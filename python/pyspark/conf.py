@@ -75,7 +75,7 @@ class SparkConf(object):
     and can no longer be modified by the user.
     """
 
-    def __init__(self, loadDefaults=True, _jvm=None):
+    def __init__(self, loadDefaults=True, _jvm=None, _jconf=None):
         """
         Create a new Spark configuration.
 
@@ -83,11 +83,16 @@ class SparkConf(object):
                properties (True by default)
         @param _jvm: internal parameter used to pass a handle to the
                Java VM; does not need to be set by users
+        @param _jconf: Optionally pass in an existing SparkConf handle
+               to use its parameters
         """
-        from pyspark.context import SparkContext
-        SparkContext._ensure_initialized()
-        _jvm = _jvm or SparkContext._jvm
-        self._jconf = _jvm.SparkConf(loadDefaults)
+        if _jconf:
+            self._jconf = _jconf
+        else:
+            from pyspark.context import SparkContext
+            SparkContext._ensure_initialized()
+            _jvm = _jvm or SparkContext._jvm
+            self._jconf = _jvm.SparkConf(loadDefaults)
 
     def set(self, key, value):
         """Set a configuration property."""

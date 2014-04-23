@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.worker
 
-import java.io.{File, FileOutputStream, IOException, InputStream}
+import java.io.{File, FileOutputStream, InputStream, IOException}
 import java.lang.System._
 
 import org.apache.spark.Logging
@@ -46,21 +46,26 @@ object CommandUtils extends Logging {
    * the way the JAVA_OPTS are assembled there.
    */
   def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
-    val libraryOpts = getEnv("SPARK_LIBRARY_PATH", command)
-      .map(p => List("-Djava.library.path=" + p))
-      .getOrElse(Nil)
-    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS"))
-      .map(Utils.splitCommandString).getOrElse(Nil)
-    val userOpts = getEnv("SPARK_JAVA_OPTS", command).map(Utils.splitCommandString).getOrElse(Nil)
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
+    // Note, this will coalesce multiple options into a single command component
+    val extraOpts = command.extraJavaOptions.toSeq
+    val libraryOpts =
+      if (command.libraryPathEntries.size > 0) {
+        val joined = command.libraryPathEntries.mkString(File.pathSeparator)
+        Seq(s"-Djava.library.path=$joined")
+      } else {
+         Seq()
+      }
 
     // Figure out our classpath with the external compute-classpath script
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
       Seq(sparkHome + "/bin/compute-classpath" + ext),
       extraEnvironment=command.environment)
+    val userClassPath = command.classPathEntries.mkString(File.pathSeparator)
+    val classPathWithUser = classPath + File.pathSeparator + userClassPath
 
-    Seq("-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts
+    Seq("-cp", classPathWithUser) ++ libraryOpts ++ extraOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */

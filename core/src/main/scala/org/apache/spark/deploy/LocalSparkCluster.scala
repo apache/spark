@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy
 
+import scala.collection.mutable.ArrayBuffer
+
 import akka.actor.ActorSystem
 
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, Logging}
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Testing class that creates a Spark standalone process in-cluster (that is, running the
@@ -66,9 +66,9 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
     // TODO: In Akka 2.1.x, ActorSystem.awaitTermination hangs when you have remote actors!
     //       This is unfortunate, but for now we just comment it out.
     workerActorSystems.foreach(_.shutdown())
-    //workerActorSystems.foreach(_.awaitTermination())
+    // workerActorSystems.foreach(_.awaitTermination())
     masterActorSystems.foreach(_.shutdown())
-    //masterActorSystems.foreach(_.awaitTermination())
+    // masterActorSystems.foreach(_.awaitTermination())
     masterActorSystems.clear()
     workerActorSystems.clear()
   }

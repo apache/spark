@@ -23,9 +23,9 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import com.typesafe.config.Config
 
 /**
- * An [[akka.actor.ActorSystem]] which refuses to shut down in the event of a fatal exception.
+ * An akka.actor.ActorSystem which refuses to shut down in the event of a fatal exception
  * This is necessary as Spark Executors are allowed to recover from fatal exceptions
- * (see [[org.apache.spark.executor.Executor]]).
+ * (see org.apache.spark.executor.Executor)
  */
 object IndestructibleActorSystem {
   def apply(name: String, config: Config): ActorSystem =
@@ -49,7 +49,7 @@ private[akka] class IndestructibleActorSystemImpl(
         if (isFatalError(cause) && !settings.JvmExitOnFatalError) {
           log.error(cause, "Uncaught fatal error from thread [{}] not shutting down " +
             "ActorSystem [{}] tolerating and continuing.... ", thread.getName, name)
-          //shutdown()                 //TODO make it configurable
+          // shutdown()                 //TODO make it configurable
         } else {
           fallbackHandler.uncaughtException(thread, cause)
         }

@@ -17,19 +17,16 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
-import org.apache.spark.deploy.{Command, ApplicationDescription}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.util.Utils
 
 private[spark] class SparkDeploySchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
-    masters: Array[String],
-    appName: String)
+    masters: Array[String])
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
   with AppClientListener
   with Logging {
@@ -45,14 +42,23 @@ private[spark] class SparkDeploySchedulerBackend(
 
     // The endpoint for executors to talk to us
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
-      conf.get("spark.driver.host"),  conf.get("spark.driver.port"),
+      conf.get("spark.driver.host"), conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
     val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{WORKER_URL}}")
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+    val classPathEntries = sys.props.get("spark.executor.extraClassPath").toSeq.flatMap { cp =>
+      cp.split(java.io.File.pathSeparator)
+    }
+    val libraryPathEntries = sys.props.get("spark.executor.extraLibraryPath").toSeq.flatMap { cp =>
+      cp.split(java.io.File.pathSeparator)
+    }
+
     val command = Command(
-      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs)
+      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.testExecutorEnvs,
+      classPathEntries, libraryPathEntries, extraJavaOpts)
     val sparkHome = sc.getSparkHome()
-    val appDesc = new ApplicationDescription(appName, maxCores, sc.executorMemory, command,
-      sparkHome, "http://" + sc.ui.appUIAddress)
+    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
+      sparkHome, sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))
 
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()

@@ -13,7 +13,7 @@ object in your main program (called the _driver program_).
 Specifically, to run on a cluster, the SparkContext can connect to several types of _cluster managers_
 (either Spark's own standalone cluster manager or Mesos/YARN), which allocate resources across
 applications. Once connected, Spark acquires *executors* on nodes in the cluster, which are
-worker processes that run computations and store data for your application.
+processes that run computations and store data for your application.
 Next, it sends your application code (defined by JAR or Python files passed to SparkContext) to
 the executors. Finally, SparkContext sends *tasks* for the executors to run.
 
@@ -50,17 +50,78 @@ The system currently supports three cluster managers:
 In addition, Spark's [EC2 launch scripts](ec2-scripts.html) make it easy to launch a standalone
 cluster on Amazon EC2.
 
-# Shipping Code to the Cluster
+# Bundling and Launching Applications
 
-The recommended way to ship your code to the cluster is to pass it through SparkContext's constructor,
-which takes a list of JAR files (Java/Scala) or .egg and .zip libraries (Python) to disseminate to
-worker nodes. You can also dynamically add new files to be sent to executors with `SparkContext.addJar`
-and `addFile`.
+### Bundling Your Application's Dependencies
+If your code depends on other projects, you will need to package them alongside
+your application in order to distribute the code to a Spark cluster. To do this,
+to create an assembly jar (or "uber" jar) containing your code and its dependencies. Both
+[sbt](https://github.com/sbt/sbt-assembly) and
+[Maven](http://maven.apache.org/plugins/maven-shade-plugin/)
+have assembly plugins. When creating assembly jars, list Spark and Hadoop
+as `provided` dependencies; these need not be bundled since they are provided by
+the cluster manager at runtime. Once you have an assembled jar you can call the `bin/spark-submit`
+script as shown here while passing your jar.
 
-## URIs for addJar / addFile
+For Python, you can use the `pyFiles` argument of SparkContext
+or its `addPyFile` method to add `.py`, `.zip` or `.egg` files to be distributed.
 
-- **file:** - Absolute paths and `file:/` URIs are served by the driver's HTTP file server, and every executor
-  pulls the file from the driver HTTP server
+### Launching Applications with ./bin/spark-submit
+
+Once a user application is bundled, it can be launched using the `spark-submit` script located in
+the bin directory. This script takes care of setting up the classpath with Spark and its
+dependencies, and can support different cluster managers and deploy modes that Spark supports.
+It's usage is
+
+    ./bin/spark-submit <app jar> --class path.to.your.Class [other options..]
+
+To enumerate all options available to `spark-submit` run it with the `--help` flag.
+Here are a few examples of common options:
+
+{% highlight bash %}
+# Run application locally
+./bin/spark-submit my-app.jar \
+  --class my.main.ClassName
+  --master local[8]
+
+# Run on a Spark cluster
+./bin/spark-submit my-app.jar \
+  --class my.main.ClassName
+  --master spark://mycluster:7077 \
+  --executor-memory 20G \
+  --total-executor-cores 100
+
+# Run on a YARN cluster
+HADOOP_CONF_DIR=XX /bin/spark-submit my-app.jar \
+  --class my.main.ClassName
+  --master yarn-cluster \  # can also be `yarn-client` for client mode
+  --executor-memory 20G \
+  --num-executors 50
+{% endhighlight %}
+
+### Loading Configurations from a File
+
+The `spark-submit` script can load default `SparkConf` values from a properties file and pass them
+onto your application. By default it will read configuration options from
+`conf/spark-defaults.conf`. Any values specified in the file will be passed on to the
+application when run. They can obviate the need for certain flags to `spark-submit`: for
+instance, if `spark.master` property is set, you can safely omit the
+`--master` flag from `spark-submit`. In general, configuration values explicitly set on a
+`SparkConf` take the highest precedence, then flags passed to `spark-submit`, then values
+in the defaults file.
+
+If you are ever unclear where configuration options are coming from. fine-grained debugging
+information can be printed by adding the `--verbose` option to `./spark-submit`.
+
+### Advanced Dependency Management
+When using `./bin/spark-submit` jars will be automatically transferred to the cluster. For many
+users this is sufficient. However, advanced users can add jars by calling `addFile` or `addJar`
+on an existing SparkContext. This can be used to distribute JAR files (Java/Scala) or .egg and
+.zip libraries (Python) to executors. Spark uses the following URL scheme to allow different
+strategies for disseminating jars:
+
+- **file:** - Absolute paths and `file:/` URIs are served by the driver's HTTP file server, and
+  every executor pulls the file from the driver HTTP server
 - **hdfs:**, **http:**, **https:**, **ftp:** - these pull down files and JARs from the URI as expected
 - **local:** - a URI starting with local:/ is expected to exist as a local file on each worker node.  This
   means that no network IO will be incurred, and works well for large files/JARs that are pushed to each worker,
@@ -95,6 +156,14 @@ The following table summarizes terms you'll see used to refer to cluster concept
       <td>User program built on Spark. Consists of a <em>driver program</em> and <em>executors</em> on the cluster.</td>
     </tr>
     <tr>
+      <td>Application jar</td>
+      <td>
+        A jar containing the user's Spark application. In some cases users will want to create
+        an "uber jar" containing their application along with its dependencies. The user's jar
+        should never include Hadoop or Spark libraries, however, these will be added at runtime.
+      </td>
+    </tr>
+    <tr>
       <td>Driver program</td>
       <td>The process running the main() function of the application and creating the SparkContext</td>
     </tr>
@@ -102,6 +171,12 @@ The following table summarizes terms you'll see used to refer to cluster concept
       <td>Cluster manager</td>
       <td>An external service for acquiring resources on the cluster (e.g. standalone manager, Mesos, YARN)</td>
     </tr>
+    <tr>
+      <td>Deploy mode</td>
+      <td>Distinguishes where the driver process runs. In "cluster" mode, the framework launches
+        the driver inside of the cluster. In "client" mode, the submitter launches the driver
+        outside of the cluster.</td>
+    <tr>
     <tr>
       <td>Worker node</td>
       <td>Any node that can run application code in the cluster</td>

@@ -20,11 +20,12 @@ package org.apache.spark.graphx.util
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.HashSet
+import scala.language.existentials
 
 import org.apache.spark.util.Utils
 
-import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor}
-import org.objectweb.asm.Opcodes._
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor}
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
 
 /**
@@ -65,7 +66,7 @@ private[graphx] object BytecodeUtils {
       val finder = new MethodInvocationFinder(c.getName, m)
       getClassReader(c).accept(finder, 0)
       for (classMethod <- finder.methodsInvoked) {
-        //println(classMethod)
+        // println(classMethod)
         if (classMethod._1 == targetClass && classMethod._2 == targetMethod) {
           return true
         } else if (!seen.contains(classMethod)) {

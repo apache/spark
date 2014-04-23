@@ -20,8 +20,8 @@ package org.apache.spark.io
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import org.scalatest.FunSuite
-import org.apache.spark.SparkConf
 
+import org.apache.spark.SparkConf
 
 class CompressionCodecSuite extends FunSuite {
   val conf = new SparkConf(false)

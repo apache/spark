@@ -19,15 +19,16 @@ package org.apache.spark.util
 
 import java.io.Serializable
 import java.util.{PriorityQueue => JPriorityQueue}
-import scala.collection.generic.Growable
+
 import scala.collection.JavaConverters._
+import scala.collection.generic.Growable
 
 /**
  * Bounded priority queue. This class wraps the original PriorityQueue
  * class and modifies it such that only the top K elements are retained.
  * The top K elements are defined by an implicit Ordering[A].
  */
-class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Ordering[A])
+private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Ordering[A])
   extends Iterable[A] with Growable[A] with Serializable {
 
   private val underlying = new JPriorityQueue[A](maxSize, ord)

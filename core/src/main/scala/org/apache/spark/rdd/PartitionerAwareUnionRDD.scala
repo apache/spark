@@ -17,10 +17,11 @@
 
 package org.apache.spark.rdd
 
-import scala.reflect.ClassTag
-import java.io.{ObjectOutputStream, IOException}
-import org.apache.spark.{TaskContext, OneToOneDependency, SparkContext, Partition}
+import java.io.{IOException, ObjectOutputStream}
 
+import scala.reflect.ClassTag
+
+import org.apache.spark.{OneToOneDependency, Partition, SparkContext, TaskContext}
 
 /**
  * Class representing partitions of PartitionerAwareUnionRDD, which maintains the list of
@@ -32,7 +33,7 @@ class PartitionerAwareUnionRDDPartition(
     val idx: Int
   ) extends Partition {
   var parents = rdds.map(_.partitions(idx)).toArray
-  
+
   override val index = idx
   override def hashCode(): Int = idx
 

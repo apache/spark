@@ -51,7 +51,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
    */
-  def groupByKey(): DStream[(K, Seq[V])] = {
+  def groupByKey(): DStream[(K, Iterable[V])] = {
     groupByKey(defaultPartitioner())
   }
 
@@ -59,20 +59,20 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
    */
-  def groupByKey(numPartitions: Int): DStream[(K, Seq[V])] = {
+  def groupByKey(numPartitions: Int): DStream[(K, Iterable[V])] = {
     groupByKey(defaultPartitioner(numPartitions))
   }
 
   /**
    * Return a new DStream by applying `groupByKey` on each RDD. The supplied
-   * [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    */
-  def groupByKey(partitioner: Partitioner): DStream[(K, Seq[V])] = {
+  def groupByKey(partitioner: Partitioner): DStream[(K, Iterable[V])] = {
     val createCombiner = (v: V) => ArrayBuffer[V](v)
     val mergeValue = (c: ArrayBuffer[V], v: V) => (c += v)
     val mergeCombiner = (c1: ArrayBuffer[V], c2: ArrayBuffer[V]) => (c1 ++ c2)
     combineByKey(createCombiner, mergeValue, mergeCombiner, partitioner)
-      .asInstanceOf[DStream[(K, Seq[V])]]
+      .asInstanceOf[DStream[(K, Iterable[V])]]
   }
 
   /**
@@ -95,7 +95,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
 
   /**
    * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
-   * merged using the supplied reduce function. [[org.apache.spark.Partitioner]] is used to control
+   * merged using the supplied reduce function. org.apache.spark.Partitioner is used to control
    * the partitioning of each RDD.
    */
   def reduceByKey(reduceFunc: (V, V) => V, partitioner: Partitioner): DStream[(K, V)] = {
@@ -126,7 +126,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    */
-  def groupByKeyAndWindow(windowDuration: Duration): DStream[(K, Seq[V])] = {
+  def groupByKeyAndWindow(windowDuration: Duration): DStream[(K, Iterable[V])] = {
     groupByKeyAndWindow(windowDuration, self.slideDuration, defaultPartitioner())
   }
 
@@ -140,7 +140,8 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
    */
-  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration): DStream[(K, Seq[V])] =
+  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration)
+      : DStream[(K, Iterable[V])] =
   {
     groupByKeyAndWindow(windowDuration, slideDuration, defaultPartitioner())
   }
@@ -161,7 +162,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
       windowDuration: Duration,
       slideDuration: Duration,
       numPartitions: Int
-    ): DStream[(K, Seq[V])] = {
+    ): DStream[(K, Iterable[V])] = {
     groupByKeyAndWindow(windowDuration, slideDuration, defaultPartitioner(numPartitions))
   }
 
@@ -180,14 +181,14 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
       windowDuration: Duration,
       slideDuration: Duration,
       partitioner: Partitioner
-    ): DStream[(K, Seq[V])] = {
-    val createCombiner = (v: Seq[V]) => new ArrayBuffer[V] ++= v
-    val mergeValue = (buf: ArrayBuffer[V], v: Seq[V]) => buf ++= v
+    ): DStream[(K, Iterable[V])] = {
+    val createCombiner = (v: Iterable[V]) => new ArrayBuffer[V] ++= v
+    val mergeValue = (buf: ArrayBuffer[V], v: Iterable[V]) => buf ++= v
     val mergeCombiner = (buf1: ArrayBuffer[V], buf2: ArrayBuffer[V]) => buf1 ++= buf2
     self.groupByKey(partitioner)
         .window(windowDuration, slideDuration)
         .combineByKey[ArrayBuffer[V]](createCombiner, mergeValue, mergeCombiner, partitioner)
-        .asInstanceOf[DStream[(K, Seq[V])]]
+        .asInstanceOf[DStream[(K, Iterable[V])]]
   }
 
   /**
@@ -376,7 +377,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
   /**
    * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of the key.
-   * [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    * @param updateFunc State update function. If `this` function returns None, then
    *                   corresponding state key-value pair will be eliminated.
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
@@ -396,7 +397,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
   /**
    * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
-   * [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    * @param updateFunc State update function. If `this` function returns None, then
    *                   corresponding state key-value pair will be eliminated. Note, that
    *                   this function may generate a different a tuple with a different key
@@ -438,7 +439,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * Hash partitioning is used to generate the RDDs with Spark's default number
    * of partitions.
    */
-  def cogroup[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (Seq[V], Seq[W]))] = {
+  def cogroup[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, defaultPartitioner())
   }
 
@@ -447,18 +448,18 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    */
   def cogroup[W: ClassTag](other: DStream[(K, W)], numPartitions: Int)
-  : DStream[(K, (Seq[V], Seq[W]))] = {
+  : DStream[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, defaultPartitioner(numPartitions))
   }
 
   /**
    * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
-   * The supplied [[org.apache.spark.Partitioner]] is used to partition the generated RDDs.
+   * The supplied org.apache.spark.Partitioner is used to partition the generated RDDs.
    */
   def cogroup[W: ClassTag](
       other: DStream[(K, W)],
       partitioner: Partitioner
-    ): DStream[(K, (Seq[V], Seq[W]))] = {
+    ): DStream[(K, (Iterable[V], Iterable[W]))] = {
     self.transformWith(
       other,
       (rdd1: RDD[(K, V)], rdd2: RDD[(K, W)]) => rdd1.cogroup(rdd2, partitioner)
@@ -483,7 +484,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
 
   /**
    * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
-   * The supplied [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   * The supplied org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    */
   def join[W: ClassTag](
       other: DStream[(K, W)],
@@ -518,7 +519,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
 
   /**
    * Return a new DStream by applying 'left outer join' between RDDs of `this` DStream and
-   * `other` DStream. The supplied [[org.apache.spark.Partitioner]] is used to control
+   * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
    * the partitioning of each RDD.
    */
   def leftOuterJoin[W: ClassTag](
@@ -554,7 +555,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
 
   /**
    * Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
-   * `other` DStream. The supplied [[org.apache.spark.Partitioner]] is used to control
+   * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
    * the partitioning of each RDD.
    */
   def rightOuterJoin[W: ClassTag](

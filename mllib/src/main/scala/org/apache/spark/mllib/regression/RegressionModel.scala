@@ -18,7 +18,10 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.annotation.Experimental
 
+@Experimental
 trait RegressionModel extends Serializable {
   /**
    * Predict values for the given data set using the model trained.
@@ -26,7 +29,7 @@ trait RegressionModel extends Serializable {
    * @param testData RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
    */
-  def predict(testData: RDD[Array[Double]]): RDD[Double]
+  def predict(testData: RDD[Vector]): RDD[Double]
 
   /**
    * Predict values for a single data point using the model trained.
@@ -34,5 +37,5 @@ trait RegressionModel extends Serializable {
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
    */
-  def predict(testData: Array[Double]): Double
+  def predict(testData: Vector): Double
 }

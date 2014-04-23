@@ -19,10 +19,11 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{NarrowDependency, SparkEnv, Partition, TaskContext}
+import org.apache.spark.{NarrowDependency, Partition, TaskContext}
+import org.apache.spark.annotation.DeveloperApi
 
-
-class PartitionPruningRDDPartition(idx: Int, val parentSplit: Partition) extends Partition {
+private[spark] class PartitionPruningRDDPartition(idx: Int, val parentSplit: Partition)
+  extends Partition {
   override val index = idx
 }
 
@@ -31,7 +32,7 @@ class PartitionPruningRDDPartition(idx: Int, val parentSplit: Partition) extends
  * Represents a dependency between the PartitionPruningRDD and its parent. In this
  * case, the child RDD contains a subset of partitions of the parents'.
  */
-class PruneDependency[T](rdd: RDD[T], @transient partitionFilterFunc: Int => Boolean)
+private[spark] class PruneDependency[T](rdd: RDD[T], @transient partitionFilterFunc: Int => Boolean)
   extends NarrowDependency[T](rdd) {
 
   @transient
@@ -46,11 +47,13 @@ class PruneDependency[T](rdd: RDD[T], @transient partitionFilterFunc: Int => Boo
 
 
 /**
+ * :: DeveloperApi ::
  * A RDD used to prune RDD partitions/partitions so we can avoid launching tasks on
  * all partitions. An example use case: If we know the RDD is partitioned by range,
  * and the execution DAG has a filter on the key, we can avoid launching tasks
  * on partitions that don't have the range covering the key.
  */
+@DeveloperApi
 class PartitionPruningRDD[T: ClassTag](
     @transient prev: RDD[T],
     @transient partitionFilterFunc: Int => Boolean)
@@ -64,6 +67,7 @@ class PartitionPruningRDD[T: ClassTag](
 }
 
 
+@DeveloperApi
 object PartitionPruningRDD {
 
   /**

@@ -27,7 +27,7 @@ object Bagel extends Logging {
 
   /**
    * Runs a Bagel program.
-   * @param sc [[org.apache.spark.SparkContext]] to use for the program.
+   * @param sc org.apache.spark.SparkContext to use for the program.
    * @param vertices vertices of the graph represented as an RDD of (Key, Vertex) pairs. Often the
    *                 Key will be the vertex id.
    * @param messages initial set of messages represented as an RDD of (Key, Message) pairs. Often
@@ -38,10 +38,10 @@ object Bagel extends Logging {
    * @param aggregator [[org.apache.spark.bagel.Aggregator]] performs a reduce across all vertices
    *                  after each superstep and provides the result to each vertex in the next
    *                  superstep.
-   * @param partitioner [[org.apache.spark.Partitioner]] partitions values by key
+   * @param partitioner org.apache.spark.Partitioner partitions values by key
    * @param numPartitions number of partitions across which to split the graph.
    *                      Default is the default parallelism of the SparkContext
-   * @param storageLevel [[org.apache.spark.storage.StorageLevel]] to use for caching of
+   * @param storageLevel org.apache.spark.storage.StorageLevel to use for caching of
    *                    intermediate RDDs in each superstep. Defaults to caching in memory.
    * @param compute function that takes a Vertex, optional set of (possibly combined) messages to
    *                the Vertex, optional Aggregator and the current superstep,
@@ -131,7 +131,7 @@ object Bagel extends Logging {
 
   /**
    * Runs a Bagel program with no [[org.apache.spark.bagel.Aggregator]], default
-   * [[org.apache.spark.HashPartitioner]] and default storage level
+   * org.apache.spark.HashPartitioner and default storage level
    */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C: Manifest](
     sc: SparkContext,
@@ -146,7 +146,7 @@ object Bagel extends Logging {
 
   /**
    * Runs a Bagel program with no [[org.apache.spark.bagel.Aggregator]] and the
-   * default [[org.apache.spark.HashPartitioner]]
+   * default org.apache.spark.HashPartitioner
    */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C: Manifest](
     sc: SparkContext,
@@ -166,7 +166,7 @@ object Bagel extends Logging {
 
   /**
    * Runs a Bagel program with no [[org.apache.spark.bagel.Aggregator]],
-   * default [[org.apache.spark.HashPartitioner]],
+   * default org.apache.spark.HashPartitioner,
    * [[org.apache.spark.bagel.DefaultCombiner]] and the default storage level
    */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest](
@@ -180,7 +180,7 @@ object Bagel extends Logging {
 
   /**
    * Runs a Bagel program with no [[org.apache.spark.bagel.Aggregator]],
-   * the default [[org.apache.spark.HashPartitioner]]
+   * the default org.apache.spark.HashPartitioner
    * and [[org.apache.spark.bagel.DefaultCombiner]]
    */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest](
@@ -220,20 +220,23 @@ object Bagel extends Logging {
    */
   private def comp[K: Manifest, V <: Vertex, M <: Message[K], C](
     sc: SparkContext,
-    grouped: RDD[(K, (Seq[C], Seq[V]))],
+    grouped: RDD[(K, (Iterable[C], Iterable[V]))],
     compute: (V, Option[C]) => (V, Array[M]),
     storageLevel: StorageLevel
   ): (RDD[(K, (V, Array[M]))], Int, Int) = {
     var numMsgs = sc.accumulator(0)
     var numActiveVerts = sc.accumulator(0)
-    val processed = grouped.flatMapValues {
-      case (_, vs) if vs.size == 0 => None
-      case (c, vs) =>
+    val processed = grouped.mapValues(x => (x._1.iterator, x._2.iterator))
+      .flatMapValues {
+      case (_, vs) if !vs.hasNext => None
+      case (c, vs) => {
         val (newVert, newMsgs) =
-          compute(vs(0), c match {
-            case Seq(comb) => Some(comb)
-            case Seq() => None
-          })
+          compute(vs.next,
+            c.hasNext match {
+              case true => Some(c.next)
+              case false => None
+            }
+          )
 
         numMsgs += newMsgs.size
         if (newVert.active) {
@@ -241,6 +244,7 @@ object Bagel extends Logging {
         }
 
         Some((newVert, newMsgs))
+      }
     }.persist(storageLevel)
 
     // Force evaluation of processed RDD for accurate performance measurements

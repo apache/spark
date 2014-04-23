@@ -18,14 +18,16 @@
 package org.apache.spark.mllib.recommendation
 
 import scala.collection.JavaConversions._
+import scala.math.abs
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import org.jblas._
+import org.jblas.DoubleMatrix
 
 import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.SparkContext._
+import org.apache.spark.Partitioner
 
 object ALSSuite {
 
@@ -34,7 +36,8 @@ object ALSSuite {
       products: Int,
       features: Int,
       samplingRate: Double,
-      implicitPrefs: Boolean): (java.util.List[Rating], DoubleMatrix, DoubleMatrix) = {
+      implicitPrefs: Boolean,
+      negativeWeights: Boolean): (java.util.List[Rating], DoubleMatrix, DoubleMatrix) = {
     val (sampledRatings, trueRatings, truePrefs) =
       generateRatings(users, products, features, samplingRate, implicitPrefs)
     (seqAsJavaList(sampledRatings), trueRatings, truePrefs)
@@ -45,7 +48,8 @@ object ALSSuite {
       products: Int,
       features: Int,
       samplingRate: Double,
-      implicitPrefs: Boolean = false): (Seq[Rating], DoubleMatrix, DoubleMatrix) = {
+      implicitPrefs: Boolean = false,
+      negativeWeights: Boolean = false): (Seq[Rating], DoubleMatrix, DoubleMatrix) = {
     val rand = new Random(42)
 
     // Create a random matrix with uniform values from -1 to 1
@@ -56,7 +60,9 @@ object ALSSuite {
     val productMatrix = randomMatrix(features, products)
     val (trueRatings, truePrefs) = implicitPrefs match {
       case true =>
-        val raw = new DoubleMatrix(users, products, Array.fill(users * products)(rand.nextInt(10).toDouble): _*)
+        // Generate raw values from [0,9], or if negativeWeights, from [-2,7]
+        val raw = new DoubleMatrix(users, products,
+          Array.fill(users * products)((if (negativeWeights) -2 else 0) + rand.nextInt(10).toDouble): _*)
         val prefs = new DoubleMatrix(users, products, raw.data.map(v => if (v > 0) 1.0 else 0.0): _*)
         (raw, prefs)
       case false => (userMatrix.mmul(productMatrix), null)
@@ -69,7 +75,6 @@ object ALSSuite {
 
     (sampledRatings, trueRatings, truePrefs)
   }
-
 }
 
 
@@ -107,6 +112,41 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     testALS(100, 200, 2, 15, 0.7, 0.4, true, true)
   }
 
+  test("rank-2 matrices implicit negative") {
+    testALS(100, 200, 2, 15, 0.7, 0.4, true, false, true)
+  }
+
+  test("pseudorandomness") {
+    val ratings = sc.parallelize(ALSSuite.generateRatings(10, 20, 5, 0.5, false, false)._1, 2)
+    val model11 = ALS.train(ratings, 5, 1, 1.0, 2, 1)
+    val model12 = ALS.train(ratings, 5, 1, 1.0, 2, 1)
+    val u11 = model11.userFeatures.values.flatMap(_.toList).collect().toList
+    val u12 = model12.userFeatures.values.flatMap(_.toList).collect().toList
+    val model2 = ALS.train(ratings, 5, 1, 1.0, 2, 2)
+    val u2 = model2.userFeatures.values.flatMap(_.toList).collect().toList
+    assert(u11 == u12)
+    assert(u11 != u2)
+  }
+
+  test("negative ids") {
+    val data = ALSSuite.generateRatings(50, 50, 2, 0.7, false, false)
+    val ratings = sc.parallelize(data._1.map { case Rating(u, p, r) =>
+      Rating(u - 25, p - 25, r)
+    })
+    val correct = data._2
+    val model = ALS.train(ratings, 5, 15)
+
+    val pairs = Array.tabulate(50, 50)((u, p) => (u - 25, p - 25)).flatten
+    val ans = model.predict(sc.parallelize(pairs)).collect()
+    ans.foreach { r =>
+      val u = r.user + 25
+      val p = r.product + 25
+      val v = r.rating
+      val error = v - correct.get(u, p)
+      assert(math.abs(error) < 0.4)
+    }
+  }
+
   /**
    * Test if we can correctly factorize R = U * P where U and P are of known rank.
    *
@@ -118,16 +158,20 @@ class ALSSuite extends FunSuite with LocalSparkContext {
    * @param matchThreshold max difference allowed to consider a predicted rating correct
    * @param implicitPrefs  flag to test implicit feedback
    * @param bulkPredict    flag to test bulk prediciton
+   * @param negativeWeights whether the generated data can contain negative values
+   * @param numBlocks      number of blocks to partition users and products into
    */
   def testALS(users: Int, products: Int, features: Int, iterations: Int,
     samplingRate: Double, matchThreshold: Double, implicitPrefs: Boolean = false,
-    bulkPredict: Boolean = false)
+    bulkPredict: Boolean = false, negativeWeights: Boolean = false, numBlocks: Int = -1)
   {
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
-      features, samplingRate, implicitPrefs)
+      features, samplingRate, implicitPrefs, negativeWeights)
     val model = implicitPrefs match {
-      case false => ALS.train(sc.parallelize(sampledRatings), features, iterations)
-      case true => ALS.trainImplicit(sc.parallelize(sampledRatings), features, iterations)
+      case false => ALS.train(sc.parallelize(sampledRatings), features, iterations, 0.01,
+          numBlocks, 0L)
+      case true => ALS.trainImplicit(sc.parallelize(sampledRatings), features, iterations, 0.01,
+          numBlocks, 1.0, 0L)
     }
 
     val predictedU = new DoubleMatrix(users, features)
@@ -166,13 +210,13 @@ class ALSSuite extends FunSuite with LocalSparkContext {
       for (u <- 0 until users; p <- 0 until products) {
         val prediction = predictedRatings.get(u, p)
         val truePref = truePrefs.get(u, p)
-        val confidence = 1 + 1.0 * trueRatings.get(u, p)
+        val confidence = 1 + 1.0 * abs(trueRatings.get(u, p))
         val err = confidence * (truePref - prediction) * (truePref - prediction)
         sqErr += err
-        denom += 1
+        denom += confidence
       }
       val rmse = math.sqrt(sqErr / denom)
-      if (math.abs(rmse) > matchThreshold) {
+      if (rmse > matchThreshold) {
         fail("Model failed to predict RMSE: %f\ncorr: %s\npred: %s\nU: %s\n P: %s".format(
           rmse, truePrefs, predictedRatings, predictedU, predictedP))
       }

@@ -17,9 +17,9 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.TaskContext
-
 import java.util.Properties
+
+import org.apache.spark.TaskContext
 
 /**
  * Tracks information about an active job in the DAGScheduler.

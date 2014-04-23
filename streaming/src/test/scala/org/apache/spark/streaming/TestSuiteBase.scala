@@ -137,7 +137,6 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   val conf = new SparkConf()
     .setMaster(master)
     .setAppName(framework)
-    .set("spark.cleaner.ttl", StreamingContext.DEFAULT_CLEANER_TTL.toString)
 
   // Default before function for any streaming test suite. Override this
   // if you want to add your stuff to "before" (i.e., don't call before { } )
@@ -277,7 +276,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
       assert(output.size === numExpectedOutput, "Unexpected number of outputs generated")
 
-      Thread.sleep(500) // Give some time for the forgetting old RDDs to complete
+      Thread.sleep(100) // Give some time for the forgetting old RDDs to complete
     } catch {
       case e: Exception => {e.printStackTrace(); throw e}
     } finally {

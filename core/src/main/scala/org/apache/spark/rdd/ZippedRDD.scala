@@ -17,11 +17,11 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{OneToOneDependency, SparkContext, Partition, TaskContext}
-
-import java.io.{ObjectOutputStream, IOException}
+import java.io.{IOException, ObjectOutputStream}
 
 import scala.reflect.ClassTag
+
+import org.apache.spark.{OneToOneDependency, Partition, SparkContext, TaskContext}
 
 private[spark] class ZippedPartition[T: ClassTag, U: ClassTag](
     idx: Int,
@@ -44,7 +44,7 @@ private[spark] class ZippedPartition[T: ClassTag, U: ClassTag](
   }
 }
 
-class ZippedRDD[T: ClassTag, U: ClassTag](
+private[spark] class ZippedRDD[T: ClassTag, U: ClassTag](
     sc: SparkContext,
     var rdd1: RDD[T],
     var rdd2: RDD[U])

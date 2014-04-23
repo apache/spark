@@ -22,7 +22,6 @@ import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.util.SizeEstimator
 
-
 class OpenHashSetSuite extends FunSuite with ShouldMatchers {
 
   test("size for specialized, primitive int") {

@@ -20,11 +20,10 @@ package org.apache.spark
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.executor.{ShuffleReadMetrics, TaskMetrics}
+import org.apache.spark.executor.ShuffleReadMetrics
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.CompletionIterator
-
 
 private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
 
@@ -80,7 +79,6 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
     val completionIter = CompletionIterator[T, Iterator[T]](itr, {
       val shuffleMetrics = new ShuffleReadMetrics
       shuffleMetrics.shuffleFinishTime = System.currentTimeMillis
-      shuffleMetrics.remoteFetchTime = blockFetcherItr.remoteFetchTime
       shuffleMetrics.fetchWaitTime = blockFetcherItr.fetchWaitTime
       shuffleMetrics.remoteBytesRead = blockFetcherItr.remoteBytesRead
       shuffleMetrics.totalBlocksFetched = blockFetcherItr.totalBlocks

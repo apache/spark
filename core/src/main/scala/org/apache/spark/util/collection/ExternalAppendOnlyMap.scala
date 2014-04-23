@@ -17,20 +17,21 @@
 
 package org.apache.spark.util.collection
 
-import java.io._
+import java.io.{InputStream, BufferedInputStream, FileInputStream, File, Serializable, EOFException}
 import java.util.Comparator
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManager}
 
 /**
+ * :: DeveloperApi ::
  * An append-only map that spills sorted content to disk when there is insufficient space for it
  * to grow.
  *
@@ -55,12 +56,12 @@ import org.apache.spark.storage.{BlockId, BlockManager}
  *   `spark.shuffle.safetyFraction` specifies an additional margin of safety as a fraction of
  *   this threshold, in case map size estimation is not sufficiently accurate.
  */
-
-private[spark] class ExternalAppendOnlyMap[K, V, C](
+@DeveloperApi
+class ExternalAppendOnlyMap[K, V, C](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
-    serializer: Serializer = SparkEnv.get.serializerManager.default,
+    serializer: Serializer = SparkEnv.get.serializer,
     blockManager: BlockManager = SparkEnv.get.blockManager)
   extends Iterable[(K, C)] with Serializable with Logging {
 
@@ -148,7 +149,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   }
 
   /**
-   * Sort the existing contents of the in-memory map and spill them to a temporary file on disk
+   * Sort the existing contents of the in-memory map and spill them to a temporary file on disk.
    */
   private def spill(mapSize: Long) {
     spillCount += 1
@@ -223,7 +224,8 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
    */
   private class ExternalIterator extends Iterator[(K, C)] {
 
-    // A fixed-size queue that maintains a buffer for each stream we are currently merging
+    // A queue that maintains a buffer for each stream we are currently merging
+    // This queue maintains the invariant that it only contains non-empty buffers
     private val mergeHeap = new mutable.PriorityQueue[StreamBuffer]
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
@@ -233,7 +235,9 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
 
     inputStreams.foreach { it =>
       val kcPairs = getMorePairs(it)
-      mergeHeap.enqueue(StreamBuffer(it, kcPairs))
+      if (kcPairs.length > 0) {
+        mergeHeap.enqueue(new StreamBuffer(it, kcPairs))
+      }
     }
 
     /**
@@ -258,11 +262,11 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
 
     /**
      * If the given buffer contains a value for the given key, merge that value into
-     * baseCombiner and remove the corresponding (K, C) pair from the buffer
+     * baseCombiner and remove the corresponding (K, C) pair from the buffer.
      */
     private def mergeIfKeyExists(key: K, baseCombiner: C, buffer: StreamBuffer): C = {
       var i = 0
-      while (i < buffer.pairs.size) {
+      while (i < buffer.pairs.length) {
         val (k, c) = buffer.pairs(i)
         if (k == key) {
           buffer.pairs.remove(i)
@@ -274,40 +278,41 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
     }
 
     /**
-     * Return true if there exists an input stream that still has unvisited pairs
+     * Return true if there exists an input stream that still has unvisited pairs.
      */
-    override def hasNext: Boolean = mergeHeap.exists(!_.pairs.isEmpty)
+    override def hasNext: Boolean = mergeHeap.length > 0
 
     /**
      * Select a key with the minimum hash, then combine all values with the same key from all
      * input streams.
      */
     override def next(): (K, C) = {
+      if (mergeHeap.length == 0) {
+        throw new NoSuchElementException
+      }
       // Select a key from the StreamBuffer that holds the lowest key hash
       val minBuffer = mergeHeap.dequeue()
       val (minPairs, minHash) = (minBuffer.pairs, minBuffer.minKeyHash)
-      if (minPairs.length == 0) {
-        // Should only happen when no other stream buffers have any pairs left
-        throw new NoSuchElementException
-      }
       var (minKey, minCombiner) = minPairs.remove(0)
       assert(minKey.hashCode() == minHash)
 
       // For all other streams that may have this key (i.e. have the same minimum key hash),
       // merge in the corresponding value (if any) from that stream
       val mergedBuffers = ArrayBuffer[StreamBuffer](minBuffer)
-      while (!mergeHeap.isEmpty && mergeHeap.head.minKeyHash == minHash) {
+      while (mergeHeap.length > 0 && mergeHeap.head.minKeyHash == minHash) {
         val newBuffer = mergeHeap.dequeue()
         minCombiner = mergeIfKeyExists(minKey, minCombiner, newBuffer)
         mergedBuffers += newBuffer
       }
 
-      // Repopulate each visited stream buffer and add it back to the merge heap
+      // Repopulate each visited stream buffer and add it back to the queue if it is non-empty
       mergedBuffers.foreach { buffer =>
-        if (buffer.pairs.length == 0) {
+        if (buffer.isEmpty) {
           buffer.pairs ++= getMorePairs(buffer.iterator)
         }
-        mergeHeap.enqueue(buffer)
+        if (!buffer.isEmpty) {
+          mergeHeap.enqueue(buffer)
+        }
       }
 
       (minKey, minCombiner)
@@ -323,13 +328,12 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
     private case class StreamBuffer(iterator: Iterator[(K, C)], pairs: ArrayBuffer[(K, C)])
       extends Comparable[StreamBuffer] {
 
-      def minKeyHash: Int = {
-        if (pairs.length > 0){
-          // pairs are already sorted by key hash
-          pairs(0)._1.hashCode()
-        } else {
-          Int.MaxValue
-        }
+      def isEmpty = pairs.length == 0
+
+      // Invalid if there are no more pairs in this stream
+      def minKeyHash = {
+        assert(pairs.length > 0)
+        pairs.head._1.hashCode()
       }
 
       override def compareTo(other: StreamBuffer): Int = {
@@ -345,7 +349,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
     extends Iterator[(K, C)] {
     private val fileStream = new FileInputStream(file)
-    private val bufferedStream = new FastBufferedInputStream(fileStream, fileBufferSize)
+    private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
@@ -356,7 +360,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
     private var objectsRead = 0
 
     /**
-     * Construct a stream that reads only from the next batch
+     * Construct a stream that reads only from the next batch.
      */
     private def nextBatchStream(): InputStream = {
       if (batchSizes.length > 0) {

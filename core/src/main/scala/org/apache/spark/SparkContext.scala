@@ -19,55 +19,66 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
-import java.util.{UUID, Properties}
 import java.util.concurrent.atomic.AtomicInteger
-
+import java.util.{Properties, UUID}
+import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
-
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.language.implicitConversions
 import scala.reflect.{ClassTag, classTag}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
-  FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat,
-  TextInputFormat}
+import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
+import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.input.WholeTextFileInputFormat
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
-  SparkDeploySchedulerBackend, SimrSchedulerBackend}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SparkDeploySchedulerBackend, SimrSchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{Utils, TimeStampedHashMap, MetadataCleaner, MetadataCleanerType,
-  ClosureCleaner}
+import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
 
 /**
+ * :: DeveloperApi ::
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
- * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Can
- *   be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
- *   from a list of input files or InputFormats for the application.
  */
-class SparkContext(
-    config: SparkConf,
-    // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
-    // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
-    // contains a map from hostname to a list of input format splits on the host.
-    val preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map())
-  extends Logging {
+
+@DeveloperApi
+class SparkContext(config: SparkConf) extends Logging {
+
+  // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
+  // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
+  // contains a map from hostname to a list of input format splits on the host.
+  private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
+
+  /**
+   * :: DeveloperApi ::
+   * Alternative constructor for setting preferred locations where Spark will create executors.
+   *
+   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Ca
+   * be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
+   * from a list of input files or InputFormats for the application.
+   */
+    @DeveloperApi
+    def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
+      this(config)
+      this.preferredNodeLocationData = preferredNodeLocationData
+  }
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -97,11 +108,47 @@ class SparkContext(
       environment: Map[String, String] = Map(),
       preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()) =
   {
-    this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment),
-      preferredNodeLocationData)
+    this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
+    this.preferredNodeLocationData = preferredNodeLocationData
   }
 
+  // NOTE: The below constructors could be consolidated using default arguments. Due to
+  // Scala bug SI-8479, however, this causes the compile step to fail when generating docs.
+  // Until we have a good workaround for that bug the constructors remain broken out.
+
+  /**
+   * Alternative constructor that allows setting common Spark properties directly
+   *
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName A name for your application, to display on the cluster web UI.
+   */
+  private[spark] def this(master: String, appName: String) =
+    this(master, appName, null, Nil, Map(), Map())
+
+  /**
+   * Alternative constructor that allows setting common Spark properties directly
+   *
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName A name for your application, to display on the cluster web UI.
+   * @param sparkHome Location where Spark is installed on cluster nodes.
+   */
+  private[spark] def this(master: String, appName: String, sparkHome: String) =
+    this(master, appName, sparkHome, Nil, Map(), Map())
+
+  /**
+   * Alternative constructor that allows setting common Spark properties directly
+   *
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName A name for your application, to display on the cluster web UI.
+   * @param sparkHome Location where Spark is installed on cluster nodes.
+   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
+   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+   */
+  private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
+    this(master, appName, sparkHome, jars, Map(), Map())
+
   private[spark] val conf = config.clone()
+  conf.validateSettings()
 
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
@@ -113,7 +160,7 @@ class SparkContext(
     throw new SparkException("A master URL must be set in your configuration")
   }
   if (!conf.contains("spark.app.name")) {
-    throw new SparkException("An application must be set in your configuration")
+    throw new SparkException("An application name must be set in your configuration")
   }
 
   if (conf.getBoolean("spark.logConf", false)) {
@@ -124,16 +171,26 @@ class SparkContext(
   conf.setIfMissing("spark.driver.host", Utils.localHostName())
   conf.setIfMissing("spark.driver.port", "0")
 
-  val jars: Seq[String] = if (conf.contains("spark.jars")) {
-    conf.get("spark.jars").split(",").filter(_.size != 0)
-  } else {
-    null
-  }
+  val jars: Seq[String] =
+    conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
+
+  val files: Seq[String] =
+    conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
 
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
 
+  // Generate the random name for a temp folder in Tachyon
+  // Add a timestamp as the suffix here to make it more safe
+  val tachyonFolderName = "spark-" + randomUUID.toString()
+  conf.set("spark.tachyonStore.folderName", tachyonFolderName)
+
   val isLocal = (master == "local" || master.startsWith("local["))
+
+  if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
+
+  // An asynchronous listener bus for Spark events
+  private[spark] val listenerBus = new LiveListenerBus
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.create(
@@ -142,7 +199,8 @@ class SparkContext(
     conf.get("spark.driver.host"),
     conf.get("spark.driver.port").toInt,
     isDriver = true,
-    isLocal = isLocal)
+    isLocal = isLocal,
+    listenerBus = listenerBus)
   SparkEnv.set(env)
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
@@ -150,13 +208,26 @@ class SparkContext(
   private[spark] val addedJars = HashMap[String, Long]()
 
   // Keeps track of all persisted RDDs
-  private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]
+  private[spark] val persistentRdds = new TimeStampedWeakValueHashMap[Int, RDD[_]]
   private[spark] val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
-  // Initialize the Spark UI
+  // Initialize the Spark UI, registering all associated listeners
   private[spark] val ui = new SparkUI(this)
   ui.bind()
+
+  // Optionally log Spark events
+  private[spark] val eventLogger: Option[EventLoggingListener] = {
+    if (conf.getBoolean("spark.eventLog.enabled", false)) {
+      val logger = new EventLoggingListener(appName, conf)
+      logger.start()
+      listenerBus.addListener(logger)
+      Some(logger)
+    } else None
+  }
+
+  // At this point, all relevant SparkListeners have been registered, so begin releasing events
+  listenerBus.start()
 
   val startTime = System.currentTimeMillis()
 
@@ -165,32 +236,36 @@ class SparkContext(
     jars.foreach(addJar)
   }
 
+  if (files != null) {
+    files.foreach(addFile)
+  }
+
+  private def warnSparkMem(value: String): String = {
+    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
+      "deprecated, please use spark.executor.memory instead.")
+    value
+  }
+
   private[spark] val executorMemory = conf.getOption("spark.executor.memory")
-    .orElse(Option(System.getenv("SPARK_MEM")))
+    .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
+    .orElse(Option(System.getenv("SPARK_MEM")).map(warnSparkMem))
     .map(Utils.memoryStringToMb)
     .getOrElse(512)
 
-  if (!conf.contains("spark.executor.memory") && sys.env.contains("SPARK_MEM")) {
-    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
-      "deprecated, instead use spark.executor.memory")
-  }
+  // Environment variables to pass to our executors.
+  // NOTE: This should only be used for test related settings.
+  private[spark] val testExecutorEnvs = HashMap[String, String]()
 
-  // Environment variables to pass to our executors
-  private[spark] val executorEnvs = HashMap[String, String]()
-  // Note: SPARK_MEM is included for Mesos, but overwritten for standalone mode in ExecutorRunner
-  for (key <- Seq("SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS");
-      value <- Option(System.getenv(key))) {
-    executorEnvs(key) = value
-  }
   // Convert java options to env vars as a work around
   // since we can't set env vars directly in sbt.
-  for { (envKey, propKey) <- Seq(("SPARK_HOME", "spark.home"), ("SPARK_TESTING", "spark.testing"))
+  for { (envKey, propKey) <- Seq(("SPARK_TESTING", "spark.testing"))
     value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
-    executorEnvs(envKey) = value
+    testExecutorEnvs(envKey) = value
   }
-  // Since memory can be set with a system property too, use that
-  executorEnvs("SPARK_MEM") = executorMemory + "m"
-  executorEnvs ++= conf.getExecutorEnv
+  // The Mesos scheduler backend relies on this environment variable to set executor memory.
+  // TODO: Set this only in the Mesos scheduler.
+  testExecutorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
+  testExecutorEnvs ++= conf.getExecutorEnv
 
   // Set SPARK_USER for user who is running SparkContext.
   val sparkUser = Option {
@@ -198,19 +273,29 @@ class SparkContext(
   }.getOrElse {
     SparkContext.SPARK_UNKNOWN_USER
   }
-  executorEnvs("SPARK_USER") = sparkUser
+  testExecutorEnvs("SPARK_USER") = sparkUser
 
   // Create and start the scheduler
-  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master, appName)
+  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
   taskScheduler.start()
 
-  @volatile private[spark] var dagScheduler = new DAGScheduler(taskScheduler)
+  @volatile private[spark] var dagScheduler = new DAGScheduler(this)
   dagScheduler.start()
 
-  ui.start()
+  private[spark] val cleaner: Option[ContextCleaner] = {
+    if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
+      Some(new ContextCleaner(this))
+    } else {
+      None
+    }
+  }
+  cleaner.foreach(_.start())
+
+  postEnvironmentUpdate()
+  postApplicationStart()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
-  val hadoopConfiguration = {
+  val hadoopConfiguration: Configuration = {
     val env = SparkEnv.get
     val hadoopConf = SparkHadoopUtil.get.newConfiguration()
     // Explicitly check for S3 environment variables
@@ -245,6 +330,7 @@ class SparkContext(
     localProperties.set(props)
   }
 
+  @deprecated("Properties no longer need to be explicitly initialized.", "1.0.0")
   def initLocalProperties() {
     localProperties.set(new Properties())
   }
@@ -313,7 +399,7 @@ class SparkContext(
   private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
   private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
 
-  def initDriverMetrics() {
+  private def initDriverMetrics() {
     SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
     SparkEnv.get.metricsSystem.registerSource(blockManagerSource)
   }
@@ -344,9 +430,50 @@ class SparkContext(
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
-  def textFile(path: String, minSplits: Int = defaultMinSplits): RDD[String] = {
+  def textFile(path: String, minPartitions: Int = defaultMinPartitions): RDD[String] = {
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
-      minSplits).map(pair => pair._2.toString)
+      minPartitions).map(pair => pair._2.toString)
+  }
+
+  /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * <p> For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do `val rdd = sparkContext.wholeTextFile("hdfs://a-hdfs-path")`,
+   *
+   * <p> then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   */
+  def wholeTextFiles(path: String, minPartitions: Int = defaultMinPartitions):
+  RDD[(String, String)] = {
+    val job = new NewHadoopJob(hadoopConfiguration)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updateConf = job.getConfiguration
+    new WholeTextFileRDD(
+      this,
+      classOf[WholeTextFileInputFormat],
+      classOf[String],
+      classOf[String],
+      updateConf,
+      minPartitions)
   }
 
   /**
@@ -355,10 +482,10 @@ class SparkContext(
    * using the older MapReduce API (`org.apache.hadoop.mapred`).
    *
    * @param conf JobConf for setting up the dataset
-   * @param inputFormatClass Class of the [[InputFormat]]
+   * @param inputFormatClass Class of the InputFormat
    * @param keyClass Class of the keys
    * @param valueClass Class of the values
-   * @param minSplits Minimum number of Hadoop Splits to generate.
+   * @param minPartitions Minimum number of Hadoop Splits to generate.
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
@@ -370,11 +497,11 @@ class SparkContext(
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int = defaultMinSplits
+      minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
     // Add necessary security credentials to the JobConf before broadcasting it.
     SparkHadoopUtil.get.addCredentials(conf)
-    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
+    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minPartitions)
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
@@ -389,7 +516,7 @@ class SparkContext(
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int = defaultMinSplits
+      minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
@@ -401,7 +528,7 @@ class SparkContext(
       inputFormatClass,
       keyClass,
       valueClass,
-      minSplits)
+      minPartitions)
   }
 
   /**
@@ -409,7 +536,7 @@ class SparkContext(
    * values and the InputFormat so that users don't need to pass them directly. Instead, callers
    * can just write, for example,
    * {{{
-   * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path, minSplits)
+   * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path, minPartitions)
    * }}}
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
@@ -418,13 +545,13 @@ class SparkContext(
    * a `map` function.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]]
-      (path: String, minSplits: Int)
+      (path: String, minPartitions: Int)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
     hadoopFile(path,
       fm.runtimeClass.asInstanceOf[Class[F]],
       km.runtimeClass.asInstanceOf[Class[K]],
       vm.runtimeClass.asInstanceOf[Class[V]],
-      minSplits)
+      minPartitions)
   }
 
   /**
@@ -442,7 +569,7 @@ class SparkContext(
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
-    hadoopFile[K, V, F](path, defaultMinSplits)
+    hadoopFile[K, V, F](path, defaultMinPartitions)
 
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
@@ -503,10 +630,10 @@ class SparkContext(
   def sequenceFile[K, V](path: String,
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int
+      minPartitions: Int
       ): RDD[(K, V)] = {
     val inputFormatClass = classOf[SequenceFileInputFormat[K, V]]
-    hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits)
+    hadoopFile(path, inputFormatClass, keyClass, valueClass, minPartitions)
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
@@ -518,7 +645,7 @@ class SparkContext(
     * */
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]
       ): RDD[(K, V)] =
-    sequenceFile(path, keyClass, valueClass, defaultMinSplits)
+    sequenceFile(path, keyClass, valueClass, defaultMinPartitions)
 
   /**
    * Version of sequenceFile() for types implicitly convertible to Writables through a
@@ -542,7 +669,7 @@ class SparkContext(
    * a `map` function.
    */
    def sequenceFile[K, V]
-       (path: String, minSplits: Int = defaultMinSplits)
+       (path: String, minPartitions: Int = defaultMinPartitions)
        (implicit km: ClassTag[K], vm: ClassTag[V],
         kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
       : RDD[(K, V)] = {
@@ -551,7 +678,7 @@ class SparkContext(
     val format = classOf[SequenceFileInputFormat[Writable, Writable]]
     val writables = hadoopFile(path, format,
         kc.writableClass(km).asInstanceOf[Class[Writable]],
-        vc.writableClass(vm).asInstanceOf[Class[Writable]], minSplits)
+        vc.writableClass(vm).asInstanceOf[Class[Writable]], minPartitions)
     writables.map { case (k, v) => (kc.convert(k), vc.convert(v)) }
   }
 
@@ -565,12 +692,11 @@ class SparkContext(
    */
   def objectFile[T: ClassTag](
       path: String,
-      minSplits: Int = defaultMinSplits
+      minPartitions: Int = defaultMinPartitions
       ): RDD[T] = {
-    sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minSplits)
+    sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minPartitions)
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
   }
-
 
   protected[spark] def checkpointFile[T: ClassTag](
       path: String
@@ -584,6 +710,9 @@ class SparkContext(
   /** Build the union of a list of RDDs passed as variable-length arguments. */
   def union[T: ClassTag](first: RDD[T], rest: RDD[T]*): RDD[T] =
     new UnionRDD(this, Seq(first) ++ rest)
+
+  /** Get an RDD that has no partitions or elements. */
+  def emptyRDD[T: ClassTag] = new EmptyRDD[T](this)
 
   // Methods for creating shared variables
 
@@ -610,7 +739,7 @@ class SparkContext(
    * standard mutable collections. So you can use this with mutable Map, Set, etc.
    */
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable, T]
-      (initialValue: R) = {
+      (initialValue: R): Accumulable[R, T] = {
     val param = new GrowableAccumulableParam[R,T]
     new Accumulable(initialValue, param)
   }
@@ -620,7 +749,11 @@ class SparkContext(
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
    */
-  def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T](value, isLocal)
+  def broadcast[T](value: T): Broadcast[T] = {
+    val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    cleaner.foreach(_.registerBroadcastForCleanup(bc))
+    bc
+  }
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
@@ -638,14 +771,23 @@ class SparkContext(
     addedFiles(key) = System.currentTimeMillis
 
     // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
-    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory), conf)
+    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
+    postEnvironmentUpdate()
   }
 
+  /**
+   * :: DeveloperApi ::
+   * Register a listener to receive up-calls from events that happen during execution.
+   */
+  @DeveloperApi
   def addSparkListener(listener: SparkListener) {
-    dagScheduler.addSparkListener(listener)
+    listenerBus.addListener(listener)
   }
+
+  /** The version of Spark on which this application is running. */
+  def version = SparkContext.SPARK_VERSION
 
   /**
    * Return a map from the slave to the max memory available for caching and the remaining
@@ -671,10 +813,6 @@ class SparkContext(
    */
   def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
 
-  def getStageInfo: Map[Stage,StageInfo] = {
-    dagScheduler.stageToInfos
-  }
-
   /**
    * Return information about blocks stored in all of the slaves
    */
@@ -698,7 +836,7 @@ class SparkContext(
   }
 
   /**
-   *  Return current scheduling mode
+   * Return current scheduling mode
    */
   def getSchedulingMode: SchedulingMode.SchedulingMode = {
     taskScheduler.schedulingMode
@@ -708,6 +846,7 @@ class SparkContext(
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
+  @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
   def clearFiles() {
     addedFiles.clear()
   }
@@ -720,6 +859,22 @@ class SparkContext(
    */
   private [spark] def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = {
     dagScheduler.getPreferredLocs(rdd, partition)
+  }
+
+  /**
+   * Register an RDD to be persisted in memory and/or disk storage
+   */
+  private[spark] def persistRDD(rdd: RDD[_]) {
+    persistentRdds(rdd.id) = rdd
+  }
+
+  /**
+   * Unpersist an RDD from memory and/or disk storage
+   */
+  private[spark] def unpersistRDD(rddId: Int, blocking: Boolean = true) {
+    env.blockManager.master.removeRdd(rddId, blocking)
+    persistentRdds.remove(rddId)
+    listenerBus.post(SparkListenerUnpersistRDD(rddId))
   }
 
   /**
@@ -740,9 +895,11 @@ class SparkContext(
         key = uri.getScheme match {
           // A JAR file which exists only on the driver node
           case null | "file" =>
-            if (SparkHadoopUtil.get.isYarnMode() && master == "yarn-standalone") {
-              // In order for this to work in yarn standalone mode the user must specify the 
-              // --addjars option to the client to upload the file into the distributed cache 
+            // yarn-standalone is deprecated, but still supported
+            if (SparkHadoopUtil.get.isYarnMode() &&
+                (master == "yarn-standalone" || master == "yarn-cluster")) {
+              // In order for this to work in yarn-cluster mode the user must specify the
+              // --addjars option to the client to upload the file into the distributed cache
               // of the AM to make it show up in the current working directory.
               val fileName = new Path(uri.getPath).getName()
               try {
@@ -750,7 +907,7 @@ class SparkContext(
               } catch {
                 case e: Exception => {
                   // For now just log an error but allow to go through so spark examples work.
-                  // The spark examples don't really need the jar distributed since its also 
+                  // The spark examples don't really need the jar distributed since its also
                   // the app jar.
                   logError("Error adding jar (" + e + "), was the --addJars option used?")
                   null
@@ -771,18 +928,21 @@ class SparkContext(
         logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
       }
     }
+    postEnvironmentUpdate()
   }
 
   /**
    * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
    * any new nodes.
    */
+  @deprecated("adding jars no longer creates local copies that need to be deleted", "1.0.0")
   def clearJars() {
     addedJars.clear()
   }
 
   /** Shut down the SparkContext. */
   def stop() {
+    postApplicationEnd()
     ui.stop()
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
@@ -790,16 +950,16 @@ class SparkContext(
     dagScheduler = null
     if (dagSchedulerCopy != null) {
       metadataCleaner.cancel()
+      cleaner.foreach(_.stop())
       dagSchedulerCopy.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
-      // Clean up locally linked files
-      clearFiles()
-      clearJars()
       SparkEnv.set(null)
       ShuffleMapTask.clearCache()
       ResultTask.clearCache()
+      listenerBus.stop()
+      eventLogger.foreach(_.stop())
       logInfo("Successfully stopped SparkContext")
     } else {
       logInfo("SparkContext already stopped")
@@ -830,13 +990,13 @@ class SparkContext(
     setLocalProperty("externalCallSite", null)
   }
 
+  /**
+   * Capture the current user callsite and return a formatted version for printing. If the user
+   * has overridden the call site, this will return the user's version.
+   */
   private[spark] def getCallSite(): String = {
-    val callSite = getLocalProperty("externalCallSite")
-    if (callSite == null) {
-      Utils.formatSparkCallSite
-    } else {
-      callSite
-    }
+    val defaultCallSite = Utils.getCallSiteInfo
+    Option(getLocalProperty("externalCallSite")).getOrElse(defaultCallSite.toString)
   }
 
   /**
@@ -851,6 +1011,9 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
+    partitions.foreach{ p =>
+      require(p >= 0 && p < rdd.partitions.size, s"Invalid partition requested: $p")
+    }
     val callSite = getCallSite
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite)
@@ -928,8 +1091,10 @@ class SparkContext(
   }
 
   /**
+   * :: DeveloperApi ::
    * Run a job that can return approximate results.
    */
+  @DeveloperApi
   def runApproximateJob[T, U, R](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
@@ -945,8 +1110,10 @@ class SparkContext(
   }
 
   /**
+   * :: Experimental ::
    * Submit a job for execution and return a FutureJob holding the result.
    */
+  @Experimental
   def submitJob[T, U, R](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,
@@ -954,6 +1121,9 @@ class SparkContext(
       resultHandler: (Int, U) => Unit,
       resultFunc: => R): SimpleFutureAction[R] =
   {
+    partitions.foreach{ p =>
+      require(p >= 0 && p < rdd.partitions.size, s"Invalid partition requested: $p")
+    }
     val cleanF = clean(processPartition)
     val callSite = getCallSite
     val waiter = dagScheduler.submitJob(
@@ -978,6 +1148,16 @@ class SparkContext(
   /** Cancel all jobs that have been scheduled or are running.  */
   def cancelAllJobs() {
     dagScheduler.cancelAllJobs()
+  }
+
+  /** Cancel a given job if it's scheduled or running */
+  private[spark] def cancelJob(jobId: Int) {
+    dagScheduler.cancelJob(jobId)
+  }
+
+  /** Cancel a given stage and all jobs associated with it */
+  private[spark] def cancelStage(stageId: Int) {
+    dagScheduler.cancelStage(stageId)
   }
 
   /**
@@ -1008,7 +1188,11 @@ class SparkContext(
   def defaultParallelism: Int = taskScheduler.defaultParallelism
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
+  @deprecated("use defaultMinPartitions", "1.0.0")
   def defaultMinSplits: Int = math.min(defaultParallelism, 2)
+
+  /** Default min number of partitions for Hadoop RDDs when not given by user */
+  def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
 
   private val nextShuffleId = new AtomicInteger(0)
 
@@ -1018,6 +1202,29 @@ class SparkContext(
 
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+
+  /** Post the application start event */
+  private def postApplicationStart() {
+    listenerBus.post(SparkListenerApplicationStart(appName, startTime, sparkUser))
+  }
+
+  /** Post the application end event */
+  private def postApplicationEnd() {
+    listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
+  }
+
+  /** Post the environment update event once the task scheduler is ready */
+  private def postEnvironmentUpdate() {
+    if (taskScheduler != null) {
+      val schedulingMode = getSchedulingMode.toString
+      val addedJarPaths = addedJars.keys.toSeq
+      val addedFilePaths = addedFiles.keys.toSeq
+      val environmentDetails =
+        SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
+      val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
+      listenerBus.post(environmentUpdate)
+    }
+  }
 
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
   private[spark] def cleanup(cleanupTime: Long) {
@@ -1029,7 +1236,9 @@ class SparkContext(
  * The SparkContext object contains a number of implicit conversions and parameters for use with
  * various Spark features.
  */
-object SparkContext {
+object SparkContext extends Logging {
+
+  private[spark] val SPARK_VERSION = "1.0.0"
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
@@ -1065,10 +1274,10 @@ object SparkContext {
   implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
 
   implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
-      rdd: RDD[(K, V)])   =
+      rdd: RDD[(K, V)]) =
     new SequenceFileRDDFunctions(rdd)
 
-  implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassTag, V: ClassTag](
+  implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
       rdd: RDD[(K, V)]) =
     new OrderedRDDFunctions[K, V, (K, V)](rdd)
 
@@ -1102,27 +1311,33 @@ object SparkContext {
   }
 
   // Helper objects for converting common types to Writable
-  private def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T) = {
+  private def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T)
+      : WritableConverter[T] = {
     val wClass = classTag[W].runtimeClass.asInstanceOf[Class[W]]
     new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
   }
 
-  implicit def intWritableConverter() = simpleWritableConverter[Int, IntWritable](_.get)
+  implicit def intWritableConverter(): WritableConverter[Int] =
+    simpleWritableConverter[Int, IntWritable](_.get)
 
-  implicit def longWritableConverter() = simpleWritableConverter[Long, LongWritable](_.get)
+  implicit def longWritableConverter(): WritableConverter[Long] =
+    simpleWritableConverter[Long, LongWritable](_.get)
 
-  implicit def doubleWritableConverter() = simpleWritableConverter[Double, DoubleWritable](_.get)
+  implicit def doubleWritableConverter(): WritableConverter[Double] =
+    simpleWritableConverter[Double, DoubleWritable](_.get)
 
-  implicit def floatWritableConverter() = simpleWritableConverter[Float, FloatWritable](_.get)
+  implicit def floatWritableConverter(): WritableConverter[Float] =
+    simpleWritableConverter[Float, FloatWritable](_.get)
 
-  implicit def booleanWritableConverter() =
+  implicit def booleanWritableConverter(): WritableConverter[Boolean] =
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
-  implicit def bytesWritableConverter() = {
+  implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
     simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
   }
 
-  implicit def stringWritableConverter() = simpleWritableConverter[String, Text](_.toString)
+  implicit def stringWritableConverter(): WritableConverter[String] =
+    simpleWritableConverter[String, Text](_.toString)
 
   implicit def writableWritableConverter[T <: Writable]() =
     new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
@@ -1131,19 +1346,19 @@ object SparkContext {
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to SparkContext.
    */
-  def jarOfClass(cls: Class[_]): Seq[String] = {
+  def jarOfClass(cls: Class[_]): Option[String] = {
     val uri = cls.getResource("/" + cls.getName.replace('.', '/') + ".class")
     if (uri != null) {
       val uriStr = uri.toString
       if (uriStr.startsWith("jar:file:")) {
         // URI will be of the form "jar:file:/path/foo.jar!/package/cls.class",
         // so pull out the /path/foo.jar
-        List(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
+        Some(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
       } else {
-        Nil
+        None
       }
     } else {
-      Nil
+      None
     }
   }
 
@@ -1152,7 +1367,7 @@ object SparkContext {
    * to pass their JARs to SparkContext. In most cases you can call jarOfObject(this) in
    * your driver program.
    */
-  def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
+  def jarOfObject(obj: AnyRef): Option[String] = jarOfClass(obj.getClass)
 
   /**
    * Creates a modified version of a SparkConf with the parameters that can be passed separately
@@ -1182,11 +1397,9 @@ object SparkContext {
   }
 
   /** Creates a task scheduler based on a given master URL. Extracted for testing. */
-  private def createTaskScheduler(sc: SparkContext, master: String, appName: String)
-      : TaskScheduler =
-  {
-    // Regular expression used for local[N] master format
-    val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
+  private def createTaskScheduler(sc: SparkContext, master: String): TaskScheduler = {
+    // Regular expression used for local[N] and local[*] master formats
+    val LOCAL_N_REGEX = """local\[([0-9\*]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
     val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+)\s*,\s*([0-9]+)\]""".r
     // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
@@ -1209,8 +1422,11 @@ object SparkContext {
         scheduler
 
       case LOCAL_N_REGEX(threads) =>
+        def localCpuCount = Runtime.getRuntime.availableProcessors()
+        // local[*] estimates the number of cores on the machine; local[N] uses exactly N threads.
+        val threadCount = if (threads == "*") localCpuCount else threads.toInt
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalBackend(scheduler, threads.toInt)
+        val backend = new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
         scheduler
 
@@ -1223,7 +1439,7 @@ object SparkContext {
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, appName)
+        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         scheduler
 
@@ -1240,14 +1456,18 @@ object SparkContext {
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val masterUrls = localCluster.start()
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, appName)
+        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
         }
         scheduler
 
-      case "yarn-standalone" =>
+      case "yarn-standalone" | "yarn-cluster" =>
+        if (master == "yarn-standalone") {
+          logWarning(
+            "\"yarn-standalone\" is deprecated as of Spark 1.0. Use \"yarn-cluster\" instead.")
+        }
         val scheduler = try {
           val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
@@ -1296,9 +1516,9 @@ object SparkContext {
         val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", false)
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, sc, url, appName)
+          new CoarseMesosSchedulerBackend(scheduler, sc, url)
         } else {
-          new MesosSchedulerBackend(scheduler, sc, url, appName)
+          new MesosSchedulerBackend(scheduler, sc, url)
         }
         scheduler.initialize(backend)
         scheduler

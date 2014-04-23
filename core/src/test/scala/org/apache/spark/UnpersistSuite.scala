@@ -19,8 +19,7 @@ package org.apache.spark
 
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
-import org.scalatest.time.{Span, Millis}
-import org.apache.spark.SparkContext._
+import org.scalatest.time.{Millis, Span}
 
 class UnpersistSuite extends FunSuite with LocalSparkContext {
   test("unpersist RDD") {

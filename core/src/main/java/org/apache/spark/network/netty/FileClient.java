@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.netty;
 
+import java.util.concurrent.TimeUnit;
+
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
@@ -26,8 +28,6 @@ import io.netty.channel.socket.oio.OioSocketChannel;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.concurrent.TimeUnit;
 
 class FileClient {
 

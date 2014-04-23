@@ -18,8 +18,10 @@
 package org.apache.spark.examples
 
 import java.util.Random
+
+import breeze.linalg.{Vector, DenseVector, squaredDistance}
+
 import org.apache.spark.SparkContext
-import org.apache.spark.util.Vector
 import org.apache.spark.SparkContext._
 
 /**
@@ -28,24 +30,24 @@ import org.apache.spark.SparkContext._
 object SparkKMeans {
   val R = 1000     // Scaling factor
   val rand = new Random(42)
-    
-  def parseVector(line: String): Vector = {
-    new Vector(line.split(' ').map(_.toDouble))
+
+  def parseVector(line: String): Vector[Double] = {
+    DenseVector(line.split(' ').map(_.toDouble))
   }
-  
-  def closestPoint(p: Vector, centers: Array[Vector]): Int = {
+
+  def closestPoint(p: Vector[Double], centers: Array[Vector[Double]]): Int = {
     var index = 0
     var bestIndex = 0
     var closest = Double.PositiveInfinity
-  
+
     for (i <- 0 until centers.length) {
-      val tempDist = p.squaredDist(centers(i))
+      val tempDist = squaredDistance(p, centers(i))
       if (tempDist < closest) {
         closest = tempDist
         bestIndex = i
       }
     }
-  
+
     bestIndex
   }
 
@@ -55,27 +57,28 @@ object SparkKMeans {
         System.exit(1)
     }
     val sc = new SparkContext(args(0), "SparkLocalKMeans",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
     val lines = sc.textFile(args(1))
     val data = lines.map(parseVector _).cache()
     val K = args(2).toInt
     val convergeDist = args(3).toDouble
-  
+
     val kPoints = data.takeSample(withReplacement = false, K, 42).toArray
     var tempDist = 1.0
 
     while(tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
-      
+
       val pointStats = closest.reduceByKey{case ((x1, y1), (x2, y2)) => (x1 + x2, y1 + y2)}
-      
-      val newPoints = pointStats.map {pair => (pair._1, pair._2._1 / pair._2._2)}.collectAsMap()
-      
+
+      val newPoints = pointStats.map {pair =>
+        (pair._1, pair._2._1 * (1.0 / pair._2._2))}.collectAsMap()
+
       tempDist = 0.0
       for (i <- 0 until K) {
-        tempDist += kPoints(i).squaredDist(newPoints(i))
+        tempDist += squaredDistance(kPoints(i), newPoints(i))
       }
-      
+
       for (newP <- newPoints) {
         kPoints(newP._1) = newP._2
       }
@@ -84,6 +87,6 @@ object SparkKMeans {
 
     println("Final centers:")
     kPoints.foreach(println)
-    System.exit(0)
+    sc.stop()
   }
 }

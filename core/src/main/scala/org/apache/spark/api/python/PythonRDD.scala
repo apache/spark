@@ -19,14 +19,17 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
+import java.nio.charset.Charset
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
+import net.razorvine.pickle.{Pickler, Unpickler}
+
+import org.apache.spark._
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
@@ -99,6 +102,14 @@ private[spark] class PythonRDD[T: ClassTag](
         }
       }
     }.start()
+
+    /*
+     * Partial fix for SPARK-1019: Attempts to stop reading the input stream since
+     * other completion callbacks might invalidate the input. Because interruption
+     * is not synchronous this still leaves a potential race where the interruption is
+     * processed only after the stream becomes invalid.
+     */
+    context.addOnCompleteCallback(() => context.interrupted = true)
 
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
@@ -198,6 +209,7 @@ private object SpecialLengths {
 }
 
 private[spark] object PythonRDD {
+  val UTF8 = Charset.forName("UTF-8")
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
   JavaRDD[Array[Byte]] = {
@@ -258,7 +270,7 @@ private[spark] object PythonRDD {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
-    val bytes = str.getBytes("UTF-8")
+    val bytes = str.getBytes(UTF8)
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)
   }
@@ -274,11 +286,41 @@ private[spark] object PythonRDD {
     file.close()
   }
 
+  /**
+   * Convert an RDD of serialized Python dictionaries to Scala Maps
+   * TODO: Support more Python types.
+   */
+  def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Unpickler
+      // TODO: Figure out why flatMap is necessay for pyspark
+      iter.flatMap { row =>
+        unpickle.loads(row) match {
+          case objs: java.util.ArrayList[JMap[String, _] @unchecked] => objs.map(_.toMap)
+          // Incase the partition doesn't have a collection
+          case obj: JMap[String @unchecked, _] => Seq(obj.toMap)
+        }
+      }
+    }
+  }
+
+  /**
+   * Convert and RDD of Java objects to and RDD of serialized Python objects, that is usable by
+   * PySpark.
+   */
+  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
+    jRDD.rdd.mapPartitions { iter =>
+      val pickle = new Pickler
+      iter.map { row =>
+        pickle.dumps(row)
+      }
+    }
+  }
 }
 
 private
 class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
-  override def call(arr: Array[Byte]) : String = new String(arr, "UTF-8")
+  override def call(arr: Array[Byte]) : String = new String(arr, PythonRDD.UTF8)
 }
 
 /**

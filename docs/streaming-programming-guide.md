@@ -40,7 +40,7 @@ Spark Streaming provides a high-level abstraction called *discretized stream* or
 which represents a continuous stream of data. DStreams can be created either from input data
 stream from sources such as Kafka and Flume, or by applying high-level
 operations on other DStreams. Internally, a DStream is represented as a sequence of
-[RDDs](api/core/index.html#org.apache.spark.rdd.RDD).
+[RDDs](api/scala/index.html#org.apache.spark.rdd.RDD).
 
 This guide shows you how to start writing Spark Streaming programs with DStreams. You can
 write Spark Streaming programs in Scala or Java, both of which are presented in this guide. You
@@ -58,11 +58,21 @@ do is as follows.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1" >
+First, we import the names of the Spark Streaming classes, and some implicit
+conversions from StreamingContext into our environment, to add useful methods to
+other classes we need (like DStream).
 
-First, we create a
-[StreamingContext](api/streaming/index.html#org.apache.spark.streaming.StreamingContext) object,
-which is the main entry point for all streaming
-functionality. Besides Spark's configuration, we specify that any DStream will be processed
+[StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) is the
+main entry point for all streaming functionality.
+
+{% highlight scala %}
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.StreamingContext._
+{% endhighlight %}
+
+Then we create a
+[StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) object.
+Besides Spark's configuration, we specify that any DStream will be processed
 in 1 second batches.
 
 {% highlight scala %}
@@ -98,7 +108,7 @@ val pairs = words.map(word => (word, 1))
 val wordCounts = pairs.reduceByKey(_ + _)
 
 // Print a few of the counts to the console
-wordCount.print()
+wordCounts.print()
 {% endhighlight %}
 
 The `words` DStream is further mapped (one-to-one transformation) to a DStream of `(word,
@@ -122,7 +132,7 @@ The complete code can be found in the Spark Streaming example
 <div data-lang="java" markdown="1">
 
 First, we create a
-[JavaStreamingContext](api/streaming/index.html#org.apache.spark.streaming.api.java.JavaStreamingContext) object,
+[JavaStreamingContext](api/scala/index.html#org.apache.spark.streaming.api.java.JavaStreamingContext) object,
 which is the main entry point for all streaming
 functionality. Besides Spark's configuration, we specify that any DStream would be processed
 in 1 second batches.
@@ -158,7 +168,7 @@ JavaDStream<String> words = lines.flatMap(
 generating multiple new records from each record in the source DStream. In this case,
 each line will be split into multiple words and the stream of words is represented as the
 `words` DStream. Note that we defined the transformation using a
-[FlatMapFunction](api/core/index.html#org.apache.spark.api.java.function.FlatMapFunction) object.
+[FlatMapFunction](api/scala/index.html#org.apache.spark.api.java.function.FlatMapFunction) object.
 As we will discover along the way, there are a number of such convenience classes in the Java API
 that help define DStream transformations.
 
@@ -178,13 +188,13 @@ JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
       return i1 + i2;
     }
   });
-wordCount.print();     // Print a few of the counts to the console
+wordCounts.print();     // Print a few of the counts to the console
 {% endhighlight %}
 
 The `words` DStream is further mapped (one-to-one transformation) to a DStream of `(word,
-1)` pairs, using a [PairFunction](api/core/index.html#org.apache.spark.api.java.function.PairFunction)
+1)` pairs, using a [PairFunction](api/scala/index.html#org.apache.spark.api.java.function.PairFunction)
 object. Then, it is reduced to get the frequency of words in each batch of data,
-using a [Function2](api/core/index.html#org.apache.spark.api.java.function.Function2) object.
+using a [Function2](api/scala/index.html#org.apache.spark.api.java.function.Function2) object.
 Finally, `wordCounts.print()` will print a few of the counts generated every second.
 
 Note that when these lines are executed, Spark Streaming only sets up the computation it
@@ -262,6 +272,24 @@ Time: 1357008430000 ms
     </td>
 </table>
 
+If you plan to run the Scala code for Spark Streaming-based use cases in the Spark
+shell, you should start the shell with the SparkConfiguration pre-configured to
+discard old batches periodically:
+
+{% highlight bash %}
+$ SPARK_JAVA_OPTS=-Dspark.cleaner.ttl=10000 bin/spark-shell
+{% endhighlight %}
+
+... and create your StreamingContext by wrapping the existing interactive shell
+SparkContext object, `sc`:
+
+{% highlight scala %}
+val ssc = new StreamingContext(sc, Seconds(1))
+{% endhighlight %}
+
+When working with the shell, you may also need to send a `^D` to your netcat session
+to force the pipeline to print the word counts to the console at the sink.
+
 ***************************************************************************************************  
 
 # Basics
@@ -275,23 +303,23 @@ To write your own Spark Streaming program, you will have to add the following de
  SBT or Maven project:
 
     groupId = org.apache.spark
-    artifactId = spark-streaming_{{site.SCALA_VERSION}}
+    artifactId = spark-streaming_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION}}
 
 For ingesting data from sources like Kafka and Flume that are not present in the Spark
 Streaming core
  API, you will have to add the corresponding
-artifact `spark-streaming-xyz_{{site.SCALA_VERSION}}` to the dependencies. For example,
+artifact `spark-streaming-xyz_{{site.SCALA_BINARY_VERSION}}` to the dependencies. For example,
 some of the common ones are as follows.
 
 
 <table class="table">
 <tr><th>Source</th><th>Artifact</th></tr>
-<tr><td> Kafka </td><td> spark-streaming-kafka_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_VERSION}} </td></tr>
+<tr><td> Kafka </td><td> spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> </td><td></td></tr>
 </table>
 
@@ -305,7 +333,7 @@ for the full list of supported sources and artifacts.
 <div data-lang="scala" markdown="1">
 
 To initialize a Spark Streaming program in Scala, a
-[`StreamingContext`](api/streaming/index.html#org.apache.spark.streaming.StreamingContext)
+[`StreamingContext`](api/scala/index.html#org.apache.spark.streaming.StreamingContext)
 object has to be created, which is the main entry point of all Spark Streaming functionality.
 A `StreamingContext` object can be created by using
 
@@ -316,7 +344,7 @@ new StreamingContext(master, appName, batchDuration, [sparkHome], [jars])
 <div data-lang="java" markdown="1">
 
 To initialize a Spark Streaming program in Java, a
-[`JavaStreamingContext`](api/streaming/index.html#org.apache.spark.streaming.api.java.JavaStreamingContext)
+[`JavaStreamingContext`](api/scala/index.html#org.apache.spark.streaming.api.java.JavaStreamingContext)
 object has to be created, which is the main entry point of all Spark Streaming functionality.
 A `JavaStreamingContext` object can be created by using
 
@@ -403,14 +431,14 @@ and process any files created in that directory. Note that
 
 For more details on streams from files, Akka actors and sockets,
 see the API documentations of the relevant functions in
-[StreamingContext](api/streaming/index.html#org.apache.spark.streaming.StreamingContext) for
-Scala and [JavaStreamingContext](api/streaming/index.html#org.apache.spark.streaming.api.java.JavaStreamingContext)
+[StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) for
+Scala and [JavaStreamingContext](api/scala/index.html#org.apache.spark.streaming.api.java.JavaStreamingContext)
  for Java.
 
 Additional functionality for creating DStreams from sources such as Kafka, Flume, and Twitter
 can be imported by adding the right dependencies as explained in an
 [earlier](#linking) section. To take the
-case of Kafka, after adding the artifact `spark-streaming-kafka_{{site.SCALA_VERSION}}` to the
+case of Kafka, after adding the artifact `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` to the
 project dependencies, you can create a DStream from Kafka as
 
 <div class="codetabs">
@@ -428,9 +456,9 @@ KafkaUtils.createStream(javaStreamingContext, kafkaParams, ...);
 </div>
 </div>
 
-For more details on these additional sources, see the corresponding [API documentation]
-(#where-to-go-from-here). Furthermore, you can also implement your own custom receiver
-for your sources. See the [Custom Receiver Guide](streaming-custom-receivers.html).
+For more details on these additional sources, see the corresponding [API documentation](#where-to-go-from-here).
+Furthermore, you can also implement your own custom receiver for your sources. See the
+[Custom Receiver Guide](streaming-custom-receivers.html).
 
 ## Operations
 There are two kinds of DStream operations - _transformations_ and _output operations_. Similar to
@@ -511,7 +539,7 @@ common ones are as follows.
   <td> <b>updateStateByKey</b>(<i>func</i>) </td>
   <td> Return a new "state" DStream where the state for each key is updated by applying the
   given function on the previous state of the key and the new values for the key. This can be
-  used to maintain arbitrary state data for each ket.</td>
+  used to maintain arbitrary state data for each key.</td>
 </tr>
 <tr><td></td><td></td></tr>
 </table>
@@ -520,9 +548,8 @@ The last two transformations are worth highlighting again.
 
 <h4>UpdateStateByKey Operation</h4>
 
-The `updateStateByKey` operation allows
-you to main arbitrary stateful computation, where you want to maintain some state data and
-continuously update it with new information. To use this, you will have to do two steps.
+The `updateStateByKey` operation allows you to maintain arbitrary state while continuously updating
+it with new information. To use this, you will have to do two steps.
 
 1. Define the state - The state can be of arbitrary data type.
 1. Define the state update function - Specify with a function how to update the state using the
@@ -775,10 +802,10 @@ output operators are defined:
 
 
 The complete list of DStream operations is available in the API documentation. For the Scala API,
-see [DStream](api/streaming/index.html#org.apache.spark.streaming.dstream.DStream)
-and [PairDStreamFunctions](api/streaming/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions).
-For the Java API, see [JavaDStream](api/streaming/index.html#org.apache.spark.streaming.api.java.dstream.DStream)
-and [JavaPairDStream](api/streaming/index.html#org.apache.spark.streaming.api.java.JavaPairDStream).
+see [DStream](api/scala/index.html#org.apache.spark.streaming.dstream.DStream)
+and [PairDStreamFunctions](api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions).
+For the Java API, see [JavaDStream](api/scala/index.html#org.apache.spark.streaming.api.java.dstream.DStream)
+and [JavaPairDStream](api/scala/index.html#org.apache.spark.streaming.api.java.JavaPairDStream).
 Specifically for the Java API, see [Spark's Java programming guide](java-programming-guide.html)
 for more information.
 
@@ -854,7 +881,7 @@ Cluster resources maybe under-utilized if the number of parallel tasks used in a
 computation is not high enough. For example, for distributed reduce operations like `reduceByKey`
 and `reduceByKeyAndWindow`, the default number of parallel tasks is 8. You can pass the level of
 parallelism as an argument (see the
-[`PairDStreamFunctions`](api/streaming/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
+[`PairDStreamFunctions`](api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
 documentation), or set the [config property](configuration.html#spark-properties)
 `spark.default.parallelism` to change the default.
 
@@ -898,7 +925,7 @@ A good approach to figure out the right batch size for your application is to te
 conservative batch size (say, 5-10 seconds) and a low data rate. To verify whether the system
 is able to keep up with data rate, you can check the value of the end-to-end delay experienced
 by each processed batch (either look for "Total delay" in Spark driver log4j logs, or use the
-[StreamingListener](api/streaming/index.html#org.apache.spark.streaming.scheduler.StreamingListener)
+[StreamingListener](api/scala/index.html#org.apache.spark.streaming.scheduler.StreamingListener)
 interface).
 If the delay is maintained to be comparable to the batch size, then system is stable. Otherwise,
 if the delay is continuously increasing, it means that the system is unable to keep up and it
@@ -925,7 +952,7 @@ exception saying so.
 ## Monitoring
 Besides Spark's in-built [monitoring capabilities](monitoring.html),
 the progress of a Spark Streaming program can also be monitored using the [StreamingListener]
-(streaming/index.html#org.apache.spark.scheduler.StreamingListener) interface,
+(api/scala/index.html#org.apache.spark.scheduler.StreamingListener) interface,
 which allows you to get statistics of batch processing times, queueing delays,
 and total end-to-end delays. Note that this is still an experimental API and it is likely to be
 improved upon (i.e., more information reported) in the future.
@@ -938,9 +965,9 @@ in Spark Streaming applications and achieving more consistent batch processing t
 
 * **Default persistence level of DStreams**: Unlike RDDs, the default persistence level of DStreams
 serializes the data in memory (that is,
-[StorageLevel.MEMORY_ONLY_SER](api/core/index.html#org.apache.spark.storage.StorageLevel$) for
+[StorageLevel.MEMORY_ONLY_SER](api/scala/index.html#org.apache.spark.storage.StorageLevel$) for
 DStream compared to
-[StorageLevel.MEMORY_ONLY](api/core/index.html#org.apache.spark.storage.StorageLevel$) for RDDs).
+[StorageLevel.MEMORY_ONLY](api/scala/index.html#org.apache.spark.storage.StorageLevel$) for RDDs).
 Even though keeping the data serialized incurs higher serialization/deserialization overheads,
 it significantly reduces GC pauses.
 
@@ -1000,11 +1027,11 @@ Since all data is modeled as RDDs with their lineage of deterministic operations
  for output operations.
 
 ## Failure of the Driver Node
-To allows a streaming application to operate 24/7, Spark Streaming allows a streaming computation
+For a streaming application to operate 24/7, Spark Streaming allows a streaming computation
 to be resumed even after the failure of the driver node. Spark Streaming periodically writes the
 metadata information of the DStreams setup through the `StreamingContext` to a
 HDFS directory (can be any Hadoop-compatible filesystem). This periodic
-*checkpointing* can be enabled by setting a the checkpoint
+*checkpointing* can be enabled by setting the checkpoint
 directory using `ssc.checkpoint(<checkpoint directory>)` as described
 [earlier](#rdd-checkpointing). On failure of the driver node,
 the lost `StreamingContext` can be recovered from this information, and restarted.
@@ -1105,8 +1132,8 @@ classes. So, if you are using `getOrCreate`, then make sure that the checkpoint 
 explicitly deleted every time recompiled code needs to be launched.
 
 This failure recovery can be done automatically using Spark's
-[standalone cluster mode](spark-standalone.html), which allows any Spark
-application's driver to be as well as, ensures automatic restart of the driver on failure (see
+[standalone cluster mode](spark-standalone.html), which allows the driver of any Spark application
+to be launched within the cluster and be restarted on failure (see
 [supervise mode](spark-standalone.html#launching-applications-inside-the-cluster)). This can be
 tested locally by launching the above example using the supervise mode in a
 local standalone cluster and killing the java process running the driver (will be shown as
@@ -1123,7 +1150,7 @@ There are two different failure behaviors based on which input sources are used.
 1. _Using HDFS files as input source_ - Since the data is reliably stored on HDFS, all data can
 re-computed and therefore no data will be lost due to any failure.
 1. _Using any input source that receives data through a network_ - The received input data is
-replicated in memory to multiple nodes. Since, all the data in the Spark worker's memory is lost
+replicated in memory to multiple nodes. Since all the data in the Spark worker's memory is lost
 when the Spark driver fails, the past input data will not be accessible and driver recovers.
 Hence, if stateful and window-based operations are used
 (like `updateStateByKey`, `window`, `countByValueAndWindow`, etc.), then the intermediate state
@@ -1133,11 +1160,11 @@ In future releases, we will support full recoverability for all input sources. N
 non-stateful transformations like `map`, `count`, and `reduceByKey`, with _all_ input streams,
 the system, upon restarting, will continue to receive and process new data.
 
-To better understand the behavior of the system under driver failure with a HDFS source, lets
+To better understand the behavior of the system under driver failure with a HDFS source, let's
 consider what will happen with a file input stream. Specifically, in the case of the file input
 stream, it will correctly identify new files that were created while the driver was down and
 process them in the same way as it would have if the driver had not failed. To explain further
-in the case of file input stream, we shall use an example. Lets say, files are being generated
+in the case of file input stream, we shall use an example. Let's say, files are being generated
 every second, and a Spark Streaming program reads every new file and output the number of lines
 in the file. This is what the sequence of outputs would be with and without a driver failure.
 
@@ -1217,15 +1244,15 @@ and output 30 after recovery.
 # Where to Go from Here
 
 * API documentation
-  - Main docs of StreamingContext and DStreams in [Scala](api/streaming/index.html#org.apache.spark.streaming.package)
-    and [Java](api/streaming/index.html#org.apache.spark.streaming.api.java.package)
+  - Main docs of StreamingContext and DStreams in [Scala](api/scala/index.html#org.apache.spark.streaming.package)
+    and [Java](api/scala/index.html#org.apache.spark.streaming.api.java.package)
   - Additional docs for
-    [Kafka](api/external/kafka/index.html#org.apache.spark.streaming.kafka.KafkaUtils$),
-    [Flume](api/external/flume/index.html#org.apache.spark.streaming.flume.FlumeUtils$),
-    [Twitter](api/external/twitter/index.html#org.apache.spark.streaming.twitter.TwitterUtils$),
-    [ZeroMQ](api/external/zeromq/index.html#org.apache.spark.streaming.zeromq.ZeroMQUtils$), and
-    [MQTT](api/external/mqtt/index.html#org.apache.spark.streaming.mqtt.MQTTUtils$)
+    [Kafka](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$),
+    [Flume](api/scala/index.html#org.apache.spark.streaming.flume.FlumeUtils$),
+    [Twitter](api/scala/index.html#org.apache.spark.streaming.twitter.TwitterUtils$),
+    [ZeroMQ](api/scala/index.html#org.apache.spark.streaming.zeromq.ZeroMQUtils$), and
+    [MQTT](api/scala/index.html#org.apache.spark.streaming.mqtt.MQTTUtils$)
 
 * More examples in [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/streaming/examples)
   and [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/streaming/examples)
-* [Paper](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf) describing Spark Streaming
+* [Paper](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf) describing Spark Streaming.

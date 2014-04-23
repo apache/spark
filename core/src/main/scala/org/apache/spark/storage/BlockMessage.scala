@@ -19,8 +19,8 @@ package org.apache.spark.storage
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.StringBuilder
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.StringBuilder
 
 import org.apache.spark.network._
 
@@ -37,7 +37,7 @@ private[spark] class BlockMessage() {
   private var id: BlockId = null
   private var data: ByteBuffer = null
   private var level: StorageLevel = null
- 
+
   def set(getBlock: GetBlock) {
     typ = BlockMessage.TYPE_GET_BLOCK
     id = getBlock.id
@@ -75,13 +75,13 @@ private[spark] class BlockMessage() {
       idBuilder += buffer.getChar()
     }
     id = BlockId(idBuilder.toString)
-    
+
     if (typ == BlockMessage.TYPE_PUT_BLOCK) {
 
       val booleanInt = buffer.getInt()
       val replication = buffer.getInt()
       level = StorageLevel(booleanInt, replication)
-      
+
       val dataLength = buffer.getInt()
       data = ByteBuffer.allocate(dataLength)
       if (dataLength != buffer.remaining) {
@@ -108,12 +108,12 @@ private[spark] class BlockMessage() {
     buffer.clear()
     set(buffer)
   }
-  
+
   def getType: Int = typ
   def getId: BlockId = id
   def getData: ByteBuffer = data
   def getLevel: StorageLevel =  level
-  
+
   def toBufferMessage: BufferMessage = {
     val startTime = System.currentTimeMillis
     val buffers = new ArrayBuffer[ByteBuffer]()
@@ -127,7 +127,7 @@ private[spark] class BlockMessage() {
       buffer = ByteBuffer.allocate(8).putInt(level.toInt).putInt(level.replication)
       buffer.flip()
       buffers += buffer
-      
+
       buffer = ByteBuffer.allocate(4).putInt(data.remaining)
       buffer.flip()
       buffers += buffer
@@ -140,7 +140,7 @@ private[spark] class BlockMessage() {
 
       buffers += data
     }
-    
+
     /*
     println()
     println("BlockMessage: ")
@@ -158,7 +158,7 @@ private[spark] class BlockMessage() {
   }
 
   override def toString: String = {
-    "BlockMessage [type = " + typ + ", id = " + id + ", level = " + level + 
+    "BlockMessage [type = " + typ + ", id = " + id + ", level = " + level +
     ", data = " + (if (data != null) data.remaining.toString  else "null") + "]"
   }
 }
@@ -168,7 +168,7 @@ private[spark] object BlockMessage {
   val TYPE_GET_BLOCK: Int = 1
   val TYPE_GOT_BLOCK: Int = 2
   val TYPE_PUT_BLOCK: Int = 3
- 
+
   def fromBufferMessage(bufferMessage: BufferMessage): BlockMessage = {
     val newBlockMessage = new BlockMessage()
     newBlockMessage.set(bufferMessage)
@@ -192,7 +192,7 @@ private[spark] object BlockMessage {
     newBlockMessage.set(gotBlock)
     newBlockMessage
   }
-  
+
   def fromPutBlock(putBlock: PutBlock): BlockMessage = {
     val newBlockMessage = new BlockMessage()
     newBlockMessage.set(putBlock)
@@ -206,7 +206,7 @@ private[spark] object BlockMessage {
     val bMsg = B.toBufferMessage
     val C = new BlockMessage()
     C.set(bMsg)
-    
+
     println(B.getId + " " + B.getLevel)
     println(C.getId + " " + C.getLevel)
   }

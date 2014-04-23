@@ -20,10 +20,12 @@ package org.apache.spark.storage
 import java.io.{File, FileWriter}
 
 import scala.collection.mutable
+import scala.language.reflectiveCalls
 
 import com.google.common.io.Files
-import org.apache.spark.SparkConf
 import org.scalatest.{BeforeAndAfterEach, FunSuite}
+
+import org.apache.spark.SparkConf
 
 class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
   private val testConf = new SparkConf(false)
@@ -58,8 +60,16 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
     val newFile = diskBlockManager.getFile(blockId)
     writeToFile(newFile, 10)
     assertSegmentEquals(blockId, blockId.name, 0, 10)
-
+    assert(diskBlockManager.containsBlock(blockId))
     newFile.delete()
+    assert(!diskBlockManager.containsBlock(blockId))
+  }
+
+  test("enumerating blocks") {
+    val ids = (1 to 100).map(i => TestBlockId("test_" + i))
+    val files = ids.map(id => diskBlockManager.getFile(id))
+    files.foreach(file => writeToFile(file, 10))
+    assert(diskBlockManager.getAllBlocks.toSet === ids.toSet)
   }
 
   test("block appending") {

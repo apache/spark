@@ -20,12 +20,11 @@ package org.apache.spark.deploy.worker
 import java.io._
 
 import akka.actor.ActorRef
-
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.{ExecutorState, ApplicationDescription, Command}
+import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 
 /**
@@ -100,7 +99,9 @@ private[spark] class ExecutorRunner(
 
   def getCommandSeq = {
     val command = Command(appDesc.command.mainClass,
-      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId), appDesc.command.environment)
+      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId), appDesc.command.environment,
+      appDesc.command.classPathEntries, appDesc.command.libraryPathEntries,
+      appDesc.command.extraJavaOptions)
     CommandUtils.buildCommandSeq(command, memory, sparkHome.getAbsolutePath)
   }
 

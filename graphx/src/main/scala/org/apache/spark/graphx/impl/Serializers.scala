@@ -20,12 +20,13 @@ package org.apache.spark.graphx.impl
 import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
-import org.apache.spark.SparkConf
 import org.apache.spark.graphx._
 import org.apache.spark.serializer._
 
+import scala.language.existentials
+
 private[graphx]
-class VertexIdMsgSerializer(conf: SparkConf) extends Serializer {
+class VertexIdMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -46,7 +47,7 @@ class VertexIdMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for VertexBroadcastMessage[Int]. */
 private[graphx]
-class IntVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
+class IntVertexBroadcastMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -70,7 +71,7 @@ class IntVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for VertexBroadcastMessage[Long]. */
 private[graphx]
-class LongVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
+class LongVertexBroadcastMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -94,7 +95,7 @@ class LongVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for VertexBroadcastMessage[Double]. */
 private[graphx]
-class DoubleVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
+class DoubleVertexBroadcastMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -118,7 +119,7 @@ class DoubleVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for AggregationMessage[Int]. */
 private[graphx]
-class IntAggMsgSerializer(conf: SparkConf) extends Serializer {
+class IntAggMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -142,7 +143,7 @@ class IntAggMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for AggregationMessage[Long]. */
 private[graphx]
-class LongAggMsgSerializer(conf: SparkConf) extends Serializer {
+class LongAggMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -166,7 +167,7 @@ class LongAggMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for AggregationMessage[Double]. */
 private[graphx]
-class DoubleAggMsgSerializer(conf: SparkConf) extends Serializer {
+class DoubleAggMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -298,7 +299,6 @@ abstract class ShuffleSerializationStream(s: OutputStream) extends Serialization
     s.write(v.toInt)
   }
 
-  //def writeDouble(v: Double): Unit = writeUnsignedVarLong(java.lang.Double.doubleToLongBits(v))
   def writeDouble(v: Double): Unit = writeLong(java.lang.Double.doubleToLongBits(v))
 
   override def flush(): Unit = s.flush()
@@ -391,7 +391,6 @@ abstract class ShuffleDeserializationStream(s: InputStream) extends Deserializat
       (s.read() & 0xFF)
   }
 
-  //def readDouble(): Double = java.lang.Double.longBitsToDouble(readUnsignedVarLong())
   def readDouble(): Double = java.lang.Double.longBitsToDouble(readLong())
 
   override def close(): Unit = s.close()

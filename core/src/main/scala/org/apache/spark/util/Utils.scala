@@ -18,7 +18,8 @@
 package org.apache.spark.util
 
 import java.io._
-import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address}
+import java.net.{InetAddress, Inet4Address, NetworkInterface, URI, URL, URLConnection}
+import java.nio.ByteBuffer
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
@@ -30,21 +31,21 @@ import scala.reflect.ClassTag
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.json4s._
+import tachyon.client.{TachyonFile,TachyonFS}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
-import org.apache.hadoop.io._
-
-import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import java.nio.ByteBuffer
-import org.apache.spark.{SparkConf, SparkException, Logging}
+import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 
 /**
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
+
+  val osName = System.getProperty("os.name")
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -116,6 +117,21 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Get the ClassLoader which loaded Spark.
+   */
+  def getSparkClassLoader = getClass.getClassLoader
+
+  /**
+   * Get the Context ClassLoader on this thread or, if not present, the ClassLoader that
+   * loaded Spark.
+   *
+   * This should be used whenever passing a ClassLoader to Class.ForName or finding the currently
+   * active loader when setting up ClassLoader delegation chains.
+   */
+  def getContextOrSparkClassLoader =
+    Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
+
+  /**
    * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
    */
   def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput) = {
@@ -153,12 +169,21 @@ private[spark] object Utils extends Logging {
   }
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
+  private val shutdownDeleteTachyonPaths = new scala.collection.mutable.HashSet[String]()
 
   // Register the path to be deleted via shutdown hook
   def registerShutdownDeleteDir(file: File) {
     val absolutePath = file.getAbsolutePath()
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths += absolutePath
+    }
+  }
+
+  // Register the tachyon path to be deleted via shutdown hook
+  def registerShutdownDeleteDir(tachyonfile: TachyonFile) {
+    val absolutePath = tachyonfile.getPath()
+    shutdownDeleteTachyonPaths.synchronized {
+      shutdownDeleteTachyonPaths += absolutePath
     }
   }
 
@@ -170,11 +195,35 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  // Is the path already registered to be deleted via a shutdown hook ?
+  def hasShutdownDeleteTachyonDir(file: TachyonFile): Boolean = {
+    val absolutePath = file.getPath()
+    shutdownDeletePaths.synchronized {
+      shutdownDeletePaths.contains(absolutePath)
+    }
+  }
+
   // Note: if file is child of some registered path, while not equal to it, then return true;
   // else false. This is to ensure that two shutdown hooks do not try to delete each others
   // paths - resulting in IOException and incomplete cleanup.
   def hasRootAsShutdownDeleteDir(file: File): Boolean = {
     val absolutePath = file.getAbsolutePath()
+    val retval = shutdownDeletePaths.synchronized {
+      shutdownDeletePaths.find { path =>
+        !absolutePath.equals(path) && absolutePath.startsWith(path)
+      }.isDefined
+    }
+    if (retval) {
+      logInfo("path = " + file + ", already present as root for deletion.")
+    }
+    retval
+  }
+
+  // Note: if file is child of some registered path, while not equal to it, then return true;
+  // else false. This is to ensure that two shutdown hooks do not try to delete each others
+  // paths - resulting in Exception and incomplete cleanup.
+  def hasRootAsShutdownDeleteDir(file: TachyonFile): Boolean = {
+    val absolutePath = file.getPath()
     val retval = shutdownDeletePaths.synchronized {
       shutdownDeletePaths.find { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
@@ -237,13 +286,29 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Construct a URI container information used for authentication.
+   * This also sets the default authenticator to properly negotiation the
+   * user/password based on the URI.
+   *
+   * Note this relies on the Authenticator.setDefault being set properly to decode
+   * the user name and password. This is currently set in the SecurityManager.
+   */
+  def constructURIForAuthentication(uri: URI, securityMgr: SecurityManager): URI = {
+    val userCred = securityMgr.getSecretKey()
+    if (userCred == null) throw new Exception("Secret key is null with authentication on")
+    val userInfo = securityMgr.getHttpUser()  + ":" + userCred
+    new URI(uri.getScheme(), userInfo, uri.getHost(), uri.getPort(), uri.getPath(),
+      uri.getQuery(), uri.getFragment())
+  }
+
+  /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  def fetchFile(url: String, targetDir: File, conf: SparkConf) {
+  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager) {
     val filename = url.split("/").last
     val tempDir = getLocalDir(conf)
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
@@ -253,7 +318,23 @@ private[spark] object Utils extends Logging {
     uri.getScheme match {
       case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)
-        val in = new URL(url).openStream()
+
+        var uc: URLConnection = null
+        if (securityMgr.isAuthenticationEnabled()) {
+          logDebug("fetchFile with security enabled")
+          val newuri = constructURIForAuthentication(uri, securityMgr)
+          uc = newuri.toURL().openConnection()
+          uc.setAllowUserInteraction(false)
+        } else {
+          logDebug("fetchFile not using security")
+          uc = new URL(url).openConnection()
+        }
+
+        val timeout = conf.getInt("spark.files.fetchTimeout", 60) * 1000
+        uc.setConnectTimeout(timeout)
+        uc.setReadTimeout(timeout)
+        uc.connect()
+        val in = uc.getInputStream()
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
@@ -299,8 +380,7 @@ private[spark] object Utils extends Logging {
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
-        val conf = SparkHadoopUtil.get.newConfiguration()
-        val fs = FileSystem.get(uri, conf)
+        val fs = getHadoopFileSystem(uri)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
@@ -433,10 +513,10 @@ private[spark] object Utils extends Logging {
   private val hostPortParseResults = new ConcurrentHashMap[String, (String, Int)]()
 
   def parseHostPort(hostPort: String): (String,  Int) = {
-    {
-      // Check cache first.
-      val cached = hostPortParseResults.get(hostPort)
-      if (cached != null) return cached
+    // Check cache first.
+    val cached = hostPortParseResults.get(hostPort)
+    if (cached != null) {
+      return cached
     }
 
     val indx: Int = hostPort.lastIndexOf(':')
@@ -471,7 +551,7 @@ private[spark] object Utils extends Logging {
    * millisecond.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
-    return " " + (System.currentTimeMillis - startTimeMs) + " ms"
+    " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   /**
@@ -493,22 +573,67 @@ private[spark] object Utils extends Logging {
 
   /**
    * Delete a file or directory and its contents recursively.
+   * Don't follow directories if they are symlinks.
    */
   def deleteRecursively(file: File) {
-    if (file.isDirectory) {
+    if ((file.isDirectory) && !isSymlink(file)) {
       for (child <- listFilesSafely(file)) {
         deleteRecursively(child)
       }
     }
     if (!file.delete()) {
-      throw new IOException("Failed to delete: " + file)
+      // Delete can also fail if the file simply did not exist
+      if (file.exists()) {
+        throw new IOException("Failed to delete: " + file.getAbsolutePath)
+      }
+    }
+  }
+
+  /**
+   * Delete a file or directory and its contents recursively.
+   */
+  def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
+    if (!client.delete(dir.getPath(), true)) {
+      throw new IOException("Failed to delete the tachyon dir: " + dir)
+    }
+  }
+
+  /**
+   * Check to see if file is a symbolic link.
+   */
+  def isSymlink(file: File): Boolean = {
+    if (file == null) throw new NullPointerException("File must not be null")
+    if (osName.startsWith("Windows")) return false
+    val fileInCanonicalDir = if (file.getParent() == null) {
+      file
+    } else {
+      new File(file.getParentFile().getCanonicalFile(), file.getName())
+    }
+
+    if (fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile())) {
+      return false
+    } else {
+      return true
+    }
+  }
+
+  /**
+   * Finds all the files in a directory whose last modified time is older than cutoff seconds.
+   * @param dir  must be the path to a directory, or IllegalArgumentException is thrown
+   * @param cutoff measured in seconds. Files older than this are returned.
+   */
+  def findOldFiles(dir: File, cutoff: Long): Seq[File] = {
+    val currentTimeMillis = System.currentTimeMillis
+    if (dir.isDirectory) {
+      val files = listFilesSafely(dir)
+      files.filter { file => file.lastModified < (currentTimeMillis - cutoff * 1000) }
+    } else {
+      throw new IllegalArgumentException(dir + " is not a directory!")
     }
   }
 
   /**
    * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
-   * This is used to figure out how much memory to claim from Mesos based on the SPARK_MEM
-   * environment variable.
    */
   def memoryStringToMb(str: String): Int = {
     val lower = str.toLowerCase
@@ -650,7 +775,13 @@ private[spark] object Utils extends Logging {
   private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
 
   private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
-                                    val firstUserLine: Int, val firstUserClass: String)
+                                    val firstUserLine: Int, val firstUserClass: String) {
+
+    /** Returns a printable version of the call site info suitable for logs. */
+    override def toString = {
+      "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
+    }
+  }
 
   /**
    * When called inside a class in the spark package, returns the name of the user code class
@@ -658,8 +789,8 @@ private[spark] object Utils extends Logging {
    * This is used, for example, to tell users where in their code each RDD got created.
    */
   def getCallSiteInfo: CallSiteInfo = {
-    val trace = Thread.currentThread.getStackTrace().filter( el =>
-      (!el.getMethodName.contains("getStackTrace")))
+    val trace = Thread.currentThread.getStackTrace()
+      .filterNot(_.getMethodName.contains("getStackTrace"))
 
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
@@ -690,12 +821,6 @@ private[spark] object Utils extends Logging {
       }
     }
     new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
-  }
-
-  def formatSparkCallSite = {
-    val callSiteInfo = getCallSiteInfo
-    "%s at %s:%s".format(callSiteInfo.lastSparkMethod, callSiteInfo.firstUserFile,
-                         callSiteInfo.firstUserLine)
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
@@ -762,7 +887,7 @@ private[spark] object Utils extends Logging {
     }
     var i = 0
     while (i < s.length) {
-      var nextChar = s.charAt(i)
+      val nextChar = s.charAt(i)
       if (inDoubleQuote) {
         if (nextChar == '"') {
           inDoubleQuote = false
@@ -867,5 +992,55 @@ private[spark] object Utils extends Logging {
       iterator.next()
     }
     count
+  }
+
+  /**
+   * Creates a symlink. Note jdk1.7 has Files.createSymbolicLink but not used here
+   * for jdk1.6 support.  Supports windows by doing copy, everything else uses "ln -sf".
+   * @param src absolute path to the source
+   * @param dst relative path for the destination
+   */
+  def symlink(src: File, dst: File) {
+    if (!src.isAbsolute()) {
+      throw new IOException("Source must be absolute")
+    }
+    if (dst.isAbsolute()) {
+      throw new IOException("Destination must be relative")
+    }
+    val linkCmd = if (osName.startsWith("Windows")) "copy" else "ln -sf"
+    import scala.sys.process._
+    (linkCmd + " " + src.getAbsolutePath() + " " + dst.getPath()) lines_! ProcessLogger(line =>
+       (logInfo(line)))
+  }
+
+
+  /** Return the class name of the given object, removing all dollar signs */
+  def getFormattedClassName(obj: AnyRef) = {
+    obj.getClass.getSimpleName.replace("$", "")
+  }
+
+  /** Return an option that translates JNothing to None */
+  def jsonOption(json: JValue): Option[JValue] = {
+    json match {
+      case JNothing => None
+      case value: JValue => Some(value)
+    }
+  }
+
+  /** Return an empty JSON object */
+  def emptyJson = JObject(List[JField]())
+
+  /**
+   * Return a Hadoop FileSystem with the scheme encoded in the given path.
+   */
+  def getHadoopFileSystem(path: URI): FileSystem = {
+    FileSystem.get(path, SparkHadoopUtil.get.newConfiguration())
+  }
+
+  /**
+   * Return a Hadoop FileSystem with the scheme encoded in the given path.
+   */
+  def getHadoopFileSystem(path: String): FileSystem = {
+    getHadoopFileSystem(new URI(path))
   }
 }

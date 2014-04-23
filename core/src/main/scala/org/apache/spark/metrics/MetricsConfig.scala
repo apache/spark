@@ -17,13 +17,14 @@
 
 package org.apache.spark.metrics
 
+import java.io.{FileInputStream, InputStream}
 import java.util.Properties
-import java.io.{File, FileInputStream, InputStream, IOException}
 
 import scala.collection.mutable
 import scala.util.matching.Regex
 
 import org.apache.spark.Logging
+import org.apache.spark.util.Utils
 
 private[spark] class MetricsConfig(val configFile: Option[String]) extends Logging {
 
@@ -42,7 +43,7 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
   }
 
   def initialize() {
-    //Add default properties in case there's no properties file
+    // Add default properties in case there's no properties file
     setDefaultProperties(properties)
 
     // If spark.metrics.conf is not set, try to get file in class path
@@ -50,7 +51,7 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
     try {
       is = configFile match {
         case Some(f) => new FileInputStream(f)
-        case None => getClass.getClassLoader.getResourceAsStream(METRICS_CONF)
+        case None => Utils.getSparkClassLoader.getResourceAsStream(METRICS_CONF)
       }
 
       if (is != null) {

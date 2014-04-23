@@ -29,7 +29,7 @@ SPARK_HOME = os.environ["SPARK_HOME"]
 
 def launch_gateway():
     # Launch the Py4j gateway using Spark's run command so that we pick up the
-    # proper classpath and SPARK_MEM settings from spark-env.sh
+    # proper classpath and settings from spark-env.sh
     on_windows = platform.system() == "Windows"
     script = "./bin/spark-class.cmd" if on_windows else "./bin/spark-class"
     command = [os.path.join(SPARK_HOME, script), "py4j.GatewayServer",
@@ -64,5 +64,9 @@ def launch_gateway():
     java_import(gateway.jvm, "org.apache.spark.api.java.*")
     java_import(gateway.jvm, "org.apache.spark.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
+    java_import(gateway.jvm, "org.apache.spark.sql.SQLContext")
+    java_import(gateway.jvm, "org.apache.spark.sql.hive.HiveContext")
+    java_import(gateway.jvm, "org.apache.spark.sql.hive.LocalHiveContext")
+    java_import(gateway.jvm, "org.apache.spark.sql.hive.TestHiveContext")
     java_import(gateway.jvm, "scala.Tuple2")
     return gateway

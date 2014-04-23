@@ -17,20 +17,21 @@
 
 package org.apache.spark.metrics.sink
 
-import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.json.MetricsModule
-
-import com.fasterxml.jackson.databind.ObjectMapper
-
 import java.util.Properties
 import java.util.concurrent.TimeUnit
+
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.Handler
+import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.json.MetricsModule
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.ui.JettyUtils
+import org.apache.spark.SecurityManager
+import org.apache.spark.ui.JettyUtils._
 
-class MetricsServlet(val property: Properties, val registry: MetricRegistry) extends Sink {
+private[spark] class MetricsServlet(val property: Properties, val registry: MetricRegistry,
+    securityMgr: SecurityManager) extends Sink {
   val SERVLET_KEY_PATH = "path"
   val SERVLET_KEY_SAMPLE = "sample"
 
@@ -44,8 +45,9 @@ class MetricsServlet(val property: Properties, val registry: MetricRegistry) ext
   val mapper = new ObjectMapper().registerModule(
     new MetricsModule(TimeUnit.SECONDS, TimeUnit.MILLISECONDS, servletShowSample))
 
-  def getHandlers = Array[(String, Handler)](
-    (servletPath, JettyUtils.createHandler(request => getMetricsSnapshot(request), "text/json"))
+  def getHandlers = Array[ServletContextHandler](
+    createServletHandler(servletPath,
+      new ServletParams(request => getMetricsSnapshot(request), "text/json"), securityMgr)
   )
 
   def getMetricsSnapshot(request: HttpServletRequest): String = {

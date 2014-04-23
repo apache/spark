@@ -16,15 +16,15 @@
  */
 package org.apache.spark.rdd
 
-import scala.reflect.{ ClassTag, classTag}
+import scala.reflect.{ClassTag, classTag}
 
+import org.apache.hadoop.io.Writable
+import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
-import org.apache.hadoop.io.compress.CompressionCodec
-import org.apache.hadoop.io.Writable
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.Logging
+import org.apache.spark.SparkContext._
 
 /**
  * Extra functions available on RDDs of (key, value) pairs to create a Hadoop SequenceFile,

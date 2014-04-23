@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx
 
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx.impl._
@@ -419,5 +420,6 @@ object Graph {
    * All the convenience operations are defined in the [[GraphOps]] class which may be
    * shared across multiple graph implementations.
    */
-  implicit def graphToGraphOps[VD: ClassTag, ED: ClassTag](g: Graph[VD, ED]) = g.ops
+  implicit def graphToGraphOps[VD: ClassTag, ED: ClassTag]
+      (g: Graph[VD, ED]): GraphOps[VD, ED] = g.ops
 } // end of Graph object

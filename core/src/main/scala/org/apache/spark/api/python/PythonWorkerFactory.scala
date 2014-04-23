@@ -17,8 +17,8 @@
 
 package org.apache.spark.api.python
 
-import java.io.{OutputStreamWriter, File, DataInputStream, IOException}
-import java.net.{ServerSocket, Socket, SocketException, InetAddress}
+import java.io.{DataInputStream, File, IOException, OutputStreamWriter}
+import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
 import scala.collection.JavaConversions._
 

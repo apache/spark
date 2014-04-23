@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkContext, SparkEnv, Partition, TaskContext}
+import org.apache.spark.{Partition, SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.storage.{BlockId, BlockManager}
 
 private[spark] class BlockRDDPartition(val blockId: BlockId, idx: Int) extends Partition {

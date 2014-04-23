@@ -22,11 +22,24 @@
 sbin=`dirname "$0"`
 sbin=`cd "$sbin"; pwd`
 
+START_TACHYON=false
+
+while (( "$#" )); do
+case $1 in
+    --with-tachyon)
+      if [ ! -e "$sbin"/../tachyon/bin/tachyon ]; then
+        echo "Error: --with-tachyon specified, but tachyon not found."
+        exit -1
+      fi
+      START_TACHYON=true
+      ;;
+  esac
+shift
+done
+
 . "$sbin/spark-config.sh"
 
-if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
-  . "${SPARK_CONF_DIR}/spark-env.sh"
-fi
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
@@ -40,13 +53,10 @@ if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then
   SPARK_MASTER_WEBUI_PORT=8080
 fi
 
-# Set SPARK_PUBLIC_DNS so the master report the correct webUI address to the slaves
-if [ "$SPARK_PUBLIC_DNS" = "" ]; then
-    # If we appear to be running on EC2, use the public address by default:
-    # NOTE: ec2-metadata is installed on Amazon Linux AMI. Check based on that and hostname
-    if command -v ec2-metadata > /dev/null || [[ `hostname` == *ec2.internal ]]; then
-        export SPARK_PUBLIC_DNS=`wget -q -O - http://instance-data.ec2.internal/latest/meta-data/public-hostname`
-    fi
-fi
-
 "$sbin"/spark-daemon.sh start org.apache.spark.deploy.master.Master 1 --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT
+
+if [ "$START_TACHYON" == "true" ]; then
+  "$sbin"/../tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
+  "$sbin"/../tachyon/bin/tachyon format -s
+  "$sbin"/../tachyon/bin/tachyon-start.sh master
+fi

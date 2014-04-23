@@ -20,7 +20,7 @@ package org.apache.spark.network.netty
 import io.netty.buffer._
 
 import org.apache.spark.Logging
-import org.apache.spark.storage.{TestBlockId, BlockId}
+import org.apache.spark.storage.{BlockId, TestBlockId}
 
 private[spark] class FileHeader (
   val fileLen: Int,
@@ -32,12 +32,12 @@ private[spark] class FileHeader (
     buf.writeInt(fileLen)
     buf.writeInt(blockId.name.length)
     blockId.name.foreach((x: Char) => buf.writeByte(x))
-    //padding the rest of header
+    // padding the rest of header
     if (FileHeader.HEADER_SIZE - buf.readableBytes > 0 ) {
       buf.writeZero(FileHeader.HEADER_SIZE - buf.readableBytes)
     } else {
-      throw new Exception("too long header " + buf.readableBytes) 
-      logInfo("too long header") 
+      throw new Exception("too long header " + buf.readableBytes)
+      logInfo("too long header")
     }
     buf
   }

@@ -17,24 +17,24 @@
 
 package org.apache.spark.api.java
 
+import java.util
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConversions
 import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapred.InputFormat
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import com.google.common.base.Optional
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.mapred.{InputFormat, JobConf}
+import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext.IntAccumulatorParam
-import org.apache.spark.SparkContext.DoubleAccumulatorParam
+import org.apache.spark.SparkContext.{DoubleAccumulatorParam, IntAccumulatorParam}
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
@@ -90,13 +90,39 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment))
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment, Map()))
 
   private[spark] val env = sc.env
 
+  def isLocal: java.lang.Boolean = sc.isLocal
+
+  def sparkUser: String = sc.sparkUser
+
+  def master: String = sc.master
+
+  def appName: String = sc.appName
+
+  def jars: util.List[String] = sc.jars
+
+  def startTime: java.lang.Long = sc.startTime
+
+  /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
+  def defaultParallelism: java.lang.Integer = sc.defaultParallelism
+
+  /**
+   * Default min number of partitions for Hadoop RDDs when not given by user.
+   * @deprecated As of Spark 1.0.0, defaultMinSplits is deprecated, use
+   *            {@link #defaultMinPartitions()} instead
+   */
+  @deprecated("use defaultMinPartitions", "1.0.0")
+  def defaultMinSplits: java.lang.Integer = sc.defaultMinSplits
+
+  /** Default min number of partitions for Hadoop RDDs when not given by user */
+  def defaultMinPartitions: java.lang.Integer = sc.defaultMinPartitions
+
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
-    implicit val cm: ClassTag[T] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
+    implicit val ctag: ClassTag[T] = fakeClassTag
     sc.parallelize(JavaConversions.asScalaBuffer(list), numSlices)
   }
 
@@ -107,8 +133,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizePairs[K, V](list: java.util.List[Tuple2[K, V]], numSlices: Int)
   : JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
-    implicit val vcm: ClassTag[V] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
+    implicit val ctagK: ClassTag[K] = fakeClassTag
+    implicit val ctagV: ClassTag[V] = fakeClassTag
     JavaPairRDD.fromRDD(sc.parallelize(JavaConversions.asScalaBuffer(list), numSlices))
   }
 
@@ -135,7 +161,48 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
-  def textFile(path: String, minSplits: Int): JavaRDD[String] = sc.textFile(path, minSplits)
+  def textFile(path: String, minPartitions: Int): JavaRDD[String] =
+    sc.textFile(path, minPartitions)
+
+  /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * <p> For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do `JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")`,
+   *
+   * <p> then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   */
+  def wholeTextFiles(path: String, minPartitions: Int): JavaPairRDD[String, String] =
+    new JavaPairRDD(sc.wholeTextFiles(path, minPartitions))
+
+  /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * @see `wholeTextFiles(path: String, minPartitions: Int)`.
+   */
+  def wholeTextFiles(path: String): JavaPairRDD[String, String] =
+    new JavaPairRDD(sc.wholeTextFiles(path))
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *
@@ -147,11 +214,11 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def sequenceFile[K, V](path: String,
     keyClass: Class[K],
     valueClass: Class[V],
-    minSplits: Int
+    minPartitions: Int
     ): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minSplits))
+    implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
+    new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minPartitions))
   }
 
   /** Get an RDD for a Hadoop SequenceFile.
@@ -163,8 +230,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     */
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]):
   JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
+    implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass))
   }
 
@@ -175,9 +242,9 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * slow if you use the default serializer (Java serialization), though the nice thing about it is
    * that there's very little effort required to save arbitrary objects.
    */
-  def objectFile[T](path: String, minSplits: Int): JavaRDD[T] = {
-    implicit val cm: ClassTag[T] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    sc.objectFile(path, minSplits)(cm)
+  def objectFile[T](path: String, minPartitions: Int): JavaRDD[T] = {
+    implicit val ctag: ClassTag[T] = fakeClassTag
+    sc.objectFile(path, minPartitions)(ctag)
   }
 
   /**
@@ -188,8 +255,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * that there's very little effort required to save arbitrary objects.
    */
   def objectFile[T](path: String): JavaRDD[T] = {
-    implicit val cm: ClassTag[T] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    sc.objectFile(path)(cm)
+    implicit val ctag: ClassTag[T] = fakeClassTag
+    sc.objectFile(path)(ctag)
   }
 
   /**
@@ -207,11 +274,11 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     inputFormatClass: Class[F],
     keyClass: Class[K],
     valueClass: Class[V],
-    minSplits: Int
+    minPartitions: Int
     ): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass, minSplits))
+    implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
+    new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass, minPartitions))
   }
 
   /**
@@ -229,8 +296,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     keyClass: Class[K],
     valueClass: Class[V]
     ): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
+    implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass))
   }
 
@@ -246,11 +313,11 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     inputFormatClass: Class[F],
     keyClass: Class[K],
     valueClass: Class[V],
-    minSplits: Int
+    minPartitions: Int
     ): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits))
+    implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
+    new JavaPairRDD(sc.hadoopFile(path, inputFormatClass, keyClass, valueClass, minPartitions))
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
@@ -266,8 +333,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     keyClass: Class[K],
     valueClass: Class[V]
     ): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
+    implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.hadoopFile(path,
       inputFormatClass, keyClass, valueClass))
   }
@@ -287,8 +354,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     kClass: Class[K],
     vClass: Class[V],
     conf: Configuration): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(kClass)
-    implicit val vcm: ClassTag[V] = ClassTag(vClass)
+    implicit val ctagK: ClassTag[K] = ClassTag(kClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(vClass)
     new JavaPairRDD(sc.newAPIHadoopFile(path, fClass, kClass, vClass, conf))
   }
 
@@ -306,26 +373,26 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     fClass: Class[F],
     kClass: Class[K],
     vClass: Class[V]): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(kClass)
-    implicit val vcm: ClassTag[V] = ClassTag(vClass)
+    implicit val ctagK: ClassTag[K] = ClassTag(kClass)
+    implicit val ctagV: ClassTag[V] = ClassTag(vClass)
     new JavaPairRDD(sc.newAPIHadoopRDD(conf, fClass, kClass, vClass))
   }
 
   /** Build the union of two or more RDDs. */
   override def union[T](first: JavaRDD[T], rest: java.util.List[JavaRDD[T]]): JavaRDD[T] = {
     val rdds: Seq[RDD[T]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
-    implicit val cm: ClassTag[T] = first.classTag
-    sc.union(rdds)(cm)
+    implicit val ctag: ClassTag[T] = first.classTag
+    sc.union(rdds)
   }
 
   /** Build the union of two or more RDDs. */
   override def union[K, V](first: JavaPairRDD[K, V], rest: java.util.List[JavaPairRDD[K, V]])
       : JavaPairRDD[K, V] = {
     val rdds: Seq[RDD[(K, V)]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
-    implicit val cm: ClassTag[(K, V)] = first.classTag
-    implicit val kcm: ClassTag[K] = first.kClassTag
-    implicit val vcm: ClassTag[V] = first.vClassTag
-    new JavaPairRDD(sc.union(rdds)(cm))(kcm, vcm)
+    implicit val ctag: ClassTag[(K, V)] = first.classTag
+    implicit val ctagK: ClassTag[K] = first.kClassTag
+    implicit val ctagV: ClassTag[V] = first.vClassTag
+    new JavaPairRDD(sc.union(rdds))
   }
 
   /** Build the union of two or more RDDs. */
@@ -417,6 +484,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
    * any new nodes.
    */
+  @deprecated("adding jars no longer creates local copies that need to be deleted", "1.0.0")
   def clearJars() {
     sc.clearJars()
   }
@@ -425,6 +493,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
+  @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
   def clearFiles() {
     sc.clearFiles()
   }
@@ -444,11 +513,10 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.setCheckpointDir(dir)
   }
 
-  def getCheckpointDir = JavaUtils.optionToOptional(sc.getCheckpointDir)
+  def getCheckpointDir: Optional[String] = JavaUtils.optionToOptional(sc.getCheckpointDir)
 
   protected def checkpointFile[T](path: String): JavaRDD[T] = {
-    implicit val cm: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
+    implicit val ctag: ClassTag[T] = fakeClassTag
     new JavaRDD(sc.checkpointFile(path))
   }
 
@@ -535,4 +603,18 @@ object JavaSparkContext {
    * your driver program.
    */
   def jarOfObject(obj: AnyRef): Array[String] = SparkContext.jarOfObject(obj).toArray
+
+  /**
+   * Produces a ClassTag[T], which is actually just a casted ClassTag[AnyRef].
+   *
+   * This method is used to keep ClassTags out of the external Java API, as the Java compiler
+   * cannot produce them automatically. While this ClassTag-faking does please the compiler,
+   * it can cause problems at runtime if the Scala API relies on ClassTags for correctness.
+   *
+   * Often, though, a ClassTag[AnyRef] will not lead to incorrect behavior, just worse performance
+   * or security issues. For instance, an Array[AnyRef] can hold any type T, but may lose primitive
+   * specialization.
+   */
+  private[spark]
+  def fakeClassTag[T]: ClassTag[T] = ClassTag.AnyRef.asInstanceOf[ClassTag[T]]
 }
