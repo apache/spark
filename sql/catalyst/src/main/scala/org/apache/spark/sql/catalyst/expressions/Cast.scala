@@ -28,7 +28,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   override def toString = s"CAST($child, $dataType)"
 
   type EvaluatedType = Any
-  
+
   def nullOrCast[T](a: Any, func: T => Any): Any = if(a == null) {
     null
   } else {
@@ -40,7 +40,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case BinaryType => nullOrCast[Array[Byte]](_, new String(_, "UTF-8"))
     case _ => nullOrCast[Any](_, _.toString)
   }
-  
+
   // BinaryConverter
   def castToBinary: Any => Any = child.dataType match {
     case StringType => nullOrCast[String](_, _.getBytes("UTF-8"))
@@ -58,7 +58,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case DoubleType => nullOrCast[Double](_, _ != 0)
     case FloatType => nullOrCast[Float](_, _ != 0)
   }
-  
+
   // TimestampConverter
   def castToTimestamp: Any => Any = child.dataType match {
     case StringType => nullOrCast[String](_, s => {
@@ -87,7 +87,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
 
   private def decimalToTimestamp(d: BigDecimal) = {
     val seconds = d.longValue()
-    val bd = (d - seconds) * (1000000000)
+    val bd = (d - seconds) * 1000000000
     val nanos = bd.intValue()
 
     // Convert to millis
@@ -96,18 +96,23 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
 
     // remaining fractional portion as nanos
     t.setNanos(nanos)
-    
     t
   }
 
-  private def timestampToDouble(t: Timestamp) = (t.getSeconds() + t.getNanos().toDouble / 1000)
+  // Timestamp to long, converting milliseconds to seconds
+  private def timestampToLong(ts: Timestamp) = ts.getTime / 1000
+
+  private def timestampToDouble(ts: Timestamp) = {
+    // First part is the seconds since the beginning of time, followed by nanosecs.
+    ts.getTime / 1000 + ts.getNanos.toDouble / 1000000000
+  }
 
   def castToLong: Any => Any = child.dataType match {
     case StringType => nullOrCast[String](_, s => try s.toLong catch {
       case _: NumberFormatException => null
     })
     case BooleanType => nullOrCast[Boolean](_, b => if(b) 1 else 0)
-    case TimestampType => nullOrCast[Timestamp](_, t => timestampToDouble(t).toLong)
+    case TimestampType => nullOrCast[Timestamp](_, t => timestampToLong(t))
     case DecimalType => nullOrCast[BigDecimal](_, _.toLong)
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
   }
@@ -117,7 +122,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
       case _: NumberFormatException => null
     })
     case BooleanType => nullOrCast[Boolean](_, b => if(b) 1 else 0)
-    case TimestampType => nullOrCast[Timestamp](_, t => timestampToDouble(t).toInt)
+    case TimestampType => nullOrCast[Timestamp](_, t => timestampToLong(t).toInt)
     case DecimalType => nullOrCast[BigDecimal](_, _.toInt)
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
   }
@@ -127,7 +132,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
       case _: NumberFormatException => null
     })
     case BooleanType => nullOrCast[Boolean](_, b => if(b) 1 else 0)
-    case TimestampType => nullOrCast[Timestamp](_, t => timestampToDouble(t).toShort)
+    case TimestampType => nullOrCast[Timestamp](_, t => timestampToLong(t).toShort)
     case DecimalType => nullOrCast[BigDecimal](_, _.toShort)
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
   }
@@ -137,7 +142,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
       case _: NumberFormatException => null
     })
     case BooleanType => nullOrCast[Boolean](_, b => if(b) 1 else 0)
-    case TimestampType => nullOrCast[Timestamp](_, t => timestampToDouble(t).toByte)
+    case TimestampType => nullOrCast[Timestamp](_, t => timestampToLong(t).toByte)
     case DecimalType => nullOrCast[BigDecimal](_, _.toByte)
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
   }
@@ -147,7 +152,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
       case _: NumberFormatException => null
     })
     case BooleanType => nullOrCast[Boolean](_, b => if(b) BigDecimal(1) else BigDecimal(0))
-    case TimestampType => nullOrCast[Timestamp](_, t => BigDecimal(timestampToDouble(t)))
+    case TimestampType =>
+      // Note that we lose precision here.
+      nullOrCast[Timestamp](_, t => BigDecimal(timestampToDouble(t)))
     case x: NumericType => b => BigDecimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b))
   }
 

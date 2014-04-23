@@ -48,7 +48,7 @@ Spark automatically includes Kryo serializers for the many commonly-used core Sc
 in the AllScalaRegistrar from the [Twitter chill](https://github.com/twitter/chill) library.
 
 To register your own custom classes with Kryo, create a public class that extends
-[`org.apache.spark.serializer.KryoRegistrator`](api/core/index.html#org.apache.spark.serializer.KryoRegistrator) and set the
+[`org.apache.spark.serializer.KryoRegistrator`](api/scala/index.html#org.apache.spark.serializer.KryoRegistrator) and set the
 `spark.kryo.registrator` config property to point to it, as follows:
 
 {% highlight scala %}
@@ -90,9 +90,10 @@ than the "raw" data inside their fields. This is due to several reasons:
 * Each distinct Java object has an "object header", which is about 16 bytes and contains information
   such as a pointer to its class. For an object with very little data in it (say one `Int` field), this
   can be bigger than the data.
-* Java Strings have about 40 bytes of overhead over the raw string data (since they store it in an
+* Java `String`s have about 40 bytes of overhead over the raw string data (since they store it in an
   array of `Char`s and keep extra data such as the length), and store each character
-  as *two* bytes due to Unicode. Thus a 10-character string can easily consume 60 bytes.
+  as *two* bytes due to `String`'s internal usage of UTF-16 encoding. Thus a 10-character string can
+  easily consume 60 bytes.
 * Common collection classes, such as `HashMap` and `LinkedList`, use linked data structures, where
   there is a "wrapper" object for each entry (e.g. `Map.Entry`). This object not only has a header,
   but also pointers (typically 8 bytes each) to the next object in the list.
@@ -221,7 +222,7 @@ enough. Spark automatically sets the number of "map" tasks to run on each file a
 (though you can control it through optional parameters to `SparkContext.textFile`, etc), and for
 distributed "reduce" operations, such as `groupByKey` and `reduceByKey`, it uses the largest
 parent RDD's number of partitions. You can pass the level of parallelism as a second argument
-(see the [`spark.PairRDDFunctions`](api/core/index.html#org.apache.spark.rdd.PairRDDFunctions) documentation),
+(see the [`spark.PairRDDFunctions`](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) documentation),
 or set the config property `spark.default.parallelism` to change the default.
 In general, we recommend 2-3 tasks per CPU core in your cluster.
 

@@ -17,13 +17,18 @@
 
 package org.apache.spark.mllib.util
 
-import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
-  squaredDistance => breezeSquaredDistance}
+import scala.reflect.ClassTag
 
+import breeze.linalg.{Vector => BV, SparseVector => BSV, squaredDistance => breezeSquaredDistance}
+
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.PartitionwiseSampledRDD
+import org.apache.spark.SparkContext._
+import org.apache.spark.util.random.BernoulliSampler
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.Vectors
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -39,17 +44,6 @@ object MLUtils {
   }
 
   /**
-   * Multiclass label parser, which parses a string into double.
-   */
-  val multiclassLabelParser: String => Double = _.toDouble
-
-  /**
-   * Binary label parser, which outputs 1.0 (positive) if the value is greater than 0.5,
-   * or 0.0 (negative) otherwise.
-   */
-  val binaryLabelParser: String => Double = label => if (label.toDouble > 0.5) 1.0 else 0.0
-
-  /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint].
    * The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
    * Each line represents a labeled sparse feature vector using the following format:
@@ -63,16 +57,16 @@ object MLUtils {
    * @param labelParser parser for labels, default: 1.0 if label > 0.5 or 0.0 otherwise
    * @param numFeatures number of features, which will be determined from the input data if a
    *                    negative value is given. The default value is -1.
-   * @param minSplits min number of partitions, default: sc.defaultMinSplits
+   * @param minPartitions min number of partitions, default: sc.defaultMinPartitions
    * @return labeled data stored as an RDD[LabeledPoint]
    */
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
-      labelParser: String => Double,
+      labelParser: LabelParser,
       numFeatures: Int,
-      minSplits: Int): RDD[LabeledPoint] = {
-    val parsed = sc.textFile(path, minSplits)
+      minPartitions: Int): RDD[LabeledPoint] = {
+    val parsed = sc.textFile(path, minPartitions)
       .map(_.trim)
       .filter(!_.isEmpty)
       .map(_.split(' '))
@@ -89,7 +83,7 @@ object MLUtils {
       }.reduce(math.max)
     }
     parsed.map { items =>
-      val label = labelParser(items.head)
+      val label = labelParser.parse(items.head)
       val (indices, values) = items.tail.map { item =>
         val indexAndValue = item.split(':')
         val index = indexAndValue(0).toInt - 1
@@ -107,14 +101,7 @@ object MLUtils {
    * with number of features determined automatically and the default number of partitions.
    */
   def loadLibSVMData(sc: SparkContext, path: String): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, binaryLabelParser, -1, sc.defaultMinSplits)
-
-  /**
-   * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint],
-   * with number of features specified explicitly and the default number of partitions.
-   */
-  def loadLibSVMData(sc: SparkContext, path: String, numFeatures: Int): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, binaryLabelParser, numFeatures, sc.defaultMinSplits)
+    loadLibSVMData(sc, path, BinaryLabelParser, -1, sc.defaultMinPartitions)
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
@@ -124,8 +111,8 @@ object MLUtils {
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
-      labelParser: String => Double): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, labelParser, -1, sc.defaultMinSplits)
+      labelParser: LabelParser): RDD[LabeledPoint] =
+    loadLibSVMData(sc, path, labelParser, -1, sc.defaultMinPartitions)
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
@@ -135,11 +122,12 @@ object MLUtils {
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
-      labelParser: String => Double,
+      labelParser: LabelParser,
       numFeatures: Int): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinSplits)
+    loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinPartitions)
 
   /**
+   * :: Experimental ::
    * Load labeled data from a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -149,6 +137,7 @@ object MLUtils {
    * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
    *         the label, and the second element represents the feature values (an array of Double).
    */
+  @Experimental
   def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
       val parts = line.split(',')
@@ -159,6 +148,7 @@ object MLUtils {
   }
 
   /**
+   * :: Experimental ::
    * Save labeled data to a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -166,61 +156,26 @@ object MLUtils {
    * @param data An RDD of LabeledPoints containing data to be saved.
    * @param dir Directory to save the data.
    */
+  @Experimental
   def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
     val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
     dataStr.saveAsTextFile(dir)
   }
 
   /**
-   * Utility function to compute mean and standard deviation on a given dataset.
-   *
-   * @param data - input data set whose statistics are computed
-   * @param numFeatures - number of features
-   * @param numExamples - number of examples in input dataset
-   *
-   * @return (yMean, xColMean, xColSd) - Tuple consisting of
-   *     yMean - mean of the labels
-   *     xColMean - Row vector with mean for every column (or feature) of the input data
-   *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
+   * Return a k element array of pairs of RDDs with the first element of each pair
+   * containing the training data, a complement of the validation data and the second
+   * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
    */
-  def computeStats(
-      data: RDD[LabeledPoint],
-      numFeatures: Int,
-      numExamples: Long): (Double, Vector, Vector) = {
-    val brzData = data.map { case LabeledPoint(label, features) =>
-      (label, features.toBreeze)
-    }
-    val aggStats = brzData.aggregate(
-      (0L, 0.0, BDV.zeros[Double](numFeatures), BDV.zeros[Double](numFeatures))
-    )(
-      seqOp = (c, v) => (c, v) match {
-        case ((n, sumLabel, sum, sumSq), (label, features)) =>
-          features.activeIterator.foreach { case (i, x) =>
-            sumSq(i) += x * x
-          }
-          (n + 1L, sumLabel + label, sum += features, sumSq)
-      },
-      combOp = (c1, c2) => (c1, c2) match {
-        case ((n1, sumLabel1, sum1, sumSq1), (n2, sumLabel2, sum2, sumSq2)) =>
-          (n1 + n2, sumLabel1 + sumLabel2, sum1 += sum2, sumSq1 += sumSq2)
-      }
-    )
-    val (nl, sumLabel, sum, sumSq) = aggStats
-
-    require(nl > 0, "Input data is empty.")
-    require(nl == numExamples)
-
-    val n = nl.toDouble
-    val yMean = sumLabel / n
-    val mean = sum / n
-    val std = new Array[Double](sum.length)
-    var i = 0
-    while (i < numFeatures) {
-      std(i) = sumSq(i) / n - mean(i) * mean(i)
-      i += 1
-    }
-
-    (yMean, Vectors.fromBreeze(mean), Vectors.dense(std))
+  def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
+    val numFoldsF = numFolds.toFloat
+    (1 to numFolds).map { fold =>
+      val sampler = new BernoulliSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
+        complement = false)
+      val validation = new PartitionwiseSampledRDD(rdd, sampler, seed)
+      val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
+      (training, validation)
+    }.toArray
   }
 
   /**

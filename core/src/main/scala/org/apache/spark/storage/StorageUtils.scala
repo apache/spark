@@ -21,60 +21,30 @@ import scala.collection.Map
 import scala.collection.mutable
 
 import org.apache.spark.SparkContext
-import org.apache.spark.util.Utils
 
-private[spark]
-class StorageStatus(
+/** Storage information for each BlockManager. */
+private[spark] class StorageStatus(
     val blockManagerId: BlockManagerId,
     val maxMem: Long,
     val blocks: mutable.Map[BlockId, BlockStatus] = mutable.Map.empty) {
 
-  def memUsed() = blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
+  def memUsed = blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
 
   def memUsedByRDD(rddId: Int) =
     rddBlocks.filterKeys(_.rddId == rddId).values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
 
-  def diskUsed() = blocks.values.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
+  def diskUsed = blocks.values.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
 
   def diskUsedByRDD(rddId: Int) =
     rddBlocks.filterKeys(_.rddId == rddId).values.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
 
-  def memRemaining : Long = maxMem - memUsed()
+  def memRemaining: Long = maxMem - memUsed
 
-  def rddBlocks = blocks.flatMap {
-    case (rdd: RDDBlockId, status) => Some(rdd, status)
-    case _ => None
-  }
+  def rddBlocks = blocks.collect { case (rdd: RDDBlockId, status) => (rdd, status) }
 }
 
-private[spark]
-class RDDInfo(
-  val id: Int,
-  val name: String,
-  val numPartitions: Int,
-  val storageLevel: StorageLevel) extends Ordered[RDDInfo] {
-
-  var numCachedPartitions = 0
-  var memSize = 0L
-  var diskSize = 0L
-  var tachyonSize= 0L
-
-  override def toString = {
-    import Utils.bytesToString
-    ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s;" +
-      "TachyonSize: %s; DiskSize: %s").format(
-        name, id, storageLevel.toString, numCachedPartitions, numPartitions,
-        bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
-  }
-
-  override def compare(that: RDDInfo) = {
-    this.id - that.id
-  }
-}
-
-/* Helper methods for storage-related objects */
-private[spark]
-object StorageUtils {
+/** Helper methods for storage-related objects. */
+private[spark] object StorageUtils {
 
   /**
    * Returns basic information of all RDDs persisted in the given SparkContext. This does not

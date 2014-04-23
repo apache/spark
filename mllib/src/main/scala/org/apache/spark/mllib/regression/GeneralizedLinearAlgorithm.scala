@@ -19,13 +19,14 @@ package org.apache.spark.mllib.regression
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
- * GeneralizedLinearModel (GLM) represents a model trained using 
+ * GeneralizedLinearModel (GLM) represents a model trained using
  * GeneralizedLinearAlgorithm. GLMs consist of a weight vector and
  * an intercept.
  *
@@ -37,7 +38,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
 
   /**
    * Predict the result given a data point and the weights learned.
-   * 
+   *
    * @param dataMatrix Row vector containing the features for this data point
    * @param weightMatrix Column vector containing the weights of the model
    * @param intercept Intercept of the model.
@@ -79,7 +80,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
-  val optimizer: Optimizer
+  /** The optimizer to solve the problem. */
+  def optimizer: Optimizer
 
   /** Whether to add intercept (default: true). */
   protected var addIntercept: Boolean = true
@@ -100,8 +102,10 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
+   * :: Experimental ::
    * Set if the algorithm should validate data before training. Default true.
    */
+  @Experimental
   def setValidateData(validateData: Boolean): this.type = {
     this.validateData = validateData
     this

@@ -23,8 +23,10 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 
-trait HiveStrategies {
+private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
   self: SQLContext#SparkPlanner =>
 
@@ -41,6 +43,9 @@ trait HiveStrategies {
   object DataSinks extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
+        InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+      case logical.InsertIntoTable(SparkLogicalPlan(InMemoryColumnarTableScan(
+        _, HiveTableScan(_, table, _))), partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case _ => Nil
     }

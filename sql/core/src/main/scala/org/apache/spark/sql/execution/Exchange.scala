@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{HashPartitioner, RangePartitioner, SparkConf}
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.sql.Row
@@ -26,6 +27,10 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
   override def outputPartitioning = newPartitioning
@@ -61,7 +66,14 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         shuffled.map(_._1)
 
       case SinglePartition =>
-        child.execute().coalesce(1, shuffle = true)
+        val rdd = child.execute().mapPartitions { iter =>
+          val mutablePair = new MutablePair[Null, Row]()
+          iter.map(r => mutablePair.update(null, r))
+        }
+        val partitioner = new HashPartitioner(1)
+        val shuffled = new ShuffledRDD[Null, Row, MutablePair[Null, Row]](rdd, partitioner)
+        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+        shuffled.map(_._2)
 
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
@@ -74,7 +86,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  * [[catalyst.plans.physical.Distribution Distribution]] requirements for each operator by inserting
  * [[Exchange]] Operators where required.
  */
-object AddExchange extends Rule[SparkPlan] {
+private[sql] object AddExchange extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
   val numPartitions = 150
 

@@ -17,12 +17,11 @@
 
 package org.apache.spark.util
 
-import java.io._
+import java.io.{FileOutputStream, BufferedOutputStream, PrintWriter, IOException}
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 
 import org.apache.spark.{Logging, SparkConf}
@@ -36,7 +35,7 @@ import org.apache.spark.io.CompressionCodec
  * @param compress Whether to compress output
  * @param overwrite Whether to overwrite existing files
  */
-class FileLogger(
+private[spark] class FileLogger(
     logDir: String,
     conf: SparkConf = new SparkConf,
     outputBufferSize: Int = 8 * 1024, // 8 KB
@@ -49,7 +48,7 @@ class FileLogger(
   }
 
   private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
-  private var fileIndex = 0
+  var fileIndex = 0
 
   // Only used if compression is enabled
   private lazy val compressionCodec = CompressionCodec.createCodec(conf)
@@ -57,10 +56,9 @@ class FileLogger(
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
-  private var writer: Option[PrintWriter] = {
-    createLogDir()
-    Some(createWriter())
-  }
+  private var writer: Option[PrintWriter] = None
+
+  createLogDir()
 
   /**
    * Create a logging directory with the given path.
@@ -84,8 +82,8 @@ class FileLogger(
   /**
    * Create a new writer for the file identified by the given path.
    */
-  private def createWriter(): PrintWriter = {
-    val logPath = logDir + "/" + fileIndex
+  private def createWriter(fileName: String): PrintWriter = {
+    val logPath = logDir + "/" + fileName
     val uri = new URI(logPath)
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
@@ -93,7 +91,7 @@ class FileLogger(
     val dstream = uri.getScheme match {
       case "file" | null =>
         // Second parameter is whether to append
-        new FileOutputStream(logPath, !overwrite)
+        new FileOutputStream(uri.getPath, !overwrite)
 
       case _ =>
         val path = new Path(logPath)
@@ -101,7 +99,7 @@ class FileLogger(
         hadoopDataStream.get
     }
 
-    val bstream = new FastBufferedOutputStream(dstream, outputBufferSize)
+    val bstream = new BufferedOutputStream(dstream, outputBufferSize)
     val cstream = if (compress) compressionCodec.compressedOutputStream(bstream) else bstream
     new PrintWriter(cstream)
   }
@@ -147,13 +145,17 @@ class FileLogger(
   }
 
   /**
-   * Start a writer for a new file if one does not already exit.
+   * Start a writer for a new file, closing the existing one if it exists.
+   * @param fileName Name of the new file, defaulting to the file index if not provided.
    */
-  def start() {
-    writer.getOrElse {
-      fileIndex += 1
-      writer = Some(createWriter())
+  def newFile(fileName: String = "") {
+    fileIndex += 1
+    writer.foreach(_.close())
+    val name = fileName match {
+      case "" => fileIndex.toString
+      case _ => fileName
     }
+    writer = Some(createWriter(name))
   }
 
   /**

@@ -20,12 +20,11 @@ package org.apache.spark.rdd
 import java.util.Random
 
 import scala.collection.Map
-import scala.collection.JavaConversions.mapAsScalaMap
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
-import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.NullWritable
@@ -35,6 +34,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -42,6 +42,7 @@ import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{BoundedPriorityQueue, SerializableHyperLogLog, Utils}
+import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
 
 /**
@@ -86,7 +87,11 @@ abstract class RDD[T: ClassTag](
   // Methods that should be implemented by subclasses of RDD
   // =======================================================================
 
-  /** Implemented by subclasses to compute a given partition. */
+  /**
+   * :: DeveloperApi ::
+   * Implemented by subclasses to compute a given partition.
+   */
+  @DeveloperApi
   def compute(split: Partition, context: TaskContext): Iterator[T]
 
   /**
@@ -101,7 +106,9 @@ abstract class RDD[T: ClassTag](
    */
   protected def getDependencies: Seq[Dependency[_]] = deps
 
-  /** Optionally overridden by subclasses to specify placement preferences. */
+  /**
+   * Optionally overridden by subclasses to specify placement preferences.
+   */
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
   /** Optionally overridden by subclasses to specify how they are partitioned. */
@@ -138,6 +145,8 @@ abstract class RDD[T: ClassTag](
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
     sc.persistRDD(this)
+    // Register the RDD with the ContextCleaner for automatic GC-based cleanup
+    sc.cleaner.foreach(_.registerRDDForCleanup(this))
     storageLevel = newLevel
     this
   }
@@ -156,7 +165,7 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): RDD[T] = {
     logInfo("Removing RDD " + id + " from persistence list")
-    sc.unpersistRDD(this, blocking)
+    sc.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE
     this
   }
@@ -219,6 +228,30 @@ abstract class RDD[T: ClassTag](
     } else {
       computeOrReadCheckpoint(split, context)
     }
+  }
+
+  /**
+   * Return the ancestors of the given RDD that are related to it only through a sequence of
+   * narrow dependencies. This traverses the given RDD's dependency tree using DFS, but maintains
+   * no ordering on the RDDs returned.
+   */
+  private[spark] def getNarrowAncestors: Seq[RDD[_]] = {
+    val ancestors = new mutable.HashSet[RDD[_]]
+
+    def visit(rdd: RDD[_]) {
+      val narrowDependencies = rdd.dependencies.filter(_.isInstanceOf[NarrowDependency[_]])
+      val narrowParents = narrowDependencies.map(_.rdd)
+      val narrowParentsNotVisited = narrowParents.filterNot(ancestors.contains)
+      narrowParentsNotVisited.foreach { parent =>
+        ancestors.add(parent)
+        visit(parent)
+      }
+    }
+
+    visit(this)
+
+    // In case there is a cycle, do not include the root itself
+    ancestors.filterNot(_ == this).toSeq
   }
 
   /**
@@ -436,20 +469,20 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped items.
    */
-  def groupBy[K: ClassTag](f: T => K): RDD[(K, Seq[T])] =
+  def groupBy[K: ClassTag](f: T => K): RDD[(K, Iterable[T])] =
     groupBy[K](f, defaultPartitioner(this))
 
   /**
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */
-  def groupBy[K: ClassTag](f: T => K, numPartitions: Int): RDD[(K, Seq[T])] =
+  def groupBy[K: ClassTag](f: T => K, numPartitions: Int): RDD[(K, Iterable[T])] =
     groupBy(f, new HashPartitioner(numPartitions))
 
   /**
    * Return an RDD of grouped items.
    */
-  def groupBy[K: ClassTag](f: T => K, p: Partitioner): RDD[(K, Seq[T])] = {
+  def groupBy[K: ClassTag](f: T => K, p: Partitioner): RDD[(K, Iterable[T])] = {
     val cleanF = sc.clean(f)
     this.map(t => (cleanF(t), t)).groupByKey(p)
   }
@@ -516,9 +549,11 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * :: DeveloperApi ::
    * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
    * mapPartitions that also passes the TaskContext into the closure.
    */
+  @DeveloperApi
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = {
@@ -790,9 +825,11 @@ abstract class RDD[T: ClassTag](
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
-   * (Experimental) Approximate version of count() that returns a potentially incomplete result
+   * :: Experimental ::
+   * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
    */
+  @Experimental
   def countApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val countElements: (TaskContext, Iterator[T]) => Long = { (ctx, iter) =>
       var result = 0L
@@ -815,29 +852,31 @@ abstract class RDD[T: ClassTag](
       throw new SparkException("countByValue() does not support arrays")
     }
     // TODO: This should perhaps be distributed by default.
-    def countPartition(iter: Iterator[T]): Iterator[OLMap[T]] = {
-      val map = new OLMap[T]
-      while (iter.hasNext) {
-        val v = iter.next()
-        map.put(v, map.getLong(v) + 1L)
+    def countPartition(iter: Iterator[T]): Iterator[OpenHashMap[T,Long]] = {
+      val map = new OpenHashMap[T,Long]
+      iter.foreach {
+        t => map.changeValue(t, 1L, _ + 1L)
       }
       Iterator(map)
     }
-    def mergeMaps(m1: OLMap[T], m2: OLMap[T]): OLMap[T] = {
-      val iter = m2.object2LongEntrySet.fastIterator()
-      while (iter.hasNext) {
-        val entry = iter.next()
-        m1.put(entry.getKey, m1.getLong(entry.getKey) + entry.getLongValue)
+    def mergeMaps(m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]): OpenHashMap[T,Long] = {
+      m2.foreach { case (key, value) =>
+        m1.changeValue(key, value, _ + value)
       }
       m1
     }
     val myResult = mapPartitions(countPartition).reduce(mergeMaps)
-    myResult.asInstanceOf[java.util.Map[T, Long]]   // Will be wrapped as a Scala mutable Map
+    // Convert to a Scala mutable map
+    val mutableResult = scala.collection.mutable.Map[T,Long]()
+    myResult.foreach { case (k, v) => mutableResult.put(k, v) }
+    mutableResult
   }
 
   /**
-   * (Experimental) Approximate version of countByValue().
+   * :: Experimental ::
+   * Approximate version of countByValue().
    */
+  @Experimental
   def countByValueApprox(
       timeout: Long,
       confidence: Double = 0.95
@@ -845,11 +884,10 @@ abstract class RDD[T: ClassTag](
     if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValueApprox() does not support arrays")
     }
-    val countPartition: (TaskContext, Iterator[T]) => OLMap[T] = { (ctx, iter) =>
-      val map = new OLMap[T]
-      while (iter.hasNext) {
-        val v = iter.next()
-        map.put(v, map.getLong(v) + 1L)
+    val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T,Long] = { (ctx, iter) =>
+      val map = new OpenHashMap[T,Long]
+      iter.foreach {
+        t => map.changeValue(t, 1L, _ + 1L)
       }
       map
     }
@@ -858,6 +896,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * :: Experimental ::
    * Return approximate number of distinct elements in the RDD.
    *
    * The accuracy of approximation can be controlled through the relative standard deviation
@@ -865,6 +904,7 @@ abstract class RDD[T: ClassTag](
    * more accurate counts but increase the memory footprint and vise versa. The default value of
    * relativeSD is 0.05.
    */
+  @Experimental
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
     val zeroCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
     aggregate(zeroCounter)(_.add(_), _.merge(_)).value.cardinality()
@@ -1141,5 +1181,4 @@ abstract class RDD[T: ClassTag](
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
   }
-
 }

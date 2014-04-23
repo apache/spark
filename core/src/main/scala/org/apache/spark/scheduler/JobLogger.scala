@@ -25,9 +25,11 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 
 /**
+ * :: DeveloperApi ::
  * A logger class to record runtime information for jobs in Spark. This class outputs one log file
  * for each Spark job, containing tasks start/stop and shuffle information. JobLogger is a subclass
  * of SparkListener, use addSparkListener to add JobLogger to a SparkContext after the SparkContext
@@ -38,7 +40,7 @@ import org.apache.spark.executor.TaskMetrics
  * to log application information as SparkListenerEvents. To enable this functionality, set
  * spark.eventLog.enabled to true.
  */
-
+@DeveloperApi
 @deprecated("Log application information by setting spark.eventLog.enabled.", "1.0.0")
 class JobLogger(val user: String, val logDirName: String) extends SparkListener with Logging {
 
@@ -191,7 +193,11 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
    */
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     val stageId = stageCompleted.stageInfo.stageId
-    stageLogInfo(stageId, "STAGE_ID=%d STATUS=COMPLETED".format(stageId))
+    if (stageCompleted.stageInfo.failureReason.isEmpty) {
+      stageLogInfo(stageId, s"STAGE_ID=$stageId STATUS=COMPLETED")
+    } else {
+      stageLogInfo(stageId, s"STAGE_ID=$stageId STATUS=FAILED")
+    }
   }
 
   /**
@@ -201,7 +207,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val taskInfo = taskEnd.taskInfo
     var taskStatus = "TASK_TYPE=%s".format(taskEnd.taskType)
-    val taskMetrics = if (taskEnd.taskMetrics != null) taskEnd.taskMetrics else TaskMetrics.empty()
+    val taskMetrics = if (taskEnd.taskMetrics != null) taskEnd.taskMetrics else TaskMetrics.empty
     taskEnd.reason match {
       case Success => taskStatus += " STATUS=SUCCESS"
         recordTaskMetrics(taskEnd.stageId, taskStatus, taskInfo, taskMetrics)
@@ -227,7 +233,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
     var info = "JOB_ID=" + jobId
     jobEnd.jobResult match {
       case JobSucceeded => info += " STATUS=SUCCESS"
-      case JobFailed(exception, _) =>
+      case JobFailed(exception) =>
         info += " STATUS=FAILED REASON="
         exception.getMessage.split("\\s+").foreach(info += _ + "_")
       case _ =>

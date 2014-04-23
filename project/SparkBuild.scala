@@ -23,6 +23,8 @@ import AssemblyKeys._
 import scala.util.Properties
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
+import sbtunidoc.Plugin._
+import UnidocKeys._
 
 import scala.collection.JavaConversions._
 
@@ -31,6 +33,7 @@ import scala.collection.JavaConversions._
 
 object SparkBuild extends Build {
   val SPARK_VERSION = "1.0.0-SNAPSHOT"
+  val SPARK_VERSION_SHORT = SPARK_VERSION.replaceAll("-SNAPSHOT", "")
 
   // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
   // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
@@ -162,7 +165,7 @@ object SparkBuild extends Build {
     organization       := "org.apache.spark",
     version            := SPARK_VERSION,
     scalaVersion       := "2.10.4",
-    scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
+    scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation", "-feature",
       "-target:" + SCALAC_JVM_VERSION),
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
@@ -184,17 +187,23 @@ object SparkBuild extends Build {
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     // Remove certain packages from Scaladoc
-    scalacOptions in (Compile,doc) := Seq("-groups", "-skip-packages", Seq(
-      "akka",
-      "org.apache.spark.network",
-      "org.apache.spark.deploy",
-      "org.apache.spark.util.collection"
-      ).mkString(":")),
+    scalacOptions in (Compile, doc) := Seq(
+      "-groups",
+      "-skip-packages", Seq(
+        "akka",
+        "org.apache.spark.api.python",
+        "org.apache.spark.network",
+        "org.apache.spark.deploy",
+        "org.apache.spark.util.collection"
+      ).mkString(":"),
+      "-doc-title", "Spark " + SPARK_VERSION_SHORT + " ScalaDoc"
+    ),
 
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
 
     resolvers ++= Seq(
+      // HTTPS is unavailable for Maven Central
       "Maven Repository"     at "http://repo.maven.apache.org/maven2",
       "Apache Repository"    at "https://repository.apache.org/content/repositories/releases",
       "JBoss Repository"     at "https://repository.jboss.org/nexus/content/repositories/releases/",
@@ -262,8 +271,6 @@ object SparkBuild extends Build {
         "org.eclipse.jetty" % "jetty-util"     % jettyVersion,
         "org.eclipse.jetty" % "jetty-plus"     % jettyVersion,
         "org.eclipse.jetty" % "jetty-security" % jettyVersion,
-        /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
-        "org.eclipse.jetty.orbit" % "javax.servlet" % "3.0.0.v201112011016" artifacts Artifact("javax.servlet", "jar", "jar"),
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
         "com.novocode"      % "junit-interface" % "0.10"   % "test",
@@ -284,7 +291,7 @@ object SparkBuild extends Build {
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
-  ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings
+  ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings ++ genjavadocSettings
 
   val akkaVersion = "2.2.3-shaded-protobuf"
   val chillVersion = "0.3.1"
@@ -305,7 +312,7 @@ object SparkBuild extends Build {
   val excludeHadoop = ExclusionRule(organization = "org.apache.hadoop")
   val excludeCurator = ExclusionRule(organization = "org.apache.curator")
   val excludePowermock = ExclusionRule(organization = "org.powermock")
-
+  val excludeFastutil = ExclusionRule(organization = "it.unimi.dsi")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
@@ -330,7 +337,6 @@ object SparkBuild extends Build {
         "org.spark-project.akka"    %% "akka-slf4j"       % akkaVersion excludeAll(excludeNetty),
         "org.spark-project.akka"    %% "akka-testkit"     % akkaVersion % "test",
         "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
-        "it.unimi.dsi"               % "fastutil"         % "6.4.4",
         "colt"                       % "colt"             % "1.2.0",
         "org.apache.mesos"           % "mesos"            % "0.13.0",
         "commons-net"                % "commons-net"      % "2.2",
@@ -345,20 +351,63 @@ object SparkBuild extends Build {
         "com.twitter"               %% "chill"            % chillVersion excludeAll(excludeAsm),
         "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
         "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
-        "com.clearspring.analytics"  % "stream"           % "2.5.1"
+        "com.clearspring.analytics"  % "stream"           % "2.5.1" excludeAll(excludeFastutil),
+        "org.spark-project"          % "pyrolite"         % "2.0.1"
       ),
     libraryDependencies ++= maybeAvro
   )
 
-  def rootSettings = sharedSettings ++ Seq(
-    publish := {}
+  // Create a colon-separate package list adding "org.apache.spark" in front of all of them,
+  // for easier specification of JavaDoc package groups
+  def packageList(names: String*): String = {
+    names.map(s => "org.apache.spark." + s).mkString(":")
+  }
+
+  def rootSettings = sharedSettings ++ scalaJavaUnidocSettings ++ Seq(
+    publish := {},
+
+    unidocProjectFilter in (ScalaUnidoc, unidoc) :=
+      inAnyProject -- inProjects(repl, examples, tools, catalyst, yarn, yarnAlpha),
+    unidocProjectFilter in (JavaUnidoc, unidoc) :=
+      inAnyProject -- inProjects(repl, examples, bagel, graphx, catalyst, tools, yarn, yarnAlpha),
+
+    // Skip class names containing $ and some internal packages in Javadocs
+    unidocAllSources in (JavaUnidoc, unidoc) := {
+      (unidocAllSources in (JavaUnidoc, unidoc)).value
+        .map(_.filterNot(_.getName.contains("$")))
+        .map(_.filterNot(_.getCanonicalPath.contains("akka")))
+        .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
+        .map(_.filterNot(_.getCanonicalPath.contains("network")))
+        .map(_.filterNot(_.getCanonicalPath.contains("executor")))
+        .map(_.filterNot(_.getCanonicalPath.contains("python")))
+        .map(_.filterNot(_.getCanonicalPath.contains("collection")))
+    },
+
+    // Javadoc options: create a window title, and group key packages on index page
+    javacOptions in doc := Seq(
+      "-windowtitle", "Spark " + SPARK_VERSION_SHORT + " JavaDoc",
+      "-public",
+      "-group", "Core Java API", packageList("api.java", "api.java.function"),
+      "-group", "Spark Streaming", packageList(
+        "streaming.api.java", "streaming.flume", "streaming.kafka",
+        "streaming.mqtt", "streaming.twitter", "streaming.zeromq"
+      ),
+      "-group", "MLlib", packageList(
+        "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
+        "mllib.linalg.distributed", "mllib.optimization", "mllib.rdd", "mllib.recommendation",
+        "mllib.regression", "mllib.stat", "mllib.tree", "mllib.tree.configuration",
+        "mllib.tree.impurity", "mllib.tree.model", "mllib.util"
+      ),
+      "-group", "Spark SQL", packageList("sql.api.java", "sql.hive.api.java"),
+      "-noqualifier", "java.lang"
+    )
   )
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
-   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
-   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v ),
-   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v),
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v),
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v)
   )
 
   def examplesSettings = sharedSettings ++ Seq(
@@ -408,7 +457,7 @@ object SparkBuild extends Build {
   def catalystSettings = sharedSettings ++ Seq(
     name := "catalyst",
     // The mechanics of rewriting expression ids to compare trees in some test cases makes
-    // assumptions about the the expression ids being contiguious.  Running tests in parallel breaks
+    // assumptions about the the expression ids being contiguous.  Running tests in parallel breaks
     // this non-deterministically.  TODO: FIX THIS.
     parallelExecution in Test := false,
     libraryDependencies ++= Seq(

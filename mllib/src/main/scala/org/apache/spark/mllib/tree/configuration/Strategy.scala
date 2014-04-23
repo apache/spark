@@ -17,11 +17,13 @@
 
 package org.apache.spark.mllib.tree.configuration
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.impurity.Impurity
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 
 /**
+ * :: Experimental ::
  * Stores all the configuration options for tree construction
  * @param algo classification or regression
  * @param impurity criterion used for information gain calculation
@@ -34,10 +36,11 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
  */
+@Experimental
 class Strategy (
     val algo: Algo,
     val impurity: Impurity,
     val maxDepth: Int,
     val maxBins: Int = 100,
     val quantileCalculationStrategy: QuantileStrategy = Sort,
-    val categoricalFeaturesInfo: Map[Int,Int] = Map[Int,Int]()) extends Serializable
+    val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int]()) extends Serializable

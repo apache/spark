@@ -18,9 +18,11 @@
 package org.apache.spark.examples
 
 import scala.math.sqrt
-import cern.jet.math._
+
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
+import cern.jet.math._
+
 import org.apache.spark._
 
 /**
@@ -111,8 +113,8 @@ object SparkALS {
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
 
     val sc = new SparkContext(host, "SparkALS",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
-    
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
+
     val R = generateR()
 
     // Initialize m and u randomly
@@ -137,6 +139,6 @@ object SparkALS {
       println()
     }
 
-    System.exit(0)
+    sc.stop()
   }
 }

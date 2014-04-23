@@ -26,7 +26,6 @@ import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.SortedSet
 import scala.io.Source
 import scala.reflect.ClassTag
 
@@ -116,6 +115,21 @@ private[spark] object Utils extends Logging {
       isWrapper.close()
     }
   }
+
+  /**
+   * Get the ClassLoader which loaded Spark.
+   */
+  def getSparkClassLoader = getClass.getClassLoader
+
+  /**
+   * Get the Context ClassLoader on this thread or, if not present, the ClassLoader that
+   * loaded Spark.
+   *
+   * This should be used whenever passing a ClassLoader to Class.ForName or finding the currently
+   * active loader when setting up ClassLoader delegation chains.
+   */
+  def getContextOrSparkClassLoader =
+    Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
 
   /**
    * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
@@ -499,10 +513,10 @@ private[spark] object Utils extends Logging {
   private val hostPortParseResults = new ConcurrentHashMap[String, (String, Int)]()
 
   def parseHostPort(hostPort: String): (String,  Int) = {
-    {
-      // Check cache first.
-      val cached = hostPortParseResults.get(hostPort)
-      if (cached != null) return cached
+    // Check cache first.
+    val cached = hostPortParseResults.get(hostPort)
+    if (cached != null) {
+      return cached
     }
 
     val indx: Int = hostPort.lastIndexOf(':')
@@ -1021,5 +1035,12 @@ private[spark] object Utils extends Logging {
    */
   def getHadoopFileSystem(path: URI): FileSystem = {
     FileSystem.get(path, SparkHadoopUtil.get.newConfiguration())
+  }
+
+  /**
+   * Return a Hadoop FileSystem with the scheme encoded in the given path.
+   */
+  def getHadoopFileSystem(path: String): FileSystem = {
+    getHadoopFileSystem(new URI(path))
   }
 }

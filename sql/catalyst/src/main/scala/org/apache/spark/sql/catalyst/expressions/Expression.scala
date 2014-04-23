@@ -50,8 +50,7 @@ abstract class Expression extends TreeNode[Expression] {
   def references: Set[Attribute]
 
   /** Returns the result of evaluating this expression on a given input Row */
-  def eval(input: Row = null): EvaluatedType =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+  def eval(input: Row = null): EvaluatedType
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -87,7 +86,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Evaluation helper function for 2 Numeric children expressions. Those expressions are supposed 
+   * Evaluation helper function for 2 Numeric children expressions. Those expressions are supposed
    * to be in the same data type, and also the return type.
    * Either one of the expressions result is null, the evaluation result should be null.
    */
@@ -121,7 +120,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Evaluation helper function for 2 Fractional children expressions. Those expressions are  
+   * Evaluation helper function for 2 Fractional children expressions. Those expressions are
    * supposed to be in the same data type, and also the return type.
    * Either one of the expressions result is null, the evaluation result should be null.
    */
@@ -154,7 +153,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Evaluation helper function for 2 Integral children expressions. Those expressions are  
+   * Evaluation helper function for 2 Integral children expressions. Those expressions are
    * supposed to be in the same data type, and also the return type.
    * Either one of the expressions result is null, the evaluation result should be null.
    */
@@ -187,12 +186,12 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Evaluation helper function for 2 Comparable children expressions. Those expressions are  
+   * Evaluation helper function for 2 Comparable children expressions. Those expressions are
    * supposed to be in the same data type, and the return type should be Integer:
    * Negative value: 1st argument less than 2nd argument
    * Zero:  1st argument equals 2nd argument
    * Positive value: 1st argument greater than 2nd argument
-   * 
+   *
    * Either one of the expressions result is null, the evaluation result should be null.
    */
   @inline
@@ -214,7 +213,7 @@ abstract class Expression extends TreeNode[Expression] {
         null
       } else {
         e1.dataType match {
-          case i: NativeType => 
+          case i: NativeType =>
             f.asInstanceOf[(Ordering[i.JvmType], i.JvmType, i.JvmType) => Boolean](
               i.ordering, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support ordered operations")
