@@ -299,6 +299,10 @@ class VertexRDD[@specialized VD: ClassTag](
     new VertexRDD[VD2](parts)
   }
 
+  /**
+   * Returns a new `VertexRDD` reflecting a reversal of all edge directions in the corresponding
+   * [[EdgeRDD]].
+   */
   def reverseRoutingTables(): VertexRDD[VD] =
     this.mapVertexPartitions(vPart => vPart.withRoutingTable(vPart.routingTable.reverse))
 

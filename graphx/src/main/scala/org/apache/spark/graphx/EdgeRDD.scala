@@ -29,7 +29,7 @@ import org.apache.spark.graphx.impl.EdgePartition
  * `EdgeRDD[ED, VD]` extends `RDD[Edge[ED]]` by storing the edges in columnar format on each
  * partition for performance. It may additionally store the vertex attributes associated with each
  * edge to provide the triplet view. Shipping of the vertex attributes is managed by
- * [[org.apache.spark.graphx.impl.ReplicatedVertexView]].
+ * `impl.ReplicatedVertexView`.
  */
 class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
     val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])])
@@ -103,6 +103,7 @@ class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
    */
   def reverse: EdgeRDD[ED, VD] = mapEdgePartitions((pid, part) => part.reverse)
 
+  /** Removes all edges but those matching `epred` and where both vertices match `vpred`. */
   def filter(
       epred: EdgeTriplet[VD, ED] => Boolean,
       vpred: (VertexId, VD) => Boolean): EdgeRDD[ED, VD] = {
