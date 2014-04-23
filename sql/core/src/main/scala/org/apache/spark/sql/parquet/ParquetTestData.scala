@@ -19,20 +19,16 @@ package org.apache.spark.sql.parquet
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.Job
 
+import parquet.example.data.{GroupWriter, Group}
+import parquet.example.data.simple.SimpleGroup
 import parquet.hadoop.ParquetWriter
-import parquet.hadoop.util.ContextUtil
+import parquet.hadoop.api.WriteSupport
+import parquet.hadoop.api.WriteSupport.WriteContext
+import parquet.io.api.RecordConsumer
 import parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.util.Utils
-import parquet.hadoop.metadata.CompressionCodecName
-import parquet.hadoop.api.WriteSupport
-import parquet.example.data.{GroupWriter, Group}
-import parquet.io.api.RecordConsumer
-import parquet.hadoop.api.WriteSupport.WriteContext
-import parquet.example.data.simple.SimpleGroup
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
 // with an empty configuration (it is after all not intended to be used in this way?)
