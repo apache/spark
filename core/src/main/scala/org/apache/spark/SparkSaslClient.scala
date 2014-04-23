@@ -111,10 +111,10 @@ private[spark] class SparkSaslClient(securityMgr: SecurityManager)  extends Logg
     CallbackHandler {
 
     private val userName: String =
-      SparkSaslServer.encodeIdentifier(securityMgr.getSaslUser().getBytes())
+      SparkSaslServer.encodeIdentifier(securityMgr.getSaslUser().getBytes("utf-8"))
     private val secretKey = securityMgr.getSecretKey()
     private val userPassword: Array[Char] =
-      SparkSaslServer.encodePassword(if (secretKey != null) secretKey.getBytes() else "".getBytes())
+      SparkSaslServer.encodePassword(if (secretKey != null) secretKey.getBytes("utf-8") else "".getBytes("utf-8"))
 
     /**
      * Implementation used to respond to SASL request from the server.

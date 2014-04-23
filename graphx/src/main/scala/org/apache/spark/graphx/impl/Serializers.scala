@@ -18,12 +18,12 @@
 package org.apache.spark.graphx.impl
 
 import java.io.{EOFException, InputStream, OutputStream}
-import java.nio.ByteBuffer
 
 import org.apache.spark.graphx._
 import org.apache.spark.serializer._
 
 import scala.language.existentials
+import org.apache.spark.io.LargeByteBuffer
 
 private[graphx]
 class VertexIdMsgSerializer extends Serializer with Serializable {
@@ -398,11 +398,11 @@ abstract class ShuffleDeserializationStream(s: InputStream) extends Deserializat
 
 private[graphx] sealed trait ShuffleSerializerInstance extends SerializerInstance {
 
-  override def serialize[T](t: T): ByteBuffer = throw new UnsupportedOperationException
+  override def serialize[T](t: T): LargeByteBuffer = throw new UnsupportedOperationException
 
-  override def deserialize[T](bytes: ByteBuffer): T = throw new UnsupportedOperationException
+  override def deserialize[T](bytes: LargeByteBuffer): T = throw new UnsupportedOperationException
 
-  override def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T =
+  override def deserialize[T](bytes: LargeByteBuffer, loader: ClassLoader): T =
     throw new UnsupportedOperationException
 
   // The implementation should override the following two.
