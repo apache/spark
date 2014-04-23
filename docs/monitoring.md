@@ -91,6 +91,29 @@ represents an application's event logs. This creates a web interface at
       The port to which the web interface of the history server binds.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.use.kerberos</td>
+    <td>false</td>
+    <td>
+      Indicates whether the history server should use kerberos to login. If this is true
+      it looks uses the configs <code>spark.history.kerberos.principal</code> and
+      <code>spark.history.kerberos.keytab</code>. 
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.kerberos.principal</td>
+    <td>(none)</td>
+    <td>
+      Kerberos principal name for the History Server.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.kerberos.keytab</td>
+    <td>(none)</td>
+    <td>
+      Location of the kerberos keytab file for the History Server.
+    </td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
