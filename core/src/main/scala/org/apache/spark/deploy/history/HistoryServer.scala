@@ -243,7 +243,7 @@ class HistoryServer(
  *
  * This launches the HistoryServer as a Spark daemon.
  */
-object HistoryServer extends Logging {
+object HistoryServer {
   private val conf = new SparkConf
 
   // Interval between each check for event log updates
