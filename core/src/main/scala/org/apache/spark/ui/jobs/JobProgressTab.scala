@@ -30,7 +30,7 @@ private[ui] class JobProgressTab(parent: SparkUI) extends WebUITab(parent, "stag
   val live = parent.live
   val sc = parent.sc
   val conf = if (live) sc.conf else new SparkConf
-  val killEnabled = conf.getBoolean("spark.ui.killEnabled", true)
+  val killEnabled = conf.getBoolean("spark.ui.killEnabled", false)
   val listener = new JobProgressListener(conf)
 
   attachPage(new JobProgressPage(this))
