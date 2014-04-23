@@ -51,5 +51,7 @@ class ImplicitOrderingSuite extends FunSuite with LocalSparkContext {
     assert(rdd.groupBy(x => new NonOrderedClass).keyOrdering.isEmpty)
     assert(rdd.groupBy(x => new ComparableClass).keyOrdering.isDefined)
     assert(rdd.groupBy(x => new OrderedClass).keyOrdering.isDefined)
+    assert(rdd.groupBy((x: Int) => x, 5).keyOrdering.isDefined)
+    assert(rdd.groupBy((x: Int) => x, new HashPartitioner(5)).keyOrdering.isDefined)
   }
 }
