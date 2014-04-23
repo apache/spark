@@ -82,7 +82,7 @@ class ExecutorRunnable(
     ctx.setContainerTokens(ByteBuffer.wrap(dob.getData()))
 
     val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
-      localResources.contains(ClientBase.LOG4J_PROP))
+      localResources)
     logInfo("Setting up executor with commands: " + commands)
     ctx.setCommands(commands)
 

@@ -119,7 +119,7 @@ private[spark] object AkkaUtils extends Logging {
 
   /** Returns the default Spark timeout to use for Akka remote actor lookup. */
   def lookupTimeout(conf: SparkConf): FiniteDuration = {
-    Duration.create(conf.get("spark.akka.lookupTimeout", "30").toLong, "seconds")
+    Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
   }
 
   /** Returns the configured max frame size for Akka messages in bytes. */
