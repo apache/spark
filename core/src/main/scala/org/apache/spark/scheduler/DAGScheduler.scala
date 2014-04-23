@@ -498,12 +498,16 @@ class DAGScheduler(
    * the last fetch failure.
    */
   private[scheduler] def resubmitFailedStages() {
-    logInfo("Resubmitting failed stages")
-    clearCacheLocs()
-    val failedStagesCopy = failedStages.toArray
-    failedStages.clear()
-    for (stage <- failedStagesCopy.sortBy(_.jobId)) {
-      submitStage(stage)
+    if (failedStages.size > 0) {
+      // Failed stages may be removed by job cancellation, so failed might be empty even if
+      // the ResubmitFailedStages event has been scheduled.
+      logInfo("Resubmitting failed stages")
+      clearCacheLocs()
+      val failedStagesCopy = failedStages.toArray
+      failedStages.clear()
+      for (stage <- failedStagesCopy.sortBy(_.jobId)) {
+        submitStage(stage)
+      }
     }
   }
 
@@ -579,6 +583,91 @@ class DAGScheduler(
       jobsThatUseStage.find(jobIdToActiveJob.contains)
     } else {
       None
+    }
+  }
+
+  private[scheduler] def handleJobGroupCancelled(groupId: String) {
+    // Cancel all jobs belonging to this job group.
+    // First finds all active jobs with this group id, and then kill stages for them.
+    val activeInGroup = activeJobs.filter(activeJob =>
+      groupId == activeJob.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
+    val jobIds = activeInGroup.map(_.jobId)
+    jobIds.foreach(handleJobCancellation(_, "part of cancel job group"))
+  }
+
+  private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
+    for (stage <- stageIdToStage.get(task.stageId); stageInfo <- stageToInfos.get(stage)) {
+      if (taskInfo.serializedSize > DAGScheduler.TASK_SIZE_TO_WARN * 1024 &&
+        !stageInfo.emittedTaskSizeWarning) {
+        stageInfo.emittedTaskSizeWarning = true
+        logWarning(("Stage %d (%s) contains a task of very large " +
+          "size (%d KB). The maximum recommended task size is %d KB.").format(
+            task.stageId, stageInfo.name, taskInfo.serializedSize / 1024,
+            DAGScheduler.TASK_SIZE_TO_WARN))
+      }
+    }
+    listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
+  }
+
+  private[scheduler] def handleTaskSetFailed(taskSet: TaskSet, reason: String) {
+    stageIdToStage.get(taskSet.stageId).foreach {abortStage(_, reason) }
+  }
+
+  private[scheduler] def cleanUpAfterSchedulerStop() {
+    for (job <- activeJobs) {
+      val error = new SparkException("Job cancelled because SparkContext was shut down")
+      job.listener.jobFailed(error)
+      // Tell the listeners that all of the running stages have ended.  Don't bother
+      // cancelling the stages because if the DAG scheduler is stopped, the entire application
+      // is in the process of getting stopped.
+      val stageFailedMessage = "Stage cancelled because SparkContext was shut down"
+      runningStages.foreach { stage =>
+        val info = stageToInfos(stage)
+        info.stageFailed(stageFailedMessage)
+        listenerBus.post(SparkListenerStageCompleted(info))
+      }
+      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
+    }
+  }
+
+  private[scheduler] def handleJobSubmitted(jobId: Int,
+    finalRDD: RDD[_],
+    func: (TaskContext, Iterator[_]) => _,
+    partitions: Array[Int],
+    allowLocal: Boolean,
+    callSite: String,
+    listener: JobListener,
+    properties: Properties = null) {
+    var finalStage: Stage = null
+    try {
+      // New stage creation may throw an exception if, for example, jobs are run on a
+      // HadoopRDD whose underlying HDFS files have been deleted.
+      finalStage = newStage(finalRDD, partitions.size, None, jobId, Some(callSite))
+    } catch {
+      case e: Exception =>
+        logWarning("Creating new stage failed due to exception - job: " + jobId, e)
+        listener.jobFailed(e)
+    }
+    if (finalStage != null) {
+      val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
+      clearCacheLocs()
+      logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".
+        format(job.jobId, callSite, partitions.length, allowLocal))
+      logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
+      logInfo("Parents of final stage: " + finalStage.parents)
+      logInfo("Missing parents: " + getMissingParentStages(finalStage))
+      if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
+        // Compute very short actions like first() or take() with no parent stages locally.
+        listenerBus.post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
+        runLocally(job)
+      } else {
+        jobIdToActiveJob(jobId) = job
+        activeJobs += job
+        resultStageToJob(finalStage) = job
+        listenerBus.post(SparkListenerJobStart(job.jobId, jobIdToStageIds(jobId).toArray,
+          properties))
+        submitStage(finalStage)
+      }
     }
   }
 
@@ -673,6 +762,10 @@ class DAGScheduler(
    */
   private[scheduler] def handleTaskCompletion(event: CompletionEvent) {
     val task = event.task
+    val stageId = task.stageId
+    val taskType = Utils.getFormattedClassName(task)
+    listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
+      event.taskMetrics))
     if (!stageIdToStage.contains(task.stageId)) {
       // Skip all the actions if the stage has been cancelled.
       return
@@ -1045,36 +1138,8 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
    */
   def receive = {
     case JobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite, listener, properties) =>
-      var finalStage: Stage = null
-      try {
-        // New stage creation may throw an exception if, for example, jobs are run on a
-        // HadoopRDD whose underlying HDFS files have been deleted.
-        finalStage = dagScheduler.newStage(rdd, partitions.size, None, jobId, Some(callSite))
-      } catch {
-        case e: Exception =>
-          logWarning("Creating new stage failed due to exception - job: " + jobId, e)
-          listener.jobFailed(e)
-      }
-      val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
-      dagScheduler.clearCacheLocs()
-      logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".
-        format(job.jobId, callSite, partitions.length, allowLocal))
-      logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
-      logInfo("Parents of final stage: " + finalStage.parents)
-      logInfo("Missing parents: " + dagScheduler.getMissingParentStages(finalStage))
-      if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
-        // Compute very short actions like first() or take() with no parent stages locally.
-        dagScheduler.listenerBus.post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
-        dagScheduler.runLocally(job)
-      } else {
-        dagScheduler.jobIdToActiveJob(jobId) = job
-        dagScheduler.activeJobs += job
-        dagScheduler.resultStageToJob(finalStage) = job
-        dagScheduler.listenerBus.post(
-          SparkListenerJobStart(job.jobId, dagScheduler.jobIdToStageIds(jobId).toArray,
-            properties))
-        dagScheduler.submitStage(finalStage)
-      }
+      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite,
+        listener, properties)
 
     case StageCancelled(stageId) =>
       dagScheduler.handleStageCancellation(stageId)
@@ -1083,12 +1148,7 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
       dagScheduler.handleJobCancellation(jobId)
 
     case JobGroupCancelled(groupId) =>
-      // Cancel all jobs belonging to this job group.
-      // First finds all active jobs with this group id, and then kill stages for them.
-      val activeInGroup = dagScheduler.activeJobs.filter(activeJob =>
-        groupId == activeJob.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
-      val jobIds = activeInGroup.map(_.jobId)
-      jobIds.foreach(dagScheduler.handleJobCancellation(_, "part of cancel job group"))
+      dagScheduler.handleJobGroupCancelled(groupId)
 
     case AllJobsCancelled =>
       dagScheduler.doCancelAllJobs()
@@ -1100,60 +1160,24 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
       dagScheduler.handleExecutorLost(execId)
 
     case BeginEvent(task, taskInfo) =>
-      for (
-        job <- dagScheduler.jobIdToActiveJob.get(task.stageId);
-        stage <- dagScheduler.stageIdToStage.get(task.stageId);
-        stageInfo <- dagScheduler.stageToInfos.get(stage)
-      ) {
-        if (taskInfo.serializedSize > DAGScheduler.TASK_SIZE_TO_WARN * 1024 &&
-          !stageInfo.emittedTaskSizeWarning) {
-          stageInfo.emittedTaskSizeWarning = true
-          logWarning(("Stage %d (%s) contains a task of very large " +
-            "size (%d KB). The maximum recommended task size is %d KB.").format(
-              task.stageId, stageInfo.name, taskInfo.serializedSize / 1024,
-              DAGScheduler.TASK_SIZE_TO_WARN))
-        }
-      }
-      dagScheduler.listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
+      dagScheduler.handleBeginEvent(task, taskInfo)
 
     case GettingResultEvent(task, taskInfo) =>
       dagScheduler.listenerBus.post(SparkListenerTaskGettingResult(taskInfo))
 
     case completion @ CompletionEvent(task, reason, _, _, taskInfo, taskMetrics) =>
-      val stageId = task.stageId
-      val taskType = Utils.getFormattedClassName(task)
-      dagScheduler.listenerBus.post(SparkListenerTaskEnd(stageId, taskType, reason, taskInfo,
-        taskMetrics))
       dagScheduler.handleTaskCompletion(completion)
 
     case TaskSetFailed(taskSet, reason) =>
-      dagScheduler.stageIdToStage.get(taskSet.stageId).foreach {
-        dagScheduler.abortStage(_, reason) }
+      dagScheduler.handleTaskSetFailed(taskSet, reason)
 
     case ResubmitFailedStages =>
-      if (dagScheduler.failedStages.size > 0) {
-        // Failed stages may be removed by job cancellation, so failed might be empty even if
-        // the ResubmitFailedStages event has been scheduled.
-        dagScheduler.resubmitFailedStages()
-      }
+      dagScheduler.resubmitFailedStages()
   }
 
   override def postStop() {
     // Cancel any active jobs in postStop hook
-    for (job <- dagScheduler.activeJobs) {
-      val error = new SparkException("Job cancelled because SparkContext was shut down")
-      job.listener.jobFailed(error)
-      // Tell the listeners that all of the running stages have ended.  Don't bother
-      // cancelling the stages because if the DAG scheduler is stopped, the entire application
-      // is in the process of getting stopped.
-      val stageFailedMessage = "Stage cancelled because SparkContext was shut down"
-      dagScheduler.runningStages.foreach { stage =>
-        val info = dagScheduler.stageToInfos(stage)
-        info.stageFailed(stageFailedMessage)
-        dagScheduler.listenerBus.post(SparkListenerStageCompleted(info))
-      }
-      dagScheduler.listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
-    }
+    dagScheduler.cleanUpAfterSchedulerStop()
   }
 }
 
