@@ -274,7 +274,7 @@ object HistoryServer extends Logging {
     // from a keytab file so that we can access HDFS beyond the kerberos ticket expiration.
     // As long as it is using Hadoop rpc (hdfs://), a relogin will automatically
     // occur from the keytab.
-    if (conf.getBoolean("spark.histor.use.kerberos", false)) {
+    if (conf.getBoolean("spark.history.use.kerberos", false)) {
       // if you have enabled kerberos the following 2 params must be set
       val principalName = conf.get("spark.history.kerberos.principal")
       val keytabFilename = conf.get("spark.history.kerberos.keytab")
