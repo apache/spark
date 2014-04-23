@@ -136,10 +136,10 @@ private[spark] class Executor(
     threadPool.execute(tr)
   }
 
-  def killTask(taskId: Long) {
+  def killTask(taskId: Long, interruptThread: Boolean) {
     val tr = runningTasks.get(taskId)
     if (tr != null) {
-      tr.kill()
+      tr.kill(interruptThread)
     }
   }
 
@@ -166,11 +166,11 @@ private[spark] class Executor(
     @volatile private var killed = false
     @volatile private var task: Task[Any] = _
 
-    def kill() {
+    def kill(interruptThread: Boolean) {
       logInfo("Executor is trying to kill task " + taskId)
       killed = true
       if (task != null) {
-        task.kill()
+        task.kill(interruptThread)
       }
     }
 
@@ -257,7 +257,7 @@ private[spark] class Executor(
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
         }
 
-        case TaskKilledException => {
+        case TaskKilledException | _: InterruptedException if task.killed => {
           logInfo("Executor killed task " + taskId)
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
         }
