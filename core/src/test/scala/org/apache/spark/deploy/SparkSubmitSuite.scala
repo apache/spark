@@ -110,7 +110,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     childArgsStr should include ("--executor-memory 5g")
     childArgsStr should include ("--driver-memory 4g")
     childArgsStr should include ("--executor-cores 5")
-    childArgsStr should include ("--args arg1 --args arg2")
+    childArgsStr should include ("--arg arg1 --arg arg2")
     childArgsStr should include ("--queue thequeue")
     childArgsStr should include ("--files file1.txt,file2.txt")
     childArgsStr should include ("--archives archive1.txt,archive2.txt")

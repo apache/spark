@@ -353,7 +353,7 @@ object SparkBuild extends Build {
         "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
         "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
         "com.clearspring.analytics"  % "stream"           % "2.5.1" excludeAll(excludeFastutil),
-        "org.spark-project"          % "pyrolite"         % "2.0"
+        "org.spark-project"          % "pyrolite"         % "2.0.1"
       ),
     libraryDependencies ++= maybeAvro
   )
@@ -368,7 +368,7 @@ object SparkBuild extends Build {
     publish := {},
 
     unidocProjectFilter in (ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(repl, examples, tools, yarn, yarnAlpha),
+      inAnyProject -- inProjects(repl, examples, tools, catalyst, yarn, yarnAlpha),
     unidocProjectFilter in (JavaUnidoc, unidoc) :=
       inAnyProject -- inProjects(repl, examples, bagel, graphx, catalyst, tools, yarn, yarnAlpha),
 
@@ -412,7 +412,9 @@ object SparkBuild extends Build {
   )
 
   def examplesSettings = sharedSettings ++ Seq(
-    name := "spark-examples",
+    name := "spark-examples",  
+    jarName in assembly <<= version map { 
+      v => "spark-examples-" + v + "-hadoop" + hadoopVersion + ".jar" },
     libraryDependencies ++= Seq(
       "com.twitter"          %% "algebird-core"   % "0.1.11",
       "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging, excludeJruby),
@@ -458,7 +460,7 @@ object SparkBuild extends Build {
   def catalystSettings = sharedSettings ++ Seq(
     name := "catalyst",
     // The mechanics of rewriting expression ids to compare trees in some test cases makes
-    // assumptions about the the expression ids being contiguious.  Running tests in parallel breaks
+    // assumptions about the the expression ids being contiguous.  Running tests in parallel breaks
     // this non-deterministically.  TODO: FIX THIS.
     parallelExecution in Test := false,
     libraryDependencies ++= Seq(

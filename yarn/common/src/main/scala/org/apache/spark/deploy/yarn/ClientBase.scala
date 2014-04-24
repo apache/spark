@@ -375,9 +375,11 @@ object ClientBase {
     val classpathEntries = Option(conf.getStrings(
       YarnConfiguration.YARN_APPLICATION_CLASSPATH)).getOrElse(
         getDefaultYarnApplicationClasspath())
-    for (c <- classpathEntries) {
-      YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
-        File.pathSeparator)
+    if (classpathEntries != null) {
+      for (c <- classpathEntries) {
+        YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
+          File.pathSeparator)
+      }
     }
 
     val mrClasspathEntries = Option(conf.getStrings(
@@ -458,7 +460,8 @@ object ClientBase {
     }
 
     /** Add entry to the classpath. */
-    def addClasspathEntry(path: String) = Apps.addToEnvironment(env, Environment.CLASSPATH.name, path)
+    def addClasspathEntry(path: String) = YarnSparkHadoopUtil.addToEnvironment(env,
+      Environment.CLASSPATH.name, path, File.pathSeparator)
     /** Add entry to the classpath. Interpreted as a path relative to the working directory. */
     def addPwdClasspathEntry(entry: String) = addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + entry)
 
