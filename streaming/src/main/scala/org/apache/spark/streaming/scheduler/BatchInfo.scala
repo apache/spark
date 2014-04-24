@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.ui
+package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 
 /**
  * Class having information on completed batches.

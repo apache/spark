@@ -19,7 +19,6 @@ package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.ui.BatchInfo
 
 /** Class representing a set of Jobs
   * belong to the same batch.

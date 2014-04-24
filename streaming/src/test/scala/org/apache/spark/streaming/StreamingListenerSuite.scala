@@ -25,7 +25,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.ui.{BatchInfo, ReceiverInfo}
+import org.apache.spark.streaming.ui.ReceiverInfo
 
 import org.scalatest.matchers.ShouldMatchers
 import org.scalatest.concurrent.Eventually._
