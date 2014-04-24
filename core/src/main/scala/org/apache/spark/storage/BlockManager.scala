@@ -1021,6 +1021,8 @@ private[spark] class BlockManager(
       heartBeatTask.cancel()
     }
     connectionManager.stop()
+    shuffleBlockManager.stop()
+    diskBlockManager.stop()
     actorSystem.stop(slaveActor)
     blockInfo.clear()
     memoryStore.clear()
