@@ -119,7 +119,16 @@ class ExpressionEvaluationSuite extends FunSuite {
     expression.eval(inputRow)
   }
 
-  def checkEvaluation(expression: Expression, expected: Any, inputRow: Row = EmptyRow): Unit = {
+  def checkEvaluation(
+      expression: Expression,
+      dataType: DataType,
+      foldable: Boolean,
+      nullable: Boolean,
+      expected: Any,
+      inputRow: Row = EmptyRow): Unit = {
+    assert(expression.dataType === dataType)
+    assert(expression.foldable === foldable)
+    assert(expression.nullable === nullable)
     val actual = try evaluate(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
@@ -130,54 +139,67 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("LIKE literal Regular Expression") {
-    checkEvaluation(Literal(null, StringType).like("a"), null)
-    checkEvaluation(Literal(null, StringType).like(Literal(null, StringType)), null)
-    checkEvaluation("abdef" like "abdef", true)
-    checkEvaluation("a_%b" like "a\\__b", true)
-    checkEvaluation("addb" like "a_%b", true)
-    checkEvaluation("addb" like "a\\__b", false)
-    checkEvaluation("addb" like "a%\\%b", false)
-    checkEvaluation("a_%b" like "a%\\%b", true)
-    checkEvaluation("addb" like "a%", true)
-    checkEvaluation("addb" like "**", false)
-    checkEvaluation("abc" like "a%", true)
-    checkEvaluation("abc"  like "b%", false)
-    checkEvaluation("abc"  like "bc%", false)
+    checkEvaluation(Literal(null, StringType).like("a"), BooleanType, true, true, null)
+    checkEvaluation(Literal(null, StringType).like(Literal(null, StringType)),
+      BooleanType, true, true, null)
+    checkEvaluation("abdef" like "abdef", BooleanType, true, true, true)
+    checkEvaluation("a_%b" like "a\\__b", BooleanType, true, true, true)
+    checkEvaluation("addb" like "a_%b", BooleanType, true, true, true)
+    checkEvaluation("addb" like "a\\__b", BooleanType, true, true, false)
+    checkEvaluation("addb" like "a%\\%b", BooleanType, true, true, false)
+    checkEvaluation("a_%b" like "a%\\%b", BooleanType, true, true, true)
+    checkEvaluation("addb" like "a%", BooleanType, true, true, true)
+    checkEvaluation("addb" like "**", BooleanType, true, true, false)
+    checkEvaluation("abc" like "a%", BooleanType, true, true, true)
+    checkEvaluation("abc" like "b%", BooleanType, true, true, false)
+    checkEvaluation("abc" like "bc%", BooleanType, true, true, false)
   }
 
   test("LIKE Non-literal Regular Expression") {
     val regEx = 'a.string.at(0)
-    checkEvaluation("abcd" like regEx, null, new GenericRow(Array[Any](null)))
-    checkEvaluation("abdef" like regEx, true, new GenericRow(Array[Any]("abdef")))
-    checkEvaluation("a_%b" like regEx, true, new GenericRow(Array[Any]("a\\__b")))
-    checkEvaluation("addb" like regEx, true, new GenericRow(Array[Any]("a_%b")))
-    checkEvaluation("addb" like regEx, false, new GenericRow(Array[Any]("a\\__b")))
-    checkEvaluation("addb" like regEx, false, new GenericRow(Array[Any]("a%\\%b")))
-    checkEvaluation("a_%b" like regEx, true, new GenericRow(Array[Any]("a%\\%b")))
-    checkEvaluation("addb" like regEx, true, new GenericRow(Array[Any]("a%")))
-    checkEvaluation("addb" like regEx, false, new GenericRow(Array[Any]("**")))
-    checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
-    checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
-    checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
+    checkEvaluation("abcd" like regEx, BooleanType, false, true, null,
+      new GenericRow(Array[Any](null)))
+    checkEvaluation("abdef" like regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("abdef")))
+    checkEvaluation("a_%b" like regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("a\\__b")))
+    checkEvaluation("addb" like regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("a_%b")))
+    checkEvaluation("addb" like regEx, BooleanType, false, true, false,
+      new GenericRow(Array[Any]("a\\__b")))
+    checkEvaluation("addb" like regEx, BooleanType, false, true, false,
+      new GenericRow(Array[Any]("a%\\%b")))
+    checkEvaluation("a_%b" like regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("a%\\%b")))
+    checkEvaluation("addb" like regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("a%")))
+    checkEvaluation("addb" like regEx, BooleanType, false, true, false,
+      new GenericRow(Array[Any]("**")))
+    checkEvaluation("abc" like regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("a%")))
+    checkEvaluation("abc" like regEx, BooleanType, false, true, false,
+      new GenericRow(Array[Any]("b%")))
+    checkEvaluation("abc" like regEx, BooleanType, false, true, false,
+      new GenericRow(Array[Any]("bc%")))
   }
 
   test("RLIKE literal Regular Expression") {
-    checkEvaluation("abdef" rlike "abdef", true)
-    checkEvaluation("abbbbc" rlike "a.*c", true)
+    checkEvaluation("abdef" rlike "abdef", BooleanType, true, true, true)
+    checkEvaluation("abbbbc" rlike "a.*c", BooleanType, true, true, true)
 
-    checkEvaluation("fofo" rlike "^fo", true)
-    checkEvaluation("fo\no" rlike "^fo\no$", true)
-    checkEvaluation("Bn" rlike "^Ba*n", true)
-    checkEvaluation("afofo" rlike "fo", true)
-    checkEvaluation("afofo" rlike "^fo", false)
-    checkEvaluation("Baan" rlike "^Ba?n", false)
-    checkEvaluation("axe" rlike "pi|apa", false)
-    checkEvaluation("pip" rlike "^(pi)*$", false)
+    checkEvaluation("fofo" rlike "^fo", BooleanType, true, true, true)
+    checkEvaluation("fo\no" rlike "^fo\no$", BooleanType, true, true, true)
+    checkEvaluation("Bn" rlike "^Ba*n", BooleanType, true, true, true)
+    checkEvaluation("afofo" rlike "fo", BooleanType, true, true, true)
+    checkEvaluation("afofo" rlike "^fo", BooleanType, true, true, false)
+    checkEvaluation("Baan" rlike "^Ba?n", BooleanType, true, true, false)
+    checkEvaluation("axe" rlike "pi|apa", BooleanType, true, true, false)
+    checkEvaluation("pip" rlike "^(pi)*$", BooleanType, true, true, false)
 
-    checkEvaluation("abc"  rlike "^ab", true)
-    checkEvaluation("abc"  rlike "^bc", false)
-    checkEvaluation("abc"  rlike "^ab", true)
-    checkEvaluation("abc"  rlike "^bc", false)
+    checkEvaluation("abc" rlike "^ab", BooleanType, true, true, true)
+    checkEvaluation("abc" rlike "^bc", BooleanType, true, true, false)
+    checkEvaluation("abc" rlike "^ab", BooleanType, true, true, true)
+    checkEvaluation("abc" rlike "^bc", BooleanType, true, true, false)
 
     intercept[java.util.regex.PatternSyntaxException] {
       evaluate("abbbbc" rlike "**")
@@ -186,11 +208,16 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("RLIKE Non-literal Regular Expression") {
     val regEx = 'a.string.at(0)
-    checkEvaluation("abdef" rlike regEx, true, new GenericRow(Array[Any]("abdef")))
-    checkEvaluation("abbbbc" rlike regEx, true, new GenericRow(Array[Any]("a.*c")))
-    checkEvaluation("fofo" rlike regEx, true, new GenericRow(Array[Any]("^fo")))
-    checkEvaluation("fo\no" rlike regEx, true, new GenericRow(Array[Any]("^fo\no$")))
-    checkEvaluation("Bn" rlike regEx, true, new GenericRow(Array[Any]("^Ba*n")))
+    checkEvaluation("abdef" rlike regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("abdef")))
+    checkEvaluation("abbbbc" rlike regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("a.*c")))
+    checkEvaluation("fofo" rlike regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("^fo")))
+    checkEvaluation("fo\no" rlike regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("^fo\no$")))
+    checkEvaluation("Bn" rlike regEx, BooleanType, false, true, true,
+      new GenericRow(Array[Any]("^Ba*n")))
 
     intercept[java.util.regex.PatternSyntaxException] {
       evaluate("abbbbc" rlike regEx, new GenericRow(Array[Any]("**")))
@@ -202,71 +229,80 @@ class ExpressionEvaluationSuite extends FunSuite {
     val sts = "1970-01-01 00:00:01.0"
     val ts = Timestamp.valueOf(sts)
 
-    checkEvaluation("abdef" cast StringType, "abdef")
-    checkEvaluation("abdef" cast DecimalType, null)
-    checkEvaluation("abdef" cast TimestampType, null)
-    checkEvaluation("12.65" cast DecimalType, BigDecimal(12.65))
+    checkEvaluation("abdef" cast StringType, StringType, true, false, "abdef")
+    checkEvaluation("abdef" cast DecimalType, DecimalType, true, true, null)
+    checkEvaluation("abdef" cast TimestampType, TimestampType, true, true, null)
+    checkEvaluation("12.65" cast DecimalType, DecimalType, true, true, BigDecimal(12.65))
 
-    checkEvaluation(Literal(1) cast LongType, 1)
-    checkEvaluation(Cast(Literal(1) cast TimestampType, LongType), 1)
-    checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
+    checkEvaluation(Literal(1) cast LongType, LongType, true, false, 1)
+    checkEvaluation(Cast(Literal(1) cast TimestampType, LongType), LongType, true, false, 1)
+    checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType),
+      DoubleType, true, false, 1.toDouble)
 
-    checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType), sts)
-    checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType), ts)
+    checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType),
+      StringType, true, true, sts)
+    checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType),
+      TimestampType, true, true, ts)
 
-    checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
+    checkEvaluation(Cast("abdef" cast BinaryType, StringType), StringType, true, false, "abdef")
 
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5)
+      Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType),
+      LongType, true, true, 5)
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 5)
+      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType),
+      ShortType, true, true, 5)
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast TimestampType, ByteType), DecimalType), LongType), StringType), ShortType), null)
+      Cast("5" cast TimestampType, ByteType), DecimalType), LongType), StringType), ShortType),
+      ShortType, true, true, null)
     checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast DecimalType, ByteType), TimestampType), LongType), StringType), ShortType), 5)
-    checkEvaluation(Literal(true) cast IntegerType, 1)
-    checkEvaluation(Literal(false) cast IntegerType, 0)
-    checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
-    checkEvaluation(Cast(Literal(0) cast BooleanType, IntegerType), 0)
-    checkEvaluation("23" cast DoubleType, 23)
-    checkEvaluation("23" cast IntegerType, 23)
-    checkEvaluation("23" cast FloatType, 23)
-    checkEvaluation("23" cast DecimalType, 23)
-    checkEvaluation("23" cast ByteType, 23)
-    checkEvaluation("23" cast ShortType, 23)
-    checkEvaluation("2012-12-11" cast DoubleType, null)
-    checkEvaluation(Literal(123) cast IntegerType, 123)
+      Cast("5" cast DecimalType, ByteType), TimestampType), LongType), StringType), ShortType),
+      ShortType, true, true, 5)
+    checkEvaluation(Literal(true) cast IntegerType, IntegerType, true, false, 1)
+    checkEvaluation(Literal(false) cast IntegerType, IntegerType, true, false, 0)
+    checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), IntegerType, true, false, 1)
+    checkEvaluation(Cast(Literal(0) cast BooleanType, IntegerType), IntegerType, true, false, 0)
+    checkEvaluation("23" cast DoubleType, DoubleType, true, true, 23)
+    checkEvaluation("23" cast IntegerType, IntegerType, true, true, 23)
+    checkEvaluation("23" cast FloatType, FloatType, true, true, 23)
+    checkEvaluation("23" cast DecimalType, DecimalType, true, true, 23)
+    checkEvaluation("23" cast ByteType, ByteType, true, true, 23)
+    checkEvaluation("23" cast ShortType, ShortType, true, true, 23)
+    checkEvaluation("2012-12-11" cast DoubleType, DoubleType, true, true, null)
+    checkEvaluation(Literal(123) cast IntegerType, IntegerType, true, false, 123)
 
-    intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
+    intercept[Exception] { evaluate(Literal(1) cast BinaryType, null) }
   }
 
   test("timestamp") {
     val ts1 = new Timestamp(12)
     val ts2 = new Timestamp(123)
-    checkEvaluation(Literal("ab") < Literal("abc"), true)
-    checkEvaluation(Literal(ts1) < Literal(ts2), true)
+    checkEvaluation(Literal("ab") < Literal("abc"), BooleanType, true, false, true)
+    checkEvaluation(Literal(ts1) < Literal(ts2), BooleanType, true, false, true)
   }
 
   test("timestamp casting") {
     val millis = 15 * 1000 + 2
     val ts = new Timestamp(millis)
-    val ts1 = new Timestamp(15 * 1000)  // a timestamp without the milliseconds part
-    checkEvaluation(Cast(ts, ShortType), 15)
-    checkEvaluation(Cast(ts, IntegerType), 15)
-    checkEvaluation(Cast(ts, LongType), 15)
-    checkEvaluation(Cast(ts, FloatType), 15.002f)
-    checkEvaluation(Cast(ts, DoubleType), 15.002)
-    checkEvaluation(Cast(Cast(ts, ShortType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(ts, IntegerType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(ts, LongType), TimestampType), ts1)
+    val ts1 = new Timestamp(15 * 1000) // a timestamp without the milliseconds part
+    checkEvaluation(Cast(ts, ShortType), ShortType, true, false, 15)
+    checkEvaluation(Cast(ts, IntegerType), IntegerType, true, false, 15)
+    checkEvaluation(Cast(ts, LongType), LongType, true, false, 15)
+    checkEvaluation(Cast(ts, FloatType), FloatType, true, false, 15.002f)
+    checkEvaluation(Cast(ts, DoubleType), DoubleType, true, false, 15.002)
+    checkEvaluation(Cast(Cast(ts, ShortType), TimestampType), TimestampType, true, false, ts1)
+    checkEvaluation(Cast(Cast(ts, IntegerType), TimestampType), TimestampType, true, false, ts1)
+    checkEvaluation(Cast(Cast(ts, LongType), TimestampType), TimestampType, true, false, ts1)
     checkEvaluation(Cast(Cast(millis.toFloat / 1000, TimestampType), FloatType),
-      millis.toFloat / 1000)
+      FloatType, true, false, millis.toFloat / 1000)
     checkEvaluation(Cast(Cast(millis.toDouble / 1000, TimestampType), DoubleType),
-      millis.toDouble / 1000)
-    checkEvaluation(Cast(Literal(BigDecimal(1)) cast TimestampType, DecimalType), 1)
+      DoubleType, true, false, millis.toDouble / 1000)
+    checkEvaluation(Cast(Literal(BigDecimal(1)) cast TimestampType, DecimalType),
+      DecimalType, true, false, 1)
 
     // A test for higher precision than millis
-    checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
+    checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType),
+      DoubleType, true, false, 0.00000001)
   }
 }
 
