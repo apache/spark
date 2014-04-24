@@ -36,8 +36,12 @@ class SQLQuerySuite extends QueryTest {
 
   test("index into array of arrays") {
     checkAnswer(
-      sql("SELECT nestedData, nestedData[0][0], nestedData[0][0] + nestedData[0][1] FROM arrayData"),
-      arrayData.map(d => (d.nestedData, d.nestedData(0)(0), d.nestedData(0)(0) + d.nestedData(0)(1))).collect().toSeq)
+      sql(
+        "SELECT nestedData, nestedData[0][0], nestedData[0][0] + nestedData[0][1] FROM arrayData"),
+      arrayData.map(d =>
+        (d.nestedData,
+         d.nestedData(0)(0),
+         d.nestedData(0)(0) + d.nestedData(0)(1))).collect().toSeq)
   }
 
   test("agg") {
