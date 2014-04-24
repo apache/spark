@@ -110,6 +110,9 @@ private[spark] class PythonRDD[T: ClassTag](
       }
     }.start()
 
+    // Necessary to distinguish between a task that has failed and a task that is finished
+    @volatile var success: Boolean = false
+
     // It is necessary to have a monitor thread for python workers if the user cancel's with
     // interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
     // threads can block indefinetly.
@@ -120,7 +123,9 @@ private[spark] class PythonRDD[T: ClassTag](
         while (!context.interrupted) {
           Thread.sleep(2000)
         }
-        Try(env.destroyPythonWorker(pythonExec, envVars.toMap))
+        if (!success) {
+          Try(env.destroyPythonWorker(pythonExec, envVars.toMap))
+        }
       }
     }.start()
 
@@ -130,7 +135,10 @@ private[spark] class PythonRDD[T: ClassTag](
      * is not synchronous this still leaves a potential race where the interruption is
      * processed only after the stream becomes invalid.
      */
-    context.addOnCompleteCallback(() => context.interrupted = true)
+    context.addOnCompleteCallback{ () =>
+      success = true // Indicate that the task has completed successfully
+      context.interrupted = true
+    }
 
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
