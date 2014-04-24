@@ -27,8 +27,7 @@ import org.apache.spark.rdd.{RDD, UnionRDD}
  *
  * @param scoreAndLabels an RDD of (score, label) pairs.
  */
-class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)])
-  extends Serializable with Logging {
+class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)]) extends Logging {
 
   /** Unpersist intermediate RDDs used in the computation. */
   def unpersist() {
@@ -91,59 +90,27 @@ class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)])
   /** Returns the (threshold, recall) curve. */
   def recallByThreshold(): RDD[(Double, Double)] = createCurve(Recall)
 
-  /**
-   * A counter for positives and negatives.
-   *
-   * @param numPositives number of positive labels
-   * @param numNegatives number of negative labels
-   */
-  private class LabelCounter(
-      var numPositives: Long = 0L,
-      var numNegatives: Long = 0L) extends Serializable {
-
-    /** Processes a label. */
-    def +=(label: Double): LabelCounter = {
-      // Though we assume 1.0 for positive and 0.0 for negative, the following check will handle
-      // -1.0 for negative as well.
-      if (label > 0.5) numPositives += 1L else numNegatives += 1L
-      this
-    }
-
-    /** Merges another counter. */
-    def +=(other: LabelCounter): LabelCounter = {
-      numPositives += other.numPositives
-      numNegatives += other.numNegatives
-      this
-    }
-
-    override def clone: LabelCounter = {
-      new LabelCounter(numPositives, numNegatives)
-    }
-
-    override def toString: String = s"{numPos: $numPositives, numNeg: $numNegatives}"
-  }
-
   private lazy val (
-    cumulativeCounts: RDD[(Double, LabelCounter)],
+    cumulativeCounts: RDD[(Double, BinaryLabelCounter)],
     confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
     // Create a bin for each distinct score value, count positives and negatives within each bin,
     // and then sort by score values in descending order.
     val counts = scoreAndLabels.combineByKey(
-      createCombiner = (label: Double) => new LabelCounter(0L, 0L) += label,
-      mergeValue = (c: LabelCounter, label: Double) => c += label,
-      mergeCombiners = (c1: LabelCounter, c2: LabelCounter) => c1 += c2
+      createCombiner = (label: Double) => new BinaryLabelCounter(0L, 0L) += label,
+      mergeValue = (c: BinaryLabelCounter, label: Double) => c += label,
+      mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
     ).sortByKey(ascending = false)
     val agg = counts.values.mapPartitions({ iter =>
-      val agg = new LabelCounter()
+      val agg = new BinaryLabelCounter()
       iter.foreach(agg += _)
       Iterator(agg)
     }, preservesPartitioning = true).collect()
     val partitionwiseCumulativeCounts =
-      agg.scanLeft(new LabelCounter())((agg: LabelCounter, c: LabelCounter) => agg.clone() += c)
+      agg.scanLeft(new BinaryLabelCounter())((agg: BinaryLabelCounter, c: BinaryLabelCounter) => agg.clone() += c)
     val totalCount = partitionwiseCumulativeCounts.last
     logInfo(s"Total counts: $totalCount")
     val cumulativeCounts = counts.mapPartitionsWithIndex(
-      (index: Int, iter: Iterator[(Double, LabelCounter)]) => {
+      (index: Int, iter: Iterator[(Double, BinaryLabelCounter)]) => {
         val cumCount = partitionwiseCumulativeCounts(index)
         iter.map { case (score, c) =>
           cumCount += c
@@ -155,35 +122,6 @@ class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)])
       (score, BinaryConfusionMatrixImpl(cumCount, totalCount).asInstanceOf[BinaryConfusionMatrix])
     }
     (cumulativeCounts, confusions)
-  }
-
-  /**
-   * Implementation of [[org.apache.spark.mllib.evaluation.binary.BinaryConfusionMatrix]].
-   *
-   * @param count label counter for labels with scores greater than or equal to the current score
-   * @param totalCount label counter for all labels
-   */
-  private case class BinaryConfusionMatrixImpl(
-      count: LabelCounter,
-      totalCount: LabelCounter) extends BinaryConfusionMatrix with Serializable {
-
-    /** number of true positives */
-    override def numTruePositives: Long = count.numPositives
-
-    /** number of false positives */
-    override def numFalsePositives: Long = count.numNegatives
-
-    /** number of false negatives */
-    override def numFalseNegatives: Long = totalCount.numPositives - count.numPositives
-
-    /** number of true negatives */
-    override def numTrueNegatives: Long = totalCount.numNegatives - count.numNegatives
-
-    /** number of positives */
-    override def numPositives: Long = totalCount.numPositives
-
-    /** number of negatives */
-    override def numNegatives: Long = totalCount.numNegatives
   }
 
   /** Creates a curve of (threshold, metric). */
@@ -202,4 +140,3 @@ class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)])
     }
   }
 }
-
