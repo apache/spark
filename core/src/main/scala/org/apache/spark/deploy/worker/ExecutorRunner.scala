@@ -68,9 +68,11 @@ private[spark] class ExecutorRunner(
   }
 
   private def killProcess() {
-    logInfo("Killing process!")
-    process.destroy()
-    process.waitFor()
+    if (process != null) {
+      logInfo("Killing process!")
+      process.destroy()
+      process.waitFor()
+    }
   }
 
   /** Stop this executor runner, including killing the process it launched */
@@ -138,7 +140,6 @@ private[spark] class ExecutorRunner(
       // long-lived processes only. However, in the future, we might restart the executor a few
       // times on the same machine.
       val exitCode = process.waitFor()
-      killProcess()
       state = ExecutorState.FAILED
       val message = "Command exited with code " + exitCode
       worker ! ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode))
