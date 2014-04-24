@@ -68,17 +68,15 @@ private[spark] class ExecutorRunner(
   }
 
   private def killProcess() {
-    if (process != null) {
-      logInfo("Killing process!")
-      process.destroy()
-      process.waitFor()
-      process = null
-    }
+    logInfo("Killing process!")
+    process.destroy()
+    process.waitFor()
   }
 
   /** Stop this executor runner, including killing the process it launched */
   def kill() {
     if (workerThread != null) {
+      // the workerThread will kill the child process when interrupted
       workerThread.interrupt()
       workerThread = null
       state = ExecutorState.KILLED
