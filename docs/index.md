@@ -13,11 +13,10 @@ Get Spark by visiting the [downloads page](http://spark.apache.org/downloads.htm
 
 Spark runs on both Windows and Unix-like systems (e.g., Linux, Mac OS). All you need to run it is to have Java installed on your system `PATH` or point the `JAVA_HOME` environment variable to a Java installation.
 
-Note: The Spark Programming Guide is written through a Scala lens, so Java and Python developers may wish to download and install Scala so they can work hands-on with the Scala examples in the Spark Programming Guide. 
+Note: Some parts of the [Spark Programming Quick Start Guide](quick-start.html) and all of the [Spark Scala Programming Guide](scala-programming-guide.html) are written through a Scala lens, so Java and Python developers may wish to download and install Scala so they can work hands-on with the Scala examples.
 
 For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_BINARY_VERSION}}. If you write applications in
-Scala, you will need to use a compatible Scala version (*e.g.*, {{site.SCALA_BINARY_VERSION}}.X) -- newer major versions may no
-t work. You can get the appropriate version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
+Scala, you will need to use a compatible Scala version (*e.g.*, {{site.SCALA_BINARY_VERSION}}.x) -- newer major versions may not work. You can get the appropriate version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
 
 # Building
 
@@ -25,9 +24,7 @@ Spark uses the Hadoop-client library to talk to HDFS and other Hadoop-supported
 storage systems. Because the HDFS protocol has changed in different versions of
 Hadoop, you must build Spark against the same version that your cluster uses.
 
-Spark is bundled with the [Simple Build Tool](http://www.scala-sbt.org) (SBT). 
-
-To compile the code so Spark links to Hadoop 1.0.4 (default), from the top-level Spark directory run:
+Spark is bundled with the [Simple Build Tool](http://www.scala-sbt.org) (SBT). To compile the code with SBT so Spark links to Hadoop 1.0.4 (default), from the top-level Spark directory run:
 
     $ sbt/sbt assembly
 
@@ -86,18 +83,20 @@ to connect to. This can be a [URL for a distributed cluster](scala-programming-g
 `local` to run locally with one thread, or `local[N]` to run locally with N threads. We recommend starting by using
 `local` for testing.
 
-# Using the Spark Shells
+# Using the Spark Shell
 
 You can run Spark interactively through modified versions of the Scala shell or
-the Python interpreter. These are great ways to learn the Spark framework.
+the Python interpreter. These are great ways to learn the Spark framework. 
 
-To run Spark's Scala shell:
+The Spark Scala shell is discussed in greater detail in the [Spark Programming Quick Start Guide](quick-start.html) and the [Spark Scala Programming Guide](scala-programming-guide.html). The Spark Python interpreter is discussed in greater detail in the [Spark Python Programming Guide](python-programming-guide.html#interactive-use).
+
+To run Spark's Scala shell, from the top-level Spark directory:
 
     $ ./bin/spark-shell
     ...
-    >
+    scala>
 
-To run Spark's Python interpreter:
+To run Spark's Python interpreter, from the top-level Spark directory:
 
     $ ./bin/pyspark
     ...
@@ -105,7 +104,7 @@ To run Spark's Python interpreter:
 
 # Launching on a Cluster
 
-The Spark [cluster mode overview](cluster-overview.html) explains the key concepts in running on a cluster.
+The Spark [cluster mode overview](cluster-overview.html) explains the key concepts of running on a cluster.
 Spark can run by itself or over several existing cluster managers. There are currently several
 options for deployment:
 
@@ -118,14 +117,18 @@ options for deployment:
 
 **Programming Guides:**
 
-* [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [Spark Programming Guide](scala-programming-guide.html): an overview of Spark concepts though the lens of the Scala API
-  * [Java Programming Guide](java-programming-guide.html): using Spark from Java
-  * [Python Programming Guide](python-programming-guide.html): using Spark from Python
+We recommend that Scala, Java and Python developers work through the [Spark Programming Quick Start Guide](quick-start.html) and then work through the [Spark Scala Programming Guide](scala-programming-guide.html). 
+
+Even though the [Spark Programming Quick Start Guide](quick-start.html) and the [Spark Scala Programming Guide](scala-programming-guide.html) are written through a Scala lens, Java and Python developers will find that these docs introduce key concepts that are very helpful to understand before diving into the [Spark Java Programming Guide](java-programming-guide.html) or the [Spark Python Programming Guide](python-programming-guide.html).
+
+* [Spark Programming Quick Start Guide](quick-start.html): a quick introduction to the Spark API; start here!
+* [Spark Scala Programming Guide](scala-programming-guide.html): an overview of Spark concepts though a Scala lens; then go here! 
+  * [Spark Java Programming Guide](java-programming-guide.html): using Spark from Java
+  * [Spark Python Programming Guide](python-programming-guide.html): using Spark from Python
 * [Spark Streaming](streaming-programming-guide.html): Spark's API for processing data streams
 * [Spark SQL](sql-programming-guide.html): Support for running relational queries on Spark
 * [MLlib (Machine Learning)](mllib-guide.html): Spark's built-in machine learning library
-* [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model
+* [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model; will soon be superseded by [GraphX](graphx-programming-guide.html)
 * [GraphX (Graphs on Spark)](graphx-programming-guide.html): Spark's new API for graphs
 
 **API Docs:**
@@ -138,7 +141,7 @@ options for deployment:
 * [GraphX (Graphs on Spark) for Scala (Scaladoc)](api/graphx/index.html)
 
 
-**Deployment guides:**
+**Deployment Guides:**
 
 * [Cluster Overview](cluster-overview.html): overview of concepts and components when running on a cluster
 * [Amazon EC2](ec2-scripts.html): scripts that let you launch a cluster on EC2 in about 5 minutes
@@ -147,17 +150,17 @@ options for deployment:
     [Apache Mesos](http://mesos.apache.org)
 * [YARN](running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
 
-**Other documents:**
+**Other Documents:**
 
 * [Configuration](configuration.html): customize Spark via its configuration system
-* [Tuning Guide](tuning.html): best practices to optimize performance and memory use
+* [Tuning Guide](tuning.html): best practices for optimizing performance and memory use
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
 * [Job Scheduling](job-scheduling.html): scheduling resources across and within Spark applications
 * [Building Spark with Maven](building-with-maven.html): build Spark using the Maven system
-* [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
+* [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark): Spark Wiki discussing how to contribute code, contribute documentation, report issues, etc.
 
-**External resources:**
+**External Resources:**
 
 * [Spark Homepage](http://spark.apache.org)
 * [Shark](http://shark.cs.berkeley.edu): Apache Hive over Spark
@@ -166,7 +169,7 @@ options for deployment:
   exercises about Spark, Shark, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/agenda-2012),
   [slides](http://ampcamp.berkeley.edu/agenda-2012) and [exercises](http://ampcamp.berkeley.edu/exercises-2012) are
   available online for free.
-* [Code Examples](http://spark.apache.org/examples.html): more are also available in the [examples subfolder](https://github.com/apache/spark/tree/master/examples/src/main/scala/) of Spark
+* [Code Examples](http://spark.apache.org/examples.html): more are also available in the [examples subfolder](https://github.com/apache/spark/tree/master/examples/src/main/scala/) of the Apache Spark project
 * [Paper Describing Spark](http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf)
 * [Paper Describing Spark Streaming](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf)
 
