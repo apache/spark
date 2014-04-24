@@ -454,16 +454,15 @@ class SparkContext(object):
         ...         sc.setJobGroup("job_to_cancel", "some description")
         ...         result = sc.parallelize(range(x)).map(map_func).collect()
         ...     except Exception as e:
-        ...         print e
         ...         result = "Cancelled"
         ...     lock.release()
         >>> def stop_job():
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
-        >>> lock.acquire()
-        >>> thread.start_new_thread(start_job, (10,))
-        >>> thread.start_new_thread(stop_job, tuple())
-        >>> lock.acquire()
+        >>> supress = lock.acquire()
+        >>> supress = thread.start_new_thread(start_job, (10,))
+        >>> supress = thread.start_new_thread(stop_job, tuple())
+        >>> supress = lock.acquire()
         >>> print result
         Cancelled
 
