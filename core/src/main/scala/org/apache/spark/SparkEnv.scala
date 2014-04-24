@@ -102,10 +102,7 @@ class SparkEnv (
   def destroyPythonWorker(pythonExec: String, envVars: Map[String, String]) {
     synchronized {
       val key = (pythonExec, envVars)
-      pythonWorkers.get(key) match {
-        case Some(worker) => worker.stop()
-        case _ =>
-      }
+      pythonWorkers(key).stop()
     }
   }
 }

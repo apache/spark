@@ -113,9 +113,9 @@ private[spark] class PythonRDD[T: ClassTag](
     // Necessary to distinguish between a task that has failed and a task that is finished
     @volatile var success: Boolean = false
 
-    // It is necessary to have a monitor thread for python workers if the user cancel's with
+    // It is necessary to have a monitor thread for python workers if the user cancels with
     // interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
-    // threads can block indefinetly.
+    // threads can block indefinitely.
     new Thread(s"Worker Monitor for $pythonExec") {
       override def run() {
         // Kill the worker if it is interrupted or completed
@@ -124,7 +124,13 @@ private[spark] class PythonRDD[T: ClassTag](
           Thread.sleep(2000)
         }
         if (!success) {
-          Try(env.destroyPythonWorker(pythonExec, envVars.toMap))
+          try {
+            logInfo("Success was false, trying to kill worker")
+            env.destroyPythonWorker(pythonExec, envVars.toMap)
+          } catch {
+            case e: Exception =>
+              logError("Exception when trying to kill worker", e)
+          }
         }
       }
     }.start()
