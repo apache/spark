@@ -141,7 +141,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
   }
 
-  // TODO: This test makes assumptions about Thread.sleep() and is flaky
+  // TODO: This test works in IntelliJ but not through SBT
   ignore("actor input stream") {
     // Start the server
     val testServer = new TestServer()

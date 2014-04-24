@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 
-trait HiveStrategies {
+private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
   self: SQLContext#SparkPlanner =>
 

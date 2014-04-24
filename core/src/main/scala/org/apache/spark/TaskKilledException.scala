@@ -15,22 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
-
-class ConcurrentHiveSuite extends FunSuite with BeforeAndAfterAll {
-  ignore("multiple instances not supported") {
-    test("Multiple Hive Instances") {
-      (1 to 10).map { i =>
-        val ts =
-          new TestHiveContext(new SparkContext("local", s"TestSQLContext$i", new SparkConf()))
-        ts.executeSql("SHOW TABLES").toRdd.collect()
-        ts.executeSql("SELECT * FROM src").toRdd.collect()
-        ts.executeSql("SHOW TABLES").toRdd.collect()
-      }
-    }
-  }
-}
+/**
+ * Exception for a task getting killed.
+ */
+private[spark] class TaskKilledException extends RuntimeException

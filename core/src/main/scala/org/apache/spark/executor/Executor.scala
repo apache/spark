@@ -136,10 +136,10 @@ private[spark] class Executor(
     threadPool.execute(tr)
   }
 
-  def killTask(taskId: Long) {
+  def killTask(taskId: Long, interruptThread: Boolean) {
     val tr = runningTasks.get(taskId)
     if (tr != null) {
-      tr.kill()
+      tr.kill(interruptThread)
     }
   }
 
@@ -161,16 +161,14 @@ private[spark] class Executor(
   class TaskRunner(execBackend: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer)
     extends Runnable {
 
-    object TaskKilledException extends Exception
-
     @volatile private var killed = false
     @volatile private var task: Task[Any] = _
 
-    def kill() {
+    def kill(interruptThread: Boolean) {
       logInfo("Executor is trying to kill task " + taskId)
       killed = true
       if (task != null) {
-        task.kill()
+        task.kill(interruptThread)
       }
     }
 
@@ -200,7 +198,7 @@ private[spark] class Executor(
           // causes a NonLocalReturnControl exception to be thrown. The NonLocalReturnControl
           // exception will be caught by the catch block, leading to an incorrect ExceptionFailure
           // for the task.
-          throw TaskKilledException
+          throw new TaskKilledException
         }
 
         attemptedTask = Some(task)
@@ -214,7 +212,7 @@ private[spark] class Executor(
 
         // If the task has been killed, let's fail it.
         if (task.killed) {
-          throw TaskKilledException
+          throw new TaskKilledException
         }
 
         val resultSer = SparkEnv.get.serializer.newInstance()
@@ -257,7 +255,7 @@ private[spark] class Executor(
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
         }
 
-        case TaskKilledException => {
+        case _: TaskKilledException | _: InterruptedException if task.killed => {
           logInfo("Executor killed task " + taskId)
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
         }

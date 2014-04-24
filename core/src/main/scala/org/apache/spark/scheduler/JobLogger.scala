@@ -207,7 +207,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val taskInfo = taskEnd.taskInfo
     var taskStatus = "TASK_TYPE=%s".format(taskEnd.taskType)
-    val taskMetrics = if (taskEnd.taskMetrics != null) taskEnd.taskMetrics else TaskMetrics.empty()
+    val taskMetrics = if (taskEnd.taskMetrics != null) taskEnd.taskMetrics else TaskMetrics.empty
     taskEnd.reason match {
       case Success => taskStatus += " STATUS=SUCCESS"
         recordTaskMetrics(taskEnd.stageId, taskStatus, taskInfo, taskMetrics)

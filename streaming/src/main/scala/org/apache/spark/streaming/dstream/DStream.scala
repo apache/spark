@@ -498,7 +498,8 @@ abstract class DStream[T: ClassTag] (
    * the RDDs with `numPartitions` partitions (Spark's default number of partitions if
    * `numPartitions` not specified).
    */
-  def countByValue(numPartitions: Int = ssc.sc.defaultParallelism): DStream[(T, Long)] =
+  def countByValue(numPartitions: Int = ssc.sc.defaultParallelism)(implicit ord: Ordering[T] = null)
+      : DStream[(T, Long)] =
     this.map(x => (x, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
 
   /**
@@ -696,9 +697,10 @@ abstract class DStream[T: ClassTag] (
   def countByValueAndWindow(
       windowDuration: Duration,
       slideDuration: Duration,
-      numPartitions: Int = ssc.sc.defaultParallelism
-    ): DStream[(T, Long)] = {
-
+      numPartitions: Int = ssc.sc.defaultParallelism)
+      (implicit ord: Ordering[T] = null)
+      : DStream[(T, Long)] =
+  {
     this.map(x => (x, 1L)).reduceByKeyAndWindow(
       (x: Long, y: Long) => x + y,
       (x: Long, y: Long) => x - y,
