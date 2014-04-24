@@ -84,6 +84,35 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     assert(sc.parallelize(1 to 10, 2).count === 10)
   }
 
+  test("do not put partially executed partitions into cache") {
+    // In this test case, we create a scenario in which a partition is only partially executed,
+    // and make sure CacheManager does not put that partially executed partition into the
+    // BlockManager.
+    import JobCancellationSuite._
+    sc = new SparkContext("local", "test")
+
+    // Run from 1 to 10, and then block and wait for the task to be killed.
+    val rdd = sc.parallelize(1 to 1000, 2).map { x =>
+      if (x > 10) {
+        taskStartedSemaphore.release()
+        taskCancelledSemaphore.acquire()
+      }
+      x
+    }.cache()
+
+    val rdd1 = rdd.map(x => x)
+
+    future {
+      taskStartedSemaphore.acquire()
+      sc.cancelAllJobs()
+      taskCancelledSemaphore.release(100000)
+    }
+
+    intercept[SparkException] { rdd1.count() }
+    // If the partial block is put into cache, rdd.count() would return a number less than 1000.
+    assert(rdd.count() === 1000)
+  }
+
   test("job group") {
     sc = new SparkContext("local[2]", "test")
 
@@ -113,15 +142,15 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     // Once A is cancelled, job B should finish fairly quickly.
     assert(jobB.get() === 100)
   }
-/*
-  test("two jobs sharing the same stage") {
+
+  ignore("two jobs sharing the same stage") {
     // sem1: make sure cancel is issued after some tasks are launched
     // sem2: make sure the first stage is not finished until cancel is issued
     val sem1 = new Semaphore(0)
     val sem2 = new Semaphore(0)
 
     sc = new SparkContext("local[2]", "test")
-    sc.dagScheduler.addSparkListener(new SparkListener {
+    sc.addSparkListener(new SparkListener {
       override def onTaskStart(taskStart: SparkListenerTaskStart) {
         sem1.release()
       }
@@ -147,7 +176,7 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     intercept[SparkException] { f1.get() }
     intercept[SparkException] { f2.get() }
   }
- */
+
   def testCount() {
     // Cancel before launching any tasks
     {
@@ -205,4 +234,10 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
       assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
     }
   }
+}
+
+
+object JobCancellationSuite {
+  val taskStartedSemaphore = new Semaphore(0)
+  val taskCancelledSemaphore = new Semaphore(0)
 }
