@@ -993,7 +993,7 @@ class RDD(object):
             combiners = {}
             client = statsd()
             for x in iterator:
-                client.increment('spark.combine_by_key_metric.combine_locally_count')
+                client.increment('spark.combine_by_key_metric.combine_locally_count', sample_rate=0.001)
                 (k, v) = x
                 if k not in combiners:
                     combiners[k] = createCombiner(v)
