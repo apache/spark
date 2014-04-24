@@ -22,12 +22,16 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import akka.actor._
 import akka.actor.OneForOneStrategy
 import akka.actor.SupervisorStrategy.Stop
+import akka.pattern.ask
+import akka.util.Timeout
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
@@ -111,10 +115,28 @@ class DAGScheduler(
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
 
-  private var dagSchedulerActorSupervisor: ActorRef = _
+  private val dagSchedulerActorSupervisor =
+    env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
+
   private[scheduler] var eventProcessActor: ActorRef = _
 
-  startDAGSchedulerActors()
+  private def initializeEventProcessActor() {
+    try {
+      // blocking the thread until supervisor is started, which ensures eventProcessActor is
+      // not null before any job is submitted
+      implicit val timeout = Timeout(30 seconds)
+      val initEventActorReply =
+        dagSchedulerActorSupervisor ? Props(new DAGSchedulerEventProcessActor(this))
+      eventProcessActor = Await.result(initEventActorReply, timeout.duration).
+        asInstanceOf[ActorRef]
+    } catch {
+      case e: Exception =>
+        logError("DAGSchedulerEventProcessActor cannot be initialized, stop SparkContext")
+        sc.stop()
+    }
+  }
+
+  initializeEventProcessActor()
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -287,14 +309,6 @@ class DAGScheduler(
     }
     visit(stage.rdd)
     missing.toList
-  }
-
-  private def startDAGSchedulerActors() {
-    dagSchedulerActorSupervisor = env.actorSystem.actorOf(Props(
-      new DAGSchedulerActorSupervisor(this)))
-    while (dagSchedulerActorSupervisor == null || eventProcessActor == null) {
-      Thread.sleep(1)
-    }
   }
 
   /**
@@ -1145,9 +1159,6 @@ private[scheduler] class DAGSchedulerActorSupervisor(dagScheduler: DAGScheduler)
     case p: Props => sender ! context.actorOf(p)
     case _ => logWarning("received unknown message in DAGSchedulerActorSupervisor")
   }
-
-  dagScheduler.eventProcessActor = context.actorOf(
-    Props(new DAGSchedulerEventProcessActor(dagScheduler)))
 }
 
 private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGScheduler)
