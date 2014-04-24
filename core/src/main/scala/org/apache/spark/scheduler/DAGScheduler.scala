@@ -1134,11 +1134,11 @@ private[scheduler] class DAGSchedulerActorSupervisor(dagScheduler: DAGScheduler)
     }
 
   def receive = {
-    case p: Props => sender ! context.system.actorOf(p)
+    case p: Props => sender ! context.actorOf(p)
     case _ => logWarning("received unknown message in DAGSchedulerActorSupervisor")
   }
 
-  dagScheduler.eventProcessActor = context.system.actorOf(
+  dagScheduler.eventProcessActor = context.actorOf(
     Props(new DAGSchedulerEventProcessActor(dagScheduler)))
 }
 
