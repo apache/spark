@@ -133,13 +133,9 @@ Even though the [Spark Programming Quick Start Guide](quick-start.html) and the 
 
 **API Docs:**
 
-* [Spark for Java/Scala (Scaladoc)](api/core/index.html)
-* [Spark for Python (Epydoc)](api/pyspark/index.html)
-* [Spark Streaming for Java/Scala (Scaladoc)](api/streaming/index.html)
-* [MLlib (Machine Learning) for Java/Scala (Scaladoc)](api/mllib/index.html)
-* [Bagel (Pregel on Spark) for Scala (Scaladoc)](api/bagel/index.html)
-* [GraphX (Graphs on Spark) for Scala (Scaladoc)](api/graphx/index.html)
-
+[Spark Scala API (Scaladoc)](api/scala/index.html#org.apache.spark.package)
+[Spark Java API (Javadoc)](api/java/index.html)
+[Spark Python API (Epydoc)](api/python/index.html)
 
 **Deployment Guides:**
 
