@@ -20,6 +20,7 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable.Queue
 
 import org.apache.spark.util.Distribution
+import org.apache.spark.streaming.ui.BatchInfo
 
 /** Base trait for events related to StreamingListener */
 sealed trait StreamingListenerEvent

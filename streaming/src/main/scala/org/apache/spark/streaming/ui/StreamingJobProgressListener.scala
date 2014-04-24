@@ -22,7 +22,6 @@ import org.apache.spark.streaming.scheduler._
 import scala.collection.mutable.{Queue, HashMap}
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchStarted
-import org.apache.spark.streaming.scheduler.BatchInfo
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchSubmitted
 import org.apache.spark.util.Distribution
 import org.apache.spark.Logging
