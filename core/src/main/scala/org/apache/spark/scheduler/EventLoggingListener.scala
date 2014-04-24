@@ -51,10 +51,11 @@ private[spark] class EventLoggingListener(
   private val logBaseDir = conf.get("spark.eventLog.dir", "/tmp/spark-events").stripSuffix("/")
   private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis
   val logDir = logBaseDir + "/" + name
+  val LOG_FILE_PERMISSIONS: FsPermission = FsPermission.createImmutable(0770: Short)
 
   private val logger =
     new FileLogger(logDir, conf, hadoopConfiguration, outputBufferSize, shouldCompress,
-      shouldOverwrite)
+      shouldOverwrite, Some(LOG_FILE_PERMISSIONS))
 
   /**
    * Begin logging events.
@@ -64,10 +65,11 @@ private[spark] class EventLoggingListener(
     logInfo("Logging events to %s".format(logDir))
     if (shouldCompress) {
       val codec = conf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
-      logger.newFile(COMPRESSION_CODEC_PREFIX + codec)
+      logger.newFile(COMPRESSION_CODEC_PREFIX + codec, Some(LOG_FILE_PERMISSIONS))
     }
-    logger.newFile(SPARK_VERSION_PREFIX + SparkContext.SPARK_VERSION)
-    logger.newFile(LOG_PREFIX + logger.fileIndex)
+    logger.newFile(SPARK_VERSION_PREFIX + SparkContext.SPARK_VERSION,
+      Some(LOG_FILE_PERMISSIONS))
+    logger.newFile(LOG_PREFIX + logger.fileIndex, Some(LOG_FILE_PERMISSIONS))
   }
 
   /** Log the event as JSON. */
@@ -114,7 +116,7 @@ private[spark] class EventLoggingListener(
    * In addition, create an empty special file to indicate application completion.
    */
   def stop() = {
-    logger.newFile(APPLICATION_COMPLETE)
+    logger.newFile(APPLICATION_COMPLETE, Some(LOG_FILE_PERMISSIONS))
     logger.stop()
   }
 }
