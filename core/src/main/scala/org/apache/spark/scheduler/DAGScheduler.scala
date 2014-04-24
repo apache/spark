@@ -594,7 +594,7 @@ class DAGScheduler(
     val activeInGroup = activeJobs.filter(activeJob =>
       groupId == activeJob.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
     val jobIds = activeInGroup.map(_.jobId)
-    jobIds.foreach(handleJobCancellation(_, "part of cancel job group"))
+    jobIds.foreach(handleJobCancellation(_, "part of cancelled job group %s".format(groupId)))
     submitWaitingStages()
   }
 
@@ -641,13 +641,14 @@ class DAGScheduler(
   }
 
   private[scheduler] def handleJobSubmitted(jobId: Int,
-    finalRDD: RDD[_],
-    func: (TaskContext, Iterator[_]) => _,
-    partitions: Array[Int],
-    allowLocal: Boolean,
-    callSite: String,
-    listener: JobListener,
-    properties: Properties = null) {
+      finalRDD: RDD[_],
+      func: (TaskContext, Iterator[_]) => _,
+      partitions: Array[Int],
+      allowLocal: Boolean,
+      callSite: String,
+      listener: JobListener,
+      properties: Properties = null)
+  {
     var finalStage: Stage = null
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
@@ -657,12 +658,13 @@ class DAGScheduler(
       case e: Exception =>
         logWarning("Creating new stage failed due to exception - job: " + jobId, e)
         listener.jobFailed(e)
+        return
     }
     if (finalStage != null) {
       val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
       clearCacheLocs()
-      logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".
-        format(job.jobId, callSite, partitions.length, allowLocal))
+      logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".format(
+        job.jobId, callSite, partitions.length, allowLocal))
       logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
       logInfo("Parents of final stage: " + finalStage.parents)
       logInfo("Missing parents: " + getMissingParentStages(finalStage))
