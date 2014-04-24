@@ -181,10 +181,15 @@ class HistoryServer(
     // Do not call ui.bind() to avoid creating a new server for each application
     replayBus.replay()
     if (appListener.applicationStarted) {
-      // Note this relies on the user setting acls properly. We could also add in a master config
-      // to the history server that admins would set if we don't trust the user.
+      HISTORY_UI_ACLS_POLICY match {
+        case HistoryUIAclPolicy.APPLICATION =>
+          appSecManager.setUIAcls(appListener.enableViewAcls)
+        case HistoryUIAclPolicy.HISTORY_SERVER =>
+          appSecManager.setUIAcls(true)
+        case HistoryUIAclPolicy.OFF =>
+          appSecManager.setUIAcls(false)
+      }
       appSecManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
-      appSecManager.setUIAcls(appListener.enableViewAcls)
       attachSparkUI(ui)
       val appName = appListener.appName
       val sparkUser = appListener.sparkUser
@@ -241,6 +246,20 @@ class HistoryServer(
 }
 
 /**
+ * This is the policy used by the history server for setting who has view permissions
+ * to the applications.
+ * APPLICATION uses the acl settings set by the user who ran the application. If it had
+ * acls enabled, then it will enforce those acls, otherwise anyone can view the application.
+ * HISTORY_SERVER enables the acls for all applications regardless of the application acl settings.
+ * OFF disables the acls for all applications regardless of the application acl settings.
+ */
+object HistoryUIAclPolicy extends Enumeration {
+
+  type HistoryUIAclPolicy = Value
+  val APPLICATION, HISTORY_SERVER, OFF = Value
+}
+
+/**
  * The recommended way of starting and stopping a HistoryServer is through the scripts
  * start-history-server.sh and stop-history-server.sh. The path to a base log directory
  * is must be specified, while the requested UI port is optional. For example:
@@ -261,6 +280,10 @@ object HistoryServer {
 
   // The port to which the web UI is bound
   val WEB_UI_PORT = conf.getInt("spark.history.ui.port", 18080)
+
+  // the ui acl policy to apply to the applications
+  val HISTORY_UI_ACLS_POLICY = HistoryUIAclPolicy.
+    withName(conf.get("spark.history.ui.acls.policy", "APPLICATION"))
 
   val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 

@@ -115,6 +115,18 @@ represents an application's event logs. This creates a web interface at
       Location of the kerberos keytab file for the History Server.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.ui.acls.policy</td>
+    <td>APPLICATION</td>
+    <td>
+      This controls the policy used by the history server for setting who has view permissions
+      to the applications. There are three options: APPLICATION, HISTORY_SERVER, and OFF.
+      APPLICATIONS uses the acl settings set by the user who ran the application. If it had 
+      acls enabled, then it will enforce those acls, otherwise anyone can view the application.  
+      HISTORY_SERVER enables the acls for all applications regardless of the application acl settings. 
+      OFF disables the acls for all applications regardless of the application acl settings. 
+    </td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
