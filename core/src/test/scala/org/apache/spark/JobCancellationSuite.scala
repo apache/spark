@@ -101,11 +101,11 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.count()
     }
 
-    sc.clearJobGroup()
-    val jobB = sc.parallelize(1 to 100, 2).countAsync()
-
     // Block until both tasks of job A have started and cancel job A.
     sem.acquire(2)
+
+    sc.clearJobGroup()
+    val jobB = sc.parallelize(1 to 100, 2).countAsync()
     sc.cancelJobGroup("jobA")
     val e = intercept[SparkException] { Await.result(jobA, Duration.Inf) }
     assert(e.getMessage contains "cancel")
@@ -132,11 +132,11 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100000); i }.count()
     }
 
-    sc.clearJobGroup()
-    val jobB = sc.parallelize(1 to 100, 2).countAsync()
-
     // Block until both tasks of job A have started and cancel job A.
     sem.acquire(2)
+
+    sc.clearJobGroup()
+    val jobB = sc.parallelize(1 to 100, 2).countAsync()
     sc.cancelJobGroup("jobA")
     val e = intercept[SparkException] { Await.result(jobA, 5.seconds) }
     assert(e.getMessage contains "cancel")
