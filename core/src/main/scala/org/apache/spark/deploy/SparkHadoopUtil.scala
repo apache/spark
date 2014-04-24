@@ -75,6 +75,10 @@ class SparkHadoopUtil {
 
   def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
 
+  def loginUserFromKeytab(principalName: String, keytabFilename: String) { 
+    UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+  }
+
 }
 
 object SparkHadoopUtil {
