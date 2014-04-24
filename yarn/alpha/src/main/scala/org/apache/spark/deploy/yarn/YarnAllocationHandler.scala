@@ -160,8 +160,7 @@ private[yarn] class YarnAllocationHandler(
           dataLocalContainers.put(candidateHost, remainingContainers)
           // all consumed
           remainingContainers = null
-        }
-        else if (requiredHostCount > 0) {
+        } else if (requiredHostCount > 0) {
           // Container list has more containers than we need for data locality.
           // Split into two : data local container count of (remainingContainers.size -
           // requiredHostCount) and rest as remainingContainer
@@ -192,8 +191,7 @@ private[yarn] class YarnAllocationHandler(
               dataLocalContainers.put(rack, remainingContainers)
               // All consumed
               remainingContainers = null
-            }
-            else if (requiredRackCount > 0) {
+            } else if (requiredRackCount > 0) {
               // container list has more containers than we need for data locality.
               // Split into two : data local container count of (remainingContainers.size -
               // requiredRackCount) and rest as remainingContainer
@@ -239,8 +237,7 @@ private[yarn] class YarnAllocationHandler(
           releasedContainerList.add(containerId)
           // reset counter back to old value.
           numExecutorsRunning.decrementAndGet()
-        }
-        else {
+        } else {
           // Deallocate + allocate can result in reusing id's wrongly - so use a different counter
           // (executorIdCounter)
           val executorId = executorIdCounter.incrementAndGet().toString
@@ -294,8 +291,7 @@ private[yarn] class YarnAllocationHandler(
         // Was this released by us ? If yes, then simply remove from containerSet and move on.
         if (pendingReleaseContainers.containsKey(containerId)) {
           pendingReleaseContainers.remove(containerId)
-        }
-        else {
+        } else {
           // Simply decrement count - next iteration of ReporterThread will take care of allocating.
           numExecutorsRunning.decrementAndGet()
           logInfo("Completed container %s (state: %s, exit status: %s)".format(
@@ -408,8 +404,7 @@ private[yarn] class YarnAllocationHandler(
         preferredHostToCount.isEmpty)
       resourceRequests = List(createResourceRequest(
         AllocationType.ANY, null, numExecutors, YarnAllocationHandler.PRIORITY))
-    }
-    else {
+    } else {
       // request for all hosts in preferred nodes and for numExecutors -
       // candidates.size, request by default allocation policy.
       val hostContainerRequests: ArrayBuffer[ResourceRequest] =
@@ -456,8 +451,7 @@ private[yarn] class YarnAllocationHandler(
     if (numExecutors > 0) {
       logInfo("Allocating %d executor containers with %d of memory each.".format(numExecutors,
         executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD))
-    }
-    else {
+    } else {
       logDebug("Empty allocation req ..  release : " + releasedContainerList)
     }
 
