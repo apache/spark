@@ -34,10 +34,10 @@ import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
  */
 private[graphx]
 class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag](
-    val srcIds: Array[VertexId],
-    val dstIds: Array[VertexId],
-    val data: Array[ED],
-    val index: PrimitiveKeyOpenHashMap[VertexId, Int]) extends Serializable {
+    @transient val srcIds: Array[VertexId],
+    @transient val dstIds: Array[VertexId],
+    @transient val data: Array[ED],
+    @transient val index: PrimitiveKeyOpenHashMap[VertexId, Int]) extends Serializable {
 
   /**
    * Reverse all the edges in this partition.
