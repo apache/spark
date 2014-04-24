@@ -116,15 +116,16 @@ represents an application's event logs. This creates a web interface at
     </td>
   </tr>
   <tr>
-    <td>spark.history.ui.acls.policy</td>
-    <td>APPLICATION</td>
+    <td>spark.history.ui.acls.enable</td>
+    <td>false</td>
     <td>
-      This controls the policy used by the history server for setting who has view permissions
-      to the applications. There are three options: APPLICATION, HISTORY_SERVER, and OFF.
-      APPLICATIONS uses the acl settings set by the user who ran the application. If it had 
-      acls enabled, then it will enforce those acls, otherwise anyone can view the application.  
-      HISTORY_SERVER enables the acls for all applications regardless of the application acl settings. 
-      OFF disables the acls for all applications regardless of the application acl settings. 
+      Specifies whether acls should be checked to authorize users viewing the applications.
+      If enabled, access control checks are made regardless of what the individual application had 
+      set for <code>spark.ui.acls.enable</code> when the application was run. The application owner
+      will always have authorization to view their own application and any users specified via 
+      <code>spark.ui.view.acls</code> when the application was run will also have authorization
+      to view that application. 
+      If disabled, no access control checks are made. 
     </td>
   </tr>
 </table>
