@@ -49,11 +49,9 @@ trait SparkExprTyper extends Logging {
       val trees = codeParser.stmts(line)
       if (reporter.hasErrors) {
         Some(Nil)
-      }
-      else if (isIncomplete) {
+      } else if (isIncomplete) {
         None
-      }
-      else {
+      } else {
         Some(trees)
       }
     }

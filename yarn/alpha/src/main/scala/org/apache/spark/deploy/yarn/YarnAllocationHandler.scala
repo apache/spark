@@ -136,9 +136,8 @@ private[yarn] class YarnAllocationHandler(
           val containers = hostToContainers.getOrElseUpdate(host, new ArrayBuffer[Container]())
 
           containers += container
-        }
-        // Add all ignored containers to released list
-        else {
+        } else {
+          // Add all ignored containers to released list
           releasedContainerList.add(container.getId())
         }
       }
@@ -335,8 +334,7 @@ private[yarn] class YarnAllocationHandler(
               val rackCount = allocatedRackCount.getOrElse(rack, 0) - 1
               if (rackCount > 0) {
                 allocatedRackCount.put(rack, rackCount)
-              }
-              else {
+              } else {
                 allocatedRackCount.remove(rack)
               }
             }
