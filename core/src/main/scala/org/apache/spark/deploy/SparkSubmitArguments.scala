@@ -108,7 +108,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
     deployMode = Option(deployMode).getOrElse(System.getenv("DEPLOY_MODE"))
 
     // Global defaults. These should be keep to minimum to avoid confusing behavior.
-    master = Option(master).getOrElse("local")
+    master = Option(master).getOrElse("local[*]")
   }
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
