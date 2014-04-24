@@ -237,6 +237,13 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("2012-12-11" cast DoubleType, null)
     checkEvaluation(Literal(123) cast IntegerType, 123)
 
+    checkEvaluation(Literal(23d) + Cast(true, DoubleType), 24)
+    checkEvaluation(Literal(23) + Cast(true, IntegerType), 24)
+    checkEvaluation(Literal(23f) + Cast(true, FloatType), 24)
+    checkEvaluation(Literal(BigDecimal(23)) + Cast(true, DecimalType), 24)
+    checkEvaluation(Literal(23.toByte) + Cast(true, ByteType), 24)
+    checkEvaluation(Literal(23.toShort) + Cast(true, ShortType), 24)
+
     intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
   }
 
