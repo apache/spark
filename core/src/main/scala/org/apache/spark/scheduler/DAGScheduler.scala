@@ -74,8 +74,6 @@ class DAGScheduler(
 
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
-  private[scheduler] var eventProcessActor: ActorRef = _
-
   private[scheduler] val nextJobId = new AtomicInteger(0)
   private[scheduler] def numTotalJobs: Int = nextJobId.get()
   private val nextStageId = new AtomicInteger(0)
@@ -113,8 +111,10 @@ class DAGScheduler(
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
 
-  private val dagSchedulerActorSupervisor =
-    env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
+  private var dagSchedulerActorSupervisor: ActorRef = _
+  private[scheduler] var eventProcessActor: ActorRef = _
+
+  startDAGSchedulerActors()
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -287,6 +287,14 @@ class DAGScheduler(
     }
     visit(stage.rdd)
     missing.toList
+  }
+
+  private def startDAGSchedulerActors() {
+    dagSchedulerActorSupervisor = env.actorSystem.actorOf(Props(
+      new DAGSchedulerActorSupervisor(this)))
+    while (dagSchedulerActorSupervisor == null || eventProcessActor == null) {
+      Thread.sleep(1)
+    }
   }
 
   /**
