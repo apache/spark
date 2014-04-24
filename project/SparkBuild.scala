@@ -606,8 +606,7 @@ object SparkBuild extends Build {
     name := "spark-streaming-flume",
     previousArtifact := sparkPreviousArtifact("spark-streaming-flume"),
     libraryDependencies ++= Seq(
-      "org.apache.flume" % "flume-ng-sdk" % "1.4.0" % "compile" excludeAll(excludeNetty, excludeThrift),
-      "org.apache.thrift" % "libthrift" % "0.8.0" % "compile"
+      "org.apache.flume" % "flume-ng-sdk" % "1.4.0" % "compile" excludeAll(excludeNetty, excludeThrift)
     )
   )
 
