@@ -59,7 +59,7 @@ private[spark] class PythonRDD[T: ClassTag](
     @volatile var readerException: Exception = null
 
     // Start a thread to feed the process input from our parent's iterator
-    new Thread("stdin writer for " + pythonExec) {
+    val writer = new Thread("stdin writer for " + pythonExec) {
       override def run() {
         try {
           SparkEnv.set(env)
@@ -106,6 +106,27 @@ private[spark] class PythonRDD[T: ClassTag](
             // will kill the whole executor (see Executor).
             readerException = e
             Try(worker.shutdownOutput()) // kill Python worker process
+        }
+      }
+    }
+
+    writer.start()
+
+    val reader = Thread.currentThread
+
+    // It is necessary to have a monitor thread for python workers if the user cancel's with
+    // interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
+    // threads can block indefinetly.
+    new Thread(s"Worker Monitor for $pythonExec") {
+      override def run() {
+        while (writer.isAlive || reader.isAlive) {
+          Thread.sleep(1000)
+          if (context.interrupted) {
+            writer.interrupt()
+            reader.interrupt()
+            Try(worker.shutdownOutput())
+            return
+          }
         }
       }
     }.start()
