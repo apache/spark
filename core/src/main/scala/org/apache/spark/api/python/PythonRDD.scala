@@ -119,11 +119,12 @@ private[spark] class PythonRDD[T: ClassTag](
     // threads can block indefinetly.
     new Thread(s"Worker Monitor for $pythonExec") {
       override def run() {
-        Thread.sleep(2000)
-        if (context.interrupted) {
-          Try(worker.shutdownOutput())
-          return
+        // Kill the worker if it is interrupted or completed
+        // When a python task completes, the context is always set to interupted
+        while (!context.interrupted) {
+          Thread.sleep(2000)
         }
+        Try(worker.shutdownOutput())
       }
     }.start()
 
