@@ -381,8 +381,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       val prng42 = new Random(42)
       val prng43 = new Random(43)
       Array(1, 2, 3, 4, 5, 6).filter{i =>
-        if (i < 4) 0 == prng42.nextInt(3)
-        else 0 == prng43.nextInt(3)}
+        if (i < 4) 0 == prng42.nextInt(3) else 0 == prng43.nextInt(3)
+      }
     }
     assert(sample.size === checkSample.size)
     for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
