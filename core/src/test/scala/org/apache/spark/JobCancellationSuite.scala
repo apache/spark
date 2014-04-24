@@ -21,7 +21,7 @@ import java.util.concurrent.Semaphore
 
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration._
 import scala.concurrent.future
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -130,13 +130,43 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.count()
     }
 
+    // Block until both tasks of job A have started and cancel job A.
+    sem.acquire(2)
+
     sc.clearJobGroup()
     val jobB = sc.parallelize(1 to 100, 2).countAsync()
+    sc.cancelJobGroup("jobA")
+    val e = intercept[SparkException] { Await.result(jobA, Duration.Inf) }
+    assert(e.getMessage contains "cancel")
+
+    // Once A is cancelled, job B should finish fairly quickly.
+    assert(jobB.get() === 100)
+  }
+
+  test("job group with interruption") {
+    sc = new SparkContext("local[2]", "test")
+
+    // Add a listener to release the semaphore once any tasks are launched.
+    val sem = new Semaphore(0)
+    sc.addSparkListener(new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart) {
+        sem.release()
+      }
+    })
+
+    // jobA is the one to be cancelled.
+    val jobA = future {
+      sc.setJobGroup("jobA", "this is a job to be cancelled", interruptOnCancel = true)
+      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100000); i }.count()
+    }
 
     // Block until both tasks of job A have started and cancel job A.
     sem.acquire(2)
+
+    sc.clearJobGroup()
+    val jobB = sc.parallelize(1 to 100, 2).countAsync()
     sc.cancelJobGroup("jobA")
-    val e = intercept[SparkException] { Await.result(jobA, Duration.Inf) }
+    val e = intercept[SparkException] { Await.result(jobA, 5.seconds) }
     assert(e.getMessage contains "cancel")
 
     // Once A is cancelled, job B should finish fairly quickly.
