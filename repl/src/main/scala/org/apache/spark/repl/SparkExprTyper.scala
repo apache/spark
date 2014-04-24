@@ -47,9 +47,15 @@ trait SparkExprTyper extends Logging {
     var isIncomplete = false
     reporter.withIncompleteHandler((_, _) => isIncomplete = true) {
       val trees = codeParser.stmts(line)
-      if (reporter.hasErrors) Some(Nil)
-      else if (isIncomplete) None
-      else Some(trees)
+      if (reporter.hasErrors) {
+        Some(Nil)
+      }
+      else if (isIncomplete) {
+        None
+      }
+      else {
+        Some(trees)
+      }
     }
   }
   // def parsesAsExpr(line: String) = {
@@ -70,8 +76,7 @@ trait SparkExprTyper extends Logging {
           val sym0 = symbolOfTerm(name)
           // drop NullaryMethodType
           val sym = sym0.cloneSymbol setInfo afterTyper(sym0.info.finalResultType)
-          if (sym.info.typeSymbol eq UnitClass) NoSymbol
-          else sym
+          if (sym.info.typeSymbol eq UnitClass) NoSymbol else sym
         case _          => NoSymbol
       }
     }

@@ -110,7 +110,9 @@ private[spark] class FileLogger(
    * @param withTime Whether to prepend message with a timestamp
    */
   def log(msg: String, withTime: Boolean = false) {
-    val writeInfo = if (!withTime) msg else {
+    val writeInfo = if (!withTime) {
+      msg
+    } else {
       val date = new Date(System.currentTimeMillis())
       dateFormat.get.format(date) + ": " + msg
     }
