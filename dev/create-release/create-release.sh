@@ -92,7 +92,6 @@ make_binary_release() {
   cp spark-$RELEASE_VERSION-bin-$NAME/spark-$RELEASE_VERSION-bin-$NAME.tgz .
   rm -rf spark-$RELEASE_VERSION-bin-$NAME
 
-  tar cvzf spark-$RELEASE_VERSION-bin-$NAME.tgz spark-$RELEASE_VERSION-bin-$NAME
   echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --armour \
     --output spark-$RELEASE_VERSION-bin-$NAME.tgz.asc \
     --detach-sig spark-$RELEASE_VERSION-bin-$NAME.tgz
@@ -102,7 +101,6 @@ make_binary_release() {
   echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md \
     SHA512 spark-$RELEASE_VERSION-bin-$NAME.tgz > \
     spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
-  rm -rf spark-$RELEASE_VERSION-bin-$NAME
 }
 
 make_binary_release "hadoop1" "--hadoop 1.0.4"
@@ -114,7 +112,7 @@ echo "Copying release tarballs"
 ssh $USER_NAME@people.apache.org \
   mkdir /home/$USER_NAME/public_html/spark-$RELEASE_VERSION-$RC_NAME
 rc_folder=spark-$RELEASE_VERSION-$RC_NAME
-scp spark* \
+scp spark-* \
   $USER_NAME@people.apache.org:/home/$USER_NAME/public_html/$rc_folder/
 
 # Docs
