@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkConf, SparkContext}
