@@ -108,7 +108,7 @@ private[spark] class PythonRDD[T: ClassTag](
             Try(worker.shutdownOutput()) // kill Python worker process
         }
       }
-    }
+    }.start()
 
     // It is necessary to have a monitor thread for python workers if the user cancel's with
     // interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
