@@ -120,7 +120,7 @@ private[spark] class PythonRDD[T: ClassTag](
         while (!context.interrupted) {
           Thread.sleep(2000)
         }
-        Try(worker.shutdownOutput())
+        Try(env.destroyPythonWorker(pythonExec, envVars.toMap))
       }
     }.start()
 
