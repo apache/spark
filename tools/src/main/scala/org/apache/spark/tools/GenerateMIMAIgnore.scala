@@ -50,7 +50,7 @@ object GenerateMIMAIgnore {
            is a module or class. */
 
         val privateAsClass = mirror
-          .staticClass(className)
+          .classSymbol(Class.forName(className, false, classLoader))
           .privateWithin
           .fullName
           .startsWith(packageName)
