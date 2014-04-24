@@ -85,7 +85,7 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Shoul
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegressionWithSGD()
+    val lr = new LogisticRegressionWithSGD().setIntercept(true)
     lr.optimizer.setStepSize(10.0).setNumIterations(20)
 
     val model = lr.run(testRDD)
@@ -118,7 +118,7 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Shoul
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegressionWithSGD()
+    val lr = new LogisticRegressionWithSGD().setIntercept(true)
     lr.optimizer.setStepSize(10.0).setNumIterations(10)
 
     val model = lr.run(testRDD, initialWeights)

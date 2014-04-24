@@ -67,9 +67,6 @@ class RidgeRegressionWithSGD private (
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
-  // We don't want to penalize the intercept in RidgeRegression, so set this to false.
-  super.setIntercept(false)
-
   /**
    * Construct a RidgeRegression object with default parameters: {stepSize: 1.0, numIterations: 100,
    * regParam: 1.0, miniBatchFraction: 1.0}.

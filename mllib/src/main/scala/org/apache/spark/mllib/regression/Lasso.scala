@@ -66,9 +66,6 @@ class LassoWithSGD private (
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
-  // We don't want to penalize the intercept, so set this to false.
-  super.setIntercept(false)
-
   /**
    * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
    * regParam: 1.0, miniBatchFraction: 1.0}.

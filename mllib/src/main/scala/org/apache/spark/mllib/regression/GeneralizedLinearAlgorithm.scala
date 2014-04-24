@@ -83,8 +83,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /** The optimizer to solve the problem. */
   def optimizer: Optimizer
 
-  /** Whether to add intercept (default: true). */
-  protected var addIntercept: Boolean = true
+  /** Whether to add intercept (default: false). */
+  protected var addIntercept: Boolean = false
 
   protected var validateData: Boolean = true
 
@@ -94,7 +94,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   protected def createModel(weights: Vector, intercept: Double): M
 
   /**
-   * Set if the algorithm should add an intercept. Default true.
+   * Set if the algorithm should add an intercept. Default false.
+   * We set the default to false because adding the intercept will cause memory allocation.
    */
   def setIntercept(addIntercept: Boolean): this.type = {
     this.addIntercept = addIntercept
