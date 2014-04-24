@@ -207,6 +207,10 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   private def cleanup(cleanupTime: Long) {
     shuffleStates.clearOldValues(cleanupTime, (shuffleId, state) => removeShuffleBlocks(shuffleId))
   }
+
+  def stop() {
+    metadataCleaner.cancel()
+  }
 }
 
 private[spark]
