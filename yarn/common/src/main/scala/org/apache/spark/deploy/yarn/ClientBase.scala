@@ -59,9 +59,9 @@ trait ClientBase extends Logging {
   private val distCacheMgr = new ClientDistributedCacheManager()
 
   // Staging directory is private! -> rwx--------
-  val STAGING_DIR_PERMISSION: FsPermission = FsPermission.createImmutable(0700: Short)
+  val STAGING_DIR_PERMISSION: FsPermission = FsPermission.createImmutable(0x1C0: Short) // 0700
   // App files are world-wide readable and owner writable -> rw-r--r--
-  val APP_FILE_PERMISSION: FsPermission = FsPermission.createImmutable(0644: Short)
+  val APP_FILE_PERMISSION: FsPermission = FsPermission.createImmutable(0x1A4: Short) // 0644
 
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {
