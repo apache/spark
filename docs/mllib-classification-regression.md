@@ -294,12 +294,9 @@ The recursive tree construction is stopped at a node when one of the two conditi
 1. The node depth is equal to the `maxDepth` training paramemter
 2. No split candidate leads to an information gain at the node.
 
-### Practical Limitations
+### Implementation Details
 
-The tree implementation stores an Array[Double] of size *O(#features \* #splits \* 2^maxDepth)* in memory for aggregating histograms over partitions. The current implementation might not scale to very deep trees since the memory requirement grows exponentially with tree depth. 
-
-Please drop us a line if you encounter any issues. We are planning to solve this problem in the near future and real-world examples will be great.
-
+The tree implementation stores an Array[Double] of size *O(#features \* #splits \* 2^maxDepth)* in memory for aggregating histograms over partitions. Based upon the 'maxMemory' parameter set during training (default is 128 MB), the task is broken down into smaller groups to avoid out-of-memory errors during computation.
 
 ## Implementation in MLlib
 
