@@ -62,10 +62,10 @@ object CommandUtils extends Logging {
     val classPath = Utils.executeAndGetOutput(
       Seq(sparkHome + "/bin/compute-classpath" + ext),
       extraEnvironment=command.environment)
-    val userClassPath = command.classPathEntries.mkString(File.pathSeparator)
-    val classPathWithUser = classPath + File.pathSeparator + userClassPath
+    val userClassPath = command.classPathEntries ++ Seq(classPath)
 
-    Seq("-cp", classPathWithUser) ++ libraryOpts ++ extraOpts ++ memoryOpts
+    Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
+      libraryOpts ++ extraOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
