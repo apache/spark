@@ -203,8 +203,8 @@ public class JavaAPISuite implements Serializable {
     List<Integer> dataArray = Arrays.asList(1, 2, 3, 4);
     JavaPairRDD<Integer, Long> zip = sc.parallelize(dataArray).zipWithIndex();
     JavaRDD<Long> indexes = zip.values();
-    HashSet<Long> correctIndexes = new HashSet<Long>(Arrays.asList(0l, 1l, 2l, 3l));
-    Assert.assertTrue(new HashSet<Long>(indexes.collect()) == correctIndexes);
+    List<Long> correctIndexes = Arrays.asList(0L, 1L, 2L, 3L);
+    Assert.assertTrue(indexes.collect().equals(correctIndexes));
   }
 
   @SuppressWarnings("unchecked")
