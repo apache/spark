@@ -327,18 +327,18 @@ class StreamingContext private[streaming] (
    * @param directory HDFS directory to monitor for new file
    * @param filter Function to filter paths to process
    * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @param recursive Should search through the directory recursively to find new files
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
    */
   def fileStream[
-    K: ClassTag,
-    V: ClassTag,
-    F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): InputDStream[(K, V)] = {
-    new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
-  }
-
+      K: ClassTag,
+      V: ClassTag,
+      F <: NewInputFormat[K, V]: ClassTag
+    ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean, recursive: Boolean): DStream[(K, V)] = {
+      new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly, recursive)
+  } 
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value

@@ -34,7 +34,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     @transient ssc_ : StreamingContext,
     directory: String,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
-    newFilesOnly: Boolean = true)
+    newFilesOnly: Boolean = true,
+    recursive: Boolean = false)
   extends InputDStream[(K, V)](ssc_) {
 
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
@@ -97,6 +98,22 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   /**
+   * Produces a list of files recursively in a directory
+   */
+  private def recursiveFileList(
+      fs: FileSystem, 
+      path: Path, 
+      filter: CustomPathFilter): 
+    Array[FileStatus] = {
+      fs.listStatus(path, filter).flatMap( (x: FileStatus) => 
+          x.isDirectory match {
+          case true => recursiveFileList(fs,x.getPath(),filter)
+          case _ => Array(x)
+        }
+      )
+  } 
+
+  /**
    * Find files which have modification timestamp <= current time and return a 3-tuple of
    * (new files found, latest modification time among them, files with latest modification time)
    */
@@ -104,7 +121,13 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     logDebug("Trying to get new files for time " + currentTime)
     lastNewFileFindingTime = System.currentTimeMillis
     val filter = new CustomPathFilter(currentTime)
-    val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+
+    val newFiles: Array[String] = {
+      recursive match {
+        case true => recursiveFileList(fs, directoryPath, filter).map(_.getPath.toString)
+        case _ => fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+      }
+    } 
     val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
     logInfo("Finding new files took " + timeTaken + " ms")
     logDebug("# cached file times = " + fileModTimes.size)
