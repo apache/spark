@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.plans.{QueryPlan, logical}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 
+/* CHANGE */
+
 /**
  * :: DeveloperApi ::
  */
