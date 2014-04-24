@@ -39,7 +39,6 @@ class RDDSampler(object):
             import numpy
             self._random = numpy.random.RandomState(self._seed)
         else:
-            import random
             self._random = random.Random(self._seed)
 
         for _ in range(0, split):
