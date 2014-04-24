@@ -384,9 +384,9 @@ class RDD(object):
         # See: scala/spark/RDD.scala
         rand = Random(seed)
         while len(samples) < total:
-            samples = self.sample(withReplacement, fraction, rand.randint(0,sys.maxint)).collect()
+            samples = self.sample(withReplacement, fraction, rand.randint(0, sys.maxint)).collect()
 
-        sampler = RDDSampler(withReplacement, fraction, rand.randint(0,sys.maxint))
+        sampler = RDDSampler(withReplacement, fraction, rand.randint(0, sys.maxint))
         sampler.shuffle(samples)
         return samples[0:total]
 

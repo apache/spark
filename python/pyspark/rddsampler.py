@@ -27,7 +27,7 @@ class RDDSampler(object):
             print >> sys.stderr, "NumPy does not appear to be installed. Falling back to default random generator for sampling."
             self._use_numpy = False
 
-        self._seed = seed if seed is not None else random.randint(0,sys.maxint)
+        self._seed = seed if seed is not None else random.randint(0, sys.maxint)
         self._withReplacement = withReplacement
         self._fraction = fraction
         self._random = None

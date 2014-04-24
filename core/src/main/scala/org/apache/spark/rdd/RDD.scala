@@ -336,7 +336,7 @@ abstract class RDD[T: ClassTag](
    * Randomly splits this RDD with the provided weights.
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1
-   * @param seed random seed, default to rand.nextLong
+   * @param seed random seed
    *
    * @return split RDDs in an array
    */
