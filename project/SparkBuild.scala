@@ -294,7 +294,7 @@ object SparkBuild extends Build {
   ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings ++ genjavadocSettings
 
   val akkaVersion = "2.2.3-shaded-protobuf"
-  val chillVersion = "0.3.1"
+  val chillVersion = "0.3.6"
   val codahaleMetricsVersion = "3.0.0"
   val jblasVersion = "1.2.3"
   val jettyVersion = "8.1.14.v20131031"
@@ -411,8 +411,8 @@ object SparkBuild extends Build {
   )
 
   def examplesSettings = sharedSettings ++ Seq(
-    name := "spark-examples",  
-    jarName in assembly <<= version map { 
+    name := "spark-examples",
+    jarName in assembly <<= version map {
       v => "spark-examples-" + v + "-hadoop" + hadoopVersion + ".jar" },
     libraryDependencies ++= Seq(
       "com.twitter"          %% "algebird-core"   % "0.1.11",
