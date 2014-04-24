@@ -23,12 +23,13 @@ import scala.collection.mutable.{Queue, HashMap}
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchStarted
 import org.apache.spark.streaming.scheduler.BatchInfo
-import org.apache.spark.streaming.scheduler.ReceiverInfo
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchSubmitted
 import org.apache.spark.util.Distribution
+import org.apache.spark.Logging
 
 
-private[ui] class StreamingJobProgressListener(ssc: StreamingContext) extends StreamingListener {
+private[ui] class StreamingJobProgressListener(ssc: StreamingContext)
+  extends StreamingListener with Logging {
 
   private val waitingBatchInfos = new HashMap[Time, BatchInfo]
   private val runningBatchInfos = new HashMap[Time, BatchInfo]
@@ -39,9 +40,50 @@ private[ui] class StreamingJobProgressListener(ssc: StreamingContext) extends St
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
 
-  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) = {
+  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
     synchronized {
-      receiverInfos.put(receiverStarted.receiverInfo.streamId, receiverStarted.receiverInfo)
+      receiverInfos(receiverStarted.streamId) = ReceiverInfo(receiverStarted.streamId,
+        s"${receiverStarted.typ}-${receiverStarted.streamId}", true, receiverStarted.location)
+    }
+  }
+
+  override def onReceiverError(receiverError: StreamingListenerReceiverError) {
+    synchronized {
+      val newReceiverInfo = receiverInfos.get(receiverError.streamId) match {
+        case Some(oldInfo) =>
+          oldInfo.copy(lastErrorMessage = receiverError.message, lastError = receiverError.error)
+        case None =>
+          logWarning("No prior receiver info")
+          ReceiverInfo(
+            receiverError.streamId,
+            "", true, "",
+            lastErrorMessage = receiverError.message,
+            lastError = receiverError.error
+          )
+      }
+      receiverInfos(receiverError.streamId) = newReceiverInfo
+    }
+  }
+
+  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
+    synchronized {
+      val newReceiverInfo = receiverInfos.get(receiverStopped.streamId) match {
+        case Some(oldInfo) =>
+          oldInfo.copy(
+            active = false,
+            lastErrorMessage = receiverStopped.message,
+            lastError = receiverStopped.error
+          )
+        case None =>
+          logWarning("No prior receiver info")
+          ReceiverInfo(
+            receiverStopped.streamId,
+            "", true, "",
+            lastErrorMessage = receiverStopped.message,
+            lastError = receiverStopped.error
+          )
+      }
+      receiverInfos(receiverStopped.streamId) = newReceiverInfo
     }
   }
 

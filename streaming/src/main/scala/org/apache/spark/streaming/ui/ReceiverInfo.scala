@@ -15,9 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.receiver
+package org.apache.spark.streaming.ui
 
-/** Messages sent to the NetworkReceiver. */
-private[streaming] sealed trait ReceiverMessage
-private[streaming] object StopReceiver extends ReceiverMessage
-
+/** Class having information about a receiver */
+case class ReceiverInfo(
+    streamId: Int,
+    name: String,
+    var active: Boolean,
+    var location: String = "",
+    var lastErrorMessage: String = "",
+    var lastError: String = ""
+   ) {
+}

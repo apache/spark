@@ -28,7 +28,7 @@ case class StreamingListenerBatchSubmitted(batchInfo: BatchInfo) extends Streami
 case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends StreamingListenerEvent
 case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent
 
-case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)
+case class StreamingListenerReceiverStarted(streamId: Int, typ: String, location: String)
   extends StreamingListenerEvent
 case class StreamingListenerReceiverError(streamId: Int, message: String, error: String)
   extends StreamingListenerEvent

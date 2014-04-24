@@ -50,49 +50,42 @@ class SocketReceiver[T: ClassTag](
     storageLevel: StorageLevel
   ) extends Receiver[T](storageLevel) with Logging {
 
-  var socket: Socket = null
-  var receivingThread: Thread = null
-
   def onStart() {
-    receivingThread = new Thread("Socket Receiver") {
-      override def run() {
-        connect()
-        receive()
-      }
-    }
-    receivingThread.start()
+    // Start the thread that receives data over a connection
+    new Thread("Socket Receiver") {
+      setDaemon(true)
+      override def run() { receive() }
+    }.start()
   }
 
   def onStop() {
-    if (socket != null) {
-      socket.close()
-    }
-    socket = null
-    if (receivingThread != null) {
-      receivingThread.join()
-    }
+    // There is nothing much to do as the thread calling receive()
+    // is designed to stop by itself isStopped() returns false
   }
 
-  def connect() {
+  /** Create a socket connection and receive data until receiver is stopped */
+  def receive() {
+    var socket: Socket = null
     try {
       logInfo("Connecting to " + host + ":" + port)
       socket = new Socket(host, port)
-    } catch {
-      case e: Exception =>
-        restart("Could not connect to " + host + ":" + port, e)
-    }
-  }
-
-  def receive() {
-    try {
       logInfo("Connected to " + host + ":" + port)
       val iterator = bytesToObjects(socket.getInputStream())
       while(!isStopped && iterator.hasNext) {
         store(iterator.next)
       }
+      logInfo("Stopped receiving")
+      restart("Retrying connecting to " + host + ":" + port)
     } catch {
-      case e: Exception =>
-        restart("Error receiving data from socket", e)
+      case e: java.net.ConnectException =>
+        restart("Error connecting to " + host + ":" + port, e)
+      case t: Throwable =>
+        restart("Error receiving data", t)
+    } finally {
+      if (socket != null) {
+        socket.close()
+        logInfo("Closed socket to " + host + ":" + port)
+      }
     }
   }
 }

@@ -198,7 +198,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
 
   /** Check if receiver has been marked for stopping. */
   def isStopped(): Boolean = {
-    !executor.isReceiverStarted()
+    executor.isReceiverStopped()
   }
 
   /** Get unique identifier of this receiver. */

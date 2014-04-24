@@ -29,12 +29,12 @@ import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, St
 import org.apache.spark.util.AkkaUtils
 
 /** Information about receiver */
-case class ReceiverInfo(streamId: Int, typ: String, location: String) {
+private[scheduler] case class ReceiverInfo(streamId: Int, typ: String, location: String) {
   override def toString = s"$typ-$streamId"
 }
 
 /** Information about blocks received by the receiver */
-case class ReceivedBlockInfo(
+private[streaming] case class ReceivedBlockInfo(
     streamId: Int,
     blockId: StreamBlockId,
     numRecords: Long,
@@ -130,9 +130,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
       throw new Exception("Register received for unexpected id " + streamId)
     }
     receiverInfo += ((streamId, receiverActor))
-    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStarted(
-      ReceiverInfo(streamId, typ, host)
-    ))
+    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStarted(streamId, typ, host))
     logInfo("Registered receiver for stream " + streamId + " from " + sender.path.address)
   }
 
