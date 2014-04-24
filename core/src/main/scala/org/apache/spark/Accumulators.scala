@@ -104,8 +104,11 @@ class Accumulable[R, T] (
    * Set the accumulator's value; only allowed on master.
    */
   def value_= (newValue: R) {
-    if (!deserialized) value_ = newValue
-    else throw new UnsupportedOperationException("Can't assign accumulator value in task")
+    if (!deserialized) {
+      value_ = newValue
+    } else {
+      throw new UnsupportedOperationException("Can't assign accumulator value in task")
+    }
   }
 
   /**

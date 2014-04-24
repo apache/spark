@@ -237,8 +237,7 @@ private[spark] class Master(
             if (waitingDrivers.contains(d)) {
               waitingDrivers -= d
               self ! DriverStateChanged(driverId, DriverState.KILLED, None)
-            }
-            else {
+            } else {
               // We just notify the worker to kill the driver here. The final bookkeeping occurs
               // on the return path when the worker submits a state change back to the master
               // to notify it that the driver was successfully killed.

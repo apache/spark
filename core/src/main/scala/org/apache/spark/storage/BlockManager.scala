@@ -281,7 +281,9 @@ private[spark] class BlockManager(
       val onDiskSize = status.diskSize
       master.updateBlockInfo(
         blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inTachyonSize)
-    } else true
+    } else {
+      true
+    }
   }
 
   /**
@@ -676,7 +678,7 @@ private[spark] class BlockManager(
               tachyonStore.putValues(blockId, iterator, level, false)
             case ArrayBufferValues(array) =>
               tachyonStore.putValues(blockId, array, level, false)
-            case ByteBufferValues(bytes) => 
+            case ByteBufferValues(bytes) =>
               bytes.rewind()
               tachyonStore.putBytes(blockId, bytes, level)
           }
@@ -695,7 +697,7 @@ private[spark] class BlockManager(
               diskStore.putValues(blockId, iterator, level, askForBytes)
             case ArrayBufferValues(array) =>
               diskStore.putValues(blockId, array, level, askForBytes)
-            case ByteBufferValues(bytes) => 
+            case ByteBufferValues(bytes) =>
               bytes.rewind()
               diskStore.putBytes(blockId, bytes, level)
           }

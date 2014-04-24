@@ -91,9 +91,11 @@ private[spark] class DriverRunner(
         }
 
         val state =
-          if (killed) { DriverState.KILLED }
-          else if (finalException.isDefined) { DriverState.ERROR }
-          else {
+          if (killed) {
+            DriverState.KILLED
+          } else if (finalException.isDefined) {
+            DriverState.ERROR
+          } else {
             finalExitCode match {
               case Some(0) => DriverState.FINISHED
               case _ => DriverState.FAILED

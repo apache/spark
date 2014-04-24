@@ -811,8 +811,7 @@ private[spark] object Utils extends Logging {
           } else {
             el.getMethodName
           }
-        }
-        else {
+        } else {
           firstUserLine = el.getLineNumber
           firstUserFile = el.getFileName
           firstUserClass = el.getClassName

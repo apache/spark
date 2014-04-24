@@ -147,12 +147,12 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
     val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
       .orElse(Option(System.getenv("LOCAL_DIRS")))
- 
+
     localDirs match {
       case None => throw new Exception("Yarn Local dirs can't be empty")
       case Some(l) => l
     }
-  } 
+  }
 
   private def getApplicationAttemptId(): ApplicationAttemptId = {
     val envs = System.getenv()
@@ -321,8 +321,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
             logInfo("Allocating %d containers to make up for (potentially) lost containers".
               format(missingExecutorCount))
             yarnAllocator.allocateContainers(missingExecutorCount)
+          } else {
+            sendProgress()
           }
-          else sendProgress()
           Thread.sleep(sleepTime)
         }
       }
@@ -361,7 +362,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         return
       }
       isFinished = true
-      
+
       logInfo("finishApplicationMaster with " + status)
       if (registered) {
         val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest])

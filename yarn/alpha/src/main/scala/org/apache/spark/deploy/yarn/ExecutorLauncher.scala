@@ -243,8 +243,9 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
             logInfo("Allocating " + missingExecutorCount +
               " containers to make up for (potentially ?) lost containers")
             yarnAllocator.allocateContainers(missingExecutorCount)
+          } else {
+            sendProgress()
           }
-          else sendProgress()
           Thread.sleep(sleepTime)
         }
       }
