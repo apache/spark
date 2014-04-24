@@ -27,7 +27,6 @@ import org.jblas.DoubleMatrix
 
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.SparkContext._
-import org.apache.spark.Partitioner
 
 object ALSSuite {
 
