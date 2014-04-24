@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.{WebUI, SparkUI}
 import org.apache.spark.ui.JettyUtils._
@@ -257,6 +258,7 @@ object HistoryServer {
   val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 
   def main(argStrings: Array[String]) {
+    initSecurity()
     val args = new HistoryServerArguments(argStrings)
     val securityManager = new SecurityManager(conf)
     val server = new HistoryServer(args.logDir, securityManager, conf)
@@ -266,6 +268,20 @@ object HistoryServer {
     while(true) { Thread.sleep(Int.MaxValue) }
     server.stop()
   }
+
+  def initSecurity() {
+    // If we are accessing HDFS and it has security enabled (Kerberos), we have to login
+    // from a keytab file so that we can access HDFS beyond the kerberos ticket expiration.
+    // As long as it is using Hadoop rpc (hdfs://), a relogin will automatically
+    // occur from the keytab.
+    if (conf.getBoolean("spark.history.use.kerberos", false)) {
+      // if you have enabled kerberos the following 2 params must be set
+      val principalName = conf.get("spark.history.kerberos.principal")
+      val keytabFilename = conf.get("spark.history.kerberos.keytab")
+      SparkHadoopUtil.get.loginUserFromKeytab(principalName, keytabFilename)
+    }
+  }
+
 }
 
 
