@@ -104,8 +104,11 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       // Check whether all the nodes at the current level at leaves.
       val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0)
       logDebug("all leaf = " + allLeaf)
-      if (allLeaf) break = true // no more tree construction
-      else level += 1
+      if (allLeaf) {
+        break = true // no more tree construction
+      } else {
+        level += 1
+      }
     }
 
     // Initialize the top or root node of the tree.
