@@ -495,7 +495,10 @@ class StreamingContext private[streaming] (
 
 object StreamingContext extends Logging {
 
-  implicit def toPairDStreamFunctions[K: ClassTag, V: ClassTag](stream: DStream[(K,V)]) = {
+  private[streaming] val DEFAULT_CLEANER_TTL = 3600
+
+  implicit def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
+      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     new PairDStreamFunctions[K, V](stream)
   }
 
