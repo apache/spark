@@ -855,6 +855,12 @@
       <modules>
         <module>yarn</module>
       </modules>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
+      </dependencies>
     </profile>
 
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
