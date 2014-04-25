@@ -27,17 +27,16 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat, FileOutputCommitter}
 
-import parquet.hadoop.{ParquetRecordReader, BadConfigurationException, ParquetInputFormat, ParquetOutputFormat}
+import parquet.hadoop.{ParquetRecordReader, ParquetInputFormat, ParquetOutputFormat}
+import parquet.hadoop.api.ReadSupport
 import parquet.hadoop.util.ContextUtil
 import parquet.io.InvalidRecordException
 import parquet.schema.MessageType
 
 import org.apache.spark.{Logging, SerializableWritable, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Attribute, Expression, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
-import parquet.filter.UnboundRecordFilter
-import parquet.hadoop.api.ReadSupport
 
 /**
  * Parquet table scan operator. Imports the file that backs the given
@@ -75,7 +74,7 @@ case class ParquetTableScan(
     // as simple column predicate filters in Parquet. Here we just record
     // the whole pruning predicate.
     // Note 2: you can disable filter predicate pushdown by setting
-    // "org.apache.spark.sql.parquet.filter.pushdown" to false inside SparkConf.
+    // "spark.sql.hints.parquetFilterPushdown" to false inside SparkConf.
     if (columnPruningPred.isDefined &&
       sc.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
       ParquetFilters.serializeFilterExpressions(columnPruningPred.get, conf)
@@ -289,7 +288,9 @@ private[parquet] class FilteringParquetRowInputFormat
       ParquetFilters.deserializeFilterExpressions(ContextUtil.getConfiguration(taskAttemptContext))
     if (filterExpressions.isDefined) {
       logInfo(s"Pushing down predicates for RecordFilter: ${filterExpressions.mkString(", ")}")
-      new ParquetRecordReader[Row](readSupport, ParquetFilters.createFilter(filterExpressions.get))
+      new ParquetRecordReader[Row](
+        readSupport,
+        ParquetFilters.createRecordFilter(filterExpressions.get))
     } else {
       new ParquetRecordReader[Row](readSupport)
     }

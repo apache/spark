@@ -140,16 +140,35 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         InsertIntoParquetTable(relation, planLater(child), overwrite=true)(sparkContext) :: Nil
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child), overwrite)(sparkContext) :: Nil
-      case PhysicalOperation(projectList, filters, relation: ParquetRelation) =>
-        // Note: we do not actually remove the filters that were pushed down to Parquet from
-        // the plan, in case that some of the predicates cannot be evaluated there because
-        // they contain complex operations, such as CASTs.
-        // TODO: rethink whether conjuntions that are handed down to Parquet should be removed
-        // from the list of higher-level filters.
-          pruneFilterProject(
-            projectList,
-            filters,
-            ParquetTableScan(_, relation, Some(filters))(sparkContext)) :: Nil
+      case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) => {
+        val remainingFilters =
+          if (sparkContext.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
+            filters.filter {
+              // Note: filters cannot be pushed down to Parquet if they contain more complex
+              // expressions than simple "Attribute cmp Literal" comparisons. Here we remove
+              // all filters that have been pushed down. Note that a predicate such as
+              // "A AND B" can result in "A" being pushed down.
+              filter =>
+                val recordFilter = ParquetFilters.createFilter(filter)
+                if (!recordFilter.isDefined) {
+                  // First case: the pushdown did not result in any record filter.
+                  true
+                } else {
+                  // Second case: a record filter was created; here we are conservative in
+                  // the sense that even if "A" was pushed and we check for "A AND B" we
+                  // still want to keep "A AND B" in the higher-level filter, not just "B".
+                  !ParquetFilters.findExpression(recordFilter.get, filter).isDefined
+                }
+            }
+          } else {
+            filters
+          }
+        pruneFilterProject(
+          projectList,
+          remainingFilters,
+          ParquetTableScan(_, relation, Some(filters))(sparkContext)) :: Nil
+      }
+
       case _ => Nil
     }
   }
