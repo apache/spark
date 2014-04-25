@@ -66,8 +66,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         if (k.startsWith("spark")) {
           defaultProperties(k) = v
           if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
-        }
-        else {
+        } else {
           SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
         }
       }
