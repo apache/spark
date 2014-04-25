@@ -66,8 +66,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         if (k.startsWith("spark")) {
           defaultProperties(k) = v
           if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
-        }
-        else {
+        } else {
           SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
         }
       }
@@ -116,6 +115,15 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
     if (args.length == 0) printUsageAndExit(-1)
     if (primaryResource == null) SparkSubmit.printErrorAndExit("Must specify a primary resource")
     if (mainClass == null) SparkSubmit.printErrorAndExit("Must specify a main class with --class")
+
+    if (master.startsWith("yarn")) {
+      val hasHadoopEnv = sys.env.contains("HADOOP_CONF_DIR") || sys.env.contains("YARN_CONF_DIR")
+      val testing = sys.env.contains("SPARK_TESTING")
+      if (!hasHadoopEnv && !testing) {
+        throw new Exception(s"When running with master '$master' " +
+          "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
+      }
+    }
   }
 
   override def toString =  {

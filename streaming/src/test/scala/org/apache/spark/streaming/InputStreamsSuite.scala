@@ -42,8 +42,6 @@ import org.apache.spark.streaming.receiver.{ActorHelper, Receiver}
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
-  val testPort = 9999
-
   test("socket input stream") {
     // Start the server
     val testServer = new TestServer()
@@ -143,7 +141,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
   }
 
-  // TODO: This test makes assumptions about Thread.sleep() and is flaky
+  // TODO: This test works in IntelliJ but not through SBT
   ignore("actor input stream") {
     // Start the server
     val testServer = new TestServer()
@@ -286,17 +284,6 @@ class TestServer(portToBind: Int = 0) extends Logging {
   def stop() { servingThread.interrupt() }
 
   def port = serverSocket.getLocalPort
-}
-
-object TestServer {
-  def main(args: Array[String]) {
-    val s = new TestServer()
-    s.start()
-    while(true) {
-      Thread.sleep(1000)
-      s.send("hello")
-    }
-  }
 }
 
 /** This is an actor for testing actor input stream */

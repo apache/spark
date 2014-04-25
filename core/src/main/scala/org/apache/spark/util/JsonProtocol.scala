@@ -176,7 +176,7 @@ private[spark] object JsonProtocol {
    * -------------------------------------------------------------------- */
 
   def stageInfoToJson(stageInfo: StageInfo): JValue = {
-    val rddInfo = rddInfoToJson(stageInfo.rddInfo)
+    val rddInfo = JArray(stageInfo.rddInfos.map(rddInfoToJson).toList)
     val submissionTime = stageInfo.submissionTime.map(JInt(_)).getOrElse(JNothing)
     val completionTime = stageInfo.completionTime.map(JInt(_)).getOrElse(JNothing)
     val failureReason = stageInfo.failureReason.map(JString(_)).getOrElse(JNothing)
@@ -208,7 +208,8 @@ private[spark] object JsonProtocol {
       taskMetrics.shuffleReadMetrics.map(shuffleReadMetricsToJson).getOrElse(JNothing)
     val shuffleWriteMetrics =
       taskMetrics.shuffleWriteMetrics.map(shuffleWriteMetricsToJson).getOrElse(JNothing)
-    val updatedBlocks = taskMetrics.updatedBlocks.map { blocks =>
+    val updatedBlocks =
+      taskMetrics.updatedBlocks.map { blocks =>
         JArray(blocks.toList.map { case (id, status) =>
           ("Block ID" -> id.toString) ~
           ("Status" -> blockStatusToJson(status))
@@ -467,13 +468,13 @@ private[spark] object JsonProtocol {
     val stageId = (json \ "Stage ID").extract[Int]
     val stageName = (json \ "Stage Name").extract[String]
     val numTasks = (json \ "Number of Tasks").extract[Int]
-    val rddInfo = rddInfoFromJson(json \ "RDD Info")
+    val rddInfos = (json \ "RDD Info").extract[List[JValue]].map(rddInfoFromJson)
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val failureReason = Utils.jsonOption(json \ "Failure Reason").map(_.extract[String])
     val emittedTaskSizeWarning = (json \ "Emitted Task Size Warning").extract[Boolean]
 
-    val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfo)
+    val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfos)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.failureReason = failureReason
@@ -518,13 +519,14 @@ private[spark] object JsonProtocol {
       Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson)
     metrics.shuffleWriteMetrics =
       Utils.jsonOption(json \ "Shuffle Write Metrics").map(shuffleWriteMetricsFromJson)
-    metrics.updatedBlocks = Utils.jsonOption(json \ "Updated Blocks").map { value =>
-      value.extract[List[JValue]].map { block =>
-        val id = BlockId((block \ "Block ID").extract[String])
-        val status = blockStatusFromJson(block \ "Status")
-        (id, status)
+    metrics.updatedBlocks =
+      Utils.jsonOption(json \ "Updated Blocks").map { value =>
+        value.extract[List[JValue]].map { block =>
+          val id = BlockId((block \ "Block ID").extract[String])
+          val status = blockStatusFromJson(block \ "Status")
+          (id, status)
+        }
       }
-    }
     metrics
   }
 

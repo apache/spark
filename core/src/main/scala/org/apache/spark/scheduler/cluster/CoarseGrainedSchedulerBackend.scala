@@ -101,8 +101,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       case ReviveOffers =>
         makeOffers()
 
-      case KillTask(taskId, executorId) =>
-        executorActor(executorId) ! KillTask(taskId, executorId)
+      case KillTask(taskId, executorId, interruptThread) =>
+        executorActor(executorId) ! KillTask(taskId, executorId, interruptThread)
 
       case StopDriver =>
         sender ! true
@@ -207,8 +207,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     driverActor ! ReviveOffers
   }
 
-  override def killTask(taskId: Long, executorId: String) {
-    driverActor ! KillTask(taskId, executorId)
+  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
+    driverActor ! KillTask(taskId, executorId, interruptThread)
   }
 
   override def defaultParallelism(): Int = {
