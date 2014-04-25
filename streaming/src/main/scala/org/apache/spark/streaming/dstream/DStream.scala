@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.MetadataCleaner
 import org.apache.spark.streaming._
@@ -340,13 +340,23 @@ abstract class DStream[T: ClassTag] (
    * this to clear their own metadata along with the generated RDDs.
    */
   private[streaming] def clearMetadata(time: Time) {
+    val unpersistData = ssc.conf.getBoolean("spark.streaming.unpersist", true)
     val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
     logDebug("Clearing references to old RDDs: [" +
       oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]")
     generatedRDDs --= oldRDDs.keys
-    if (ssc.conf.getBoolean("spark.streaming.unpersist", false)) {
+    if (unpersistData) {
       logDebug("Unpersisting old RDDs: " + oldRDDs.values.map(_.id).mkString(", "))
-      oldRDDs.values.foreach(_.unpersist(false))
+      oldRDDs.values.foreach { rdd =>
+        rdd.unpersist(false)
+        // Explicitly remove blocks of BlockRDD
+        rdd match {
+          case b: BlockRDD[_] =>
+            logInfo("Removing blocks of RDD " + b + " of time " + time)
+            b.removeBlocks()
+          case _ =>
+        }
+      }
     }
     logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +
       (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))

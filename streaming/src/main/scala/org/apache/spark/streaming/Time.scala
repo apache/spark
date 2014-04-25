@@ -68,5 +68,5 @@ case class Time(private val millis: Long) {
 }
 
 object Time {
-  val ordering = Ordering.by((time: Time) => time.millis)
+  implicit val ordering = Ordering.by((time: Time) => time.millis)
 }

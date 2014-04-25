@@ -469,10 +469,13 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.streaming.unpersist</td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Force RDDs generated and persisted by Spark Streaming to be automatically unpersisted from
-    Spark's memory. Setting this to true is likely to reduce Spark's RDD memory usage.
+    Spark's memory. The raw input data received by Spark Streaming is also automatically cleared.
+    Setting this to false will allow the raw data and persisted RDDs to be accessible outside the
+    streaming application as they will not be cleared automatically. But it comes at the cost of
+    higher memory usage in Spark.
   </td>
 </tr>
 <tr>
