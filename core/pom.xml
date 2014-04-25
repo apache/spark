@@ -114,6 +114,10 @@
       <artifactId>commons-net</artifactId>
     </dependency>
     <dependency>
+      <groupId>commons-lang</groupId>
+      <artifactId>commons-lang</artifactId>
+    </dependency>
+    <dependency>
       <groupId>${akka.group}</groupId>
       <artifactId>akka-remote_${scala.binary.version}</artifactId>
     </dependency>
