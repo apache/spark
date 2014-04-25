@@ -15,9 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.receiver
+package org.apache.spark.streaming.scheduler
 
-/** Messages sent to the NetworkReceiver. */
-private[streaming] sealed trait ReceiverMessage
-private[streaming] object StopReceiver extends ReceiverMessage
+import akka.actor.ActorRef
+import org.apache.spark.annotation.DeveloperApi
 
+/**
+ * :: DeveloperApi ::
+ * Class having information about a receiver
+ */
+@DeveloperApi
+case class ReceiverInfo(
+    streamId: Int,
+    name: String,
+    private[streaming] val actor: ActorRef,
+    active: Boolean,
+    location: String,
+    lastErrorMessage: String = "",
+    lastError: String = ""
+   ) {
+}
