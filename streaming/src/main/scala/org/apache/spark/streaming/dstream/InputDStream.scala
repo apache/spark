@@ -30,7 +30,7 @@ import scala.reflect.ClassTag
  * FileInputDStream, a subclass of InputDStream, monitors a HDFS directory from the driver for
  * new files and generates RDDs with the new files. For implementing input streams
  * that requires running a receiver on the worker nodes, use
- * [[org.apache.spark.streaming.dstream.NetworkInputDStream]] as the parent class.
+ * [[org.apache.spark.streaming.dstream.ReceiverInputDStream]] as the parent class.
  *
  * @param ssc_ Streaming context that will execute this input stream
  */

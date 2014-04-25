@@ -114,7 +114,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * @deprecated As of Spark 1.0.0, defaultMinSplits is deprecated, use
    *            {@link #defaultMinPartitions()} instead
    */
-  @Deprecated
+  @deprecated("use defaultMinPartitions", "1.0.0")
   def defaultMinSplits: java.lang.Integer = sc.defaultMinSplits
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
@@ -570,6 +570,21 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * // In a separate thread:
    * sc.cancelJobGroup("some_job_to_cancel");
    * }}}
+   *
+   * If interruptOnCancel is set to true for the job group, then job cancellation will result
+   * in Thread.interrupt() being called on the job's executor threads. This is useful to help ensure
+   * that the tasks are actually stopped in a timely manner, but is off by default due to HDFS-1208,
+   * where HDFS may respond to Thread.interrupt() by marking nodes as dead.
+   */
+  def setJobGroup(groupId: String, description: String, interruptOnCancel: Boolean): Unit =
+    sc.setJobGroup(groupId, description, interruptOnCancel)
+
+  /**
+   * Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+   * different value or cleared.
+   *
+   * @see `setJobGroup(groupId: String, description: String, interruptThread: Boolean)`.
+   *      This method sets interruptOnCancel to false.
    */
   def setJobGroup(groupId: String, description: String): Unit = sc.setJobGroup(groupId, description)
 

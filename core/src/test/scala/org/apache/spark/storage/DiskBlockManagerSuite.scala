@@ -53,6 +53,11 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
     shuffleBlockManager.idToSegmentMap.clear()
   }
 
+  override def afterEach() {
+    diskBlockManager.stop()
+    shuffleBlockManager.idToSegmentMap.clear()
+  }
+
   test("basic block creation") {
     val blockId = new TestBlockId("test")
     assertSegmentEquals(blockId, blockId.name, 0, 0)

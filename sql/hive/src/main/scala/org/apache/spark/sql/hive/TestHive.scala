@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.hive.test
 
 import java.io.File
 import java.util.{Set => JavaSet}
@@ -34,6 +34,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.hive._
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -99,14 +100,15 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
 
-  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql/hive")) {
-    new File("src/test/resources/")
+  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
   } else {
-    new File("sql/hive/src/test/resources")
+    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" + 
+      File.separator + "resources")
   }
 
   def getHiveFile(path: String): File = {
-    val stripped = path.replaceAll("""\.\.\/""", "")
+    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
     hiveDevHome
       .map(new File(_, stripped))
       .filter(_.exists)

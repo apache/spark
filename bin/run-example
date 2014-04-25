@@ -41,11 +41,18 @@ fi
 # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
 # to avoid the -sources and -doc packages that are built by publish-local.
 EXAMPLES_DIR="$FWDIR"/examples
+
 if [[ -z $SPARK_EXAMPLES_JAR ]]; then
-  jars_pat="$EXAMPLES_DIR/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar"
-  errmsg="You need to build Spark with sbt/sbt assembly before running this program"
-  need_one_glob "$jars_pat" "$errmsg"
-  export SPARK_EXAMPLES_JAR=$_RET
+  if [ -f "$FWDIR/RELEASE" ]; then
+    one_glob "$FWDIR/lib/spark-examples-*hadoop*.jar"
+    export SPARK_EXAMPLES_JAR=$_RET
+  fi
+  if [[ -z $SPARK_EXAMPLES_JAR ]]; then
+    jars_pat="$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.jar"
+    errmsg="You need to build Spark with sbt/sbt assembly before running this program"
+    need_one_glob "$jars_pat" "$errmsg"
+    export SPARK_EXAMPLES_JAR=$_RET
+  fi
 fi
 
 
@@ -73,7 +80,6 @@ fi
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 JAVA_OPTS="$SPARK_JAVA_OPTS"
-JAVA_OPTS="$JAVA_OPTS -Djava.library.path=$SPARK_LIBRARY_PATH"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e "$FWDIR/conf/java-opts" ] ; then
   JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"

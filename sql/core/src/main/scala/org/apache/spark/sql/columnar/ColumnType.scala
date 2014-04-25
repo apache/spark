@@ -200,10 +200,10 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
 }
 
 private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
-  override def actualSize(v: String): Int = v.getBytes.length + 4
+  override def actualSize(v: String): Int = v.getBytes("utf-8").length + 4
 
   override def append(v: String, buffer: ByteBuffer) {
-    val stringBytes = v.getBytes()
+    val stringBytes = v.getBytes("utf-8")
     buffer.putInt(stringBytes.length).put(stringBytes, 0, stringBytes.length)
   }
 
@@ -211,7 +211,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
     val length = buffer.getInt()
     val stringBytes = new Array[Byte](length)
     buffer.get(stringBytes, 0, length)
-    new String(stringBytes)
+    new String(stringBytes, "utf-8")
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: String) {
