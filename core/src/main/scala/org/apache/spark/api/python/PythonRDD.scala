@@ -111,7 +111,7 @@ private[spark] class PythonRDD[T: ClassTag](
     }.start()
 
     // Necessary to distinguish between a task that has failed and a task that is finished
-    @volatile var success: Boolean = false
+    @volatile var complete: Boolean = false
 
     // It is necessary to have a monitor thread for python workers if the user cancels with
     // interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
@@ -123,9 +123,9 @@ private[spark] class PythonRDD[T: ClassTag](
         while (!context.interrupted) {
           Thread.sleep(2000)
         }
-        if (!success) {
+        if (!complete) {
           try {
-            logInfo("Success was false, trying to kill worker")
+            logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
             env.destroyPythonWorker(pythonExec, envVars.toMap)
           } catch {
             case e: Exception =>
@@ -142,7 +142,7 @@ private[spark] class PythonRDD[T: ClassTag](
      * processed only after the stream becomes invalid.
      */
     context.addOnCompleteCallback{ () =>
-      success = true // Indicate that the task has completed successfully
+      complete = true // Indicate that the task has completed successfully
       context.interrupted = true
     }
 
