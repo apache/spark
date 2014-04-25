@@ -36,7 +36,7 @@
 # 2) cd to deploy dir; ./sbin/start-master.sh
 # 3) Verify master is up by visiting web page, ie http://master-ip:8080.  Note the spark:// URL.
 # 4) ./sbin/start-slave.sh 1 <<spark:// URL>>
-# 5) MASTER="spark://my-master-ip:7077" ./bin/spark-shell
+# 5) ./bin/spark-shell --master spark://my-master-ip:7077
 #
 
 # Figure out where the Spark framework is installed
@@ -141,6 +141,7 @@ cp $FWDIR/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$FWDIR"/conf/*.template "$DISTDIR"/conf
+cp "$FWDIR"/conf/slaves "$DISTDIR"/conf
 cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/python" "$DISTDIR"
 cp -r "$FWDIR/sbin" "$DISTDIR"

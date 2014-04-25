@@ -314,6 +314,7 @@ object SparkBuild extends Build {
   val excludePowermock = ExclusionRule(organization = "org.powermock")
   val excludeFastutil = ExclusionRule(organization = "it.unimi.dsi")
   val excludeJruby = ExclusionRule(organization = "org.jruby")
+  val excludeThrift = ExclusionRule(organization = "org.apache.thrift")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
@@ -608,7 +609,7 @@ object SparkBuild extends Build {
     name := "spark-streaming-flume",
     previousArtifact := sparkPreviousArtifact("spark-streaming-flume"),
     libraryDependencies ++= Seq(
-      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty)
+      "org.apache.flume" % "flume-ng-sdk" % "1.4.0" % "compile" excludeAll(excludeNetty, excludeThrift)
     )
   )
 

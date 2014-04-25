@@ -18,6 +18,6 @@
 package org.apache.spark.streaming.receiver
 
 /** Messages sent to the NetworkReceiver. */
-private[streaming] sealed trait NetworkReceiverMessage
-private[streaming] object StopReceiver extends NetworkReceiverMessage
+private[streaming] sealed trait ReceiverMessage
+private[streaming] object StopReceiver extends ReceiverMessage
 

@@ -382,11 +382,6 @@
         <version>10.4.2.0</version>
       </dependency>
       <dependency>
-        <groupId>net.liftweb</groupId>
-        <artifactId>lift-json_${scala.binary.version}</artifactId>
-        <version>2.5.1</version>
-      </dependency>
-      <dependency>
         <groupId>com.codahale.metrics</groupId>
         <artifactId>metrics-core</artifactId>
         <version>${codahale.metrics.version}</version>

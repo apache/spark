@@ -15,23 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark
 
-import java.nio.ByteBuffer
-import org.apache.spark.{SecurityManager, SparkConf}
-
-private[spark] object ReceiverTest {
-  def main(args: Array[String]) {
-    val conf = new SparkConf
-    val manager = new ConnectionManager(9999, conf, new SecurityManager(conf))
-    println("Started connection manager with id = " + manager.id)
-
-    manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
-      /* println("Received [" + msg + "] from [" + id + "] at " + System.currentTimeMillis) */
-      val buffer = ByteBuffer.wrap("response".getBytes("utf-8"))
-      Some(Message.createBufferMessage(buffer, msg.id))
-    })
-    Thread.currentThread.join()
-  }
-}
-
+/**
+ * Exception for a task getting killed.
+ */
+private[spark] class TaskKilledException extends RuntimeException

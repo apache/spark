@@ -203,8 +203,9 @@ case class InsertIntoParquetTable(
     val stageId = sc.newRddId()
 
     val taskIdOffset =
-      if (overwrite) 1
-      else {
+      if (overwrite) {
+        1
+      } else {
         FileSystemHelper
           .findMaxTaskId(NewFileOutputFormat.getOutputPath(job).toString, job.getConfiguration) + 1
       }

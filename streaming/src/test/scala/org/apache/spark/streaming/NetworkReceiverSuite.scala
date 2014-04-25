@@ -20,6 +20,7 @@ package org.apache.spark.streaming
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.postfixOps
 
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -28,6 +29,7 @@ import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
+import scala.language.postfixOps
 
 /** Testsuite for testing the network receiver behavior */
 class NetworkReceiverSuite extends FunSuite with Timeouts {
@@ -92,9 +94,13 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
 
     // Verify restarting actually stops and starts the receiver
     receiver.restart("restarting", null, 100)
-    assert(receiver.isStopped)
-    assert(receiver.onStopCalled)
+    eventually(timeout(50 millis), interval(10 millis)) {
+      // receiver will be stopped async
+      assert(receiver.isStopped)
+      assert(receiver.onStopCalled)
+    }
     eventually(timeout(1000 millis), interval(100 millis)) {
+      // receiver will be started async
       assert(receiver.onStartCalled)
       assert(executor.isReceiverStarted)
       assert(receiver.isStarted)

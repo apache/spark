@@ -381,8 +381,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       val prng42 = new Random(42)
       val prng43 = new Random(43)
       Array(1, 2, 3, 4, 5, 6).filter{i =>
-        if (i < 4) 0 == prng42.nextInt(3)
-        else 0 == prng43.nextInt(3)}
+        if (i < 4) 0 == prng42.nextInt(3) else 0 == prng43.nextInt(3)
+      }
     }
     assert(sample.size === checkSample.size)
     for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
@@ -463,7 +463,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("takeSample") {
     val data = sc.parallelize(1 to 100, 2)
-
+    
+    for (num <- List(5, 20, 100)) {
+      val sample = data.takeSample(withReplacement=false, num=num)
+      assert(sample.size === num)        // Got exactly num elements
+      assert(sample.toSet.size === num)  // Elements are distinct
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
@@ -479,6 +485,19 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=true, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
+    {
+      val sample = data.takeSample(withReplacement=true, num=20)
+      assert(sample.size === 20)        // Got exactly 100 elements
+      assert(sample.toSet.size <= 20, "sampling with replacement returned all distinct elements")
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
+    {
+      val sample = data.takeSample(withReplacement=true, num=100)
+      assert(sample.size === 100)        // Got exactly 100 elements
+      // Chance of getting all distinct elements is astronomically low, so test we got < 100
+      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
       assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
     }
     for (seed <- 1 to 5) {

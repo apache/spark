@@ -18,8 +18,10 @@
 package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.streaming.Time
+import org.apache.spark.annotation.DeveloperApi
 
 /**
+ * :: DeveloperApi ::
  * Class having information on completed batches.
  * @param batchTime   Time of the batch
  * @param submissionTime  Clock time of when jobs of this batch was submitted to
@@ -27,6 +29,7 @@ import org.apache.spark.streaming.Time
  * @param processingStartTime Clock time of when the first job of this batch started processing
  * @param processingEndTime Clock time of when the last job of this batch finished processing
  */
+@DeveloperApi
 case class BatchInfo(
     batchTime: Time,
     receivedBlockInfo: Map[Int, Array[ReceivedBlockInfo]],

@@ -89,8 +89,7 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") {
             Previous {Utils.bytesToString(math.min(byteLength, startByte))}
           </button>
         </a>
-      }
-      else {
+      } else {
         <button type="button" class="btn btn-default" disabled="disabled">
           Previous 0 B
         </button>
@@ -104,8 +103,7 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") {
             Next {Utils.bytesToString(math.min(byteLength, logLength - endByte))}
           </button>
         </a>
-      }
-      else {
+      } else {
         <button type="button" class="btn btn-default" disabled="disabled">
           Next 0 B
         </button>
@@ -137,9 +135,13 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") {
     val logLength = file.length()
     val getOffset = offset.getOrElse(logLength - defaultBytes)
     val startByte =
-      if (getOffset < 0) 0L
-      else if (getOffset > logLength) logLength
-      else getOffset
+      if (getOffset < 0) {
+        0L
+      } else if (getOffset > logLength) {
+        logLength
+      } else {
+        getOffset
+      }
     val logPageLength = math.min(byteLength, maxBytes)
     val endByte = math.min(startByte + logPageLength, logLength)
     (startByte, endByte)
