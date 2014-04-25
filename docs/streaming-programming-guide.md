@@ -272,12 +272,10 @@ Time: 1357008430000 ms
     </td>
 </table>
 
-If you plan to run the Scala code for Spark Streaming-based use cases in the Spark
-shell, you should start the shell with the SparkConfiguration pre-configured to
-discard old batches periodically:
+You can also use Spark Streaming directly from the Spark shell:
 
 {% highlight bash %}
-$ SPARK_JAVA_OPTS=-Dspark.cleaner.ttl=10000 bin/spark-shell
+$ bin/spark-shell
 {% endhighlight %}
 
 ... and create your StreamingContext by wrapping the existing interactive shell

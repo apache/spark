@@ -36,7 +36,7 @@
 # 2) cd to deploy dir; ./sbin/start-master.sh
 # 3) Verify master is up by visiting web page, ie http://master-ip:8080.  Note the spark:// URL.
 # 4) ./sbin/start-slave.sh 1 <<spark:// URL>>
-# 5) MASTER="spark://my-master-ip:7077" ./bin/spark-shell
+# 5) ./bin/spark-shell --master spark://my-master-ip:7077
 #
 
 # Figure out where the Spark framework is installed
