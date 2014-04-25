@@ -610,8 +610,8 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void wholeTextFiles() throws IOException {
-    byte[] content1 = "spark is easy to use.\n".getBytes();
-    byte[] content2 = "spark is also easy to use.\n".getBytes();
+    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+    byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
 
     File tempDir = Files.createTempDir();
     String tempDirName = tempDir.getAbsolutePath();

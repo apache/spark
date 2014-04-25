@@ -56,7 +56,7 @@ object MQTTPublisher {
     val msg: String = "hello mqtt demo for spark streaming"
 
     while (true) {
-      val message: MqttMessage = new MqttMessage(String.valueOf(msg).getBytes())
+      val message: MqttMessage = new MqttMessage(String.valueOf(msg).getBytes("utf-8"))
       msgtopic.publish(message)
       println("Published data. topic: " + msgtopic.getName() + " Message: " + message)
     }

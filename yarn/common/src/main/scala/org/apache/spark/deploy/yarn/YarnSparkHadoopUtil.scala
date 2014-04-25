@@ -64,7 +64,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   override def addSecretKeyToUserCredentials(key: String, secret: String) {
     val creds = new Credentials()
-    creds.addSecretKey(new Text(key), secret.getBytes())
+    creds.addSecretKey(new Text(key), secret.getBytes("utf-8"))
     addCurrentUserCredentials(creds)
   }
 

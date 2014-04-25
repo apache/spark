@@ -187,7 +187,7 @@ private[spark] class PythonRDD[T: ClassTag](
               val exLength = stream.readInt()
               val obj = new Array[Byte](exLength)
               stream.readFully(obj)
-              throw new PythonException(new String(obj), readerException)
+              throw new PythonException(new String(obj, "utf-8"), readerException)
             case SpecialLengths.END_OF_DATA_SECTION =>
               // We've finished the data section of the output, but we can still
               // read some accumulator updates:
