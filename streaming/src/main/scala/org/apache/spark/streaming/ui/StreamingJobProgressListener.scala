@@ -28,8 +28,8 @@ import org.apache.spark.util.Distribution
 import org.apache.spark.Logging
 
 
-private[ui] class StreamingJobProgressListener(ssc: StreamingContext)
-  extends StreamingListener with Logging {
+private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
+  extends StreamingListener {
 
   private val waitingBatchInfos = new HashMap[Time, BatchInfo]
   private val runningBatchInfos = new HashMap[Time, BatchInfo]
