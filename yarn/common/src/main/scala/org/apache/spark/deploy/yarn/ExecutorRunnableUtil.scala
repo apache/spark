@@ -58,7 +58,6 @@ trait ExecutorRunnableUtil extends Logging {
 
     javaOpts += "-Djava.io.tmpdir=" +
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
-    javaOpts += ClientBase.getLog4jConfiguration(localResources)
 
     // Certain configs need to be passed here because they are needed before the Executor
     // registers with the Scheduler and transfers the spark configs. Since the Executor backend
@@ -166,13 +165,8 @@ trait ExecutorRunnableUtil extends Logging {
 
   def prepareEnvironment: HashMap[String, String] = {
     val env = new HashMap[String, String]()
-
     val extraCp = sparkConf.getOption("spark.executor.extraClassPath")
-    val log4jConf = System.getenv(ClientBase.LOG4J_CONF_ENV_KEY)
-    ClientBase.populateClasspath(yarnConf, sparkConf, log4jConf, env, extraCp)
-    if (log4jConf != null) {
-      env(ClientBase.LOG4J_CONF_ENV_KEY) = log4jConf
-    }
+    ClientBase.populateClasspath(null, yarnConf, sparkConf, env, extraCp)
 
     // Allow users to specify some environment variables
     YarnSparkHadoopUtil.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"),
