@@ -25,7 +25,7 @@ import scala.collection.JavaConversions.mapAsScalaMap
 private[streaming]
 object RawTextHelper {
 
-  /** 
+  /**
    * Splits lines and counts the words.
    */
   def splitAndCountPartitions(iter: Iterator[String]): Iterator[(String, Long)] = {
@@ -103,7 +103,7 @@ object RawTextHelper {
     for(i <- 0 to 1) {
       sc.parallelize(1 to 200000, 1000)
         .map(_ % 1331).map(_.toString)
-        .mapPartitions(splitAndCountPartitions).reduceByKey(_ + _, 10)
+        .mapPartitions(splitAndCountPartitions).reduceByKey((x: Long, y: Long) => x + y, 10)
         .count()
     }
   }
@@ -114,4 +114,3 @@ object RawTextHelper {
 
   def max(v1: Long, v2: Long) = math.max(v1, v2)
 }
-
