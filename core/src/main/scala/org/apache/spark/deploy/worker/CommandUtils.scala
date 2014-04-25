@@ -48,7 +48,13 @@ object CommandUtils extends Logging {
   def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
     // Note, this will coalesce multiple options into a single command component
-    val extraOpts = command.extraJavaOptions.toSeq
+    val extraOpts = command.extraJavaOptions match {
+      case Some(opts) =>
+        opts.split(" ")
+      case _ =>
+        Seq()
+    }
+
     val libraryOpts =
       if (command.libraryPathEntries.size > 0) {
         val joined = command.libraryPathEntries.mkString(File.pathSeparator)
