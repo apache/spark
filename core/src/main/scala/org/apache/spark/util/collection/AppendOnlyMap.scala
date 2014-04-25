@@ -40,6 +40,8 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
 
+  private val LOAD_FACTOR = 0.7
+
   private var capacity = nextPowerOf2(initialCapacity)
   private var mask = capacity - 1
   private var curSize = 0
@@ -56,8 +58,6 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   // Triggered by destructiveSortedIterator; the underlying data array may no longer be used
   private var destroyed = false
   private val destructionMessage = "Map state is invalid from destructive sorting!"
-
-  private val LOAD_FACTOR = 0.7
 
   /** Get the value for a given key */
   def apply(key: K): V = {
