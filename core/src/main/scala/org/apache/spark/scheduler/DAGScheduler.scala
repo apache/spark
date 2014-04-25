@@ -121,19 +121,13 @@ class DAGScheduler(
   private[scheduler] var eventProcessActor: ActorRef = _
 
   private def initializeEventProcessActor() {
-    try {
-      // blocking the thread until supervisor is started, which ensures eventProcessActor is
-      // not null before any job is submitted
-      implicit val timeout = Timeout(30 seconds)
-      val initEventActorReply =
-        dagSchedulerActorSupervisor ? Props(new DAGSchedulerEventProcessActor(this))
-      eventProcessActor = Await.result(initEventActorReply, timeout.duration).
-        asInstanceOf[ActorRef]
-    } catch {
-      case e: Exception =>
-        logError("DAGSchedulerEventProcessActor cannot be initialized, stop SparkContext")
-        sc.stop()
-    }
+    // blocking the thread until supervisor is started, which ensures eventProcessActor is
+    // not null before any job is submitted
+    implicit val timeout = Timeout(30 seconds)
+    val initEventActorReply =
+      dagSchedulerActorSupervisor ? Props(new DAGSchedulerEventProcessActor(this))
+    eventProcessActor = Await.result(initEventActorReply, timeout.duration).
+      asInstanceOf[ActorRef]
   }
 
   initializeEventProcessActor()
