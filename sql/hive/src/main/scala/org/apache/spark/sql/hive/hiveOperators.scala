@@ -76,17 +76,19 @@ case class HiveTableScan(
 
   @transient
   val hadoopReader = new HadoopTableReader(relation.tableDesc, sc)
-  /* TODO:attempt to retrieve a list of column ids that is required
-  // require more work ...  
-  val hadoopReader = { 
-    val cNames: ArrayList[Integer] = getNeededColumnIDs()
-    if (cNames.size() != 0) {
-      ColumnProjectionUtils.appendReadColumnIDs(sc.hiveconf,cNames)
-    } else {
-      ColumnProjectionUtils.setFullyReadColumns(sc.hiveconf)
-    }
-    new HadoopTableReader(relation.tableDesc, sc)
-  }*/
+  /** 
+   * attempt to retrieve a list of column ids that is required
+   * TODO: require more work ...  
+   * val hadoopReader = { 
+   *   val cNames: ArrayList[Integer] = getNeededColumnIDs()
+   *   if (cNames.size() != 0) {
+   *     ColumnProjectionUtils.appendReadColumnIDs(sc.hiveconf,cNames)
+   *   } else {
+   *     ColumnProjectionUtils.setFullyReadColumns(sc.hiveconf)
+   *   }
+   *   new HadoopTableReader(relation.tableDesc, sc)
+   * }
+   */
  
   /**
    * The hive object inspector for this table, which can be used to extract values from the
@@ -183,7 +185,7 @@ case class HiveTableScan(
         len = castedValues.length
         // castedValues represents columns in the row.
         while (i < len) {
-	  val n = castedValues(i)
+          val n = castedValues(i)
           if (n.isInstanceOf[String]) {
             if (n.asInstanceOf[String].toLowerCase == "null") {
               row.setNullAt(i)
@@ -196,9 +198,10 @@ case class HiveTableScan(
           }
           i += 1
         }
-        if (shouldKeep.eval(row).asInstanceOf[Boolean])
+        if (shouldKeep.eval(row).asInstanceOf[Boolean]) {
           filterPartition += part
-	index += 1
+        }
+        index += 1
       }
       filterPartition
     }
