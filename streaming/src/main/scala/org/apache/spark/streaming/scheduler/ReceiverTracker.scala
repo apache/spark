@@ -124,7 +124,8 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
     if (!receiverInputStreamMap.contains(streamId)) {
       throw new Exception("Register received for unexpected id " + streamId)
     }
-    receiverInfo(streamId) = ReceiverInfo(streamId, s"${typ}-${streamId}", receiverActor, true, host)
+    receiverInfo(streamId) = ReceiverInfo(
+      streamId, s"${typ}-${streamId}", receiverActor, true, host)
     ssc.scheduler.listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
     logInfo("Registered receiver for stream " + streamId + " from " + sender.path.address)
   }
