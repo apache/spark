@@ -17,31 +17,108 @@
 
 package org.apache.spark.streaming.kafka;
 
+import java.io.Serializable;
 import java.util.HashMap;
+import java.util.List;
 
-import org.apache.spark.streaming.api.java.JavaPairReceiverInputDStream;
-import org.junit.Test;
-import com.google.common.collect.Maps;
-import kafka.serializer.StringDecoder;
-import org.apache.spark.storage.StorageLevel;
+import scala.Predef;
+import scala.Tuple2;
+import scala.collection.JavaConverters;
+
+import junit.framework.Assert;
+
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
+import org.apache.spark.streaming.api.java.JavaDStream;
+import org.apache.spark.streaming.api.java.JavaPairDStream;
+import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
-public class JavaKafkaStreamSuite extends LocalJavaStreamingContext {
-  @Test
+import org.junit.Test;
+import org.junit.Ignore;
+import org.junit.After;
+import org.junit.Before;
+
+public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements Serializable {
+  private transient KafkaStreamSuite testSuite = new KafkaStreamSuite();
+
+  @Before
+  @Override
+  public void setUp() {
+    testSuite.beforeFunction();
+    System.clearProperty("spark.driver.port");
+    System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock");
+    ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+  }
+
+  @After
+  @Override
+  public void tearDown() {
+    ssc.stop();
+    ssc = null;
+    System.clearProperty("spark.driver.port");
+    testSuite.afterFunction();
+  }
+
+  @Ignore @Test
   public void testKafkaStream() {
-    HashMap<String, Integer> topics = Maps.newHashMap();
+    String topic = "topic1";
+    HashMap<String, Integer> topics = new HashMap<String, Integer>();
+    topics.put(topic, 1);
 
-    // tests the API, does not actually test data receiving
-    JavaPairReceiverInputDStream<String, String> test1 =
-            KafkaUtils.createStream(ssc, "localhost:12345", "group", topics);
-    JavaPairReceiverInputDStream<String, String> test2 = KafkaUtils.createStream(ssc, "localhost:12345", "group", topics,
-      StorageLevel.MEMORY_AND_DISK_SER_2());
+    HashMap<String, Integer> sent = new HashMap<String, Integer>();
+    sent.put("a", 5);
+    sent.put("b", 3);
+    sent.put("c", 10);
 
-    HashMap<String, String> kafkaParams = Maps.newHashMap();
-    kafkaParams.put("zookeeper.connect", "localhost:12345");
-    kafkaParams.put("group.id","consumer-group");
-      JavaPairReceiverInputDStream<String, String> test3 = KafkaUtils.createStream(ssc,
-      String.class, String.class, StringDecoder.class, StringDecoder.class,
-      kafkaParams, topics, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaPairDStream<String, String> stream = KafkaUtils.createStream(ssc,
+        testSuite.zkConnect(),
+        "group",
+        topics);
+
+    final HashMap<String, Long> result = new HashMap<String, Long>();
+
+    JavaDStream<String> words = stream.map(
+      new Function<Tuple2<String, String>, String>() {
+        @Override
+        public String call(Tuple2<String, String> tuple2) throws Exception {
+          return tuple2._2();
+        }
+      }
+    );
+
+    words.countByValue().foreachRDD(
+      new Function<JavaPairRDD<String, Long>, Void>() {
+        @Override
+        public Void call(JavaPairRDD<String, Long> rdd) throws Exception {
+          List<Tuple2<String, Long>> ret = rdd.collect();
+          for (Tuple2<String, Long> r : ret) {
+            if (result.containsKey(r._1())) {
+              result.put(r._1(), result.get(r._1()) + r._2());
+            } else {
+              result.put(r._1(), r._2());
+            }
+          }
+
+          return null;
+        }
+      }
+    );
+
+    ssc.start();
+
+    HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
+    testSuite.produceAndSendTestMessage(topic,
+      JavaConverters.asScalaMapConverter(tmp).asScala().toMap(
+        Predef.<Tuple2<String, Object>>conforms()
+    ));
+
+    ssc.awaitTermination(10000);
+
+    Assert.assertEquals(sent.size(), result.size());
+    for (String k : sent.keySet()) {
+      Assert.assertEquals(sent.get(k).intValue(), result.get(k).intValue());
+    }
   }
 }
