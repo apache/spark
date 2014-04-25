@@ -24,6 +24,7 @@ import org.apache.spark._
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   extends JavaRDDLike[T, JavaRDD[T]] {
@@ -98,7 +99,13 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Int): JavaRDD[T] =
+  def sample(withReplacement: Boolean, fraction: Double): JavaRDD[T] =
+    sample(withReplacement, fraction, Utils.random.nextLong)
+    
+  /**
+   * Return a sampled subset of this RDD.
+   */
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long): JavaRDD[T] =
     wrapRDD(rdd.sample(withReplacement, fraction, seed))
 
   /**

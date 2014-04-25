@@ -30,6 +30,7 @@ from tempfile import NamedTemporaryFile
 from threading import Thread
 import warnings
 import heapq
+from random import Random
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
@@ -332,7 +333,7 @@ class RDD(object):
                    .reduceByKey(lambda x, _: x) \
                    .map(lambda (x, _): x)
 
-    def sample(self, withReplacement, fraction, seed):
+    def sample(self, withReplacement, fraction, seed=None):
         """
         Return a sampled subset of this RDD (relies on numpy and falls back
         on default random generator if numpy is unavailable).
@@ -344,7 +345,7 @@ class RDD(object):
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     # this is ported from scala/spark/RDD.scala
-    def takeSample(self, withReplacement, num, seed):
+    def takeSample(self, withReplacement, num, seed=None):
         """
         Return a fixed-size sampled subset of this RDD (currently requires numpy).
 
@@ -381,13 +382,11 @@ class RDD(object):
         # If the first sample didn't turn out large enough, keep trying to take samples;
         # this shouldn't happen often because we use a big multiplier for their initial size.
         # See: scala/spark/RDD.scala
+        rand = Random(seed)
         while len(samples) < total:
-            if seed > sys.maxint - 2:
-                seed = -1
-            seed += 1
-            samples = self.sample(withReplacement, fraction, seed).collect()
+            samples = self.sample(withReplacement, fraction, rand.randint(0, sys.maxint)).collect()
 
-        sampler = RDDSampler(withReplacement, fraction, seed+1)
+        sampler = RDDSampler(withReplacement, fraction, rand.randint(0, sys.maxint))
         sampler.shuffle(samples)
         return samples[0:total]
 
