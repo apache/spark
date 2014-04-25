@@ -58,7 +58,9 @@ class KryoSerializer(conf: SparkConf)
     // Do this before we invoke the user registrator so the user registrator can override this.
     kryo.setReferences(referenceTracking)
 
-    for (cls <- KryoSerializer.toRegister) kryo.register(cls)
+    for (cls <- KryoSerializer.toRegister) {
+      kryo.register(cls)
+    }
 
     // Allow sending SerializableWritable
     kryo.register(classOf[SerializableWritable[_]], new KryoJavaSerializer())
@@ -77,7 +79,7 @@ class KryoSerializer(conf: SparkConf)
     }
 
     // Register Chill's classes; we do this after our ranges and the user's own classes to let
-    // our code override the generic serialziers in Chill for things like Seq
+    // our code override the generic serializers in Chill for things like Seq
     new AllScalaRegistrar().apply(kryo)
 
     kryo.setClassLoader(classLoader)
@@ -176,10 +178,6 @@ private[serializer] object KryoSerializer {
     classOf[GetBlock],
     classOf[MapStatus],
     classOf[BlockManagerId],
-    classOf[Array[Byte]],
-    (1 to 10).getClass,
-    (1 until 10).getClass,
-    (1L to 10L).getClass,
-    (1L until 10L).getClass
+    classOf[Array[Byte]]
   )
 }
