@@ -381,20 +381,6 @@
         <version>10.4.2.0</version>
       </dependency>
       <dependency>
-        <groupId>net.liftweb</groupId>
-        <artifactId>lift-json_${scala.binary.version}</artifactId>
-        <version>2.5.1</version>
-        <!-- see also exclusion for json4s; this is necessary since it depends on
-             scala-library and scalap 2.10.0, but we use 2.10.4, and only override
-             scala-library -->
-        <exclusions>
-          <exclusion>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scalap</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
         <groupId>com.codahale.metrics</groupId>
         <artifactId>metrics-core</artifactId>
         <version>${codahale.metrics.version}</version>
@@ -851,7 +837,7 @@
       </modules>
 
     </profile>
-    
+
    <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
     <profile>
       <id>hadoop-provided</id>
@@ -896,6 +882,6 @@
         </dependency>
       </dependencies>
     </profile>
-    
+
   </profiles>
 </project>
