@@ -422,8 +422,9 @@ class ExternalAppendOnlyMap[K, V, C](
 private[spark] object ExternalAppendOnlyMap {
   private class KCComparator[K, C] extends Comparator[(K, C)] {
     def compare(kc1: (K, C), kc2: (K, C)): Int = {
-      if (kc1._1.hashCode() < kc2._1.hashCode()) -1
-      else if (kc1._1.hashCode() == kc2._1.hashCode()) 0 else 1
+      val hash1 = kc1._1.hashCode()
+      val hash2 = kc2._1.hashCode()
+      if (hash1 < hash2) -1 else if (hash1 == hash2) 0 else 1
     }
   }
 }
