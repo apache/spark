@@ -238,6 +238,18 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(123) cast IntegerType, 123)
 
     intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
+
+    assert(("abcdef" cast StringType).nullable === false)
+    assert(("abcdef" cast BinaryType).nullable === false)
+    assert(("abcdef" cast BooleanType).nullable === false)
+    assert(("abcdef" cast TimestampType).nullable === true)
+    assert(("abcdef" cast LongType).nullable === true)
+    assert(("abcdef" cast IntegerType).nullable === true)
+    assert(("abcdef" cast ShortType).nullable === true)
+    assert(("abcdef" cast ByteType).nullable === true)
+    assert(("abcdef" cast DecimalType).nullable === true)
+    assert(("abcdef" cast DoubleType).nullable === true)
+    assert(("abcdef" cast FloatType).nullable === true)
   }
 
   test("timestamp") {
