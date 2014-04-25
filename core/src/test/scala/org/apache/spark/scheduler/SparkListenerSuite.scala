@@ -29,7 +29,8 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.executor.TaskMetrics
 
 class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
-    with BeforeAndAfter with BeforeAndAfterAll {
+  with BeforeAndAfter with BeforeAndAfterAll {
+
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
@@ -37,7 +38,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     sc = new SparkContext("local", "SparkListenerSuite")
   }
 
-  override def afterAll {
+  override def afterAll() {
     System.clearProperty("spark.akka.frameSize")
   }
 
