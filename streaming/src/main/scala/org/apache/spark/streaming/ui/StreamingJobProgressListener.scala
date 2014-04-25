@@ -23,9 +23,9 @@ import scala.collection.mutable.{Queue, HashMap}
 import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchStarted
 import org.apache.spark.streaming.scheduler.BatchInfo
-import org.apache.spark.streaming.scheduler.ReceiverInfo
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchSubmitted
 import org.apache.spark.util.Distribution
+import org.apache.spark.Logging
 
 
 private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
@@ -40,9 +40,21 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
 
-  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) = {
+  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
     synchronized {
-      receiverInfos.put(receiverStarted.receiverInfo.streamId, receiverStarted.receiverInfo)
+      receiverInfos(receiverStarted.receiverInfo.streamId) = receiverStarted.receiverInfo
+    }
+  }
+
+  override def onReceiverError(receiverError: StreamingListenerReceiverError) {
+    synchronized {
+      receiverInfos(receiverError.receiverInfo.streamId) = receiverError.receiverInfo
+    }
+  }
+
+  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
+    synchronized {
+      receiverInfos(receiverStopped.receiverInfo.streamId) = receiverStopped.receiverInfo
     }
   }
 

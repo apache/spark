@@ -15,23 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.streaming.scheduler
 
-import java.nio.ByteBuffer
-import org.apache.spark.{SecurityManager, SparkConf}
+import akka.actor.ActorRef
+import org.apache.spark.annotation.DeveloperApi
 
-private[spark] object ReceiverTest {
-  def main(args: Array[String]) {
-    val conf = new SparkConf
-    val manager = new ConnectionManager(9999, conf, new SecurityManager(conf))
-    println("Started connection manager with id = " + manager.id)
-
-    manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
-      /* println("Received [" + msg + "] from [" + id + "] at " + System.currentTimeMillis) */
-      val buffer = ByteBuffer.wrap("response".getBytes("utf-8"))
-      Some(Message.createBufferMessage(buffer, msg.id))
-    })
-    Thread.currentThread.join()
-  }
+/**
+ * :: DeveloperApi ::
+ * Class having information about a receiver
+ */
+@DeveloperApi
+case class ReceiverInfo(
+    streamId: Int,
+    name: String,
+    private[streaming] val actor: ActorRef,
+    active: Boolean,
+    location: String,
+    lastErrorMessage: String = "",
+    lastError: String = ""
+   ) {
 }
-

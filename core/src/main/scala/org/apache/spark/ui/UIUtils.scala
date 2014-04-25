@@ -122,7 +122,7 @@ private[spark] object UIUtils extends Logging {
       }
     }
     if (unit.isEmpty) {
-      "%d".formatLocal(Locale.US, value)
+      "%d".formatLocal(Locale.US, value.toInt)
     } else {
       "%.1f%s".formatLocal(Locale.US, value, unit)
     }
