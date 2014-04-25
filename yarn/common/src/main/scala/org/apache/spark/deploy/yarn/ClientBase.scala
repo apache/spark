@@ -265,6 +265,15 @@ trait ClientBase extends Logging {
     YarnSparkHadoopUtil.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"),
       File.pathSeparator)
 
+    val sparkJavaOpts = System.getenv().get("SPARK_JAVA_OPTS")
+    if (sparkJavaOpts != null) {
+      env("SPARK_JAVA_OPTS") = sparkJavaOpts
+    }
+    val sparkYarnUserEnv = System.getenv().get("SPARK_YARN_USER_ENV")
+    if (sparkYarnUserEnv != null) {
+      env("SPARK_YARN_USER_ENV") = sparkYarnUserEnv
+    }
+
     env
   }
 
@@ -318,6 +327,10 @@ trait ClientBase extends Logging {
       JAVA_OPTS += "-XX:+CMSIncrementalPacing"
       JAVA_OPTS += "-XX:CMSIncrementalDutyCycleMin=0"
       JAVA_OPTS += "-XX:CMSIncrementalDutyCycle=10"
+    }
+
+    if (env.isDefinedAt("SPARK_JAVA_OPTS")) {
+      JAVA_OPTS += env("SPARK_JAVA_OPTS")
     }
 
     // TODO: it might be nicer to pass these as an internal environment variable rather than
