@@ -137,8 +137,8 @@ private[spark] object JettyUtils extends Logging {
     contextHandler
   }
 
-  /** Add security filters, if any, do the given list of ServletContextHandlers */
-  private def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
+  /** Add filters, if any, to the given list of ServletContextHandlers */
+  def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
     val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
     filters.foreach {
       case filter : String =>

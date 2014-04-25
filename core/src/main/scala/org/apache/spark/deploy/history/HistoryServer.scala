@@ -168,17 +168,21 @@ class HistoryServer(
    * directory. If this file exists, the associated application is regarded to be completed, in
    * which case the server proceeds to render the SparkUI. Otherwise, the server does nothing.
    */
-  private def renderSparkUI(logDir: FileStatus, logInfo: EventLoggingInfo) {
+  private def renderSparkUI(logDir: FileStatus, elogInfo: EventLoggingInfo) {
     val path = logDir.getPath
     val appId = path.getName
-    val replayBus = new ReplayListenerBus(logInfo.logPaths, fileSystem, logInfo.compressionCodec)
+    val replayBus = new ReplayListenerBus(elogInfo.logPaths, fileSystem, elogInfo.compressionCodec)
     val appListener = new ApplicationEventListener
     replayBus.addListener(appListener)
-    val ui = new SparkUI(conf, replayBus, appId, "/history/" + appId)
+    val appConf = conf.clone()
+    val appSecManager = new SecurityManager(appConf)
+    val ui = new SparkUI(conf, appSecManager, replayBus, appId, "/history/" + appId)
 
     // Do not call ui.bind() to avoid creating a new server for each application
     replayBus.replay()
     if (appListener.applicationStarted) {
+      appSecManager.setUIAcls(HISTORY_UI_ACLS_ENABLED)
+      appSecManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
       attachSparkUI(ui)
       val appName = appListener.appName
       val sparkUser = appListener.sparkUser
@@ -202,6 +206,7 @@ class HistoryServer(
   private def attachSparkUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach(attachHandler)
+    addFilters(ui.getHandlers, conf)
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
@@ -254,6 +259,9 @@ object HistoryServer {
 
   // The port to which the web UI is bound
   val WEB_UI_PORT = conf.getInt("spark.history.ui.port", 18080)
+
+  // set whether to enable or disable view acls for all applications
+  val HISTORY_UI_ACLS_ENABLED = conf.getBoolean("spark.history.ui.acls.enable", false)
 
   val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 
