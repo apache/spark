@@ -26,7 +26,7 @@ import org.apache.spark.sql.hive.test.TestHive._
  * https://amplab.cs.berkeley.edu/benchmark/
  */
 class BigDataBenchmarkSuite extends HiveComparisonTest {
-  val testDataDirectory = new File("target/big-data-benchmark-testdata")
+  val testDataDirectory = new File("target" + File.separator + "big-data-benchmark-testdata")
 
   val testTables = Seq(
     TestTable(
