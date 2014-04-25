@@ -119,7 +119,9 @@ object SparkSubmit {
 
     if (!deployOnCluster) {
       childMainClass = appArgs.mainClass
-      if (appArgs.primaryResource != RESERVED_JAR_NAME) childClasspath += appArgs.primaryResource
+      if (appArgs.primaryResource != RESERVED_JAR_NAME) {
+        childClasspath += appArgs.primaryResource
+      }
     } else if (clusterManager == YARN) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       childArgs += ("--jar", appArgs.primaryResource)

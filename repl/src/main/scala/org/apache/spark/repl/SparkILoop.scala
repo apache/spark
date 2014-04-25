@@ -965,7 +965,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       case None => {
         val envMaster = sys.env.get("MASTER")
         val propMaster = sys.props.get("spark.master")
-        envMaster.getOrElse(propMaster.getOrElse("local[*]"))
+        envMaster.orElse(propMaster).getOrElse("local[*]")
       }
     }
     master
