@@ -52,7 +52,8 @@ private[spark] class EventLoggingListener(
   private val logBaseDir = conf.get("spark.eventLog.dir", "/tmp/spark-events").stripSuffix("/")
   private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis
   val logDir = logBaseDir + "/" + name
-  val LOG_FILE_PERMISSIONS: FsPermission = FsPermission.createImmutable(0770: Short)
+  val LOG_FILE_PERMISSIONS: FsPermission =
+    FsPermission.createImmutable(Integer.parseInt("770", 8).toShort: Short)
 
   private val logger =
     new FileLogger(logDir, conf, hadoopConfiguration, outputBufferSize, shouldCompress,
