@@ -19,6 +19,8 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
  * or Tachyon, whether to drop the RDD to disk if it falls out of memory or Tachyon , whether to
@@ -142,21 +144,37 @@ object StorageLevel {
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
   val OFF_HEAP = new StorageLevel(false, false, true, false)
 
-  /** Create a new StorageLevel object without setting useOffHeap */
+  /**
+   * :: DeveloperApi ::
+   * Create a new StorageLevel object without setting useOffHeap
+   */
+  @DeveloperApi
   def apply(useDisk: Boolean, useMemory: Boolean, useOffHeap: Boolean,
     deserialized: Boolean, replication: Int) = getCachedStorageLevel(
       new StorageLevel(useDisk, useMemory, useOffHeap, deserialized, replication))
 
-  /** Create a new StorageLevel object */
+  /**
+   * :: DeveloperApi ::
+   * Create a new StorageLevel object
+   */
+  @DeveloperApi
   def apply(useDisk: Boolean, useMemory: Boolean,
     deserialized: Boolean, replication: Int = 1) = getCachedStorageLevel(
       new StorageLevel(useDisk, useMemory, false, deserialized, replication))
 
-  /** Create a new StorageLevel object from its integer representation */
+  /**
+   * :: DeveloperApi ::
+   * Create a new StorageLevel object from its integer representation
+   */
+  @DeveloperApi
   def apply(flags: Int, replication: Int): StorageLevel =
     getCachedStorageLevel(new StorageLevel(flags, replication))
 
-  /** Read StorageLevel object from ObjectInput stream */
+  /**
+   * :: DeveloperApi ::
+   * Read StorageLevel object from ObjectInput stream
+   */
+  @DeveloperApi
   def apply(in: ObjectInput): StorageLevel = {
     val obj = new StorageLevel()
     obj.readExternal(in)
