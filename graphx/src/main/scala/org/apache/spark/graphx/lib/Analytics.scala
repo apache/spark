@@ -51,6 +51,7 @@ object Analytics extends Logging {
     val conf = new SparkConf()
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
+      .set("spark.locality.wait", "100000")
 
     taskType match {
       case "pagerank" =>
