@@ -22,6 +22,7 @@ import org.apache.spark.deploy.yarn.{ApplicationMaster, YarnAllocationHandler}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.yarn.util.RackResolver
 
 /**
  *
@@ -41,7 +42,7 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
   // By default, rack is unknown
   override def getRackForHost(hostPort: String): Option[String] = {
     val host = Utils.parseHostPort(hostPort)._1
-    val retval = YarnAllocationHandler.lookupRack(conf, host)
+    val retval = RackResolver.resolve(conf, host).getNetworkLocation
     if (retval != null) Some(retval) else None
   }
 
