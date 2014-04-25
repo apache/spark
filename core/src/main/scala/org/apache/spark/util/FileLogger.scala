@@ -24,10 +24,10 @@ import java.util.Date
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.io.CompressionCodec
-import org.apache.hadoop.fs.permission.FsPermission
 
 /**
  * A generic class for logging information to file.
@@ -62,12 +62,12 @@ private[spark] class FileLogger(
 
   private var writer: Option[PrintWriter] = None
 
-  createLogDir(dirPermissions)
+  createLogDir()
 
   /**
    * Create a logging directory with the given path.
    */
-  private def createLogDir(dirPerms: Option[FsPermission]) {
+  private def createLogDir() {
     val path = new Path(logDir)
     if (fileSystem.exists(path)) {
       if (overwrite) {
@@ -81,10 +81,10 @@ private[spark] class FileLogger(
     if (!fileSystem.mkdirs(path)) {
       throw new IOException("Error in creating log directory: %s".format(logDir))
     }
-    if (dirPerms.isDefined) {
+    if (dirPermissions.isDefined) {
       val fsStatus = fileSystem.getFileStatus(path)
-      if (fsStatus.getPermission().toShort() != dirPerms.get.toShort()) {
-        fileSystem.setPermission(path, dirPerms.get);
+      if (fsStatus.getPermission().toShort() != dirPermissions.get.toShort()) {
+        fileSystem.setPermission(path, dirPermissions.get);
       }
     }
   }
@@ -110,7 +110,7 @@ private[spark] class FileLogger(
         hadoopDataStream.get
       }
 
-    if (perms.isDefined) fileSystem.setPermission(path, perms.get)
+    perms.foreach {p => fileSystem.setPermission(path, p)}
     val bstream = new BufferedOutputStream(dstream, outputBufferSize)
     val cstream = if (compress) compressionCodec.compressedOutputStream(bstream) else bstream
     new PrintWriter(cstream)
