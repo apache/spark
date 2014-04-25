@@ -28,27 +28,54 @@ import org.apache.spark.storage.StorageLevel
  * Abstract class of a receiver that can be run on worker nodes to receive external data. A
  * custom receiver can be defined by defining the functions onStart() and onStop(). onStart()
  * should define the setup steps necessary to start receiving data,
- * and onStop() should define the cleanup steps necessary to stop receiving data. A custom
- * receiver would look something like this.
+ * and onStop() should define the cleanup steps necessary to stop receiving data.
+ *
+ * A custom receiver in Scala would look like this.
  *
  * @example {{{
  *  class MyReceiver(storageLevel: StorageLevel) extends NetworkReceiver[String](storageLevel) {
- *    def onStart() {
- *      // Setup stuff (start threads, open sockets, etc.) to start receiving data.
- *      // Must start new thread to receive data, as onStart() must be non-blocking.
+ *      def onStart() {
+ *          // Setup stuff (start threads, open sockets, etc.) to start receiving data.
+ *          // Must start new thread to receive data, as onStart() must be non-blocking.
  *
- *      // Call store(...) in those threads to store received data into Spark's memory.
+ *          // Call store(...) in those threads to store received data into Spark's memory.
  *
- *      // Call stop(...), restart() or reportError(...) on any thread based on how
- *      // different errors should be handled.
+ *          // Call stop(...), restart(...) or reportError(...) on any thread based on how
+ *          // different errors needs to be handled.
  *
- *      // See corresponding method documentation for more details
- *    }
+ *          // See corresponding method documentation for more details
+ *      }
  *
- *    def onStop() {
- *      // Cleanup stuff (stop threads, close sockets, etc.) to stop receiving data.
- *    }
+ *      def onStop() {
+ *          // Cleanup stuff (stop threads, close sockets, etc.) to stop receiving data.
+ *      }
  *  }
+ * }}}
+ *
+ * A custom receiver in Java would look like this.
+ *
+ * @example {{{
+ * class MyReceiver extends Receiver<String> {
+ *     public MyReceiver(StorageLevel storageLevel) {
+ *         super(storageLevel);
+ *     }
+ *
+ *     public void onStart() {
+ *          // Setup stuff (start threads, open sockets, etc.) to start receiving data.
+ *          // Must start new thread to receive data, as onStart() must be non-blocking.
+ *
+ *          // Call store(...) in those threads to store received data into Spark's memory.
+ *
+ *          // Call stop(...), restart(...) or reportError(...) on any thread based on how
+ *          // different errors needs to be handled.
+ *
+ *          // See corresponding method documentation for more details
+ *     }
+ *
+ *     public void onStop() {
+ *          // Cleanup stuff (stop threads, close sockets, etc.) to stop receiving data.
+ *     }
+ * }
  * }}}
  */
 abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable {
@@ -153,30 +180,34 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   }
 
   /**
-   * Restart the receiver. This will call `onStop()` immediately and return.
-   * Asynchronously, after a delay, `onStart()` will be called.
+   * Restart the receiver. This method schedules the restart and returns
+   * immediately. The stopping and subsequent starting of the receiver
+   * (by calling `onStop()` and `onStart()`) is performed asynchronously
+   * in a background thread. The delay between the stopping and the starting
+   * is defined by the Spark configuration `spark.streaming.receiverRestartDelay`.
    * The `message` will be reported to the driver.
-   * The delay is defined by the Spark configuration
-   * `spark.streaming.receiverRestartDelay`.
    */
   def restart(message: String) {
     executor.restartReceiver(message)
   }
 
   /**
-   * Restart the receiver. This will call `onStop()` immediately and return.
-   * Asynchronously, after a delay, `onStart()` will be called.
+   * Restart the receiver. This method schedules the restart and returns
+   * immediately. The stopping and subsequent starting of the receiver
+   * (by calling `onStop()` and `onStart()`) is performed asynchronously
+   * in a background thread. The delay between the stopping and the starting
+   * is defined by the Spark configuration `spark.streaming.receiverRestartDelay`.
    * The `message` and `exception` will be reported to the driver.
-   * The delay is defined by the Spark configuration
-   * `spark.streaming.receiverRestartDelay`.
    */
   def restart(message: String, error: Throwable) {
     executor.restartReceiver(message, Some(error))
   }
 
   /**
-   * Restart the receiver. This will call `onStop()` immediately and return.
-   * Asynchronously, after the given delay, `onStart()` will be called.
+   * Restart the receiver. This method schedules the restart and returns
+   * immediately. The stopping and subsequent starting of the receiver
+   * (by calling `onStop()` and `onStart()`) is performed asynchronously
+   * in a background thread.
    */
   def restart(message: String, error: Throwable, millisecond: Int) {
     executor.restartReceiver(message, Some(error), millisecond)
@@ -192,16 +223,23 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
     executor.stop(message, Some(error))
   }
 
+  /** Check if the receiver has started or not. */
   def isStarted(): Boolean = {
     executor.isReceiverStarted()
   }
 
-  /** Check if receiver has been marked for stopping. */
+  /**
+   * Check if receiver has been marked for stopping. Use this to identify when
+   * the receiving of data should be stopped.
+   */
   def isStopped(): Boolean = {
     !executor.isReceiverStarted()
   }
 
-  /** Get unique identifier of this receiver. */
+  /**
+   * Get the unique identifier the receiver input stream that this
+   * receiver is associated with.
+   */
   def streamId = id
 
   /*

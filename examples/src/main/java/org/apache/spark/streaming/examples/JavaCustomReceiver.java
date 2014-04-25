@@ -1,6 +1,7 @@
 package org.apache.spark.streaming.examples;
 
 import com.google.common.collect.Lists;
+
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
@@ -16,6 +17,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.ConnectException;
 import java.net.Socket;
+import java.util.regex.Pattern;
 
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
@@ -30,6 +32,7 @@ import java.net.Socket;
  */
 
 public class JavaCustomReceiver {
+  private static final Pattern SPACE = Pattern.compile(" ");
 
   public static void main(String[] args) {
     if (args.length < 3) {
@@ -52,7 +55,7 @@ public class JavaCustomReceiver {
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
       public Iterable<String> call(String x) {
-        return Lists.newArrayList(" ");
+        return Lists.newArrayList(SPACE.split(x));
       }
     });
     JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
@@ -88,7 +91,6 @@ class JavaSocketReceiver extends Receiver<String> {
     port = port_;
   }
 
-  @Override
   public void onStart() {
     // Start the thread that receives data over a connection
     new Thread()  {
@@ -98,7 +100,6 @@ class JavaSocketReceiver extends Receiver<String> {
     }.start();
   }
 
-  @Override
   public void onStop() {
     // There is nothing much to do as the thread calling receive()
     // is designed to stop by itself isStopped() returns false
@@ -123,6 +124,7 @@ class JavaSocketReceiver extends Receiver<String> {
     } catch(Throwable t) {
       restart("Error receiving data", t);
     }
+    restart("Trying to connect again");
   }
 }
 
