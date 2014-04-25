@@ -20,7 +20,7 @@ package org.apache.spark.mllib.rdd
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
 
 /**
  * Machine learning specific RDD functions.
@@ -43,13 +43,6 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
     } else {
       new SlidingRDD[T](self, windowSize)
     }
-  }
-
-  /**
-   * Returns an RDD with the specified slice of partitions.
-   */
-  def slicePartitions(slice: Seq[Int]): RDD[T] = {
-    new PartitionSlicingRDD(self, slice)
   }
 
   /**
@@ -87,7 +80,7 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
     }
 
     if (nextPowerOfTwo > numPartitions) {
-      new PartitionSlicingRDD(butterfly, 0 until numPartitions)
+      PartitionPruningRDD.create(butterfly, (i) => i < numPartitions)
     } else {
       butterfly
     }

@@ -47,13 +47,6 @@ class RDDFunctionsSuite extends FunSuite with LocalSparkContext {
     assert(sliding.collect().toList === expected)
   }
 
-  test("slicePartitions") {
-    val rdd = sc.parallelize(0 until 10, 10)
-    val slice = Seq(0, 2, 4, 7)
-    val sliced = rdd.slicePartitions(slice)
-    assert(sliced.collect().toSeq === slice)
-  }
-
   test("allReduce") {
     for (numPartitions <- 1 to 10) {
       val rdd = sc.parallelize(0 until 1000, numPartitions)
