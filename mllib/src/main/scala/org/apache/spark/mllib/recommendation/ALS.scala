@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
-import org.apache.spark.mllib.optimization.NNLSbyPCG
+import org.apache.spark.mllib.optimization.NNLS
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
@@ -504,7 +504,7 @@ class ALS private (
       }
     }
 
-    val ws = NNLSbyPCG.createWorkspace(rank)
+    val ws = if (nonnegative) NNLS.createWorkspace(rank) else null
 
     // Solve the least-squares problem for each user and return the new feature vectors
     Array.range(0, numUsers).map { index =>
@@ -526,11 +526,11 @@ class ALS private (
    * to nonnegativity constraints if `nonnegative` is true.
    */
   def solveLeastSquares(ata: DoubleMatrix, atb: DoubleMatrix,
-      ws: NNLSbyPCG.Workspace): Array[Double] = {
+      ws: NNLS.Workspace): Array[Double] = {
     if (!nonnegative) {
       Solve.solvePositive(ata, atb).data
     } else {
-      NNLSbyPCG.solve(ata, atb, true, ws)
+      NNLS.solve(ata, atb, ws)
     }
   }
 
@@ -566,7 +566,7 @@ object ALS {
    * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
    * product of two lower-rank matrices of a given rank (number of features). To solve for these
    * features, we run a given number of iterations of ALS. This is done using a level of
-   * parallelism given by `blocks`, partitioning the data using the Partitioner `partitioner`.
+   * parallelism given by `blocks`.
    *
    * @param ratings     RDD of (userID, productID, rating) pairs
    * @param rank        number of features to use
@@ -574,7 +574,7 @@ object ALS {
    * @param lambda      regularization factor (recommended: 0.01)
    * @param blocks      level of parallelism to split computation into
    * @param seed        random seed
-   * @param nonnegative Whether to impose nonnegativity constraints
+   * @param nonnegative whether to impose nonnegativity constraints
    */
   def train(
       ratings: RDD[Rating],
@@ -585,7 +585,7 @@ object ALS {
       seed: Long,
       nonnegative: Boolean) = {
     val als = new ALS(blocks, rank, iterations, lambda, false, 1.0, seed)
-    if (nonnegative) als.setNonnegative(true)
+    als.setNonnegative(nonnegative)
     als.run(ratings)
   }
 

@@ -21,14 +21,11 @@ import org.jblas.{DoubleMatrix, SimpleBlas}
 
 import org.apache.spark.annotation.DeveloperApi
 
-
 /**
- * :: DeveloperApi ::
  * Object used to solve nonnegative least squares problems using a modified
  * projected gradient method.
  */
-@DeveloperApi
-private[mllib] object NNLSbyPCG {
+private[mllib] object NNLS {
   class Workspace(val n: Int) {
     val scratch = new DoubleMatrix(n, 1)
     val grad = new DoubleMatrix(n, 1)
@@ -38,16 +35,12 @@ private[mllib] object NNLSbyPCG {
     val res = new DoubleMatrix(n, 1)
 
     def wipe() {
-      var i: Int = 0
-      while (i < n) {
-        scratch.data(i) = 0.0
-        grad.data(i) = 0.0
-        x.data(i) = 0.0
-        dir.data(i) = 0.0
-        lastDir.data(i) = 0.0
-        res.data(i) = 0.0
-        i = i + 1
-      }
+      scratch.fill(0.0)
+      grad.fill(0.0)
+      x.fill(0.0)
+      dir.fill(0.0)
+      lastDir.fill(0.0)
+      res.fill(0.0)
     }
   }
 
@@ -61,7 +54,7 @@ private[mllib] object NNLSbyPCG {
    *
    * We solve the problem
    *   min_x      1/2 x^T ata x^T - x^T atb
-   *   subject to x >= 0 (if nonnegative == true)
+   *   subject to x >= 0
    *
    * The method used is similar to one described by Polyak (B. T. Polyak, The conjugate gradient
    * method in extremal problems, Zh. Vychisl. Mat. Mat. Fiz. 9(4)(1969), pp. 94-112) for bound-
@@ -69,8 +62,7 @@ private[mllib] object NNLSbyPCG {
    * direction, however, while this method only uses a conjugate gradient direction if the last
    * iteration did not cause a previously-inactive constraint to become active.
    */
-  def solve(ata: DoubleMatrix, atb: DoubleMatrix, nonnegative: Boolean,
-      ws: Workspace): Array[Double] = {
+  def solve(ata: DoubleMatrix, atb: DoubleMatrix, ws: Workspace): Array[Double] = {
     ws.wipe()
 
     val n = atb.rows
@@ -86,7 +78,7 @@ private[mllib] object NNLSbyPCG {
 
     // stopping condition
     def stop(step: Double, ndir: Double, nx: Double): Boolean = {
-        ((step != step) // NaN
+        ((step.isNaN) // NaN
       || (step < 1e-6) // too small or negative
       || (step > 1e40) // too small; almost certainly numerical problems
       || (ndir < 1e-12 * nx) // gradient relatively too small
@@ -111,14 +103,12 @@ private[mllib] object NNLSbyPCG {
       SimpleBlas.copy(res, grad)
 
       // project the gradient
-      if (nonnegative) {
-        i = 0
-        while (i < n) {
-          if (grad.data(i) > 0.0 && x.data(i) == 0.0) {
-            grad.data(i) = 0.0
-          }
-          i = i + 1
+      i = 0
+      while (i < n) {
+        if (grad.data(i) > 0.0 && x.data(i) == 0.0) {
+          grad.data(i) = 0.0
         }
+        i = i + 1
       }
       val ngrad = SimpleBlas.dot(grad, grad)
 
@@ -150,24 +140,20 @@ private[mllib] object NNLSbyPCG {
       }
 
       // don't run through the walls
-      if (nonnegative) {
-        i = 0
-        while (i < n) {
-          if (step * dir.data(i) > x.data(i)) {
-            step = Math.min(step, x.data(i) / dir.data(i))
-          }
-          i = i + 1
+      i = 0
+      while (i < n) {
+        if (step * dir.data(i) > x.data(i)) {
+          step = x.data(i) / dir.data(i)
         }
+        i = i + 1
       }
 
       // take the step
       i = 0
       while (i < n) {
-        if (nonnegative) {
-          if (step * dir.data(i) > x.data(i) * (1 - 1e-14)) {
-            x.data(i) = 0
-            lastWall = iterno
-          } else x.data(i) -= step * dir.data(i)
+        if (step * dir.data(i) > x.data(i) * (1 - 1e-14)) {
+          x.data(i) = 0
+          lastWall = iterno
         } else {
           x.data(i) -= step * dir.data(i)
         }

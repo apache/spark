@@ -43,20 +43,20 @@ class NNLSSuite extends FunSuite {
     (ata, atb)
   }
 
-  test("NNLSbyPCG: exact solution cases") {
+  test("NNLS: exact solution cases") {
     val n = 20
     val rand = new Random(12346)
-    val ws = NNLSbyPCG.createWorkspace(n)
+    val ws = NNLS.createWorkspace(n)
     var numSolved = 0
 
-    // About 15% of random 20x20 [-1,1]-matrices have a singular value less than 1e-3.  NNLSbyPCG
+    // About 15% of random 20x20 [-1,1]-matrices have a singular value less than 1e-3.  NNLS
     // can legitimately fail to solve these anywhere close to exactly.  So we grab a considerable
     // sample of these matrices and make sure that we solved a substantial fraction of them.
 
     for (kase <- 0 until 100) {
       val (ata, atb) = genOnesData(n, rand)
-      val x = NNLSbyPCG.solve(ata, atb, true, ws)
-      assert(x.length == n)
+      val x = NNLS.solve(ata, atb, ws)
+      assert(x.length === n)
       var error = 0.0
       var solved = true
       for (i <- 0 until n) {
@@ -66,12 +66,11 @@ class NNLSSuite extends FunSuite {
       if (error > 1e-2) solved = false
       if (solved) numSolved = numSolved + 1
     }
-    println(numSolved)
 
     assert(numSolved > 50)
   }
 
-  test("NNLSbyPCG: nonnegativity constraint active") {
+  test("NNLS: nonnegativity constraint active") {
     val n = 5
     val M = Array(
       Array( 4.377, -3.531, -1.306, -0.139,  3.418, -1.632),
@@ -86,10 +85,11 @@ class NNLSSuite extends FunSuite {
 
     val goodx = Array(0.13025, 0.54506, 0.2874, 0.0, 0.028628)
 
-    val ws = NNLSbyPCG.createWorkspace(n)
-    val x = NNLSbyPCG.solve(ata, atb, true, ws)
+    val ws = NNLS.createWorkspace(n)
+    val x = NNLS.solve(ata, atb, ws)
     for (i <- 0 until n) {
       assert(Math.abs(x(i) - goodx(i)) < 1e-3)
+      assert(x(i) >= 0)
     }
   }
 }
