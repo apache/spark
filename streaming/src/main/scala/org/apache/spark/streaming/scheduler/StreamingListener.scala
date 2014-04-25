@@ -20,28 +20,45 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable.Queue
 
 import org.apache.spark.util.Distribution
+import org.apache.spark.annotation.DeveloperApi
 
-/** Base trait for events related to StreamingListener */
+/**
+ * :: DeveloperApi ::
+ * Base trait for events related to StreamingListener
+ */
+@DeveloperApi
 sealed trait StreamingListenerEvent
 
+@DeveloperApi
 case class StreamingListenerBatchSubmitted(batchInfo: BatchInfo) extends StreamingListenerEvent
+
+@DeveloperApi
 case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends StreamingListenerEvent
+
+@DeveloperApi
 case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent
 
-case class StreamingListenerReceiverStarted(streamId: Int, typ: String, location: String)
+@DeveloperApi
+case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent
-case class StreamingListenerReceiverError(streamId: Int, message: String, error: String)
+
+@DeveloperApi
+case class StreamingListenerReceiverError(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent
-case class StreamingListenerReceiverStopped(streamId: Int, message: String, error: String)
+
+@DeveloperApi
+case class StreamingListenerReceiverStopped(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent
 
 /** An event used in the listener to shutdown the listener daemon thread. */
 private[scheduler] case object StreamingListenerShutdown extends StreamingListenerEvent
 
 /**
+ * :: DeveloperApi ::
  * A listener interface for receiving information about an ongoing streaming
  * computation.
  */
+@DeveloperApi
 trait StreamingListener {
 
   /** Called when a receiver has been started */
@@ -65,9 +82,11 @@ trait StreamingListener {
 
 
 /**
+ * :: DeveloperApi ::
  * A simple StreamingListener that logs summary statistics across Spark Streaming batches
  * @param numBatchInfos Number of last batches to consider for generating statistics (default: 10)
  */
+@DeveloperApi
 class StatsReportListener(numBatchInfos: Int = 10) extends StreamingListener {
   // Queue containing latest completed batches
   val batchInfos = new Queue[BatchInfo]()

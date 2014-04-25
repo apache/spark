@@ -15,15 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.ui
+package org.apache.spark.streaming.scheduler
 
-/** Class having information about a receiver */
+import akka.actor.ActorRef
+import org.apache.spark.annotation.DeveloperApi
+
+/**
+ * :: DeveloperApi ::
+ * Class having information about a receiver
+ */
+@DeveloperApi
 case class ReceiverInfo(
     streamId: Int,
     name: String,
-    var active: Boolean,
-    var location: String = "",
-    var lastErrorMessage: String = "",
-    var lastError: String = ""
+    private[streaming] val actor: ActorRef,
+    active: Boolean,
+    location: String,
+    lastErrorMessage: String = "",
+    lastError: String = ""
    ) {
 }

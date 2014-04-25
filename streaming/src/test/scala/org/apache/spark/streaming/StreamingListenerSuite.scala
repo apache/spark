@@ -25,7 +25,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.ui.ReceiverInfo
 
 import org.scalatest.matchers.ShouldMatchers
 import org.scalatest.concurrent.Eventually._
@@ -66,7 +65,7 @@ class StreamingListenerSuite extends TestSuiteBase with ShouldMatchers {
 
   test("receiver info reporting") {
     val ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
-    val inputStream = ssc.networkStream(new StreamingListenerSuiteReceiver)
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)
 
     val collector = new ReceiverInfoCollector
@@ -113,15 +112,16 @@ class ReceiverInfoCollector extends StreamingListener {
   val receiverErrors = new ArrayBuffer[(Int, String, String)]()
 
   override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
-    startedReceiverStreamIds += receiverStarted.streamId
+    startedReceiverStreamIds += receiverStarted.receiverInfo.streamId
   }
 
   override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
-    stoppedReceiverStreamIds += receiverStopped.streamId
+    stoppedReceiverStreamIds += receiverStopped.receiverInfo.streamId
   }
 
   override def onReceiverError(receiverError: StreamingListenerReceiverError) {
-    receiverErrors += ((receiverError.streamId, receiverError.message, receiverError.error))
+    receiverErrors += ((receiverError.receiverInfo.streamId,
+      receiverError.receiverInfo.lastErrorMessage, receiverError.receiverInfo.lastError))
   }
 }
 

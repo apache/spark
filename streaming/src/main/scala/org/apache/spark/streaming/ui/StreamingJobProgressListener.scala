@@ -42,48 +42,19 @@ private[ui] class StreamingJobProgressListener(ssc: StreamingContext)
 
   override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
     synchronized {
-      receiverInfos(receiverStarted.streamId) = ReceiverInfo(receiverStarted.streamId,
-        s"${receiverStarted.typ}-${receiverStarted.streamId}", true, receiverStarted.location)
+      receiverInfos(receiverStarted.receiverInfo.streamId) = receiverStarted.receiverInfo
     }
   }
 
   override def onReceiverError(receiverError: StreamingListenerReceiverError) {
     synchronized {
-      val newReceiverInfo = receiverInfos.get(receiverError.streamId) match {
-        case Some(oldInfo) =>
-          oldInfo.copy(lastErrorMessage = receiverError.message, lastError = receiverError.error)
-        case None =>
-          logWarning("No prior receiver info")
-          ReceiverInfo(
-            receiverError.streamId,
-            "", true, "",
-            lastErrorMessage = receiverError.message,
-            lastError = receiverError.error
-          )
-      }
-      receiverInfos(receiverError.streamId) = newReceiverInfo
+      receiverInfos(receiverError.receiverInfo.streamId) = receiverError.receiverInfo
     }
   }
 
   override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
     synchronized {
-      val newReceiverInfo = receiverInfos.get(receiverStopped.streamId) match {
-        case Some(oldInfo) =>
-          oldInfo.copy(
-            active = false,
-            lastErrorMessage = receiverStopped.message,
-            lastError = receiverStopped.error
-          )
-        case None =>
-          logWarning("No prior receiver info")
-          ReceiverInfo(
-            receiverStopped.streamId,
-            "", true, "",
-            lastErrorMessage = receiverStopped.message,
-            lastError = receiverStopped.error
-          )
-      }
-      receiverInfos(receiverStopped.streamId) = newReceiverInfo
+      receiverInfos(receiverStopped.receiverInfo.streamId) = receiverStopped.receiverInfo
     }
   }
 
