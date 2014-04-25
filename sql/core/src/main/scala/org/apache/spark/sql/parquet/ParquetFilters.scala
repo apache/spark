@@ -51,11 +51,15 @@ object ParquetFilters {
       case BooleanType =>
         ComparisonFilter.createBooleanFilter(name, literal.value.asInstanceOf[Boolean], predicate)
       case IntegerType =>
-        ComparisonFilter.createIntFilter(name, (x: Int) =>
-          x == literal.value.asInstanceOf[Int], predicate)
+        ComparisonFilter.createIntFilter(
+          name,
+          (x: Int) => x == literal.value.asInstanceOf[Int],
+          predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(name, (x: Long) =>
-          x == literal.value.asInstanceOf[Long], predicate)
+        ComparisonFilter.createLongFilter(
+          name,
+          (x: Long) => x == literal.value.asInstanceOf[Long],
+          predicate)
       case DoubleType =>
         ComparisonFilter.createDoubleFilter(
           name,
@@ -74,11 +78,15 @@ object ParquetFilters {
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
       case IntegerType =>
-        ComparisonFilter.createIntFilter(name, (x: Int) =>
-          x < literal.value.asInstanceOf[Int], predicate)
+        ComparisonFilter.createIntFilter(
+          name,
+          (x: Int) => x < literal.value.asInstanceOf[Int],
+          predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(name, (x: Long) =>
-          x < literal.value.asInstanceOf[Long], predicate)
+        ComparisonFilter.createLongFilter(
+          name,
+          (x: Long) => x < literal.value.asInstanceOf[Long],
+          predicate)
       case DoubleType =>
         ComparisonFilter.createDoubleFilter(
           name,
@@ -95,11 +103,15 @@ object ParquetFilters {
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
       case IntegerType =>
-        ComparisonFilter.createIntFilter(name, (x: Int) =>
-          x <= literal.value.asInstanceOf[Int], predicate)
+        ComparisonFilter.createIntFilter(
+          name,
+          (x: Int) => x <= literal.value.asInstanceOf[Int],
+          predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(name, (x: Long) =>
-          x <= literal.value.asInstanceOf[Long], predicate)
+        ComparisonFilter.createLongFilter(
+          name,
+          (x: Long) => x <= literal.value.asInstanceOf[Long],
+          predicate)
       case DoubleType =>
         ComparisonFilter.createDoubleFilter(
           name,
@@ -117,11 +129,15 @@ object ParquetFilters {
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
       case IntegerType =>
-        ComparisonFilter.createIntFilter(name, (x: Int) =>
-          x > literal.value.asInstanceOf[Int], predicate)
+        ComparisonFilter.createIntFilter(
+          name,
+          (x: Int) => x > literal.value.asInstanceOf[Int],
+          predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(name, (x: Long) =>
-          x > literal.value.asInstanceOf[Long], predicate)
+        ComparisonFilter.createLongFilter(
+          name,
+          (x: Long) => x > literal.value.asInstanceOf[Long],
+          predicate)
       case DoubleType =>
         ComparisonFilter.createDoubleFilter(
           name,
@@ -138,11 +154,14 @@ object ParquetFilters {
         literal: Literal,
         predicate: CatalystPredicate) = literal.dataType match {
       case IntegerType =>
-        ComparisonFilter.createIntFilter(name, (x: Int) =>
-          x >= literal.value.asInstanceOf[Int], predicate)
+        ComparisonFilter.createIntFilter(
+          name, (x: Int) => x >= literal.value.asInstanceOf[Int],
+          predicate)
       case LongType =>
-        ComparisonFilter.createLongFilter(name, (x: Long) =>
-          x >= literal.value.asInstanceOf[Long], predicate)
+        ComparisonFilter.createLongFilter(
+          name,
+          (x: Long) => x >= literal.value.asInstanceOf[Long],
+          predicate)
       case DoubleType =>
         ComparisonFilter.createDoubleFilter(
           name,
