@@ -71,7 +71,7 @@ object KafkaWordCount {
 object KafkaWordCountProducer {
 
   def main(args: Array[String]) {
-    if (args.length < 2) {
+    if (args.length < 4) {
       System.err.println("Usage: KafkaWordCountProducer <metadataBrokerList> <topic> " +
         "<messagesPerSec> <wordsPerMessage>")
       System.exit(1)
