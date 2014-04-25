@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.Context
+import org.apache.hadoop.hive.ql.metadata.Partition
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Hive}
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
@@ -39,8 +40,10 @@ import org.apache.spark.{SparkHiveHadoopWriter, TaskContext, SparkException}
 /* Implicits */
 import scala.collection.JavaConversions._
 import scala.collection.mutable
+import scala.util.control._
 /* java library */ 
 import java.util.ArrayList
+
 
 /**
  * The Hive table scan operator.  Column and partition pruning are both handled.
@@ -72,6 +75,9 @@ case class HiveTableScan(
   }
 
   @transient
+  val hadoopReader = new HadoopTableReader(relation.tableDesc, sc)
+  /* TODO:attempt to retrieve a list of column ids that is required
+  // require more work ...  
   val hadoopReader = { 
     val cNames: ArrayList[Integer] = getNeededColumnIDs()
     if (cNames.size() != 0) {
@@ -80,7 +86,8 @@ case class HiveTableScan(
       ColumnProjectionUtils.setFullyReadColumns(sc.hiveconf)
     }
     new HadoopTableReader(relation.tableDesc, sc)
-  }
+  }*/
+ 
   /**
    * The hive object inspector for this table, which can be used to extract values from the
    * serialized row representation.
@@ -90,56 +97,46 @@ case class HiveTableScan(
     relation.tableDesc.getDeserializer.getObjectInspector.asInstanceOf[StructObjectInspector]
 
   /** attempt to retrieve a list of column ids that is required ... used by ColumnProjectionUtils */
-  private def getNeededColumnIDs() : ArrayList[Integer] = { 
+  private def getNeededColumnIDs() : ArrayList[Integer] = {
     val names: ArrayList[Integer] = new ArrayList[Integer]()
     var i = 0
     val len = relation.attributes.length
     while(i < len) {
-      for(a <- attributes) { 
+      for(a <- attributes) {
         if(a.name == relation.attributes(i).name) {
           names.add(i)
         }
       }
-      i += 1 
-    } 
+      i += 1
+    }
     names
-  }  
+  }
   /**
    * Functions that extract the requested attributes from the hive output.  Partitioned values are
    * casted from string to its declared data type.
    */
   @transient
   protected lazy val attributeFunctions: Seq[(Any, Array[String]) => Any] = {
-    val len = attributes.length 
-    /** newList ArrayBuffer + while loop created to simulate functionality of
-     *  attributes.map(...) .... performance reason.    
-     */
-    val newList = mutable.ArrayBuffer[(Any, Array[String]) => Any]()
-    var i = 0
-    while (i < len) {
-      val a: Attribute = attributes(i)
+    attributes.map { a =>
       val ordinal = relation.partitionKeys.indexOf(a)
       if (ordinal >= 0) {
-        newList += ( (_: Any, partitionKeys: Array[String]) => {
-                       val value = partitionKeys(ordinal)
-                       val dataType = relation.partitionKeys(ordinal).dataType
-                       castFromString(value, dataType)
-                     }
-                   )
+        (_: Any, partitionKeys: Array[String]) => {
+          val value = partitionKeys(ordinal)
+          val dataType = relation.partitionKeys(ordinal).dataType
+          castFromString(value, dataType)
+        }
       } else {
         val ref = objectInspector.getAllStructFieldRefs
           .find(_.getFieldName == a.name)
           .getOrElse(sys.error(s"Can't find attribute $a"))
-          newList += ( (row: Any, _: Array[String]) => {
-                         val data = objectInspector.getStructFieldData(row, ref)
-                         unwrapData(data, ref.getFieldObjectInspector)
-                       }
-                     )
+        (row: Any, _: Array[String]) => {
+          val data = objectInspector.getStructFieldData(row, ref)
+          unwrapData(data, ref.getFieldObjectInspector)
+        }
       }
-      i+=1
     }
-    newList
   }
+ 
 
   private def castFromString(value: String, dataType: DataType) = {
     Cast(Literal(value), dataType).eval(null)
@@ -162,13 +159,19 @@ case class HiveTableScan(
     /** mutable row implementation to avoid creating row instance at
      *  each iteration inside the while loop.
      */
-    val row = new GenericMutableRow(attributes.length)
-    boundPruningPred match {
-      case None => partitions
-      case Some(shouldKeep) => partitions.filter { part =>
-        val castedValues = mutable.ArrayBuffer[Any]()
+    var row = new GenericMutableRow(relation.partitionKeys.length)
+    if (boundPruningPred == None) {
+      partitions
+    } else {
+      val shouldKeep:Expression = boundPruningPred.get 
+      val partitionSize = partitions.length
+      var index = 0
+      var filterPartition = mutable.ListBuffer[HivePartition]()
+      while (index < partitionSize) { 
+        val part = partitions(index)
         var i = 0
         var len = relation.partitionKeys.length
+        var castedValues = mutable.ListBuffer[Any]()
         val iter: Iterator[String] = part.getValues.iterator
         while (i < len) {
           castedValues += castFromString(iter.next,relation.partitionKeys(i).dataType)
@@ -180,66 +183,75 @@ case class HiveTableScan(
         len = castedValues.length
         // castedValues represents columns in the row.
         while (i < len) {
-          castedValues(i) match {
-            case n: String if n.toLowerCase == "null" => row.setNullAt(i)
-            case n: Boolean => row.setBoolean(i,n)
-            case n: Byte => row.setByte(i,n)
-            case n: Double => row.setDouble(i,n)
-            case n: Float => row.setFloat(i,n)
-            case n: Int => row.setInt(i,n)
-            case n: Long => row.setLong(i,n)
-            case n: String  => row.setString(i,n)
-            case n: Short  => row.setShort(i,n)
-            case other => row.update(i,other)
+	  val n = castedValues(i)
+          if (n.isInstanceOf[String]) {
+            if (n.asInstanceOf[String].toLowerCase == "null") {
+              row.setNullAt(i)
+            } else {
+              row.setString(i,n.asInstanceOf[String])
+            }
+          }
+          else {
+            row.update(i,n)
           }
           i += 1
         }
-        shouldKeep.eval(row).asInstanceOf[Boolean]
+        if (shouldKeep.eval(row).asInstanceOf[Boolean])
+          filterPartition += part
+	index += 1
       }
+      filterPartition
     }
   }
+  /**
+   * A custom Iterator class passed to mapPartitions() at execute() method.  
+   */     
+  class MyIterator(iter: Iterator[_],mutableRow: GenericMutableRow) extends Iterator[Row] {
 
+    def hasNext = iter.hasNext
+    def next = {
+      val row = iter.next()
+      val values = row match {
+        case Array(deserializedRow: AnyRef, partitionKeys: Array[String]) =>
+          attributeFunctions.map(_(deserializedRow, partitionKeys))
+        case deserializedRow: AnyRef =>
+          attributeFunctions.map(_(deserializedRow, Array.empty))
+      } 
+      var i = 0
+      val len = values.length
+      while ( i < len ) {
+        val n = values(i)
+        if(n.isInstanceOf[String]){
+          if(n.asInstanceOf[String].toLowerCase == "null"){
+            mutableRow.setNullAt(i)
+          }else{
+            mutableRow.setString(i,n.asInstanceOf[String])
+          }
+        }
+        else if(n.isInstanceOf[HiveVarchar]){
+          mutableRow.update(i,n.asInstanceOf[HiveVarchar].getValue)
+        }
+        else if(n.isInstanceOf[HiveDecimal]){
+          mutableRow.update(i,BigDecimal(n.asInstanceOf[HiveDecimal].bigDecimalValue))
+        }
+        else{
+          mutableRow.update(i,n)
+        }
+        i += 1
+      }
+      mutableRow
+    }
+  }
+   
   def execute() = {
     /**
-     *  mutableRow is GenericMutableRow type and only created once.
-     *  mutableRow is upadted at each iteration inside the while loop. 
+     *  mutableRow is GenericMutableRow type and only created once per partition. 
      */ 
-    val mutableRow = new GenericMutableRow(attributes.length) 
-    var i = 0
-    
-    var res = inputRdd.context.runJob(inputRdd,(iter: Iterator[_]) => {
-      /** rddBuffer keeps track of all the transformed rows.
-       *  needed later to create finalRdd 
-       */ 
-      val rddBuffer = mutable.ArrayBuffer[Row]()
-      while (iter.hasNext) {
-        val row = iter.next()
-        val values = row match {
-          case Array(deserializedRow: AnyRef, partitionKeys: Array[String]) =>
-            attributeFunctions.map(_(deserializedRow, partitionKeys))
-          case deserializedRow: AnyRef =>
-            attributeFunctions.map(_(deserializedRow, Array.empty))
-        }
-        i = 0
-        val len = values.length
-        while ( i < len ) {
-          values(i) match {
-            case n: String if n.toLowerCase == "null" => mutableRow.setNullAt(i)
-            case varchar: org.apache.hadoop.hive.common.`type`.HiveVarchar => 
-              mutableRow.update(i,varchar.getValue)
-            case decimal: org.apache.hadoop.hive.common.`type`.HiveDecimal =>
-              mutableRow.update(i,BigDecimal(decimal.bigDecimalValue))
-            case other => mutableRow.update(i,other)
-          }
-          i += 1
-        }
-        rddBuffer +=  mutableRow
-      }
-      rddBuffer
+    inputRdd.mapPartitions((iter: Iterator[_]) => { 
+      var mutableRow = new GenericMutableRow(attributes.length)
+      new  MyIterator(iter,mutableRow)
     })
-    /** finalRdd ... equivelant to Rdd generated from inputRdd.map(...) */
-    val finalRdd = inputRdd.context.makeRDD(res(0))
-    finalRdd
+    
   }
   def output = attributes
 }
