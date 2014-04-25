@@ -50,7 +50,7 @@ object CommandUtils extends Logging {
     // Note, this will coalesce multiple options into a single command component
     val extraOpts = command.extraJavaOptions match {
       case Some(opts) =>
-        opts.split(" ").toSeq
+        opts.split("\\s+").toSeq
       case _ =>
         Seq()
     }
