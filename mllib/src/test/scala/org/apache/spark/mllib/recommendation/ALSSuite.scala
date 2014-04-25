@@ -179,12 +179,9 @@ class ALSSuite extends FunSuite with LocalSparkContext {
   {
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
       features, samplingRate, implicitPrefs, negativeWeights, negativeFactors)
-    val model = implicitPrefs match {
-      case false => ALS.train(sc.parallelize(sampledRatings), features, iterations, 0.01,
-          numBlocks, 0L, !negativeFactors)
-      case true => ALS.trainImplicit(sc.parallelize(sampledRatings), features, iterations, 0.01,
-          numBlocks, 1.0, 0L, !negativeFactors)
-    }
+
+    val model = (new ALS(numBlocks, features, iterations, 0.01, implicitPrefs, 1.0).setSeed(0L)
+          .setNonnegative(!negativeFactors).run(sc.parallelize(sampledRatings)))
 
     val predictedU = new DoubleMatrix(users, features)
     for ((u, vec) <- model.userFeatures.collect(); i <- 0 until features) {
