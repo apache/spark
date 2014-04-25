@@ -31,7 +31,6 @@ set -o posix
 
 if [[ "$@" == *--help* ]]; then
   echo "Usage: ./bin/spark-shell [options]"
-  echo "This is a thin wrapper on ./bin/spark-submit. Its options are:"
   ./bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   exit 0
 fi

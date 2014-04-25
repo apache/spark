@@ -42,7 +42,7 @@ object SparkSubmit {
    * A special jar name that indicates the class being run is inside of Spark itself,
    * and therefore no user jar is needed.
    */
-  private val reservedJarName = "spark-internal"
+  private val RESERVED_JAR_NAME = "spark-internal"
 
   def main(args: Array[String]) {
     val appArgs = new SparkSubmitArguments(args)
@@ -119,7 +119,7 @@ object SparkSubmit {
 
     if (!deployOnCluster) {
       childMainClass = appArgs.mainClass
-      if (appArgs.primaryResource != reservedJarName) childClasspath += appArgs.primaryResource
+      if (appArgs.primaryResource != RESERVED_JAR_NAME) childClasspath += appArgs.primaryResource
     } else if (clusterManager == YARN) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       childArgs += ("--jar", appArgs.primaryResource)
