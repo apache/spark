@@ -229,7 +229,7 @@ private[spark] object HttpBroadcast extends Logging {
       val (file, time) = (entry.getKey, entry.getValue)
       if (time < cleanupTime) {
         iterator.remove()
-        deleteBroadcastFile(new File(file.getCanonicalPath))
+        deleteBroadcastFile(new File(file))
       }
     }
   }
