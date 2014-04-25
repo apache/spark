@@ -29,5 +29,10 @@ class PythonRDDSuite extends FunSuite {
         PythonRDD.writeIteratorToStream(input.iterator, buffer)
     }
 
+    test("Handle nulls gracefully") {
+        val input: List[String] = List("a",null)
+        val buffer = new DataOutputStream(new ByteArrayOutputStream)
+        PythonRDD.writeIteratorToStream(input.iterator, buffer)
+    }
 }
 

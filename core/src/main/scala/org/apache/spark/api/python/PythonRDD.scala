@@ -245,7 +245,7 @@ private object SpecialLengths {
   val TIMING_DATA = -3
 }
 
-private[spark] object PythonRDD {
+private[spark] object PythonRDD extends Logging {
   val UTF8 = Charset.forName("UTF-8")
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
@@ -301,15 +301,25 @@ private[spark] object PythonRDD {
               throw new SparkException("Unexpected Tuple2 element type " + pair._1.getClass)
           }
         case other =>
-          throw new SparkException("Unexpected element type " + first.getClass)
+          Option(other) match {
+            case None =>
+              logDebug("Encountered NULL element from iterator. We skip writing NULL to stream.")
+            case Some(x) =>
+              throw new SparkException("Unexpected element type " + first.getClass)
+          }
       }
     }
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
-    val bytes = str.getBytes(UTF8)
-    dataOut.writeInt(bytes.length)
-    dataOut.write(bytes)
+    Option(str) match {
+      case None =>
+        logDebug("Encountered NULL string. We skip writing NULL to stream.")
+      case Some(x) =>
+        val bytes = x.getBytes(UTF8)
+        dataOut.writeInt(bytes.length)
+        dataOut.write(bytes)
+    }
   }
 
   def writeToFile[T](items: java.util.Iterator[T], filename: String) {
