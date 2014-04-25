@@ -301,22 +301,20 @@ private[spark] object PythonRDD extends Logging {
               throw new SparkException("Unexpected Tuple2 element type " + pair._1.getClass)
           }
         case other =>
-          Option(other) match {
-            case None =>
-              logDebug("Encountered NULL element from iterator. We skip writing NULL to stream.")
-            case Some(x) =>
-              throw new SparkException("Unexpected element type " + first.getClass)
+          if (other == null) {
+            logDebug("Encountered NULL element from iterator. We skip writing NULL to stream.")
+          } else {
+            throw new SparkException("Unexpected element type " + first.getClass)
           }
       }
     }
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
-    Option(str) match {
-      case None =>
-        logDebug("Encountered NULL string. We skip writing NULL to stream.")
-      case Some(x) =>
-        val bytes = x.getBytes(UTF8)
+    if (str == null) {
+      logDebug("Encountered NULL string. We skip writing NULL to stream.")
+    } else {
+        val bytes = str.getBytes(UTF8)
         dataOut.writeInt(bytes.length)
         dataOut.write(bytes)
     }
