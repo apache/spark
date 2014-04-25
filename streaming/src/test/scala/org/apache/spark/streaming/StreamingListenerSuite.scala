@@ -66,7 +66,7 @@ class StreamingListenerSuite extends TestSuiteBase with ShouldMatchers {
 
   test("receiver info reporting") {
     val ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
-    val inputStream = ssc.networkStream(new StreamingListenerSuiteReceiver)
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)
 
     val collector = new ReceiverInfoCollector
