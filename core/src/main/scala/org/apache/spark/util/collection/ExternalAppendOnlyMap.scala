@@ -337,8 +337,8 @@ class ExternalAppendOnlyMap[K, V, C](
       }
 
       override def compareTo(other: StreamBuffer): Int = {
-        // minus sign because mutable.PriorityQueue dequeues the max, not the min
-        -minKeyHash.compareTo(other.minKeyHash)
+        // descending order because mutable.PriorityQueue dequeues the max, not the min
+        if (other.minKeyHash < minKeyHash) -1 else if (other.minKeyHash == minKeyHash) 0 else 1
       }
     }
   }
@@ -422,7 +422,8 @@ class ExternalAppendOnlyMap[K, V, C](
 private[spark] object ExternalAppendOnlyMap {
   private class KCComparator[K, C] extends Comparator[(K, C)] {
     def compare(kc1: (K, C), kc2: (K, C)): Int = {
-      kc1._1.hashCode().compareTo(kc2._1.hashCode())
+      if (kc1._1.hashCode() < kc2._1.hashCode()) -1
+      else if (kc1._1.hashCode() == kc2._1.hashCode()) 0 else 1
     }
   }
 }
