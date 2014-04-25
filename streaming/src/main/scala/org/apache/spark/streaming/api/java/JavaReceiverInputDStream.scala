@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.api.java
 
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.streaming.dstream.ReceiverInputDStream

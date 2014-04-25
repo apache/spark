@@ -195,6 +195,7 @@ private[spark] object JettyUtils extends Logging {
           (server, server.getConnectors.head.getLocalPort)
         case f: Failure[_] =>
           server.stop()
+          pool.stop()
           logInfo("Failed to create UI at port, %s. Trying again.".format(currentPort))
           logInfo("Error was: " + f.toString)
           connect((currentPort + 1) % 65536)

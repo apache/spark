@@ -292,7 +292,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     if (keyClass.isArray && partitioner.isInstanceOf[HashPartitioner]) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
-    if (self.partitioner == partitioner) self else new ShuffledRDD[K, V, (K, V)](self, partitioner)
+    if (self.partitioner == Some(partitioner)) {
+      self
+    } else {
+      new ShuffledRDD[K, V, (K, V)](self, partitioner)
+    }
   }
 
   /**

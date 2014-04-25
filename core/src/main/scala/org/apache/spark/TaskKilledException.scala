@@ -15,27 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.api.java
-
-import scala.language.implicitConversions
-import scala.reflect.ClassTag
-
-import org.apache.spark.streaming.dstream.InputDStream
+package org.apache.spark
 
 /**
- * A Java-friendly interface to [[org.apache.spark.streaming.dstream.InputDStream]].
+ * Exception for a task getting killed.
  */
-class JavaInputDStream[T](val inputDStream: InputDStream[T])
-  (implicit override val classTag: ClassTag[T]) extends JavaDStream[T](inputDStream) {
-}
-
-object JavaInputDStream {
-  /**
-   * Convert a scala [[org.apache.spark.streaming.dstream.InputDStream]] to a Java-friendly
-   * [[org.apache.spark.streaming.api.java.JavaInputDStream]].
-   */
-  implicit def fromInputDStream[T: ClassTag](
-      inputDStream: InputDStream[T]): JavaInputDStream[T] = {
-    new JavaInputDStream[T](inputDStream)
-  }
-}
+private[spark] class TaskKilledException extends RuntimeException

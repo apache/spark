@@ -240,8 +240,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
         if (hasLocationPreferences) {
           val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
           ssc.sc.makeRDD[Receiver[_]](receiversWithPreferences)
-        }
-        else {
+        } else {
           ssc.sc.makeRDD(receivers, receivers.size)
         }
 
