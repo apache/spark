@@ -93,7 +93,7 @@ case class Rating(val user: Int, val product: Int, val rating: Double)
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-class ALS (
+class ALS private (
     private var numBlocks: Int,
     private var rank: Int,
     private var iterations: Int,
