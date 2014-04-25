@@ -246,7 +246,7 @@ class EdgePartition[
    *
    * @return size of the partition
    */
-  def size: Int = srcIds.size
+  val size: Int = srcIds.size
 
   /** The number of unique source vertices in the partition. */
   def indexSize: Int = index.size
