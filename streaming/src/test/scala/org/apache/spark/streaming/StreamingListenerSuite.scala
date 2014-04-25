@@ -75,8 +75,8 @@ class StreamingListenerSuite extends TestSuiteBase with ShouldMatchers {
     ssc.start()
     try {
       eventually(timeout(1000 millis), interval(20 millis)) {
-        collector.startedReceiverInfo should have size 1
-        collector.startedReceiverInfo(0).streamId should equal (0)
+        collector.startedReceiverStreamIds.size should be >= 1
+        collector.startedReceiverStreamIds(0) should equal (0)
         collector.stoppedReceiverStreamIds should have size 1
         collector.stoppedReceiverStreamIds(0) should equal (0)
         collector.receiverErrors should have size 1
@@ -108,20 +108,21 @@ class BatchInfoCollector extends StreamingListener {
 
 /** Listener that collects information on processed batches */
 class ReceiverInfoCollector extends StreamingListener {
-  val startedReceiverInfo = new ArrayBuffer[ReceiverInfo]
+  val startedReceiverStreamIds = new ArrayBuffer[Int]
   val stoppedReceiverStreamIds = new ArrayBuffer[Int]()
   val receiverErrors = new ArrayBuffer[(Int, String, String)]()
 
   override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
-    startedReceiverInfo += receiverStarted.receiverInfo
+    startedReceiverStreamIds += receiverStarted.receiverInfo.streamId
   }
 
   override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
-    stoppedReceiverStreamIds += receiverStopped.streamId
+    stoppedReceiverStreamIds += receiverStopped.receiverInfo.streamId
   }
 
   override def onReceiverError(receiverError: StreamingListenerReceiverError) {
-    receiverErrors += ((receiverError.streamId, receiverError.message, receiverError.error))
+    receiverErrors += ((receiverError.receiverInfo.streamId,
+      receiverError.receiverInfo.lastErrorMessage, receiverError.receiverInfo.lastError))
   }
 }
 

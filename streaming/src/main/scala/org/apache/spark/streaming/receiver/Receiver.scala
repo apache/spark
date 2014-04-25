@@ -23,8 +23,10 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.annotation.DeveloperApi
 
 /**
+ * :: DeveloperApi ::
  * Abstract class of a receiver that can be run on worker nodes to receive external data. A
  * custom receiver can be defined by defining the functions onStart() and onStop(). onStart()
  * should define the setup steps necessary to start receiving data,
@@ -78,6 +80,7 @@ import org.apache.spark.storage.StorageLevel
  * }
  * }}}
  */
+@DeveloperApi
 abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable {
 
   /**
@@ -233,7 +236,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * the receiving of data should be stopped.
    */
   def isStopped(): Boolean = {
-    !executor.isReceiverStarted()
+    executor.isReceiverStopped()
   }
 
   /**
