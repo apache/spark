@@ -97,6 +97,14 @@ class SparkEnv (
       pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
     }
   }
+
+  private[spark]
+  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String]) {
+    synchronized {
+      val key = (pythonExec, envVars)
+      pythonWorkers(key).stop()
+    }
+  }
 }
 
 object SparkEnv extends Logging {

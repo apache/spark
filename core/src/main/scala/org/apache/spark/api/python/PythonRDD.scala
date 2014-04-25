@@ -110,13 +110,41 @@ private[spark] class PythonRDD[T: ClassTag](
       }
     }.start()
 
+    // Necessary to distinguish between a task that has failed and a task that is finished
+    @volatile var complete: Boolean = false
+
+    // It is necessary to have a monitor thread for python workers if the user cancels with
+    // interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
+    // threads can block indefinitely.
+    new Thread(s"Worker Monitor for $pythonExec") {
+      override def run() {
+        // Kill the worker if it is interrupted or completed
+        // When a python task completes, the context is always set to interupted
+        while (!context.interrupted) {
+          Thread.sleep(2000)
+        }
+        if (!complete) {
+          try {
+            logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
+            env.destroyPythonWorker(pythonExec, envVars.toMap)
+          } catch {
+            case e: Exception =>
+              logError("Exception when trying to kill worker", e)
+          }
+        }
+      }
+    }.start()
+
     /*
      * Partial fix for SPARK-1019: Attempts to stop reading the input stream since
      * other completion callbacks might invalidate the input. Because interruption
      * is not synchronous this still leaves a potential race where the interruption is
      * processed only after the stream becomes invalid.
      */
-    context.addOnCompleteCallback(() => context.interrupted = true)
+    context.addOnCompleteCallback{ () =>
+      complete = true // Indicate that the task has completed successfully
+      context.interrupted = true
+    }
 
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
