@@ -46,12 +46,18 @@ trait PredicateHelper {
     }
   }
 
-  private def combineConjunctivePredicates(predicates: Seq[Expression]) =
-    predicates.reduceLeft(And)
-
-  /** Returns true if `expr` can be evaluated using only the output of `plan`. */
+  /**
+   * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
+   * can be used to determine when is is acceptable to move expression evaluation within a query
+   * plan.
+   *
+   * For example consider a join between two relations R(a, b) and S(c, d).
+   *
+   * `canEvaluate(Equals(a,b), R)` returns `true` where as `canEvaluate(Equals(a,c), R)` returns
+   * `false`.
+   */
   protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
-    expr.references subsetOf plan.outputSet
+    expr.references.subsetOf(plan.outputSet)
 }
 
 abstract class BinaryPredicate extends BinaryExpression with Predicate {

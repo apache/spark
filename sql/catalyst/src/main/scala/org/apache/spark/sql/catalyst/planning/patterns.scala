@@ -109,7 +109,7 @@ object PhysicalOperation extends PredicateHelper {
  * techniques.  For inner joins, any filters on top of the join operator are also matched.
  */
 object HashFilteredJoin extends Logging with PredicateHelper {
-  /** (joinType, rightKeys, leftKeys, condition, left, right) */
+  /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
   type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
 
@@ -136,8 +136,8 @@ object HashFilteredJoin extends Logging with PredicateHelper {
     }
 
     val joinKeys = joinPredicates.map {
-      case Equals(l,r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
-      case Equals(l,r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
+      case Equals(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
+      case Equals(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
     }
 
     // Do not consider this strategy if there are no join keys.

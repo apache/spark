@@ -30,6 +30,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object HashJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // Find inner joins where at least some predicates can be evaluated by matching hash keys
+      // using the HashFilteredJoin pattern.
       case HashFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
         val hashJoin =
           execution.HashJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
