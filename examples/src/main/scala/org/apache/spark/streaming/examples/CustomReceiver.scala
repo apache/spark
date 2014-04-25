@@ -32,7 +32,7 @@ import org.apache.spark.streaming.receiver.Receiver
  *
  * Usage: CustomReceiver <master> <hostname> <port>
  *   <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
- *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive data.
+ *   <hostname> and <port> of the TCP server that Spark Streaming would connect to receive data.
  *
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
