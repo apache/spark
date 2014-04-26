@@ -114,8 +114,8 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 import sqlContext._
 
 // Define the schema using a case class.
-// note: now caseclass has 22 fields limit, you can use class that implements the Product interface 
-// to support table with more than 22 fields;
+// Note: Case classes in Scala 2.10 can support only up to 22 fields. To work around this limit,
+// you can use custom classes that implements the Product interface.
 case class Person(name: String, age: Int)
 
 // Create an RDD of Person objects and register it as a table.
