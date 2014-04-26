@@ -41,7 +41,7 @@ public class JavaReceiverAPISuite implements Serializable {
   public void testReceiver() throws InterruptedException {
     TestServer server = new TestServer(0);
     server.start();
-    final AtomicInteger batchCounter = new AtomicInteger(0);
+
     final AtomicLong dataCounter = new AtomicLong(0);
 
     try {
@@ -57,9 +57,8 @@ public class JavaReceiverAPISuite implements Serializable {
       mapped.foreachRDD(new Function<JavaRDD<String>, Void>() {
         @Override
         public Void call(JavaRDD<String> rdd) throws Exception {
-          batchCounter.incrementAndGet();
-          dataCounter.addAndGet(rdd.count());
-          return null;
+        dataCounter.addAndGet(rdd.count());
+        return null;
         }
       });
 
@@ -72,7 +71,7 @@ public class JavaReceiverAPISuite implements Serializable {
         server.send("" + i + "\n"); // \n to make sure these are separate lines
         Thread.sleep(50);
       }
-      while (batchCounter.get() == 0 && System.currentTimeMillis() - startTime < timeout) {
+      while (dataCounter.get() == 0 && System.currentTimeMillis() - startTime < timeout) {
         Thread.sleep(100);
       }
       ssc.stop();
