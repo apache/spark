@@ -73,30 +73,34 @@ the bin directory. This script takes care of setting up the classpath with Spark
 dependencies, and can support different cluster managers and deploy modes that Spark supports.
 It's usage is
 
-    ./bin/spark-submit <app jar> --class path.to.your.Class [other options..]
+    ./bin/spark-submit --class path.to.your.Class [options] <app jar> [app options]
 
-To enumerate all options available to `spark-submit` run it with the `--help` flag.
-Here are a few examples of common options:
+When calling Spark submit `[app options]` will be passed along to your application's 
+main class. To enumerate all options available to `spark-submit` run it with 
+the `--help` flag. Here are a few examples of common options:
 
 {% highlight bash %}
 # Run application locally
-./bin/spark-submit my-app.jar \
+./bin/spark-submit \
   --class my.main.ClassName
-  --master local[8]
+  --master local[8] \
+  my-app.jar
 
 # Run on a Spark cluster
-./bin/spark-submit my-app.jar \
+./bin/spark-submit \
   --class my.main.ClassName
   --master spark://mycluster:7077 \
   --executor-memory 20G \
-  --total-executor-cores 100
+  --total-executor-cores 100 \
+  my-app.jar
 
 # Run on a YARN cluster
-HADOOP_CONF_DIR=XX /bin/spark-submit my-app.jar \
+HADOOP_CONF_DIR=XX /bin/spark-submit \
   --class my.main.ClassName
   --master yarn-cluster \  # can also be `yarn-client` for client mode
   --executor-memory 20G \
-  --num-executors 50
+  --num-executors 50 \
+  my-app.jar
 {% endhighlight %}
 
 ### Loading Configurations from a File
