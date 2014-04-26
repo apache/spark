@@ -201,9 +201,10 @@ case class InsertIntoParquetTable(
    * Stores the given Row RDD as a Hadoop file.
    *
    * Note: We cannot use ``saveAsNewAPIHadoopFile`` from [[org.apache.spark.rdd.PairRDDFunctions]]
-   * together with [[org.apache.spark.util.MutablePair]] because ``PairRDDFunctions`` uses ``Tuple2``
-   * and not ``Product2``. Also, we want to allow appending files to an existing directory and need
-   * to determine which was the largest written file index before starting to write.
+   * together with [[org.apache.spark.util.MutablePair]] because ``PairRDDFunctions`` uses
+   * ``Tuple2`` and not ``Product2``. Also, we want to allow appending files to an existing
+   * directory and need to determine which was the largest written file index before starting to
+   * write.
    *
    * @param rdd The [[org.apache.spark.rdd.RDD]] to writer
    * @param path The directory to write to.
