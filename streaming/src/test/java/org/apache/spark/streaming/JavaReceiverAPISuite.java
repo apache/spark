@@ -41,6 +41,7 @@ public class JavaReceiverAPISuite implements Serializable {
   public void testReceiver() throws InterruptedException {
     TestServer server = new TestServer(0);
     server.start();
+    System.out.println("Server started on " + server.port());
 
     final AtomicLong dataCounter = new AtomicLong(0);
 
@@ -69,6 +70,7 @@ public class JavaReceiverAPISuite implements Serializable {
       Thread.sleep(1000);
       for (int i = 0; i < 6; i++) {
         server.send("" + i + "\n"); // \n to make sure these are separate lines
+        System.out.println("Sent " + i);
         Thread.sleep(50);
       }
       while (dataCounter.get() == 0 && System.currentTimeMillis() - startTime < timeout) {
@@ -113,13 +115,16 @@ class JavaSocketReceiver extends Receiver<String> {
       BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
       String userInput;
       while ((userInput = in.readLine()) != null) {
+        System.out.println("Received " + userInput);
         store(userInput);
       }
       in.close();
       socket.close();
     } catch(ConnectException ce) {
+      ce.printStackTrace();
       restart("Could not connect", ce);
     } catch(Throwable t) {
+      t.printStackTrace();
       restart("Error receiving data", t);
     }
   }
