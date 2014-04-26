@@ -54,7 +54,7 @@ private[spark] object SenderTest {
       val responseStr = manager.sendMessageReliablySync(targetConnectionManagerId, dataMessage)
         .map { response =>
           val buffer = response.asInstanceOf[BufferMessage].buffers(0)
-          new String(buffer.array)
+          new String(buffer.array, "utf-8")
         }.getOrElse("none")
 
       val finishTime = System.currentTimeMillis

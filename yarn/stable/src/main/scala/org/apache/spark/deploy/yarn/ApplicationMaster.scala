@@ -42,6 +42,9 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
 
+/**
+ * An application master that runs the user's driver program and allocates executors.
+ */
 class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
                         sparkConf: SparkConf) extends Logging {
 
@@ -347,8 +350,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
       logInfo("finishApplicationMaster with " + status)
       if (registered) {
-        // Set tracking URL to empty since we don't have a history server.
-        amClient.unregisterApplicationMaster(status, "" /* appMessage */ , "" /* appTrackingUrl */)
+        val trackingUrl = sparkConf.get("spark.yarn.historyServer.address", "")
+        amClient.unregisterApplicationMaster(status, diagnostics, trackingUrl)
       }
     }
   }

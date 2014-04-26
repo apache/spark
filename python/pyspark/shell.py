@@ -22,7 +22,7 @@ This file is designed to be launched as a PYTHONSTARTUP script.
 """
 
 import sys
-if sys.version_info.major != 2:
+if sys.version_info[0] != 2:
     print("Error: Default Python used is Python%s" % sys.version_info.major)
     print("\tSet env variable PYSPARK_PYTHON to Python2 binary and re-run it.")
     sys.exit(1)
@@ -53,7 +53,7 @@ print("Using Python version %s (%s, %s)" % (
     platform.python_version(),
     platform.python_build()[0],
     platform.python_build()[1]))
-    print("Spark context available as sc.")
+print("SparkContext available as sc.")
 
 if add_files != None:
     print("Adding files: [%s]" % ", ".join(add_files))

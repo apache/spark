@@ -35,7 +35,7 @@ USER_NAME=pwendell
 
 set -e
 
-GIT_TAG=v$RELEASE_VERSION
+GIT_TAG=v$RELEASE_VERSION-$RC_NAME
 
 # Artifact publishing
 
@@ -83,16 +83,15 @@ rm -rf spark-$RELEASE_VERSION
 
 make_binary_release() {
   NAME=$1
-  MAVEN_FLAGS=$2
-
+  FLAGS=$2
   cp -r spark spark-$RELEASE_VERSION-bin-$NAME
+  
   cd spark-$RELEASE_VERSION-bin-$NAME
-  export MAVEN_OPTS="-Xmx3g -XX:MaxPermSize=1g -XX:ReservedCodeCacheSize=1g"
-  mvn $MAVEN_FLAGS -DskipTests clean package
-  find . -name test-classes -type d | xargs rm -rf
-  find . -name classes -type d | xargs rm -rf
+  ./make-distribution.sh $FLAGS --name $NAME --tgz
   cd ..
-  tar cvzf spark-$RELEASE_VERSION-bin-$NAME.tgz spark-$RELEASE_VERSION-bin-$NAME
+  cp spark-$RELEASE_VERSION-bin-$NAME/spark-$RELEASE_VERSION-bin-$NAME.tgz .
+  rm -rf spark-$RELEASE_VERSION-bin-$NAME
+
   echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --armour \
     --output spark-$RELEASE_VERSION-bin-$NAME.tgz.asc \
     --detach-sig spark-$RELEASE_VERSION-bin-$NAME.tgz
@@ -102,19 +101,18 @@ make_binary_release() {
   echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --print-md \
     SHA512 spark-$RELEASE_VERSION-bin-$NAME.tgz > \
     spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
-  rm -rf spark-$RELEASE_VERSION-bin-$NAME
 }
 
-make_binary_release "hadoop1"  "-Dhadoop.version=1.0.4"
-make_binary_release "cdh4"     "-Dhadoop.version=2.0.0-mr1-cdh4.2.0"
-make_binary_release "hadoop2"  "-Pyarn -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0"
+make_binary_release "hadoop1" "--hadoop 1.0.4"
+make_binary_release "cdh4" "--hadoop 2.0.0-mr1-cdh4.2.0"
+make_binary_release "hadoop2" "--with-yarn --hadoop 2.2.0"
 
 # Copy data
 echo "Copying release tarballs"
 ssh $USER_NAME@people.apache.org \
   mkdir /home/$USER_NAME/public_html/spark-$RELEASE_VERSION-$RC_NAME
 rc_folder=spark-$RELEASE_VERSION-$RC_NAME
-scp spark* \
+scp spark-* \
   $USER_NAME@people.apache.org:/home/$USER_NAME/public_html/$rc_folder/
 
 # Docs

@@ -148,6 +148,7 @@ class SparkContext(config: SparkConf) extends Logging {
     this(master, appName, sparkHome, jars, Map(), Map())
 
   private[spark] val conf = config.clone()
+  conf.validateSettings()
 
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
@@ -159,7 +160,7 @@ class SparkContext(config: SparkConf) extends Logging {
     throw new SparkException("A master URL must be set in your configuration")
   }
   if (!conf.contains("spark.app.name")) {
-    throw new SparkException("An application must be set in your configuration")
+    throw new SparkException("An application name must be set in your configuration")
   }
 
   if (conf.getBoolean("spark.logConf", false)) {
@@ -170,11 +171,11 @@ class SparkContext(config: SparkConf) extends Logging {
   conf.setIfMissing("spark.driver.host", Utils.localHostName())
   conf.setIfMissing("spark.driver.port", "0")
 
-  val jars: Seq[String] = if (conf.contains("spark.jars")) {
-    conf.get("spark.jars").split(",").filter(_.size != 0)
-  } else {
-    null
-  }
+  val jars: Seq[String] =
+    conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
+
+  val files: Seq[String] =
+    conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
 
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
@@ -215,82 +216,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val ui = new SparkUI(this)
   ui.bind()
 
-  // Optionally log Spark events
-  private[spark] val eventLogger: Option[EventLoggingListener] = {
-    if (conf.getBoolean("spark.eventLog.enabled", false)) {
-      val logger = new EventLoggingListener(appName, conf)
-      logger.start()
-      listenerBus.addListener(logger)
-      Some(logger)
-    } else None
-  }
-
-  // At this point, all relevant SparkListeners have been registered, so begin releasing events
-  listenerBus.start()
-
-  val startTime = System.currentTimeMillis()
-
-  // Add each JAR given through the constructor
-  if (jars != null) {
-    jars.foreach(addJar)
-  }
-
-  private def warnSparkMem(value: String): String = {
-    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
-      "deprecated, please use spark.executor.memory instead.")
-    value
-  }
-
-  private[spark] val executorMemory = conf.getOption("spark.executor.memory")
-    .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
-    .orElse(Option(System.getenv("SPARK_MEM")).map(warnSparkMem))
-    .map(Utils.memoryStringToMb)
-    .getOrElse(512)
-
-  // Environment variables to pass to our executors
-  private[spark] val executorEnvs = HashMap[String, String]()
-  for (key <- Seq("SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS");
-      value <- Option(System.getenv(key))) {
-    executorEnvs(key) = value
-  }
-  // Convert java options to env vars as a work around
-  // since we can't set env vars directly in sbt.
-  for { (envKey, propKey) <- Seq(("SPARK_HOME", "spark.home"), ("SPARK_TESTING", "spark.testing"))
-    value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
-    executorEnvs(envKey) = value
-  }
-  // The Mesos scheduler backend relies on this environment variable to set executor memory.
-  // TODO: Set this only in the Mesos scheduler.
-  executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
-  executorEnvs ++= conf.getExecutorEnv
-
-  // Set SPARK_USER for user who is running SparkContext.
-  val sparkUser = Option {
-    Option(System.getProperty("user.name")).getOrElse(System.getenv("SPARK_USER"))
-  }.getOrElse {
-    SparkContext.SPARK_UNKNOWN_USER
-  }
-  executorEnvs("SPARK_USER") = sparkUser
-
-  // Create and start the scheduler
-  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
-  taskScheduler.start()
-
-  @volatile private[spark] var dagScheduler = new DAGScheduler(this)
-  dagScheduler.start()
-
-  private[spark] val cleaner: Option[ContextCleaner] = {
-    if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
-      Some(new ContextCleaner(this))
-    } else {
-      None
-    }
-  }
-  cleaner.foreach(_.start())
-
-  postEnvironmentUpdate()
-  postApplicationStart()
-
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration: Configuration = {
     val env = SparkEnv.get
@@ -313,6 +238,84 @@ class SparkContext(config: SparkConf) extends Logging {
     hadoopConf.set("io.file.buffer.size", bufferSize)
     hadoopConf
   }
+
+  // Optionally log Spark events
+  private[spark] val eventLogger: Option[EventLoggingListener] = {
+    if (conf.getBoolean("spark.eventLog.enabled", false)) {
+      val logger = new EventLoggingListener(appName, conf, hadoopConfiguration)
+      logger.start()
+      listenerBus.addListener(logger)
+      Some(logger)
+    } else None
+  }
+
+  // At this point, all relevant SparkListeners have been registered, so begin releasing events
+  listenerBus.start()
+
+  val startTime = System.currentTimeMillis()
+
+  // Add each JAR given through the constructor
+  if (jars != null) {
+    jars.foreach(addJar)
+  }
+
+  if (files != null) {
+    files.foreach(addFile)
+  }
+
+  private def warnSparkMem(value: String): String = {
+    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
+      "deprecated, please use spark.executor.memory instead.")
+    value
+  }
+
+  private[spark] val executorMemory = conf.getOption("spark.executor.memory")
+    .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
+    .orElse(Option(System.getenv("SPARK_MEM")).map(warnSparkMem))
+    .map(Utils.memoryStringToMb)
+    .getOrElse(512)
+
+  // Environment variables to pass to our executors.
+  // NOTE: This should only be used for test related settings.
+  private[spark] val testExecutorEnvs = HashMap[String, String]()
+
+  // Convert java options to env vars as a work around
+  // since we can't set env vars directly in sbt.
+  for { (envKey, propKey) <- Seq(("SPARK_TESTING", "spark.testing"))
+    value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
+    testExecutorEnvs(envKey) = value
+  }
+  // The Mesos scheduler backend relies on this environment variable to set executor memory.
+  // TODO: Set this only in the Mesos scheduler.
+  testExecutorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
+  testExecutorEnvs ++= conf.getExecutorEnv
+
+  // Set SPARK_USER for user who is running SparkContext.
+  val sparkUser = Option {
+    Option(System.getProperty("user.name")).getOrElse(System.getenv("SPARK_USER"))
+  }.getOrElse {
+    SparkContext.SPARK_UNKNOWN_USER
+  }
+  testExecutorEnvs("SPARK_USER") = sparkUser
+
+  // Create and start the scheduler
+  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
+  taskScheduler.start()
+
+  @volatile private[spark] var dagScheduler = new DAGScheduler(this)
+  dagScheduler.start()
+
+  private[spark] val cleaner: Option[ContextCleaner] = {
+    if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
+      Some(new ContextCleaner(this))
+    } else {
+      None
+    }
+  }
+  cleaner.foreach(_.start())
+
+  postEnvironmentUpdate()
+  postApplicationStart()
 
   private[spark] var checkpointDir: Option[String] = None
 
@@ -378,16 +381,27 @@ class SparkContext(config: SparkConf) extends Logging {
    * // In a separate thread:
    * sc.cancelJobGroup("some_job_to_cancel")
    * }}}
+   *
+   * If interruptOnCancel is set to true for the job group, then job cancellation will result
+   * in Thread.interrupt() being called on the job's executor threads. This is useful to help ensure
+   * that the tasks are actually stopped in a timely manner, but is off by default due to HDFS-1208,
+   * where HDFS may respond to Thread.interrupt() by marking nodes as dead.
    */
-  def setJobGroup(groupId: String, description: String) {
+  def setJobGroup(groupId: String, description: String, interruptOnCancel: Boolean = false) {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, description)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
+    // Note: Specifying interruptOnCancel in setJobGroup (rather than cancelJobGroup) avoids
+    // changing several public APIs and allows Spark cancellations outside of the cancelJobGroup
+    // APIs to also take advantage of this property (e.g., internal job failures or canceling from
+    // JobProgressTab UI) on a per-job basis.
+    setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, interruptOnCancel.toString)
   }
 
   /** Clear the current thread's job group ID and its description. */
   def clearJobGroup() {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
+    setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, null)
   }
 
   // Post init
@@ -427,9 +441,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
-  def textFile(path: String, minSplits: Int = defaultMinSplits): RDD[String] = {
+  def textFile(path: String, minPartitions: Int = defaultMinPartitions): RDD[String] = {
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
-      minSplits).map(pair => pair._2.toString)
+      minPartitions).map(pair => pair._2.toString)
   }
 
   /**
@@ -457,9 +471,10 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
    *
-   * @param minSplits A suggestion value of the minimal splitting number for input data.
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  def wholeTextFiles(path: String, minSplits: Int = defaultMinSplits): RDD[(String, String)] = {
+  def wholeTextFiles(path: String, minPartitions: Int = defaultMinPartitions):
+  RDD[(String, String)] = {
     val job = new NewHadoopJob(hadoopConfiguration)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updateConf = job.getConfiguration
@@ -469,7 +484,7 @@ class SparkContext(config: SparkConf) extends Logging {
       classOf[String],
       classOf[String],
       updateConf,
-      minSplits)
+      minPartitions)
   }
 
   /**
@@ -481,7 +496,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param inputFormatClass Class of the InputFormat
    * @param keyClass Class of the keys
    * @param valueClass Class of the values
-   * @param minSplits Minimum number of Hadoop Splits to generate.
+   * @param minPartitions Minimum number of Hadoop Splits to generate.
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
@@ -493,11 +508,11 @@ class SparkContext(config: SparkConf) extends Logging {
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int = defaultMinSplits
+      minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
     // Add necessary security credentials to the JobConf before broadcasting it.
     SparkHadoopUtil.get.addCredentials(conf)
-    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
+    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minPartitions)
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
@@ -512,7 +527,7 @@ class SparkContext(config: SparkConf) extends Logging {
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int = defaultMinSplits
+      minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
@@ -524,7 +539,7 @@ class SparkContext(config: SparkConf) extends Logging {
       inputFormatClass,
       keyClass,
       valueClass,
-      minSplits)
+      minPartitions)
   }
 
   /**
@@ -532,7 +547,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * values and the InputFormat so that users don't need to pass them directly. Instead, callers
    * can just write, for example,
    * {{{
-   * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path, minSplits)
+   * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path, minPartitions)
    * }}}
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
@@ -541,13 +556,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * a `map` function.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]]
-      (path: String, minSplits: Int)
+      (path: String, minPartitions: Int)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
     hadoopFile(path,
       fm.runtimeClass.asInstanceOf[Class[F]],
       km.runtimeClass.asInstanceOf[Class[K]],
       vm.runtimeClass.asInstanceOf[Class[V]],
-      minSplits)
+      minPartitions)
   }
 
   /**
@@ -565,7 +580,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
-    hadoopFile[K, V, F](path, defaultMinSplits)
+    hadoopFile[K, V, F](path, defaultMinPartitions)
 
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
@@ -626,10 +641,10 @@ class SparkContext(config: SparkConf) extends Logging {
   def sequenceFile[K, V](path: String,
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int
+      minPartitions: Int
       ): RDD[(K, V)] = {
     val inputFormatClass = classOf[SequenceFileInputFormat[K, V]]
-    hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits)
+    hadoopFile(path, inputFormatClass, keyClass, valueClass, minPartitions)
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
@@ -641,7 +656,7 @@ class SparkContext(config: SparkConf) extends Logging {
     * */
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]
       ): RDD[(K, V)] =
-    sequenceFile(path, keyClass, valueClass, defaultMinSplits)
+    sequenceFile(path, keyClass, valueClass, defaultMinPartitions)
 
   /**
    * Version of sequenceFile() for types implicitly convertible to Writables through a
@@ -665,7 +680,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * a `map` function.
    */
    def sequenceFile[K, V]
-       (path: String, minSplits: Int = defaultMinSplits)
+       (path: String, minPartitions: Int = defaultMinPartitions)
        (implicit km: ClassTag[K], vm: ClassTag[V],
         kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
       : RDD[(K, V)] = {
@@ -674,7 +689,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val format = classOf[SequenceFileInputFormat[Writable, Writable]]
     val writables = hadoopFile(path, format,
         kc.writableClass(km).asInstanceOf[Class[Writable]],
-        vc.writableClass(vm).asInstanceOf[Class[Writable]], minSplits)
+        vc.writableClass(vm).asInstanceOf[Class[Writable]], minPartitions)
     writables.map { case (k, v) => (kc.convert(k), vc.convert(v)) }
   }
 
@@ -688,9 +703,9 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def objectFile[T: ClassTag](
       path: String,
-      minSplits: Int = defaultMinSplits
+      minPartitions: Int = defaultMinPartitions
       ): RDD[T] = {
-    sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minSplits)
+    sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minPartitions)
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
   }
 
@@ -1106,6 +1121,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Submit a job for execution and return a FutureJob holding the result.
    */
   @Experimental
@@ -1183,7 +1199,11 @@ class SparkContext(config: SparkConf) extends Logging {
   def defaultParallelism: Int = taskScheduler.defaultParallelism
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
+  @deprecated("use defaultMinPartitions", "1.0.0")
   def defaultMinSplits: Int = math.min(defaultParallelism, 2)
+
+  /** Default min number of partitions for Hadoop RDDs when not given by user */
+  def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
 
   private val nextShuffleId = new AtomicInteger(0)
 
@@ -1235,6 +1255,8 @@ object SparkContext extends Logging {
 
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
 
+  private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
+
   private[spark] val SPARK_UNKNOWN_USER = "<unknown>"
 
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
@@ -1259,8 +1281,10 @@ object SparkContext extends Logging {
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 
-  implicit def rddToPairRDDFunctions[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]) =
+  implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
+      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     new PairRDDFunctions(rdd)
+  }
 
   implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
 
@@ -1268,7 +1292,7 @@ object SparkContext extends Logging {
       rdd: RDD[(K, V)]) =
     new SequenceFileRDDFunctions(rdd)
 
-  implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassTag, V: ClassTag](
+  implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
       rdd: RDD[(K, V)]) =
     new OrderedRDDFunctions[K, V, (K, V)](rdd)
 
@@ -1337,19 +1361,19 @@ object SparkContext extends Logging {
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to SparkContext.
    */
-  def jarOfClass(cls: Class[_]): Seq[String] = {
+  def jarOfClass(cls: Class[_]): Option[String] = {
     val uri = cls.getResource("/" + cls.getName.replace('.', '/') + ".class")
     if (uri != null) {
       val uriStr = uri.toString
       if (uriStr.startsWith("jar:file:")) {
         // URI will be of the form "jar:file:/path/foo.jar!/package/cls.class",
         // so pull out the /path/foo.jar
-        List(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
+        Some(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
       } else {
-        Nil
+        None
       }
     } else {
-      Nil
+      None
     }
   }
 
@@ -1358,7 +1382,7 @@ object SparkContext extends Logging {
    * to pass their JARs to SparkContext. In most cases you can call jarOfObject(this) in
    * your driver program.
    */
-  def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
+  def jarOfObject(obj: AnyRef): Option[String] = jarOfClass(obj.getClass)
 
   /**
    * Creates a modified version of a SparkConf with the parameters that can be passed separately

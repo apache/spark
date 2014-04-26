@@ -39,6 +39,7 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.{OrderedRDDFunctions, RDD}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
                        (implicit val kClassTag: ClassTag[K], implicit val vClassTag: ClassTag[V])
@@ -119,7 +120,13 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Int): JavaPairRDD[K, V] =
+  def sample(withReplacement: Boolean, fraction: Double): JavaPairRDD[K, V] =
+    sample(withReplacement, fraction, Utils.random.nextLong)
+    
+  /**
+   * Return a sampled subset of this RDD.
+   */
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.sample(withReplacement, fraction, seed))
 
   /**
@@ -626,10 +633,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * order of the keys).
    */
   def sortByKey(comp: Comparator[K], ascending: Boolean): JavaPairRDD[K, V] = {
-    class KeyOrdering(val a: K) extends Ordered[K] {
-      override def compare(b: K) = comp.compare(a, b)
-    }
-    implicit def toOrdered(x: K): Ordered[K] = new KeyOrdering(x)
+    implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
     fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending))
   }
 
@@ -640,10 +644,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * order of the keys).
    */
   def sortByKey(comp: Comparator[K], ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
-    class KeyOrdering(val a: K) extends Ordered[K] {
-      override def compare(b: K) = comp.compare(a, b)
-    }
-    implicit def toOrdered(x: K): Ordered[K] = new KeyOrdering(x)
+    implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
     fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending, numPartitions))
   }
 
