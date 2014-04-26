@@ -27,7 +27,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.DeveloperApi
 
-
 /**
  * :: DeveloperApi ::
  * Class used to solve the optimization problem in ADMMLasso
@@ -41,7 +40,6 @@ class ADMMLasso
   private var l1RegParam: Double = 1.0
   private var l2RegParam: Double = .0
   private var penalty: Double = 10.0
-
 
   /**
    * Set the number of partitions for ADMM. Default 10
@@ -165,8 +163,8 @@ object ADMMLasso extends Logging {
     while (iter <= numIterations && !minorChange) {
       val zBroadcast = z
       def localUpdate(
-           it: Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))]
-           ):Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))] = {
+          it: Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))]
+          ):Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))] = {
         if (it.hasNext) {
           val localData = it.next()
           val (x, u) = localData._2
