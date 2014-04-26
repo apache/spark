@@ -173,9 +173,12 @@ object ParquetFilters {
           (x: Float) => x >= literal.value.asInstanceOf[Float],
           predicate)
     }
-    // TODO: we currently only filter on non-nullable (Parquet REQUIRED) attributes until
-    // https://github.com/Parquet/parquet-mr/issues/371
-    // has been resolved
+
+    /**
+     * TODO: we currently only filter on non-nullable (Parquet REQUIRED) attributes until
+     * https://github.com/Parquet/parquet-mr/issues/371
+     * has been resolved.
+     */
     expression match {
       case p @ Or(left: Expression, right: Expression)
           if createFilter(left).isDefined && createFilter(right).isDefined => {
@@ -225,34 +228,49 @@ object ParquetFilters {
       case _ => None
     }
   }
-  // Note: Inside the Hadoop API we only have access to `Configuration`, not to
-  // [[SparkContext]], so we cannot use broadcasts to convey the actual filter
-  // predicate.
-  def serializeFilterExpressions(filters: Seq[Expression], conf: Configuration): Unit = {
-    val serialized: Array[Byte] = SparkSqlSerializer.serialize(filters)
-    val encoded: String = BaseEncoding.base64().encode(serialized)
-    conf.set(PARQUET_FILTER_DATA, encoded)
-  }
 
-  // Note: Inside the Hadoop API we only have access to `Configuration`, not to
-  // [[SparkContext]], so we cannot use broadcasts to convey the actual filter
-  // predicate.
-  def deserializeFilterExpressions(conf: Configuration): Option[Seq[Expression]] = {
-    val data = conf.get(PARQUET_FILTER_DATA)
-    if (data != null) {
-      val decoded: Array[Byte] = BaseEncoding.base64().decode(data)
-      Some(SparkSqlSerializer.deserialize(decoded))
-    } else {
-      None
+  /**
+   * Note: Inside the Hadoop API we only have access to `Configuration`, not to
+   * [[org.apache.spark.SparkContext]], so we cannot use broadcasts to convey
+   * the actual filter predicate.
+   */
+  def serializeFilterExpressions(filters: Seq[Expression], conf: Configuration): Unit = {
+    if (filters.length > 0) {
+      val serialized: Array[Byte] = SparkSqlSerializer.serialize(filters)
+      val encoded: String = BaseEncoding.base64().encode(serialized)
+      conf.set(PARQUET_FILTER_DATA, encoded)
     }
   }
 
-  // Try to find the given expression in the tree of filters in order to
-  // determine whether it is safe to remove it from the higher level filters. Note
-  // that strictly speaking we could stop the search whenever an expression is found
-  // that contains this expression as subexpression (e.g., when searching for "a"
-  // and "(a or c)" is found) but we don't care about optimizations here since the
-  // filter tree is assumed to be small.
+  /**
+   * Note: Inside the Hadoop API we only have access to `Configuration`, not to
+   * [[org.apache.spark.SparkContext]], so we cannot use broadcasts to convey
+   * the actual filter predicate.
+   */
+  def deserializeFilterExpressions(conf: Configuration): Seq[Expression] = {
+    val data = conf.get(PARQUET_FILTER_DATA)
+    if (data != null) {
+      val decoded: Array[Byte] = BaseEncoding.base64().decode(data)
+      SparkSqlSerializer.deserialize(decoded)
+    } else {
+      Seq()
+    }
+  }
+
+  /**
+   * Try to find the given expression in the tree of filters in order to
+   * determine whether it is safe to remove it from the higher level filters. Note
+   * that strictly speaking we could stop the search whenever an expression is found
+   * that contains this expression as subexpression (e.g., when searching for "a"
+   * and "(a or c)" is found) but we don't care about optimizations here since the
+   * filter tree is assumed to be small.
+   *
+   * @param filter The [[org.apache.spark.sql.parquet.CatalystFilter]] to expand
+   *               and search
+   * @param expression The expression to look for
+   * @return An optional [[org.apache.spark.sql.parquet.CatalystFilter]] that
+   *         contains the expression.
+   */
   def findExpression(
       filter: CatalystFilter,
       expression: Expression): Option[CatalystFilter] = filter match {

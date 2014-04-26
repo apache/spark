@@ -40,14 +40,14 @@ import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 
 /**
  * Parquet table scan operator. Imports the file that backs the given
- * [[ParquetRelation]] as a RDD[Row].
+ * [[org.apache.spark.sql.parquet.ParquetRelation]] as a ``RDD[Row]``.
  */
 case class ParquetTableScan(
     // note: output cannot be transient, see
     // https://issues.apache.org/jira/browse/SPARK-1367
     output: Seq[Attribute],
     relation: ParquetRelation,
-    columnPruningPred: Option[Seq[Expression]])(
+    columnPruningPred: Seq[Expression])(
     @transient val sc: SparkContext)
   extends LeafNode {
 
@@ -75,9 +75,9 @@ case class ParquetTableScan(
     // the whole pruning predicate.
     // Note 2: you can disable filter predicate pushdown by setting
     // "spark.sql.hints.parquetFilterPushdown" to false inside SparkConf.
-    if (columnPruningPred.isDefined &&
+    if (columnPruningPred.length > 0 &&
       sc.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
-      ParquetFilters.serializeFilterExpressions(columnPruningPred.get, conf)
+      ParquetFilters.serializeFilterExpressions(columnPruningPred, conf)
     }
 
     sc.newAPIHadoopRDD(
@@ -197,10 +197,18 @@ case class InsertIntoParquetTable(
 
   override def otherCopyArgs = sc :: Nil
 
-  // based on ``saveAsNewAPIHadoopFile`` in [[PairRDDFunctions]]
-  // TODO: Maybe PairRDDFunctions should use Product2 instead of Tuple2?
-  // .. then we could use the default one and could use [[MutablePair]]
-  // instead of ``Tuple2``
+  /**
+   * Stores the given Row RDD as a Hadoop file.
+   *
+   * Note: We cannot use ``saveAsNewAPIHadoopFile`` from [[org.apache.spark.rdd.PairRDDFunctions]]
+   * together with [[org.apache.spark.util.MutablePair]] because ``PairRDDFunctions`` uses ``Tuple2``
+   * and not ``Product2``. Also, we want to allow appending files to an existing directory and need
+   * to determine which was the largest written file index before starting to write.
+   *
+   * @param rdd The [[org.apache.spark.rdd.RDD]] to writer
+   * @param path The directory to write to.
+   * @param conf A [[org.apache.hadoop.conf.Configuration]].
+   */
   private def saveAsHadoopFile(
       rdd: RDD[Row],
       path: String,
@@ -257,8 +265,10 @@ case class InsertIntoParquetTable(
   }
 }
 
-// TODO: this will be able to append to directories it created itself, not necessarily
-// to imported ones
+/**
+ * TODO: this will be able to append to directories it created itself, not necessarily
+ * to imported ones.
+ */
 private[parquet] class AppendingParquetOutputFormat(offset: Int)
   extends parquet.hadoop.ParquetOutputFormat[Row] {
   // override to accept existing directories as valid output directory
@@ -275,8 +285,10 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
   }
 }
 
-// We extend ParquetInputFormat in order to have more control over which
-// RecordFilter we want to use
+/**
+ * We extend ParquetInputFormat in order to have more control over which
+ * RecordFilter we want to use.
+ */
 private[parquet] class FilteringParquetRowInputFormat
   extends parquet.hadoop.ParquetInputFormat[Row] with Logging {
   override def createRecordReader(
@@ -286,11 +298,11 @@ private[parquet] class FilteringParquetRowInputFormat
 
     val filterExpressions =
       ParquetFilters.deserializeFilterExpressions(ContextUtil.getConfiguration(taskAttemptContext))
-    if (filterExpressions.isDefined) {
+    if (filterExpressions.length > 0) {
       logInfo(s"Pushing down predicates for RecordFilter: ${filterExpressions.mkString(", ")}")
       new ParquetRecordReader[Row](
         readSupport,
-        ParquetFilters.createRecordFilter(filterExpressions.get))
+        ParquetFilters.createRecordFilter(filterExpressions))
     } else {
       new ParquetRecordReader[Row](readSupport)
     }
@@ -313,7 +325,9 @@ private[parquet] object FileSystemHelper {
     fs.listStatus(path).map(_.getPath)
   }
 
-  // finds the maximum taskid in the output file names at the given path
+    /**
+     * Finds the maximum taskid in the output file names at the given path.
+     */
   def findMaxTaskId(pathStr: String, conf: Configuration): Int = {
     val files = FileSystemHelper.listFiles(pathStr, conf)
     // filename pattern is part-r-<int>.parquet
