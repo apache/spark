@@ -746,7 +746,8 @@ object ALS {
     utalk.persist()
 
     // user partition -> number of products
-    val userInbound = utalk.groupByKey.map(x => (x._1, 8.0 * rank * x._2.toList.distinct.length)).collectAsMap()
+    val userInbound =
+        utalk.groupByKey.map(x => (x._1, 8.0 * rank * x._2.toList.distinct.length)).collectAsMap()
 
     // product -> number of user partitions, summed over each partition.
     val productOutbound = (utalk.distinct.map(x => (productPartitioner.getPartition(x._2), x._1))
@@ -770,7 +771,8 @@ object ALS {
     ptalk.persist()
 
     // product partition -> number of users
-    val productInbound = ptalk.groupByKey.map(x => (x._1, 8.0 * rank * x._2.toList.distinct.length)).collectAsMap()
+    val productInbound =
+        ptalk.groupByKey.map(x => (x._1, 8.0 * rank * x._2.toList.distinct.length)).collectAsMap()
 
     // user -> number of product partitions, summed over each partition.
     val userOutbound = (ptalk.distinct.map(x => (userPartitioner.getPartition(x._2), x._1))
