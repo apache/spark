@@ -75,7 +75,7 @@ It's usage is
 
     ./bin/spark-submit --class path.to.your.Class [options] <app jar> [app options]
 
-When calling Spark submit `[app options]` will be passed along to your application's 
+When calling `spark-submit`, `[app options]` will be passed along to your application's
 main class. To enumerate all options available to `spark-submit` run it with 
 the `--help` flag. Here are a few examples of common options:
 

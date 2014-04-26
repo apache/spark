@@ -162,8 +162,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     var inSparkOpts = true
     parse(opts)
 
-    def parse(opts: Seq[String]): Unit = {
-      opts match {
+    def parse(opts: Seq[String]): Unit = opts match {
       case ("--name") :: value :: tail =>
         name = value
         parse(tail)
@@ -272,7 +271,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
       case Nil =>
       }
-    }
   }
 
   private def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
