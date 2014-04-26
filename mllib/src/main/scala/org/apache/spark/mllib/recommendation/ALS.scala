@@ -515,7 +515,7 @@ class ALS private (
       // Add regularization
       var i = 0
       while (i < rank) {
-        fullXtX.data(i*rank+i) += lambda
+        fullXtX.data(i * rank + i) += lambda
         i = i + 1
       }
       // Solve the resulting matrix, which is symmetric and positive-definite
