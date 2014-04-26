@@ -104,10 +104,10 @@ class ListTests(PySparkTestCase):
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
         data = [
-            LabeledPoint(0.0, [1, 0]),
-            LabeledPoint(1.0, [0, 1]),
-            LabeledPoint(0.0, [2, 0]),
-            LabeledPoint(1.0, [0, 2])
+            LabeledPoint(0.0, [1, 0, 0]),
+            LabeledPoint(1.0, [0, 1, 1]),
+            LabeledPoint(0.0, [2, 0, 0]),
+            LabeledPoint(1.0, [0, 2, 1])
         ]
         rdd = self.sc.parallelize(data)
         features = [p.features.tolist() for p in data]

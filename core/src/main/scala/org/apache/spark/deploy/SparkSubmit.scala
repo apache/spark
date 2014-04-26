@@ -17,14 +17,12 @@
 
 package org.apache.spark.deploy
 
-import java.io.{PrintStream, File}
+import java.io.{File, PrintStream}
 import java.net.{URI, URL}
 
-import org.apache.spark.executor.ExecutorURLClassLoader
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.Map
+import org.apache.spark.executor.ExecutorURLClassLoader
 
 /**
  * Scala code behind the spark-submit script.  The script handles setting up the classpath with
@@ -39,6 +37,12 @@ object SparkSubmit {
   private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL
 
   private var clusterManager: Int = LOCAL
+
+  /**
+   * A special jar name that indicates the class being run is inside of Spark itself,
+   * and therefore no user jar is needed.
+   */
+  private val RESERVED_JAR_NAME = "spark-internal"
 
   def main(args: Array[String]) {
     val appArgs = new SparkSubmitArguments(args)
@@ -63,7 +67,8 @@ object SparkSubmit {
   /**
    * @return
    *         a tuple containing the arguments for the child, a list of classpath
-   *         entries for the child, and the main class for the child
+   *         entries for the child, a list of system propertes, a list of env vars
+   *         and the main class for the child
    */
   private[spark] def createLaunchEnv(appArgs: SparkSubmitArguments): (ArrayBuffer[String],
       ArrayBuffer[String], Map[String, String], String) = {
@@ -114,7 +119,9 @@ object SparkSubmit {
 
     if (!deployOnCluster) {
       childMainClass = appArgs.mainClass
-      childClasspath += appArgs.primaryResource
+      if (appArgs.primaryResource != RESERVED_JAR_NAME) {
+        childClasspath += appArgs.primaryResource
+      }
     } else if (clusterManager == YARN) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       childArgs += ("--jar", appArgs.primaryResource)
@@ -123,6 +130,12 @@ object SparkSubmit {
 
     val options = List[OptionAssigner](
       new OptionAssigner(appArgs.master, ALL_CLUSTER_MGRS, false, sysProp = "spark.master"),
+      new OptionAssigner(appArgs.driverExtraClassPath, STANDALONE | YARN, true,
+        sysProp = "spark.driver.extraClassPath"),
+      new OptionAssigner(appArgs.driverExtraJavaOptions, STANDALONE | YARN, true,
+        sysProp = "spark.driver.extraJavaOptions"),
+      new OptionAssigner(appArgs.driverExtraLibraryPath, STANDALONE | YARN, true,
+        sysProp = "spark.driver.extraLibraryPath"),
       new OptionAssigner(appArgs.driverMemory, YARN, true, clOption = "--driver-memory"),
       new OptionAssigner(appArgs.name, YARN, true, clOption = "--name"),
       new OptionAssigner(appArgs.queue, YARN, true, clOption = "--queue"),
@@ -142,10 +155,14 @@ object SparkSubmit {
       new OptionAssigner(appArgs.files, YARN, true, clOption = "--files"),
       new OptionAssigner(appArgs.archives, YARN, false, sysProp = "spark.yarn.dist.archives"),
       new OptionAssigner(appArgs.archives, YARN, true, clOption = "--archives"),
-      new OptionAssigner(appArgs.jars, YARN, true, clOption = "--addJars")
+      new OptionAssigner(appArgs.jars, YARN, true, clOption = "--addJars"),
+      new OptionAssigner(appArgs.files, LOCAL | STANDALONE | MESOS, true, sysProp = "spark.files"),
+      new OptionAssigner(appArgs.jars, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.jars"),
+      new OptionAssigner(appArgs.name, LOCAL | STANDALONE | MESOS, false,
+        sysProp = "spark.app.name")
     )
 
-    // more jars
+    // For client mode make any added jars immediately visible on the classpath
     if (appArgs.jars != null && !deployOnCluster) {
       for (jar <- appArgs.jars.split(",")) {
         childClasspath += jar
@@ -163,6 +180,14 @@ object SparkSubmit {
       }
     }
 
+    // For standalone mode, add the application jar automatically so the user doesn't have to
+    // call sc.addJar. TODO: Standalone mode in the cluster
+    if (clusterManager == STANDALONE) {
+      val existingJars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
+      sysProps.put("spark.jars", (existingJars ++ Seq(appArgs.primaryResource)).mkString(","))
+      println("SPARK JARS" + sysProps.get("spark.jars"))
+    }
+
     if (deployOnCluster && clusterManager == STANDALONE) {
       if (appArgs.supervise) {
         childArgs += "--supervise"
@@ -173,15 +198,19 @@ object SparkSubmit {
       childArgs += (appArgs.master, appArgs.primaryResource, appArgs.mainClass)
     }
 
-    // args
+    // Arguments to be passed to user program
     if (appArgs.childArgs != null) {
       if (!deployOnCluster || clusterManager == STANDALONE) {
         childArgs ++= appArgs.childArgs
       } else if (clusterManager == YARN) {
         for (arg <- appArgs.childArgs) {
-          childArgs += ("--args", arg)
+          childArgs += ("--arg", arg)
         }
       }
+    }
+
+    for ((k, v) <- appArgs.getDefaultSparkProperties) {
+      if (!sysProps.contains(k)) sysProps(k) = v
     }
 
     (childArgs, childClasspath, sysProps, childMainClass)
@@ -191,11 +220,11 @@ object SparkSubmit {
       sysProps: Map[String, String], childMainClass: String, verbose: Boolean = false) {
 
     if (verbose) {
-      System.err.println(s"Main class:\n$childMainClass")
-      System.err.println(s"Arguments:\n${childArgs.mkString("\n")}")
-      System.err.println(s"System properties:\n${sysProps.mkString("\n")}")
-      System.err.println(s"Classpath elements:\n${childClasspath.mkString("\n")}")
-      System.err.println("\n")
+      printStream.println(s"Main class:\n$childMainClass")
+      printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
+      printStream.println(s"System properties:\n${sysProps.mkString("\n")}")
+      printStream.println(s"Classpath elements:\n${childClasspath.mkString("\n")}")
+      printStream.println("\n")
     }
 
     val loader = new ExecutorURLClassLoader(new Array[URL](0),
@@ -226,6 +255,10 @@ object SparkSubmit {
   }
 }
 
+/**
+ * Provides an indirection layer for passing arguments as system properties or flags to
+ * the user's driver program or to downstream launcher tools.
+ */
 private[spark] class OptionAssigner(val value: String,
   val clusterManager: Int,
   val deployOnCluster: Boolean,
