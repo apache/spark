@@ -1060,9 +1060,7 @@ private[spark] object Utils extends Logging {
   /**
    * Indicates whether Spark is currently running unit tests.
    */
-  private[spark] def isTesting() = {
-    val hasTestingEnv = sys.env.contains("SPARK_TESTING")
-    val hasTestingProp = sys.props.get("spark.testing").map(_.toBoolean).getOrElse(false)
-    hasTestingEnv || hasTestingProp
+  private[spark] def isTesting = {
+    sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
   }
 }
