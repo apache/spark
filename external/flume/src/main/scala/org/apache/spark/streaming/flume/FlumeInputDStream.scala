@@ -36,17 +36,27 @@ import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.Logging
 import org.apache.spark.streaming.receiver.Receiver
+import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
+import org.jboss.netty.channel.ChannelPipelineFactory
+import java.util.concurrent.Executors
+import org.jboss.netty.channel.Channels
+import org.jboss.netty.handler.codec.compression.ZlibDecoder
+import org.jboss.netty.handler.codec.compression.ZlibEncoder
+import org.jboss.netty.channel.ChannelPipeline
+import org.jboss.netty.channel.ChannelFactory
+import org.jboss.netty.handler.execution.ExecutionHandler
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
   @transient ssc_ : StreamingContext,
   host: String,
   port: Int,
-  storageLevel: StorageLevel
+  storageLevel: StorageLevel,
+  enableCompression: Boolean
 ) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
-    new FlumeReceiver(host, port, storageLevel)
+    new FlumeReceiver(host, port, storageLevel, enableCompression)
   }
 }
 
@@ -134,12 +144,30 @@ private[streaming]
 class FlumeReceiver(
     host: String,
     port: Int,
-    storageLevel: StorageLevel
+    storageLevel: StorageLevel,
+    enableCompression: Boolean
   ) extends Receiver[SparkFlumeEvent](storageLevel) with Logging {
 
   lazy val responder = new SpecificResponder(
     classOf[AvroSourceProtocol], new FlumeEventServer(this))
-  lazy val server = new NettyServer(responder, new InetSocketAddress(host, port))
+  lazy val server = initServer()
+
+  private def initServer() = {
+    if (enableCompression) {
+      val channelFactory = new NioServerSocketChannelFactory
+        (Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
+      val channelPipelieFactory = new CompressionChannelPipelineFactory()
+      
+      new NettyServer(
+        responder, 
+        new InetSocketAddress(host, port),
+        channelFactory, 
+        channelPipelieFactory, 
+        null)
+    } else {
+      new NettyServer(responder, new InetSocketAddress(host, port))
+    }
+  }
 
   def onStart() {
     server.start()
@@ -152,4 +180,16 @@ class FlumeReceiver(
   }
 
   override def preferredLocation = Some(host)
+}
+
+private[streaming]
+class CompressionChannelPipelineFactory() extends ChannelPipelineFactory {
+  
+  def getPipeline() = {
+      val pipeline = Channels.pipeline()
+      val encoder = new ZlibEncoder(6)
+      pipeline.addFirst("deflater", encoder)
+      pipeline.addFirst("inflater", new ZlibDecoder())
+      pipeline
+  }
 }
