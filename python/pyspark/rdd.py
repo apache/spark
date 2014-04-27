@@ -18,6 +18,7 @@
 from base64 import standard_b64encode as b64enc
 import copy
 from collections import defaultdict
+from collections import namedtuple
 from itertools import chain, ifilter, imap
 import operator
 import os
@@ -28,26 +29,32 @@ from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
 import warnings
+import heapq
+from random import Random
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
-    BatchedSerializer, CloudPickleSerializer, pack_long
+    BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler
+from pyspark.storagelevel import StorageLevel
+from pyspark.resultiterable import ResultIterable
 
 from py4j.java_collections import ListConverter, MapConverter
 
-
 __all__ = ["RDD"]
 
+
 def _extract_concise_traceback():
+    """
+    This function returns the traceback info for a callsite, returns a dict
+    with function name, file name and line number
+    """
     tb = traceback.extract_stack()
+    callsite = namedtuple("Callsite", "function file linenum")
     if len(tb) == 0:
-        return "I'm lost!"
-    # HACK:  This function is in a file called 'rdd.py' in the top level of
-    # everything PySpark.  Just trim off the directory name and assume
-    # everything in that tree is PySpark guts.
+        return None
     file, line, module, what = tb[len(tb) - 1]
     sparkpath = os.path.dirname(file)
     first_spark_frame = len(tb) - 1
@@ -58,16 +65,20 @@ def _extract_concise_traceback():
             break
     if first_spark_frame == 0:
         file, line, fun, what = tb[0]
-        return "%s at %s:%d" % (fun, file, line)
+        return callsite(function=fun, file=file, linenum=line)
     sfile, sline, sfun, swhat = tb[first_spark_frame]
     ufile, uline, ufun, uwhat = tb[first_spark_frame-1]
-    return "%s at %s:%d" % (sfun, ufile, uline)
+    return callsite(function=sfun, file=ufile, linenum=uline)
 
 _spark_stack_depth = 0
 
 class _JavaStackTrace(object):
     def __init__(self, sc):
-        self._traceback = _extract_concise_traceback()
+        tb = _extract_concise_traceback()
+        if tb is not None:
+            self._traceback = "%s at %s:%s" % (tb.function, tb.file, tb.linenum)
+        else:
+            self._traceback = "Error! Could not extract traceback info"
         self._context = sc
 
     def __enter__(self):
@@ -82,6 +93,73 @@ class _JavaStackTrace(object):
         if _spark_stack_depth == 0:
             self._context._jsc.setCallSite(None)
 
+class MaxHeapQ(object):
+    """
+    An implementation of MaxHeap.
+    >>> import pyspark.rdd
+    >>> heap = pyspark.rdd.MaxHeapQ(5)
+    >>> [heap.insert(i) for i in range(10)]
+    [None, None, None, None, None, None, None, None, None, None]
+    >>> sorted(heap.getElements())
+    [0, 1, 2, 3, 4]
+    >>> heap = pyspark.rdd.MaxHeapQ(5)
+    >>> [heap.insert(i) for i in range(9, -1, -1)]
+    [None, None, None, None, None, None, None, None, None, None]
+    >>> sorted(heap.getElements())
+    [0, 1, 2, 3, 4]
+    >>> heap = pyspark.rdd.MaxHeapQ(1)
+    >>> [heap.insert(i) for i in range(9, -1, -1)]
+    [None, None, None, None, None, None, None, None, None, None]
+    >>> heap.getElements()
+    [0]
+    """
+
+    def __init__(self, maxsize):
+        # we start from q[1], this makes calculating children as trivial as 2 * k
+        self.q = [0]
+        self.maxsize = maxsize
+
+    def _swim(self, k):
+        while (k > 1) and (self.q[k/2] < self.q[k]):
+            self._swap(k, k/2)
+            k = k/2
+
+    def _swap(self, i, j):
+        t = self.q[i]
+        self.q[i] = self.q[j]
+        self.q[j] = t
+
+    def _sink(self, k):
+        N = self.size()
+        while 2 * k <= N:
+            j = 2 * k
+            # Here we test if both children are greater than parent
+            # if not swap with larger one.
+            if j < N and self.q[j] < self.q[j + 1]:
+                j = j + 1
+            if(self.q[k] > self.q[j]):
+                break
+            self._swap(k, j)
+            k = j
+
+    def size(self):
+        return len(self.q) - 1
+
+    def insert(self, value):
+        if (self.size()) < self.maxsize:
+            self.q.append(value)
+            self._swim(self.size())
+        else:
+            self._replaceRoot(value)
+
+    def getElements(self):
+        return self.q[1:]
+
+    def _replaceRoot(self, value):
+        if(self.q[1] > value):
+            self.q[1] = value
+            self._sink(1)
+
 class RDD(object):
     """
     A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
@@ -95,6 +173,13 @@ class RDD(object):
         self.is_checkpointed = False
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
+        self._id = jrdd.id()
+
+    def id(self):
+        """
+        A unique ID for this RDD (within its SparkContext).
+        """
+        return self._id
 
     def __repr__(self):
         return self._jrdd.toString()
@@ -163,7 +248,11 @@ class RDD(object):
 
     def map(self, f, preservesPartitioning=False):
         """
-        Return a new RDD containing the distinct elements in this RDD.
+        Return a new RDD by applying a function to each element of this RDD.
+        
+        >>> rdd = sc.parallelize(["b", "a", "c"])
+        >>> sorted(rdd.map(lambda x: (x, 1)).collect())
+        [('a', 1), ('b', 1), ('c', 1)]
         """
         def func(split, iterator): return imap(f, iterator)
         return PipelinedRDD(self, func, preservesPartitioning)
@@ -244,7 +333,7 @@ class RDD(object):
                    .reduceByKey(lambda x, _: x) \
                    .map(lambda (x, _): x)
 
-    def sample(self, withReplacement, fraction, seed):
+    def sample(self, withReplacement, fraction, seed=None):
         """
         Return a sampled subset of this RDD (relies on numpy and falls back
         on default random generator if numpy is unavailable).
@@ -252,10 +341,11 @@ class RDD(object):
         >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
         [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
         """
+        assert fraction >= 0.0, "Invalid fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     # this is ported from scala/spark/RDD.scala
-    def takeSample(self, withReplacement, num, seed):
+    def takeSample(self, withReplacement, num, seed=None):
         """
         Return a fixed-size sampled subset of this RDD (currently requires numpy).
 
@@ -271,6 +361,9 @@ class RDD(object):
 
         if (num < 0):
             raise ValueError
+
+        if (initialCount == 0):
+            return list()
 
         if initialCount > sys.maxint - 1:
             maxSelected = sys.maxint - 1
@@ -289,13 +382,11 @@ class RDD(object):
         # If the first sample didn't turn out large enough, keep trying to take samples;
         # this shouldn't happen often because we use a big multiplier for their initial size.
         # See: scala/spark/RDD.scala
+        rand = Random(seed)
         while len(samples) < total:
-            if seed > sys.maxint - 2:
-                seed = -1
-            seed += 1
-            samples = self.sample(withReplacement, fraction, seed).collect()
+            samples = self.sample(withReplacement, fraction, rand.randint(0, sys.maxint)).collect()
 
-        sampler = RDDSampler(withReplacement, fraction, seed+1)
+        sampler = RDDSampler(withReplacement, fraction, rand.randint(0, sys.maxint))
         sampler.shuffle(samples)
         return samples[0:total]
 
@@ -318,6 +409,23 @@ class RDD(object):
             other_copy = other._reserialize()
             return RDD(self_copy._jrdd.union(other_copy._jrdd), self.ctx,
                        self.ctx.serializer)
+
+    def intersection(self, other):
+        """
+        Return the intersection of this RDD and another one. The output will not 
+        contain any duplicate elements, even if the input RDDs did.
+        
+        Note that this method performs a shuffle internally.
+
+        >>> rdd1 = sc.parallelize([1, 10, 2, 3, 4, 5])
+        >>> rdd2 = sc.parallelize([1, 6, 2, 3, 7, 8])
+        >>> rdd1.intersection(rdd2).collect()
+        [1, 2, 3]
+        """
+        return self.map(lambda v: (v, None)) \
+            .cogroup(other.map(lambda v: (v, None))) \
+            .filter(lambda x: (len(x[1][0]) != 0) and (len(x[1][1]) != 0)) \
+            .keys()
 
     def _reserialize(self):
         if self._jrdd_deserializer == self.ctx.serializer:
@@ -491,7 +599,7 @@ class RDD(object):
     def reduce(self, f):
         """
         Reduces the elements of this RDD using the specified commutative and
-        associative binary operator.
+        associative binary operator. Currently reduces partitions locally.
 
         >>> from operator import add
         >>> sc.parallelize([1, 2, 3, 4, 5]).reduce(add)
@@ -533,8 +641,54 @@ class RDD(object):
         vals = self.mapPartitions(func).collect()
         return reduce(op, vals, zeroValue)
 
-    # TODO: aggregate
+    def aggregate(self, zeroValue, seqOp, combOp):
+        """
+        Aggregate the elements of each partition, and then the results for all
+        the partitions, using a given combine functions and a neutral "zero
+        value."
 
+        The functions C{op(t1, t2)} is allowed to modify C{t1} and return it
+        as its result value to avoid object allocation; however, it should not
+        modify C{t2}.
+
+        The first function (seqOp) can return a different result type, U, than
+        the type of this RDD. Thus, we need one operation for merging a T into an U
+        and one operation for merging two U
+
+        >>> seqOp = (lambda x, y: (x[0] + y, x[1] + 1))
+        >>> combOp = (lambda x, y: (x[0] + y[0], x[1] + y[1]))
+        >>> sc.parallelize([1, 2, 3, 4]).aggregate((0, 0), seqOp, combOp)
+        (10, 4)
+        >>> sc.parallelize([]).aggregate((0, 0), seqOp, combOp)
+        (0, 0)
+        """
+        def func(iterator):
+            acc = zeroValue
+            for obj in iterator:
+                acc = seqOp(acc, obj)
+            yield acc
+
+        return self.mapPartitions(func).fold(zeroValue, combOp)
+        
+
+    def max(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).max()
+        43.0
+        """
+        return self.reduce(max)
+
+    def min(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).min()
+        1.0
+        """
+        return self.reduce(min)
+    
     def sum(self):
         """
         Add up the elements in this RDD.
@@ -628,6 +782,60 @@ class RDD(object):
                 m1[k] += v
             return m1
         return self.mapPartitions(countPartition).reduce(mergeMaps)
+    
+    def top(self, num):
+        """
+        Get the top N elements from a RDD.
+
+        Note: It returns the list sorted in descending order.
+        >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
+        [12]
+        >>> sc.parallelize([2, 3, 4, 5, 6], 2).cache().top(2)
+        [6, 5]
+        """
+        def topIterator(iterator):
+            q = []
+            for k in iterator:
+                if len(q) < num:
+                    heapq.heappush(q, k)
+                else:
+                    heapq.heappushpop(q, k)
+            yield q
+
+        def merge(a, b):
+            return next(topIterator(a + b))
+
+        return sorted(self.mapPartitions(topIterator).reduce(merge), reverse=True)
+
+    def takeOrdered(self, num, key=None):
+        """
+        Get the N elements from a RDD ordered in ascending order or as specified
+        by the optional key function. 
+
+        >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7]).takeOrdered(6)
+        [1, 2, 3, 4, 5, 6]
+        >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7], 2).takeOrdered(6, key=lambda x: -x)
+        [10, 9, 7, 6, 5, 4]
+        """
+
+        def topNKeyedElems(iterator, key_=None):
+            q = MaxHeapQ(num)
+            for k in iterator:
+                if key_ != None:
+                    k = (key_(k), k)
+                q.insert(k)
+            yield q.getElements()
+
+        def unKey(x, key_=None):
+            if key_ != None:
+                x = [i[1] for i in x]
+            return x
+        
+        def merge(a, b):
+            return next(topNKeyedElems(a + b))
+        result = self.mapPartitions(lambda i: topNKeyedElems(i, key)).reduce(merge)
+        return sorted(unKey(result, key), key=key)
+
 
     def take(self, num):
         """
@@ -915,7 +1123,21 @@ class RDD(object):
                     combiners[k] = mergeCombiners(combiners[k], v)
             return combiners.iteritems()
         return shuffled.mapPartitions(_mergeCombiners)
+    
+    def foldByKey(self, zeroValue, func, numPartitions=None):
+        """
+        Merge the values for each key using an associative function "func" and a neutral "zeroValue"
+        which may be added to the result an arbitrary number of times, and must not change 
+        the result (e.g., 0 for addition, or 1 for multiplication.).                
 
+        >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
+        >>> from operator import add
+        >>> rdd.foldByKey(0, add).collect()
+        [('a', 2), ('b', 1)]
+        """
+        return self.combineByKey(lambda v: func(zeroValue, v), func, func, numPartitions)
+    
+    
     # TODO: support variant with custom partitioner
     def groupByKey(self, numPartitions=None):
         """
@@ -923,7 +1145,7 @@ class RDD(object):
         Hash-partitions the resulting RDD with into numPartitions partitions.
 
         >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
-        >>> sorted(x.groupByKey().collect())
+        >>> map((lambda (x,y): (x, list(y))), sorted(x.groupByKey().collect()))
         [('a', [1, 1]), ('b', [1])]
         """
 
@@ -938,7 +1160,7 @@ class RDD(object):
             return a + b
 
         return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
-                numPartitions)
+                numPartitions).mapValues(lambda x: ResultIterable(x))
 
     # TODO: add tests
     def flatMapValues(self, f):
@@ -985,7 +1207,7 @@ class RDD(object):
 
         >>> x = sc.parallelize([("a", 1), ("b", 4)])
         >>> y = sc.parallelize([("a", 2)])
-        >>> sorted(x.cogroup(y).collect())
+        >>> map((lambda (x,y): (x, (list(y[0]), list(y[1])))), sorted(list(x.cogroup(y).collect())))
         [('a', ([1], [2])), ('b', ([4], []))]
         """
         return python_cogroup(self, other, numPartitions)
@@ -1022,7 +1244,7 @@ class RDD(object):
 
         >>> x = sc.parallelize(range(0,3)).keyBy(lambda x: x*x)
         >>> y = sc.parallelize(zip(range(0,5), range(0,5)))
-        >>> sorted(x.cogroup(y).collect())
+        >>> map((lambda (x,y): (x, (list(y[0]), (list(y[1]))))), sorted(x.cogroup(y).collect()))
         [(0, ([0], [0])), (1, ([1], [1])), (2, ([], [2])), (3, ([], [3])), (4, ([2], [4]))]
         """
         return self.map(lambda x: (f(x), x))
@@ -1057,11 +1279,70 @@ class RDD(object):
         jrdd = self._jrdd.coalesce(numPartitions)
         return RDD(jrdd, self.ctx, self._jrdd_deserializer)
 
+    def zip(self, other):
+        """
+        Zips this RDD with another one, returning key-value pairs with the first element in each RDD
+        second element in each RDD, etc. Assumes that the two RDDs have the same number of
+        partitions and the same number of elements in each partition (e.g. one was made through
+        a map on the other).
+
+        >>> x = sc.parallelize(range(0,5))
+        >>> y = sc.parallelize(range(1000, 1005))
+        >>> x.zip(y).collect()
+        [(0, 1000), (1, 1001), (2, 1002), (3, 1003), (4, 1004)]
+        """
+        pairRDD = self._jrdd.zip(other._jrdd)
+        deserializer = PairDeserializer(self._jrdd_deserializer,
+                                             other._jrdd_deserializer)
+        return RDD(pairRDD, self.ctx, deserializer)
+
+    def name(self):
+        """
+        Return the name of this RDD.
+        """
+        name_ = self._jrdd.name()
+        if not name_:
+            return None
+        return name_.encode('utf-8')
+
+    def setName(self, name):
+        """
+        Assign a name to this RDD.
+        >>> rdd1 = sc.parallelize([1,2])
+        >>> rdd1.setName('RDD1')
+        >>> rdd1.name()
+        'RDD1'
+        """
+        self._jrdd.setName(name)
+
+    def toDebugString(self):
+        """
+        A description of this RDD and its recursive dependencies for debugging.
+        """
+        debug_string = self._jrdd.toDebugString()
+        if not debug_string:
+            return None
+        return debug_string.encode('utf-8')
+
+    def getStorageLevel(self):
+        """
+        Get the RDD's current storage level.
+        >>> rdd1 = sc.parallelize([1,2])
+        >>> rdd1.getStorageLevel()
+        StorageLevel(False, False, False, False, 1)
+        """
+        java_storage_level = self._jrdd.getStorageLevel()
+        storage_level = StorageLevel(java_storage_level.useDisk(),
+                                     java_storage_level.useMemory(),
+                                     java_storage_level.useOffHeap(),
+                                     java_storage_level.deserialized(),
+                                     java_storage_level.replication())
+        return storage_level
+
     # TODO: `lookup` is disabled because we can't make direct comparisons based
     # on the key; we need to compare the hash of the key to the hash of the
     # keys in the pairs.  This could be an expensive operation, since those
     # hashes aren't retained.
-
 
 class PipelinedRDD(RDD):
     """

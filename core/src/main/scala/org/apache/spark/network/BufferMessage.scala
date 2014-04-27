@@ -45,9 +45,10 @@ class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: 
       throw new Exception("Max chunk size is " + maxChunkSize)
     }
 
+    val security = if (isSecurityNeg) 1 else 0
     if (size == 0 && !gotChunkForSendingOnce) {
       val newChunk = new MessageChunk(
-        new MessageChunkHeader(typ, id, 0, 0, ackId, senderAddress), null)
+        new MessageChunkHeader(typ, id, 0, 0, ackId, security, senderAddress), null)
       gotChunkForSendingOnce = true
       return Some(newChunk)
     }
@@ -65,7 +66,7 @@ class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: 
         }
         buffer.position(buffer.position + newBuffer.remaining)
         val newChunk = new MessageChunk(new MessageChunkHeader(
-            typ, id, size, newBuffer.remaining, ackId, senderAddress), newBuffer)
+            typ, id, size, newBuffer.remaining, ackId, security, senderAddress), newBuffer)
         gotChunkForSendingOnce = true
         return Some(newChunk)
       }
@@ -79,6 +80,7 @@ class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: 
       throw new Exception("Attempting to get chunk from message with multiple data buffers")
     }
     val buffer = buffers(0)
+    val security = if (isSecurityNeg) 1 else 0
     if (buffer.remaining > 0) {
       if (buffer.remaining < chunkSize) {
         throw new Exception("Not enough space in data buffer for receiving chunk")
@@ -86,7 +88,7 @@ class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: 
       val newBuffer = buffer.slice().limit(chunkSize).asInstanceOf[ByteBuffer]
       buffer.position(buffer.position + newBuffer.remaining)
       val newChunk = new MessageChunk(new MessageChunkHeader(
-          typ, id, size, newBuffer.remaining, ackId, senderAddress), newBuffer)
+          typ, id, size, newBuffer.remaining, ackId, security, senderAddress), newBuffer)
       return Some(newChunk)
     }
     None

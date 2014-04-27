@@ -1,0 +1,17 @@
+ABSTRACT SYNTAX TREE:
+  (TOK_SHOWPARTITIONS srcpart)
+
+STAGE DEPENDENCIES:
+  Stage-0 is a root stage
+  Stage-1 is a root stage
+
+STAGE PLANS:
+  Stage: Stage-0
+      Show Partitions Operator:
+        Show Partitions
+          table: srcpart
+
+  Stage: Stage-1
+    Fetch Operator
+      limit: -1
+

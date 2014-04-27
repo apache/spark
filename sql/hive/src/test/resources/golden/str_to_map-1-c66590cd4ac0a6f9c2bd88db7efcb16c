@@ -1,0 +1,2 @@
+str_to_map(text, delimiter1, delimiter2) - Creates a map by parsing text 
+Split text into key-value pairs using two delimiters. The first delimiter seperates pairs, and the second delimiter sperates key and value. If only one parameter is given, default delimiters are used: ',' as delimiter1 and '=' as delimiter2.

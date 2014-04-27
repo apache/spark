@@ -26,7 +26,7 @@ import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.mqtt._
 
 /**
- * A simple Mqtt publisher for demonstration purposes, repeatedly publishes 
+ * A simple Mqtt publisher for demonstration purposes, repeatedly publishes
  * Space separated String Message "hello mqtt demo for spark streaming"
  */
 object MQTTPublisher {
@@ -56,7 +56,7 @@ object MQTTPublisher {
     val msg: String = "hello mqtt demo for spark streaming"
 
     while (true) {
-      val message: MqttMessage = new MqttMessage(String.valueOf(msg).getBytes())
+      val message: MqttMessage = new MqttMessage(String.valueOf(msg).getBytes("utf-8"))
       msgtopic.publish(message)
       println("Published data. topic: " + msgtopic.getName() + " Message: " + message)
     }
@@ -97,7 +97,7 @@ object MQTTWordCount {
     val Seq(master, brokerUrl, topic) = args.toSeq
 
     val ssc = new StreamingContext(master, "MqttWordCount", Seconds(2), System.getenv("SPARK_HOME"),
-    StreamingContext.jarOfClass(this.getClass))
+    StreamingContext.jarOfClass(this.getClass).toSeq)
     val lines = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_ONLY_SER_2)
 
     val words = lines.flatMap(x => x.toString.split(" "))

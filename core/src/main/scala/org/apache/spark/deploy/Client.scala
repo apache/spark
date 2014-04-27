@@ -26,7 +26,7 @@ import akka.pattern.ask
 import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -54,8 +54,21 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         System.getenv().foreach{case (k, v) => env(k) = v}
 
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
+
+        val classPathConf = "spark.driver.extraClassPath"
+        val classPathEntries = sys.props.get(classPathConf).toSeq.flatMap { cp =>
+          cp.split(java.io.File.pathSeparator)
+        }
+
+        val libraryPathConf = "spark.driver.extraLibraryPath"
+        val libraryPathEntries = sys.props.get(libraryPathConf).toSeq.flatMap { cp =>
+          cp.split(java.io.File.pathSeparator)
+        }
+
+        val javaOptionsConf = "spark.driver.extraJavaOptions"
+        val javaOpts = sys.props.get(javaOptionsConf)
         val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
-          driverArgs.driverOptions, env)
+          driverArgs.driverOptions, env, classPathEntries, libraryPathEntries, javaOpts)
 
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,
@@ -128,6 +141,9 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
  */
 object Client {
   def main(args: Array[String]) {
+    println("WARNING: This client is deprecated and will be removed in a future version of Spark.")
+    println("Use ./bin/spark-submit with \"--master spark://host:port\"")
+
     val conf = new SparkConf()
     val driverArgs = new ClientArguments(args)
 
@@ -141,7 +157,7 @@ object Client {
     // TODO: See if we can initialize akka so return messages are sent back using the same TCP
     //       flow. Else, this (sadly) requires the DriverClient be routable from the Master.
     val (actorSystem, _) = AkkaUtils.createActorSystem(
-      "driverClient", Utils.localHostName(), 0, false, conf)
+      "driverClient", Utils.localHostName(), 0, false, conf, new SecurityManager(conf))
 
     actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
 

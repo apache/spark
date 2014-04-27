@@ -39,6 +39,7 @@ import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+import org.apache.spark.util.Utils
 
 /** The Scala interactive shell.  It provides a read-eval-print loop
  *  around the Interpreter class.
@@ -130,7 +131,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   def history = in.history
 
   /** The context class loader at the time this object was created */
-  protected val originalClassLoader = Thread.currentThread.getContextClassLoader
+  protected val originalClassLoader = Utils.getContextOrSparkClassLoader
 
   // classpath entries added via :cp
   var addedClasspath: String = ""
@@ -177,13 +178,18 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     override lazy val formatting = new Formatting {
       def prompt = SparkILoop.this.prompt
     }
-    override protected def parentClassLoader =  SparkHelper.explicitParentLoader(settings).getOrElse(classOf[SparkILoop].getClassLoader)
+    override protected def parentClassLoader = SparkHelper.explicitParentLoader(settings).getOrElse(classOf[SparkILoop].getClassLoader)
   }
 
   /** Create a new interpreter. */
   def createInterpreter() {
-    if (addedClasspath != "")
-      settings.classpath append addedClasspath
+    require(settings != null)
+
+    if (addedClasspath != "") settings.classpath.append(addedClasspath)
+    // work around for Scala bug
+    val totalClassPath = SparkILoop.getAddedJars.foldLeft(
+      settings.classpath.value)((l, r) => ClassPath.join(l, r))
+    this.settings.classpath.value = totalClassPath
 
     intp = new SparkILoopInterpreter
   }
@@ -866,7 +872,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   }
 
   val u: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
-  val m = u.runtimeMirror(getClass.getClassLoader)
+  val m = u.runtimeMirror(Utils.getSparkClassLoader)
   private def tagOfStaticClass[T: ClassTag]: u.TypeTag[T] =
     u.TypeTag[T](
       m,
@@ -876,6 +882,8 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       })
 
   def process(settings: Settings): Boolean = savingContextLoader {
+    if (getMaster() == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
+
     this.settings = settings
     createInterpreter()
 
@@ -934,16 +942,9 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
   def createSparkContext(): SparkContext = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
-    val master = this.master match {
-      case Some(m) => m
-      case None => {
-        val prop = System.getenv("MASTER")
-        if (prop != null) prop else "local"
-      }
-    }
     val jars = SparkILoop.getAddedJars.map(new java.io.File(_).getAbsolutePath)
     val conf = new SparkConf()
-      .setMaster(master)
+      .setMaster(getMaster())
       .setAppName("Spark shell")
       .setJars(jars)
       .set("spark.repl.class.uri", intp.classServer.uri)
@@ -956,6 +957,18 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
     sparkContext
+  }
+
+  private def getMaster(): String = {
+    val master = this.master match {
+      case Some(m) => m
+      case None => {
+        val envMaster = sys.env.get("MASTER")
+        val propMaster = sys.props.get("spark.master")
+        envMaster.orElse(propMaster).getOrElse("local[*]")
+      }
+    }
+    master
   }
 
   /** process command-line arguments and do as they request */

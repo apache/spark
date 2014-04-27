@@ -225,11 +225,12 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
     val joined = rdd1.groupWith(rdd2).collect()
     assert(joined.size === 4)
-    assert(joined.toSet === Set(
-      (1, (ArrayBuffer(1, 2), ArrayBuffer('x'))),
-      (2, (ArrayBuffer(1), ArrayBuffer('y', 'z'))),
-      (3, (ArrayBuffer(1), ArrayBuffer())),
-      (4, (ArrayBuffer(), ArrayBuffer('w')))
+    val joinedSet = joined.map(x => (x._1, (x._2._1.toList, x._2._2.toList))).toSet
+    assert(joinedSet === Set(
+      (1, (List(1, 2), List('x'))),
+      (2, (List(1), List('y', 'z'))),
+      (3, (List(1), List())),
+      (4, (List(), List('w')))
     ))
   }
 
@@ -347,6 +348,48 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
      */
     pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
   }
+
+  test("lookup") {
+    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+
+    assert(pairs.partitioner === None)
+    assert(pairs.lookup(1) === Seq(2))
+    assert(pairs.lookup(5) === Seq(6,7))
+    assert(pairs.lookup(-1) === Seq())
+
+  }
+
+  test("lookup with partitioner") {
+    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+
+    val p = new Partitioner {
+      def numPartitions: Int = 2
+
+      def getPartition(key: Any): Int = Math.abs(key.hashCode() % 2)
+    }
+    val shuffled = pairs.partitionBy(p)
+
+    assert(shuffled.partitioner === Some(p))
+    assert(shuffled.lookup(1) === Seq(2))
+    assert(shuffled.lookup(5) === Seq(6,7))
+    assert(shuffled.lookup(-1) === Seq())
+  }
+
+  test("lookup with bad partitioner") {
+    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+
+    val p = new Partitioner {
+      def numPartitions: Int = 2
+
+      def getPartition(key: Any): Int = key.hashCode() % 2
+    }
+    val shuffled = pairs.partitionBy(p)
+
+    assert(shuffled.partitioner === Some(p))
+    assert(shuffled.lookup(1) === Seq(2))
+    intercept[IllegalArgumentException] {shuffled.lookup(-1)}
+  }
+
 }
 
 /*
@@ -405,4 +448,3 @@ class ConfigTestFormat() extends FakeFormat() with Configurable {
     super.getRecordWriter(p1)
   }
 }
-

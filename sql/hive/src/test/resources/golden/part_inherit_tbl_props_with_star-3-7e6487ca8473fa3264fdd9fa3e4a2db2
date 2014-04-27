@@ -1,0 +1,33 @@
+# col_name            	data_type           	comment             
+	 	 
+c1                  	tinyint             	None                
+	 	 
+# Partition Information	 	 
+# col_name            	data_type           	comment             
+	 	 
+c2                  	string              	None                
+	 	 
+# Detailed Partition Information	 	 
+Partition Value:    	[v1]                	 
+Database:           	default             	 
+Table:              	mytbl               	 
+CreateTime:         	Fri Jan 03 17:19:02 PST 2014	 
+LastAccessTime:     	UNKNOWN             	 
+Protect Mode:       	None                	 
+Location:           	file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sharkWarehouse3973694235577030193/mytbl/c2=v1	 
+Partition Parameters:	 	 
+	a                   	myval               
+	b                   	yourval             
+	c                   	noval               
+	transient_lastDdlTime	1388798342          
+	 	 
+# Storage Information	 	 
+SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe	 
+InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
+OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
+Compressed:         	No                  	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
+Storage Desc Params:	 	 
+	serialization.format	1                   

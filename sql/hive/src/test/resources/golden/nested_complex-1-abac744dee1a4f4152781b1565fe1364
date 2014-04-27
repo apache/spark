@@ -1,0 +1,5 @@
+simple_int          	int                 	None                
+max_nested_array    	array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<int>>>>>>>>>>>>>>>>>>>>>>>	None                
+max_nested_map      	array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<map<string,string>>>>>>>>>>>>>>>>>>>>>>	None                
+max_nested_struct   	array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<array<struct<s:string,i:bigint>>>>>>>>>>>>>>>>>>>>>>>	None                
+simple_string       	string              	None                

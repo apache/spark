@@ -17,10 +17,12 @@
 
 package org.apache.spark.util
 
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.spark.util.random.XORShiftRandom
 
+@deprecated("Use Vectors.dense from Spark's mllib.linalg package instead.", "1.0.0")
 class Vector(val elements: Array[Double]) extends Serializable {
   def length = elements.length
 
@@ -135,8 +137,8 @@ object Vector {
   def ones(length: Int) = Vector(length, _ => 1)
 
   /**
-   * Creates this [[org.apache.spark.util.Vector]] of given length containing random numbers 
-   * between 0.0 and 1.0. Optional [[scala.util.Random]] number generator can be provided.
+   * Creates this [[org.apache.spark.util.Vector]] of given length containing random numbers
+   * between 0.0 and 1.0. Optional scala.util.Random number generator can be provided.
    */
   def random(length: Int, random: Random = new XORShiftRandom()) =
     Vector(length, _ => random.nextDouble())

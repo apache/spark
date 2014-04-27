@@ -23,11 +23,11 @@ import scala.util.Random
 
 import akka.actor.{Actor, ActorRef, Props, actorRef2Scala}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SecurityManager}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
-import org.apache.spark.streaming.receivers.Receiver
 import org.apache.spark.util.AkkaUtils
+import org.apache.spark.streaming.receiver.ActorHelper
 
 case class SubscribeReceiver(receiverActor: ActorRef)
 case class UnsubscribeReceiver(receiverActor: ActorRef)
@@ -81,14 +81,14 @@ class FeederActor extends Actor {
  * @see [[org.apache.spark.streaming.examples.FeederActor]]
  */
 class SampleActorReceiver[T: ClassTag](urlOfPublisher: String)
-extends Actor with Receiver {
+extends Actor with ActorHelper {
 
   lazy private val remotePublisher = context.actorSelection(urlOfPublisher)
 
   override def preStart = remotePublisher ! SubscribeReceiver(context.self)
 
   def receive = {
-    case msg => pushBlock(msg.asInstanceOf[T])
+    case msg => store(msg.asInstanceOf[T])
   }
 
   override def postStop() = remotePublisher ! UnsubscribeReceiver(context.self)
@@ -112,8 +112,9 @@ object FeederActor {
     }
     val Seq(host, port) = args.toSeq
 
-
-    val actorSystem = AkkaUtils.createActorSystem("test", host, port.toInt, conf = new SparkConf)._1
+    val conf = new SparkConf
+    val actorSystem = AkkaUtils.createActorSystem("test", host, port.toInt, conf = conf,
+      securityManager = new SecurityManager(conf))._1
     val feeder = actorSystem.actorOf(Props[FeederActor], "FeederActor")
 
     println("Feeder started as:" + feeder)
@@ -149,7 +150,7 @@ object ActorWordCount {
 
     // Create the context and set the batch size
     val ssc = new StreamingContext(master, "ActorWordCount", Seconds(2),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
 
     /*
      * Following is the use of actorStream to plug in custom actor as receiver
@@ -167,7 +168,7 @@ object ActorWordCount {
       Props(new SampleActorReceiver[String]("akka.tcp://test@%s:%s/user/FeederActor".format(
         host, port.toInt))), "SampleReceiver")
 
-    //compute wordcount
+    // compute wordcount
     lines.flatMap(_.split("\\s+")).map(x => (x, 1)).reduceByKey(_ + _).print()
 
     ssc.start()

@@ -29,7 +29,7 @@ private[spark] abstract class ShuffleFetcher {
       shuffleId: Int,
       reduceId: Int,
       context: TaskContext,
-      serializer: Serializer = SparkEnv.get.serializerManager.default): Iterator[T]
+      serializer: Serializer = SparkEnv.get.serializer): Iterator[T]
 
   /** Stop the fetcher */
   def stop() {}

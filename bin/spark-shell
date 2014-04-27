@@ -19,9 +19,8 @@
 
 #
 # Shell script for starting the Spark Shell REPL
-# Note that it will set MASTER to spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}
-# if those two env vars are set in spark-env.sh but MASTER is not.
 
+args="$@"
 cygwin=false
 case "`uname`" in
     CYGWIN*) cygwin=true;;
@@ -30,71 +29,31 @@ esac
 # Enter posix mode for bash
 set -o posix
 
-CORE_PATTERN="^[0-9]+$"
-MEM_PATTERN="^[0-9]+[m|g|M|G]$"
+if [[ "$@" == *--help* ]]; then
+  echo "Usage: ./bin/spark-shell [options]"
+  ./bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exit 0
+fi
 
+## Global script variables
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-	echo "Usage: spark-shell [OPTIONS]"
-	echo "OPTIONS:"
-	echo "-c --cores num, the maximum number of cores to be used by the spark shell"
-	echo "-em --execmem num[m|g], the memory used by each executor of spark shell"
-	echo "-dm --drivermem num[m|g], the memory used by the spark shell and driver"
-	echo "-h --help, print this help information" 
-	exit
-fi
-
-SPARK_SHELL_OPTS=""
-
-for o in "$@"; do
-  if [ "$1" = "-c" -o "$1" = "--cores" ]; then
-    shift
-    if [[ "$1" =~ $CORE_PATTERN ]]; then
-      SPARK_SHELL_OPTS="$SPARK_SHELL_OPTS -Dspark.cores.max=$1"
-      shift
+function main(){
+    if $cygwin; then
+        # Workaround for issue involving JLine and Cygwin
+        # (see http://sourceforge.net/p/jline/bugs/40/).
+        # If you're using the Mintty terminal emulator in Cygwin, may need to set the
+        # "Backspace sends ^H" setting in "Keys" section of the Mintty options
+        # (see https://github.com/sbt/sbt/issues/562).
+        stty -icanon min 1 -echo > /dev/null 2>&1
+        export SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Djline.terminal=unix"
+        $FWDIR/bin/spark-submit spark-internal "$args" --class org.apache.spark.repl.Main
+        stty icanon echo > /dev/null 2>&1
     else
-      echo "ERROR: wrong format for -c/--cores"
-      exit 1
+        export SPARK_REPL_OPTS
+        $FWDIR/bin/spark-submit spark-internal "$args" --class org.apache.spark.repl.Main
     fi
-  fi
-  if [ "$1" = "-em" -o "$1" = "--execmem" ]; then
-    shift
-    if [[ $1 =~ $MEM_PATTERN ]]; then
-      SPARK_SHELL_OPTS="$SPARK_SHELL_OPTS -Dspark.executor.memory=$1"
-      shift
-    else
-      echo "ERROR: wrong format for --execmem/-em"
-      exit 1
-    fi
-  fi
-  if [ "$1" = "-dm" -o "$1" = "--drivermem" ]; then
-    shift
-    if [[ $1 =~ $MEM_PATTERN ]]; then
-      export SPARK_MEM=$1
-      shift
-    else
-      echo "ERROR: wrong format for --drivermem/-dm"
-      exit 1
-    fi
-  fi
-done
-
-# Set MASTER from spark-env if possible
-DEFAULT_SPARK_MASTER_PORT=7077
-if [ -z "$MASTER" ]; then
-  if [ -e "$FWDIR/conf/spark-env.sh" ]; then
-    . "$FWDIR/conf/spark-env.sh"
-  fi
-  if [ "x" != "x$SPARK_MASTER_IP" ]; then
-    if [ "y" != "y$SPARK_MASTER_PORT" ]; then
-      SPARK_MASTER_PORT="${SPARK_MASTER_PORT}"
-    else
-      SPARK_MASTER_PORT=$DEFAULT_SPARK_MASTER_PORT
-    fi
-    export MASTER="spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}"
-  fi
-fi
+}
 
 # Copy restore-TTY-on-exit functions from Scala script so spark-shell exits properly even in
 # binary distribution of Spark where Scala is not installed
@@ -124,20 +83,10 @@ if [[ ! $? ]]; then
   saved_stty=""
 fi
 
-if $cygwin; then
-    # Workaround for issue involving JLine and Cygwin
-    # (see http://sourceforge.net/p/jline/bugs/40/).
-    # If you're using the Mintty terminal emulator in Cygwin, may need to set the
-    # "Backspace sends ^H" setting in "Keys" section of the Mintty options
-    # (see https://github.com/sbt/sbt/issues/562).
-    stty -icanon min 1 -echo > /dev/null 2>&1
-    $FWDIR/bin/spark-class -Djline.terminal=unix $SPARK_SHELL_OPTS org.apache.spark.repl.Main "$@"
-    stty icanon echo > /dev/null 2>&1
-else
-    $FWDIR/bin/spark-class $SPARK_SHELL_OPTS org.apache.spark.repl.Main "$@"
-fi
+main
 
 # record the exit status lest it be overwritten:
 # then reenable echo and propagate the code.
 exit_status=$?
 onExit
+

@@ -19,14 +19,16 @@ package org.apache.spark.streaming
 
 import org.apache.spark.streaming.StreamingContext._
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.SparkContext._
 
 import util.ManualClock
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkException, SparkConf}
 import org.apache.spark.streaming.dstream.{WindowedDStream, DStream}
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import scala.reflect.ClassTag
+import org.apache.spark.storage.StorageLevel
+import scala.collection.mutable
 
 class BasicOperationsSuite extends TestSuiteBase {
   test("map") {
@@ -117,7 +119,7 @@ class BasicOperationsSuite extends TestSuiteBase {
   test("groupByKey") {
     testOperation(
       Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
-      (s: DStream[String]) => s.map(x => (x, 1)).groupByKey(),
+      (s: DStream[String]) => s.map(x => (x, 1)).groupByKey().mapValues(_.toSeq),
       Seq( Seq(("a", Seq(1, 1)), ("b", Seq(1))), Seq(("", Seq(1, 1))), Seq() ),
       true
     )
@@ -251,7 +253,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       Seq(  )
     )
     val operation = (s1: DStream[String], s2: DStream[String]) => {
-      s1.map(x => (x,1)).cogroup(s2.map(x => (x, "x")))
+      s1.map(x => (x,1)).cogroup(s2.map(x => (x, "x"))).mapValues(x => (x._1.toSeq, x._2.toSeq))
     }
     testOperation(inputData1, inputData2, operation, outputData, true)
   }
@@ -324,7 +326,7 @@ class BasicOperationsSuite extends TestSuiteBase {
 
     val updateStateOperation = (s: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-        Some(values.foldLeft(0)(_ + _) + state.getOrElse(0))
+        Some(values.sum + state.getOrElse(0))
       }
       s.map(x => (x, 1)).updateStateByKey[Int](updateFunc)
     }
@@ -359,7 +361,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       // updateFunc clears a state when a StateObject is seen without new values twice in a row
       val updateFunc = (values: Seq[Int], state: Option[StateObject]) => {
         val stateObj = state.getOrElse(new StateObject)
-        values.foldLeft(0)(_ + _) match {
+        values.sum match {
           case 0 => stateObj.expireCounter += 1 // no new values
           case n => { // has new values, increment and reset expireCounter
             stateObj.counter += n
@@ -394,6 +396,16 @@ class BasicOperationsSuite extends TestSuiteBase {
     assert(getInputFromSlice(2000, 4000) == Set(2, 3, 4))
     ssc.stop()
     Thread.sleep(1000)
+  }
+
+  test("slice - has not been initialized") {
+    val ssc = new StreamingContext(conf, Seconds(1))
+    val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
+    val stream = new TestInputStream[Int](ssc, input, 2)
+    val thrown = intercept[SparkException] {
+      stream.slice(new Time(0), new Time(1000))
+    }
+    assert(thrown.getMessage.contains("has not been initialized"))
   }
 
   val cleanupTestInput = (0 until 10).map(x => Seq(x, x + 1)).toSeq
@@ -448,6 +460,78 @@ class BasicOperationsSuite extends TestSuiteBase {
     assert(stateStream.rememberDuration === stateStream.checkpointDuration * 2)
     assert(stateStream.generatedRDDs.contains(Time(10000)))
     assert(!stateStream.generatedRDDs.contains(Time(4000)))
+  }
+
+  test("rdd cleanup - input blocks and persisted RDDs") {
+    // Actually receive data over through receiver to create BlockRDDs
+
+    // Start the server
+    val testServer = new TestServer()
+    testServer.start()
+
+    // Set up the streaming context and input streams
+    val ssc = new StreamingContext(conf, batchDuration)
+    val networkStream = ssc.socketTextStream("localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
+    val mappedStream = networkStream.map(_ + ".").persist()
+    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+    val outputStream = new TestOutputStream(mappedStream, outputBuffer)
+
+    outputStream.register()
+    ssc.start()
+
+    // Feed data to the server to send to the network receiver
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val input = Seq(1, 2, 3, 4, 5, 6)
+
+    val blockRdds = new mutable.HashMap[Time, BlockRDD[_]]
+    val persistentRddIds = new mutable.HashMap[Time, Int]
+
+    def collectRddInfo() { // get all RDD info required for verification
+      networkStream.generatedRDDs.foreach { case (time, rdd) =>
+        blockRdds(time) = rdd.asInstanceOf[BlockRDD[_]]
+      }
+      mappedStream.generatedRDDs.foreach { case (time, rdd) =>
+        persistentRddIds(time) = rdd.id
+      }
+    }
+
+    Thread.sleep(200)
+    for (i <- 0 until input.size) {
+      testServer.send(input(i).toString + "\n")
+      Thread.sleep(200)
+      clock.addToTime(batchDuration.milliseconds)
+      collectRddInfo()
+    }
+
+    Thread.sleep(200)
+    collectRddInfo()
+    logInfo("Stopping server")
+    testServer.stop()
+    logInfo("Stopping context")
+
+    // verify data has been received
+    assert(outputBuffer.size > 0)
+    assert(blockRdds.size > 0)
+    assert(persistentRddIds.size > 0)
+
+    import Time._
+
+    val latestPersistedRddId = persistentRddIds(persistentRddIds.keySet.max)
+    val earliestPersistedRddId = persistentRddIds(persistentRddIds.keySet.min)
+    val latestBlockRdd = blockRdds(blockRdds.keySet.max)
+    val earliestBlockRdd = blockRdds(blockRdds.keySet.min)
+    // verify that the latest mapped RDD is persisted but the earliest one has been unpersisted
+    assert(ssc.sparkContext.persistentRdds.contains(latestPersistedRddId))
+    assert(!ssc.sparkContext.persistentRdds.contains(earliestPersistedRddId))
+
+    // verify that the latest input blocks are present but the earliest blocks have been removed
+    assert(latestBlockRdd.isValid)
+    assert(latestBlockRdd.collect != null)
+    assert(!earliestBlockRdd.isValid)
+    earliestBlockRdd.blockIds.foreach { blockId =>
+      assert(!ssc.sparkContext.env.blockManager.master.contains(blockId))
+    }
+    ssc.stop()
   }
 
   /** Test cleanup of RDDs in DStream metadata */
