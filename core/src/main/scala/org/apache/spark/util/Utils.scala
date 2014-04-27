@@ -1062,4 +1062,10 @@ private[spark] object Utils extends Logging {
   def isWindows = Option(System.getProperty("os.name")).
     map(_.startsWith("Windows")).getOrElse(false)
 
+  /**
+   * Indicates whether Spark is currently running unit tests.
+   */
+  private[spark] def isTesting = {
+    sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
+  }
 }
