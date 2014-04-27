@@ -44,7 +44,7 @@ import java.nio.charset.Charset
  *
  * and run the example as
  *
- *      `$ ./run-example org.apache.spark.streaming.examples.RecoverableNetworkWordCount \
+ *      `$ ./run-example org.apache.spark.examples.streaming.RecoverableNetworkWordCount \
  *              local[2] localhost 9999 ~/checkpoint/ ~/out`
  *
  * If the directory ~/checkpoint/ does not exist (e.g. running for the first time), it will create
@@ -56,7 +56,7 @@ import java.nio.charset.Charset
  *
  *      `$ ./spark-class org.apache.spark.deploy.Client -s launch <cluster-url> \
  *              <path-to-examples-jar> \
- *              org.apache.spark.streaming.examples.RecoverableNetworkWordCount <cluster-url> \
+ *              org.apache.spark.examples.streaming.RecoverableNetworkWordCount <cluster-url> \
  *              localhost 9999 ~/checkpoint ~/out`
  *
  * <path-to-examples-jar> would typically be

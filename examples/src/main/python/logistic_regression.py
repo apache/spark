@@ -20,7 +20,7 @@ A logistic regression implementation that uses NumPy (http://www.numpy.org)
 to act on batches of input data using efficient matrix operations.
 
 In practice, one may prefer to use the LogisticRegression algorithm in
-MLlib, as shown in python/examples/mllib/logistic_regression.py.
+MLlib, as shown in examples/src/main/python/mllib/logistic_regression.py.
 """
 
 from collections import namedtuple

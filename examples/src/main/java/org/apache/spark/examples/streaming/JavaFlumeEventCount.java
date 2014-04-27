@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.examples;
+package org.apache.spark.examples.streaming;
 
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.examples.streaming.StreamingExamples;

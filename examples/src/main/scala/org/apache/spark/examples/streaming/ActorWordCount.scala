@@ -78,7 +78,7 @@ class FeederActor extends Actor {
  * goes and subscribe to a typical publisher/feeder actor and receives
  * data.
  *
- * @see [[org.apache.spark.streaming.examples.FeederActor]]
+ * @see [[org.apache.spark.examples.streaming.FeederActor]]
  */
 class SampleActorReceiver[T: ClassTag](urlOfPublisher: String)
 extends Actor with ActorHelper {
@@ -131,9 +131,9 @@ object FeederActor {
  *   <hostname> and <port> describe the AkkaSystem that Spark Sample feeder is running on.
  *
  * To run this example locally, you may run Feeder Actor as
- *    `$ ./bin/run-example org.apache.spark.streaming.examples.FeederActor 127.0.1.1 9999`
+ *    `$ ./bin/run-example org.apache.spark.examples.streaming.FeederActor 127.0.1.1 9999`
  * and then run the example
- *    `./bin/run-example org.apache.spark.streaming.examples.ActorWordCount local[2] 127.0.1.1 9999`
+ *    `./bin/run-example org.apache.spark.examples.streaming.ActorWordCount local[2] 127.0.1.1 9999`
  */
 object ActorWordCount {
   def main(args: Array[String]) {

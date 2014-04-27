@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.examples;
+package org.apache.spark.examples.mllib;
 
 import java.util.regex.Pattern;
 

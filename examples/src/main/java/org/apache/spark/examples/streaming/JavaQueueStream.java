@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.examples;
+package org.apache.spark.examples.streaming;
 
 import com.google.common.collect.Lists;
 import scala.Tuple2;
