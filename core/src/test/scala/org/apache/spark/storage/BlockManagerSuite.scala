@@ -833,6 +833,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val notMappedAsArray = arrayFromByteBuffer(notMapped)
     assert(Arrays.equals(mappedAsArray, bytes))
     assert(Arrays.equals(notMappedAsArray, bytes))
+  }
   
   test("updated block statuses") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
