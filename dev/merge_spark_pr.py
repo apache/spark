@@ -26,10 +26,17 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import urllib2
+
+try:
+  import jira.client
+  JIRA_IMPORTED=True
+except ImportError:
+  JIRA_IMPORTED=False
 
 # Location of your Spark git development area
 SPARK_HOME = os.environ.get("SPARK_HOME", "/home/patrick/Documents/spark")
@@ -37,8 +44,15 @@ SPARK_HOME = os.environ.get("SPARK_HOME", "/home/patrick/Documents/spark")
 PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
+# ASF JIRA username
+JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "pwendell")
+# ASF JIRA password
+JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "1234")
 
-GIT_API_BASE = "https://api.github.com/repos/apache/spark"
+GITHUB_BASE = "https://github.com/apache/spark/pull"
+GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
+JIRA_BASE = "https://issues.apache.org/jira/browse"
+JIRA_API_BASE = "https://issues.apache.org/jira"
 # Prefix added to temporary branches
 BRANCH_PREFIX = "PR_TOOL"
 
@@ -145,8 +159,7 @@ def merge_pr(pr_num, target_ref):
   return merge_hash
 
 
-def maybe_cherry_pick(pr_num, merge_hash, default_branch):
-  continue_maybe("Would you like to pick %s into another branch?" % merge_hash)
+def cherry_pick(pr_num, merge_hash, default_branch):
   pick_ref = raw_input("Enter a branch name [%s]: " % default_branch)
   if pick_ref == "":
     pick_ref = default_branch
@@ -171,14 +184,86 @@ def maybe_cherry_pick(pr_num, merge_hash, default_branch):
 
   print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
   print("Pick hash: %s" % pick_hash)
+  return pick_ref
 
-branches = get_json("%s/branches" % GIT_API_BASE)
+def fix_version_from_branch(branch, versions):
+  # Note: Assumes this is a sorted (newest->oldest) list of un-released versions
+  if branch == "master":
+    return versions[0]
+  else:
+    branch_ver = branch.replace("branch-", "")
+    return filter(lambda x: x.name.startswith(branch_ver), versions)[-1]
+
+def resolve_jira(title, merge_branches, comment):
+  asf_jira = jira.client.JIRA({'server': JIRA_API_BASE},
+    basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
+
+  default_jira_id = ""
+  search = re.findall("SPARK-[0-9]{4,5}", title)
+  if len(search) > 0:
+    default_jira_id = search[0]
+
+  jira_id = raw_input("Enter a JIRA id [%s]: " % default_jira_id)
+  if jira_id == "":
+    jira_id = default_jira_id
+
+  try:
+    issue = asf_jira.issue(jira_id)
+  except Exception as e:
+    fail("ASF JIRA could not find %s\n%s" % (jira_id, e))
+
+  cur_status = issue.fields.status.name
+  cur_summary = issue.fields.summary
+  cur_assignee = issue.fields.assignee
+  if cur_assignee == None:
+    cur_assignee = "NOT ASSIGNED!!!"
+  else:
+    cur_assignee = cur_assignee.displayName
+
+  if cur_status == "Resolved" or cur_status == "Closed":
+    fail("JIRA issue %s already has status '%s'" % (jira_id, cur_status))
+  print ("=== JIRA %s ===" % jira_id)
+  print ("summary\t\t%s\nassignee\t%s\nstatus\t\t%s\nurl\t\t%s/%s\n" % (
+    cur_summary, cur_assignee, cur_status, JIRA_BASE, jira_id))
+
+  versions = asf_jira.project_versions("SPARK")
+  versions = sorted(versions, key = lambda x: x.name, reverse=True)
+  versions = filter(lambda x: x.raw['released'] == False, versions)
+
+  default_fix_versions = map(lambda x: fix_version_from_branch(x, versions).name, merge_branches)
+  for v in default_fix_versions:
+    # Handles the case where we have forked a release branch but not yet made the release.
+    # In this case, if the PR is committed to the master branch and the release branch, we
+    # only consider the release branch to be the fix version. E.g. it is not valid to have
+    # both 1.1.0 and 1.0.0 as fix versions.
+    (major, minor, patch) = v.split(".")
+    if patch == 0:
+      previous = "%s.%s.%s" % (major, int(minor) - 1, 0)
+      if previous in default_fix_versions:
+        default_fix_versions = filter(lambda x: x != v, default_fix_versions)
+  default_fix_versions = ",".join(default_fix_versions)
+
+  fix_versions = raw_input("Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
+  if fix_versions == "":
+    fix_versions = default_fix_versions
+  fix_versions = fix_versions.replace(" ", "").split(",")
+
+  def get_version_json(version_str):
+    return filter(lambda v: v.name == version_str, versions)[0].raw
+  jira_fix_versions = map(lambda v: get_version_json(v), fix_versions)
+
+  resolve = filter(lambda a: a['name'] == "Resolve Issue", asf_jira.transitions(jira_id))[0]
+  asf_jira.transition_issue(jira_id, resolve["id"], fixVersions=jira_fix_versions, comment=comment)
+
+  print "Succesfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions)
+
+branches = get_json("%s/branches" % GITHUB_API_BASE)
 branch_names = filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches])
 # Assumes branch names can be sorted lexicographically
 latest_branch = sorted(branch_names, reverse=True)[0]
 
 pr_num = raw_input("Which pull request would you like to merge? (e.g. 34): ")
-pr = get_json("%s/pulls/%s" % (GIT_API_BASE, pr_num))
+pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
 
 url = pr["url"]
 title = pr["title"]
@@ -208,11 +293,22 @@ if not bool(pr["mergeable"]):
   continue_maybe(msg)
 
 print ("\n=== Pull Request #%s ===" % pr_num)
-print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (
+print ("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (
   title, pr_repo_desc, target_ref, url))
 continue_maybe("Proceed with merging pull request #%s?" % pr_num)
 
+merged_refs = [target_ref]
+
 merge_hash = merge_pr(pr_num, target_ref)
 
-while True:
-  maybe_cherry_pick(pr_num, merge_hash, latest_branch)
+pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
+while raw_input("\n%s (y/n): " % pick_prompt).lower() == "y":
+  merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
+
+if JIRA_IMPORTED:
+  continue_maybe("Would you like to update an associated JIRA?")
+  jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (pr_num, GITHUB_BASE, pr_num)
+  resolve_jira(title, merged_refs, jira_comment)
+else:
+  print "Could not find jira-python library. Run 'sudo pip install jira-python' to install."
+  print "Exiting without trying to close the associated JIRA."
