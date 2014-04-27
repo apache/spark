@@ -178,6 +178,7 @@ fi
 if [ "$MAKE_TGZ" == "true" ]; then
   TARDIR_NAME=spark-$VERSION-bin-$NAME
   TARDIR="$FWDIR/$TARDIR_NAME"
+  rm -rf "$TARDIR"
   cp -r "$DISTDIR" "$TARDIR"
   tar czf "spark-$VERSION-bin-$NAME.tgz" -C "$FWDIR" "$TARDIR_NAME"
   rm -rf "$TARDIR"
