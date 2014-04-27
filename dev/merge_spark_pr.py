@@ -237,7 +237,7 @@ def resolve_jira(title, merge_branches, comment):
     # only consider the release branch to be the fix version. E.g. it is not valid to have
     # both 1.1.0 and 1.0.0 as fix versions.
     (major, minor, patch) = v.split(".")
-    if patch == 0:
+    if patch == "0":
       previous = "%s.%s.%s" % (major, int(minor) - 1, 0)
       if previous in default_fix_versions:
         default_fix_versions = filter(lambda x: x != v, default_fix_versions)
