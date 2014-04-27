@@ -27,13 +27,14 @@ import org.scalatest.{BeforeAndAfterEach, FunSuite}
 
 import org.apache.spark.SparkConf
 
+
 class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
   private val testConf = new SparkConf(false)
   val rootDir0 = Files.createTempDir()
   rootDir0.deleteOnExit()
   val rootDir1 = Files.createTempDir()
   rootDir1.deleteOnExit()
-  val rootDirs = rootDir0.getName + "," + rootDir1.getName
+  val rootDirs = rootDir0.getCanonicalPath + "," + rootDir1.getCanonicalPath
   println("Created root dirs: " + rootDirs)
 
   // This suite focuses primarily on consolidation features,

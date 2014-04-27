@@ -213,7 +213,7 @@ private[spark] object HttpBroadcast extends Logging {
     SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
     if (removeFromDriver) {
       val file = getFile(id)
-      files.remove(file.toString)
+      files.remove(file.getCanonicalPath)
       deleteBroadcastFile(file)
     }
   }
@@ -229,7 +229,7 @@ private[spark] object HttpBroadcast extends Logging {
       val (file, time) = (entry.getKey, entry.getValue)
       if (time < cleanupTime) {
         iterator.remove()
-        deleteBroadcastFile(new File(file.toString))
+        deleteBroadcastFile(new File(file))
       }
     }
   }
