@@ -87,21 +87,19 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     val segment = diskManager.getBlockLocation(blockId)
     val channel = new RandomAccessFile(segment.file, "r").getChannel()
 
-    val buffer =
-      try {
-        // For small files, directly read rather than memory map
-        if (segment.length < minMemoryMapBytes) {
-          val buf = ByteBuffer.allocate(segment.length.toInt)
-          channel.read(buf, segment.offset)
-          buf.rewind()
-          Some(buf)
-        } else {
-          Some(channel.map(MapMode.READ_ONLY, segment.offset, segment.length))
-        }
-      } finally {
-        channel.close()
+    try {
+      // For small files, directly read rather than memory map
+      if (segment.length < minMemoryMapBytes) {
+        val buf = ByteBuffer.allocate(segment.length.toInt)
+        channel.read(buf, segment.offset)
+        buf.flip()
+        Some(buf)
+      } else {
+        Some(channel.map(MapMode.READ_ONLY, segment.offset, segment.length))
       }
-    buffer
+    } finally {
+      channel.close()
+    }
   }
 
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {

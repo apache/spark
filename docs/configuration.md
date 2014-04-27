@@ -124,7 +124,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.storage.memoryMapThreshold</td>
-  <td>2 * 4096</td>
+  <td>8192</td>
   <td>
     Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
     This prevents Spark from memory mapping very small blocks. In general, memory
