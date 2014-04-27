@@ -1056,4 +1056,11 @@ private[spark] object Utils extends Logging {
   def getHadoopFileSystem(path: String): FileSystem = {
     getHadoopFileSystem(new URI(path))
   }
+
+  /**
+   * Indicates whether Spark is currently running unit tests.
+   */
+  private[spark] def isTesting = {
+    sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
+  }
 }

@@ -185,7 +185,6 @@ object SparkSubmit {
     if (clusterManager == STANDALONE) {
       val existingJars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
       sysProps.put("spark.jars", (existingJars ++ Seq(appArgs.primaryResource)).mkString(","))
-      println("SPARK JARS" + sysProps.get("spark.jars"))
     }
 
     if (deployOnCluster && clusterManager == STANDALONE) {
