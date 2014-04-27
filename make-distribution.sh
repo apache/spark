@@ -43,7 +43,7 @@
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
 
-VERSION=$(mvn help:evaluate -Dexpression=project.version |grep -v "INFO")
+VERSION=$(mvn help:evaluate -Dexpression=project.version | sed -n -e '/\[.*\]/!p' | sed -n -e '/Download/!p' | sed -n -e '/^[0-9]/p;q')
 if [ $? == -1 ] ;then
     echo -e "You need Maven installed to build Spark."
     echo -e "Download Maven from https://maven.apache.org."
