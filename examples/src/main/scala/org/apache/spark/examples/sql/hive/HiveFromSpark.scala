@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.examples
+package org.apache.spark.examples.sql.hive
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.examples
+package org.apache.spark.examples.streaming
 
 import org.eclipse.paho.client.mqttv3.{MqttClient, MqttClientPersistence, MqttException, MqttMessage, MqttTopic}
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence

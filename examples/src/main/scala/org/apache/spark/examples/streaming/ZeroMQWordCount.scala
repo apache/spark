@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.examples
+package org.apache.spark.examples.streaming
 
 import akka.actor.ActorSystem
 import akka.actor.actorRef2Scala

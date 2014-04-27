@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.examples
+package org.apache.spark.examples.streaming
 
 import org.apache.spark.streaming.{Time, Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._

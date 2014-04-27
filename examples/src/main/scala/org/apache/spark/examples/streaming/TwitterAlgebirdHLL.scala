@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.examples
+package org.apache.spark.examples.streaming
 
 import com.twitter.algebird.HyperLogLogMonoid
 import com.twitter.algebird.HyperLogLog._

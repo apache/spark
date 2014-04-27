@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.examples.clickstream
+package org.apache.spark.examples.streaming.clickstream
 
 import java.net.ServerSocket
 import java.io.PrintWriter

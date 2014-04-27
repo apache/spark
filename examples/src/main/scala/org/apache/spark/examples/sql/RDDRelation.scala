@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.examples
+package org.apache.spark.examples.sql
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
