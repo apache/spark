@@ -284,8 +284,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
         |  --deploy-mode DEPLOY_MODE   Mode to deploy the app in, either 'client' or 'cluster'.
         |  --class CLASS_NAME          Name of your app's main class (required for Java apps).
-        |  --arg ARG                   Argument to be passed to your application's main class. This
-        |                              option can be specified multiple times for multiple args.
         |  --name NAME                 The name of your application (Default: 'Spark').
         |  --jars JARS                 A comma-separated list of local jars to include on the
         |                              driver classpath and that SparkContext.addJar will work
