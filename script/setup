@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -x
+set -e
 
 FWDIR="$(cd `dirname $0`/..; pwd)"
 export SPARK_HADOOP_VERSION="$(cat $FWDIR/SHOPIFY_HADOOP_VERSION)"

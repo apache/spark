@@ -1,9 +1,13 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 set -x
+set -e
+
+FWDIR="$(cd `dirname $0`/..; pwd)"
 # Compile spark jars into dist folder
 export LOCAL_SBT_DIR=1
 ./make-distribution.sh --tgz --hadoop $(cat SHOPIFY_HADOOP_VERSION)
-if [ "$?" != "0" ]; then
+if [ "$?" != "0" || -e "$FWDIR/lib/spark-assembly*hadoop*.jar" ]; then
   echo "Failed to make spark distro using sbt."
   exit 1
 fi

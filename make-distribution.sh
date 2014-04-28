@@ -39,6 +39,8 @@
 # 5) ./bin/spark-shell --master spark://my-master-ip:7077
 #
 
+set -e
+
 # Figure out where the Spark framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
