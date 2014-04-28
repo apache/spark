@@ -45,16 +45,16 @@ object FlumeUtils {
    * @param hostname Hostname of the slave machine to which the flume data will be sent
    * @param port     Port of the slave machine to which the flume data will be sent
    * @param storageLevel  Storage level to use for storing the received objects
-   * @param enableCompression  Should Netty Server decode input stream from client  
+   * @param enableDecompression  should netty server decompress input stream
    */
   def createStream (
       ssc: StreamingContext,
       hostname: String,
       port: Int,
       storageLevel: StorageLevel,
-      enableCompression: Boolean
+      enableDecompression: Boolean
     ): ReceiverInputDStream[SparkFlumeEvent] = {
-    val inputStream = new FlumeInputDStream[SparkFlumeEvent](ssc, hostname, port, storageLevel, enableCompression)
+    val inputStream = new FlumeInputDStream[SparkFlumeEvent](ssc, hostname, port, storageLevel, enableDecompression)
     inputStream
   }
 
@@ -92,15 +92,15 @@ object FlumeUtils {
    * @param hostname Hostname of the slave machine to which the flume data will be sent
    * @param port     Port of the slave machine to which the flume data will be sent
    * @param storageLevel  Storage level to use for storing the received objects
-   * @param enableCompression  Should Netty Server decode input stream from client  
+   * @param enableDecompression  should netty server decompress input stream
    */
   def createStream(
       jssc: JavaStreamingContext,
       hostname: String,
       port: Int,
       storageLevel: StorageLevel,
-      enableCompression: Boolean
+      enableDecompression: Boolean
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
-    createStream(jssc.ssc, hostname, port, storageLevel, enableCompression)
+    createStream(jssc.ssc, hostname, port, storageLevel, enableDecompression)
   }
 }

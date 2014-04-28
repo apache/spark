@@ -49,11 +49,11 @@ class FlumeStreamSuite extends TestSuiteBase {
     runFlumeStreamTest(true, 9998)
   }
   
-  def runFlumeStreamTest(enableCompression: Boolean, testPort: Int) {
+  def runFlumeStreamTest(enableDecompression: Boolean, testPort: Int) {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
     val flumeStream: JavaReceiverInputDStream[SparkFlumeEvent] =
-      FlumeUtils.createStream(ssc, "localhost", testPort, StorageLevel.MEMORY_AND_DISK, enableCompression)
+      FlumeUtils.createStream(ssc, "localhost", testPort, StorageLevel.MEMORY_AND_DISK, enableDecompression)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
     val outputStream = new TestOutputStream(flumeStream.receiverInputDStream, outputBuffer)
@@ -66,7 +66,7 @@ class FlumeStreamSuite extends TestSuiteBase {
     val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", testPort))
     var client: AvroSourceProtocol = null;
 
-    if (enableCompression) {
+    if (enableDecompression) {
       client = SpecificRequestor.getClient(
           classOf[AvroSourceProtocol], 
           new NettyTransceiver(new InetSocketAddress("localhost", testPort), 
@@ -75,7 +75,6 @@ class FlumeStreamSuite extends TestSuiteBase {
       client = SpecificRequestor.getClient(
         classOf[AvroSourceProtocol], transceiver)
     }
-
     for (i <- 0 until input.size) {
       val event = new AvroFlumeEvent
       event.setBody(ByteBuffer.wrap(input(i).toString.getBytes("utf-8")))
@@ -109,8 +108,7 @@ class FlumeStreamSuite extends TestSuiteBase {
     }
   }
 
-  class CompressionChannelFactory(compressionLevel: Int) extends
-      NioClientSocketChannelFactory {
+  class CompressionChannelFactory(compressionLevel: Int) extends NioClientSocketChannelFactory {
     override def newChannel(pipeline:ChannelPipeline) : SocketChannel = {
       var encoder : ZlibEncoder = new ZlibEncoder(compressionLevel);
       pipeline.addFirst("deflater", encoder);

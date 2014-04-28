@@ -52,11 +52,11 @@ class FlumeInputDStream[T: ClassTag](
   host: String,
   port: Int,
   storageLevel: StorageLevel,
-  enableCompression: Boolean
+  enableDecompression: Boolean
 ) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
 
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
-    new FlumeReceiver(host, port, storageLevel, enableCompression)
+    new FlumeReceiver(host, port, storageLevel, enableDecompression)
   }
 }
 
@@ -145,7 +145,7 @@ class FlumeReceiver(
     host: String,
     port: Int,
     storageLevel: StorageLevel,
-    enableCompression: Boolean
+    enableDecompression: Boolean
   ) extends Receiver[SparkFlumeEvent](storageLevel) with Logging {
 
   lazy val responder = new SpecificResponder(
@@ -153,7 +153,7 @@ class FlumeReceiver(
   lazy val server = initServer()
 
   private def initServer() = {
-    if (enableCompression) {
+    if (enableDecompression) {
       val channelFactory = new NioServerSocketChannelFactory
         (Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
       val channelPipelieFactory = new CompressionChannelPipelineFactory()
@@ -183,7 +183,7 @@ class FlumeReceiver(
 }
 
 private[streaming]
-class CompressionChannelPipelineFactory() extends ChannelPipelineFactory {
+class CompressionChannelPipelineFactory extends ChannelPipelineFactory {
   
   def getPipeline() = {
       val pipeline = Channels.pipeline()
