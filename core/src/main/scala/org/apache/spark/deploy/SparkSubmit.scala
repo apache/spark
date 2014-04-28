@@ -131,7 +131,7 @@ object SparkSubmit {
 
     if (clusterManager == YARN) {
       // The choice of class is arbitrary, could use any spark-yarn class
-      if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") || !Utils.isTesting) {
+      if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
         val msg = "Could not load YARN classes. This copy of Spark may not have been compiled " +
           "with YARN support."
         throw new Exception(msg)
