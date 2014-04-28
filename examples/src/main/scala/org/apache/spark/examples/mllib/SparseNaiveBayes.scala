@@ -33,15 +33,15 @@ import org.apache.spark.mllib.util.{MLUtils, MulticlassLabelParser}
  */
 object SparseNaiveBayes extends App {
 
-  case class NaiveBayesParams(
+  case class Params(
       input: String = null,
       minPartitions: Int = 0,
       numFeatures: Int = -1,
       lambda: Double = 1.0)
 
-  val defaultParams = NaiveBayesParams()
+  val defaultParams = Params()
 
-  val parser = new OptionParser[NaiveBayesParams]("SparseNaiveBayes") {
+  val parser = new OptionParser[Params]("SparseNaiveBayes") {
     head("SparseNaiveBayes: an example naive Bayes app for LIBSVM data.")
     opt[Int]("numPartitions")
       .text("min number of partitions")
@@ -64,7 +64,7 @@ object SparseNaiveBayes extends App {
     sys.exit(1)
   }
 
-  def run(params: NaiveBayesParams) {
+  def run(params: Params) {
     val conf = new SparkConf().setAppName(s"SparseNaiveBayes with $params")
     val sc = new SparkContext(conf)
 
