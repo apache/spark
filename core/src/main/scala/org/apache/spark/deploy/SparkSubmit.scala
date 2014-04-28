@@ -124,11 +124,12 @@ object SparkSubmit {
       }
     } else if (clusterManager == YARN) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
-      // Special flag to avoid deprecation warnings at the client
-      sysProps("SPARK_SUBMIT") = "true"
       childArgs += ("--jar", appArgs.primaryResource)
       childArgs += ("--class", appArgs.mainClass)
     }
+
+    // Special flag to avoid deprecation warnings at the client
+    sysProps("SPARK_SUBMIT") = "true"
 
     val options = List[OptionAssigner](
       new OptionAssigner(appArgs.master, ALL_CLUSTER_MGRS, false, sysProp = "spark.master"),
