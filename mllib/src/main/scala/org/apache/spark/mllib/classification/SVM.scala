@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{DataValidators, MLUtils}
+import org.apache.spark.mllib.util.DataValidators
 import org.apache.spark.rdd.RDD
 
 /**
@@ -182,20 +181,5 @@ object SVMWithSGD {
    */
   def train(input: RDD[LabeledPoint], numIterations: Int): SVMModel = {
     train(input, numIterations, 1.0, 1.0, 1.0)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length != 5) {
-      println("Usage: SVM <master> <input_dir> <step_size> <regularization_parameter> <niters>")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "SVM")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = SVMWithSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
-
-    println("Weights: " + model.weights)
-    println("Intercept: " + model.intercept)
-
-    sc.stop()
   }
 }
