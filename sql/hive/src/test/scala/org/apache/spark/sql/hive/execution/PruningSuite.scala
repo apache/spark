@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.hive.{HiveTableScan, TestHive}
+import org.apache.spark.sql.hive.test.TestHive
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._

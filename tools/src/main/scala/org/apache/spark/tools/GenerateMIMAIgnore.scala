@@ -41,7 +41,7 @@ object GenerateMIMAIgnore {
 
   private def classesPrivateWithin(packageName: String): Set[String] = {
 
-    val classes = getClasses(packageName, classLoader)
+    val classes = getClasses(packageName)
     val privateClasses = mutable.HashSet[String]()
 
     def isPackagePrivate(className: String) = {
@@ -50,7 +50,7 @@ object GenerateMIMAIgnore {
            is a module or class. */
 
         val privateAsClass = mirror
-          .staticClass(className)
+          .classSymbol(Class.forName(className, false, classLoader))
           .privateWithin
           .fullName
           .startsWith(packageName)
@@ -99,15 +99,16 @@ object GenerateMIMAIgnore {
     // Heuristic to remove JVM classes that do not correspond to user-facing classes in Scala
     name.contains("anon") ||
     name.endsWith("$class") ||
-    name.contains("$sp")
+    name.contains("$sp") ||
+    name.contains("hive") ||
+    name.contains("Hive")
   }
 
   /**
    * Scans all classes accessible from the context class loader which belong to the given package
    * and subpackages both from directories and jars present on the classpath.
    */
-  private def getClasses(packageName: String,
-      classLoader: ClassLoader = Thread.currentThread().getContextClassLoader): Set[String] = {
+  private def getClasses(packageName: String): Set[String] = {
     val path = packageName.replace('.', '/')
     val resources = classLoader.getResources(path)
 
@@ -126,7 +127,7 @@ object GenerateMIMAIgnore {
     val jar = new JarFile(new File(jarPath))
     val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))
     val classes = for (entry <- enums if entry.endsWith(".class"))
-      yield Class.forName(entry.replace('/', '.').stripSuffix(".class"))
+      yield Class.forName(entry.replace('/', '.').stripSuffix(".class"), false, classLoader)
     classes
   }
 }

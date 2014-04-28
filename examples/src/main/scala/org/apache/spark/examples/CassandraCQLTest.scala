@@ -18,15 +18,18 @@
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 import scala.collection.immutable.Map
+
 import org.apache.cassandra.hadoop.ConfigHelper
 import org.apache.cassandra.hadoop.cql3.CqlPagingInputFormat
 import org.apache.cassandra.hadoop.cql3.CqlConfigHelper
 import org.apache.cassandra.hadoop.cql3.CqlOutputFormat
 import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.mapreduce.Job
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 
@@ -72,7 +75,7 @@ object CassandraCQLTest {
     val sc = new SparkContext(args(0),
                "CQLTestApp",
                System.getenv("SPARK_HOME"),
-               SparkContext.jarOfClass(this.getClass))
+               SparkContext.jarOfClass(this.getClass).toSeq)
     val cHost: String = args(1)
     val cPort: String = args(2)
     val KeySpace = "retail"

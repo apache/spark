@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.columnar.compression
 
-import java.nio.ByteBuffer
+import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnType, NativeColumnType}
@@ -84,7 +84,7 @@ private[sql] object CompressionScheme {
   }
 
   def columnHeaderSize(columnBuffer: ByteBuffer): Int = {
-    val header = columnBuffer.duplicate()
+    val header = columnBuffer.duplicate().order(ByteOrder.nativeOrder)
     val nullCount = header.getInt(4)
     // Column type ID + null count + null positions
     4 + 4 + 4 * nullCount

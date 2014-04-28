@@ -150,20 +150,27 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark local dirs") {
       override def run() {
         logDebug("Shutdown hook called")
-        localDirs.foreach { localDir =>
-          try {
-            if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
-          } catch {
-            case t: Throwable =>
-              logError("Exception while deleting local spark dir: " + localDir, t)
-          }
-        }
-
-        if (shuffleSender != null) {
-          shuffleSender.stop()
-        }
+        DiskBlockManager.this.stop()
       }
     })
+  }
+
+  /** Cleanup local dirs and stop shuffle sender. */
+  private[spark] def stop() {
+    localDirs.foreach { localDir =>
+      if (localDir.isDirectory() && localDir.exists()) {
+        try {
+          if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
+        } catch {
+          case t: Throwable =>
+            logError("Exception while deleting local spark dir: " + localDir, t)
+        }
+      }
+    }
+
+    if (shuffleSender != null) {
+      shuffleSender.stop()
+    }
   }
 
   private[storage] def startShuffleBlockSender(port: Int): Int = {

@@ -24,6 +24,9 @@ import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collectio
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
+import scala.util.Try
+
+import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
@@ -87,16 +90,47 @@ private[spark] class PythonRDD[T: ClassTag](
           dataOut.flush()
           worker.shutdownOutput()
         } catch {
+
           case e: java.io.FileNotFoundException =>
             readerException = e
-            // Kill the Python worker process:
-            worker.shutdownOutput()
+            Try(worker.shutdownOutput()) // kill Python worker process
+
           case e: IOException =>
             // This can happen for legitimate reasons if the Python code stops returning data
-            // before we are done passing elements through, e.g., for take(). Just log a message
-            // to say it happened.
-            logInfo("stdin writer to Python finished early")
-            logDebug("stdin writer to Python finished early", e)
+            // before we are done passing elements through, e.g., for take(). Just log a message to
+            // say it happened (as it could also be hiding a real IOException from a data source).
+            logInfo("stdin writer to Python finished early (may not be an error)", e)
+
+          case e: Exception =>
+            // We must avoid throwing exceptions here, because the thread uncaught exception handler
+            // will kill the whole executor (see Executor).
+            readerException = e
+            Try(worker.shutdownOutput()) // kill Python worker process
+        }
+      }
+    }.start()
+
+    // Necessary to distinguish between a task that has failed and a task that is finished
+    @volatile var complete: Boolean = false
+
+    // It is necessary to have a monitor thread for python workers if the user cancels with
+    // interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
+    // threads can block indefinitely.
+    new Thread(s"Worker Monitor for $pythonExec") {
+      override def run() {
+        // Kill the worker if it is interrupted or completed
+        // When a python task completes, the context is always set to interupted
+        while (!context.interrupted) {
+          Thread.sleep(2000)
+        }
+        if (!complete) {
+          try {
+            logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
+            env.destroyPythonWorker(pythonExec, envVars.toMap)
+          } catch {
+            case e: Exception =>
+              logError("Exception when trying to kill worker", e)
+          }
         }
       }
     }.start()
@@ -107,7 +141,10 @@ private[spark] class PythonRDD[T: ClassTag](
      * is not synchronous this still leaves a potential race where the interruption is
      * processed only after the stream becomes invalid.
      */
-    context.addOnCompleteCallback(() => context.interrupted = true)
+    context.addOnCompleteCallback{ () =>
+      complete = true // Indicate that the task has completed successfully
+      context.interrupted = true
+    }
 
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
@@ -150,7 +187,7 @@ private[spark] class PythonRDD[T: ClassTag](
               val exLength = stream.readInt()
               val obj = new Array[Byte](exLength)
               stream.readFully(obj)
-              throw new PythonException(new String(obj))
+              throw new PythonException(new String(obj, "utf-8"), readerException)
             case SpecialLengths.END_OF_DATA_SECTION =>
               // We've finished the data section of the output, but we can still
               // read some accumulator updates:
@@ -160,15 +197,17 @@ private[spark] class PythonRDD[T: ClassTag](
                 val update = new Array[Byte](updateLen)
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
-
               }
               Array.empty[Byte]
           }
         } catch {
-          case eof: EOFException => {
+          case e: Exception if readerException != null =>
+            logError("Python worker exited unexpectedly (crashed)", e)
+            logError("Python crash may have been caused by prior exception:", readerException)
+            throw readerException
+
+          case eof: EOFException =>
             throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
-          }
-          case e: Throwable => throw e
         }
       }
 
@@ -183,7 +222,7 @@ private[spark] class PythonRDD[T: ClassTag](
 }
 
 /** Thrown for exceptions in user Python code. */
-private class PythonException(msg: String) extends Exception(msg)
+private class PythonException(msg: String, cause: Exception) extends RuntimeException(msg, cause)
 
 /**
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from Python.
@@ -284,6 +323,36 @@ private[spark] object PythonRDD {
     file.close()
   }
 
+  /**
+   * Convert an RDD of serialized Python dictionaries to Scala Maps
+   * TODO: Support more Python types.
+   */
+  def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Unpickler
+      // TODO: Figure out why flatMap is necessay for pyspark
+      iter.flatMap { row =>
+        unpickle.loads(row) match {
+          case objs: java.util.ArrayList[JMap[String, _] @unchecked] => objs.map(_.toMap)
+          // Incase the partition doesn't have a collection
+          case obj: JMap[String @unchecked, _] => Seq(obj.toMap)
+        }
+      }
+    }
+  }
+
+  /**
+   * Convert and RDD of Java objects to and RDD of serialized Python objects, that is usable by
+   * PySpark.
+   */
+  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
+    jRDD.rdd.mapPartitions { iter =>
+      val pickle = new Pickler
+      iter.map { row =>
+        pickle.dumps(row)
+      }
+    }
+  }
 }
 
 private

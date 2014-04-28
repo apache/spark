@@ -29,6 +29,8 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.util.Utils
 
+import scala.language.postfixOps
+
 class DriverSuite extends FunSuite with Timeouts {
 
   test("driver should exit after finishing") {

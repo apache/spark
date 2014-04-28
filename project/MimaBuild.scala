@@ -38,6 +38,7 @@ object MimaBuild {
         IO.read(excludeFile).split("\n")
       }
 
+    // Exclude a single class and its corresponding object
     def excludeClass(className: String) = {
       Seq(
         excludePackage(className), 
@@ -48,7 +49,16 @@ object MimaBuild {
         ProblemFilters.exclude[MissingTypesProblem](className + "$")
       )
     }
-    def excludeSparkClass(className: String) = excludeClass("org.apache.spark." + className)
+
+    // Exclude a Spark class, that is in the package org.apache.spark
+    def excludeSparkClass(className: String) = {
+      excludeClass("org.apache.spark." + className)
+    }
+
+    // Exclude a Spark package, that is in the package org.apache.spark
+    def excludeSparkPackage(packageName: String) = {
+      excludePackage("org.apache.spark." + packageName)
+    }
 
     val packagePrivateExcludes = packagePrivateList.flatMap(excludeClass)
 
@@ -58,9 +68,9 @@ object MimaBuild {
       SparkBuild.SPARK_VERSION match {
         case v if v.startsWith("1.0") =>
           Seq(
-            excludePackage("org.apache.spark.api.java"),
-            excludePackage("org.apache.spark.streaming.api.java"),
-            excludePackage("org.apache.spark.mllib")
+            excludeSparkPackage("api.java"),
+            excludeSparkPackage("mllib"),
+            excludeSparkPackage("streaming")
           ) ++
           excludeSparkClass("rdd.ClassTags") ++
           excludeSparkClass("util.XORShiftRandom") ++
@@ -68,9 +78,7 @@ object MimaBuild {
           excludeSparkClass("mllib.optimization.SquaredGradient") ++
           excludeSparkClass("mllib.regression.RidgeRegressionWithSGD") ++
           excludeSparkClass("mllib.regression.LassoWithSGD") ++
-          excludeSparkClass("mllib.regression.LinearRegressionWithSGD") ++
-          excludeSparkClass("streaming.dstream.NetworkReceiver") ++
-          excludeSparkClass("streaming.dstream.NetworkReceiver#NetworkReceiverActor")
+          excludeSparkClass("mllib.regression.LinearRegressionWithSGD")
         case _ => Seq()
       }
 
@@ -81,5 +89,4 @@ object MimaBuild {
     previousArtifact := None,
     binaryIssueFilters ++= ignoredABIProblems(sparkHome)
   )
-
 }

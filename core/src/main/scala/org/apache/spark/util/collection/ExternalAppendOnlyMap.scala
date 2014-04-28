@@ -17,14 +17,13 @@
 
 package org.apache.spark.util.collection
 
-import java.io._
+import java.io.{InputStream, BufferedInputStream, FileInputStream, File, Serializable, EOFException}
 import java.util.Comparator
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.ByteStreams
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
@@ -338,8 +337,8 @@ class ExternalAppendOnlyMap[K, V, C](
       }
 
       override def compareTo(other: StreamBuffer): Int = {
-        // minus sign because mutable.PriorityQueue dequeues the max, not the min
-        -minKeyHash.compareTo(other.minKeyHash)
+        // descending order because mutable.PriorityQueue dequeues the max, not the min
+        if (other.minKeyHash < minKeyHash) -1 else if (other.minKeyHash == minKeyHash) 0 else 1
       }
     }
   }
@@ -350,7 +349,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
     extends Iterator[(K, C)] {
     private val fileStream = new FileInputStream(file)
-    private val bufferedStream = new FastBufferedInputStream(fileStream, fileBufferSize)
+    private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
@@ -423,7 +422,9 @@ class ExternalAppendOnlyMap[K, V, C](
 private[spark] object ExternalAppendOnlyMap {
   private class KCComparator[K, C] extends Comparator[(K, C)] {
     def compare(kc1: (K, C), kc2: (K, C)): Int = {
-      kc1._1.hashCode().compareTo(kc2._1.hashCode())
+      val hash1 = kc1._1.hashCode()
+      val hash2 = kc2._1.hashCode()
+      if (hash1 < hash2) -1 else if (hash1 == hash2) 0 else 1
     }
   }
 }

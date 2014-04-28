@@ -17,12 +17,10 @@
 
 package org.apache.spark.rdd
 
-import scala.collection.mutable.HashMap
-import scala.collection.parallel.mutable
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
-import org.scalatest.concurrent.Timeouts._
-import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
@@ -153,7 +151,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
         if (shouldFail) {
           throw new Exception("injected failure")
         } else {
-          return Array(1, 2, 3, 4).iterator
+          Array(1, 2, 3, 4).iterator
         }
       }
     }.cache()
@@ -274,37 +272,42 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("coalesced RDDs with locality, large scale (10K partitions)") {
     // large scale experiment
     import collection.mutable
-    val rnd = scala.util.Random
     val partitions = 10000
     val numMachines = 50
     val machines = mutable.ListBuffer[String]()
-    (1 to numMachines).foreach(machines += "m"+_)
+    (1 to numMachines).foreach(machines += "m" + _)
+    val rnd = scala.util.Random
+    for (seed <- 1 to 5) {
+      rnd.setSeed(seed)
 
-    val blocks = (1 to partitions).map(i =>
-    { (i, Array.fill(3)(machines(rnd.nextInt(machines.size))).toList) } )
+      val blocks = (1 to partitions).map { i =>
+        (i, Array.fill(3)(machines(rnd.nextInt(machines.size))).toList)
+      }
 
-    val data2 = sc.makeRDD(blocks)
-    val coalesced2 = data2.coalesce(numMachines*2)
+      val data2 = sc.makeRDD(blocks)
+      val coalesced2 = data2.coalesce(numMachines * 2)
 
-    // test that you get over 90% locality in each group
-    val minLocality = coalesced2.partitions
-      .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
-      .foldLeft(1.0)((perc, loc) => math.min(perc,loc))
-    assert(minLocality >= 0.90, "Expected 90% locality but got " + (minLocality*100.0).toInt + "%")
+      // test that you get over 90% locality in each group
+      val minLocality = coalesced2.partitions
+        .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
+        .foldLeft(1.0)((perc, loc) => math.min(perc, loc))
+      assert(minLocality >= 0.90, "Expected 90% locality but got " +
+        (minLocality * 100.0).toInt + "%")
 
-    // test that the groups are load balanced with 100 +/- 20 elements in each
-    val maxImbalance = coalesced2.partitions
-      .map(part => part.asInstanceOf[CoalescedRDDPartition].parents.size)
-      .foldLeft(0)((dev, curr) => math.max(math.abs(100-curr),dev))
-    assert(maxImbalance <= 20, "Expected 100 +/- 20 per partition, but got " + maxImbalance)
+      // test that the groups are load balanced with 100 +/- 20 elements in each
+      val maxImbalance = coalesced2.partitions
+        .map(part => part.asInstanceOf[CoalescedRDDPartition].parents.size)
+        .foldLeft(0)((dev, curr) => math.max(math.abs(100 - curr), dev))
+      assert(maxImbalance <= 20, "Expected 100 +/- 20 per partition, but got " + maxImbalance)
 
-    val data3 = sc.makeRDD(blocks).map(i => i*2) // derived RDD to test *current* pref locs
-    val coalesced3 = data3.coalesce(numMachines*2)
-    val minLocality2 = coalesced3.partitions
-      .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
-      .foldLeft(1.0)((perc, loc) => math.min(perc,loc))
-    assert(minLocality2 >= 0.90, "Expected 90% locality for derived RDD but got " +
-      (minLocality2*100.0).toInt + "%")
+      val data3 = sc.makeRDD(blocks).map(i => i * 2) // derived RDD to test *current* pref locs
+      val coalesced3 = data3.coalesce(numMachines * 2)
+      val minLocality2 = coalesced3.partitions
+        .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
+        .foldLeft(1.0)((perc, loc) => math.min(perc, loc))
+      assert(minLocality2 >= 0.90, "Expected 90% locality for derived RDD but got " +
+        (minLocality2 * 100.0).toInt + "%")
+    }
   }
 
   test("zipped RDDs") {
@@ -378,8 +381,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       val prng42 = new Random(42)
       val prng43 = new Random(43)
       Array(1, 2, 3, 4, 5, 6).filter{i =>
-        if (i < 4) 0 == prng42.nextInt(3)
-        else 0 == prng43.nextInt(3)}
+        if (i < 4) 0 == prng42.nextInt(3) else 0 == prng43.nextInt(3)
+      }
     }
     assert(sample.size === checkSample.size)
     for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
@@ -460,7 +463,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("takeSample") {
     val data = sc.parallelize(1 to 100, 2)
-
+    
+    for (num <- List(5, 20, 100)) {
+      val sample = data.takeSample(withReplacement=false, num=num)
+      assert(sample.size === num)        // Got exactly num elements
+      assert(sample.toSet.size === num)  // Elements are distinct
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
@@ -476,6 +485,19 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=true, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
+    {
+      val sample = data.takeSample(withReplacement=true, num=20)
+      assert(sample.size === 20)        // Got exactly 100 elements
+      assert(sample.toSet.size <= 20, "sampling with replacement returned all distinct elements")
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
+    {
+      val sample = data.takeSample(withReplacement=true, num=100)
+      assert(sample.size === 100)        // Got exactly 100 elements
+      // Chance of getting all distinct elements is astronomically low, so test we got < 100
+      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
       assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
     }
     for (seed <- 1 to 5) {
@@ -562,5 +584,145 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val ranked = data.zipWithUniqueId()
     val ids = ranked.map(_._1).distinct().collect()
     assert(ids.length === n)
+  }
+
+  test("getNarrowAncestors") {
+    val rdd1 = sc.parallelize(1 to 100, 4)
+    val rdd2 = rdd1.filter(_ % 2 == 0).map(_ + 1)
+    val rdd3 = rdd2.map(_ - 1).filter(_ < 50).map(i => (i, i))
+    val rdd4 = rdd3.reduceByKey(_ + _)
+    val rdd5 = rdd4.mapValues(_ + 1).mapValues(_ + 2).mapValues(_ + 3)
+    val ancestors1 = rdd1.getNarrowAncestors
+    val ancestors2 = rdd2.getNarrowAncestors
+    val ancestors3 = rdd3.getNarrowAncestors
+    val ancestors4 = rdd4.getNarrowAncestors
+    val ancestors5 = rdd5.getNarrowAncestors
+
+    // Simple dependency tree with a single branch
+    assert(ancestors1.size === 0)
+    assert(ancestors2.size === 2)
+    assert(ancestors2.count(_.isInstanceOf[ParallelCollectionRDD[_]]) === 1)
+    assert(ancestors2.count(_.isInstanceOf[FilteredRDD[_]]) === 1)
+    assert(ancestors3.size === 5)
+    assert(ancestors3.count(_.isInstanceOf[ParallelCollectionRDD[_]]) === 1)
+    assert(ancestors3.count(_.isInstanceOf[FilteredRDD[_]]) === 2)
+    assert(ancestors3.count(_.isInstanceOf[MappedRDD[_, _]]) === 2)
+
+    // Any ancestors before the shuffle are not considered
+    assert(ancestors4.size === 1)
+    assert(ancestors4.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 1)
+    assert(ancestors5.size === 4)
+    assert(ancestors5.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 1)
+    assert(ancestors5.count(_.isInstanceOf[MapPartitionsRDD[_, _]]) === 1)
+    assert(ancestors5.count(_.isInstanceOf[MappedValuesRDD[_, _, _]]) === 2)
+  }
+
+  test("getNarrowAncestors with multiple parents") {
+    val rdd1 = sc.parallelize(1 to 100, 5)
+    val rdd2 = sc.parallelize(1 to 200, 10).map(_ + 1)
+    val rdd3 = sc.parallelize(1 to 300, 15).filter(_ > 50)
+    val rdd4 = rdd1.map(i => (i, i))
+    val rdd5 = rdd2.map(i => (i, i))
+    val rdd6 = sc.union(rdd1, rdd2)
+    val rdd7 = sc.union(rdd1, rdd2, rdd3)
+    val rdd8 = sc.union(rdd6, rdd7)
+    val rdd9 = rdd4.join(rdd5)
+    val ancestors6 = rdd6.getNarrowAncestors
+    val ancestors7 = rdd7.getNarrowAncestors
+    val ancestors8 = rdd8.getNarrowAncestors
+    val ancestors9 = rdd9.getNarrowAncestors
+
+    // Simple dependency tree with multiple branches
+    assert(ancestors6.size === 3)
+    assert(ancestors6.count(_.isInstanceOf[ParallelCollectionRDD[_]]) === 2)
+    assert(ancestors6.count(_.isInstanceOf[MappedRDD[_, _]]) === 1)
+    assert(ancestors7.size === 5)
+    assert(ancestors7.count(_.isInstanceOf[ParallelCollectionRDD[_]]) === 3)
+    assert(ancestors7.count(_.isInstanceOf[MappedRDD[_, _]]) === 1)
+    assert(ancestors7.count(_.isInstanceOf[FilteredRDD[_]]) === 1)
+
+    // Dependency tree with duplicate nodes (e.g. rdd1 should not be reported twice)
+    assert(ancestors8.size === 7)
+    assert(ancestors8.count(_.isInstanceOf[MappedRDD[_, _]]) === 1)
+    assert(ancestors8.count(_.isInstanceOf[FilteredRDD[_]]) === 1)
+    assert(ancestors8.count(_.isInstanceOf[UnionRDD[_]]) === 2)
+    assert(ancestors8.count(_.isInstanceOf[ParallelCollectionRDD[_]]) === 3)
+    assert(ancestors8.count(_ == rdd1) === 1)
+    assert(ancestors8.count(_ == rdd2) === 1)
+    assert(ancestors8.count(_ == rdd3) === 1)
+
+    // Any ancestors before the shuffle are not considered
+    assert(ancestors9.size === 2)
+    assert(ancestors9.count(_.isInstanceOf[CoGroupedRDD[_]]) === 1)
+    assert(ancestors9.count(_.isInstanceOf[MappedValuesRDD[_, _, _]]) === 1)
+  }
+
+  /**
+   * This tests for the pathological condition in which the RDD dependency graph is cyclical.
+   *
+   * Since RDD is part of the public API, applications may actually implement RDDs that allow
+   * such graphs to be constructed. In such cases, getNarrowAncestor should not simply hang.
+   */
+  test("getNarrowAncestors with cycles") {
+    val rdd1 = new CyclicalDependencyRDD[Int]
+    val rdd2 = new CyclicalDependencyRDD[Int]
+    val rdd3 = new CyclicalDependencyRDD[Int]
+    val rdd4 = rdd3.map(_ + 1).filter(_ > 10).map(_ + 2).filter(_ % 5 > 1)
+    val rdd5 = rdd4.map(_ + 2).filter(_ > 20)
+    val rdd6 = sc.union(rdd1, rdd2, rdd3).map(_ + 4).union(rdd5).union(rdd4)
+
+    // Simple cyclical dependency
+    rdd1.addDependency(new OneToOneDependency[Int](rdd2))
+    rdd2.addDependency(new OneToOneDependency[Int](rdd1))
+    val ancestors1 = rdd1.getNarrowAncestors
+    val ancestors2 = rdd2.getNarrowAncestors
+    assert(ancestors1.size === 1)
+    assert(ancestors1.count(_ == rdd2) === 1)
+    assert(ancestors1.count(_ == rdd1) === 0)
+    assert(ancestors2.size === 1)
+    assert(ancestors2.count(_ == rdd1) === 1)
+    assert(ancestors2.count(_ == rdd2) === 0)
+
+    // Cycle involving a longer chain
+    rdd3.addDependency(new OneToOneDependency[Int](rdd4))
+    val ancestors3 = rdd3.getNarrowAncestors
+    val ancestors4 = rdd4.getNarrowAncestors
+    assert(ancestors3.size === 4)
+    assert(ancestors3.count(_.isInstanceOf[MappedRDD[_, _]]) === 2)
+    assert(ancestors3.count(_.isInstanceOf[FilteredRDD[_]]) === 2)
+    assert(ancestors3.count(_ == rdd3) === 0)
+    assert(ancestors4.size === 4)
+    assert(ancestors4.count(_.isInstanceOf[MappedRDD[_, _]]) === 2)
+    assert(ancestors4.count(_.isInstanceOf[FilteredRDD[_]]) === 1)
+    assert(ancestors4.count(_.isInstanceOf[CyclicalDependencyRDD[_]]) === 1)
+    assert(ancestors4.count(_ == rdd3) === 1)
+    assert(ancestors4.count(_ == rdd4) === 0)
+
+    // Cycles that do not involve the root
+    val ancestors5 = rdd5.getNarrowAncestors
+    assert(ancestors5.size === 6)
+    assert(ancestors5.count(_.isInstanceOf[MappedRDD[_, _]]) === 3)
+    assert(ancestors5.count(_.isInstanceOf[FilteredRDD[_]]) === 2)
+    assert(ancestors5.count(_.isInstanceOf[CyclicalDependencyRDD[_]]) === 1)
+    assert(ancestors4.count(_ == rdd3) === 1)
+
+    // Complex cyclical dependency graph (combination of all of the above)
+    val ancestors6 = rdd6.getNarrowAncestors
+    assert(ancestors6.size === 12)
+    assert(ancestors6.count(_.isInstanceOf[UnionRDD[_]]) === 2)
+    assert(ancestors6.count(_.isInstanceOf[MappedRDD[_, _]]) === 4)
+    assert(ancestors6.count(_.isInstanceOf[FilteredRDD[_]]) === 3)
+    assert(ancestors6.count(_.isInstanceOf[CyclicalDependencyRDD[_]]) === 3)
+  }
+
+  /** A contrived RDD that allows the manual addition of dependencies after creation. */
+  private class CyclicalDependencyRDD[T: ClassTag] extends RDD[T](sc, Nil) {
+    private val mutableDependencies: ArrayBuffer[Dependency[_]] = ArrayBuffer.empty
+    override def compute(p: Partition, c: TaskContext): Iterator[T] = Iterator.empty
+    override def getPartitions: Array[Partition] = Array.empty
+    override def getDependencies: Seq[Dependency[_]] = mutableDependencies
+    def addDependency(dep: Dependency[_]) {
+      mutableDependencies += dep
+    }
   }
 }

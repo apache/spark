@@ -39,21 +39,32 @@ You can start a the history server by executing:
 
 The base logging directory must be supplied, and should contain sub-directories that each
 represents an application's event logs. This creates a web interface at
-`http://<server-url>:18080` by default. The history server depends on the following variables:
+`http://<server-url>:18080` by default. The history server can be configured as follows:
 
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
   <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
-    <td>Memory to allocate to the history server. (default: 512m).</td>
+    <td>Memory to allocate to the history server (default: 512m).</td>
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_JAVA_OPTS</code></td>
     <td>JVM options for the history server (default: none).</td>
   </tr>
+  <tr>
+    <td><code>SPARK_PUBLIC_DNS</code></td>
+    <td>
+      The public address for the history server. If this is not set, links to application history
+      may use the internal address of the server, resulting in broken links (default: none).
+    </td>
+  </tr>
+  <tr>
+    <td><code>SPARK_HISTORY_OPTS</code></td>
+    <td>
+      <code>spark.history.*</code> configuration options for the history server (default: none).
+    </td>
+  </tr>
 </table>
-
-Further, the history server can be configured as follows:
 
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -78,6 +89,43 @@ Further, the history server can be configured as follows:
     <td>18080</td>
     <td>
       The port to which the web interface of the history server binds.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.kerberos.enabled</td>
+    <td>false</td>
+    <td>
+      Indicates whether the history server should use kerberos to login. This is useful
+      if the history server is accessing HDFS files on a secure Hadoop cluster. If this is 
+      true it looks uses the configs <code>spark.history.kerberos.principal</code> and
+      <code>spark.history.kerberos.keytab</code>. 
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.kerberos.principal</td>
+    <td>(none)</td>
+    <td>
+      Kerberos principal name for the History Server.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.kerberos.keytab</td>
+    <td>(none)</td>
+    <td>
+      Location of the kerberos keytab file for the History Server.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.acls.enable</td>
+    <td>false</td>
+    <td>
+      Specifies whether acls should be checked to authorize users viewing the applications.
+      If enabled, access control checks are made regardless of what the individual application had 
+      set for <code>spark.ui.acls.enable</code> when the application was run. The application owner
+      will always have authorization to view their own application and any users specified via 
+      <code>spark.ui.view.acls</code> when the application was run will also have authorization
+      to view that application. 
+      If disabled, no access control checks are made. 
     </td>
   </tr>
 </table>

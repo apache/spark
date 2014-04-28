@@ -29,7 +29,8 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.executor.TaskMetrics
 
 class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
-    with BeforeAndAfter with BeforeAndAfterAll {
+  with BeforeAndAfter with BeforeAndAfterAll {
+
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
@@ -37,7 +38,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     sc = new SparkContext("local", "SparkListenerSuite")
   }
 
-  override def afterAll {
+  override def afterAll() {
     System.clearProperty("spark.akka.frameSize")
   }
 
@@ -50,9 +51,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
     assert(counter.count === 0)
 
-    // Starting listener bus should flush all buffered events (asynchronously, hence the sleep)
+    // Starting listener bus should flush all buffered events
     bus.start()
-    Thread.sleep(1000)
+    assert(bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(counter.count === 5)
 
     // After listener bus has stopped, posting events should not increment counter
@@ -77,14 +78,21 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   test("bus.stop() waits for the event queue to completely drain") {
     @volatile var drained = false
 
-    // Tells the listener to stop blocking
-    val listenerWait = new Semaphore(1)
+    // When Listener has started
+    val listenerStarted = new Semaphore(0)
 
-    // When stop has returned
-    val stopReturned = new Semaphore(1)
+    // Tells the listener to stop blocking
+    val listenerWait = new Semaphore(0)
+
+    // When stopper has started
+    val stopperStarted = new Semaphore(0)
+
+    // When stopper has returned
+    val stopperReturned = new Semaphore(0)
 
     class BlockingListener extends SparkListener {
       override def onJobEnd(jobEnd: SparkListenerJobEnd) = {
+        listenerStarted.release()
         listenerWait.acquire()
         drained = true
       }
@@ -97,23 +105,26 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     bus.start()
     bus.post(SparkListenerJobEnd(0, JobSucceeded))
 
-    // the queue should not drain immediately
+    listenerStarted.acquire()
+    // Listener should be blocked after start
     assert(!drained)
 
     new Thread("ListenerBusStopper") {
       override def run() {
+        stopperStarted.release()
         // stop() will block until notify() is called below
         bus.stop()
-        stopReturned.release(1)
+        stopperReturned.release()
       }
     }.start()
 
-    while (!bus.stopCalled) {
-      Thread.sleep(10)
-    }
+    stopperStarted.acquire()
+    // Listener should remain blocked after stopper started
+    assert(!drained)
 
+    // unblock Listener to let queue drain
     listenerWait.release()
-    stopReturned.acquire()
+    stopperReturned.acquire()
     assert(drained)
   }
 
@@ -123,18 +134,56 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.map(_.toString)
     rdd2.setName("Target RDD")
-    rdd2.count
+    rdd2.count()
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
 
     listener.stageInfos.size should be {1}
     val (stageInfo, taskInfoMetrics) = listener.stageInfos.head
-    stageInfo.rddInfo.name should be {"Target RDD"}
+    stageInfo.rddInfos.size should be {2}
+    stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
+    stageInfo.rddInfos.exists(_.name == "Target RDD") should be {true}
     stageInfo.numTasks should be {4}
-    stageInfo.rddInfo.numPartitions should be {4}
     stageInfo.submissionTime should be ('defined)
     stageInfo.completionTime should be ('defined)
     taskInfoMetrics.length should be {4}
+  }
+
+  test("basic creation of StageInfo with shuffle") {
+    val listener = new SaveStageAndTaskInfo
+    sc.addSparkListener(listener)
+    val rdd1 = sc.parallelize(1 to 100, 4)
+    val rdd2 = rdd1.filter(_ % 2 == 0).map(i => (i, i))
+    val rdd3 = rdd2.reduceByKey(_ + _)
+    rdd1.setName("Un")
+    rdd2.setName("Deux")
+    rdd3.setName("Trois")
+
+    rdd1.count()
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    listener.stageInfos.size should be {1}
+    val stageInfo1 = listener.stageInfos.keys.find(_.stageId == 0).get
+    stageInfo1.rddInfos.size should be {1} // ParallelCollectionRDD
+    stageInfo1.rddInfos.forall(_.numPartitions == 4) should be {true}
+    stageInfo1.rddInfos.exists(_.name == "Un") should be {true}
+    listener.stageInfos.clear()
+
+    rdd2.count()
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    listener.stageInfos.size should be {1}
+    val stageInfo2 = listener.stageInfos.keys.find(_.stageId == 1).get
+    stageInfo2.rddInfos.size should be {3} // ParallelCollectionRDD, FilteredRDD, MappedRDD
+    stageInfo2.rddInfos.forall(_.numPartitions == 4) should be {true}
+    stageInfo2.rddInfos.exists(_.name == "Deux") should be {true}
+    listener.stageInfos.clear()
+
+    rdd3.count()
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    listener.stageInfos.size should be {2} // Shuffle map stage + result stage
+    val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 2).get
+    stageInfo3.rddInfos.size should be {2} // ShuffledRDD, MapPartitionsRDD
+    stageInfo3.rddInfos.forall(_.numPartitions == 4) should be {true}
+    stageInfo3.rddInfos.exists(_.name == "Trois") should be {true}
   }
 
   test("StageInfo with fewer tasks than partitions") {
@@ -149,7 +198,8 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     listener.stageInfos.size should be {1}
     val (stageInfo, _) = listener.stageInfos.head
     stageInfo.numTasks should be {2}
-    stageInfo.rddInfo.numPartitions should be {4}
+    stageInfo.rddInfos.size should be {2}
+    stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
   }
 
   test("local metrics") {
@@ -157,7 +207,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
     // just to make sure some of the tasks take a noticeable amount of time
-    val w = {i:Int =>
+    val w = { i: Int =>
       if (i == 0)
         Thread.sleep(100)
       i
@@ -189,7 +239,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       checkNonZeroAvg(
         taskInfoMetrics.map(_._2.executorDeserializeTime),
         stageInfo + " executorDeserializeTime")
-      if (stageInfo.rddInfo.name == d4.name) {
+      if (stageInfo.rddInfos.exists(_.name == d4.name)) {
         checkNonZeroAvg(
           taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
           stageInfo + " fetchWaitTime")
@@ -197,11 +247,11 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
 
       taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
-        if (stageInfo.rddInfo.name == d2.name || stageInfo.rddInfo.name == d3.name) {
+        if (stageInfo.rddInfos.exists(info => info.name == d2.name || info.name == d3.name)) {
           taskMetrics.shuffleWriteMetrics should be ('defined)
           taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0l)
         }
-        if (stageInfo.rddInfo.name == d4.name) {
+        if (stageInfo.rddInfos.exists(_.name == d4.name)) {
           taskMetrics.shuffleReadMetrics should be ('defined)
           val sm = taskMetrics.shuffleReadMetrics.get
           sm.totalBlocksFetched should be > (0)

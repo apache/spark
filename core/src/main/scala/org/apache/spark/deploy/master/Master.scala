@@ -23,6 +23,7 @@ import java.util.Date
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.util.Random
 
 import akka.actor._
@@ -236,8 +237,7 @@ private[spark] class Master(
             if (waitingDrivers.contains(d)) {
               waitingDrivers -= d
               self ! DriverStateChanged(driverId, DriverState.KILLED, None)
-            }
-            else {
+            } else {
               // We just notify the worker to kill the driver here. The final bookkeeping occurs
               // on the return path when the worker submits a state change back to the master
               // to notify it that the driver was successfully killed.
@@ -626,7 +626,7 @@ private[spark] class Master(
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach( a => {
-          appIdToUI.remove(a.id).foreach { ui => webUi.detachUI(ui) }
+          appIdToUI.remove(a.id).foreach { ui => webUi.detachSparkUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
         })
         completedApps.trimStart(toRemove)
@@ -668,12 +668,12 @@ private[spark] class Master(
     if (!eventLogPaths.isEmpty) {
       try {
         val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
-        val ui = new SparkUI(replayBus, appName + " (completed)", "/history/" + app.id)
-        ui.start()
+        val ui = new SparkUI(
+          new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
         replayBus.replay()
         app.desc.appUiUrl = ui.basePath
         appIdToUI(app.id) = ui
-        webUi.attachUI(ui)
+        webUi.attachSparkUI(ui)
         return true
       } catch {
         case t: Throwable =>
