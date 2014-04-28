@@ -175,7 +175,8 @@ object LBFGS extends Logging {
 
     val lbfgs = new BreezeLBFGS[BDV[Double]](maxNumIterations, numCorrections, convergenceTol)
 
-    val states = lbfgs.iterations(new CachedDiffFunction(costFun), initialWeights.toBreeze.toDenseVector)
+    val states =
+      lbfgs.iterations(new CachedDiffFunction(costFun), initialWeights.toBreeze.toDenseVector)
 
     /**
      * NOTE: lossSum and loss is computed using the weights from the previous iteration
