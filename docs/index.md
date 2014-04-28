@@ -23,11 +23,11 @@ For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_BI
 
 # Running the Examples and Shell
 
-Spark comes with several sample programs.  Scala and Java examples are in the `examples` directory, and Python examples are in `python/examples`.
+Spark comes with several sample programs.  Scala, Java and Python examples are in the `examples/src/main` directory.
 To run one of the Java or Scala sample programs, use `./bin/run-example <class> <params>` in the top-level Spark directory
 (the `bin/run-example` script sets up the appropriate paths and launches that program).
 For example, try `./bin/run-example org.apache.spark.examples.SparkPi local`.
-To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try `./bin/pyspark ./python/examples/pi.py local`.
+To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try `./bin/pyspark ./examples/src/main/python/pi.py local`.
 
 Each example prints usage help when run with no parameters.
 

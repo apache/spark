@@ -22,10 +22,10 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.util.collection.OpenHashMap
 import scala.collection.JavaConversions.mapAsScalaMap
 
-private[streaming]
+private[spark]
 object RawTextHelper {
 
-  /** 
+  /**
    * Splits lines and counts the words.
    */
   def splitAndCountPartitions(iter: Iterator[String]): Iterator[(String, Long)] = {
@@ -114,4 +114,3 @@ object RawTextHelper {
 
   def max(v1: Long, v2: Long) = math.max(v1, v2)
 }
-
