@@ -50,3 +50,4 @@ unit-tests.log
 /lib/
 rat-results.txt
 scalastyle.txt
+conf/spark-defaults.conf.bak

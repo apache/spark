@@ -6,3 +6,11 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 export SPARK_HADOOP_VERSION="$(cat $FWDIR/SHOPIFY_HADOOP_VERSION)"
 export SBT_OPTS="-XX:MaxPermSize=2048M"
 $FWDIR/sbt/sbt clean assembly
+
+DEFAULTS_CONF="$FWDIR/conf/spark-defaults.conf"
+
+sed -i.bak /spark.driver.extraClassPath/d $DEFAULTS_CONF
+sed -i.bak /spark.executor/d $DEFAULTS_CONF
+
+echo "spark.driver.extraClassPath $FWDIR/conf/chicago_hadoop/core-site.xml:" >> "$DEFAULTS_CONF"
+echo "spark.executor $FWDIR/conf/chicago_hadoop/core-site.xml:" >> "$DEFAULTS_CONF"
