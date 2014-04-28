@@ -43,12 +43,13 @@
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
 
-VERSION=$(mvn help:evaluate -Dexpression=project.version | grep -v "INFO" | tail -n 1)
-if [ $? == -1 ] ;then
+VERSION_TEXT=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null)
+if [ $? != 0 ] ;then
     echo -e "You need Maven installed to build Spark."
     echo -e "Download Maven from https://maven.apache.org."
     exit -1;
 fi
+VERSION=$(echo "$VERSION_TEXT" | grep -v "INFO" | tail -n 1)
 
 # Initialize defaults
 SPARK_HADOOP_VERSION=1.0.4
