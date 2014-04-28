@@ -28,6 +28,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   val children = child :: ordinal :: Nil
   /** `Null` is returned for invalid ordinals. */
   override def nullable = true
+  override def foldable = child.foldable && ordinal.foldable
   override def references = children.flatMap(_.references).toSet
   def dataType = child.dataType match {
     case ArrayType(dt) => dt
@@ -69,7 +70,8 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
   type EvaluatedType = Any
 
   def dataType = field.dataType
-  def nullable = field.nullable
+  override def nullable = field.nullable
+  override def foldable = child.foldable
 
   protected def structType = child.dataType match {
     case s: StructType => s

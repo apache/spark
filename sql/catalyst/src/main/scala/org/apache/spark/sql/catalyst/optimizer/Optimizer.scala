@@ -91,9 +91,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
  */
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsDown {
+    case q: LogicalPlan => q transformExpressionsUp {
       // Skip redundant folding of literals.
       case l: Literal => l
+      // if it's foldable
+      case e if e.foldable => Literal(e.eval(null), e.dataType)
       case e @ Count(Literal(null, _)) => Literal(null, e.dataType)
       case e @ Sum(Literal(null, _)) => Literal(null, e.dataType)
       case e @ Average(Literal(null, _)) => Literal(null, e.dataType)
@@ -124,15 +126,18 @@ object ConstantFolding extends Rule[LogicalPlan] {
           case Literal(candidate, _) if(candidate == v) => true
           case _ => false
         })) => Literal(true, BooleanType)
-      // TODO put exceptional cases(Unary & Binary Expression) before here.
+
+      case e @ SortOrder(_, _) => e
+      // put exceptional cases(Unary & Binary Expression) before here.
       case e: UnaryExpression => e.child match {
         case Literal(null, _) => Literal(null, e.dataType)
+        case _ => e
       }
       case e: BinaryExpression => e.children match {
         case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
       }
-      case e if e.foldable => Literal(e.eval(null), e.dataType)
     }
   }
 }
