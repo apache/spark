@@ -64,7 +64,7 @@ private[spark] class JobWaiter[T](
 
   override def jobFailed(exception: Exception): Unit = synchronized {
     _jobFinished = true
-    jobResult = JobFailed(exception, -1)
+    jobResult = JobFailed(exception)
     this.notifyAll()
   }
 

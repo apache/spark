@@ -17,14 +17,71 @@
 
 package org.apache.spark.deploy
 
+import java.io.{OutputStream, PrintStream}
+
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
+
 import org.apache.spark.deploy.SparkSubmit._
 
+
 class SparkSubmitSuite extends FunSuite with ShouldMatchers {
+
+  val noOpOutputStream = new OutputStream {
+    def write(b: Int) = {}
+  }
+
+  /** Simple PrintStream that reads data into a buffer */
+  class BufferPrintStream extends PrintStream(noOpOutputStream) {
+    var lineBuffer = ArrayBuffer[String]()
+    override def println(line: String) {
+      lineBuffer += line
+    }
+  }
+
+  /** Returns true if the script exits and the given search string is printed. */
+  def testPrematureExit(input: Array[String], searchString: String): Boolean = {
+    val printStream = new BufferPrintStream()
+    SparkSubmit.printStream = printStream
+
+    @volatile var exitedCleanly = false
+    SparkSubmit.exitFn = () => exitedCleanly = true
+
+    val thread = new Thread {
+      override def run() = try {
+        SparkSubmit.main(input)
+      } catch {
+        // If exceptions occur after the "exit" has happened, fine to ignore them.
+        // These represent code paths not reachable during normal execution.
+        case e: Exception => if (!exitedCleanly) throw e
+      }
+    }
+    thread.start()
+    thread.join()
+    printStream.lineBuffer.find(s => s.contains(searchString)).size > 0
+  }
+
   test("prints usage on empty input") {
-    val clArgs = Array[String]()
-    // val appArgs = new SparkSubmitArguments(clArgs)
+    testPrematureExit(Array[String](), "Usage: spark-submit") should be (true)
+  }
+
+  test("prints usage with only --help") {
+    testPrematureExit(Array("--help"), "Usage: spark-submit") should be (true)
+  }
+
+  test("handles multiple binary definitions") {
+    val adjacentJars = Array("foo.jar", "bar.jar")
+    testPrematureExit(adjacentJars, "error: Found two conflicting resources") should be (true)
+
+    val nonAdjacentJars =
+      Array("foo.jar", "--master", "123", "--class", "abc", "bar.jar")
+    testPrematureExit(nonAdjacentJars, "error: Found two conflicting resources") should be (true)
+  }
+
+  test("handle binary specified but not class") {
+    testPrematureExit(Array("foo.jar"), "must specify a main class")
   }
 
   test("handles YARN cluster mode") {

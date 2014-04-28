@@ -36,8 +36,9 @@ class RateLimitedOutputStreamSuite extends FunSuite {
     val stream = new RateLimitedOutputStream(underlying, desiredBytesPerSec = 10000)
     val elapsedNs = benchmark { stream.write(data.getBytes("UTF-8")) }
 
-    // We accept anywhere from 4.0 to 4.99999 seconds since the value is rounded down.
-    assert(SECONDS.convert(elapsedNs, NANOSECONDS) === 4)
+    val seconds = SECONDS.convert(elapsedNs, NANOSECONDS)
+    assert(seconds >= 4, s"Seconds value ($seconds) is less than 4.")
+    assert(seconds <= 30, s"Took more than 30 seconds ($seconds) to write data.")
     assert(underlying.toString("UTF-8") === data)
   }
 }

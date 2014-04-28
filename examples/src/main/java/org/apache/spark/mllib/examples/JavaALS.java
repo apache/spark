@@ -85,6 +85,6 @@ public final class JavaALS {
         outputDir + "/productFeatures");
     System.out.println("Final user/product features written to " + outputDir);
 
-    System.exit(0);
+    sc.stop();
   }
 }

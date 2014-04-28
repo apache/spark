@@ -28,9 +28,9 @@ class TestVertex(val active: Boolean, val age: Int) extends Vertex with Serializ
 class TestMessage(val targetId: String) extends Message[String] with Serializable
 
 class BagelSuite extends FunSuite with Assertions with BeforeAndAfter with Timeouts {
-  
+
   var sc: SparkContext = _
-  
+
   after {
     if (sc != null) {
       sc.stop()

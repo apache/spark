@@ -117,7 +117,7 @@ class BasicOperationsSuite extends TestSuiteBase {
   test("groupByKey") {
     testOperation(
       Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
-      (s: DStream[String]) => s.map(x => (x, 1)).groupByKey(),
+      (s: DStream[String]) => s.map(x => (x, 1)).groupByKey().mapValues(_.toSeq),
       Seq( Seq(("a", Seq(1, 1)), ("b", Seq(1))), Seq(("", Seq(1, 1))), Seq() ),
       true
     )
@@ -251,7 +251,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       Seq(  )
     )
     val operation = (s1: DStream[String], s2: DStream[String]) => {
-      s1.map(x => (x,1)).cogroup(s2.map(x => (x, "x")))
+      s1.map(x => (x,1)).cogroup(s2.map(x => (x, "x"))).mapValues(x => (x._1.toSeq, x._2.toSeq))
     }
     testOperation(inputData1, inputData2, operation, outputData, true)
   }
@@ -324,7 +324,7 @@ class BasicOperationsSuite extends TestSuiteBase {
 
     val updateStateOperation = (s: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-        Some(values.foldLeft(0)(_ + _) + state.getOrElse(0))
+        Some(values.sum + state.getOrElse(0))
       }
       s.map(x => (x, 1)).updateStateByKey[Int](updateFunc)
     }
@@ -359,7 +359,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       // updateFunc clears a state when a StateObject is seen without new values twice in a row
       val updateFunc = (values: Seq[Int], state: Option[StateObject]) => {
         val stateObj = state.getOrElse(new StateObject)
-        values.foldLeft(0)(_ + _) match {
+        values.sum match {
           case 0 => stateObj.expireCounter += 1 // no new values
           case n => { // has new values, increment and reset expireCounter
             stateObj.counter += n

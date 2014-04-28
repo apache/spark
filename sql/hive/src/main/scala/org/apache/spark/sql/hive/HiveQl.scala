@@ -300,14 +300,17 @@ object HiveQl {
   }
 
   protected def nodeToDataType(node: Node): DataType = node match {
-    case Token("TOK_BIGINT", Nil) => IntegerType
+    case Token("TOK_DECIMAL", Nil) => DecimalType
+    case Token("TOK_BIGINT", Nil) => LongType
     case Token("TOK_INT", Nil) => IntegerType
-    case Token("TOK_TINYINT", Nil) => IntegerType
-    case Token("TOK_SMALLINT", Nil) => IntegerType
+    case Token("TOK_TINYINT", Nil) => ByteType
+    case Token("TOK_SMALLINT", Nil) => ShortType
     case Token("TOK_BOOLEAN", Nil) => BooleanType
     case Token("TOK_STRING", Nil) => StringType
     case Token("TOK_FLOAT", Nil) => FloatType
-    case Token("TOK_DOUBLE", Nil) => FloatType
+    case Token("TOK_DOUBLE", Nil) => DoubleType
+    case Token("TOK_TIMESTAMP", Nil) => TimestampType
+    case Token("TOK_BINARY", Nil) => BinaryType
     case Token("TOK_LIST", elementType :: Nil) => ArrayType(nodeToDataType(elementType))
     case Token("TOK_STRUCT",
            Token("TOK_TABCOLLIST", fields) :: Nil) =>
@@ -529,7 +532,7 @@ object HiveQl {
 
         val withLimit =
           limitClause.map(l => nodeToExpr(l.getChildren.head))
-            .map(StopAfter(_, withSort))
+            .map(Limit(_, withSort))
             .getOrElse(withSort)
 
         // TOK_INSERT_INTO means to add files to the table.
@@ -602,7 +605,7 @@ object HiveQl {
         case Token("TOK_TABLESPLITSAMPLE",
                Token("TOK_ROWCOUNT", Nil) ::
                Token(count, Nil) :: Nil) =>
-          StopAfter(Literal(count.toInt), relation)
+          Limit(Literal(count.toInt), relation)
         case Token("TOK_TABLESPLITSAMPLE",
                Token("TOK_PERCENT", Nil) ::
                Token(fraction, Nil) :: Nil) =>
@@ -829,6 +832,8 @@ object HiveQl {
       Cast(nodeToExpr(arg), BooleanType)
     case Token("TOK_FUNCTION", Token("TOK_DECIMAL", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), DecimalType)
+    case Token("TOK_FUNCTION", Token("TOK_TIMESTAMP", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), TimestampType)
 
     /* Arithmetic */
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))

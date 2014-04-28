@@ -29,10 +29,10 @@ import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[ui] class JobProgressUI(parent: SparkUI) {
-  val appName = parent.appName
   val basePath = parent.basePath
   val live = parent.live
   val sc = parent.sc
+  val killEnabled = parent.conf.getBoolean("spark.ui.killEnabled", true)
 
   lazy val listener = _listener.get
   lazy val isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
@@ -42,6 +42,8 @@ private[ui] class JobProgressUI(parent: SparkUI) {
   private val poolPage = new PoolPage(this)
   private var _listener: Option[JobProgressListener] = None
 
+  def appName = parent.appName
+
   def start() {
     val conf = if (live) sc.conf else new SparkConf
     _listener = Some(new JobProgressListener(conf))
@@ -49,7 +51,22 @@ private[ui] class JobProgressUI(parent: SparkUI) {
 
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)
 
+  private def handleKillRequest(request: HttpServletRequest) =  {
+    if (killEnabled) {
+      val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
+      val stageId = Option(request.getParameter("id")).getOrElse("-1").toInt
+      if (stageId >= 0 && killFlag && listener.activeStages.contains(stageId)) {
+        sc.cancelStage(stageId)
+      }
+      // Do a quick pause here to give Spark time to kill the stage so it shows up as
+      // killed after the refresh. Note that this will block the serving thread so the
+      // time should be limited in duration.
+      Thread.sleep(100)
+    }
+  }
+
   def getHandlers = Seq[ServletContextHandler](
+    createRedirectHandler("/stages/stage/kill", "/stages", handleKillRequest),
     createServletHandler("/stages/stage",
       (request: HttpServletRequest) => stagePage.render(request), parent.securityManager, basePath),
     createServletHandler("/stages/pool",
