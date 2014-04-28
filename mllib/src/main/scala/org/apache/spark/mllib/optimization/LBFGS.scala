@@ -171,14 +171,25 @@ object LBFGS extends Logging {
     val miniBatchSize = numExamples * miniBatchFraction
 
     val costFun =
-      new CostFun(data, gradient, updater, regParam, miniBatchFraction, lossHistory, miniBatchSize)
+      new CostFun(data, gradient, updater, regParam, miniBatchFraction, miniBatchSize)
 
     val lbfgs = new BreezeLBFGS[BDV[Double]](maxNumIterations, numCorrections, convergenceTol)
 
-    val weights = Vectors.fromBreeze(
-      lbfgs.minimize(new CachedDiffFunction(costFun), initialWeights.toBreeze.toDenseVector))
+    val states = lbfgs.iterations(new CachedDiffFunction(costFun), initialWeights.toBreeze.toDenseVector)
 
-    logInfo("LBFGS.runMiniBatchSGD finished. Last 10 losses %s".format(
+    /**
+     * NOTE: lossSum and loss is computed using the weights from the previous iteration
+     * and regVal is the regularization value computed in the previous iteration as well.
+     */
+    var state = states.next()
+    while(states.hasNext) {
+      lossHistory.append(state.value)
+      state = states.next()
+    }
+    lossHistory.append(state.value)
+    val weights = Vectors.fromBreeze(state.x)
+
+    logInfo("LBFGS.runMiniBatchLBFGS finished. Last 10 losses %s".format(
       lossHistory.takeRight(10).mkString(", ")))
 
     (weights, lossHistory.toArray)
@@ -194,7 +205,6 @@ object LBFGS extends Logging {
     updater: Updater,
     regParam: Double,
     miniBatchFraction: Double,
-    lossHistory: ArrayBuffer[Double],
     miniBatchSize: Double) extends DiffFunction[BDV[Double]] {
 
     private var i = 0
@@ -247,12 +257,6 @@ object LBFGS extends Logging {
 
       // gradientTotal = gradientSum / miniBatchSize + gradientTotal
       axpy(1.0 / miniBatchSize, gradientSum, gradientTotal)
-
-      /**
-       * NOTE: lossSum and loss is computed using the weights from the previous iteration
-       * and regVal is the regularization value computed in the previous iteration as well.
-       */
-      lossHistory.append(loss)
 
       i += 1
 
