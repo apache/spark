@@ -94,7 +94,55 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressionsDown {
       // Skip redundant folding of literals.
       case l: Literal => l
+      case e @ If(Literal(v, _), trueValue, falseValue) => if(v == true) trueValue else falseValue
+      case e @ In(Literal(v, _), list) if(list.exists(c => c match {
+          case Literal(candidate, _) if(candidate == v) => true
+          case _ => false
+        })) => Literal(true, BooleanType)
       case e if e.foldable => Literal(e.eval(null), e.dataType)
+    }
+  }
+}
+
+/**
+ * The expression may be constant value, due to one or more of its children expressions is null or 
+ * not null constantly, replaces [[catalyst.expressions.Expression Expressions]] with equivalent 
+ * [[catalyst.expressions.Literal Literal]] values if possible caused by that. 
+ */
+object NullPropagation extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case l: Literal => l
+      case e @ IsNull(Literal(null, _)) => Literal(true, BooleanType)
+      case e @ IsNull(Literal(_, _)) => Literal(false, BooleanType)
+      case e @ IsNull(c @ Rand) => Literal(false, BooleanType)
+      case e @ IsNotNull(Literal(null, _)) => Literal(false, BooleanType)
+      case e @ IsNotNull(Literal(_, _)) => Literal(true, BooleanType)
+      case e @ IsNotNull(c @ Rand) => Literal(true, BooleanType)
+      case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
+      case e @ GetItem(_, Literal(null, _)) => Literal(null, e.dataType)
+      case e @ GetField(Literal(null, _), _) => Literal(null, e.dataType)
+      case e @ Coalesce(children) => {
+        val newChildren = children.filter(c => c match {
+          case Literal(null, _) => false
+          case _ => true
+        })
+        if(newChildren.length == null) {
+          Literal(null, e.dataType)
+        } else if(newChildren.length == children.length){
+          e
+        } else {
+          Coalesce(newChildren)
+        }
+      }
+      // TODO put exceptional cases(Unary & Binary Expression) before here.
+      case e: UnaryExpression => e.child match {
+        case Literal(null, _) => Literal(null, e.dataType)
+      }
+      case e: BinaryExpression => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+      }
     }
   }
 }
