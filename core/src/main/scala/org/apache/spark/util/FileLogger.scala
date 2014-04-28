@@ -83,14 +83,16 @@ private[spark] class FileLogger(
     }
     if (dirPermissions.isDefined) {
       val fsStatus = fileSystem.getFileStatus(path)
-      if (fsStatus.getPermission().toShort() != dirPermissions.get.toShort()) {
-        fileSystem.setPermission(path, dirPermissions.get);
+      if (fsStatus.getPermission().toShort() != dirPermissions.get.toShort) {
+        fileSystem.setPermission(path, dirPermissions.get)
       }
     }
   }
 
   /**
    * Create a new writer for the file identified by the given path.
+   * If the permissions are not passed in, it will default to use the permissions
+   * (dirpermissions) used when class was instantiated.
    */
   private def createWriter(fileName: String, perms: Option[FsPermission] = None): PrintWriter = {
     val logPath = logDir + "/" + fileName
@@ -110,7 +112,7 @@ private[spark] class FileLogger(
         hadoopDataStream.get
       }
 
-    perms.foreach {p => fileSystem.setPermission(path, p)}
+    perms.orElse(dirPermissions).foreach {p => fileSystem.setPermission(path, p)}
     val bstream = new BufferedOutputStream(dstream, outputBufferSize)
     val cstream = if (compress) compressionCodec.compressedOutputStream(bstream) else bstream
     new PrintWriter(cstream)
