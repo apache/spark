@@ -506,7 +506,7 @@ object SparkBuild extends Build {
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.hive._
-        |import org.apache.spark.sql.hive.TestHive._
+        |import org.apache.spark.sql.hive.test.TestHive._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
   )
 
