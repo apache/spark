@@ -22,6 +22,9 @@ import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import static org.junit.Assert.*;
+
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.storage.StorageLevel;
@@ -37,6 +40,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class JavaReceiverAPISuite implements Serializable {
+
+  @Before
+  public void setUp() {
+    System.clearProperty("spark.streaming.clock");
+  }
+
+  @After
+  public void tearDown() {
+    System.clearProperty("spark.streaming.clock");
+  }
+
   @Test
   public void testReceiver() throws InterruptedException {
     TestServer server = new TestServer(0);
