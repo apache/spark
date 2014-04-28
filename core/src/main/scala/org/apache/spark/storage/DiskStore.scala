@@ -77,7 +77,12 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
     val outputStream = new FileOutputStream(file)
-    blockManager.dataSerializeStream(blockId, outputStream, values)
+    try {
+      blockManager.dataSerializeStream(blockId, outputStream, values)
+    }
+    finally {
+      outputStream.close
+    }
     val length = file.length
 
     val timeTaken = System.currentTimeMillis - startTime

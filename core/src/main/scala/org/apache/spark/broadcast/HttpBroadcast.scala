@@ -159,18 +159,24 @@ private[spark] object HttpBroadcast extends Logging {
 
   def write(id: Long, value: Any) {
     val file = getFile(id)
-    val out: OutputStream = {
-      if (compress) {
-        compressionCodec.compressedOutputStream(new FileOutputStream(file))
-      } else {
-        new BufferedOutputStream(new FileOutputStream(file), bufferSize)
+    val fileOutputStream = new FileOutputStream(file)
+    try {
+      val out: OutputStream = {
+        if (compress) {
+          compressionCodec.compressedOutputStream(fileOutputStream)
+        } else {
+          new BufferedOutputStream(fileOutputStream, bufferSize)
+        }
       }
+      val ser = SparkEnv.get.serializer.newInstance()
+      val serOut = ser.serializeStream(out)
+      serOut.writeObject(value)
+      serOut.close()
+      files += file.getAbsolutePath
     }
-    val ser = SparkEnv.get.serializer.newInstance()
-    val serOut = ser.serializeStream(out)
-    serOut.writeObject(value)
-    serOut.close()
-    files += file.getAbsolutePath
+    finally {
+      fileOutputStream.close
+    }
   }
 
   def read[T](id: Long): T = {

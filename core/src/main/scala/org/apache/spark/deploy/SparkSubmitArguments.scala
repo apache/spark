@@ -325,14 +325,19 @@ object SparkSubmitArguments {
   def getPropertiesFromFile(file: File): Seq[(String, String)] = {
     require(file.exists(), s"Properties file ${file.getName} does not exist")
     val inputStream = new FileInputStream(file)
-    val properties = new Properties()
     try {
-      properties.load(inputStream)
-    } catch {
-      case e: IOException =>
-        val message = s"Failed when loading Spark properties file ${file.getName}"
-        throw new SparkException(message, e)
+      val properties = new Properties()
+      try {
+        properties.load(inputStream)
+      } catch {
+        case e: IOException =>
+          val message = s"Failed when loading Spark properties file ${file.getName}"
+          throw new SparkException(message, e)
+      }
+      properties.stringPropertyNames().toSeq.map(k => (k, properties(k)))
     }
-    properties.stringPropertyNames().toSeq.map(k => (k, properties(k)))
+    finally {
+      inputStream.close
+    }
   }
 }
