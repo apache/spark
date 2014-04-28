@@ -149,6 +149,12 @@ object BlockFetcherIterator {
     }
 
     protected def splitLocalRemoteBlocks(): ArrayBuffer[FetchRequest] = {
+      // Make remote requests at most maxBytesInFlight / 5 in length; the reason to keep them
+      // smaller than maxBytesInFlight is to allow multiple, parallel fetches from up to 5
+      // nodes, rather than blocking on reading output from one node.
+      val targetRequestSize = math.max(maxBytesInFlight / 5, 1L)
+      logInfo("maxBytesInFlight: " + maxBytesInFlight + ", targetRequestSize: " + targetRequestSize)
+
       // Split local and remote blocks. Remote blocks are further split into FetchRequests of size
       // at most maxBytesInFlight in order to limit the amount of data in flight.
       val remoteRequests = new ArrayBuffer[FetchRequest]
@@ -160,11 +166,6 @@ object BlockFetcherIterator {
           _numBlocksToFetch += localBlocksToFetch.size
         } else {
           numRemote += blockInfos.size
-          // Make our requests at least maxBytesInFlight / 5 in length; the reason to keep them
-          // smaller than maxBytesInFlight is to allow multiple, parallel fetches from up to 5
-          // nodes, rather than blocking on reading output from one node.
-          val minRequestSize = math.max(maxBytesInFlight / 5, 1L)
-          logInfo("maxBytesInFlight: " + maxBytesInFlight + ", minRequest: " + minRequestSize)
           val iterator = blockInfos.iterator
           var curRequestSize = 0L
           var curBlocks = new ArrayBuffer[(BlockId, Long)]
@@ -179,11 +180,12 @@ object BlockFetcherIterator {
             } else if (size < 0) {
               throw new BlockException(blockId, "Negative block size " + size)
             }
-            if (curRequestSize >= minRequestSize) {
+            if (curRequestSize >= targetRequestSize) {
               // Add this FetchRequest
               remoteRequests += new FetchRequest(address, curBlocks)
               curRequestSize = 0
               curBlocks = new ArrayBuffer[(BlockId, Long)]
+              logDebug(s"Creating fetch request of $curRequestSize at $address")
             }
           }
           // Add in the final request
@@ -192,7 +194,7 @@ object BlockFetcherIterator {
           }
         }
       }
-      logInfo("Getting " + _numBlocksToFetch + " non-zero-bytes blocks out of " +
+      logInfo("Getting " + _numBlocksToFetch + " non-empty blocks out of " +
         totalBlocks + " blocks")
       remoteRequests
     }
@@ -227,8 +229,8 @@ object BlockFetcherIterator {
         sendRequest(fetchRequests.dequeue())
       }
 
-      val numGets = remoteRequests.size - fetchRequests.size
-      logInfo("Started " + numGets + " remote gets in " + Utils.getUsedTimeMs(startTime))
+      val numFetches = remoteRequests.size - fetchRequests.size
+      logInfo("Started " + numFetches + " remote fetches in" + Utils.getUsedTimeMs(startTime))
 
       // Get Local Blocks
       startTime = System.currentTimeMillis
@@ -328,7 +330,7 @@ object BlockFetcherIterator {
       }
 
       copiers = startCopiers(conf.getInt("spark.shuffle.copier.threads", 6))
-      logInfo("Started " + fetchRequestsSync.size + " remote gets in " +
+      logInfo("Started " + fetchRequestsSync.size + " remote fetches in " +
         Utils.getUsedTimeMs(startTime))
 
       // Get Local Blocks

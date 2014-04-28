@@ -123,6 +123,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.storage.memoryMapThreshold</td>
+  <td>8192</td>
+  <td>
+    Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
+    This prevents Spark from memory mapping very small blocks. In general, memory
+    mapping has high overhead for blocks close to or below the page size of the operating system.
+  </td>
+</tr>
+<tr>
   <td>spark.mesos.coarse</td>
   <td>false</td>
   <td>
