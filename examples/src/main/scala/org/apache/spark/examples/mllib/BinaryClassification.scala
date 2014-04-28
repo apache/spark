@@ -48,7 +48,7 @@ object BinaryClassification extends App {
   import Algorithm._
   import RegType._
 
-  case class BinaryClassificationParams(
+  case class Params(
       input: String = null,
       numIterations: Int = 100,
       stepSize: Double = 1.0,
@@ -56,9 +56,9 @@ object BinaryClassification extends App {
       regType: RegType = L2,
       regParam: Double = 0.1)
 
-  val defaultParams = BinaryClassificationParams()
+  val defaultParams = Params()
 
-  val parser = new OptionParser[BinaryClassificationParams]("BinaryClassification") {
+  val parser = new OptionParser[Params]("BinaryClassification") {
     head("BinaryClassification: an example app for binary classification.")
     opt[Int]("numIterations")
       .text("number of iterations")
@@ -88,7 +88,7 @@ object BinaryClassification extends App {
     sys.exit(1)
   }
 
-  def run(params: BinaryClassificationParams) {
+  def run(params: Params) {
     val conf = new SparkConf().setAppName(s"BinaryClassification with $params")
     val sc = new SparkContext(conf)
 
