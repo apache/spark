@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.{File, FileWriter}
 
 import scala.collection.mutable
+import scala.language.reflectiveCalls
 
 import com.google.common.io.Files
 import org.scalatest.{BeforeAndAfterEach, FunSuite}
@@ -49,6 +50,11 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
 
   override def beforeEach() {
     diskBlockManager = new DiskBlockManager(shuffleBlockManager, rootDirs)
+    shuffleBlockManager.idToSegmentMap.clear()
+  }
+
+  override def afterEach() {
+    diskBlockManager.stop()
     shuffleBlockManager.idToSegmentMap.clear()
   }
 

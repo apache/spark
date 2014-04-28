@@ -27,6 +27,8 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.zeromq._
 
+import scala.language.implicitConversions
+
 /**
  * A simple publisher for demonstration purposes, repeatedly publishes random Messages
  * every one second.
@@ -84,7 +86,7 @@ object ZeroMQWordCount {
 
     // Create the context and set the batch size
     val ssc = new StreamingContext(master, "ZeroMQWordCount", Seconds(2),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
 
     def bytesToStringIterator(x: Seq[ByteString]) = (x.map(_.utf8String)).iterator
 

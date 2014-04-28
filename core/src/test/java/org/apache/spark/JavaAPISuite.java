@@ -610,8 +610,8 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void wholeTextFiles() throws IOException {
-    byte[] content1 = "spark is easy to use.\n".getBytes();
-    byte[] content2 = "spark is also easy to use.\n".getBytes();
+    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+    byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
 
     File tempDir = Files.createTempDir();
     String tempDirName = tempDir.getAbsolutePath();
@@ -626,7 +626,7 @@ public class JavaAPISuite implements Serializable {
     container.put(tempDirName+"/part-00000", new Text(content1).toString());
     container.put(tempDirName+"/part-00001", new Text(content2).toString());
 
-    JavaPairRDD<String, String> readRDD = sc.wholeTextFiles(tempDirName);
+    JavaPairRDD<String, String> readRDD = sc.wholeTextFiles(tempDirName, 3);
     List<Tuple2<String, String>> result = readRDD.collect();
 
     for (Tuple2<String, String> res : result) {

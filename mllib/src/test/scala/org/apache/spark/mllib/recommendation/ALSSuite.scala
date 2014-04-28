@@ -27,6 +27,7 @@ import org.jblas.DoubleMatrix
 
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.SparkContext._
+import org.apache.spark.Partitioner
 
 object ALSSuite {
 
@@ -74,7 +75,6 @@ object ALSSuite {
 
     (sampledRatings, trueRatings, truePrefs)
   }
-
 }
 
 
@@ -128,6 +128,25 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     assert(u11 != u2)
   }
 
+  test("negative ids") {
+    val data = ALSSuite.generateRatings(50, 50, 2, 0.7, false, false)
+    val ratings = sc.parallelize(data._1.map { case Rating(u, p, r) =>
+      Rating(u - 25, p - 25, r)
+    })
+    val correct = data._2
+    val model = ALS.train(ratings, 5, 15)
+
+    val pairs = Array.tabulate(50, 50)((u, p) => (u - 25, p - 25)).flatten
+    val ans = model.predict(sc.parallelize(pairs)).collect()
+    ans.foreach { r =>
+      val u = r.user + 25
+      val p = r.product + 25
+      val v = r.rating
+      val error = v - correct.get(u, p)
+      assert(math.abs(error) < 0.4)
+    }
+  }
+
   /**
    * Test if we can correctly factorize R = U * P where U and P are of known rank.
    *
@@ -140,16 +159,19 @@ class ALSSuite extends FunSuite with LocalSparkContext {
    * @param implicitPrefs  flag to test implicit feedback
    * @param bulkPredict    flag to test bulk prediciton
    * @param negativeWeights whether the generated data can contain negative values
+   * @param numBlocks      number of blocks to partition users and products into
    */
   def testALS(users: Int, products: Int, features: Int, iterations: Int,
     samplingRate: Double, matchThreshold: Double, implicitPrefs: Boolean = false,
-    bulkPredict: Boolean = false, negativeWeights: Boolean = false)
+    bulkPredict: Boolean = false, negativeWeights: Boolean = false, numBlocks: Int = -1)
   {
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
       features, samplingRate, implicitPrefs, negativeWeights)
     val model = implicitPrefs match {
-      case false => ALS.train(sc.parallelize(sampledRatings), features, iterations)
-      case true => ALS.trainImplicit(sc.parallelize(sampledRatings), features, iterations)
+      case false => ALS.train(sc.parallelize(sampledRatings), features, iterations, 0.01,
+          numBlocks, 0L)
+      case true => ALS.trainImplicit(sc.parallelize(sampledRatings), features, iterations, 0.01,
+          numBlocks, 1.0, 0L)
     }
 
     val predictedU = new DoubleMatrix(users, features)

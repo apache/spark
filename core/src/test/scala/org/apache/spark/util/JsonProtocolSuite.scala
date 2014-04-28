@@ -231,7 +231,10 @@ class JsonProtocolSuite extends FunSuite {
     assert(info1.submissionTime === info2.submissionTime)
     assert(info1.completionTime === info2.completionTime)
     assert(info1.emittedTaskSizeWarning === info2.emittedTaskSizeWarning)
-    assertEquals(info1.rddInfo, info2.rddInfo)
+    assert(info1.rddInfos.size === info2.rddInfos.size)
+    (0 until info1.rddInfos.size).foreach { i =>
+      assertEquals(info1.rddInfos(i), info2.rddInfos(i))
+    }
   }
 
   private def assertEquals(info1: RDDInfo, info2: RDDInfo) {
@@ -434,7 +437,8 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
-    new StageInfo(a, "greetings", b, makeRddInfo(a, b, c, d, e))
+    val rddInfos = (1 to a % 5).map { i => makeRddInfo(a % i, b % i, c % i, d % i, e % i) }
+    new StageInfo(a, "greetings", b, rddInfos)
   }
 
   private def makeTaskInfo(a: Long, b: Int, c: Long) = {
@@ -523,8 +527,8 @@ class JsonProtocolSuite extends FunSuite {
       700,"Fetch Wait Time":900,"Remote Bytes Read":1000},"Shuffle Write Metrics":
       {"Shuffle Bytes Written":1200,"Shuffle Write Time":1500},"Updated Blocks":
       [{"Block ID":{"Type":"RDDBlockId","RDD ID":0,"Split Index":0},"Status":
-      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":false,
-      "Replication":2},"Memory Size":0,"Disk Size":0,"Tachyon Size":0}}]}}
+      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,
+      "Deserialized":false,"Replication":2},"Memory Size":0,"Disk Size":0,"Tachyon Size":0}}]}}
     """
 
   private val jobStartJsonString =

@@ -45,7 +45,7 @@ object PageViewStream {
 
     // Create the context
     val ssc = new StreamingContext("local[2]", "PageViewStream", Seconds(1),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
 
     // Create a NetworkInputDStream on target host:port and convert each line to a PageView
     val pageViews = ssc.socketTextStream(host, port)
@@ -69,8 +69,11 @@ object PageViewStream {
         val normalCount = statuses.filter(_ == 200).size
         val errorCount = statuses.size - normalCount
         val errorRatio = errorCount.toFloat / statuses.size
-        if (errorRatio > 0.05) {"%s: **%s**".format(zip, errorRatio)}
-        else {"%s: %s".format(zip, errorRatio)}
+        if (errorRatio > 0.05) {
+          "%s: **%s**".format(zip, errorRatio)
+        } else {
+          "%s: %s".format(zip, errorRatio)
+        }
     }
 
     // Return the number unique users in last 15 seconds

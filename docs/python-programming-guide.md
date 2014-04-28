@@ -100,8 +100,8 @@ $ MASTER=local[4] ./bin/pyspark
 
 ## IPython
 
-It is also possible to launch PySpark in [IPython](http://ipython.org), the 
-enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To 
+It is also possible to launch PySpark in [IPython](http://ipython.org), the
+enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To
 use IPython, set the `IPYTHON` variable to `1` when running `bin/pyspark`:
 
 {% highlight bash %}
@@ -134,7 +134,7 @@ Files listed here will be added to the `PYTHONPATH` and shipped to remote worker
 Code dependencies can be added to an existing SparkContext using its `addPyFile()` method.
 
 You can set [configuration properties](configuration.html#spark-properties) by passing a
-[SparkConf](api/pyspark/pyspark.conf.SparkConf-class.html) object to SparkContext:
+[SparkConf](api/python/pyspark.conf.SparkConf-class.html) object to SparkContext:
 
 {% highlight python %}
 from pyspark import SparkConf, SparkContext
@@ -147,13 +147,13 @@ sc = SparkContext(conf = conf)
 
 # API Docs
 
-[API documentation](api/pyspark/index.html) for PySpark is available as Epydoc.
+[API documentation](api/python/index.html) for PySpark is available as Epydoc.
 Many of the methods also contain [doctests](http://docs.python.org/2/library/doctest.html) that provide additional usage examples.
 
 # Libraries
 
 [MLlib](mllib-guide.html) is also available in PySpark. To use it, you'll need
-[NumPy](http://www.numpy.org) version 1.7 or newer. The [MLlib guide](mllib-guide.html) contains
+[NumPy](http://www.numpy.org) version 1.4 or newer. The [MLlib guide](mllib-guide.html) contains
 some example applications.
 
 # Where to Go from Here

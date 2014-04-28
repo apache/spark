@@ -17,10 +17,11 @@
 
 package org.apache.spark.examples
 
-import org.apache.spark._
-import SparkContext._
 import scala.util.Random
 import scala.collection.mutable
+
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
 
 /**
  * Transitive closure on a graph.
@@ -46,7 +47,7 @@ object SparkTC {
       System.exit(1)
     }
     val spark = new SparkContext(args(0), "SparkTC",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
     val slices = if (args.length > 1) args(1).toInt else 2
     var tc = spark.parallelize(generateGraph, slices).cache()
 

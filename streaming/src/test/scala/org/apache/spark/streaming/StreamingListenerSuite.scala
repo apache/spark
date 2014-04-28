@@ -17,10 +17,20 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.streaming.scheduler._
 import scala.collection.mutable.ArrayBuffer
-import org.scalatest.matchers.ShouldMatchers
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.language.postfixOps
+
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.scheduler._
+
+import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
+import org.apache.spark.Logging
 
 class StreamingListenerSuite extends TestSuiteBase with ShouldMatchers {
 
@@ -32,7 +42,7 @@ class StreamingListenerSuite extends TestSuiteBase with ShouldMatchers {
   override def batchDuration = Milliseconds(100)
   override def actuallyWait = true
 
-  test("basic BatchInfo generation") {
+  test("batch info reporting") {
     val ssc = setupStreams(input, operation)
     val collector = new BatchInfoCollector
     ssc.addStreamingListener(collector)
@@ -54,6 +64,31 @@ class StreamingListenerSuite extends TestSuiteBase with ShouldMatchers {
     isInIncreasingOrder(batchInfos.map(_.processingEndTime.get)) should be (true)
   }
 
+  test("receiver info reporting") {
+    val ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count)
+
+    val collector = new ReceiverInfoCollector
+    ssc.addStreamingListener(collector)
+
+    ssc.start()
+    try {
+      eventually(timeout(1000 millis), interval(20 millis)) {
+        collector.startedReceiverStreamIds.size should be >= 1
+        collector.startedReceiverStreamIds(0) should equal (0)
+        collector.stoppedReceiverStreamIds should have size 1
+        collector.stoppedReceiverStreamIds(0) should equal (0)
+        collector.receiverErrors should have size 1
+        collector.receiverErrors(0)._1 should equal (0)
+        collector.receiverErrors(0)._2 should include ("report error")
+        collector.receiverErrors(0)._3 should include ("report exception")
+      }
+    } finally {
+      ssc.stop()
+    }
+  }
+
   /** Check if a sequence of numbers is in increasing order */
   def isInIncreasingOrder(seq: Seq[Long]): Boolean = {
     for(i <- 1 until seq.size) {
@@ -61,12 +96,47 @@ class StreamingListenerSuite extends TestSuiteBase with ShouldMatchers {
     }
     true
   }
+}
 
-  /** Listener that collects information on processed batches */
-  class BatchInfoCollector extends StreamingListener {
-    val batchInfos = new ArrayBuffer[BatchInfo]
-    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
-      batchInfos += batchCompleted.batchInfo
+/** Listener that collects information on processed batches */
+class BatchInfoCollector extends StreamingListener {
+  val batchInfos = new ArrayBuffer[BatchInfo]
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+    batchInfos += batchCompleted.batchInfo
+  }
+}
+
+/** Listener that collects information on processed batches */
+class ReceiverInfoCollector extends StreamingListener {
+  val startedReceiverStreamIds = new ArrayBuffer[Int]
+  val stoppedReceiverStreamIds = new ArrayBuffer[Int]()
+  val receiverErrors = new ArrayBuffer[(Int, String, String)]()
+
+  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
+    startedReceiverStreamIds += receiverStarted.receiverInfo.streamId
+  }
+
+  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
+    stoppedReceiverStreamIds += receiverStopped.receiverInfo.streamId
+  }
+
+  override def onReceiverError(receiverError: StreamingListenerReceiverError) {
+    receiverErrors += ((receiverError.receiverInfo.streamId,
+      receiverError.receiverInfo.lastErrorMessage, receiverError.receiverInfo.lastError))
+  }
+}
+
+class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_ONLY) with Logging {
+  def onStart() {
+    Future {
+      logInfo("Started receiver and sleeping")
+      Thread.sleep(10)
+      logInfo("Reporting error and sleeping")
+      reportError("test report error", new Exception("test report exception"))
+      Thread.sleep(10)
+      logInfo("Stopping")
+      stop("test stop error")
     }
   }
+  def onStop() { }
 }

@@ -17,10 +17,16 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util.regex.Matcher
+import java.util.regex.Pattern
+
+import scala.collection.mutable.HashMap
+
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.util.StringInterner
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.conf.Configuration
@@ -48,7 +54,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
   }
 
-  override def getCurrentUserCredentials(): Credentials = { 
+  override def getCurrentUserCredentials(): Credentials = {
     UserGroupInformation.getCurrentUser().getCredentials()
   }
 
@@ -58,7 +64,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   override def addSecretKeyToUserCredentials(key: String, secret: String) {
     val creds = new Credentials()
-    creds.addSecretKey(new Text(key), secret.getBytes())
+    creds.addSecretKey(new Text(key), secret.getBytes("utf-8"))
     addCurrentUserCredentials(creds)
   }
 
@@ -70,7 +76,60 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 }
 
 object YarnSparkHadoopUtil {
-  def getLoggingArgsForContainerCommandLine(): String = {
-    "-Dlog4j.configuration=log4j-spark-container.properties"
+  def addToEnvironment(
+      env: HashMap[String, String],
+      variable: String,
+      value: String,
+      classPathSeparator: String) = {
+    var envVariable = ""
+    if (env.get(variable) == None) {
+      envVariable = value
+    } else {
+      envVariable = env.get(variable).get + classPathSeparator + value
+    }
+    env put (StringInterner.weakIntern(variable), StringInterner.weakIntern(envVariable))
   }
+
+  def setEnvFromInputString(
+      env: HashMap[String, String],
+      envString: String,
+      classPathSeparator: String) = {
+    if (envString != null && envString.length() > 0) {
+      var childEnvs = envString.split(",")
+      var p = Pattern.compile(getEnvironmentVariableRegex())
+      for (cEnv <- childEnvs) {
+        var parts = cEnv.split("=") // split on '='
+        var m = p.matcher(parts(1))
+        val sb = new StringBuffer
+        while (m.find()) {
+          val variable = m.group(1)
+          var replace = ""
+          if (env.get(variable) != None) {
+            replace = env.get(variable).get
+          } else {
+            // if this key is not configured for the child .. get it
+            // from the env
+            replace = System.getenv(variable)
+            if (replace == null) {
+            // the env key is note present anywhere .. simply set it
+              replace = ""
+            }
+          }
+          m.appendReplacement(sb, Matcher.quoteReplacement(replace))
+        }
+        m.appendTail(sb)
+        addToEnvironment(env, parts(0), sb.toString(), classPathSeparator)
+      }
+    }
+  }
+
+  private def getEnvironmentVariableRegex() : String = {
+    val osName = System.getProperty("os.name")
+    if (osName startsWith "Windows") {
+      "%([A-Za-z_][A-Za-z0-9_]*?)%"
+    } else {
+      "\\$([A-Za-z_][A-Za-z0-9_]*)"
+    }
+  }
+
 }

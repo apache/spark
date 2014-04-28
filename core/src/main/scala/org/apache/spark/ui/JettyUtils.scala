@@ -22,6 +22,7 @@ import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.annotation.tailrec
+import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
@@ -33,6 +34,7 @@ import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.util.Utils
 
 /**
  * Utilities for launching a web server using Jetty's HTTP Server class
@@ -121,9 +123,10 @@ private[spark] object JettyUtils extends Logging {
   /** Create a handler for serving files from a static directory */
   def createStaticHandler(resourceBase: String, path: String): ServletContextHandler = {
     val contextHandler = new ServletContextHandler
+    contextHandler.setInitParameter("org.eclipse.jetty.servlet.Default.gzip", "false")
     val staticHandler = new DefaultServlet
     val holder = new ServletHolder(staticHandler)
-    Option(getClass.getClassLoader.getResource(resourceBase)) match {
+    Option(Utils.getSparkClassLoader.getResource(resourceBase)) match {
       case Some(res) =>
         holder.setInitParameter("resourceBase", res.toString)
       case None =>
@@ -134,8 +137,8 @@ private[spark] object JettyUtils extends Logging {
     contextHandler
   }
 
-  /** Add security filters, if any, do the given list of ServletContextHandlers */
-  private def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
+  /** Add filters, if any, to the given list of ServletContextHandlers */
+  def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
     val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
     filters.foreach {
       case filter : String =>
@@ -192,6 +195,7 @@ private[spark] object JettyUtils extends Logging {
           (server, server.getConnectors.head.getLocalPort)
         case f: Failure[_] =>
           server.stop()
+          pool.stop()
           logInfo("Failed to create UI at port, %s. Trying again.".format(currentPort))
           logInfo("Error was: " + f.toString)
           connect((currentPort + 1) % 65536)

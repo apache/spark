@@ -18,20 +18,19 @@
 package org.apache.spark.streaming.dstream
 
 
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+
 import scala.deprecated
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 
-import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
-
-import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
+import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.MetadataCleaner
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.streaming.Duration
+import org.apache.spark.util.MetadataCleaner
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -144,7 +143,7 @@ abstract class DStream[T: ClassTag] (
    */
   private[streaming] def initialize(time: Time) {
     if (zeroTime != null && zeroTime != time) {
-      throw new Exception("ZeroTime is already initialized to " + zeroTime
+      throw new SparkException("ZeroTime is already initialized to " + zeroTime
         + ", cannot initialize it again to " + time)
     }
     zeroTime = time
@@ -220,7 +219,7 @@ abstract class DStream[T: ClassTag] (
         "which requires " + this.getClass.getSimpleName + " to remember generated RDDs for more " +
         "than " + rememberDuration.milliseconds / 1000 + " seconds. But Spark's metadata cleanup" +
         "delay is set to " + metadataCleanerDelay + " seconds, which is not sufficient. Please " +
-        "set the Java property 'spark.cleaner.delay' to more than " +
+        "set the Java cleaner delay to more than " +
         math.ceil(rememberDuration.milliseconds / 1000.0).toInt + " seconds."
     )
 
@@ -235,7 +234,7 @@ abstract class DStream[T: ClassTag] (
 
   private[streaming] def setContext(s: StreamingContext) {
     if (ssc != null && ssc != s) {
-      throw new Exception("Context is already set in " + this + ", cannot set it again")
+      throw new SparkException("Context is already set in " + this + ", cannot set it again")
     }
     ssc = s
     logInfo("Set context for " + this)
@@ -244,7 +243,7 @@ abstract class DStream[T: ClassTag] (
 
   private[streaming] def setGraph(g: DStreamGraph) {
     if (graph != null && graph != g) {
-      throw new Exception("Graph is already set in " + this + ", cannot set it again")
+      throw new SparkException("Graph is already set in " + this + ", cannot set it again")
     }
     graph = g
     dependencies.foreach(_.setGraph(graph))
@@ -261,7 +260,7 @@ abstract class DStream[T: ClassTag] (
   /** Checks whether the 'time' is valid wrt slideDuration for generating RDD */
   private[streaming] def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
-      throw new Exception (this + " has not been initialized")
+      throw new SparkException (this + " has not been initialized")
     } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
       logInfo("Time " + time + " is invalid as zeroTime is " + zeroTime +
         " and slideDuration is " + slideDuration + " and difference is " + (time - zeroTime))
@@ -340,26 +339,27 @@ abstract class DStream[T: ClassTag] (
    * this to clear their own metadata along with the generated RDDs.
    */
   private[streaming] def clearMetadata(time: Time) {
+    val unpersistData = ssc.conf.getBoolean("spark.streaming.unpersist", true)
     val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
     logDebug("Clearing references to old RDDs: [" +
       oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]")
     generatedRDDs --= oldRDDs.keys
-    if (ssc.conf.getBoolean("spark.streaming.unpersist", false)) {
+    if (unpersistData) {
       logDebug("Unpersisting old RDDs: " + oldRDDs.values.map(_.id).mkString(", "))
-      oldRDDs.values.foreach(_.unpersist(false))
+      oldRDDs.values.foreach { rdd =>
+        rdd.unpersist(false)
+        // Explicitly remove blocks of BlockRDD
+        rdd match {
+          case b: BlockRDD[_] =>
+            logInfo("Removing blocks of RDD " + b + " of time " + time)
+            b.removeBlocks()
+          case _ =>
+        }
+      }
     }
     logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +
       (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))
     dependencies.foreach(_.clearMetadata(time))
-  }
-
-  /* Adds metadata to the Stream while it is running.
-   * This method should be overwritten by sublcasses of InputDStream.
-   */
-  private[streaming] def addMetadata(metadata: Any) {
-    if (metadata != null) {
-      logInfo("Dropping Metadata: " + metadata.toString)
-    }
   }
 
   /**
@@ -497,7 +497,8 @@ abstract class DStream[T: ClassTag] (
    * the RDDs with `numPartitions` partitions (Spark's default number of partitions if
    * `numPartitions` not specified).
    */
-  def countByValue(numPartitions: Int = ssc.sc.defaultParallelism): DStream[(T, Long)] =
+  def countByValue(numPartitions: Int = ssc.sc.defaultParallelism)(implicit ord: Ordering[T] = null)
+      : DStream[(T, Long)] =
     this.map(x => (x, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
 
   /**
@@ -695,9 +696,10 @@ abstract class DStream[T: ClassTag] (
   def countByValueAndWindow(
       windowDuration: Duration,
       slideDuration: Duration,
-      numPartitions: Int = ssc.sc.defaultParallelism
-    ): DStream[(T, Long)] = {
-
+      numPartitions: Int = ssc.sc.defaultParallelism)
+      (implicit ord: Ordering[T] = null)
+      : DStream[(T, Long)] =
+  {
     this.map(x => (x, 1L)).reduceByKeyAndWindow(
       (x: Long, y: Long) => x + y,
       (x: Long, y: Long) => x - y,
@@ -725,6 +727,9 @@ abstract class DStream[T: ClassTag] (
    * Return all the RDDs between 'fromTime' to 'toTime' (both included)
    */
   def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = {
+    if (!isInitialized) {
+      throw new SparkException(this + " has not been initialized")
+    }
     if (!(fromTime - zeroTime).isMultipleOf(slideDuration)) {
       logWarning("fromTime (" + fromTime + ") is not a multiple of slideDuration ("
         + slideDuration + ")")

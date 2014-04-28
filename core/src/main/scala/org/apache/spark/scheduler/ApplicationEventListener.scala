@@ -28,14 +28,16 @@ private[spark] class ApplicationEventListener extends SparkListener {
   var sparkUser = "<Not Started>"
   var startTime = -1L
   var endTime = -1L
+  var viewAcls = ""
+  var enableViewAcls = false
 
   def applicationStarted = startTime != -1
 
-  def applicationFinished = endTime != -1
+  def applicationCompleted = endTime != -1
 
   def applicationDuration: Long = {
     val difference = endTime - startTime
-    if (applicationStarted && applicationFinished && difference > 0) difference else -1L
+    if (applicationStarted && applicationCompleted && difference > 0) difference else -1L
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
@@ -46,5 +48,14 @@ private[spark] class ApplicationEventListener extends SparkListener {
 
   override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
     endTime = applicationEnd.time
+  }
+
+  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
+    synchronized {
+      val environmentDetails = environmentUpdate.environmentDetails
+      val allProperties = environmentDetails("Spark Properties").toMap
+      viewAcls = allProperties.getOrElse("spark.ui.view.acls", "")
+      enableViewAcls = allProperties.getOrElse("spark.ui.acls.enable", "false").toBoolean
+    }
   }
 }

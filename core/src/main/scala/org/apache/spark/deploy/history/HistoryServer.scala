@@ -17,17 +17,14 @@
 
 package org.apache.spark.deploy.history
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.deploy.SparkUIContainer
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.{WebUI, SparkUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
 
@@ -46,17 +43,15 @@ import org.apache.spark.util.Utils
  */
 class HistoryServer(
     val baseLogDir: String,
+    securityManager: SecurityManager,
     conf: SparkConf)
-  extends SparkUIContainer("History Server") with Logging {
+  extends WebUI(securityManager, HistoryServer.WEB_UI_PORT, conf) with Logging {
 
   import HistoryServer._
 
   private val fileSystem = Utils.getHadoopFileSystem(baseLogDir)
   private val localHost = Utils.localHostName()
   private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHost)
-  private val port = WEB_UI_PORT
-  private val securityManager = new SecurityManager(conf)
-  private val indexPage = new IndexPage(this)
 
   // A timestamp of when the disk was last accessed to check for log updates
   private var lastLogCheckTime = -1L
@@ -90,35 +85,26 @@ class HistoryServer(
     }
   }
 
-  private val handlers = Seq[ServletContextHandler](
-    createStaticHandler(STATIC_RESOURCE_DIR, "/static"),
-    createServletHandler("/",
-      (request: HttpServletRequest) => indexPage.render(request), securityMgr = securityManager)
-  )
-
   // A mapping of application ID to its history information, which includes the rendered UI
   val appIdToInfo = mutable.HashMap[String, ApplicationHistoryInfo]()
 
+  initialize()
+
   /**
-   * Start the history server.
+   * Initialize the history server.
    *
    * This starts a background thread that periodically synchronizes information displayed on
    * this UI with the event logs in the provided base directory.
    */
-  def start() {
-    logCheckingThread.start()
+  def initialize() {
+    attachPage(new HistoryPage(this))
+    attachHandler(createStaticHandler(STATIC_RESOURCE_DIR, "/static"))
   }
 
   /** Bind to the HTTP server behind this web interface. */
   override def bind() {
-    try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf))
-      logInfo("Started HistoryServer at http://%s:%d".format(publicHost, boundPort))
-    } catch {
-      case e: Exception =>
-        logError("Failed to bind HistoryServer", e)
-        System.exit(1)
-    }
+    super.bind()
+    logCheckingThread.start()
   }
 
   /**
@@ -151,7 +137,7 @@ class HistoryServer(
         // Remove any applications that should no longer be retained
         appIdToInfo.foreach { case (appId, info) =>
           if (!retainedAppIds.contains(appId)) {
-            detachUI(info.ui)
+            detachSparkUI(info.ui)
             appIdToInfo.remove(appId)
           }
         }
@@ -182,19 +168,22 @@ class HistoryServer(
    * directory. If this file exists, the associated application is regarded to be completed, in
    * which case the server proceeds to render the SparkUI. Otherwise, the server does nothing.
    */
-  private def renderSparkUI(logDir: FileStatus, logInfo: EventLoggingInfo) {
+  private def renderSparkUI(logDir: FileStatus, elogInfo: EventLoggingInfo) {
     val path = logDir.getPath
     val appId = path.getName
-    val replayBus = new ReplayListenerBus(logInfo.logPaths, fileSystem, logInfo.compressionCodec)
-    val ui = new SparkUI(replayBus, appId, "/history/" + appId)
+    val replayBus = new ReplayListenerBus(elogInfo.logPaths, fileSystem, elogInfo.compressionCodec)
     val appListener = new ApplicationEventListener
     replayBus.addListener(appListener)
+    val appConf = conf.clone()
+    val appSecManager = new SecurityManager(appConf)
+    val ui = new SparkUI(conf, appSecManager, replayBus, appId, "/history/" + appId)
 
     // Do not call ui.bind() to avoid creating a new server for each application
-    ui.start()
     replayBus.replay()
     if (appListener.applicationStarted) {
-      attachUI(ui)
+      appSecManager.setUIAcls(HISTORY_UI_ACLS_ENABLED)
+      appSecManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
+      attachSparkUI(ui)
       val appName = appListener.appName
       val sparkUser = appListener.sparkUser
       val startTime = appListener.startTime
@@ -211,6 +200,19 @@ class HistoryServer(
     super.stop()
     stopped = true
     fileSystem.close()
+  }
+
+  /** Attach a reconstructed UI to this server. Only valid after bind(). */
+  private def attachSparkUI(ui: SparkUI) {
+    assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
+    ui.getHandlers.foreach(attachHandler)
+    addFilters(ui.getHandlers, conf)
+  }
+
+  /** Detach a reconstructed UI from this server. Only valid after bind(). */
+  private def detachSparkUI(ui: SparkUI) {
+    assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
+    ui.getHandlers.foreach(detachHandler)
   }
 
   /** Return the address of this server. */
@@ -258,18 +260,36 @@ object HistoryServer {
   // The port to which the web UI is bound
   val WEB_UI_PORT = conf.getInt("spark.history.ui.port", 18080)
 
+  // set whether to enable or disable view acls for all applications
+  val HISTORY_UI_ACLS_ENABLED = conf.getBoolean("spark.history.ui.acls.enable", false)
+
   val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 
   def main(argStrings: Array[String]) {
+    initSecurity()
     val args = new HistoryServerArguments(argStrings)
-    val server = new HistoryServer(args.logDir, conf)
+    val securityManager = new SecurityManager(conf)
+    val server = new HistoryServer(args.logDir, securityManager, conf)
     server.bind()
-    server.start()
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
     server.stop()
   }
+
+  def initSecurity() {
+    // If we are accessing HDFS and it has security enabled (Kerberos), we have to login
+    // from a keytab file so that we can access HDFS beyond the kerberos ticket expiration.
+    // As long as it is using Hadoop rpc (hdfs://), a relogin will automatically
+    // occur from the keytab.
+    if (conf.getBoolean("spark.history.kerberos.enabled", false)) {
+      // if you have enabled kerberos the following 2 params must be set
+      val principalName = conf.get("spark.history.kerberos.principal")
+      val keytabFilename = conf.get("spark.history.kerberos.keytab")
+      SparkHadoopUtil.get.loginUserFromKeytab(principalName, keytabFilename)
+    }
+  }
+
 }
 
 

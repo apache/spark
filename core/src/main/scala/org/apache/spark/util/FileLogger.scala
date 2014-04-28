@@ -17,13 +17,13 @@
 
 package org.apache.spark.util
 
-import java.io._
+import java.io.{FileOutputStream, BufferedOutputStream, PrintWriter, IOException}
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
-import org.apache.hadoop.fs.{FSDataOutputStream, Path}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.io.CompressionCodec
@@ -38,7 +38,8 @@ import org.apache.spark.io.CompressionCodec
  */
 private[spark] class FileLogger(
     logDir: String,
-    conf: SparkConf = new SparkConf,
+    conf: SparkConf,
+    hadoopConfiguration: Configuration,
     outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
     overwrite: Boolean = true)
@@ -86,21 +87,22 @@ private[spark] class FileLogger(
   private def createWriter(fileName: String): PrintWriter = {
     val logPath = logDir + "/" + fileName
     val uri = new URI(logPath)
+    val defaultFs = FileSystem.getDefaultUri(hadoopConfiguration).getScheme
+    val isDefaultLocal = (defaultFs == null || defaultFs == "file")
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
      * Therefore, for local files, use FileOutputStream instead. */
-    val dstream = uri.getScheme match {
-      case "file" | null =>
+    val dstream =
+      if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
         // Second parameter is whether to append
-        new FileOutputStream(logPath, !overwrite)
-
-      case _ =>
+        new FileOutputStream(uri.getPath, !overwrite)
+      } else {
         val path = new Path(logPath)
         hadoopDataStream = Some(fileSystem.create(path, overwrite))
         hadoopDataStream.get
-    }
+      }
 
-    val bstream = new FastBufferedOutputStream(dstream, outputBufferSize)
+    val bstream = new BufferedOutputStream(dstream, outputBufferSize)
     val cstream = if (compress) compressionCodec.compressedOutputStream(bstream) else bstream
     new PrintWriter(cstream)
   }
@@ -111,7 +113,9 @@ private[spark] class FileLogger(
    * @param withTime Whether to prepend message with a timestamp
    */
   def log(msg: String, withTime: Boolean = false) {
-    val writeInfo = if (!withTime) msg else {
+    val writeInfo = if (!withTime) {
+      msg
+    } else {
       val date = new Date(System.currentTimeMillis())
       dateFormat.get.format(date) + ": " + msg
     }
