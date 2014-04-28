@@ -298,7 +298,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
         |  --driver-java-options       Extra Java options to pass to the driver
         |  --driver-library-path       Extra library path entries to pass to the driver
-        |  --driver-class-path         Extra class path entries to pass to the driver
+        |  --driver-class-path         Extra class path entries to pass to the driver. Note that
+        |                              jars added with --jars are automatically included in the
+        |                              classpath.
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |
