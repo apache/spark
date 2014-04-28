@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{FileLogger, JsonProtocol}
 
@@ -39,22 +40,25 @@ import org.apache.spark.util.{FileLogger, JsonProtocol}
  */
 private[spark] class EventLoggingListener(
     appName: String,
-    conf: SparkConf,
-    hadoopConfiguration: Configuration)
+    sparkConf: SparkConf,
+    hadoopConf: Configuration)
   extends SparkListener with Logging {
 
   import EventLoggingListener._
 
-  private val shouldCompress = conf.getBoolean("spark.eventLog.compress", false)
-  private val shouldOverwrite = conf.getBoolean("spark.eventLog.overwrite", false)
-  private val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-  private val logBaseDir = conf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
+  def this(appName: String, sparkConf: SparkConf) = {
+    this(appName, sparkConf, SparkHadoopUtil.get.newConfiguration())
+  }
+
+  private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
+  private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
+  private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
+  private val logBaseDir = sparkConf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
   private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis
   val logDir = logBaseDir + "/" + name
 
   private val logger =
-    new FileLogger(logDir, conf, hadoopConfiguration, outputBufferSize, shouldCompress,
-      shouldOverwrite)
+    new FileLogger(logDir, sparkConf, hadoopConf, outputBufferSize, shouldCompress, shouldOverwrite)
 
   /**
    * Begin logging events.
@@ -63,7 +67,7 @@ private[spark] class EventLoggingListener(
   def start() {
     logInfo("Logging events to %s".format(logDir))
     if (shouldCompress) {
-      val codec = conf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
+      val codec = sparkConf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
       logger.newFile(COMPRESSION_CODEC_PREFIX + codec)
     }
     logger.newFile(SPARK_VERSION_PREFIX + SparkContext.SPARK_VERSION)

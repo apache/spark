@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{FileOutputStream, BufferedOutputStream, PrintWriter, IOException}
+import java.io.{BufferedOutputStream, FileOutputStream, IOException, PrintWriter}
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,8 +38,8 @@ import org.apache.spark.io.CompressionCodec
  */
 private[spark] class FileLogger(
     logDir: String,
-    conf: SparkConf,
-    hadoopConfiguration: Configuration,
+    sparkConf: SparkConf,
+    hadoopConf: Configuration,
     outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
     overwrite: Boolean = true)
@@ -53,7 +53,7 @@ private[spark] class FileLogger(
   var fileIndex = 0
 
   // Only used if compression is enabled
-  private lazy val compressionCodec = CompressionCodec.createCodec(conf)
+  private lazy val compressionCodec = CompressionCodec.createCodec(sparkConf)
 
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
@@ -87,8 +87,8 @@ private[spark] class FileLogger(
   private def createWriter(fileName: String): PrintWriter = {
     val logPath = logDir + "/" + fileName
     val uri = new URI(logPath)
-    val defaultFs = FileSystem.getDefaultUri(hadoopConfiguration).getScheme
-    val isDefaultLocal = (defaultFs == null || defaultFs == "file")
+    val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
+    val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
      * Therefore, for local files, use FileOutputStream instead. */
