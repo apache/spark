@@ -94,25 +94,9 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressionsDown {
       // Skip redundant folding of literals.
       case l: Literal => l
-      case e @ If(Literal(v, _), trueValue, falseValue) => if(v == true) trueValue else falseValue
-      case e @ In(Literal(v, _), list) if(list.exists(c => c match {
-          case Literal(candidate, _) if(candidate == v) => true
-          case _ => false
-        })) => Literal(true, BooleanType)
-      case e if e.foldable => Literal(e.eval(null), e.dataType)
-    }
-  }
-}
-
-/**
- * The expression may be constant value, due to one or more of its children expressions is null or 
- * not null constantly, replaces [[catalyst.expressions.Expression Expressions]] with equivalent 
- * [[catalyst.expressions.Literal Literal]] values if possible caused by that. 
- */
-object NullPropagation extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsUp {
-      case l: Literal => l
+      case e @ Count(Literal(null, _)) => Literal(null, e.dataType)
+      case e @ Sum(Literal(null, _)) => Literal(null, e.dataType)
+      case e @ Average(Literal(null, _)) => Literal(null, e.dataType)
       case e @ IsNull(Literal(null, _)) => Literal(true, BooleanType)
       case e @ IsNull(Literal(_, _)) => Literal(false, BooleanType)
       case e @ IsNull(c @ Rand) => Literal(false, BooleanType)
@@ -135,6 +119,11 @@ object NullPropagation extends Rule[LogicalPlan] {
           Coalesce(newChildren)
         }
       }
+      case e @ If(Literal(v, _), trueValue, falseValue) => if(v == true) trueValue else falseValue
+      case e @ In(Literal(v, _), list) if(list.exists(c => c match {
+          case Literal(candidate, _) if(candidate == v) => true
+          case _ => false
+        })) => Literal(true, BooleanType)
       // TODO put exceptional cases(Unary & Binary Expression) before here.
       case e: UnaryExpression => e.child match {
         case Literal(null, _) => Literal(null, e.dataType)
@@ -143,6 +132,7 @@ object NullPropagation extends Rule[LogicalPlan] {
         case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
       }
+      case e if e.foldable => Literal(e.eval(null), e.dataType)
     }
   }
 }
