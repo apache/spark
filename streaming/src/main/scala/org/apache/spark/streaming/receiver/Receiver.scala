@@ -34,7 +34,7 @@ import org.apache.spark.annotation.DeveloperApi
  *
  * A custom receiver in Scala would look like this.
  *
- * @example {{{
+ * {{{
  *  class MyReceiver(storageLevel: StorageLevel) extends NetworkReceiver[String](storageLevel) {
  *      def onStart() {
  *          // Setup stuff (start threads, open sockets, etc.) to start receiving data.
@@ -56,7 +56,7 @@ import org.apache.spark.annotation.DeveloperApi
  *
  * A custom receiver in Java would look like this.
  *
- * @example {{{
+ * {{{
  * class MyReceiver extends Receiver<String> {
  *     public MyReceiver(StorageLevel storageLevel) {
  *         super(storageLevel);

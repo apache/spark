@@ -58,7 +58,10 @@ public class JavaReceiverAPISuite implements Serializable {
       mapped.foreachRDD(new Function<JavaRDD<String>, Void>() {
         @Override
         public Void call(JavaRDD<String> rdd) throws Exception {
-        dataCounter.addAndGet(rdd.count());
+        long count = rdd.count();
+        System.out.println("Count = " + count);
+        dataCounter.addAndGet(count);
+        System.out.println("Running count = " + dataCounter.get());
         return null;
         }
       });
@@ -67,16 +70,17 @@ public class JavaReceiverAPISuite implements Serializable {
       long startTime = System.currentTimeMillis();
       long timeout = 10000;
 
-      Thread.sleep(1000);
+      Thread.sleep(200);
       for (int i = 0; i < 6; i++) {
         server.send("" + i + "\n"); // \n to make sure these are separate lines
         System.out.println("Sent " + i);
-        Thread.sleep(50);
+        Thread.sleep(100);
       }
       while (dataCounter.get() == 0 && System.currentTimeMillis() - startTime < timeout) {
         Thread.sleep(100);
       }
       ssc.stop();
+      System.out.println("Final count = " + dataCounter.get());
       assertTrue(dataCounter.get() > 0);
     } finally {
       server.stop();
@@ -116,6 +120,7 @@ class JavaSocketReceiver extends Receiver<String> {
       String userInput;
       while ((userInput = in.readLine()) != null) {
         System.out.println("Received " + userInput);
+
         store(userInput);
       }
       in.close();
