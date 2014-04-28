@@ -17,12 +17,15 @@
 
 package org.apache.spark.storage
 
-import java.nio.ByteBuffer
+import java.nio.{ByteBuffer, MappedByteBuffer}
+import java.util.Arrays
 
 import akka.actor._
-import org.scalatest.BeforeAndAfter
-import org.scalatest.FunSuite
-import org.scalatest.PrivateMethodTester
+import org.apache.spark.SparkConf
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
+import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
+import org.mockito.Mockito.{mock, when}
+import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.matchers.ShouldMatchers._
@@ -785,6 +788,53 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     }
   }
 
+  test("reads of memory-mapped and non memory-mapped files are equivalent") {
+    val confKey = "spark.storage.memoryMapThreshold"
+
+    // Create a non-trivial (not all zeros) byte array
+    var counter = 0.toByte
+    def incr = {counter = (counter + 1).toByte; counter;}
+    val bytes = Array.fill[Byte](1000)(incr)
+    val byteBuffer = ByteBuffer.wrap(bytes)
+
+    val blockId = BlockId("rdd_1_2")
+
+    // This sequence of mocks makes these tests fairly brittle. It would
+    // be nice to refactor classes involved in disk storage in a way that
+    // allows for easier testing.
+    val blockManager = mock(classOf[BlockManager])
+    val shuffleBlockManager = mock(classOf[ShuffleBlockManager])
+    when(shuffleBlockManager.conf).thenReturn(conf)
+    val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
+      System.getProperty("java.io.tmpdir"))
+
+    when(blockManager.conf).thenReturn(conf.clone.set(confKey, 0.toString))
+    val diskStoreMapped = new DiskStore(blockManager, diskBlockManager)
+    diskStoreMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
+    val mapped = diskStoreMapped.getBytes(blockId).get
+
+    when(blockManager.conf).thenReturn(conf.clone.set(confKey, (1000 * 1000).toString))
+    val diskStoreNotMapped = new DiskStore(blockManager, diskBlockManager)
+    diskStoreNotMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
+    val notMapped = diskStoreNotMapped.getBytes(blockId).get
+
+    // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
+    assert(notMapped.getClass.getName.endsWith("HeapByteBuffer"),
+      "Expected HeapByteBuffer for un-mapped read")
+    assert(mapped.isInstanceOf[MappedByteBuffer], "Expected MappedByteBuffer for mapped read")
+
+    def arrayFromByteBuffer(in: ByteBuffer): Array[Byte] = {
+      val array = new Array[Byte](in.remaining())
+      in.get(array)
+      array
+    }
+
+    val mappedAsArray = arrayFromByteBuffer(mapped)
+    val notMappedAsArray = arrayFromByteBuffer(notMapped)
+    assert(Arrays.equals(mappedAsArray, bytes))
+    assert(Arrays.equals(notMappedAsArray, bytes))
+  }
+  
   test("updated block statuses") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
       securityMgr, mapOutputTracker)

@@ -553,8 +553,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return the string to tell how long has passed in seconds. The passing parameter should be in
-   * millisecond.
+   * Return the string to tell how long has passed in milliseconds.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
     " " + (System.currentTimeMillis - startTimeMs) + " ms"
