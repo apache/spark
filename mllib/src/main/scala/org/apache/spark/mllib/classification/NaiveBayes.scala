@@ -20,11 +20,10 @@ package org.apache.spark.mllib.classification
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
 /**
