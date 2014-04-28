@@ -158,23 +158,4 @@ object NaiveBayes {
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
     new NaiveBayes(lambda).run(input)
   }
-
-  def main(args: Array[String]) {
-    if (args.length != 2 && args.length != 3) {
-      println("Usage: NaiveBayes <master> <input_dir> [<lambda>]")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "NaiveBayes")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = if (args.length == 2) {
-      NaiveBayes.train(data)
-    } else {
-      NaiveBayes.train(data, args(2).toDouble)
-    }
-
-    println("Pi\n: " + model.pi)
-    println("Theta:\n" + model.theta)
-
-    sc.stop()
-  }
 }
