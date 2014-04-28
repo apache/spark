@@ -171,7 +171,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 object Client {
 
   def main(argStrings: Array[String]) {
-    if (!sys.props.contains("SPARK_SUBMIT_YARN")) {
+    if (!sys.props.contains("SPARK_SUBMIT")) {
       println("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
     }
