@@ -169,8 +169,10 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 object Client {
 
   def main(argStrings: Array[String]) {
-    println("WARNING: This client is deprecated and will be removed in a future version of Spark.")
-    println("Use ./bin/spark-submit with \"--master yarn\"")
+    if (!sys.props.contains("SPARK_SUBMIT_YARN")) {
+      println("WARNING: This client is deprecated and will be removed in a " +
+        "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
+    }
 
     // Set an env variable indicating we are running in YARN mode.
     // Note that anything with SPARK prefix gets propagated to all (remote) processes
