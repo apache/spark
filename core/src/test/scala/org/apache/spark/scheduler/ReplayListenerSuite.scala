@@ -31,7 +31,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
- * Test for whether ReplayListenerBus replays events from logs correctly.
+ * Test whether ReplayListenerBus replays events from logs correctly.
  */
 class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
   private val fileSystem = Utils.getHadoopFileSystem("/")

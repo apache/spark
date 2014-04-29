@@ -29,7 +29,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.io.CompressionCodec
 
 /**
- * Tests for writing files through the FileLogger.
+ * Test writing files through the FileLogger.
  */
 class FileLoggerSuite extends FunSuite with BeforeAndAfter {
   private val fileSystem = Utils.getHadoopFileSystem("/")
