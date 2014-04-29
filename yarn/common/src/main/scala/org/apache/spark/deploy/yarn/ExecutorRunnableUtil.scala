@@ -71,8 +71,8 @@ trait ExecutorRunnableUtil extends Logging {
     /*
         else {
           // If no java_opts specified, default to using -XX:+CMSIncrementalMode
-          // It might be possible that other modes/config is being done in SPARK_JAVA_OPTS, so we dont
-          // want to mess with it.
+          // It might be possible that other modes/config is being done in spark.executor.extraJavaOptions,
+          // so we dont want to mess with it.
           // In our expts, using (default) throughput collector has severe perf ramnifications in
           // multi-tennent machines
           // The options are based on
