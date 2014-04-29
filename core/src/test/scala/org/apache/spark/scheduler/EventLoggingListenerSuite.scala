@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable
 import scala.io.Source
+import scala.util.Try
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.jackson.JsonMethods._
@@ -40,6 +41,11 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     "org.apache.spark.io.LZFCompressionCodec",
     "org.apache.spark.io.SnappyCompressionCodec"
   )
+
+  after {
+    Try { fileSystem.delete(new Path("/tmp/spark-events"), true) }
+    Try { fileSystem.delete(new Path("/tmp/spark-foo"), true) }
+  }
 
   test("Parse names of special files") {
     testParsingFileName()

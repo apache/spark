@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 
 /**
@@ -39,7 +40,7 @@ import org.apache.spark.io.CompressionCodec
 private[spark] class FileLogger(
     logDir: String,
     sparkConf: SparkConf,
-    hadoopConf: Configuration,
+    hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(),
     outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
     overwrite: Boolean = true)
@@ -116,7 +117,7 @@ private[spark] class FileLogger(
     val writeInfo = if (!withTime) {
       msg
     } else {
-      val date = new Date(System.currentTimeMillis())
+      val date = new Date(System.currentTimeMillis)
       dateFormat.get.format(date) + ": " + msg
     }
     writer.foreach(_.print(writeInfo))
