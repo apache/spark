@@ -18,7 +18,7 @@
 package org.apache.spark.api.java
 
 import java.util.{Comparator, List => JList, Iterator => JIterator}
-import java.lang.{Iterable => JIterable}
+import java.lang.{Iterable => JIterable, Long => JLong}
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -268,8 +268,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
    * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
    */
-  def zipWithUniqueId[Long](): JavaPairRDD[T, Long] = {
-    JavaPairRDD.fromRDD(rdd.zipWithUniqueId()).asInstanceOf[JavaPairRDD[T, Long]]
+  def zipWithUniqueId(): JavaPairRDD[T, JLong] = {
+    JavaPairRDD.fromRDD(rdd.zipWithUniqueId()).asInstanceOf[JavaPairRDD[T, JLong]]
   }
 
   /**
@@ -279,8 +279,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
    * This method needs to trigger a spark job when this RDD contains more than one partitions.
    */
-  def zipWithIndex[Long](): JavaPairRDD[T, Long] = {
-    JavaPairRDD.fromRDD(rdd.zipWithIndex()).asInstanceOf[JavaPairRDD[T, Long]]
+  def zipWithIndex(): JavaPairRDD[T, JLong] = {
+    JavaPairRDD.fromRDD(rdd.zipWithIndex()).asInstanceOf[JavaPairRDD[T, JLong]]
   }
 
   // Actions (launch a job to return a value to the user program)
