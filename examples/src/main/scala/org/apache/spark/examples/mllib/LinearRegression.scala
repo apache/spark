@@ -21,7 +21,7 @@ import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.util.{MulticlassLabelParser, MLUtils}
 import org.apache.spark.mllib.optimization.{SimpleUpdater, SquaredL2Updater, L1Updater}
 
@@ -95,12 +95,9 @@ object LinearRegression extends App {
     examples.unpersist(blocking = false)
 
     val updater = params.regType match {
-      case NONE =>
-        new SimpleUpdater()
-      case L1 =>
-        new L1Updater()
-      case L2 =>
-        new SquaredL2Updater()
+      case NONE => new SimpleUpdater()
+      case L1 => new L1Updater()
+      case L2 => new SquaredL2Updater()
     }
 
     val algorithm = new LinearRegressionWithSGD()

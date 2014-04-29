@@ -68,9 +68,8 @@ object DenseKMeans {
         .action((x, c) => c.copy(input = x))
     }
 
-    parser.parse(args, defaultParams).map {
-      params =>
-        run(params)
+    parser.parse(args, defaultParams).map { params =>
+      run(params)
     }.getOrElse {
       sys.exit(1)
     }
@@ -91,10 +90,8 @@ object DenseKMeans {
     println(s"numExamples = $numExamples.")
 
     val initMode = params.initializationMode match {
-      case Random =>
-        KMeans.RANDOM
-      case Parallel =>
-        KMeans.K_MEANS_PARALLEL
+      case Random => KMeans.RANDOM
+      case Parallel => KMeans.K_MEANS_PARALLEL
     }
 
     val model = new KMeans()

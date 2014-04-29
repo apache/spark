@@ -21,7 +21,7 @@ import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.classification._
+import org.apache.spark.mllib.classification.{LogisticRegressionWithSGD, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.binary.BinaryClassificationMetrics
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
@@ -83,9 +83,8 @@ object BinaryClassification {
         .action((x, c) => c.copy(input = x))
     }
 
-    parser.parse(args, defaultParams).map {
-      params =>
-        run(params)
+    parser.parse(args, defaultParams).map { params =>
+      run(params)
     } getOrElse {
       sys.exit(1)
     }
@@ -110,10 +109,8 @@ object BinaryClassification {
     examples.unpersist(blocking = false)
 
     val updater = params.regType match {
-      case L1 =>
-        new L1Updater()
-      case L2 =>
-        new SquaredL2Updater()
+      case L1 => new L1Updater()
+      case L2 => new SquaredL2Updater()
     }
 
     val model = params.algorithm match {

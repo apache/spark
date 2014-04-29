@@ -59,9 +59,8 @@ object SparseNaiveBayes {
         .action((x, c) => c.copy(input = x))
     }
 
-    parser.parse(args, defaultParams).map {
-      params =>
-        run(params)
+    parser.parse(args, defaultParams).map { params =>
+      run(params)
     }.getOrElse {
       sys.exit(1)
     }
