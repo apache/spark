@@ -214,7 +214,7 @@ private[hive] case class HiveGenericUdf(name: String, children: Seq[Expression])
 
   @transient
   protected lazy val returnInspector = function.initialize(argumentInspectors.toArray)
-	
+
   @transient
   protected lazy val isUDFDeterministic = {
     val udfType = function.getClass().getAnnotation(classOf[HiveUDFType])
