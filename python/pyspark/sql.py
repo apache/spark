@@ -143,13 +143,13 @@ class SQLContext:
         """
         return SchemaRDD(self._ssql_ctx.table(tableName), self)
 
-    def cacheTable(tableName):
+    def cacheTable(self, tableName):
         """
         Caches the specified table in-memory.
         """
         self._ssql_ctx.cacheTable(tableName)
 
-    def uncacheTable(tableName):
+    def uncacheTable(self, tableName):
         """
         Removes the specified table from the in-memory cache.
         """
