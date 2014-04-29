@@ -81,11 +81,11 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Vectors.dense(1.0, features.toArray: _*)
+      label -> (1.0 +: features)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
-    val initialWeightsWithIntercept = Vectors.dense(1.0, initialWeights: _*)
+    val initialWeightsWithIntercept = 1.0 +: initialWeights
 
     val (_, loss) = GradientDescent.runMiniBatchSGD(
       dataRDD,
@@ -111,7 +111,7 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(2.0, -1.5, 10000, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Vectors.dense(1.0, features.toArray: _*)
+      label -> (1.0 +: features)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
