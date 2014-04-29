@@ -55,7 +55,7 @@ object SparkBuild extends Build {
   val SCALAC_JVM_VERSION = "jvm-1.6"
   val JAVAC_JVM_VERSION = "1.6"
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects: _*)
+  lazy val root = Project("spark", file("."), settings = rootSettings) aggregate(allProjects: _*)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
@@ -569,7 +569,7 @@ object SparkBuild extends Build {
     libraryDependencies += "net.sf.py4j" % "py4j" % "0.8.1",
     name := "spark-assembly",
     assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
-    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
+    jarName in assembly <<= version map { v => s"spark-assembly-${v}-hadoop${hadoopVersion}${if (isYarnEnabled) "-yarn" else ""}.jar" },
     jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" }
   ) ++ assemblySettings ++ extraAssemblySettings
 

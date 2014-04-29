@@ -895,7 +895,8 @@
       <id>yarn</id>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
-        <hadoop.version>2.2.0</hadoop.version>
+        <hadoop.version>2.3.0</hadoop.version>
+        <yarn.version>2.3.0</yarn.version>
         <protobuf.version>2.5.0</protobuf.version>
       </properties>
       <modules>
