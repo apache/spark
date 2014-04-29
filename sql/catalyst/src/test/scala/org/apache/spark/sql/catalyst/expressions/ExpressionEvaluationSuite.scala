@@ -108,9 +108,7 @@ class ExpressionEvaluationSuite extends FunSuite {
       truthTable.foreach {
         case (l,r,answer) =>
           val expr = op(Literal(l, BooleanType), Literal(r, BooleanType))
-          val result = expr.eval(null)
-          if (result != answer)
-            fail(s"$expr should not evaluate to $result, expected: $answer")
+          checkEvaluation(expr, answer)
       }
     }
   }
