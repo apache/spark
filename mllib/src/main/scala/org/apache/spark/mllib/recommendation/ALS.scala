@@ -727,9 +727,12 @@ object ALS {
    * @param productPartitioner  partitioner for partitioning products
    */
   @DeveloperApi
-  def estimateCost(ratings: RDD[Rating], rank: Int, userPartitioner: Partitioner,
-      productPartitioner: Partitioner):
-      (Map[Int, IterationCost], Map[Int, IterationCost]) = {
+  def estimateCost(
+      ratings: RDD[Rating],
+      rank: Int,
+      userPartitioner: Partitioner,
+      productPartitioner: Partitioner
+    ): (Seq[IterationCost], Seq[IterationCost]) = {
     // user partition -> set of products
     val utalk = ratings.mapPartitions(x => {
         val ht = new mutable.HashSet[(Int, Int)]()
@@ -823,7 +826,8 @@ object ALS {
     // We do two rank*rank outer products per rating and one Cholesky factorisation per user and
     // per product.
 
-    (userAnswer.toMap, productAnswer.toMap)
+    (   userAnswer.toArray.sortBy(x => x._1).map(x => x._2),
+     productAnswer.toArray.sortBy(x => x._1).map(x => x._2))
   }
 
   private class ALSRegistrator extends KryoRegistrator {
