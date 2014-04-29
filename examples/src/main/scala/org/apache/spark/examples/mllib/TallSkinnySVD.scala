@@ -35,16 +35,12 @@ import org.apache.spark.mllib.linalg.Vectors
  */
 object TallSkinnySVD {
   def main(args: Array[String]) {
-    if (args.length != 2) {
-      System.err.println("Usage: TallSkinnySVD <master> <file>")
+    if (args.length != 1) {
+      System.err.println("Usage: TallSkinnySVD <input>")
       System.exit(1)
     }
 
-    val conf = new SparkConf()
-      .setMaster(args(0))
-      .setAppName("TallSkinnySVD")
-      .setSparkHome(System.getenv("SPARK_HOME"))
-      .setJars(SparkContext.jarOfClass(this.getClass).toSeq)
+    val conf = new SparkConf().setAppName("TallSkinnySVD")
     val sc = new SparkContext(conf)
 
     // Load and parse the data file.
