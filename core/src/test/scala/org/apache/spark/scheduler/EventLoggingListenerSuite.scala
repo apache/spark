@@ -380,6 +380,7 @@ object EventLoggingListenerSuite {
       compressionCodec: Option[String] = None) = {
     val conf = new SparkConf
     conf.set("spark.eventLog.enabled", "true")
+    conf.set("spark.eventLog.testing", "true")
     logDir.foreach { dir =>
       conf.set("spark.eventLog.dir", dir)
     }

@@ -18,9 +18,11 @@
 package org.apache.spark.scheduler
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkConf, SparkContext}
@@ -48,13 +50,17 @@ private[spark] class EventLoggingListener(
 
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
+  private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   private val logBaseDir = sparkConf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
   private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis
   val logDir = logBaseDir + "/" + name
 
-  private val logger =
+  protected val logger =
     new FileLogger(logDir, sparkConf, hadoopConf, outputBufferSize, shouldCompress, shouldOverwrite)
+
+  // For testing. Keep track of all JSON serialized events that have been logged.
+  private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
   /**
    * Begin logging events.
@@ -73,10 +79,13 @@ private[spark] class EventLoggingListener(
 
   /** Log the event as JSON. */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
-    val eventJson = compact(render(JsonProtocol.sparkEventToJson(event)))
-    logger.logLine(eventJson)
+    val eventJson = JsonProtocol.sparkEventToJson(event)
+    logger.logLine(compact(render(eventJson)))
     if (flushLogger) {
       logger.flush()
+    }
+    if (testing) {
+      loggedEvents += eventJson
     }
   }
 
