@@ -46,24 +46,14 @@ object LogisticRegressionSuite {
     val rnd = new Random(seed)
     val x1 = Array.fill[Double](nPoints)(rnd.nextGaussian())
 
-    // NOTE: if U is uniform[0, 1] then ln(u) - ln(1-u) is Logistic(0,1)
-    val unifRand = new scala.util.Random(45)
-    val rLogis = (0 until nPoints).map { i =>
-      val u = unifRand.nextDouble()
-      math.log(u) - math.log(1.0-u)
-    }
-
-    // y <- A + B*x + rLogis()
-    // y <- as.numeric(y > 0)
-    val y: Seq[Int] = (0 until nPoints).map { i =>
-      val yVal = offset + scale * x1(i) + rLogis(i)
-      if (yVal > 0) 1 else 0
+    val y = (0 until nPoints).map { i =>
+      val p = 1.0 / (1.0 + math.exp(-(offset + scale * x1(i))))
+      if (rnd.nextDouble() < p) 1.0 else 0.0
     }
 
     val testData = (0 until nPoints).map(i => LabeledPoint(y(i), Vectors.dense(Array(x1(i)))))
     testData
   }
-
 }
 
 class LogisticRegressionSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
