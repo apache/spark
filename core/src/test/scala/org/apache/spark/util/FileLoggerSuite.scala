@@ -45,27 +45,27 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
     Try { fileSystem.delete(new Path("falafel"), true) }
   }
 
-  test("simple write") {
+  test("Simple logging") {
     testSingleFile()
   }
 
-  test ("simple write with compression") {
+  test ("Simple logging with compression") {
     allCompressionCodecs.foreach { codec =>
       testSingleFile(Some(codec))
     }
   }
 
-  test("multiple files") {
+  test("Logging multiple files") {
     testMultipleFiles()
   }
 
-  test("multiple files with compression") {
+  test("Logging multiple files with compression") {
     allCompressionCodecs.foreach { codec =>
       testMultipleFiles(Some(codec))
     }
   }
 
-  test("logging when directory already exists") {
+  test("Logging when directory already exists") {
     // Create the logging directory multiple times
     new FileLogger(logDir, new SparkConf, overwrite = true)
     new FileLogger(logDir, new SparkConf, overwrite = true)

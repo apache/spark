@@ -36,6 +36,9 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  * read and deserialized into actual SparkListenerEvents.
  */
 class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
+
+  import EventLoggingListenerSuite._
+
   private val fileSystem = Utils.getHadoopFileSystem("/")
   private val allCompressionCodecs = Seq[String](
     "org.apache.spark.io.LZFCompressionCodec",
@@ -366,8 +369,13 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     assert(EventLoggingListener.parseCompressionCodec(file.get) === compressionCodec)
   }
 
+}
+
+
+object EventLoggingListenerSuite {
+
   /** Get a SparkConf with event logging enabled. */
-  private def getLoggingConf(
+  def getLoggingConf(
       logDir: Option[String] = None,
       compressionCodec: Option[String] = None) = {
     val conf = new SparkConf
@@ -381,5 +389,4 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     }
     conf
   }
-
 }
