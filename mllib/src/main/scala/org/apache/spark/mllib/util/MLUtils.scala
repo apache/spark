@@ -25,7 +25,6 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.SparkContext._
 import org.apache.spark.util.random.BernoulliSampler
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
@@ -44,6 +43,7 @@ object MLUtils {
   }
 
   /**
+   * :: Experimental ::
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint].
    * The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
    * Each line represents a labeled sparse feature vector using the following format:
@@ -60,6 +60,7 @@ object MLUtils {
    * @param minPartitions min number of partitions, default: sc.defaultMinPartitions
    * @return labeled data stored as an RDD[LabeledPoint]
    */
+  @Experimental
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
@@ -97,17 +98,21 @@ object MLUtils {
   // Convenient methods for calling from Java.
 
   /**
+   * :: Experimental ::
    * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint],
    * with number of features determined automatically and the default number of partitions.
    */
+  @Experimental
   def loadLibSVMData(sc: SparkContext, path: String): RDD[LabeledPoint] =
     loadLibSVMData(sc, path, BinaryLabelParser, -1, sc.defaultMinPartitions)
 
   /**
+   * :: Experimental ::
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
    * with the given label parser, number of features determined automatically,
    * and the default number of partitions.
    */
+  @Experimental
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
@@ -115,10 +120,12 @@ object MLUtils {
     loadLibSVMData(sc, path, labelParser, -1, sc.defaultMinPartitions)
 
   /**
+   * :: Experimental ::
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
    * with the given label parser, number of features specified explicitly,
    * and the default number of partitions.
    */
+  @Experimental
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
@@ -163,10 +170,12 @@ object MLUtils {
   }
 
   /**
+   * :: Experimental ::
    * Return a k element array of pairs of RDDs with the first element of each pair
    * containing the training data, a complement of the validation data and the second
    * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
    */
+  @Experimental
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map { fold =>

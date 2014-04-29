@@ -17,16 +17,16 @@
 
 package org.apache.spark.mllib.recommendation
 
-import org.jblas._
+import org.jblas.DoubleMatrix
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.api.python.PythonMLLibAPI
 
-
 /**
+ * :: Experimental ::
  * Model representing the result of matrix factorization.
  *
  * @param rank Rank for the features in this model.
@@ -35,6 +35,7 @@ import org.apache.spark.mllib.api.python.PythonMLLibAPI
  * @param productFeatures RDD of tuples where each tuple represents the productId
  *                        and the features computed for this product.
  */
+@Experimental
 class MatrixFactorizationModel(
     val rank: Int,
     val userFeatures: RDD[(Int, Array[Double])],

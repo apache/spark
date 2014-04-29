@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -29,6 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
+ * :: Experimental ::
  * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
  * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
  * they are executed together with joint passes over the data for efficiency.
@@ -36,6 +38,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * This is an iterative algorithm that will make multiple passes over the data, so any RDDs given
  * to it should be cached by the user.
  */
+@Experimental
 class KMeans private (
     private var k: Int,
     private var maxIterations: Int,
@@ -301,8 +304,10 @@ class KMeans private (
 
 
 /**
+ * :: Experimental ::
  * Top-level methods for calling K-means clustering.
  */
+@Experimental
 object KMeans {
 
   // Initialization mode names

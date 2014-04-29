@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
@@ -24,11 +25,13 @@ import org.apache.spark.mllib.util.DataValidators
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: Experimental ::
  * Classification model trained using Logistic Regression.
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
+@Experimental
 class LogisticRegressionModel(
     override val weights: Vector,
     override val intercept: Double)
@@ -66,9 +69,11 @@ class LogisticRegressionModel(
 }
 
 /**
+ * :: Experimental ::
  * Train a classification model for Logistic Regression using Stochastic Gradient Descent.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
+@Experimental
 class LogisticRegressionWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -96,9 +101,11 @@ class LogisticRegressionWithSGD private (
 }
 
 /**
+ * :: Experimental ::
  * Top-level methods for calling Logistic Regression.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
+@Experimental
 object LogisticRegressionWithSGD {
   // NOTE(shivaram): We use multiple train methods instead of default arguments to support
   // Java programs.

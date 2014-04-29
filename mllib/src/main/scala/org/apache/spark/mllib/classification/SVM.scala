@@ -22,13 +22,16 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.DataValidators
 import org.apache.spark.rdd.RDD
+import org.apache.spark.annotation.Experimental
 
 /**
+ * :: Experimental ::
  * Model for Support Vector Machines (SVMs).
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
+@Experimental
 class SVMModel(
     override val weights: Vector,
     override val intercept: Double)
@@ -67,9 +70,11 @@ class SVMModel(
 }
 
 /**
+ * :: Experimental ::
  * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
  * NOTE: Labels used in SVM should be {0, 1}.
  */
+@Experimental
 class SVMWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -97,8 +102,10 @@ class SVMWithSGD private (
 }
 
 /**
+ * :: Experimental ::
  * Top-level methods for calling SVM. NOTE: Labels used in SVM should be {0, 1}.
  */
+@Experimental
 object SVMWithSGD {
 
   /**

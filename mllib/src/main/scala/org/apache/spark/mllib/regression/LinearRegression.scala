@@ -17,16 +17,19 @@
 
 package org.apache.spark.mllib.regression
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 
 /**
+ * :: Experimental ::
  * Regression model trained using LinearRegression.
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
+@Experimental
 class LinearRegressionModel(
     override val weights: Vector,
     override val intercept: Double)
@@ -41,6 +44,7 @@ class LinearRegressionModel(
 }
 
 /**
+ * :: Experimental ::
  * Train a linear regression model with no regularization using Stochastic Gradient Descent.
  * This solves the least squares regression formulation
  *              f(weights) = 1/n ||A weights-y||^2
@@ -49,6 +53,7 @@ class LinearRegressionModel(
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
+@Experimental
 class LinearRegressionWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -74,8 +79,10 @@ class LinearRegressionWithSGD private (
 }
 
 /**
+ * :: Experimental ::
  * Top-level methods for calling LinearRegression.
  */
+@Experimental
 object LinearRegressionWithSGD {
 
   /**

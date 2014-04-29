@@ -63,6 +63,7 @@ private[recommendation] case class InLinkBlock(
 case class Rating(val user: Int, val product: Int, val rating: Double)
 
 /**
+ * :: Experimental ::
  * Alternating Least Squares matrix factorization.
  *
  * ALS attempts to estimate the ratings matrix `R` as the product of two lower-rank matrices,
@@ -91,6 +92,7 @@ case class Rating(val user: Int, val product: Int, val rating: Double)
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
+@Experimental
 class ALS private (
     private var numBlocks: Int,
     private var rank: Int,
@@ -535,8 +537,10 @@ class ALS private (
 
 
 /**
+ * :: Experimental ::
  * Top-level methods for calling Alternating Least Squares (ALS) matrix factorization.
  */
+@Experimental
 object ALS {
 
   /**

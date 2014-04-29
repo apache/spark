@@ -17,16 +17,19 @@
 
 package org.apache.spark.mllib.regression
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: Experimental ::
  * Regression model trained using Lasso.
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
+@Experimental
 class LassoModel(
     override val weights: Vector,
     override val intercept: Double)
@@ -42,6 +45,7 @@ class LassoModel(
 }
 
 /**
+ * :: Experimental ::
  * Train a regression model with L1-regularization using Stochastic Gradient Descent.
  * This solves the l1-regularized least squares regression formulation
  *          f(weights) = 1/n ||A weights-y||^2  + regParam ||weights||_1
@@ -49,6 +53,7 @@ class LassoModel(
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
+@Experimental
 class LassoWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -76,8 +81,10 @@ class LassoWithSGD private (
 }
 
 /**
+ * :: Experimental ::
  * Top-level methods for calling Lasso.
  */
+@Experimental
 object LassoWithSGD {
 
   /**

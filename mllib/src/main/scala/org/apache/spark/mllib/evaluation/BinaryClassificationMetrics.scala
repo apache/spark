@@ -17,16 +17,19 @@
 
 package org.apache.spark.mllib.evaluation
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.{RDD, UnionRDD}
 
 /**
+ * :: Experimental ::
  * Evaluator for binary classification.
  *
  * @param scoreAndLabels an RDD of (score, label) pairs.
  */
+@Experimental
 class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)]) extends Logging {
 
   /** Unpersist intermediate RDDs used in the computation. */

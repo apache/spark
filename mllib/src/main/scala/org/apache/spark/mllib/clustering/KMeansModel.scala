@@ -17,13 +17,16 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
 
 /**
+ * :: Experimental ::
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
+@Experimental
 class KMeansModel(val clusterCenters: Array[Vector]) extends Serializable {
 
   /** Total number of clusters. */

@@ -17,11 +17,14 @@
 
 package org.apache.spark.mllib.stat
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 
 /**
+ * :: Experimental ::
  * Trait for multivariate statistical summary of a data matrix.
  */
+@Experimental
 trait MultivariateStatisticalSummary {
 
   /**
