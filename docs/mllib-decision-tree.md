@@ -95,15 +95,9 @@ The recursive tree construction is stopped at a node when one of the two conditi
 
 ### Practical limitations
 
-1. The tree implementation stores an Array[Double] of size *O(#features \* #splits \* 2^maxDepth)*
-   in memory for aggregating histograms over partitions. The current implementation might not scale
-   to very deep trees since the memory requirement grows exponentially with tree depth.
-2. The implemented algorithm reads both sparse and dense data. However, it is not optimized for
+1. The implemented algorithm reads both sparse and dense data. However, it is not optimized for
    sparse input.
-3. Python is not supported in this release.
- 
-We are planning to solve these problems in the near future. Please drop us a line if you encounter
-any issues.
+2. Python is not supported in this release.
 
 ## Examples
 
