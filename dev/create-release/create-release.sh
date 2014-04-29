@@ -129,7 +129,7 @@ echo "Copying release documentation"
 rc_docs_folder=${rc_folder}-docs
 ssh $USER_NAME@people.apache.org \
   mkdir /home/$USER_NAME/public_html/$rc_docs_folder
-rsync -r _site/* $USER_NAME@people.apache.org /home/$USER_NAME/public_html/$rc_docs_folder
+rsync -r _site/* $USER_NAME@people.apache.org:/home/$USER_NAME/public_html/$rc_docs_folder
 
 echo "Release $RELEASE_VERSION completed:"
 echo "Git tag:\t $GIT_TAG"
