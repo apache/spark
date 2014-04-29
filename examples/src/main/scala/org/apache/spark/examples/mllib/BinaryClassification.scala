@@ -22,7 +22,7 @@ import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.classification.{LogisticRegressionWithSGD, SVMWithSGD}
-import org.apache.spark.mllib.evaluation.binary.BinaryClassificationMetrics
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
 
