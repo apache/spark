@@ -65,6 +65,13 @@ trait ClientBase extends Logging {
   val APP_FILE_PERMISSION: FsPermission =
     FsPermission.createImmutable(Integer.parseInt("644", 8).toShort)
 
+  // SPARK_JAVA_OPTS is deprecated, but for backwards compatibility:
+  val javaOptsFromEnv = System.getenv("SPARK_JAVA_OPTS")
+  if (javaOptsFromEnv != null) {
+    sparkConf.set("spark.executor.extraJavaOptions", javaOptsFromEnv)
+    sparkConf.set("spark.driver.extraJavaOptions", javaOptsFromEnv)
+  }
+
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {
     Map(
@@ -263,9 +270,14 @@ trait ClientBase extends Logging {
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)
 
-    // Allow users to specify some environment variables.
-    YarnSparkHadoopUtil.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"),
-      File.pathSeparator)
+    val sparkYarnUserEnv = System.getenv("SPARK_YARN_USER_ENV")
+    if (sparkYarnUserEnv != null) {
+      // Allow users to specify some environment variables.
+      YarnSparkHadoopUtil.setEnvFromInputString(env, sparkYarnUserEnv, File.pathSeparator)
+
+      // Pass SPARK_YARN_USER_ENV itself to the AM so it can use it to set up executor environments.
+      env("SPARK_YARN_USER_ENV") = sparkYarnUserEnv
+    }
 
     env
   }
