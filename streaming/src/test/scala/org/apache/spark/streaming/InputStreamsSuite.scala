@@ -42,8 +42,6 @@ import org.apache.spark.streaming.receiver.{ActorHelper, Receiver}
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
-  val testPort = 9999
-
   test("socket input stream") {
     // Start the server
     val testServer = new TestServer()
@@ -51,7 +49,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
-    val networkStream = ssc.socketTextStream("localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
+    val networkStream = ssc.socketTextStream(
+      "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     def output = outputBuffer.flatMap(x => x)
@@ -286,17 +285,6 @@ class TestServer(portToBind: Int = 0) extends Logging {
   def stop() { servingThread.interrupt() }
 
   def port = serverSocket.getLocalPort
-}
-
-object TestServer {
-  def main(args: Array[String]) {
-    val s = new TestServer()
-    s.start()
-    while(true) {
-      Thread.sleep(1000)
-      s.send("hello")
-    }
-  }
 }
 
 /** This is an actor for testing actor input stream */

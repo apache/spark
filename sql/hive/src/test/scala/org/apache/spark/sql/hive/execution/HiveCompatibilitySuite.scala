@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.hive.test.TestHive
@@ -26,7 +28,9 @@ import org.apache.spark.sql.hive.test.TestHive
  */
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   // TODO: bundle in jar files... get from classpath
-  lazy val hiveQueryDir = TestHive.getHiveFile("ql/src/test/queries/clientpositive")
+  lazy val hiveQueryDir = TestHive.getHiveFile("ql" + File.separator + "src" +
+    File.separator + "test" + File.separator + "queries" + File.separator + "clientpositive")
+
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   override def beforeAll() {

@@ -256,10 +256,11 @@ class SchemaRDD(
    * @group Query
    */
   @Experimental
+  override
   def sample(
-      fraction: Double,
       withReplacement: Boolean = true,
-      seed: Int = (math.random * 1000).toInt) =
+      fraction: Double,
+      seed: Long) =
     new SchemaRDD(sqlContext, Sample(fraction, withReplacement, seed, logicalPlan))
 
   /**

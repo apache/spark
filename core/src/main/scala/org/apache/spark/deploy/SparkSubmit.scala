@@ -23,6 +23,7 @@ import java.net.{URI, URL}
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.spark.executor.ExecutorURLClassLoader
+import org.apache.spark.util.Utils
 
 /**
  * Scala code behind the spark-submit script.  The script handles setting up the classpath with
@@ -37,6 +38,12 @@ object SparkSubmit {
   private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL
 
   private var clusterManager: Int = LOCAL
+
+  /**
+   * A special jar name that indicates the class being run is inside of Spark itself,
+   * and therefore no user jar is needed.
+   */
+  private val RESERVED_JAR_NAME = "spark-internal"
 
   def main(args: Array[String]) {
     val appArgs = new SparkSubmitArguments(args)
@@ -113,12 +120,26 @@ object SparkSubmit {
 
     if (!deployOnCluster) {
       childMainClass = appArgs.mainClass
-      childClasspath += appArgs.primaryResource
+      if (appArgs.primaryResource != RESERVED_JAR_NAME) {
+        childClasspath += appArgs.primaryResource
+      }
     } else if (clusterManager == YARN) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       childArgs += ("--jar", appArgs.primaryResource)
       childArgs += ("--class", appArgs.mainClass)
     }
+
+    if (clusterManager == YARN) {
+      // The choice of class is arbitrary, could use any spark-yarn class
+      if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
+        val msg = "Could not load YARN classes. This copy of Spark may not have been compiled " +
+          "with YARN support."
+        throw new Exception(msg)
+      }
+    }
+    
+    // Special flag to avoid deprecation warnings at the client
+    sysProps("SPARK_SUBMIT") = "true"
 
     val options = List[OptionAssigner](
       new OptionAssigner(appArgs.master, ALL_CLUSTER_MGRS, false, sysProp = "spark.master"),
@@ -177,7 +198,6 @@ object SparkSubmit {
     if (clusterManager == STANDALONE) {
       val existingJars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
       sysProps.put("spark.jars", (existingJars ++ Seq(appArgs.primaryResource)).mkString(","))
-      println("SPARK JARS" + sysProps.get("spark.jars"))
     }
 
     if (deployOnCluster && clusterManager == STANDALONE) {

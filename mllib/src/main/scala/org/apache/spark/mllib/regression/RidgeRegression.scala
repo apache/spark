@@ -17,10 +17,8 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.linalg.Vector
 
 /**
@@ -160,22 +158,5 @@ object RidgeRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int): RidgeRegressionModel = {
     train(input, numIterations, 1.0, 1.0, 1.0)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length != 5) {
-      println("Usage: RidgeRegression <master> <input_dir> <step_size> " +
-        "<regularization_parameter> <niters>")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "RidgeRegression")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = RidgeRegressionWithSGD.train(data, args(4).toInt, args(2).toDouble,
-        args(3).toDouble)
-
-    println("Weights: " + model.weights)
-    println("Intercept: " + model.intercept)
-
-    sc.stop()
   }
 }

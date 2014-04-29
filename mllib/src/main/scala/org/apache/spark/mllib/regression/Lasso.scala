@@ -17,10 +17,8 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
 /**
@@ -163,20 +161,5 @@ object LassoWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int): LassoModel = {
     train(input, numIterations, 1.0, 1.0, 1.0)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length != 5) {
-      println("Usage: Lasso <master> <input_dir> <step_size> <regularization_parameter> <niters>")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "Lasso")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = LassoWithSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
-
-    println("Weights: " + model.weights)
-    println("Intercept: " + model.intercept)
-
-    sc.stop()
   }
 }

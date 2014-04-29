@@ -29,7 +29,8 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.executor.TaskMetrics
 
 class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
-    with BeforeAndAfter with BeforeAndAfterAll {
+  with BeforeAndAfter with BeforeAndAfterAll {
+
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
@@ -37,7 +38,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     sc = new SparkContext("local", "SparkListenerSuite")
   }
 
-  override def afterAll {
+  override def afterAll() {
     System.clearProperty("spark.akka.frameSize")
   }
 
@@ -50,9 +51,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
     assert(counter.count === 0)
 
-    // Starting listener bus should flush all buffered events (asynchronously, hence the sleep)
+    // Starting listener bus should flush all buffered events
     bus.start()
-    Thread.sleep(1000)
+    assert(bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(counter.count === 5)
 
     // After listener bus has stopped, posting events should not increment counter
@@ -177,6 +178,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     listener.stageInfos.clear()
 
     rdd3.count()
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be {2} // Shuffle map stage + result stage
     val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 2).get
     stageInfo3.rddInfos.size should be {2} // ShuffledRDD, MapPartitionsRDD
