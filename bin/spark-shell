@@ -20,7 +20,6 @@
 #
 # Shell script for starting the Spark Shell REPL
 
-args="$@"
 cygwin=false
 case "`uname`" in
     CYGWIN*) cygwin=true;;
@@ -46,12 +45,12 @@ function main(){
         # "Backspace sends ^H" setting in "Keys" section of the Mintty options
         # (see https://github.com/sbt/sbt/issues/562).
         stty -icanon min 1 -echo > /dev/null 2>&1
-        export SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Djline.terminal=unix"
-        $FWDIR/bin/spark-submit spark-internal "$args" --class org.apache.spark.repl.Main
+        export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djline.terminal=unix"
+        $FWDIR/bin/spark-submit spark-internal "$@" --class org.apache.spark.repl.Main
         stty icanon echo > /dev/null 2>&1
     else
-        export SPARK_REPL_OPTS
-        $FWDIR/bin/spark-submit spark-internal "$args" --class org.apache.spark.repl.Main
+        export SPARK_SUBMIT_OPTS
+        $FWDIR/bin/spark-submit spark-internal "$@" --class org.apache.spark.repl.Main
     fi
 }
 
@@ -83,7 +82,7 @@ if [[ ! $? ]]; then
   saved_stty=""
 fi
 
-main
+main "$@"
 
 # record the exit status lest it be overwritten:
 # then reenable echo and propagate the code.
