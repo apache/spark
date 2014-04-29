@@ -31,20 +31,6 @@
   <name>Spark Project Examples</name>
   <url>http://spark.apache.org/</url>
 
-  <profiles>
-    <profile>
-      <!-- SPARK-1121: SPARK-1121: Adds an explicit dependency on Avro to work around
-           a Hadoop 0.23.X issue -->
-      <id>yarn-alpha</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
-
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -123,6 +109,10 @@
         <exclusion>
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jruby</groupId>
+          <artifactId>jruby-complete</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
