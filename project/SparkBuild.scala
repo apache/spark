@@ -106,7 +106,7 @@ object SparkBuild extends Build {
     case Some(v) => v.toBoolean
   }
   lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client"
-  val maybeAvro = if (hadoopVersion.startsWith("0.23.") && isYarnEnabled) Seq("org.apache.avro" % "avro" % "1.7.4") else Seq()
+  val maybeAvro = if (hadoopVersion.startsWith("0.23.")) Seq("org.apache.avro" % "avro" % "1.7.4") else Seq()
 
   lazy val isHiveEnabled = Properties.envOrNone("SPARK_HIVE") match {
     case None => DEFAULT_HIVE
@@ -224,7 +224,7 @@ object SparkBuild extends Build {
       <parent>
         <groupId>org.apache</groupId>
         <artifactId>apache</artifactId>
-        <version>13</version>
+        <version>14</version>
       </parent>
       <url>http://spark.apache.org/</url>
       <licenses>
@@ -250,7 +250,7 @@ object SparkBuild extends Build {
       </developers>
       <issueManagement>
         <system>JIRA</system>
-        <url>https://spark-project.atlassian.net/browse/SPARK</url>
+        <url>https://issues.apache.org/jira/browse/SPARK</url>
       </issueManagement>
     ),
 
@@ -294,7 +294,7 @@ object SparkBuild extends Build {
   ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings ++ genjavadocSettings
 
   val akkaVersion = "2.2.3-shaded-protobuf"
-  val chillVersion = "0.3.1"
+  val chillVersion = "0.3.6"
   val codahaleMetricsVersion = "3.0.0"
   val jblasVersion = "1.2.3"
   val jettyVersion = "8.1.14.v20131031"
@@ -313,6 +313,8 @@ object SparkBuild extends Build {
   val excludeCurator = ExclusionRule(organization = "org.apache.curator")
   val excludePowermock = ExclusionRule(organization = "org.powermock")
   val excludeFastutil = ExclusionRule(organization = "it.unimi.dsi")
+  val excludeJruby = ExclusionRule(organization = "org.jruby")
+  val excludeThrift = ExclusionRule(organization = "org.apache.thrift")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
@@ -411,12 +413,12 @@ object SparkBuild extends Build {
   )
 
   def examplesSettings = sharedSettings ++ Seq(
-    name := "spark-examples",  
-    jarName in assembly <<= version map { 
+    name := "spark-examples",
+    jarName in assembly <<= version map {
       v => "spark-examples-" + v + "-hadoop" + hadoopVersion + ".jar" },
     libraryDependencies ++= Seq(
       "com.twitter"          %% "algebird-core"   % "0.1.11",
-      "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
+      "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging, excludeJruby),
       "org.apache.cassandra" % "cassandra-all" % "1.2.6"
         exclude("com.google.guava", "guava")
         exclude("com.googlecode.concurrentlinkedhashmap", "concurrentlinkedhashmap-lru")
@@ -505,7 +507,7 @@ object SparkBuild extends Build {
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.hive._
-        |import org.apache.spark.sql.hive.TestHive._
+        |import org.apache.spark.sql.hive.test.TestHive._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
   )
 
@@ -607,7 +609,7 @@ object SparkBuild extends Build {
     name := "spark-streaming-flume",
     previousArtifact := sparkPreviousArtifact("spark-streaming-flume"),
     libraryDependencies ++= Seq(
-      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty)
+      "org.apache.flume" % "flume-ng-sdk" % "1.4.0" % "compile" excludeAll(excludeNetty, excludeThrift)
     )
   )
 

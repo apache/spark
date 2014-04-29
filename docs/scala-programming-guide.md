@@ -60,17 +60,18 @@ which avoids hard-coding the master name in your application.
 
 In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
-context connects to using the `MASTER` environment variable, and you can add JARs to the classpath
-with the `ADD_JARS` variable. For example, to run `bin/spark-shell` on exactly four cores, use
+context connects to using the `--master` argument, and you can add JARs to the classpath
+by passing a comma separated list to the `--jars` argument. For example, to run 
+`bin/spark-shell` on exactly four cores, use
 
 {% highlight bash %}
-$ MASTER=local[4] ./bin/spark-shell
+$ ./bin/spark-shell --master local[4]
 {% endhighlight %}
 
 Or, to also add `code.jar` to its classpath, use:
 
 {% highlight bash %}
-$ MASTER=local[4] ADD_JARS=code.jar ./bin/spark-shell
+$ ./bin/spark-shell --master local[4] --jars code.jar
 {% endhighlight %}
 
 ### Master URLs

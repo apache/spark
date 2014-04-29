@@ -78,7 +78,8 @@ abstract class HiveComparisonTest
       .map(name => new File(targetDir, s"$suiteName.$name"))
 
   /** The local directory with cached golden answer will be stored. */
-  protected val answerCache = new File("src/test/resources/golden")
+  protected val answerCache = new File("src" + File.separator + "test" +
+    File.separator + "resources" + File.separator + "golden")
   if (!answerCache.exists) {
     answerCache.mkdir()
   }
@@ -120,7 +121,7 @@ abstract class HiveComparisonTest
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
     val digest = java.security.MessageDigest.getInstance("MD5")
-    digest.update(str.getBytes)
+    digest.update(str.getBytes("utf-8"))
     new java.math.BigInteger(1, digest.digest).toString(16)
   }
 

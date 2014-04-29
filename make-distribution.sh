@@ -36,14 +36,14 @@
 # 2) cd to deploy dir; ./sbin/start-master.sh
 # 3) Verify master is up by visiting web page, ie http://master-ip:8080.  Note the spark:// URL.
 # 4) ./sbin/start-slave.sh 1 <<spark:// URL>>
-# 5) MASTER="spark://my-master-ip:7077" ./bin/spark-shell
+# 5) ./bin/spark-shell --master spark://my-master-ip:7077
 #
 
 # Figure out where the Spark framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
 
-VERSION=$(mvn help:evaluate -Dexpression=project.version |grep -v "INFO")
+VERSION=$(mvn help:evaluate -Dexpression=project.version | grep -v "INFO" | tail -n 1)
 if [ $? == -1 ] ;then
     echo -e "You need Maven installed to build Spark."
     echo -e "Download Maven from https://maven.apache.org."
@@ -123,10 +123,19 @@ else
 fi
 
 if [ "$SPARK_YARN" == "true" ]; then
-  mvn clean package -DskipTests -Pyarn -Dhadoop.version=$SPARK_HADOOP_VERSION \
-    -Dyarn.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
+  if [[ "$SPARK_HADOOP_VERSION" =~ "0.23." ]]; then
+    mvn clean package -DskipTests -Pyarn-alpha -Dhadoop.version=$SPARK_HADOOP_VERSION \
+      -Dyarn.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE -Phadoop-0.23
+  else
+    mvn clean package -DskipTests -Pyarn -Dhadoop.version=$SPARK_HADOOP_VERSION \
+      -Dyarn.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
+  fi
 else
-  mvn clean package -DskipTests -Dhadoop.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
+  if [[ "$SPARK_HADOOP_VERSION" =~ "0.23." ]]; then
+    mvn clean package -Phadoop-0.23 -DskipTests -Dhadoop.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
+  else
+    mvn clean package -DskipTests -Dhadoop.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
+  fi
 fi
 
 # Make directories
@@ -141,6 +150,7 @@ cp $FWDIR/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$FWDIR"/conf/*.template "$DISTDIR"/conf
+cp "$FWDIR"/conf/slaves "$DISTDIR"/conf
 cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/python" "$DISTDIR"
 cp -r "$FWDIR/sbin" "$DISTDIR"
@@ -177,6 +187,7 @@ fi
 if [ "$MAKE_TGZ" == "true" ]; then
   TARDIR_NAME=spark-$VERSION-bin-$NAME
   TARDIR="$FWDIR/$TARDIR_NAME"
+  rm -rf "$TARDIR"
   cp -r "$DISTDIR" "$TARDIR"
   tar czf "spark-$VERSION-bin-$NAME.tgz" -C "$FWDIR" "$TARDIR_NAME"
   rm -rf "$TARDIR"
