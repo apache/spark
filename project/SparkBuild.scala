@@ -426,7 +426,8 @@ object SparkBuild extends Build {
         exclude("io.netty", "netty")
         exclude("jline","jline")
         exclude("org.apache.cassandra.deps", "avro")
-        excludeAll(excludeSLF4J)
+        excludeAll(excludeSLF4J),
+      "com.github.scopt" %% "scopt" % "3.2.0"
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 

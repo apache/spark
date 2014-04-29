@@ -23,15 +23,13 @@ import scala.util.Random
 import scala.util.Sorting
 import scala.util.hashing.byteswap32
 
-import com.esotericsoftware.kryo.Kryo
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.{Logging, HashPartitioner, Partitioner, SparkContext, SparkConf}
+import org.apache.spark.{Logging, HashPartitioner, Partitioner}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
-import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
 
@@ -706,46 +704,5 @@ object ALS {
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int)
     : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, 0.01, -1, 1.0)
-  }
-
-  private class ALSRegistrator extends KryoRegistrator {
-    override def registerClasses(kryo: Kryo) {
-      kryo.register(classOf[Rating])
-    }
-  }
-
-  def main(args: Array[String]) {
-    if (args.length < 5 || args.length > 9) {
-      println("Usage: ALS <master> <ratings_file> <rank> <iterations> <output_dir> " +
-        "[<lambda>] [<implicitPrefs>] [<alpha>] [<blocks>]")
-      System.exit(1)
-    }
-    val (master, ratingsFile, rank, iters, outputDir) =
-      (args(0), args(1), args(2).toInt, args(3).toInt, args(4))
-    val lambda = if (args.length >= 6) args(5).toDouble else 0.01
-    val implicitPrefs = if (args.length >= 7) args(6).toBoolean else false
-    val alpha = if (args.length >= 8) args(7).toDouble else 1
-    val blocks = if (args.length == 9) args(8).toInt else -1
-    val conf = new SparkConf()
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator",  classOf[ALSRegistrator].getName)
-      .set("spark.kryo.referenceTracking", "false")
-      .set("spark.kryoserializer.buffer.mb", "8")
-      .set("spark.locality.wait", "10000")
-    val sc = new SparkContext(master, "ALS", conf)
-
-    val ratings = sc.textFile(ratingsFile).map { line =>
-      val fields = line.split(',')
-      Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
-    }
-    val model = new ALS(rank = rank, iterations = iters, lambda = lambda,
-      numBlocks = blocks, implicitPrefs = implicitPrefs, alpha = alpha).run(ratings)
-
-    model.userFeatures.map{ case (id, vec) => id + "," + vec.mkString(" ") }
-                      .saveAsTextFile(outputDir + "/userFeatures")
-    model.productFeatures.map{ case (id, vec) => id + "," + vec.mkString(" ") }
-                         .saveAsTextFile(outputDir + "/productFeatures")
-    println("Final user/product features written to " + outputDir)
-    sc.stop()
   }
 }
