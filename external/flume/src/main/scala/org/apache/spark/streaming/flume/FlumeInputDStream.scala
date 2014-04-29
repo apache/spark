@@ -150,7 +150,7 @@ class FlumeReceiver(
 
   lazy val responder = new SpecificResponder(
     classOf[AvroSourceProtocol], new FlumeEventServer(this))
-  lazy val server = initServer()
+  var server: NettyServer = null
 
   private def initServer() = {
     if (enableDecompression) {
@@ -170,12 +170,24 @@ class FlumeReceiver(
   }
 
   def onStart() {
-    server.start()
+    synchronized {
+      if (server == null) {
+        server = initServer()
+        server.start()
+      } else {
+        logWarning("Flume receiver being asked to start more then once with out close")
+      }
+    }
     logInfo("Flume receiver started")
   }
 
   def onStop() {
-    server.close()
+    synchronized {
+      if (server != null) {
+        server.close()
+        server = null
+      }
+    }
     logInfo("Flume receiver stopped")
   }
 
@@ -184,7 +196,7 @@ class FlumeReceiver(
 
 private[streaming]
 class CompressionChannelPipelineFactory extends ChannelPipelineFactory {
-  
+
   def getPipeline() = {
       val pipeline = Channels.pipeline()
       val encoder = new ZlibEncoder(6)
