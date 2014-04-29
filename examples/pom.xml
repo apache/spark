@@ -121,6 +121,14 @@
           <artifactId>netty</artifactId>
         </exclusion>
         <exclusion>
+          <groupId>org.jruby</groupId>
+          <artifactId>jruby-complete</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jmon</groupId>
+          <artifactId>jamon-runtime</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging</artifactId>
         </exclusion>
