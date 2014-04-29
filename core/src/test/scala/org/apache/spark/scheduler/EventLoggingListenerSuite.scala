@@ -240,7 +240,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     // Verify file contains exactly the two events logged
     val eventLoggingInfo = EventLoggingListener.parseLoggingInfo(eventLogger.logDir, fileSystem)
     assert(eventLoggingInfo.logPaths.size > 0)
-    val lines = getLines(eventLoggingInfo.logPaths.head, eventLoggingInfo.compressionCodec)
+    val lines = readFileLines(eventLoggingInfo.logPaths.head, eventLoggingInfo.compressionCodec)
     assert(lines.size === 2)
     assert(lines(0).contains("SparkListenerApplicationStart"))
     assert(lines(1).contains("SparkListenerApplicationEnd"))
@@ -281,7 +281,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
   private def assertEventsExist(eventLogger: EventLoggingListener, events: Seq[String]) {
     val eventLoggingInfo = EventLoggingListener.parseLoggingInfo(eventLogger.logDir, fileSystem)
     assert(eventLoggingInfo.logPaths.size > 0)
-    val lines = getLines(eventLoggingInfo.logPaths.head, eventLoggingInfo.compressionCodec)
+    val lines = readFileLines(eventLoggingInfo.logPaths.head, eventLoggingInfo.compressionCodec)
     val eventSet = mutable.Set(events: _*)
     lines.foreach { line =>
       eventSet.foreach { event =>
@@ -301,7 +301,9 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    * Read all lines from the file specified by the given path.
    * If a compression codec is specified, use it to read the file.
    */
-  private def getLines(filePath: Path, compressionCodec: Option[CompressionCodec]): Seq[String] = {
+  private def readFileLines(
+      filePath: Path,
+      compressionCodec: Option[CompressionCodec]): Seq[String] = {
     val fstream = fileSystem.open(filePath)
     val cstream =
       compressionCodec.map { codec =>

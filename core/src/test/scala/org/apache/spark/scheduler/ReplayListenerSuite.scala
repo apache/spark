@@ -119,16 +119,16 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     val codec = codecName.map(getCompressionCodec)
     val applications = fileSystem.listStatus(new Path(logDir))
     assert(applications != null && applications.size > 0)
-    val eventLogDir =
-      applications.filter(_.getPath.getName.startsWith("test-replay")).sortBy(_.getAccessTime).last
+    val eventLogDir = applications.sortBy(_.getAccessTime).last
     assert(eventLogDir.isDir)
     val logFiles = fileSystem.listStatus(eventLogDir.getPath)
     assert(logFiles != null && logFiles.size > 0)
     val logFile = logFiles.find(_.getPath.getName.startsWith("EVENT_LOG_"))
     assert(logFile.isDefined)
+    val logFilePath = logFile.get.getPath
 
     // Replay events
-    val replayer = new ReplayListenerBus(Seq(logFile.get.getPath), fileSystem, codec)
+    val replayer = new ReplayListenerBus(Seq(logFilePath), fileSystem, codec)
     val eventMonster = new EventMonster(conf)
     replayer.addListener(eventMonster)
     replayer.replay()

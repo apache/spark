@@ -123,9 +123,6 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
       } else {
         new FileLogger(logDir, conf)
       }
-    assert(fileSystem.exists(logDirPath))
-    assert(fileSystem.getFileStatus(logDirPath).isDir)
-    assert(fileSystem.listStatus(logDirPath).size === 0)
 
     logger.newFile("Jean_Valjean")
     logger.logLine("Who am I?")
