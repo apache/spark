@@ -62,6 +62,7 @@ if [[ ! "$@" =~ --package-only ]]; then
     -Pyarn -Phive -Pspark-ganglia-lgpl\
     release:perform
 
+  cd ..
   rm -rf spark
 fi
 
