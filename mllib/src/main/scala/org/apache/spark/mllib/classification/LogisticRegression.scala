@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{DataValidators, MLUtils}
+import org.apache.spark.mllib.util.DataValidators
 import org.apache.spark.rdd.RDD
 
 /**
@@ -182,20 +181,5 @@ object LogisticRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int): LogisticRegressionModel = {
     train(input, numIterations, 1.0, 1.0)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length != 4) {
-      println("Usage: LogisticRegression <master> <input_dir> <step_size> " +
-        "<niters>")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "LogisticRegression")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = LogisticRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
-    println("Weights: " + model.weights)
-    println("Intercept: " + model.intercept)
-
-    sc.stop()
   }
 }
