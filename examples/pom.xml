@@ -166,6 +166,11 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <dependency>
+      <groupId>com.github.scopt</groupId>
+      <artifactId>scopt_${scala.binary.version}</artifactId>
+      <version>3.2.0</version>
+    </dependency>
   </dependencies>
 
   <build>
