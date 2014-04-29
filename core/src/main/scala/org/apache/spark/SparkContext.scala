@@ -148,6 +148,7 @@ class SparkContext(config: SparkConf) extends Logging {
     this(master, appName, sparkHome, jars, Map(), Map())
 
   private[spark] val conf = config.clone()
+  conf.validateSettings()
 
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
@@ -159,7 +160,7 @@ class SparkContext(config: SparkConf) extends Logging {
     throw new SparkException("A master URL must be set in your configuration")
   }
   if (!conf.contains("spark.app.name")) {
-    throw new SparkException("An application must be set in your configuration")
+    throw new SparkException("An application name must be set in your configuration")
   }
 
   if (conf.getBoolean("spark.logConf", false)) {
@@ -170,11 +171,11 @@ class SparkContext(config: SparkConf) extends Logging {
   conf.setIfMissing("spark.driver.host", Utils.localHostName())
   conf.setIfMissing("spark.driver.port", "0")
 
-  val jars: Seq[String] = if (conf.contains("spark.jars")) {
-    conf.get("spark.jars").split(",").filter(_.size != 0)
-  } else {
-    null
-  }
+  val jars: Seq[String] =
+    conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
+
+  val files: Seq[String] =
+    conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
 
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
@@ -215,82 +216,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val ui = new SparkUI(this)
   ui.bind()
 
-  // Optionally log Spark events
-  private[spark] val eventLogger: Option[EventLoggingListener] = {
-    if (conf.getBoolean("spark.eventLog.enabled", false)) {
-      val logger = new EventLoggingListener(appName, conf)
-      logger.start()
-      listenerBus.addListener(logger)
-      Some(logger)
-    } else None
-  }
-
-  // At this point, all relevant SparkListeners have been registered, so begin releasing events
-  listenerBus.start()
-
-  val startTime = System.currentTimeMillis()
-
-  // Add each JAR given through the constructor
-  if (jars != null) {
-    jars.foreach(addJar)
-  }
-
-  private def warnSparkMem(value: String): String = {
-    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
-      "deprecated, please use spark.executor.memory instead.")
-    value
-  }
-
-  private[spark] val executorMemory = conf.getOption("spark.executor.memory")
-    .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
-    .orElse(Option(System.getenv("SPARK_MEM")).map(warnSparkMem))
-    .map(Utils.memoryStringToMb)
-    .getOrElse(512)
-
-  // Environment variables to pass to our executors
-  private[spark] val executorEnvs = HashMap[String, String]()
-  for (key <- Seq("SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS");
-      value <- Option(System.getenv(key))) {
-    executorEnvs(key) = value
-  }
-  // Convert java options to env vars as a work around
-  // since we can't set env vars directly in sbt.
-  for { (envKey, propKey) <- Seq(("SPARK_HOME", "spark.home"), ("SPARK_TESTING", "spark.testing"))
-    value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
-    executorEnvs(envKey) = value
-  }
-  // The Mesos scheduler backend relies on this environment variable to set executor memory.
-  // TODO: Set this only in the Mesos scheduler.
-  executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
-  executorEnvs ++= conf.getExecutorEnv
-
-  // Set SPARK_USER for user who is running SparkContext.
-  val sparkUser = Option {
-    Option(System.getProperty("user.name")).getOrElse(System.getenv("SPARK_USER"))
-  }.getOrElse {
-    SparkContext.SPARK_UNKNOWN_USER
-  }
-  executorEnvs("SPARK_USER") = sparkUser
-
-  // Create and start the scheduler
-  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
-  taskScheduler.start()
-
-  @volatile private[spark] var dagScheduler = new DAGScheduler(this)
-  dagScheduler.start()
-
-  private[spark] val cleaner: Option[ContextCleaner] = {
-    if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
-      Some(new ContextCleaner(this))
-    } else {
-      None
-    }
-  }
-  cleaner.foreach(_.start())
-
-  postEnvironmentUpdate()
-  postApplicationStart()
-
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration: Configuration = {
     val env = SparkEnv.get
@@ -313,6 +238,91 @@ class SparkContext(config: SparkConf) extends Logging {
     hadoopConf.set("io.file.buffer.size", bufferSize)
     hadoopConf
   }
+
+  // Optionally log Spark events
+  private[spark] val eventLogger: Option[EventLoggingListener] = {
+    if (conf.getBoolean("spark.eventLog.enabled", false)) {
+      val logger = new EventLoggingListener(appName, conf, hadoopConfiguration)
+      logger.start()
+      listenerBus.addListener(logger)
+      Some(logger)
+    } else None
+  }
+
+  // At this point, all relevant SparkListeners have been registered, so begin releasing events
+  listenerBus.start()
+
+  val startTime = System.currentTimeMillis()
+
+  // Add each JAR given through the constructor
+  if (jars != null) {
+    jars.foreach(addJar)
+  }
+
+  if (files != null) {
+    files.foreach(addFile)
+  }
+
+  private def warnSparkMem(value: String): String = {
+    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
+      "deprecated, please use spark.executor.memory instead.")
+    value
+  }
+
+  private[spark] val executorMemory = conf.getOption("spark.executor.memory")
+    .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
+    .orElse(Option(System.getenv("SPARK_MEM")).map(warnSparkMem))
+    .map(Utils.memoryStringToMb)
+    .getOrElse(512)
+
+  // Environment variables to pass to our executors.
+  // NOTE: This should only be used for test related settings.
+  private[spark] val testExecutorEnvs = HashMap[String, String]()
+
+  // Convert java options to env vars as a work around
+  // since we can't set env vars directly in sbt.
+  for { (envKey, propKey) <- Seq(("SPARK_TESTING", "spark.testing"))
+    value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
+    testExecutorEnvs(envKey) = value
+  }
+  // The Mesos scheduler backend relies on this environment variable to set executor memory.
+  // TODO: Set this only in the Mesos scheduler.
+  testExecutorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
+  testExecutorEnvs ++= conf.getExecutorEnv
+
+  // Set SPARK_USER for user who is running SparkContext.
+  val sparkUser = Option {
+    Option(System.getProperty("user.name")).getOrElse(System.getenv("SPARK_USER"))
+  }.getOrElse {
+    SparkContext.SPARK_UNKNOWN_USER
+  }
+  testExecutorEnvs("SPARK_USER") = sparkUser
+
+  // Create and start the scheduler
+  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
+  @volatile private[spark] var dagScheduler: DAGScheduler = _
+  try {
+    dagScheduler = new DAGScheduler(this)
+  } catch {
+    case e: Exception => throw
+      new SparkException("DAGScheduler cannot be initialized due to %s".format(e.getMessage))
+  }
+
+  // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
+  // constructor
+  taskScheduler.start()
+
+  private[spark] val cleaner: Option[ContextCleaner] = {
+    if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
+      Some(new ContextCleaner(this))
+    } else {
+      None
+    }
+  }
+  cleaner.foreach(_.start())
+
+  postEnvironmentUpdate()
+  postApplicationStart()
 
   private[spark] var checkpointDir: Option[String] = None
 
@@ -378,16 +388,27 @@ class SparkContext(config: SparkConf) extends Logging {
    * // In a separate thread:
    * sc.cancelJobGroup("some_job_to_cancel")
    * }}}
+   *
+   * If interruptOnCancel is set to true for the job group, then job cancellation will result
+   * in Thread.interrupt() being called on the job's executor threads. This is useful to help ensure
+   * that the tasks are actually stopped in a timely manner, but is off by default due to HDFS-1208,
+   * where HDFS may respond to Thread.interrupt() by marking nodes as dead.
    */
-  def setJobGroup(groupId: String, description: String) {
+  def setJobGroup(groupId: String, description: String, interruptOnCancel: Boolean = false) {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, description)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
+    // Note: Specifying interruptOnCancel in setJobGroup (rather than cancelJobGroup) avoids
+    // changing several public APIs and allows Spark cancellations outside of the cancelJobGroup
+    // APIs to also take advantage of this property (e.g., internal job failures or canceling from
+    // JobProgressTab UI) on a per-job basis.
+    setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, interruptOnCancel.toString)
   }
 
   /** Clear the current thread's job group ID and its description. */
   def clearJobGroup() {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
+    setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, null)
   }
 
   // Post init
@@ -1008,8 +1029,8 @@ class SparkContext(config: SparkConf) extends Logging {
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
-    partitions.foreach{ p =>
-      require(p >= 0 && p < rdd.partitions.size, s"Invalid partition requested: $p")
+    if (dagScheduler == null) {
+      throw new SparkException("SparkContext has been shutdown")
     }
     val callSite = getCallSite
     val cleanedFunc = clean(func)
@@ -1107,6 +1128,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Submit a job for execution and return a FutureJob holding the result.
    */
   @Experimental
@@ -1117,9 +1139,6 @@ class SparkContext(config: SparkConf) extends Logging {
       resultHandler: (Int, U) => Unit,
       resultFunc: => R): SimpleFutureAction[R] =
   {
-    partitions.foreach{ p =>
-      require(p >= 0 && p < rdd.partitions.size, s"Invalid partition requested: $p")
-    }
     val cleanF = clean(processPartition)
     val callSite = getCallSite
     val waiter = dagScheduler.submitJob(
@@ -1240,6 +1259,8 @@ object SparkContext extends Logging {
 
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
 
+  private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
+
   private[spark] val SPARK_UNKNOWN_USER = "<unknown>"
 
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
@@ -1264,8 +1285,10 @@ object SparkContext extends Logging {
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 
-  implicit def rddToPairRDDFunctions[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]) =
+  implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
+      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     new PairRDDFunctions(rdd)
+  }
 
   implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
 
@@ -1342,19 +1365,19 @@ object SparkContext extends Logging {
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to SparkContext.
    */
-  def jarOfClass(cls: Class[_]): Seq[String] = {
+  def jarOfClass(cls: Class[_]): Option[String] = {
     val uri = cls.getResource("/" + cls.getName.replace('.', '/') + ".class")
     if (uri != null) {
       val uriStr = uri.toString
       if (uriStr.startsWith("jar:file:")) {
         // URI will be of the form "jar:file:/path/foo.jar!/package/cls.class",
         // so pull out the /path/foo.jar
-        List(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
+        Some(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
       } else {
-        Nil
+        None
       }
     } else {
-      Nil
+      None
     }
   }
 
@@ -1363,7 +1386,7 @@ object SparkContext extends Logging {
    * to pass their JARs to SparkContext. In most cases you can call jarOfObject(this) in
    * your driver program.
    */
-  def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
+  def jarOfObject(obj: AnyRef): Option[String] = jarOfClass(obj.getClass)
 
   /**
    * Creates a modified version of a SparkConf with the parameters that can be passed separately

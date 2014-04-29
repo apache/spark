@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.tree
 
-import scala.util.control.Breaks._
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
@@ -82,31 +80,34 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
      * still survived the filters of the parent nodes.
      */
 
-    // TODO: Convert for loop to while loop
-    breakable {
-      for (level <- 0 until maxDepth) {
+    var level = 0
+    var break = false
+    while (level < maxDepth && !break) {
 
-        logDebug("#####################################")
-        logDebug("level = " + level)
-        logDebug("#####################################")
+      logDebug("#####################################")
+      logDebug("level = " + level)
+      logDebug("#####################################")
 
-        // Find best split for all nodes at a level.
-        val splitsStatsForLevel = DecisionTree.findBestSplits(input, parentImpurities, strategy,
-          level, filters, splits, bins)
+      // Find best split for all nodes at a level.
+      val splitsStatsForLevel = DecisionTree.findBestSplits(input, parentImpurities, strategy,
+        level, filters, splits, bins)
 
-        for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
-          // Extract info for nodes at the current level.
-          extractNodeInfo(nodeSplitStats, level, index, nodes)
-          // Extract info for nodes at the next lower level.
-          extractInfoForLowerLevels(level, index, maxDepth, nodeSplitStats, parentImpurities,
-            filters)
-          logDebug("final best split = " + nodeSplitStats._1)
-        }
-        require(scala.math.pow(2, level) == splitsStatsForLevel.length)
-        // Check whether all the nodes at the current level at leaves.
-        val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0)
-        logDebug("all leaf = " + allLeaf)
-        if (allLeaf) break // no more tree construction
+      for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
+        // Extract info for nodes at the current level.
+        extractNodeInfo(nodeSplitStats, level, index, nodes)
+        // Extract info for nodes at the next lower level.
+        extractInfoForLowerLevels(level, index, maxDepth, nodeSplitStats, parentImpurities,
+          filters)
+        logDebug("final best split = " + nodeSplitStats._1)
+      }
+      require(scala.math.pow(2, level) == splitsStatsForLevel.length)
+      // Check whether all the nodes at the current level at leaves.
+      val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0)
+      logDebug("all leaf = " + allLeaf)
+      if (allLeaf) {
+        break = true // no more tree construction
+      } else {
+        level += 1
       }
     }
 
@@ -146,8 +147,8 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       parentImpurities: Array[Double],
       filters: Array[List[Filter]]): Unit = {
     // 0 corresponds to the left child node and 1 corresponds to the right child node.
-    // TODO: Convert to while loop
-    for (i <- 0 to 1) {
+    var i = 0
+    while (i <= 1) {
      // Calculate the index of the node from the node level and the index at the current level.
       val nodeIndex = scala.math.pow(2, level + 1).toInt - 1 + 2 * index + i
       if (level < maxDepth - 1) {
@@ -166,6 +167,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
           logDebug("Filter = " + filter)
         }
       }
+      i += 1
     }
   }
 }

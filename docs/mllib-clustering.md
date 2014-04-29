@@ -1,19 +1,21 @@
 ---
 layout: global
-title: MLlib - Clustering
+title: <a href="mllib-guide.html">MLlib</a> - Clustering
 ---
 
 * Table of contents
 {:toc}
 
 
-# Clustering
+## Clustering
 
 Clustering is an unsupervised learning problem whereby we aim to group subsets
 of entities with one another based on some notion of similarity.  Clustering is
 often used for exploratory analysis and/or as a component of a hierarchical
 supervised learning pipeline (in which distinct classifiers or regression
-models are trained for each cluster). MLlib supports
+models are trained for each cluster). 
+
+MLlib supports
 [k-means](http://en.wikipedia.org/wiki/K-means_clustering) clustering, one of
 the most commonly used clustering algorithms that clusters the data points into
 predfined number of clusters. The MLlib implementation includes a parallelized
@@ -31,17 +33,14 @@ a given dataset, the algorithm returns the best clustering result).
 * *initializiationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged. 
 
-Available algorithms for clustering: 
+## Examples
 
-* [KMeans](api/mllib/index.html#org.apache.spark.mllib.clustering.KMeans)
-
-
-
-# Usage in Scala
-
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
 Following code snippets can be executed in `spark-shell`.
 
-In the following example after loading and parsing data, we use the KMeans object to cluster the data
+In the following example after loading and parsing data, we use the
+[`KMeans`](api/mllib/index.html#org.apache.spark.mllib.clustering.KMeans) object to cluster the data
 into two clusters. The number of desired clusters is passed to the algorithm. We then compute Within
 Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In fact the
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
@@ -63,22 +62,22 @@ val clusters = KMeans.train(parsedData, numClusters, numIterations)
 val WSSSE = clusters.computeCost(parsedData)
 println("Within Set Sum of Squared Errors = " + WSSSE)
 {% endhighlight %}
+</div>
 
-
-# Usage in Java
-
+<div data-lang="java" markdown="1">
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object.
+</div>
 
-# Usage in Python
+<div data-lang="python" markdown="1">
 Following examples can be tested in the PySpark shell.
 
-In the following example after loading and parsing data, we use the KMeans object to cluster the data
-into two clusters. The number of desired clusters is passed to the algorithm. We then compute Within
-Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In fact the
-optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
+In the following example after loading and parsing data, we use the KMeans object to cluster the
+data into two clusters. The number of desired clusters is passed to the algorithm. We then compute
+Within Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In
+fact the optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 {% highlight python %}
 from pyspark.mllib.clustering import KMeans
@@ -91,7 +90,7 @@ parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
 
 # Build the model (cluster the data)
 clusters = KMeans.train(parsedData, 2, maxIterations=10,
-        runs=10, initialization_mode="random")
+        runs=10, initializationMode="random")
 
 # Evaluate clustering by computing Within Set Sum of Squared Errors
 def error(point):
@@ -101,7 +100,6 @@ def error(point):
 WSSSE = parsedData.map(lambda point: error(point)).reduce(lambda x, y: x + y)
 print("Within Set Sum of Squared Error = " + str(WSSSE))
 {% endhighlight %}
+</div>
 
-Similarly you can use RidgeRegressionWithSGD and LassoWithSGD and compare training Mean Squared
-Errors.
-
+</div>

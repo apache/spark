@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{HashPartitioner, RangePartitioner, SparkConf}
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.sql.Row
@@ -26,6 +27,10 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
   override def outputPartitioning = newPartitioning
@@ -81,7 +86,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  * [[catalyst.plans.physical.Distribution Distribution]] requirements for each operator by inserting
  * [[Exchange]] Operators where required.
  */
-object AddExchange extends Rule[SparkPlan] {
+private[sql] object AddExchange extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
   val numPartitions = 150
 

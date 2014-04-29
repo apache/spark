@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.types._
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
-object HiveFunctionRegistry
+private[hive] object HiveFunctionRegistry
   extends analysis.FunctionRegistry with HiveFunctionFactory with HiveInspectors {
 
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
@@ -70,24 +70,26 @@ object HiveFunctionRegistry
   }
 
   def javaClassToDataType(clz: Class[_]): DataType = clz match {
+    // writable
     case c: Class[_] if c == classOf[hadoopIo.DoubleWritable] => DoubleType
     case c: Class[_] if c == classOf[hiveIo.DoubleWritable] => DoubleType
     case c: Class[_] if c == classOf[hiveIo.HiveDecimalWritable] => DecimalType
     case c: Class[_] if c == classOf[hiveIo.ByteWritable] => ByteType
     case c: Class[_] if c == classOf[hiveIo.ShortWritable] => ShortType
+    case c: Class[_] if c == classOf[hiveIo.TimestampWritable] => TimestampType
     case c: Class[_] if c == classOf[hadoopIo.Text] => StringType
     case c: Class[_] if c == classOf[hadoopIo.IntWritable] => IntegerType
     case c: Class[_] if c == classOf[hadoopIo.LongWritable] => LongType
     case c: Class[_] if c == classOf[hadoopIo.FloatWritable] => FloatType
     case c: Class[_] if c == classOf[hadoopIo.BooleanWritable] => BooleanType
+    case c: Class[_] if c == classOf[hadoopIo.BytesWritable] => BinaryType
+    
+    // java class
     case c: Class[_] if c == classOf[java.lang.String] => StringType
-    case c: Class[_] if c == java.lang.Short.TYPE => ShortType
-    case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
-    case c: Class[_] if c == java.lang.Long.TYPE => LongType
-    case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
-    case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
-    case c: Class[_] if c == java.lang.Float.TYPE => FloatType
-    case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+    case c: Class[_] if c == classOf[java.sql.Timestamp] => TimestampType
+    case c: Class[_] if c == classOf[HiveDecimal] => DecimalType
+    case c: Class[_] if c == classOf[java.math.BigDecimal] => DecimalType
+    case c: Class[_] if c == classOf[Array[Byte]] => BinaryType
     case c: Class[_] if c == classOf[java.lang.Short] => ShortType
     case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
     case c: Class[_] if c == classOf[java.lang.Long] => LongType
@@ -95,11 +97,21 @@ object HiveFunctionRegistry
     case c: Class[_] if c == classOf[java.lang.Byte] => ByteType
     case c: Class[_] if c == classOf[java.lang.Float] => FloatType
     case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
+    
+    // primitive type
+    case c: Class[_] if c == java.lang.Short.TYPE => ShortType
+    case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
+    case c: Class[_] if c == java.lang.Long.TYPE => LongType
+    case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
+    case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
+    case c: Class[_] if c == java.lang.Float.TYPE => FloatType
+    case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+    
     case c: Class[_] if c.isArray => ArrayType(javaClassToDataType(c.getComponentType))
   }
 }
 
-trait HiveFunctionFactory {
+private[hive] trait HiveFunctionFactory {
   def getFunctionInfo(name: String) = FunctionRegistry.getFunctionInfo(name)
   def getFunctionClass(name: String) = getFunctionInfo(name).getFunctionClass
   def createFunction[UDFType](name: String) =
@@ -111,11 +123,19 @@ trait HiveFunctionFactory {
     case i: hadoopIo.IntWritable => i.get
     case t: hadoopIo.Text => t.toString
     case l: hadoopIo.LongWritable => l.get
-    case d: hadoopIo.DoubleWritable => d.get()
+    case d: hadoopIo.DoubleWritable => d.get
     case d: hiveIo.DoubleWritable => d.get
     case s: hiveIo.ShortWritable => s.get
-    case b: hadoopIo.BooleanWritable => b.get()
+    case b: hadoopIo.BooleanWritable => b.get
     case b: hiveIo.ByteWritable => b.get
+    case b: hadoopIo.FloatWritable => b.get
+    case b: hadoopIo.BytesWritable => {
+      val bytes = new Array[Byte](b.getLength)
+      System.arraycopy(b.getBytes(), 0, bytes, 0, b.getLength)
+      bytes
+    }
+    case t: hiveIo.TimestampWritable => t.getTimestamp
+    case b: hiveIo.HiveDecimalWritable => BigDecimal(b.getHiveDecimal().bigDecimalValue())
     case list: java.util.List[_] => list.map(unwrap)
     case map: java.util.Map[_,_] => map.map { case (k, v) => (unwrap(k), unwrap(v)) }.toMap
     case array: Array[_] => array.map(unwrap).toSeq
@@ -127,10 +147,13 @@ trait HiveFunctionFactory {
     case p: java.lang.Byte => p
     case p: java.lang.Boolean => p
     case str: String => str
+    case p: BigDecimal => p
+    case p: Array[Byte] => p
+    case p: java.sql.Timestamp => p
   }
 }
 
-abstract class HiveUdf extends Expression with Logging with HiveFunctionFactory {
+private[hive] abstract class HiveUdf extends Expression with Logging with HiveFunctionFactory {
   self: Product =>
 
   type UDFType
@@ -148,7 +171,7 @@ abstract class HiveUdf extends Expression with Logging with HiveFunctionFactory 
   override def toString = s"$nodeName#${functionInfo.getDisplayName}(${children.mkString(",")})"
 }
 
-case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUdf {
+private[hive] case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUdf {
   import org.apache.spark.sql.hive.HiveFunctionRegistry._
   type UDFType = UDF
 
@@ -201,7 +224,7 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
   }
 }
 
-case class HiveGenericUdf(name: String, children: Seq[Expression])
+private[hive] case class HiveGenericUdf(name: String, children: Seq[Expression])
   extends HiveUdf with HiveInspectors {
 
   import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
@@ -228,7 +251,7 @@ case class HiveGenericUdf(name: String, children: Seq[Expression])
   }
 }
 
-trait HiveInspectors {
+private[hive] trait HiveInspectors {
 
   def unwrapData(data: Any, oi: ObjectInspector): Any = oi match {
     case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
@@ -252,13 +275,17 @@ trait HiveInspectors {
 
   /** Converts native catalyst types to the types expected by Hive */
   def wrap(a: Any): AnyRef = a match {
-    case s: String => new hadoopIo.Text(s)
+    case s: String => new hadoopIo.Text(s) // TODO why should be Text?
     case i: Int => i: java.lang.Integer
     case b: Boolean => b: java.lang.Boolean
+    case f: Float => f: java.lang.Float
     case d: Double => d: java.lang.Double
     case l: Long => l: java.lang.Long
     case l: Short => l: java.lang.Short
     case l: Byte => l: java.lang.Byte
+    case b: BigDecimal => b.bigDecimal
+    case b: Array[Byte] => b
+    case t: java.sql.Timestamp => t
     case s: Seq[_] => seqAsJavaList(s.map(wrap))
     case m: Map[_,_] =>
       mapAsJavaMap(m.map { case (k, v) => wrap(k) -> wrap(v) })
@@ -280,6 +307,8 @@ trait HiveInspectors {
     case ByteType => PrimitiveObjectInspectorFactory.javaByteObjectInspector
     case NullType => PrimitiveObjectInspectorFactory.javaVoidObjectInspector
     case BinaryType => PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector
+    case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
+    case DecimalType => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
   }
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
@@ -307,6 +336,14 @@ trait HiveInspectors {
     case _: JavaShortObjectInspector => ShortType
     case _: WritableByteObjectInspector => ByteType
     case _: JavaByteObjectInspector => ByteType
+    case _: WritableFloatObjectInspector => FloatType
+    case _: JavaFloatObjectInspector => FloatType
+    case _: WritableBinaryObjectInspector => BinaryType
+    case _: JavaBinaryObjectInspector => BinaryType
+    case _: WritableHiveDecimalObjectInspector => DecimalType
+    case _: JavaHiveDecimalObjectInspector => DecimalType
+    case _: WritableTimestampObjectInspector => TimestampType
+    case _: JavaTimestampObjectInspector => TimestampType
   }
 
   implicit class typeInfoConversions(dt: DataType) {
@@ -324,12 +361,13 @@ trait HiveInspectors {
       case ShortType => shortTypeInfo
       case StringType => stringTypeInfo
       case DecimalType => decimalTypeInfo
+      case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
     }
   }
 }
 
-case class HiveGenericUdaf(
+private[hive] case class HiveGenericUdaf(
     name: String,
     children: Seq[Expression]) extends AggregateExpression
   with HiveInspectors
@@ -371,7 +409,7 @@ case class HiveGenericUdaf(
  * Operators that require maintaining state in between input rows should instead be implemented as
  * user defined aggregations, which have clean semantics even in a partitioned execution.
  */
-case class HiveGenericUdtf(
+private[hive] case class HiveGenericUdtf(
     name: String,
     aliasNames: Seq[String],
     children: Seq[Expression])
@@ -438,7 +476,7 @@ case class HiveGenericUdtf(
   override def toString = s"$nodeName#$name(${children.mkString(",")})"
 }
 
-case class HiveUdafFunction(
+private[hive] case class HiveUdafFunction(
     functionName: String,
     exprs: Seq[Expression],
     base: AggregateExpression)

@@ -40,7 +40,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val content =
       generateBasicStats() ++ <br></br> ++
       <h4>Statistics over last {listener.retainedCompletedBatches.size} processed batches</h4> ++
-      generateNetworkStatsTable() ++
+      generateReceiverStats() ++
       generateBatchStatsTable()
     UIUtils.headerSparkPage(
       content, parent.basePath, parent.appName, "Streaming", parent.headerTabs, parent, Some(5000))
@@ -57,7 +57,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <strong>Time since start: </strong>{formatDurationVerbose(timeSinceStart)}
       </li>
       <li>
-        <strong>Network receivers: </strong>{listener.numNetworkReceivers}
+        <strong>Network receivers: </strong>{listener.numReceivers}
       </li>
       <li>
         <strong>Batch interval: </strong>{formatDurationVerbose(listener.batchDuration)}
@@ -71,32 +71,40 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </ul>
   }
 
-  /** Generate stats of data received over the network the streaming program */
-  private def generateNetworkStatsTable(): Seq[Node] = {
+  /** Generate stats of data received by the receivers in the streaming program */
+  private def generateReceiverStats(): Seq[Node] = {
     val receivedRecordDistributions = listener.receivedRecordsDistributions
     val lastBatchReceivedRecord = listener.lastReceivedBatchRecords
     val table = if (receivedRecordDistributions.size > 0) {
       val headerRow = Seq(
         "Receiver",
+        "Status",
         "Location",
         "Records in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]",
         "Minimum rate\n[records/sec]",
-        "25th percentile rate\n[records/sec]",
         "Median rate\n[records/sec]",
-        "75th percentile rate\n[records/sec]",
-        "Maximum rate\n[records/sec]"
+        "Maximum rate\n[records/sec]",
+        "Last Error"
       )
-      val dataRows = (0 until listener.numNetworkReceivers).map { receiverId =>
+      val dataRows = (0 until listener.numReceivers).map { receiverId =>
         val receiverInfo = listener.receiverInfo(receiverId)
-        val receiverName = receiverInfo.map(_.toString).getOrElse(s"Receiver-$receiverId")
+        val receiverName = receiverInfo.map(_.name).getOrElse(s"Receiver-$receiverId")
+        val receiverActive = receiverInfo.map { info =>
+          if (info.active) "ACTIVE" else "INACTIVE"
+        }.getOrElse(emptyCell)
         val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCell)
-        val receiverLastBatchRecords = formatDurationVerbose(lastBatchReceivedRecord(receiverId))
+        val receiverLastBatchRecords = formatNumber(lastBatchReceivedRecord(receiverId))
         val receivedRecordStats = receivedRecordDistributions(receiverId).map { d =>
-          d.getQuantiles().map(r => formatDurationVerbose(r.toLong))
+          d.getQuantiles(Seq(0.0, 0.5, 1.0)).map(r => formatNumber(r.toLong))
         }.getOrElse {
           Seq(emptyCell, emptyCell, emptyCell, emptyCell, emptyCell)
         }
-        Seq(receiverName, receiverLocation, receiverLastBatchRecords) ++ receivedRecordStats
+        val receiverLastError = listener.receiverInfo(receiverId).map { info =>
+          val msg = s"${info.lastErrorMessage} - ${info.lastError}"
+          if (msg.size > 100) msg.take(97) + "..." else msg
+        }.getOrElse(emptyCell)
+        Seq(receiverName, receiverActive, receiverLocation, receiverLastBatchRecords) ++
+          receivedRecordStats ++ Seq(receiverLastError)
       }
       Some(listingTable(headerRow, dataRows))
     } else {
@@ -104,8 +112,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     }
 
     val content =
-      <h5>Network Input Statistics</h5> ++
-      <div>{table.getOrElse("No network receivers")}</div>
+      <h5>Receiver Statistics</h5> ++
+      <div>{table.getOrElse("No receivers")}</div>
 
     content
   }

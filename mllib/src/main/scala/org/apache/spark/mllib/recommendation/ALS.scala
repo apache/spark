@@ -21,6 +21,7 @@ import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
+import scala.util.hashing.byteswap32
 
 import com.esotericsoftware.kryo.Kryo
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
@@ -183,34 +184,39 @@ class ALS private (
       this.numBlocks
     }
 
-    val partitioner = new HashPartitioner(numBlocks)
+    val partitioner = new Partitioner {
+      val numPartitions = numBlocks
 
-    val ratingsByUserBlock = ratings.map{ rating => (rating.user % numBlocks, rating) }
-    val ratingsByProductBlock = ratings.map{ rating =>
-      (rating.product % numBlocks, Rating(rating.product, rating.user, rating.rating))
+      def getPartition(x: Any): Int = {
+        Utils.nonNegativeMod(byteswap32(x.asInstanceOf[Int]), numPartitions)
+      }
     }
 
-    val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock)
-    val (productInLinks, productOutLinks) = makeLinkRDDs(numBlocks, ratingsByProductBlock)
+    val ratingsByUserBlock = ratings.map{ rating =>
+      (partitioner.getPartition(rating.user), rating)
+    }
+    val ratingsByProductBlock = ratings.map{ rating =>
+      (partitioner.getPartition(rating.product),
+        Rating(rating.product, rating.user, rating.rating))
+    }
+
+    val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock, partitioner)
+    val (productInLinks, productOutLinks) =
+        makeLinkRDDs(numBlocks, ratingsByProductBlock, partitioner)
 
     // Initialize user and product factors randomly, but use a deterministic seed for each
     // partition so that fault recovery works
     val seedGen = new Random(seed)
     val seed1 = seedGen.nextInt()
     val seed2 = seedGen.nextInt()
-    // Hash an integer to propagate random bits at all positions, similar to java.util.HashTable
-    def hash(x: Int): Int = {
-      val r = x ^ (x >>> 20) ^ (x >>> 12)
-      r ^ (r >>> 7) ^ (r >>> 4)
-    }
     var users = userOutLinks.mapPartitionsWithIndex { (index, itr) =>
-      val rand = new Random(hash(seed1 ^ index))
+      val rand = new Random(byteswap32(seed1 ^ index))
       itr.map { case (x, y) =>
         (x, y.elementIds.map(_ => randomFactor(rank, rand)))
       }
     }
     var products = productOutLinks.mapPartitionsWithIndex { (index, itr) =>
-      val rand = new Random(hash(seed2 ^ index))
+      val rand = new Random(byteswap32(seed2 ^ index))
       itr.map { case (x, y) =>
         (x, y.elementIds.map(_ => randomFactor(rank, rand)))
       }
@@ -341,13 +347,14 @@ class ALS private (
    * Make the out-links table for a block of the users (or products) dataset given the list of
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
-  private def makeOutLinkBlock(numBlocks: Int, ratings: Array[Rating]): OutLinkBlock = {
+  private def makeOutLinkBlock(numBlocks: Int, ratings: Array[Rating],
+      partitioner: Partitioner): OutLinkBlock = {
     val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
     val shouldSend = Array.fill(numUsers)(new BitSet(numBlocks))
     for (r <- ratings) {
-      shouldSend(userIdToPos(r.user))(r.product % numBlocks) = true
+      shouldSend(userIdToPos(r.user))(partitioner.getPartition(r.product)) = true
     }
     OutLinkBlock(userIds, shouldSend)
   }
@@ -356,14 +363,15 @@ class ALS private (
    * Make the in-links table for a block of the users (or products) dataset given a list of
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
-  private def makeInLinkBlock(numBlocks: Int, ratings: Array[Rating]): InLinkBlock = {
+  private def makeInLinkBlock(numBlocks: Int, ratings: Array[Rating],
+      partitioner: Partitioner): InLinkBlock = {
     val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
     // Split out our ratings by product block
     val blockRatings = Array.fill(numBlocks)(new ArrayBuffer[Rating])
     for (r <- ratings) {
-      blockRatings(r.product % numBlocks) += r
+      blockRatings(partitioner.getPartition(r.product)) += r
     }
     val ratingsForBlock = new Array[Array[(Array[Int], Array[Double])]](numBlocks)
     for (productBlock <- 0 until numBlocks) {
@@ -388,14 +396,14 @@ class ALS private (
    * the users (or (blockId, (p, u, r)) for the products). We create these simultaneously to avoid
    * having to shuffle the (blockId, (u, p, r)) RDD twice, or to cache it.
    */
-  private def makeLinkRDDs(numBlocks: Int, ratings: RDD[(Int, Rating)])
+  private def makeLinkRDDs(numBlocks: Int, ratings: RDD[(Int, Rating)], partitioner: Partitioner)
     : (RDD[(Int, InLinkBlock)], RDD[(Int, OutLinkBlock)]) =
   {
     val grouped = ratings.partitionBy(new HashPartitioner(numBlocks))
     val links = grouped.mapPartitionsWithIndex((blockId, elements) => {
       val ratings = elements.map{_._2}.toArray
-      val inLinkBlock = makeInLinkBlock(numBlocks, ratings)
-      val outLinkBlock = makeOutLinkBlock(numBlocks, ratings)
+      val inLinkBlock = makeInLinkBlock(numBlocks, ratings, partitioner)
+      val outLinkBlock = makeOutLinkBlock(numBlocks, ratings, partitioner)
       Iterator.single((blockId, (inLinkBlock, outLinkBlock)))
     }, true)
     val inLinks = links.mapValues(_._1)

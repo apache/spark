@@ -6,7 +6,7 @@ title: Spark Configuration
 Spark provides three locations to configure the system:
 
 * [Spark properties](#spark-properties) control most application parameters and can be set by passing
-  a [SparkConf](api/core/index.html#org.apache.spark.SparkConf) object to SparkContext, or through Java
+  a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object to SparkContext, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
@@ -16,7 +16,7 @@ Spark provides three locations to configure the system:
 # Spark Properties
 
 Spark properties control most application settings and are configured separately for each application.
-The preferred way to set them is by passing a [SparkConf](api/core/index.html#org.apache.spark.SparkConf)
+The preferred way to set them is by passing a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf)
 class to your SparkContext constructor.
 Alternatively, Spark will also load them from Java system properties, for compatibility with old versions
 of Spark.
@@ -53,7 +53,7 @@ there are at least five properties that you will commonly want to control:
     in serialized form. The default of Java serialization works with any Serializable Java object but is
     quite slow, so we recommend <a href="tuning.html">using <code>org.apache.spark.serializer.KryoSerializer</code>
     and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of
-    <a href="api/core/index.html#org.apache.spark.serializer.Serializer"><code>org.apache.spark.Serializer</code></a>.
+    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer"><code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
 <tr>
@@ -62,7 +62,7 @@ there are at least five properties that you will commonly want to control:
   <td>
     If you use Kryo serialization, set this class to register your custom classes with Kryo.
     It should be set to a class that extends
-    <a href="api/core/index.html#org.apache.spark.serializer.KryoRegistrator"><code>KryoRegistrator</code></a>.
+    <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator"><code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
 </tr>
@@ -73,6 +73,9 @@ there are at least five properties that you will commonly want to control:
     Directory to use for "scratch" space in Spark, including map output files and RDDs that get stored
     on disk. This should be on a fast, local disk in your system. It can also be a comma-separated
     list of multiple directories on different disks.
+
+    NOTE: In Spark 1.0 and later this will be overriden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
+    LOCAL_DIRS (YARN) envrionment variables set by the cluster manager.
   </td>
 </tr>
 <tr>
@@ -126,6 +129,15 @@ Apart from these, the following properties are also available, and may be useful
     all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
     begin to spill to disk. If spills are often, consider increasing this value at the expense of
     <code>spark.storage.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td>spark.storage.memoryMapThreshold</td>
+  <td>8192</td>
+  <td>
+    Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
+    This prevents Spark from memory mapping very small blocks. In general, memory
+    mapping has high overhead for blocks close to or below the page size of the operating system.
   </td>
 </tr>
 <tr>
@@ -466,10 +478,13 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.streaming.unpersist</td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Force RDDs generated and persisted by Spark Streaming to be automatically unpersisted from
-    Spark's memory. Setting this to true is likely to reduce Spark's RDD memory usage.
+    Spark's memory. The raw input data received by Spark Streaming is also automatically cleared.
+    Setting this to false will allow the raw data and persisted RDDs to be accessible outside the
+    streaming application as they will not be cleared automatically. But it comes at the cost of
+    higher memory usage in Spark.
   </td>
 </tr>
 <tr>
@@ -578,7 +593,7 @@ Apart from these, the following properties are also available, and may be useful
     to consolidate them onto as few nodes as possible. Spreading out is usually better for
     data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
     <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-    applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
+    applications; you can set it through <code>SPARK_MASTER_OPTS</code> in <code>spark-env.sh</code>.
   </td>
 </tr>
 <tr>
@@ -591,7 +606,7 @@ Apart from these, the following properties are also available, and may be useful
     Set this lower on a shared cluster to prevent users from grabbing
     the whole cluster by default. <br/>
     <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-    applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
+    applications; you can set it through <code>SPARK_MASTER_OPTS</code> in <code>spark-env.sh</code>.
   </td>
 </tr>
 <tr>
@@ -649,6 +664,34 @@ Apart from these, the following properties are also available, and may be useful
     Number of cores to allocate for each task.
   </td>
 </tr>
+<tr>
+  <td>spark.executor.extraJavaOptions</td>
+  <td>(none)</td>
+  <td>
+    A string of extra JVM options to pass to executors. For instance, GC settings or other
+    logging. Note that it is illegal to set Spark properties or heap size settings with this 
+    option. Spark properties should be set using a SparkConf object or the 
+    spark-defaults.conf file used with the spark-submit script. Heap size settings can be set
+    with spark.executor.memory.
+  </td>
+</tr>
+<tr>
+  <td>spark.executor.extraClassPath</td>
+  <td>(none)</td>
+  <td>
+    Extra classpath entries to append to the classpath of executors. This exists primarily
+    for backwards-compatibility with older versions of Spark. Users typically should not need
+    to set this option.
+  </td>
+</tr>
+<tr>
+  <td>spark.executor.extraLibraryPath</td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching executor JVM's.
+  </td>
+</tr>
+
 </table>
 
 ## Viewing Spark Properties
@@ -659,10 +702,9 @@ This is a useful place to check to make sure that your properties have been set 
 # Environment Variables
 
 Certain Spark settings can be configured through environment variables, which are read from the `conf/spark-env.sh`
-script in the directory where Spark is installed (or `conf/spark-env.cmd` on Windows). These variables are meant to be for machine-specific settings, such
-as library search paths. While Spark properties can also be set there through `SPARK_JAVA_OPTS`, for per-application settings, we recommend setting
-these properties within the application instead of in `spark-env.sh` so that different applications can use different
-settings.
+script in the directory where Spark is installed (or `conf/spark-env.cmd` on Windows). In Standalone and Mesos modes,
+this file can give machine specific information such as hostnames. It is also sourced when running local
+Spark applications or submission scripts.
 
 Note that `conf/spark-env.sh` does not exist by default when Spark is installed. However, you can copy
 `conf/spark-env.sh.template` to create it. Make sure you make the copy executable.
@@ -672,13 +714,7 @@ The following variables can be set in `spark-env.sh`:
 * `JAVA_HOME`, the location where Java is installed (if it's not on your default `PATH`)
 * `PYSPARK_PYTHON`, the Python binary to use for PySpark
 * `SPARK_LOCAL_IP`, to configure which IP address of the machine to bind to.
-* `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
-* `SPARK_CLASSPATH`, to add elements to Spark's classpath that you want to be present for _all_ applications.
-   Note that applications can also add dependencies for themselves through `SparkContext.addJar` -- we recommend
-   doing that when possible.
-* `SPARK_JAVA_OPTS`, to add JVM options. This includes Java options like garbage collector settings and any system
-   properties that you'd like to pass with `-D`. One use case is to set some Spark properties differently on this
-   machine, e.g., `-Dspark.local.dir=/disk1,/disk2`.
+* `SPARK_PUBLIC_DNS`, the hostname your Spark program will advertise to other machines.
 * Options for the Spark [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores
   to use on each machine and maximum memory.
 
