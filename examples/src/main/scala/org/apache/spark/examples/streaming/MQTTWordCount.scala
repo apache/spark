@@ -24,6 +24,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.mqtt._
+import org.apache.spark.SparkConf
 
 /**
  * A simple Mqtt publisher for demonstration purposes, repeatedly publishes
@@ -64,7 +65,6 @@ object MQTTPublisher {
   }
 }
 
-// scalastyle:off
 /**
  * A sample wordcount with MqttStream stream
  *
@@ -74,30 +74,28 @@ object MQTTPublisher {
  * Eclipse paho project provides Java library for Mqtt Client http://www.eclipse.org/paho/
  * Example Java code for Mqtt Publisher and Subscriber can be found here
  * https://bitbucket.org/mkjinesh/mqttclient
- * Usage: MQTTWordCount <master> <MqttbrokerUrl> <topic>
- * In local mode, <master> should be 'local[n]' with n > 1
- *   <MqttbrokerUrl> and <topic> describe where Mqtt publisher is running.
+ * Usage: MQTTWordCount <MqttbrokerUrl> <topic>
+\ *   <MqttbrokerUrl> and <topic> describe where Mqtt publisher is running.
  *
  * To run this example locally, you may run publisher as
- *    `$ ./bin/run-example org.apache.spark.examples.streaming.MQTTPublisher tcp://localhost:1883 foo`
+ *    `$ ./bin/spark-submit examples.jar \
+ *    --class org.apache.spark.examples.streaming.MQTTPublisher tcp://localhost:1883 foo`
  * and run the example as
- *    `$ ./bin/run-example org.apache.spark.examples.streaming.MQTTWordCount local[2] tcp://localhost:1883 foo`
+ *    `$ ./bin/spark-submit examples.jar \
+ *    --class org.apache.spark.examples.streaming.MQTTWordCount tcp://localhost:1883 foo`
  */
-// scalastyle:on
 object MQTTWordCount {
 
   def main(args: Array[String]) {
-    if (args.length < 3) {
+    if (args.length < 2) {
       System.err.println(
-        "Usage: MQTTWordCount <master> <MqttbrokerUrl> <topic>" +
-          " In local mode, <master> should be 'local[n]' with n > 1")
+        "Usage: MQTTWordCount <MqttbrokerUrl> <topic>")
       System.exit(1)
     }
 
-    val Seq(master, brokerUrl, topic) = args.toSeq
-
-    val ssc = new StreamingContext(master, "MqttWordCount", Seconds(2), System.getenv("SPARK_HOME"),
-    StreamingContext.jarOfClass(this.getClass).toSeq)
+    val Seq(brokerUrl, topic) = args.toSeq
+    val sparkConf = new SparkConf().setAppName("MQTTWordCount")
+    val ssc = new StreamingContext(sparkConf, Seconds(2))
     val lines = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_ONLY_SER_2)
 
     val words = lines.flatMap(x => x.toString.split(" "))

@@ -26,11 +26,9 @@ import org.apache.spark.rdd.NewHadoopRDD
 
 object HBaseTest {
   def main(args: Array[String]) {
-    val sc = new SparkContext(args(0), "HBaseTest",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
-
+    val sparkConf = new SparkConf().setAppName("HBaseTest")
+    val sc = new SparkContext(sparkConf)
     val conf = HBaseConfiguration.create()
-
     // Other options for configuring scan behavior are available. More information available at
     // http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/mapreduce/TableInputFormat.html
     conf.set(TableInputFormat.INPUT_TABLE, args(1))
