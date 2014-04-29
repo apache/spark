@@ -33,7 +33,7 @@ import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
-object BinaryClassification extends App {
+object BinaryClassification {
 
   object Algorithm extends Enumeration {
     type Algorithm = Value
@@ -56,36 +56,39 @@ object BinaryClassification extends App {
       regType: RegType = L2,
       regParam: Double = 0.1)
 
-  val defaultParams = Params()
+  def main(args: Array[String]) {
+    val defaultParams = Params()
 
-  val parser = new OptionParser[Params]("BinaryClassification") {
-    head("BinaryClassification: an example app for binary classification.")
-    opt[Int]("numIterations")
-      .text("number of iterations")
-      .action((x, c) => c.copy(numIterations = x))
-    opt[Double]("stepSize")
-      .text(s"initial step size, default: ${defaultParams.stepSize}")
-      .action((x, c) => c.copy(stepSize = x))
-    opt[String]("algorithm")
-      .text(s"algorithm (${Algorithm.values.mkString(",")}), " +
-      s"default: ${defaultParams.algorithm}")
-      .action((x, c) => c.copy(algorithm = Algorithm.withName(x)))
-    opt[String]("regType")
-      .text(s"regularization type (${RegType.values.mkString(",")}), " +
-      s"default: ${defaultParams.regType}")
-      .action((x, c) => c.copy(regType = RegType.withName(x)))
-    opt[Double]("regParam")
-      .text(s"regularization parameter, default: ${defaultParams.regParam}")
-    arg[String]("<input>")
-      .required()
-      .text("input paths to labeled examples in LIBSVM format")
-      .action((x, c) => c.copy(input = x))
-  }
+    val parser = new OptionParser[Params]("BinaryClassification") {
+      head("BinaryClassification: an example app for binary classification.")
+      opt[Int]("numIterations")
+        .text("number of iterations")
+        .action((x, c) => c.copy(numIterations = x))
+      opt[Double]("stepSize")
+        .text(s"initial step size, default: ${defaultParams.stepSize}")
+        .action((x, c) => c.copy(stepSize = x))
+      opt[String]("algorithm")
+        .text(s"algorithm (${Algorithm.values.mkString(",")}), " +
+        s"default: ${defaultParams.algorithm}")
+        .action((x, c) => c.copy(algorithm = Algorithm.withName(x)))
+      opt[String]("regType")
+        .text(s"regularization type (${RegType.values.mkString(",")}), " +
+        s"default: ${defaultParams.regType}")
+        .action((x, c) => c.copy(regType = RegType.withName(x)))
+      opt[Double]("regParam")
+        .text(s"regularization parameter, default: ${defaultParams.regParam}")
+      arg[String]("<input>")
+        .required()
+        .text("input paths to labeled examples in LIBSVM format")
+        .action((x, c) => c.copy(input = x))
+    }
 
-  parser.parse(args, defaultParams).map { params =>
-    run(params)
-  } getOrElse {
-    sys.exit(1)
+    parser.parse(args, defaultParams).map {
+      params =>
+        run(params)
+    } getOrElse {
+      sys.exit(1)
+    }
   }
 
   def run(params: Params) {

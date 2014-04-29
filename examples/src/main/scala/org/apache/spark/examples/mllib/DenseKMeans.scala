@@ -31,7 +31,7 @@ import org.apache.spark.mllib.linalg.Vectors
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
-object DenseKMeans extends App {
+object DenseKMeans {
 
   object InitializationMode extends Enumeration {
     type InitializationMode = Value
@@ -46,31 +46,34 @@ object DenseKMeans extends App {
       numIterations: Int = 10,
       initializationMode: InitializationMode = Parallel)
 
-  val defaultParams = Params()
+  def main(args: Array[String]) {
+    val defaultParams = Params()
 
-  val parser = new OptionParser[Params]("DenseKMeans") {
-    head("DenseKMeans: an example k-means app for dense data.")
-    opt[Int]('k', "k")
-      .required()
-      .text(s"number of clusters, required")
-      .action((x, c) => c.copy(k = x))
-    opt[Int]("numIterations")
-      .text(s"number of iterations, default; ${defaultParams.numIterations}")
-      .action((x, c) => c.copy(numIterations = x))
-    opt[String]("initMode")
-      .text(s"initialization mode (${InitializationMode.values.mkString(",")}), " +
-      s"default: ${defaultParams.initializationMode}")
-      .action((x, c) => c.copy(initializationMode = InitializationMode.withName(x)))
-    arg[String]("<input>")
-      .text("input paths to examples")
-      .required()
-      .action((x, c) => c.copy(input = x))
-  }
+    val parser = new OptionParser[Params]("DenseKMeans") {
+      head("DenseKMeans: an example k-means app for dense data.")
+      opt[Int]('k', "k")
+        .required()
+        .text(s"number of clusters, required")
+        .action((x, c) => c.copy(k = x))
+      opt[Int]("numIterations")
+        .text(s"number of iterations, default; ${defaultParams.numIterations}")
+        .action((x, c) => c.copy(numIterations = x))
+      opt[String]("initMode")
+        .text(s"initialization mode (${InitializationMode.values.mkString(",")}), " +
+        s"default: ${defaultParams.initializationMode}")
+        .action((x, c) => c.copy(initializationMode = InitializationMode.withName(x)))
+      arg[String]("<input>")
+        .text("input paths to examples")
+        .required()
+        .action((x, c) => c.copy(input = x))
+    }
 
-  parser.parse(args, defaultParams).map { params =>
-    run(params)
-  }.getOrElse {
-    sys.exit(1)
+    parser.parse(args, defaultParams).map {
+      params =>
+        run(params)
+    }.getOrElse {
+      sys.exit(1)
+    }
   }
 
   def run(params: Params) {

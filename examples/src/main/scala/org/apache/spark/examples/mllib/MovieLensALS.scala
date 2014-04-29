@@ -30,7 +30,7 @@ import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
  */
-object MovieLensALS extends App {
+object MovieLensALS {
 
   class ALSRegistrator extends KryoRegistrator {
     override def registerClasses(kryo: Kryo) {
@@ -45,32 +45,35 @@ object MovieLensALS extends App {
       lambda: Double = 1.0,
       rank: Int = 10)
 
-  val defaultParams = Params()
+  def main(args: Array[String]) {
+    val defaultParams = Params()
 
-  val parser = new OptionParser[Params]("MovieLensALS") {
-    head("MovieLensALS: an example app for ALS on MovieLens data.")
-    opt[Int]("rank")
-      .text(s"rank, default: ${defaultParams.rank}}")
-      .action((x, c) => c.copy(rank = x))
-    opt[Int]("numIterations")
-      .text(s"number of iterations, default: ${defaultParams.numIterations}")
-      .action((x, c) => c.copy(numIterations = x))
-    opt[Double]("lambda")
-      .text(s"lambda (smoothing constant), default: ${defaultParams.lambda}")
-      .action((x, c) => c.copy(lambda = x))
-    opt[Unit]("kryo")
-      .text(s"use Kryo serialization")
-      .action((_, c) => c.copy(kryo = true))
-    arg[String]("<input>")
-      .required()
-      .text("input paths to a MovieLens dataset of ratings")
-      .action((x, c) => c.copy(input = x))
-  }
+    val parser = new OptionParser[Params]("MovieLensALS") {
+      head("MovieLensALS: an example app for ALS on MovieLens data.")
+      opt[Int]("rank")
+        .text(s"rank, default: ${defaultParams.rank}}")
+        .action((x, c) => c.copy(rank = x))
+      opt[Int]("numIterations")
+        .text(s"number of iterations, default: ${defaultParams.numIterations}")
+        .action((x, c) => c.copy(numIterations = x))
+      opt[Double]("lambda")
+        .text(s"lambda (smoothing constant), default: ${defaultParams.lambda}")
+        .action((x, c) => c.copy(lambda = x))
+      opt[Unit]("kryo")
+        .text(s"use Kryo serialization")
+        .action((_, c) => c.copy(kryo = true))
+      arg[String]("<input>")
+        .required()
+        .text("input paths to a MovieLens dataset of ratings")
+        .action((x, c) => c.copy(input = x))
+    }
 
-  parser.parse(args, defaultParams).map { params =>
-    run(params)
-  } getOrElse {
-    System.exit(1)
+    parser.parse(args, defaultParams).map {
+      params =>
+        run(params)
+    } getOrElse {
+      System.exit(1)
+    }
   }
 
   def run(params: Params) {
