@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.recommendation
 
 import scala.collection.mutable.{ArrayBuffer, BitSet}
+import scala.collection.mutable
 import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
@@ -26,7 +27,7 @@ import scala.util.hashing.byteswap32
 import com.esotericsoftware.kryo.Kryo
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.{Logging, HashPartitioner, Partitioner, SparkContext, SparkConf}
 import org.apache.spark.storage.StorageLevel
@@ -706,6 +707,127 @@ object ALS {
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int)
     : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, 0.01, -1, 1.0)
+  }
+
+  @DeveloperApi
+  case class IterationCost(inboundBytes: Double, computation: Double, outboundBytes: Double)
+
+  /**
+   * :: DeveloperApi ::
+   * Given an RDD of ratings, a rank, and two partitioners, compute rough estimates of the
+   * computation time and communication cost of one iteration of ALS.  Returns a pair of pairs of
+   * Maps.  The first pair of maps represents computation time in unspecified units.  The second
+   * pair of maps represents communication cost in uncompressed bytes.  The first element of each
+   * pair is the cost attributable to user partitioning, while the second is the cost attributable
+   * to product partitioning.
+   *
+   * @param ratings             RDD of Rating objects
+   * @param rank                number of features to use
+   * @param userPartitioner     partitioner for partitioning users
+   * @param productPartitioner  partitioner for partitioning products
+   */
+  @DeveloperApi
+  def estimateCost(
+      ratings: RDD[Rating],
+      rank: Int,
+      userPartitioner: Partitioner,
+      productPartitioner: Partitioner
+    ): (Seq[IterationCost], Seq[IterationCost]) = {
+    // user partition -> set of products
+    val utalk = ratings.mapPartitions(x => {
+        val ht = new mutable.HashSet[(Int, Int)]()
+        while (x.hasNext) {
+          val rat = x.next()
+          val u = userPartitioner.getPartition(rat.user)
+          val p = rat.product
+          ht += ((u, p))
+        }
+        ht.iterator
+      }
+    )
+
+    utalk.persist()
+
+    // user partition -> number of products
+    val userInbound =
+        utalk.groupByKey.map(x => (x._1, 8.0 * rank * x._2.toList.distinct.length)).collectAsMap()
+
+    // product -> number of user partitions, summed over each partition.
+    val productOutbound = (utalk.distinct.map(x => (productPartitioner.getPartition(x._2), x._1))
+        .groupByKey.mapValues(x => 8.0 * rank * x.toList.length).collectAsMap())
+
+    utalk.unpersist()
+
+    // product partition -> set of users
+    val ptalk = ratings.mapPartitions(x => {
+        val ht = new mutable.HashSet[(Int, Int)]()
+        while (x.hasNext) {
+          val rat = x.next()
+          val u = rat.user
+          val p = productPartitioner.getPartition(rat.product)
+          ht += ((p, u))
+        }
+        ht.iterator
+      }
+    )
+
+    ptalk.persist()
+
+    // product partition -> number of users
+    val productInbound =
+        ptalk.groupByKey.map(x => (x._1, 8.0 * rank * x._2.toList.distinct.length)).collectAsMap()
+
+    // user -> number of product partitions, summed over each partition.
+    val userOutbound = (ptalk.distinct.map(x => (userPartitioner.getPartition(x._2), x._1))
+        .groupByKey.mapValues(x => 8.0 * rank * x.toList.length).collectAsMap())
+
+    ptalk.unpersist()
+
+    // (user, #ratings)
+    val users = ratings.map(x => x.user).groupBy(x => x).mapValues(x => x.toList.length)
+    val products = ratings.map(x => x.product).groupBy(x => x).mapValues(x => x.toList.length)
+
+    // (upart, #ratings)
+    val userRatings = (users.map(x => userPartitioner.getPartition(x._1)).groupBy(x => x)
+        .mapValues(x => x.toList.length).collectAsMap())
+    val productRatings = (products.map(x => productPartitioner.getPartition(x._1)).groupBy(x => x)
+        .mapValues(x => x.toList.length).collectAsMap())
+
+    // (upart, #users)
+    val userCount = (users.map(x => x._1).distinct.map(x => userPartitioner.getPartition(x))
+        .groupBy(x => x).mapValues(x => x.toList.length).collectAsMap())
+    val productCount = (products.map(x => x._1).distinct.map(x =>
+        productPartitioner.getPartition(x)).groupBy(x => x).mapValues(x => x.toList.length)
+        .collectAsMap())
+
+    val userComputation = new mutable.HashMap[Int, Double]()
+    val productComputation = new mutable.HashMap[Int, Double]()
+    userCount.keys.foreach { k =>
+      userComputation.put(k, 1.0 * rank * rank * userRatings.getOrElse(k, 0)
+          + rank * rank * rank * userCount.getOrElse(k, 0) / 6.0)
+    }
+    productCount.keys.foreach { k =>
+      productComputation.put(k, 1.0 * rank * rank * productRatings.getOrElse(k, 0)
+          + rank * rank * rank * productCount.getOrElse(k, 0) / 6.0)
+    }
+
+    val userAnswer = new mutable.HashMap[Int, IterationCost]()
+    userCount.keys.foreach { k =>
+      userAnswer.put(k, IterationCost(userInbound.getOrElse(k, 0.0),
+          userComputation.getOrElse(k, 0.0), userOutbound.getOrElse(k, 0.0)))
+    }
+
+    val productAnswer = new mutable.HashMap[Int, IterationCost]()
+    productCount.keys.foreach { k =>
+      productAnswer.put(k, IterationCost(productInbound.getOrElse(k, 0.0),
+          productComputation.getOrElse(k, 0.0), productOutbound.getOrElse(k, 0.0)))
+    }
+
+    // We do two rank*rank outer products per rating and one Cholesky factorisation per user and
+    // per product.
+
+    (   userAnswer.toArray.sortBy(x => x._1).map(x => x._2),
+     productAnswer.toArray.sortBy(x => x._1).map(x => x._2))
   }
 
   private class ALSRegistrator extends KryoRegistrator {
