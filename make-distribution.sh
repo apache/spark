@@ -43,7 +43,7 @@
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
 
-VERSION=$(mvn help:evaluate -Dexpression=project.version |grep -v "INFO")
+VERSION=$(mvn help:evaluate -Dexpression=project.version | grep -v "INFO" | tail -n 1)
 if [ $? == -1 ] ;then
     echo -e "You need Maven installed to build Spark."
     echo -e "Download Maven from https://maven.apache.org."
@@ -178,6 +178,7 @@ fi
 if [ "$MAKE_TGZ" == "true" ]; then
   TARDIR_NAME=spark-$VERSION-bin-$NAME
   TARDIR="$FWDIR/$TARDIR_NAME"
+  rm -rf "$TARDIR"
   cp -r "$DISTDIR" "$TARDIR"
   tar czf "spark-$VERSION-bin-$NAME.tgz" -C "$FWDIR" "$TARDIR_NAME"
   rm -rf "$TARDIR"
