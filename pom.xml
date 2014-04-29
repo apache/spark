@@ -127,6 +127,7 @@
     <jetty.version>8.1.14.v20131031</jetty.version>
     <chill.version>0.3.6</chill.version>
     <codahale.metrics.version>3.0.0</codahale.metrics.version>
+    <avro.version>1.7.4</avro.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
@@ -293,7 +294,7 @@
           <exclusion>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm-commons</artifactId>
-         </exclusion>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -308,7 +309,7 @@
           <exclusion>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm-commons</artifactId>
-         </exclusion>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -426,6 +427,16 @@
         <version>${scala.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scala-actors</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scalap</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
         <version>1.9.1</version>
@@ -492,7 +503,45 @@
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
-        <version>1.7.4</version>
+        <version>${avro.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro-ipc</artifactId>
+        <version>${avro.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>jetty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>jetty-util</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro-mapred</artifactId>
+        <version>${avro.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
@@ -687,7 +736,7 @@
             <junitxml>.</junitxml>
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
             <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
-            <stderr />
+            <stderr/>
           </configuration>
           <executions>
             <execution>
@@ -742,7 +791,7 @@
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
-           <id>add-scala-sources</id>
+            <id>add-scala-sources</id>
             <phase>generate-sources</phase>
             <goals>
               <goal>add-source</goal>
@@ -779,6 +828,17 @@
   </build>
 
   <profiles>
+    <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
+    <profile>
+      <id>hadoop-0.23</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+
     <profile>
       <id>yarn-alpha</id>
       <properties>
@@ -790,6 +850,12 @@
       <modules>
         <module>yarn</module>
       </modules>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
+      </dependencies>
     </profile>
 
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
@@ -838,7 +904,7 @@
 
     </profile>
 
-   <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
+    <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
     <profile>
       <id>hadoop-provided</id>
       <activation>
@@ -878,6 +944,7 @@
         <dependency>
           <groupId>org.apache.zookeeper</groupId>
           <artifactId>zookeeper</artifactId>
+          <version>3.4.5</version>
           <scope>provided</scope>
         </dependency>
       </dependencies>
