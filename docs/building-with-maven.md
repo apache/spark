@@ -45,16 +45,19 @@ For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop versions wit
 For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions with YARN, you can enable the "yarn-alpha" or "yarn" profile and set the "hadoop.version", "yarn.version" property. Note that Hadoop 0.23.X requires a special `-Phadoop-0.23` profile:
 
     # Apache Hadoop 2.0.5-alpha
-    $ mvn -Pyarn-alpha -Dhadoop.version=2.0.5-alpha -Dyarn.version=2.0.5-alpha -DskipTests clean package
+    $ mvn -Pyarn-alpha -Dhadoop.version=2.0.5-alpha -DskipTests clean package
 
     # Cloudera CDH 4.2.0 with MapReduce v2
-    $ mvn -Pyarn-alpha -Dhadoop.version=2.0.0-cdh4.2.0 -Dyarn.version=2.0.0-cdh4.2.0 -DskipTests clean package
+    $ mvn -Pyarn-alpha -Dhadoop.version=2.0.0-cdh4.2.0 -DskipTests clean package
 
     # Apache Hadoop 2.2.X (e.g. 2.2.0 as below) and newer
-    $ mvn -Pyarn -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -DskipTests clean package
+    $ mvn -Pyarn -Dhadoop.version=2.2.0 -DskipTests clean package
 
     # Apache Hadoop 0.23.x
     $ mvn -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.7 -Dyarn.version=0.23.7 -DskipTests clean package
+
+    # Different versions of HDFS vs YARN.
+    $ mvn -Pyarn-alpha -Dhadoop.version=2.3.0 -Dyarn.version= 0.23.7 -DskipTests clean package
 
 ## Spark Tests in Maven ##
 
