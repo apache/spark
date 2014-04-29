@@ -33,7 +33,9 @@ import org.apache.hadoop.yarn.util.{Apps, Records}
 
 import org.apache.spark.{Logging, SparkConf}
 
-
+/**
+ * Version of [[org.apache.spark.deploy.yarn.ClientBase]] tailored to YARN's alpha API.
+ */
 class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: SparkConf)
   extends YarnClientImpl with ClientBase with Logging {
 
@@ -167,8 +169,10 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 object Client {
 
   def main(argStrings: Array[String]) {
-    println("WARNING: This client is deprecated and will be removed in a future version of Spark.")
-    println("Use ./bin/spark-submit with \"--master yarn\"")
+    if (!sys.props.contains("SPARK_SUBMIT")) {
+      println("WARNING: This client is deprecated and will be removed in a " +
+        "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
+    }
 
     // Set an env variable indicating we are running in YARN mode.
     // Note that anything with SPARK prefix gets propagated to all (remote) processes

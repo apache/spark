@@ -28,7 +28,7 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 . $FWDIR/bin/load-spark-env.sh
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
+CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH:$FWDIR/conf"
 
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
 
@@ -50,9 +50,9 @@ if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
 else
   # Else use spark-assembly jar from either RELEASE or assembly directory
   if [ -f "$FWDIR/RELEASE" ]; then
-    ASSEMBLY_JAR=`ls "$FWDIR"/jars/spark*-assembly*.jar`
+    ASSEMBLY_JAR=`ls "$FWDIR"/lib/spark-assembly*hadoop*.jar`
   else
-    ASSEMBLY_JAR=`ls "$ASSEMBLY_DIR"/spark*-assembly*hadoop*.jar`
+    ASSEMBLY_JAR=`ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*.jar`
   fi
   CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
 fi

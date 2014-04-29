@@ -43,6 +43,14 @@ private[spark] class SparkUI(
   def this(conf: SparkConf, listenerBus: SparkListenerBus, appName: String, basePath: String) =
     this(null, conf, new SecurityManager(conf), listenerBus, appName, basePath)
 
+  def this(
+      conf: SparkConf,
+      securityManager: SecurityManager,
+      listenerBus: SparkListenerBus,
+      appName: String,
+      basePath: String) =
+    this(null, conf, securityManager, listenerBus, appName, basePath)
+
   // If SparkContext is not provided, assume the associated application is not live
   val live = sc != null
 

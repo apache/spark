@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
-import org.apache.spark.annotation.{AlphaComponent, Experimental, DeveloperApi}
+import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -256,10 +256,11 @@ class SchemaRDD(
    * @group Query
    */
   @Experimental
+  override
   def sample(
-      fraction: Double,
       withReplacement: Boolean = true,
-      seed: Int = (math.random * 1000).toInt) =
+      fraction: Double,
+      seed: Long) =
     new SchemaRDD(sqlContext, Sample(fraction, withReplacement, seed, logicalPlan))
 
   /**

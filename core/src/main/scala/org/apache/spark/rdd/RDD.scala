@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import java.util.Random
 
 import scala.collection.Map
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
@@ -94,26 +95,20 @@ abstract class RDD[T: ClassTag](
   def compute(split: Partition, context: TaskContext): Iterator[T]
 
   /**
-   * :: DeveloperApi ::
    * Implemented by subclasses to return the set of partitions in this RDD. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
-  @DeveloperApi
   protected def getPartitions: Array[Partition]
 
   /**
-   * :: DeveloperApi ::
    * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
-  @DeveloperApi
   protected def getDependencies: Seq[Dependency[_]] = deps
 
   /**
-   * :: DeveloperApi ::
    * Optionally overridden by subclasses to specify placement preferences.
    */
-  @DeveloperApi
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
   /** Optionally overridden by subclasses to specify how they are partitioned. */
@@ -236,6 +231,30 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Return the ancestors of the given RDD that are related to it only through a sequence of
+   * narrow dependencies. This traverses the given RDD's dependency tree using DFS, but maintains
+   * no ordering on the RDDs returned.
+   */
+  private[spark] def getNarrowAncestors: Seq[RDD[_]] = {
+    val ancestors = new mutable.HashSet[RDD[_]]
+
+    def visit(rdd: RDD[_]) {
+      val narrowDependencies = rdd.dependencies.filter(_.isInstanceOf[NarrowDependency[_]])
+      val narrowParents = narrowDependencies.map(_.rdd)
+      val narrowParentsNotVisited = narrowParents.filterNot(ancestors.contains)
+      narrowParentsNotVisited.foreach { parent =>
+        ancestors.add(parent)
+        visit(parent)
+      }
+    }
+
+    visit(this)
+
+    // In case there is a cycle, do not include the root itself
+    ancestors.filterNot(_ == this).toSeq
+  }
+
+  /**
    * Compute an RDD partition or read it from a checkpoint if the RDD is checkpointing.
    */
   private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] =
@@ -265,7 +284,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a new RDD containing the distinct elements in this RDD.
    */
-  def distinct(numPartitions: Int): RDD[T] =
+  def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] =
     map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
 
   /**
@@ -282,7 +301,7 @@ abstract class RDD[T: ClassTag](
    * If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
    * which can avoid performing a shuffle.
    */
-  def repartition(numPartitions: Int): RDD[T] = {
+  def repartition(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = {
     coalesce(numPartitions, shuffle = true)
   }
 
@@ -306,7 +325,8 @@ abstract class RDD[T: ClassTag](
    * coalesce(1000, shuffle = true) will result in 1000 partitions with the
    * data distributed using a hash partitioner.
    */
-  def coalesce(numPartitions: Int, shuffle: Boolean = false): RDD[T] = {
+  def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[T] = null)
+      : RDD[T] = {
     if (shuffle) {
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
@@ -321,7 +341,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] = {
+  def sample(withReplacement: Boolean, 
+      fraction: Double, 
+      seed: Long = Utils.random.nextLong): RDD[T] = {
     require(fraction >= 0.0, "Invalid fraction value: " + fraction)
     if (withReplacement) {
       new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), seed)
@@ -334,11 +356,11 @@ abstract class RDD[T: ClassTag](
    * Randomly splits this RDD with the provided weights.
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1
-   * @param seed random seed, default to System.nanoTime
+   * @param seed random seed
    *
    * @return split RDDs in an array
    */
-  def randomSplit(weights: Array[Double], seed: Long = System.nanoTime): Array[RDD[T]] = {
+  def randomSplit(weights: Array[Double], seed: Long = Utils.random.nextLong): Array[RDD[T]] = {
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
@@ -346,7 +368,8 @@ abstract class RDD[T: ClassTag](
     }.toArray
   }
 
-  def takeSample(withReplacement: Boolean, num: Int, seed: Int): Array[T] = {
+  def takeSample(withReplacement: Boolean, num: Int, seed: Long = Utils.random.nextLong): Array[T] =
+  {
     var fraction = 0.0
     var total = 0
     val multiplier = 3.0
@@ -405,10 +428,11 @@ abstract class RDD[T: ClassTag](
    *
    * Note that this method performs a shuffle internally.
    */
-  def intersection(other: RDD[T]): RDD[T] =
+  def intersection(other: RDD[T]): RDD[T] = {
     this.map(v => (v, null)).cogroup(other.map(v => (v, null)))
         .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
         .keys
+  }
 
   /**
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
@@ -418,10 +442,12 @@ abstract class RDD[T: ClassTag](
    *
    * @param partitioner Partitioner to use for the resulting RDD
    */
-  def intersection(other: RDD[T], partitioner: Partitioner): RDD[T] =
+  def intersection(other: RDD[T], partitioner: Partitioner)(implicit ord: Ordering[T] = null)
+      : RDD[T] = {
     this.map(v => (v, null)).cogroup(other.map(v => (v, null)), partitioner)
         .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
         .keys
+  }
 
   /**
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
@@ -431,10 +457,11 @@ abstract class RDD[T: ClassTag](
    *
    * @param numPartitions How many partitions to use in the resulting RDD
    */
-  def intersection(other: RDD[T], numPartitions: Int): RDD[T] =
+  def intersection(other: RDD[T], numPartitions: Int): RDD[T] = {
     this.map(v => (v, null)).cogroup(other.map(v => (v, null)), new HashPartitioner(numPartitions))
         .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
         .keys
+  }
 
   /**
    * Return an RDD created by coalescing all elements within each partition into an array.
@@ -448,22 +475,25 @@ abstract class RDD[T: ClassTag](
   def cartesian[U: ClassTag](other: RDD[U]): RDD[(T, U)] = new CartesianRDD(sc, this, other)
 
   /**
-   * Return an RDD of grouped items.
+   * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
+   * mapping to that key.
    */
-  def groupBy[K: ClassTag](f: T => K): RDD[(K, Iterable[T])] =
+  def groupBy[K](f: T => K)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy[K](f, defaultPartitioner(this))
 
   /**
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */
-  def groupBy[K: ClassTag](f: T => K, numPartitions: Int): RDD[(K, Iterable[T])] =
+  def groupBy[K](f: T => K, numPartitions: Int)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy(f, new HashPartitioner(numPartitions))
 
   /**
-   * Return an RDD of grouped items.
+   * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
+   * mapping to that key.
    */
-  def groupBy[K: ClassTag](f: T => K, p: Partitioner): RDD[(K, Iterable[T])] = {
+  def groupBy[K](f: T => K, p: Partitioner)(implicit kt: ClassTag[K], ord: Ordering[K] = null)
+      : RDD[(K, Iterable[T])] = {
     val cleanF = sc.clean(f)
     this.map(t => (cleanF(t), t)).groupByKey(p)
   }
@@ -720,7 +750,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
    */
-  def subtract(other: RDD[T], p: Partitioner): RDD[T] = {
+  def subtract(other: RDD[T], p: Partitioner)(implicit ord: Ordering[T] = null): RDD[T] = {
     if (partitioner == Some(p)) {
       // Our partitioner knows how to handle T (which, since we have a partitioner, is
       // really (K, V)) so make a new Partitioner that will de-tuple our fake tuples
@@ -828,7 +858,7 @@ abstract class RDD[T: ClassTag](
    * Return the count of each unique value in this RDD as a map of (value, count) pairs. The final
    * combine step happens locally on the master, equivalent to running a single reduce task.
    */
-  def countByValue(): Map[T, Long] = {
+  def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = {
     if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValue() does not support arrays")
     }
@@ -858,10 +888,10 @@ abstract class RDD[T: ClassTag](
    * Approximate version of countByValue().
    */
   @Experimental
-  def countByValueApprox(
-      timeout: Long,
-      confidence: Double = 0.95
-      ): PartialResult[Map[T, BoundedDouble]] = {
+  def countByValueApprox(timeout: Long, confidence: Double = 0.95)
+      (implicit ord: Ordering[T] = null)
+      : PartialResult[Map[T, BoundedDouble]] =
+  {
     if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValueApprox() does not support arrays")
     }
@@ -1011,13 +1041,13 @@ abstract class RDD[T: ClassTag](
    * Returns the max of this RDD as defined by the implicit Ordering[T].
    * @return the maximum element of the RDD
    * */
-  def max()(implicit ord: Ordering[T]):T = this.reduce(ord.max)
+  def max()(implicit ord: Ordering[T]): T = this.reduce(ord.max)
 
   /**
    * Returns the min of this RDD as defined by the implicit Ordering[T].
    * @return the minimum element of the RDD
    * */
-  def min()(implicit ord: Ordering[T]):T = this.reduce(ord.min)
+  def min()(implicit ord: Ordering[T]): T = this.reduce(ord.min)
 
   /**
    * Save this RDD as a text file, using string representations of elements.
@@ -1112,9 +1142,9 @@ abstract class RDD[T: ClassTag](
   @transient private var doCheckpointCalled = false
 
   /**
-   * Performs the checkpointing of this RDD by saving this. It is called by the DAGScheduler
-   * after a job using this RDD has completed (therefore the RDD has been materialized and
-   * potentially stored in memory). doCheckpoint() is called recursively on the parent RDDs.
+   * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
+   * has completed (therefore the RDD has been materialized and potentially stored in memory).
+   * doCheckpoint() is called recursively on the parent RDDs.
    */
   private[spark] def doCheckpoint() {
     if (!doCheckpointCalled) {

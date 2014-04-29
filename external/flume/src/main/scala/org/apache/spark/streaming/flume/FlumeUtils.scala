@@ -19,8 +19,8 @@ package org.apache.spark.streaming.flume
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaStreamingContext, JavaDStream}
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaInputDStream, JavaStreamingContext, JavaDStream}
+import org.apache.spark.streaming.dstream.{ReceiverInputDStream, DStream}
 
 object FlumeUtils {
   /**
@@ -35,7 +35,7 @@ object FlumeUtils {
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): DStream[SparkFlumeEvent] = {
+    ): ReceiverInputDStream[SparkFlumeEvent] = {
     val inputStream = new FlumeInputDStream[SparkFlumeEvent](ssc, hostname, port, storageLevel)
     inputStream
   }
@@ -50,7 +50,7 @@ object FlumeUtils {
       jssc: JavaStreamingContext,
       hostname: String,
       port: Int
-    ): JavaDStream[SparkFlumeEvent] = {
+    ): JavaReceiverInputDStream[SparkFlumeEvent] = {
     createStream(jssc.ssc, hostname, port)
   }
 
@@ -65,7 +65,7 @@ object FlumeUtils {
       hostname: String,
       port: Int,
       storageLevel: StorageLevel
-    ): JavaDStream[SparkFlumeEvent] = {
+    ): JavaReceiverInputDStream[SparkFlumeEvent] = {
     createStream(jssc.ssc, hostname, port, storageLevel)
   }
 }
