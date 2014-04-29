@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -27,6 +28,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.util.MutablePair
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output = projectList.map(_.toAttribute)
 
@@ -36,6 +41,10 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output = child.output
 
@@ -44,15 +53,23 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   }
 }
 
-case class Sample(fraction: Double, withReplacement: Boolean, seed: Int, child: SparkPlan)
-    extends UnaryNode {
-
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: SparkPlan)
+  extends UnaryNode
+{
   override def output = child.output
 
   // TODO: How to pick seed?
   override def execute() = child.execute().sample(withReplacement, fraction, seed)
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class Union(children: Seq[SparkPlan])(@transient sc: SparkContext) extends SparkPlan {
   // TODO: attributes output by union should be distinct for nullability purposes
   override def output = children.head.output
@@ -62,12 +79,14 @@ case class Union(children: Seq[SparkPlan])(@transient sc: SparkContext) extends 
 }
 
 /**
+ * :: DeveloperApi ::
  * Take the first limit elements. Note that the implementation is different depending on whether
  * this is a terminal operator or not. If it is terminal and is invoked using executeCollect,
  * this operator uses Spark's take method on the Spark driver. If it is not terminal or is
  * invoked using execute, we first take the limit on each partition, and then repartition all the
  * data to a single partition to compute the global limit.
  */
+@DeveloperApi
 case class Limit(limit: Int, child: SparkPlan)(@transient sc: SparkContext) extends UnaryNode {
   // TODO: Implement a partition local limit, and use a strategy to generate the proper limit plan:
   // partition local limit -> exchange into one partition -> partition local limit again
@@ -91,10 +110,12 @@ case class Limit(limit: Int, child: SparkPlan)(@transient sc: SparkContext) exte
 }
 
 /**
+ * :: DeveloperApi ::
  * Take the first limit elements as defined by the sortOrder. This is logically equivalent to
  * having a [[Limit]] operator after a [[Sort]] operator. This could have been named TopK, but
  * Spark's top operator does the opposite in ordering so we name it TakeOrdered to avoid confusion.
  */
+@DeveloperApi
 case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
                       (@transient sc: SparkContext) extends UnaryNode {
   override def otherCopyArgs = sc :: Nil
@@ -111,7 +132,10 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
   override def execute() = sc.makeRDD(executeCollect(), 1)
 }
 
-
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class Sort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
@@ -134,6 +158,10 @@ case class Sort(
   override def output = child.output
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 object ExistingRdd {
   def convertToCatalyst(a: Any): Any = a match {
     case s: Seq[Any] => s.map(convertToCatalyst)
@@ -167,6 +195,10 @@ object ExistingRdd {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
 }

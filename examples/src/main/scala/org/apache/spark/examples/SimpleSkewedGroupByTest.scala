@@ -37,7 +37,7 @@ object SimpleSkewedGroupByTest {
     var ratio = if (args.length > 5) args(5).toInt else 5.0
 
     val sc = new SparkContext(args(0), "GroupBy Test",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
 
     val pairs1 = sc.parallelize(0 until numMappers, numMappers).flatMap { p =>
       val ranGen = new Random

@@ -17,21 +17,17 @@
 
 package org.apache.spark.mllib.tree
 
-import scala.util.control.Breaks._
-
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.SparkContext._
+import org.apache.spark.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
+import org.apache.spark.mllib.tree.impurity.Impurity
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * :: Experimental ::
@@ -82,31 +78,34 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
      * still survived the filters of the parent nodes.
      */
 
-    // TODO: Convert for loop to while loop
-    breakable {
-      for (level <- 0 until maxDepth) {
+    var level = 0
+    var break = false
+    while (level < maxDepth && !break) {
 
-        logDebug("#####################################")
-        logDebug("level = " + level)
-        logDebug("#####################################")
+      logDebug("#####################################")
+      logDebug("level = " + level)
+      logDebug("#####################################")
 
-        // Find best split for all nodes at a level.
-        val splitsStatsForLevel = DecisionTree.findBestSplits(input, parentImpurities, strategy,
-          level, filters, splits, bins)
+      // Find best split for all nodes at a level.
+      val splitsStatsForLevel = DecisionTree.findBestSplits(input, parentImpurities, strategy,
+        level, filters, splits, bins)
 
-        for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
-          // Extract info for nodes at the current level.
-          extractNodeInfo(nodeSplitStats, level, index, nodes)
-          // Extract info for nodes at the next lower level.
-          extractInfoForLowerLevels(level, index, maxDepth, nodeSplitStats, parentImpurities,
-            filters)
-          logDebug("final best split = " + nodeSplitStats._1)
-        }
-        require(scala.math.pow(2, level) == splitsStatsForLevel.length)
-        // Check whether all the nodes at the current level at leaves.
-        val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0)
-        logDebug("all leaf = " + allLeaf)
-        if (allLeaf) break // no more tree construction
+      for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
+        // Extract info for nodes at the current level.
+        extractNodeInfo(nodeSplitStats, level, index, nodes)
+        // Extract info for nodes at the next lower level.
+        extractInfoForLowerLevels(level, index, maxDepth, nodeSplitStats, parentImpurities,
+          filters)
+        logDebug("final best split = " + nodeSplitStats._1)
+      }
+      require(scala.math.pow(2, level) == splitsStatsForLevel.length)
+      // Check whether all the nodes at the current level at leaves.
+      val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0)
+      logDebug("all leaf = " + allLeaf)
+      if (allLeaf) {
+        break = true // no more tree construction
+      } else {
+        level += 1
       }
     }
 
@@ -146,8 +145,8 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       parentImpurities: Array[Double],
       filters: Array[List[Filter]]): Unit = {
     // 0 corresponds to the left child node and 1 corresponds to the right child node.
-    // TODO: Convert to while loop
-    for (i <- 0 to 1) {
+    var i = 0
+    while (i <= 1) {
      // Calculate the index of the node from the node level and the index at the current level.
       val nodeIndex = scala.math.pow(2, level + 1).toInt - 1 + 2 * index + i
       if (level < maxDepth - 1) {
@@ -166,6 +165,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
           logDebug("Filter = " + filter)
         }
       }
+      i += 1
     }
   }
 }
@@ -1025,130 +1025,5 @@ object DecisionTree extends Serializable with Logging {
       case ApproxHist =>
         throw new UnsupportedOperationException("approximate histogram not supported yet.")
     }
-  }
-
-  private val usage = """
-    Usage: DecisionTreeRunner <master>[slices] --algo <Classification,
-    Regression> --trainDataDir path --testDataDir path --maxDepth num [--impurity <Gini,Entropy,
-    Variance>] [--maxBins num]
-              """
-
-  def main(args: Array[String]) {
-
-    if (args.length < 2) {
-      System.err.println(usage)
-      System.exit(1)
-    }
-
-    val sc = new SparkContext(args(0), "DecisionTree")
-
-    val argList = args.toList.drop(1)
-    type OptionMap = Map[Symbol, Any]
-
-    def nextOption(map : OptionMap, list: List[String]): OptionMap = {
-      list match {
-        case Nil => map
-        case "--algo" :: string :: tail => nextOption(map ++ Map('algo -> string), tail)
-        case "--impurity" :: string :: tail => nextOption(map ++ Map('impurity -> string), tail)
-        case "--maxDepth" :: string :: tail => nextOption(map ++ Map('maxDepth -> string), tail)
-        case "--maxBins" :: string :: tail => nextOption(map ++ Map('maxBins -> string), tail)
-        case "--trainDataDir" :: string :: tail => nextOption(map ++ Map('trainDataDir -> string)
-          , tail)
-        case "--testDataDir" :: string :: tail => nextOption(map ++ Map('testDataDir -> string),
-          tail)
-        case string :: Nil =>  nextOption(map ++ Map('infile -> string), list.tail)
-        case option :: tail => logError("Unknown option " + option)
-          sys.exit(1)
-      }
-    }
-    val options = nextOption(Map(), argList)
-    logDebug(options.toString())
-
-    // Load training data.
-    val trainData = loadLabeledData(sc, options.get('trainDataDir).get.toString)
-
-    // Identify the type of algorithm.
-    val algoStr =  options.get('algo).get.toString
-    val algo = algoStr match {
-      case "Classification" => Classification
-      case "Regression" => Regression
-    }
-
-    // Identify the type of impurity.
-    val impurityStr = options.getOrElse('impurity,
-      if (algo == Classification) "Gini" else "Variance").toString
-    val impurity = impurityStr match {
-      case "Gini" => Gini
-      case "Entropy" => Entropy
-      case "Variance" => Variance
-    }
-
-    val maxDepth = options.getOrElse('maxDepth, "1").toString.toInt
-    val maxBins = options.getOrElse('maxBins, "100").toString.toInt
-
-    val strategy = new Strategy(algo, impurity, maxDepth, maxBins)
-    val model = DecisionTree.train(trainData, strategy)
-
-    // Load test data.
-    val testData = loadLabeledData(sc, options.get('testDataDir).get.toString)
-
-    // Measure algorithm accuracy
-    if (algo == Classification) {
-      val accuracy = accuracyScore(model, testData)
-      logDebug("accuracy = " + accuracy)
-    }
-
-    if (algo == Regression) {
-      val mse = meanSquaredError(model, testData)
-      logDebug("mean square error = " + mse)
-    }
-
-    sc.stop()
-  }
-
-  /**
-   * Load labeled data from a file. The data format used here is
-   * <L>, <f1> <f2> ...,
-   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
-   *
-   * @param sc SparkContext
-   * @param dir Directory to the input data files.
-   * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
-   *         the label, and the second element represents the feature values (an array of Double).
-   */
-  private def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
-    sc.textFile(dir).map { line =>
-      val parts = line.trim().split(",")
-      val label = parts(0).toDouble
-      val features = Vectors.dense(parts.slice(1,parts.length).map(_.toDouble))
-      LabeledPoint(label, features)
-    }
-  }
-
-  // TODO: Port this method to a generic metrics package.
-  /**
-   * Calculates the classifier accuracy.
-   */
-  private def accuracyScore(model: DecisionTreeModel, data: RDD[LabeledPoint],
-      threshold: Double = 0.5): Double = {
-    def predictedValue(features: Vector) = {
-      if (model.predict(features) < threshold) 0.0 else 1.0
-    }
-    val correctCount = data.filter(y => predictedValue(y.features) == y.label).count()
-    val count = data.count()
-    logDebug("correct prediction count = " +  correctCount)
-    logDebug("data count = " + count)
-    correctCount.toDouble / count
-  }
-
-  // TODO: Port this method to a generic metrics package
-  /**
-   * Calculates the mean squared error for regression.
-   */
-  private def meanSquaredError(tree: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
-    data.map { y =>
-      val err = tree.predict(y.features) - y.label
-      err * err
-    }.mean()
   }
 }

@@ -154,7 +154,7 @@ class NaiveBayesModel(object):
 
     def predict(self, x):
         """Return the most likely class for a data vector x"""
-        return self.labels[numpy.argmax(self.pi + _dot(x, self.theta))]
+        return self.labels[numpy.argmax(self.pi + _dot(x, self.theta.transpose()))]
 
 class NaiveBayes(object):
     @classmethod

@@ -36,14 +36,11 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.NetworkReceiver
-import org.apache.spark.streaming.receivers.Receiver
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
+import org.apache.spark.streaming.receiver.{ActorHelper, Receiver}
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
-
-  val testPort = 9999
 
   test("socket input stream") {
     // Start the server
@@ -52,7 +49,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
-    val networkStream = ssc.socketTextStream("localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
+    val networkStream = ssc.socketTextStream(
+      "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     def output = outputBuffer.flatMap(x => x)
@@ -144,7 +142,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
   }
 
-  // TODO: This test makes assumptions about Thread.sleep() and is flaky
+  // TODO: This test works in IntelliJ but not through SBT
   ignore("actor input stream") {
     // Start the server
     val testServer = new TestServer()
@@ -207,7 +205,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // set up the network stream using the test receiver
     val ssc = new StreamingContext(conf, batchDuration)
-    val networkStream = ssc.networkStream[Int](testReceiver)
+    val networkStream = ssc.receiverStream[Int](testReceiver)
     val countStream = networkStream.count
     val outputBuffer = new ArrayBuffer[Seq[Long]] with SynchronizedBuffer[Seq[Long]]
     val outputStream = new TestOutputStream(countStream, outputBuffer)
@@ -289,19 +287,8 @@ class TestServer(portToBind: Int = 0) extends Logging {
   def port = serverSocket.getLocalPort
 }
 
-object TestServer {
-  def main(args: Array[String]) {
-    val s = new TestServer()
-    s.start()
-    while(true) {
-      Thread.sleep(1000)
-      s.send("hello")
-    }
-  }
-}
-
 /** This is an actor for testing actor input stream */
-class TestActor(port: Int) extends Actor with Receiver {
+class TestActor(port: Int) extends Actor with ActorHelper {
 
   def bytesToString(byteString: ByteString) = byteString.utf8String
 
@@ -309,24 +296,22 @@ class TestActor(port: Int) extends Actor with Receiver {
 
   def receive = {
     case IO.Read(socket, bytes) =>
-      pushBlock(bytesToString(bytes))
+      store(bytesToString(bytes))
   }
 }
 
 /** This is a receiver to test multiple threads inserting data using block generator */
 class MultiThreadTestReceiver(numThreads: Int, numRecordsPerThread: Int)
-  extends NetworkReceiver[Int] {
+  extends Receiver[Int](StorageLevel.MEMORY_ONLY_SER) with Logging {
   lazy val executorPool = Executors.newFixedThreadPool(numThreads)
-  lazy val blockGenerator = new BlockGenerator(StorageLevel.MEMORY_ONLY)
   lazy val finishCount = new AtomicInteger(0)
 
-  protected def onStart() {
-    blockGenerator.start()
+  def onStart() {
     (1 to numThreads).map(threadId => {
       val runnable = new Runnable {
         def run() {
           (1 to numRecordsPerThread).foreach(i =>
-            blockGenerator += (threadId * numRecordsPerThread + i) )
+            store(threadId * numRecordsPerThread + i) )
           if (finishCount.incrementAndGet == numThreads) {
             MultiThreadTestReceiver.haveAllThreadsFinished = true
           }
@@ -337,7 +322,7 @@ class MultiThreadTestReceiver(numThreads: Int, numRecordsPerThread: Int)
     })
   }
 
-  protected def onStop() {
+  def onStop() {
     executorPool.shutdown()
   }
 }

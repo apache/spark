@@ -73,8 +73,26 @@ function viewSolution() {
   });
 }
 
+// A script to fix internal hash links because we have an overlapping top bar.
+// Based on https://github.com/twitter/bootstrap/issues/193#issuecomment-2281510
+function maybeScrollToHash() {
+  console.log("HERE");
+  if (window.location.hash && $(window.location.hash).length) {
+    console.log("HERE2", $(window.location.hash), $(window.location.hash).offset().top);
+    var newTop = $(window.location.hash).offset().top - 57;
+    $(window).scrollTop(newTop);
+  }
+}
 
 $(function() {
   codeTabs();
   viewSolution();
+
+  $(window).bind('hashchange', function() {
+    maybeScrollToHash();
+  });
+
+  // Scroll now too in case we had opened the page on a hash, but wait a bit because some browsers
+  // will try to do *their* initial scroll after running the onReady handler.
+  $(window).load(function() { setTimeout(function() { maybeScrollToHash(); }, 25); }); 
 });

@@ -46,11 +46,10 @@ object LogQuery {
     }
 
     val sc = new SparkContext(args(0), "Log Query",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
 
     val dataSet =
-      if (args.length == 2) sc.textFile(args(1))
-      else sc.parallelize(exampleApacheLogs)
+      if (args.length == 2) sc.textFile(args(1)) else sc.parallelize(exampleApacheLogs)
     // scalastyle:off
     val apacheLogRegex =
       """^([\d.]+) (\S+) (\S+) \[([\w\d:/]+\s[+\-]\d{4})\] "(.+?)" (\d{3}) ([\d\-]+) "([^"]+)" "([^"]+)".*""".r
