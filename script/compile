@@ -6,6 +6,9 @@ set -e
 FWDIR="$(cd `dirname $0`/..; pwd)"
 # Compile spark jars into dist folder
 export LOCAL_SBT_DIR=1
+export SBT_HOME=$FWDIR/sbt
+export SCALA_HOME=$HOME/.sbt/boot/scala-2.10.3
+
 ./make-distribution.sh --tgz --hadoop $(cat SHOPIFY_HADOOP_VERSION)
 if [ "$?" != "0" || -e "$FWDIR/lib/spark-assembly*hadoop*.jar" ]; then
   echo "Failed to make spark distro using sbt."
