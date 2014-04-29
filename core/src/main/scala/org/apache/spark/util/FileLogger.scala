@@ -24,6 +24,7 @@ import java.util.Date
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -43,7 +44,8 @@ private[spark] class FileLogger(
     hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(),
     outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
-    overwrite: Boolean = true)
+    overwrite: Boolean = true,
+    dirPermissions: Option[FsPermission] = None)
   extends Logging {
 
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -80,14 +82,23 @@ private[spark] class FileLogger(
     if (!fileSystem.mkdirs(path)) {
       throw new IOException("Error in creating log directory: %s".format(logDir))
     }
+    if (dirPermissions.isDefined) {
+      val fsStatus = fileSystem.getFileStatus(path)
+      if (fsStatus.getPermission.toShort != dirPermissions.get.toShort) {
+        fileSystem.setPermission(path, dirPermissions.get)
+      }
+    }
   }
 
   /**
    * Create a new writer for the file identified by the given path.
+   * If the permissions are not passed in, it will default to use the permissions
+   * (dirPermissions) used when class was instantiated.
    */
-  private def createWriter(fileName: String): PrintWriter = {
+  private def createWriter(fileName: String, perms: Option[FsPermission] = None): PrintWriter = {
     val logPath = logDir + "/" + fileName
     val uri = new URI(logPath)
+    val path = new Path(logPath)
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
@@ -98,11 +109,11 @@ private[spark] class FileLogger(
         // Second parameter is whether to append
         new FileOutputStream(uri.getPath, !overwrite)
       } else {
-        val path = new Path(logPath)
         hadoopDataStream = Some(fileSystem.create(path, overwrite))
         hadoopDataStream.get
       }
 
+    perms.orElse(dirPermissions).foreach { p => fileSystem.setPermission(path, p) }
     val bstream = new BufferedOutputStream(dstream, outputBufferSize)
     val cstream = if (compress) compressionCodec.compressedOutputStream(bstream) else bstream
     new PrintWriter(cstream)
@@ -153,15 +164,16 @@ private[spark] class FileLogger(
   /**
    * Start a writer for a new file, closing the existing one if it exists.
    * @param fileName Name of the new file, defaulting to the file index if not provided.
+   * @param perms Permissions to put on the new file.
    */
-  def newFile(fileName: String = "") {
+  def newFile(fileName: String = "", perms: Option[FsPermission] = None) {
     fileIndex += 1
     writer.foreach(_.close())
     val name = fileName match {
       case "" => fileIndex.toString
       case _ => fileName
     }
-    writer = Some(createWriter(name))
+    writer = Some(createWriter(name, perms))
   }
 
   /**

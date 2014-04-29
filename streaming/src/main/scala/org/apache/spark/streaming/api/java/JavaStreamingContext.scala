@@ -390,7 +390,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
      * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
      * @param receiver Custom implementation of Receiver
      */
-  def receiverStream[T](receiver: Receiver[T]): ReceiverInputDStream[T] = {
+  def receiverStream[T](receiver: Receiver[T]): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     ssc.receiverStream(receiver)

@@ -23,6 +23,7 @@ import java.net.{URI, URL}
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.spark.executor.ExecutorURLClassLoader
+import org.apache.spark.util.Utils
 
 /**
  * Scala code behind the spark-submit script.  The script handles setting up the classpath with
@@ -127,6 +128,18 @@ object SparkSubmit {
       childArgs += ("--jar", appArgs.primaryResource)
       childArgs += ("--class", appArgs.mainClass)
     }
+
+    if (clusterManager == YARN) {
+      // The choice of class is arbitrary, could use any spark-yarn class
+      if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
+        val msg = "Could not load YARN classes. This copy of Spark may not have been compiled " +
+          "with YARN support."
+        throw new Exception(msg)
+      }
+    }
+    
+    // Special flag to avoid deprecation warnings at the client
+    sysProps("SPARK_SUBMIT") = "true"
 
     val options = List[OptionAssigner](
       new OptionAssigner(appArgs.master, ALL_CLUSTER_MGRS, false, sysProp = "spark.master"),

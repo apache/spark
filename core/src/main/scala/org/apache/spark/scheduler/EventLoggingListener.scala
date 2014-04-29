@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
@@ -56,8 +57,8 @@ private[spark] class EventLoggingListener(
   private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis
   val logDir = logBaseDir + "/" + name
 
-  protected val logger =
-    new FileLogger(logDir, sparkConf, hadoopConf, outputBufferSize, shouldCompress, shouldOverwrite)
+  protected val logger = new FileLogger(logDir, sparkConf, hadoopConf, outputBufferSize,
+    shouldCompress, shouldOverwrite, Some(LOG_FILE_PERMISSIONS))
 
   // For testing. Keep track of all JSON serialized events that have been logged.
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
@@ -135,6 +136,7 @@ private[spark] object EventLoggingListener extends Logging {
   val SPARK_VERSION_PREFIX = "SPARK_VERSION_"
   val COMPRESSION_CODEC_PREFIX = "COMPRESSION_CODEC_"
   val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
+  val LOG_FILE_PERMISSIONS = FsPermission.createImmutable(Integer.parseInt("770", 8).toShort)
 
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = new mutable.HashMap[String, CompressionCodec]
