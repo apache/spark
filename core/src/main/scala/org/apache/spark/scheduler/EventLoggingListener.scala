@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkConf, SparkContext}
@@ -54,7 +55,7 @@ private[spark] class EventLoggingListener(
 
   private val logger =
     new FileLogger(logDir, conf, hadoopConfiguration, outputBufferSize, shouldCompress,
-      shouldOverwrite)
+      shouldOverwrite, Some(LOG_FILE_PERMISSIONS))
 
   /**
    * Begin logging events.
@@ -124,6 +125,9 @@ private[spark] object EventLoggingListener extends Logging {
   val SPARK_VERSION_PREFIX = "SPARK_VERSION_"
   val COMPRESSION_CODEC_PREFIX = "COMPRESSION_CODEC_"
   val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
+  val LOG_FILE_PERMISSIONS: FsPermission =
+    FsPermission.createImmutable(Integer.parseInt("770", 8).toShort)
+
 
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = new mutable.HashMap[String, CompressionCodec]
