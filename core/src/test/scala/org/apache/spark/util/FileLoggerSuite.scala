@@ -42,7 +42,6 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
 
   after {
     Try { fileSystem.delete(logDirPath, true) }
-    Try { fileSystem.delete(new Path("falafel"), true) }
   }
 
   test("Simple logging") {
@@ -135,6 +134,10 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
     assert(readFileContent(new Path(logDir + "/John_Valjohn"), codec) === "One\nTwo three four...")
   }
 
+  /**
+   * Read the content of the file specified by the given path.
+   * If a compression codec is specified, use it to read the file.
+   */
   private def readFileContent(logPath: Path, codec: Option[CompressionCodec] = None): String = {
     val fstream = fileSystem.open(logPath)
     val cstream = codec.map(_.compressedInputStream(fstream)).getOrElse(fstream)
