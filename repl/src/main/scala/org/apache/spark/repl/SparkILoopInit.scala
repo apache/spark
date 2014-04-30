@@ -30,7 +30,7 @@ trait SparkILoopInit {
     _\ \/ _ \/ _ `/ __/  '_/
    /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
-""").format(Utils.getSparkVersion)
+""".format(Utils.getSparkVersion))
     import Properties._
     val welcomeMsg = "Using Scala %s (%s, Java %s)".format(
       versionString, javaVmName, javaVersion)
