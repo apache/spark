@@ -22,6 +22,7 @@ import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -115,8 +116,7 @@ trait Logging {
     val log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
     if (!log4jInitialized && usingLog4j) {
       val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
-      val classLoader = this.getClass.getClassLoader
-      Option(classLoader.getResource(defaultLogProps)) match {
+      Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
         case Some(url) =>
           PropertyConfigurator.configure(url)
           log.info(s"Using Spark's default log4j profile: $defaultLogProps")

@@ -144,7 +144,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc"  like "b%", false)
     checkEvaluation("abc"  like "bc%", false)
   }
-  
+
   test("LIKE Non-literal Regular Expression") {
     val regEx = 'a.string.at(0)
     checkEvaluation("abcd" like regEx, null, new GenericRow(Array[Any](null)))
@@ -164,7 +164,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   test("RLIKE literal Regular Expression") {
     checkEvaluation("abdef" rlike "abdef", true)
     checkEvaluation("abbbbc" rlike "a.*c", true)
-    
+
     checkEvaluation("fofo" rlike "^fo", true)
     checkEvaluation("fo\no" rlike "^fo\no$", true)
     checkEvaluation("Bn" rlike "^Ba*n", true)
@@ -196,9 +196,9 @@ class ExpressionEvaluationSuite extends FunSuite {
       evaluate("abbbbc" rlike regEx, new GenericRow(Array[Any]("**")))
     }
   }
-  
+
   test("data type casting") {
-    
+
     val sts = "1970-01-01 00:00:01.0"
     val ts = Timestamp.valueOf(sts)
 
@@ -236,8 +236,27 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("23" cast ShortType, 23)
     checkEvaluation("2012-12-11" cast DoubleType, null)
     checkEvaluation(Literal(123) cast IntegerType, 123)
-    
+
+    checkEvaluation(Literal(23d) + Cast(true, DoubleType), 24)
+    checkEvaluation(Literal(23) + Cast(true, IntegerType), 24)
+    checkEvaluation(Literal(23f) + Cast(true, FloatType), 24)
+    checkEvaluation(Literal(BigDecimal(23)) + Cast(true, DecimalType), 24)
+    checkEvaluation(Literal(23.toByte) + Cast(true, ByteType), 24)
+    checkEvaluation(Literal(23.toShort) + Cast(true, ShortType), 24)
+
     intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
+
+    assert(("abcdef" cast StringType).nullable === false)
+    assert(("abcdef" cast BinaryType).nullable === false)
+    assert(("abcdef" cast BooleanType).nullable === false)
+    assert(("abcdef" cast TimestampType).nullable === true)
+    assert(("abcdef" cast LongType).nullable === true)
+    assert(("abcdef" cast IntegerType).nullable === true)
+    assert(("abcdef" cast ShortType).nullable === true)
+    assert(("abcdef" cast ByteType).nullable === true)
+    assert(("abcdef" cast DecimalType).nullable === true)
+    assert(("abcdef" cast DoubleType).nullable === true)
+    assert(("abcdef" cast FloatType).nullable === true)
   }
 
   test("timestamp") {

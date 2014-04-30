@@ -17,9 +17,10 @@
 
 package org.apache.spark.examples
 
+import java.util.Random
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import java.util.Random
 
 object SkewedGroupByTest {
   def main(args: Array[String]) {
@@ -35,7 +36,7 @@ object SkewedGroupByTest {
     var numReducers = if (args.length > 4) args(4).toInt else numMappers
 
     val sc = new SparkContext(args(0), "GroupBy Test",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
 
     val pairs1 = sc.parallelize(0 until numMappers, numMappers).flatMap { p =>
       val ranGen = new Random

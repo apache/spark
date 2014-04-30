@@ -53,7 +53,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisteredExecutor(sparkProperties) =>
       logInfo("Successfully registered with driver")
       // Make this host instead of hostPort ?
-      executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties, 
+      executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties,
         false)
 
     case RegisterExecutorFailed(message) =>
@@ -69,12 +69,12 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
       }
 
-    case KillTask(taskId, _) =>
+    case KillTask(taskId, _, interruptThread) =>
       if (executor == null) {
         logError("Received KillTask command but executor was null")
         System.exit(1)
       } else {
-        executor.killTask(taskId)
+        executor.killTask(taskId, interruptThread)
       }
 
     case x: DisassociatedEvent =>

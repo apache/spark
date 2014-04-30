@@ -21,8 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
@@ -391,32 +390,10 @@ object KMeans {
    * Returns the squared Euclidean distance between two vectors computed by
    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
    */
-  private[clustering]
-  def fastSquaredDistance(v1: BreezeVectorWithNorm, v2: BreezeVectorWithNorm)
-  : Double = {
+  private[clustering] def fastSquaredDistance(
+      v1: BreezeVectorWithNorm,
+      v2: BreezeVectorWithNorm): Double = {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
-  }
-
-  @Experimental
-  def main(args: Array[String]) {
-    if (args.length < 4) {
-      println("Usage: KMeans <master> <input_file> <k> <max_iterations> [<runs>]")
-      System.exit(1)
-    }
-    val (master, inputFile, k, iters) = (args(0), args(1), args(2).toInt, args(3).toInt)
-    val runs = if (args.length >= 5) args(4).toInt else 1
-    val sc = new SparkContext(master, "KMeans")
-    val data = sc.textFile(inputFile)
-      .map(line => Vectors.dense(line.split(' ').map(_.toDouble)))
-      .cache()
-    val model = KMeans.train(data, k, iters, runs)
-    val cost = model.computeCost(data)
-    println("Cluster centers:")
-    for (c <- model.clusterCenters) {
-      println("  " + c)
-    }
-    println("Cost: " + cost)
-    System.exit(0)
   }
 }
 

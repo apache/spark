@@ -102,7 +102,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   override def reverse: Graph[VD, ED] = {
     val newETable = edges.mapEdgePartitions((pid, part) => part.reverse)
-    new GraphImpl(vertices, newETable, routingTable, replicatedVertexView)
+    GraphImpl(vertices, newETable)
   }
 
   override def mapVertices[VD2: ClassTag](f: (VertexId, VD) => VD2): Graph[VD2, ED] = {

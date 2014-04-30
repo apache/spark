@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx.impl
 
+import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.Partitioner

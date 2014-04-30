@@ -127,7 +127,7 @@ case class Aggregate(
   extends UnaryNode {
 
   def output = aggregateExpressions.map(_.toAttribute)
-  def references = child.references
+  def references = (groupingExpressions ++ aggregateExpressions).flatMap(_.references).toSet
 }
 
 case class Limit(limit: Expression, child: LogicalPlan) extends UnaryNode {
@@ -168,7 +168,7 @@ case class LowerCaseSchema(child: LogicalPlan) extends UnaryNode {
   def references = Set.empty
 }
 
-case class Sample(fraction: Double, withReplacement: Boolean, seed: Int, child: LogicalPlan)
+case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: LogicalPlan)
     extends UnaryNode {
 
   def output = child.output

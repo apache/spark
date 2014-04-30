@@ -26,6 +26,7 @@ import scala.reflect.runtime.universe.runtimeMirror
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar._
+import org.apache.spark.util.Utils
 
 private[sql] case object PassThrough extends CompressionScheme {
   override val typeId = 0
@@ -254,7 +255,7 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
     private val dictionary = {
       // TODO Can we clean up this mess? Maybe move this to `DataType`?
       implicit val classTag = {
-        val mirror = runtimeMirror(getClass.getClassLoader)
+        val mirror = runtimeMirror(Utils.getSparkClassLoader)
         ClassTag[T#JvmType](mirror.runtimeClass(columnType.scalaTag.tpe))
       }
 
@@ -396,26 +397,27 @@ private[sql] sealed abstract class IntegralDelta[I <: IntegralType] extends Comp
 
       if (initial) {
         initial = false
-        prev = value
         _compressedSize += 1 + columnType.defaultSize
       } else {
         val (smallEnough, _) = byteSizedDelta(value, prev)
         _compressedSize += (if (smallEnough) 1 else 1 + columnType.defaultSize)
       }
+
+      prev = value
     }
 
     override def compress(from: ByteBuffer, to: ByteBuffer, columnType: NativeColumnType[I]) = {
       to.putInt(typeId)
 
       if (from.hasRemaining) {
-        val prev = columnType.extract(from)
-
+        var prev = columnType.extract(from)
         to.put(Byte.MinValue)
         columnType.append(prev, to)
 
         while (from.hasRemaining) {
           val current = columnType.extract(from)
           val (smallEnough, delta) = byteSizedDelta(current, prev)
+          prev = current
 
           if (smallEnough) {
             to.put(delta)
@@ -442,13 +444,8 @@ private[sql] sealed abstract class IntegralDelta[I <: IntegralType] extends Comp
 
     override def next() = {
       val delta = buffer.get()
-
-      if (delta > Byte.MinValue) {
-        addDelta(prev, delta)
-      } else {
-        prev = columnType.extract(buffer)
-        prev
-      }
+      prev = if (delta > Byte.MinValue) addDelta(prev, delta) else columnType.extract(buffer)
+      prev
     }
 
     override def hasNext = buffer.hasRemaining
@@ -464,7 +461,7 @@ private[sql] case object IntDelta extends IntegralDelta[IntegerType.type] {
 
   override protected def byteSizedDelta(x: Int, y: Int): (Boolean, Byte) = {
     val delta = x - y
-    if (delta < Byte.MaxValue) (true, delta.toByte) else (false, 0: Byte)
+    if (math.abs(delta) <= Byte.MaxValue) (true, delta.toByte) else (false, 0: Byte)
   }
 }
 
@@ -477,6 +474,6 @@ private[sql] case object LongDelta extends IntegralDelta[LongType.type] {
 
   override protected def byteSizedDelta(x: Long, y: Long): (Boolean, Byte) = {
     val delta = x - y
-    if (delta < Byte.MaxValue) (true, delta.toByte) else (false, 0: Byte)
+    if (math.abs(delta) <= Byte.MaxValue) (true, delta.toByte) else (false, 0: Byte)
   }
 }

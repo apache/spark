@@ -21,17 +21,17 @@ import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
+import scala.util.hashing.byteswap32
 
-import com.esotericsoftware.kryo.Kryo
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.{Logging, HashPartitioner, Partitioner, SparkContext, SparkConf}
+import org.apache.spark.{Logging, HashPartitioner, Partitioner}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
-import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.SparkContext._
+import org.apache.spark.util.Utils
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
@@ -56,8 +56,10 @@ private[recommendation] case class InLinkBlock(
 
 
 /**
+ * :: Experimental ::
  * A more compact class to represent a rating than Tuple3[Int, Int, Double].
  */
+@Experimental
 case class Rating(val user: Int, val product: Int, val rating: Double)
 
 /**
@@ -167,34 +169,39 @@ class ALS private (
       this.numBlocks
     }
 
-    val partitioner = new HashPartitioner(numBlocks)
+    val partitioner = new Partitioner {
+      val numPartitions = numBlocks
 
-    val ratingsByUserBlock = ratings.map{ rating => (rating.user % numBlocks, rating) }
-    val ratingsByProductBlock = ratings.map{ rating =>
-      (rating.product % numBlocks, Rating(rating.product, rating.user, rating.rating))
+      def getPartition(x: Any): Int = {
+        Utils.nonNegativeMod(byteswap32(x.asInstanceOf[Int]), numPartitions)
+      }
     }
 
-    val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock)
-    val (productInLinks, productOutLinks) = makeLinkRDDs(numBlocks, ratingsByProductBlock)
+    val ratingsByUserBlock = ratings.map{ rating =>
+      (partitioner.getPartition(rating.user), rating)
+    }
+    val ratingsByProductBlock = ratings.map{ rating =>
+      (partitioner.getPartition(rating.product),
+        Rating(rating.product, rating.user, rating.rating))
+    }
+
+    val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock, partitioner)
+    val (productInLinks, productOutLinks) =
+        makeLinkRDDs(numBlocks, ratingsByProductBlock, partitioner)
 
     // Initialize user and product factors randomly, but use a deterministic seed for each
     // partition so that fault recovery works
     val seedGen = new Random(seed)
     val seed1 = seedGen.nextInt()
     val seed2 = seedGen.nextInt()
-    // Hash an integer to propagate random bits at all positions, similar to java.util.HashTable
-    def hash(x: Int): Int = {
-      val r = x ^ (x >>> 20) ^ (x >>> 12)
-      r ^ (r >>> 7) ^ (r >>> 4)
-    }
     var users = userOutLinks.mapPartitionsWithIndex { (index, itr) =>
-      val rand = new Random(hash(seed1 ^ index))
+      val rand = new Random(byteswap32(seed1 ^ index))
       itr.map { case (x, y) =>
         (x, y.elementIds.map(_ => randomFactor(rank, rand)))
       }
     }
     var products = productOutLinks.mapPartitionsWithIndex { (index, itr) =>
-      val rand = new Random(hash(seed2 ^ index))
+      val rand = new Random(byteswap32(seed2 ^ index))
       itr.map { case (x, y) =>
         (x, y.elementIds.map(_ => randomFactor(rank, rand)))
       }
@@ -267,7 +274,7 @@ class ALS private (
   private def computeYtY(factors: RDD[(Int, Array[Array[Double]])]) = {
     val n = rank * (rank + 1) / 2
     val LYtY = factors.values.aggregate(new DoubleMatrix(n))( seqOp = (L, Y) => {
-      Y.foreach(y => dspr(1.0, new DoubleMatrix(y), L))
+      Y.foreach(y => dspr(1.0, wrapDoubleArray(y), L))
       L
     }, combOp = (L1, L2) => {
       L1.addi(L2)
@@ -303,6 +310,15 @@ class ALS private (
   }
 
   /**
+   * Wrap a double array in a DoubleMatrix without creating garbage.
+   * This is a temporary fix for jblas 1.2.3; it should be safe to move back to the
+   * DoubleMatrix(double[]) constructor come jblas 1.2.4.
+   */
+  private def wrapDoubleArray(v: Array[Double]): DoubleMatrix = {
+    new DoubleMatrix(v.length, 1, v: _*)
+  }
+
+  /**
    * Flatten out blocked user or product factors into an RDD of (id, factor vector) pairs
    */
   private def unblockFactors(blockedFactors: RDD[(Int, Array[Array[Double]])],
@@ -316,13 +332,14 @@ class ALS private (
    * Make the out-links table for a block of the users (or products) dataset given the list of
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
-  private def makeOutLinkBlock(numBlocks: Int, ratings: Array[Rating]): OutLinkBlock = {
+  private def makeOutLinkBlock(numBlocks: Int, ratings: Array[Rating],
+      partitioner: Partitioner): OutLinkBlock = {
     val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
     val shouldSend = Array.fill(numUsers)(new BitSet(numBlocks))
     for (r <- ratings) {
-      shouldSend(userIdToPos(r.user))(r.product % numBlocks) = true
+      shouldSend(userIdToPos(r.user))(partitioner.getPartition(r.product)) = true
     }
     OutLinkBlock(userIds, shouldSend)
   }
@@ -331,14 +348,15 @@ class ALS private (
    * Make the in-links table for a block of the users (or products) dataset given a list of
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
-  private def makeInLinkBlock(numBlocks: Int, ratings: Array[Rating]): InLinkBlock = {
+  private def makeInLinkBlock(numBlocks: Int, ratings: Array[Rating],
+      partitioner: Partitioner): InLinkBlock = {
     val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
     // Split out our ratings by product block
     val blockRatings = Array.fill(numBlocks)(new ArrayBuffer[Rating])
     for (r <- ratings) {
-      blockRatings(r.product % numBlocks) += r
+      blockRatings(partitioner.getPartition(r.product)) += r
     }
     val ratingsForBlock = new Array[Array[(Array[Int], Array[Double])]](numBlocks)
     for (productBlock <- 0 until numBlocks) {
@@ -363,14 +381,14 @@ class ALS private (
    * the users (or (blockId, (p, u, r)) for the products). We create these simultaneously to avoid
    * having to shuffle the (blockId, (u, p, r)) RDD twice, or to cache it.
    */
-  private def makeLinkRDDs(numBlocks: Int, ratings: RDD[(Int, Rating)])
+  private def makeLinkRDDs(numBlocks: Int, ratings: RDD[(Int, Rating)], partitioner: Partitioner)
     : (RDD[(Int, InLinkBlock)], RDD[(Int, OutLinkBlock)]) =
   {
     val grouped = ratings.partitionBy(new HashPartitioner(numBlocks))
     val links = grouped.mapPartitionsWithIndex((blockId, elements) => {
       val ratings = elements.map{_._2}.toArray
-      val inLinkBlock = makeInLinkBlock(numBlocks, ratings)
-      val outLinkBlock = makeOutLinkBlock(numBlocks, ratings)
+      val inLinkBlock = makeInLinkBlock(numBlocks, ratings, partitioner)
+      val outLinkBlock = makeOutLinkBlock(numBlocks, ratings, partitioner)
       Iterator.single((blockId, (inLinkBlock, outLinkBlock)))
     }, true)
     val inLinks = links.mapValues(_._1)
@@ -454,13 +472,15 @@ class ALS private (
     // Compute the XtX and Xy values for each user by adding products it rated in each product
     // block
     for (productBlock <- 0 until numBlocks) {
-      for (p <- 0 until blockFactors(productBlock).length) {
-        val x = new DoubleMatrix(blockFactors(productBlock)(p))
+      var p = 0
+      while (p < blockFactors(productBlock).length) {
+        val x = wrapDoubleArray(blockFactors(productBlock)(p))
         tempXtX.fill(0.0)
         dspr(1.0, x, tempXtX)
         val (us, rs) = inLinkBlock.ratingsForBlock(productBlock)(p)
-        for (i <- 0 until us.length) {
-          if (implicitPrefs) {
+        if (implicitPrefs) {
+          var i = 0
+          while (i < us.length) {
             // Extension to the original paper to handle rs(i) < 0. confidence is a function
             // of |rs(i)| instead so that it is never negative:
             val confidence = 1 + alpha * abs(rs(i))
@@ -471,11 +491,17 @@ class ALS private (
             if (rs(i) > 0) {
               SimpleBlas.axpy(confidence, x, userXy(us(i)))
             }
-          } else {
+            i += 1
+          }
+        } else {
+          var i = 0
+          while (i < us.length) {
             userXtX(us(i)).addi(tempXtX)
             SimpleBlas.axpy(rs(i), x, userXy(us(i)))
+            i += 1
           }
         }
+        p += 1
       }
     }
 
@@ -484,7 +510,11 @@ class ALS private (
       // Compute the full XtX matrix from the lower-triangular part we got above
       fillFullMatrix(userXtX(index), fullXtX)
       // Add regularization
-      (0 until rank).foreach(i => fullXtX.data(i*rank + i) += lambda)
+      var i = 0
+      while (i < rank) {
+        fullXtX.data(i * rank + i) += lambda
+        i += 1
+      }
       // Solve the resulting matrix, which is symmetric and positive-definite
       if (implicitPrefs) {
         Solve.solvePositive(fullXtX.addi(YtY.get.value), userXy(index)).data
@@ -686,46 +716,5 @@ object ALS {
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int)
     : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, 0.01, -1, 1.0)
-  }
-
-  private class ALSRegistrator extends KryoRegistrator {
-    override def registerClasses(kryo: Kryo) {
-      kryo.register(classOf[Rating])
-    }
-  }
-
-  def main(args: Array[String]) {
-    if (args.length < 5 || args.length > 9) {
-      println("Usage: ALS <master> <ratings_file> <rank> <iterations> <output_dir> " +
-        "[<lambda>] [<implicitPrefs>] [<alpha>] [<blocks>]")
-      System.exit(1)
-    }
-    val (master, ratingsFile, rank, iters, outputDir) =
-      (args(0), args(1), args(2).toInt, args(3).toInt, args(4))
-    val lambda = if (args.length >= 6) args(5).toDouble else 0.01
-    val implicitPrefs = if (args.length >= 7) args(6).toBoolean else false
-    val alpha = if (args.length >= 8) args(7).toDouble else 1
-    val blocks = if (args.length == 9) args(8).toInt else -1
-    val conf = new SparkConf()
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator",  classOf[ALSRegistrator].getName)
-      .set("spark.kryo.referenceTracking", "false")
-      .set("spark.kryoserializer.buffer.mb", "8")
-      .set("spark.locality.wait", "10000")
-    val sc = new SparkContext(master, "ALS", conf)
-
-    val ratings = sc.textFile(ratingsFile).map { line =>
-      val fields = line.split(',')
-      Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
-    }
-    val model = new ALS(rank = rank, iterations = iters, lambda = lambda,
-      numBlocks = blocks, implicitPrefs = implicitPrefs, alpha = alpha).run(ratings)
-
-    model.userFeatures.map{ case (id, vec) => id + "," + vec.mkString(" ") }
-                      .saveAsTextFile(outputDir + "/userFeatures")
-    model.productFeatures.map{ case (id, vec) => id + "," + vec.mkString(" ") }
-                         .saveAsTextFile(outputDir + "/productFeatures")
-    println("Final user/product features written to " + outputDir)
-    sc.stop()
   }
 }

@@ -47,7 +47,12 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           if (loading.contains(key)) {
             logInfo("Another thread is loading %s, waiting for it to finish...".format(key))
             while (loading.contains(key)) {
-              try {loading.wait()} catch {case _ : Throwable =>}
+              try {
+                loading.wait()
+              } catch {
+                case e: Exception =>
+                  logWarning(s"Got an exception while waiting for another thread to load $key", e)
+              }
             }
             logInfo("Finished waiting for %s".format(key))
             /* See whether someone else has successfully loaded it. The main way this would fail
@@ -72,7 +77,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val computedValues = rdd.computeOrReadCheckpoint(split, context)
 
           // Persist the result, so long as the task is not running locally
-          if (context.runningLocally) { return computedValues }
+          if (context.runningLocally) {
+            return computedValues
+          }
 
           // Keep track of blocks with updated statuses
           var updatedBlocks = Seq[(BlockId, BlockStatus)]()
@@ -88,7 +95,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
               updatedBlocks = blockManager.put(key, computedValues, storageLevel, tellMaster = true)
               blockManager.get(key) match {
                 case Some(values) =>
-                  new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
+                  values.asInstanceOf[Iterator[T]]
                 case None =>
                   logInfo("Failure to store %s".format(key))
                   throw new Exception("Block manager failed to return persisted valued")
@@ -107,7 +114,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val metrics = context.taskMetrics
           metrics.updatedBlocks = Some(updatedBlocks)
 
-          returnValue
+          new InterruptibleIterator(context, returnValue)
 
         } finally {
           loading.synchronized {

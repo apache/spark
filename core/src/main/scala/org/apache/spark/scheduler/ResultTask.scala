@@ -21,6 +21,7 @@ import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.HashMap
+import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
@@ -54,7 +55,6 @@ private[spark] object ResultTask {
 
   def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], (TaskContext, Iterator[_]) => _) =
   {
-    val loader = Thread.currentThread.getContextClassLoader
     val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val objIn = ser.deserializeStream(in)

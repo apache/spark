@@ -89,11 +89,13 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  * A [[org.apache.spark.Partitioner]] that partitions sortable records by range into roughly
  * equal ranges. The ranges are determined by sampling the content of the RDD passed in.
  */
-class RangePartitioner[K <% Ordered[K]: ClassTag, V](
+class RangePartitioner[K : Ordering : ClassTag, V](
     partitions: Int,
     @transient rdd: RDD[_ <: Product2[K,V]],
     private val ascending: Boolean = true)
   extends Partitioner {
+
+  private val ordering = implicitly[Ordering[K]]
 
   // An array of upper bounds for the first (partitions - 1) partitions
   private val rangeBounds: Array[K] = {
@@ -103,7 +105,7 @@ class RangePartitioner[K <% Ordered[K]: ClassTag, V](
       val rddSize = rdd.count()
       val maxSampleSize = partitions * 20.0
       val frac = math.min(maxSampleSize / math.max(rddSize, 1), 1.0)
-      val rddSample = rdd.sample(false, frac, 1).map(_._1).collect().sortWith(_ < _)
+      val rddSample = rdd.sample(false, frac, 1).map(_._1).collect().sorted
       if (rddSample.length == 0) {
         Array()
       } else {
@@ -126,7 +128,7 @@ class RangePartitioner[K <% Ordered[K]: ClassTag, V](
     var partition = 0
     if (rangeBounds.length < 1000) {
       // If we have less than 100 partitions naive search
-      while (partition < rangeBounds.length && k > rangeBounds(partition)) {
+      while (partition < rangeBounds.length && ordering.gt(k, rangeBounds(partition))) {
         partition += 1
       }
     } else {

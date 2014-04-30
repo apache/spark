@@ -17,13 +17,14 @@
 
 package org.apache.spark.util
 
-import java.io._
+import java.io.{FileOutputStream, BufferedOutputStream, PrintWriter, IOException}
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
-import org.apache.hadoop.fs.{FSDataOutputStream, Path}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.io.CompressionCodec
@@ -38,10 +39,12 @@ import org.apache.spark.io.CompressionCodec
  */
 private[spark] class FileLogger(
     logDir: String,
-    conf: SparkConf = new SparkConf,
+    conf: SparkConf,
+    hadoopConfiguration: Configuration,
     outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
-    overwrite: Boolean = true)
+    overwrite: Boolean = true,
+    dirPermissions: Option[FsPermission] = None)
   extends Logging {
 
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -78,29 +81,39 @@ private[spark] class FileLogger(
     if (!fileSystem.mkdirs(path)) {
       throw new IOException("Error in creating log directory: %s".format(logDir))
     }
+    if (dirPermissions.isDefined) {
+      val fsStatus = fileSystem.getFileStatus(path)
+      if (fsStatus.getPermission().toShort() != dirPermissions.get.toShort) {
+        fileSystem.setPermission(path, dirPermissions.get)
+      }
+    }
   }
 
   /**
    * Create a new writer for the file identified by the given path.
+   * If the permissions are not passed in, it will default to use the permissions
+   * (dirpermissions) used when class was instantiated.
    */
-  private def createWriter(fileName: String): PrintWriter = {
+  private def createWriter(fileName: String, perms: Option[FsPermission] = None): PrintWriter = {
     val logPath = logDir + "/" + fileName
     val uri = new URI(logPath)
+    val defaultFs = FileSystem.getDefaultUri(hadoopConfiguration).getScheme
+    val isDefaultLocal = (defaultFs == null || defaultFs == "file")
+    val path = new Path(logPath)
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
      * Therefore, for local files, use FileOutputStream instead. */
-    val dstream = uri.getScheme match {
-      case "file" | null =>
+    val dstream =
+      if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
         // Second parameter is whether to append
-        new FileOutputStream(logPath, !overwrite)
-
-      case _ =>
-        val path = new Path(logPath)
+        new FileOutputStream(uri.getPath, !overwrite)
+      } else {
         hadoopDataStream = Some(fileSystem.create(path, overwrite))
         hadoopDataStream.get
-    }
+      }
 
-    val bstream = new FastBufferedOutputStream(dstream, outputBufferSize)
+    perms.orElse(dirPermissions).foreach {p => fileSystem.setPermission(path, p)}
+    val bstream = new BufferedOutputStream(dstream, outputBufferSize)
     val cstream = if (compress) compressionCodec.compressedOutputStream(bstream) else bstream
     new PrintWriter(cstream)
   }
@@ -111,7 +124,9 @@ private[spark] class FileLogger(
    * @param withTime Whether to prepend message with a timestamp
    */
   def log(msg: String, withTime: Boolean = false) {
-    val writeInfo = if (!withTime) msg else {
+    val writeInfo = if (!withTime) {
+      msg
+    } else {
       val date = new Date(System.currentTimeMillis())
       dateFormat.get.format(date) + ": " + msg
     }
@@ -148,15 +163,16 @@ private[spark] class FileLogger(
   /**
    * Start a writer for a new file, closing the existing one if it exists.
    * @param fileName Name of the new file, defaulting to the file index if not provided.
+   * @param perms Permissions to put on the new file.
    */
-  def newFile(fileName: String = "") {
+  def newFile(fileName: String = "", perms: Option[FsPermission] = None) {
     fileIndex += 1
     writer.foreach(_.close())
     val name = fileName match {
       case "" => fileIndex.toString
       case _ => fileName
     }
-    writer = Some(createWriter(name))
+    writer = Some(createWriter(name, perms))
   }
 
   /**

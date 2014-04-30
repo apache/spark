@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
- * Usage: NetworkWordCount <master> <hostname> <port>
+ * Usage: JavaNetworkWordCount <master> <hostname> <port>
  *   <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
  *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive data.
  *
@@ -42,9 +42,6 @@ import java.util.regex.Pattern;
  */
 public final class JavaNetworkWordCount {
   private static final Pattern SPACE = Pattern.compile(" ");
-
-  private JavaNetworkWordCount() {
-  }
 
   public static void main(String[] args) {
     if (args.length < 3) {

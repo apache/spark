@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, OutputStream}
+import java.io.{File, InputStream, OutputStream, BufferedOutputStream, ByteArrayOutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -26,7 +26,6 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 import akka.actor.{ActorSystem, Cancellable, Props}
-import it.unimi.dsi.fastutil.io.{FastBufferedOutputStream, FastByteArrayOutputStream}
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark.{Logging, MapOutputTracker, SecurityManager, SparkConf, SparkEnv, SparkException}
@@ -47,11 +46,12 @@ private[spark] class BlockManager(
     val master: BlockManagerMaster,
     val defaultSerializer: Serializer,
     maxMemory: Long,
-    val conf: SparkConf,
+    val _conf: SparkConf,
     securityManager: SecurityManager,
     mapOutputTracker: MapOutputTracker)
   extends Logging {
 
+  def conf = _conf
   val shuffleBlockManager = new ShuffleBlockManager(this)
   val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
     conf.get("spark.local.dir",  System.getProperty("java.io.tmpdir")))
@@ -282,7 +282,9 @@ private[spark] class BlockManager(
       val onDiskSize = status.diskSize
       master.updateBlockInfo(
         blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inTachyonSize)
-    } else true
+    } else {
+      true
+    }
   }
 
   /**
@@ -388,7 +390,7 @@ private[spark] class BlockManager(
               logDebug("Block " + blockId + " not found in memory")
           }
         }
-        
+
         // Look for the block in Tachyon
         if (level.useOffHeap) {
           logDebug("Getting block " + blockId + " from tachyon")
@@ -659,10 +661,9 @@ private[spark] class BlockManager(
               memoryStore.putValues(blockId, iterator, level, true)
             case ArrayBufferValues(array) =>
               memoryStore.putValues(blockId, array, level, true)
-            case ByteBufferValues(bytes) => {
+            case ByteBufferValues(bytes) =>
               bytes.rewind()
               memoryStore.putBytes(blockId, bytes, level)
-            }
           }
           size = res.size
           res.data match {
@@ -678,10 +679,9 @@ private[spark] class BlockManager(
               tachyonStore.putValues(blockId, iterator, level, false)
             case ArrayBufferValues(array) =>
               tachyonStore.putValues(blockId, array, level, false)
-            case ByteBufferValues(bytes) => {
-              bytes.rewind();
+            case ByteBufferValues(bytes) =>
+              bytes.rewind()
               tachyonStore.putBytes(blockId, bytes, level)
-            }
           }
           size = res.size
           res.data match {
@@ -698,10 +698,9 @@ private[spark] class BlockManager(
               diskStore.putValues(blockId, iterator, level, askForBytes)
             case ArrayBufferValues(array) =>
               diskStore.putValues(blockId, array, level, askForBytes)
-            case ByteBufferValues(bytes) => {
+            case ByteBufferValues(bytes) =>
               bytes.rewind()
               diskStore.putBytes(blockId, bytes, level)
-            }
           }
           size = res.size
           res.data match {
@@ -992,7 +991,7 @@ private[spark] class BlockManager(
       outputStream: OutputStream,
       values: Iterator[Any],
       serializer: Serializer = defaultSerializer) {
-    val byteStream = new FastBufferedOutputStream(outputStream)
+    val byteStream = new BufferedOutputStream(outputStream)
     val ser = serializer.newInstance()
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
   }
@@ -1002,10 +1001,9 @@ private[spark] class BlockManager(
       blockId: BlockId,
       values: Iterator[Any],
       serializer: Serializer = defaultSerializer): ByteBuffer = {
-    val byteStream = new FastByteArrayOutputStream(4096)
+    val byteStream = new ByteArrayOutputStream(4096)
     dataSerializeStream(blockId, byteStream, values, serializer)
-    byteStream.trim()
-    ByteBuffer.wrap(byteStream.array)
+    ByteBuffer.wrap(byteStream.toByteArray)
   }
 
   /**
@@ -1026,12 +1024,14 @@ private[spark] class BlockManager(
       heartBeatTask.cancel()
     }
     connectionManager.stop()
+    shuffleBlockManager.stop()
+    diskBlockManager.stop()
     actorSystem.stop(slaveActor)
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
     if (tachyonInitialized) {
-      tachyonStore.clear() 
+      tachyonStore.clear()
     }
     metadataCleaner.cancel()
     broadcastCleaner.cancel()

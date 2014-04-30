@@ -21,12 +21,15 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.{DStream, NetworkReceiver}
+import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.{MetadataCleaner, Utils}
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
+
+import scala.language.postfixOps
 
 class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts with Logging {
 
@@ -35,14 +38,9 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
   val batchDuration = Milliseconds(500)
   val sparkHome = "someDir"
   val envPair = "key" -> "value"
-  val ttl = StreamingContext.DEFAULT_CLEANER_TTL + 100
 
   var sc: SparkContext = null
   var ssc: StreamingContext = null
-
-  before {
-    System.clearProperty("spark.cleaner.ttl")
-  }
 
   after {
     if (ssc != null) {
@@ -59,67 +57,51 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc = new StreamingContext(master, appName, batchDuration)
     assert(ssc.sparkContext.conf.get("spark.master") === master)
     assert(ssc.sparkContext.conf.get("spark.app.name") === appName)
-    assert(MetadataCleaner.getDelaySeconds(ssc.sparkContext.conf) ===
-      StreamingContext.DEFAULT_CLEANER_TTL)
   }
 
   test("from no conf + spark home") {
     ssc = new StreamingContext(master, appName, batchDuration, sparkHome, Nil)
     assert(ssc.conf.get("spark.home") === sparkHome)
-    assert(MetadataCleaner.getDelaySeconds(ssc.sparkContext.conf) ===
-      StreamingContext.DEFAULT_CLEANER_TTL)
   }
 
   test("from no conf + spark home + env") {
     ssc = new StreamingContext(master, appName, batchDuration,
       sparkHome, Nil, Map(envPair))
     assert(ssc.conf.getExecutorEnv.exists(_ == envPair))
-    assert(MetadataCleaner.getDelaySeconds(ssc.sparkContext.conf) ===
-      StreamingContext.DEFAULT_CLEANER_TTL)
   }
 
-  test("from conf without ttl set") {
+  test("from conf with settings") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
+    myConf.set("spark.cleaner.ttl", "10")
     ssc = new StreamingContext(myConf, batchDuration)
-    assert(MetadataCleaner.getDelaySeconds(ssc.conf) ===
-      StreamingContext.DEFAULT_CLEANER_TTL)
+    assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
   }
 
-  test("from conf with ttl set") {
-    val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", ttl.toString)
-    ssc = new StreamingContext(myConf, batchDuration)
-    assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === ttl)
-  }
-
-  test("from existing SparkContext without ttl set") {
+  test("from existing SparkContext") {
     sc = new SparkContext(master, appName)
-    val exception = intercept[SparkException] {
-      ssc = new StreamingContext(sc, batchDuration)
-    }
-    assert(exception.getMessage.contains("ttl"))
+    ssc = new StreamingContext(sc, batchDuration)
   }
 
-  test("from existing SparkContext with ttl set") {
+  test("from existing SparkContext with settings") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", ttl.toString)
+    myConf.set("spark.cleaner.ttl", "10")
     ssc = new StreamingContext(myConf, batchDuration)
-    assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === ttl)
+    assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
   }
 
   test("from checkpoint") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", ttl.toString)
+    myConf.set("spark.cleaner.ttl", "10")
     val ssc1 = new StreamingContext(myConf, batchDuration)
     addInputStream(ssc1).register
     ssc1.start()
     val cp = new Checkpoint(ssc1, Time(1000))
-    assert(MetadataCleaner.getDelaySeconds(cp.sparkConf) === ttl)
+    assert(cp.sparkConfPairs.toMap.getOrElse("spark.cleaner.ttl", "-1") === "10")
     ssc1.stop()
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
-    assert(MetadataCleaner.getDelaySeconds(newCp.sparkConf) === ttl)
+    assert(newCp.sparkConf.getInt("spark.cleaner.ttl", -1) === 10)
     ssc = new StreamingContext(null, newCp, null)
-    assert(MetadataCleaner.getDelaySeconds(ssc.conf) === ttl)
+    assert(ssc.conf.getInt("spark.cleaner.ttl", -1) === 10)
   }
 
   test("start and stop state check") {
@@ -161,7 +143,6 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
   }
 
-
   test("stop only streaming context") {
     ssc = new StreamingContext(master, appName, batchDuration)
     sc = ssc.sparkContext
@@ -180,15 +161,15 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     conf.set("spark.cleaner.ttl", "3600")
     sc = new SparkContext(conf)
     for (i <- 1 to 4) {
-      logInfo("==================================")
-      ssc = new StreamingContext(sc, batchDuration)
+      logInfo("==================================\n\n\n")
+      ssc = new StreamingContext(sc, Milliseconds(100))
       var runningCount = 0
       TestReceiver.counter.set(1)
-      val input = ssc.networkStream(new TestReceiver)
+      val input = ssc.receiverStream(new TestReceiver)
       input.count.foreachRDD(rdd => {
         val count = rdd.first()
-        logInfo("Count = " + count)
         runningCount += count.toInt
+        logInfo("Count = " + count + ", Running count = " + runningCount)
       })
       ssc.start()
       ssc.awaitTermination(500)
@@ -215,12 +196,12 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       ssc.start()
     }
 
-    // test whether waitForStop() exits after give amount of time
+    // test whether awaitTermination() exits after give amount of time
     failAfter(1000 millis) {
       ssc.awaitTermination(500)
     }
 
-    // test whether waitForStop() does not exit if not time is given
+    // test whether awaitTermination() does not exit if not time is given
     val exception = intercept[Exception] {
       failAfter(1000 millis) {
         ssc.awaitTermination()
@@ -275,23 +256,26 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 class TestException(msg: String) extends Exception(msg)
 
 /** Custom receiver for testing whether all data received by a receiver gets processed or not */
-class TestReceiver extends NetworkReceiver[Int] {
-  protected lazy val blockGenerator = new BlockGenerator(StorageLevel.MEMORY_ONLY)
-  protected def onStart() {
-    blockGenerator.start()
-    logInfo("BlockGenerator started on thread " + receivingThread)
-    try {
-      while(true) {
-        blockGenerator += TestReceiver.counter.getAndIncrement
-        Thread.sleep(0)
+class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
+
+  var receivingThreadOption: Option[Thread] = None
+
+  def onStart() {
+    val thread = new Thread() {
+      override def run() {
+        logInfo("Receiving started")
+        while (!isStopped) {
+          store(TestReceiver.counter.getAndIncrement)
+        }
+        logInfo("Receiving stopped at count value of " + TestReceiver.counter.get())
       }
-    } finally {
-      logInfo("Receiving stopped at count value of " + TestReceiver.counter.get())
     }
+    receivingThreadOption = Some(thread)
+    thread.start()
   }
 
-  protected def onStop() {
-    blockGenerator.stop()
+  def onStop() {
+    // no cleanup to be done, the receiving thread should stop on it own
   }
 }
 

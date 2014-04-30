@@ -23,7 +23,6 @@ import java.util.List;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.VoidFunction;
 
 import org.apache.spark.sql.api.java.JavaSQLContext;
 import org.apache.spark.sql.api.java.JavaSchemaRDD;
@@ -34,19 +33,19 @@ public class JavaSparkSQL {
     private String name;
     private int age;
 
-    String getName() {
+    public String getName() {
       return name;
     }
 
-    void setName(String name) {
+    public void setName(String name) {
       this.name = name;
     }
 
-    int getAge() {
+    public int getAge() {
       return age;
     }
 
-    void setAge(int age) {
+    public void setAge(int age) {
       this.age = age;
     }
   }

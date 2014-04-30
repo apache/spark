@@ -465,7 +465,7 @@ private[spark] class TaskSetManager(
   def handleTaskGettingResult(tid: Long) = {
     val info = taskInfos(tid)
     info.markGettingResult()
-    sched.dagScheduler.taskGettingResult(tasks(info.index), info)
+    sched.dagScheduler.taskGettingResult(info)
   }
 
   /**
@@ -538,8 +538,8 @@ private[spark] class TaskSetManager(
           return
         }
         val key = ef.description
-        failureReason = "Exception failure in TID %s on host %s: %s".format(
-          tid, info.host, ef.description)
+        failureReason = "Exception failure in TID %s on host %s: %s\n%s".format(
+          tid, info.host, ef.description, ef.stackTrace.map("        " + _).mkString("\n"))
         val now = clock.getTime()
         val (printFull, dupCount) = {
           if (recentExceptions.contains(key)) {
@@ -582,7 +582,7 @@ private[spark] class TaskSetManager(
       if (numFailures(index) >= maxTaskFailures) {
         logError("Task %s:%d failed %d times; aborting job".format(
           taskSet.id, index, maxTaskFailures))
-        abort("Task %s:%d failed %d times (most recent failure: %s)".format(
+        abort("Task %s:%d failed %d times, most recent failure: %s\nDriver stacktrace:".format(
           taskSet.id, index, maxTaskFailures, failureReason))
         return
       }

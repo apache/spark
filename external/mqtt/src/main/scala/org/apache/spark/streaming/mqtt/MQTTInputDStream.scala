@@ -39,6 +39,7 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.receiver.Receiver
 
 /**
  * Input stream that subscribe messages from a Mqtt Broker.
@@ -48,59 +49,57 @@ import org.apache.spark.streaming.dstream._
  * @param storageLevel RDD storage level.
  */
 
-private[streaming] 
-class MQTTInputDStream[T: ClassTag](
+private[streaming]
+class MQTTInputDStream(
     @transient ssc_ : StreamingContext,
     brokerUrl: String,
     topic: String,
     storageLevel: StorageLevel
-  ) extends NetworkInputDStream[T](ssc_) with Logging {
+  ) extends ReceiverInputDStream[String](ssc_) with Logging {
   
-  def getReceiver(): NetworkReceiver[T] = {
-    new MQTTReceiver(brokerUrl, topic, storageLevel).asInstanceOf[NetworkReceiver[T]]
+  def getReceiver(): Receiver[String] = {
+    new MQTTReceiver(brokerUrl, topic, storageLevel)
   }
 }
 
 private[streaming] 
-class MQTTReceiver(brokerUrl: String,
-  topic: String,
-  storageLevel: StorageLevel
-  ) extends NetworkReceiver[Any] {
-  lazy protected val blockGenerator = new BlockGenerator(storageLevel)
-  
+class MQTTReceiver(
+    brokerUrl: String,
+    topic: String,
+    storageLevel: StorageLevel
+  ) extends Receiver[String](storageLevel) {
+
   def onStop() {
-    blockGenerator.stop()
+
   }
   
   def onStart() {
 
-    blockGenerator.start()
-
     // Set up persistence for messages 
-    var peristance: MqttClientPersistence = new MemoryPersistence()
+    val persistence = new MemoryPersistence()
 
     // Initializing Mqtt Client specifying brokerUrl, clientID and MqttClientPersistance
-    var client: MqttClient = new MqttClient(brokerUrl, MqttClient.generateClientId(), peristance)
+    val client = new MqttClient(brokerUrl, MqttClient.generateClientId(), persistence)
 
-    // Connect to MqttBroker    
+    // Connect to MqttBroker
     client.connect()
 
     // Subscribe to Mqtt topic
     client.subscribe(topic)
 
     // Callback automatically triggers as and when new message arrives on specified topic
-    var callback: MqttCallback = new MqttCallback() {
+    val callback: MqttCallback = new MqttCallback() {
 
-      // Handles Mqtt message 
+      // Handles Mqtt message
       override def messageArrived(arg0: String, arg1: MqttMessage) {
-        blockGenerator += new String(arg1.getPayload())
+        store(new String(arg1.getPayload(),"utf-8"))
       }
 
       override def deliveryComplete(arg0: IMqttDeliveryToken) {
       }
 
       override def connectionLost(arg0: Throwable) {
-        logInfo("Connection lost " + arg0)
+        restart("Connection lost ", arg0)
       }
     }
 

@@ -19,6 +19,7 @@ package org.apache.spark.api.java
 
 import java.lang.{Double => JDouble}
 
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.Partitioner
@@ -29,6 +30,7 @@ import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
+import org.apache.spark.util.Utils
 
 class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, JavaDoubleRDD] {
 
@@ -132,7 +134,13 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: JDouble, seed: Int): JavaDoubleRDD =
+  def sample(withReplacement: Boolean, fraction: JDouble): JavaDoubleRDD =
+    sample(withReplacement, fraction, Utils.random.nextLong)
+    
+  /**
+   * Return a sampled subset of this RDD.
+   */
+  def sample(withReplacement: Boolean, fraction: JDouble, seed: Long): JavaDoubleRDD =
     fromRDD(srdd.sample(withReplacement, fraction, seed))
 
   /**

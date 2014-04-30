@@ -1,6 +1,6 @@
 ---
 layout: global
-title: MLlib - Optimization
+title: <a href="mllib-guide.html">MLlib</a> - Optimization
 ---
 
 * Table of contents
@@ -25,9 +25,10 @@ title: MLlib - Optimization
 
 
 
-# Mathematical Description
+## Mathematical description
 
-## (Sub)Gradient Descent
+### Gradient descent
+
 The simplest method to solve optimization problems of the form `$\min_{\wv \in\R^d} \; f(\wv)$`
 is [gradient descent](http://en.wikipedia.org/wiki/Gradient_descent).
 Such first-order optimization methods (including gradient descent and stochastic variants
@@ -38,14 +39,14 @@ the direction of steepest descent, which is the negative of the derivative (call
 [gradient](http://en.wikipedia.org/wiki/Gradient)) of the function at the current point, i.e., at
 the current parameter value.
 If the objective function `$f$` is not differentiable at all arguments, but still convex, then a
-*subgradient* 
+*sub-gradient* 
 is the natural generalization of the gradient, and assumes the role of the step direction.
-In any case, computing a gradient or subgradient of `$f$` is expensive --- it requires a full
+In any case, computing a gradient or sub-gradient of `$f$` is expensive --- it requires a full
 pass through the complete dataset, in order to compute the contributions from all loss terms.
 
-## Stochastic (Sub)Gradient Descent (SGD)
+### Stochastic gradient descent (SGD)
 Optimization problems whose objective function `$f$` is written as a sum are particularly
-suitable to be solved using *stochastic subgradient descent (SGD)*. 
+suitable to be solved using *stochastic gradient descent (SGD)*. 
 In our case, for the optimization formulations commonly used in <a
 href="mllib-classification-regression.html">supervised machine learning</a>,
 `\begin{equation}
@@ -95,12 +96,12 @@ As an alternative to just use the subgradient `$R'(\wv)$` of the regularizer in 
 direction, an improved update for some cases can be obtained by using the proximal operator
 instead.
 For the L1-regularizer, the proximal operator is given by soft thresholding, as implemented in
-[L1Updater](api/mllib/index.html#org.apache.spark.mllib.optimization.L1Updater).
+[L1Updater](api/scala/index.html#org.apache.spark.mllib.optimization.L1Updater).
 
 
-## Update Schemes for Distributed SGD
+### Update schemes for distributed SGD
 The SGD implementation in
-[GradientDescent](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent) uses
+[GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent) uses
 a simple (distributed) sampling of the data examples.
 We recall that the loss part of the optimization problem `$\eqref{eq:regPrimal}$` is
 `$\frac1n \sum_{i=1}^n L(\wv;\x_i,y_i)$`, and therefore `$\frac1n \sum_{i=1}^n L'_{\wv,i}$` would
@@ -129,16 +130,16 @@ point.
 
 
 
-# Implementation in MLlib
+## Implementation in MLlib
 
 Gradient descent methods including stochastic subgradient descent (SGD) as
 included as a low-level primitive in `MLlib`, upon which various ML algorithms 
 are developed, see the 
-<a href="mllib-classification-regression.html">classification and regression</a> 
+<a href="mllib-linear-methods.html">linear methods</a> 
 section for example.
 
 The SGD method
-[GradientDescent.runMiniBatchSGD](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+[GradientDescent.runMiniBatchSGD](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 has the following parameters:
 
 * `gradient` is a class that computes the stochastic gradient of the function
@@ -162,5 +163,3 @@ each iteration, to compute the gradient direction.
 Available algorithms for gradient descent:
 
 * [GradientDescent.runMiniBatchSGD](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
-
-

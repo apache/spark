@@ -30,19 +30,6 @@
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
   <url>http://spark.apache.org/</url>
-  <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
-  <profiles>
-    <profile>
-      <id>yarn-alpha</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
-
   <dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -147,19 +134,6 @@
       <groupId>org.json4s</groupId>
       <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
       <version>3.2.6</version>
-      <!-- see also exclusion for lift-json; this is necessary since it depends on
-         scala-library and scalap 2.10.0, but we use 2.10.4, and only override
-         scala-library -->
-      <exclusions>
-        <exclusion>
-        <groupId>org.scala-lang</groupId>
-        <artifactId>scalap</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>it.unimi.dsi</groupId>
-      <artifactId>fastutil</artifactId>
     </dependency>
     <dependency>
       <groupId>colt</groupId>
@@ -270,6 +244,11 @@
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>pyrolite</artifactId>
+      <version>2.0.1</version>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -315,6 +294,48 @@
           </environmentVariables>
         </configuration>
       </plugin>
+      <!-- Unzip py4j so we can include its files in the jar -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>1.2.1</version>
+        <executions>
+          <execution>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <executable>unzip</executable>
+          <workingDirectory>../python</workingDirectory>
+          <arguments>
+            <argument>-o</argument>
+            <argument>lib/py4j*.zip</argument>
+            <argument>-d</argument>
+            <argument>build</argument>
+          </arguments>
+        </configuration>
+      </plugin>
     </plugins>
+    
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <directory>../python</directory>
+        <includes>
+          <include>pyspark/*.py</include>
+        </includes>
+      </resource>
+      <resource>
+        <directory>../python/build</directory>
+        <includes>
+          <include>py4j/*.py</include>
+        </includes>
+      </resource>
+    </resources>
   </build>
 </project>

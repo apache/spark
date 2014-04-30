@@ -42,7 +42,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     sc = new SparkContext("local", "test")
-    
+
     // Set the block size of local file system to test whether files are split right or not.
     sc.hadoopConfiguration.setLong("fs.local.block.size", 32)
   }
@@ -73,7 +73,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
       createNativeFile(dir, filename, contents)
     }
 
-    val res = sc.wholeTextFiles(dir.toString).collect()
+    val res = sc.wholeTextFiles(dir.toString, 3).collect()
 
     assert(res.size === WholeTextFileRecordReaderSuite.fileNames.size,
       "Number of files read out does not fit with the actual value.")

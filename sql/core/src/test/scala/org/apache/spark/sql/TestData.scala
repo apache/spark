@@ -23,8 +23,9 @@ import org.apache.spark.sql.test._
 /* Implicits */
 import TestSQLContext._
 
+case class TestData(key: Int, value: String)
+
 object TestData {
-  case class TestData(key: Int, value: String)
   val testData: SchemaRDD = TestSQLContext.sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString)))
   testData.registerAsTable("testData")
@@ -65,4 +66,11 @@ object TestData {
       LowerCaseData(3, "c") ::
       LowerCaseData(4, "d") :: Nil)
   lowerCaseData.registerAsTable("lowerCaseData")
+
+  case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
+  val arrayData =
+    TestSQLContext.sparkContext.parallelize(
+      ArrayData(Seq(1,2,3), Seq(Seq(1,2,3))) ::
+      ArrayData(Seq(2,3,4), Seq(Seq(2,3,4))) :: Nil)
+  arrayData.registerAsTable("arrayData")
 }

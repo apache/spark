@@ -46,7 +46,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
   // These two are created only when scheduler starts.
   // eventActor not being null means the scheduler has been started and not stopped
-  var networkInputTracker: NetworkInputTracker = null
+  var receiverTracker: ReceiverTracker = null
   private var eventActor: ActorRef = null
 
 
@@ -61,8 +61,8 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }), "JobScheduler")
 
     listenerBus.start()
-    networkInputTracker = new NetworkInputTracker(ssc)
-    networkInputTracker.start()
+    receiverTracker = new ReceiverTracker(ssc)
+    receiverTracker.start()
     jobGenerator.start()
     logInfo("Started JobScheduler")
   }
@@ -72,7 +72,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logDebug("Stopping JobScheduler")
 
     // First, stop receiving
-    networkInputTracker.stop()
+    receiverTracker.stop()
 
     // Second, stop generating jobs. If it has to process all received data,
     // then this will wait for all the processing through JobScheduler to be over.
@@ -100,14 +100,13 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logInfo("Stopped JobScheduler")
   }
 
-  def runJobs(time: Time, jobs: Seq[Job]) {
-    if (jobs.isEmpty) {
-      logInfo("No jobs added for time " + time)
+  def submitJobSet(jobSet: JobSet) {
+    if (jobSet.jobs.isEmpty) {
+      logInfo("No jobs added for time " + jobSet.time)
     } else {
-      val jobSet = new JobSet(time, jobs)
-      jobSets.put(time, jobSet)
+      jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
-      logInfo("Added jobs for time " + time)
+      logInfo("Added jobs for time " + jobSet.time)
     }
   }
 
