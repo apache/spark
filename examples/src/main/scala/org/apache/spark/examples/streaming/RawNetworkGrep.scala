@@ -19,7 +19,6 @@ package org.apache.spark.examples.streaming
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.util.RawTextHelper
 import org.apache.spark.util.IntParam
 
 /**
@@ -51,9 +50,6 @@ object RawNetworkGrep {
     // Create the context
     val ssc = new StreamingContext(master, "RawNetworkGrep", Milliseconds(batchMillis),
       System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
-
-    // Warm up the JVMs on master and slave for JIT compilation to kick in
-    RawTextHelper.warmUp(ssc.sparkContext)
 
     val rawStreams = (1 to numStreams).map(_ =>
       ssc.rawSocketStream[String](host, port, StorageLevel.MEMORY_ONLY_SER_2)).toArray

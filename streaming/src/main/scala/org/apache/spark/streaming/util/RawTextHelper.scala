@@ -22,7 +22,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.util.collection.OpenHashMap
 import scala.collection.JavaConversions.mapAsScalaMap
 
-private[spark]
+private[streaming]
 object RawTextHelper {
 
   /**

@@ -24,7 +24,6 @@ import kafka.producer._
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.kafka._
-import org.apache.spark.streaming.util.RawTextHelper._
 
 // scalastyle:off
 /**
@@ -59,7 +58,7 @@ object KafkaWordCount {
     val lines = KafkaUtils.createStream(ssc, zkQuorum, group, topicpMap).map(_._2)
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1L))
-      .reduceByKeyAndWindow(add _, subtract _, Minutes(10), Seconds(2), 2)
+      .reduceByKeyAndWindow(_ + _, _ - _, Minutes(10), Seconds(2), 2)
     wordCounts.print()
 
     ssc.start()
