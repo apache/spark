@@ -294,13 +294,14 @@
           </environmentVariables>
         </configuration>
       </plugin>
+      <!-- Unzip py4j so we can include its files in the jar -->
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <version>1.2.1</version>
         <executions>
           <execution>
-            <phase>package</phase>
+            <phase>generate-resources</phase>
             <goals>
               <goal>exec</goal>
             </goals>
