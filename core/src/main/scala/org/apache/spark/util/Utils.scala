@@ -1004,6 +1004,11 @@ private[spark] object Utils extends Logging {
     obj.getClass.getSimpleName.replace("$", "")
   }
 
+  /** Return the current version of Spark */
+  def getSparkVersion(): String = {
+    getClass.getPackage.getImplementationVersion
+  }
+
   /** Return an option that translates JNothing to None */
   def jsonOption(json: JValue): Option[JValue] = {
     json match {
