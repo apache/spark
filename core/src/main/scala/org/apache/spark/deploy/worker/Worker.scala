@@ -102,7 +102,7 @@ private[spark] class Worker(
   val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   val workerSource = new WorkerSource(this)
 
-  var retryTimer: Option[Cancellable] = None
+  var registrationRetryTimer: Option[Cancellable] = None
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
@@ -166,11 +166,11 @@ private[spark] class Worker(
   def registerWithMaster() {
     tryRegisterAllMasters()
     var retries = 0
-    retryTimer = Some {
+    registrationRetryTimer = Some {
       context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
         retries += 1
         if (registered) {
-          retryTimer.foreach(_.cancel())
+          registrationRetryTimer.foreach(_.cancel())
         } else if (retries >= REGISTRATION_RETRIES) {
           logError("All masters are unresponsive! Giving up.")
           System.exit(1)
@@ -347,7 +347,7 @@ private[spark] class Worker(
   }
 
   override def postStop() {
-    retryTimer.foreach(_.cancel())
+    registrationRetryTimer.foreach(_.cancel())
     executors.values.foreach(_.kill())
     drivers.values.foreach(_.kill())
     webUi.stop()
