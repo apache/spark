@@ -127,7 +127,13 @@ private[spark] class Executor(
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
-  val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(SparkContext.SPARK_UNKNOWN_USER)
+  // NB: Workaround for SPARK-1676. Caching UGIs prevents continuously creating FileSystem
+  // objects with "unique" UGIs, but is not a good solution if real UGIs and tokens are needed,
+  // mainly because expired tokens cannot be removed from the UGI.
+  val cacheUgi = conf.getBoolean("spark.user.cacheUserGroupInformation", true)
+
+  val cachedSparkUser = SparkHadoopUtil.get.createSparkUser()
+  def getSparkUser = if (cacheUgi) cachedSparkUser else SparkHadoopUtil.get.createSparkUser()
 
   def launchTask(context: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer) {
     val tr = new TaskRunner(context, taskId, serializedTask)
@@ -173,7 +179,7 @@ private[spark] class Executor(
       }
     }
 
-    override def run(): Unit = SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
+    override def run(): Unit = SparkHadoopUtil.get.runAsUser(getSparkUser) { () =>
       val startTime = System.currentTimeMillis()
       SparkEnv.set(env)
       Thread.currentThread.setContextClassLoader(replClassLoader)
