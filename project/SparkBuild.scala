@@ -569,7 +569,7 @@ object SparkBuild extends Build {
     libraryDependencies += "net.sf.py4j" % "py4j" % "0.8.1",
     name := "spark-assembly",
     assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
-    jarName in assembly <<= version map { v => s"spark-assembly-${v}-hadoop${hadoopVersion}${if (isYarnEnabled) "-yarn" else ""}.jar" },
+    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" }
     jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" }
   ) ++ assemblySettings ++ extraAssemblySettings
 
