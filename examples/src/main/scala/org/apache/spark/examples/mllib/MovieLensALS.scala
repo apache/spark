@@ -43,7 +43,8 @@ object MovieLensALS {
       kryo: Boolean = false,
       numIterations: Int = 20,
       lambda: Double = 1.0,
-      rank: Int = 10)
+      rank: Int = 10,
+      implicitPrefs: Boolean = false)
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -62,6 +63,9 @@ object MovieLensALS {
       opt[Unit]("kryo")
         .text(s"use Kryo serialization")
         .action((_, c) => c.copy(kryo = true))
+      opt[Unit]("implicitPrefs")
+        .text(s"use Implicit Preference")
+        .action((_, c) => c.copy(implicitPrefs = true))
       arg[String]("<input>")
         .required()
         .text("input paths to a MovieLens dataset of ratings")
@@ -111,6 +115,7 @@ object MovieLensALS {
       .setRank(params.rank)
       .setIterations(params.numIterations)
       .setLambda(params.lambda)
+      .setImplicitPrefs(params.implicitPrefs)
       .run(training)
 
     val rmse = computeRmse(model, test, numTest)
