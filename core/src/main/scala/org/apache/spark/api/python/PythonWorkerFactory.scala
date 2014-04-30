@@ -54,8 +54,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   private def validatePySpark(): Unit = {
 
     // Ensure PYTHONPATH is set
-    val pythonpathNotFound =
-      !envVars.keys.contains("PYTHONPATH") && !sys.env.keys.contains("PYTHONPATH")
+    val pythonpathNotFound = !(envVars.keys ++ sys.env.keys).contains("PYTHONPATH")
     if (pythonpathNotFound) {
       throw new Exception("PYTHONPATH is not set when launching python workers!")
     }
@@ -69,8 +68,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       val processOutput = Source.fromInputStream(process.getInputStream).getLines()
       val moduleNotFound = processOutput.exists(_.contains("No module named " + module))
       if (moduleNotFound) {
+        val pythonpaths = envVars.get("PYTHONPATH").toSeq ++ sys.env.get("PYTHONPATH").toSeq
         throw new Exception("Module %s not found! Is it included in the PYTHONPATH? (%s)"
-          .format(module, envVars("PYTHONPATH")))
+          .format(module, pythonpaths.mkString(":")))
       }
     }
 
