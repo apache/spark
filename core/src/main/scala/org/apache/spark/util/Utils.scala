@@ -1038,7 +1038,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Return the current version of Spark */
-  def getSparkVersion(): String = {
+  def getSparkVersion: String = {
     getClass.getPackage.getImplementationVersion
   }
 
