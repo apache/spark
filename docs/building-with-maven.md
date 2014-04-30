@@ -56,8 +56,8 @@ For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions with
     # Apache Hadoop 0.23.x
     $ mvn -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.7 -Dyarn.version=0.23.7 -DskipTests clean package
 
-    # Different versions of HDFS vs YARN.
-    $ mvn -Pyarn-alpha -Dhadoop.version=2.3.0 -Dyarn.version= 0.23.7 -DskipTests clean package
+    # Different versions of HDFS and YARN.
+    $ mvn -Pyarn-alpha -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
 
 ## Spark Tests in Maven ##
 
