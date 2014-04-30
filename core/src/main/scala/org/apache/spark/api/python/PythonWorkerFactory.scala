@@ -17,15 +17,18 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, File, IOException, OutputStreamWriter}
+import java.io.{DataInputStream, IOException, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
 import scala.collection.JavaConversions._
+import scala.io.Source
 
 import org.apache.spark._
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
-    extends Logging {
+  extends Logging {
+
+  validatePySpark()
 
   // Because forking processes from Java is expensive, we prefer to launch a single Python daemon
   // (pyspark/daemon.py) and tell it to fork new workers for our tasks. This daemon currently
@@ -43,6 +46,34 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     } else {
       createSimpleWorker()
     }
+  }
+
+  /**
+   * Validate that the required PySpark modules are loadable. If not, throw a helpful exception.
+   */
+  private def validatePySpark(): Unit = {
+
+    // Ensure PYTHONPATH is set
+    if (!envVars.keys.contains("PYTHONPATH")) {
+      throw new Exception("PYTHONPATH is not set when launching python workers!")
+    }
+
+    /** Attempt to load a python module with the given PYTHONPATH */
+    def validateModule(module: String): Unit = {
+      val pb = new ProcessBuilder(Seq(pythonExec, "-m", module))
+      pb.redirectErrorStream(true)
+      pb.environment().putAll(envVars)
+      val process = pb.start()
+      val processOutput = Source.fromInputStream(process.getInputStream).getLines()
+      val moduleNotFound = processOutput.exists(_.contains("No module named " + module))
+      if (moduleNotFound) {
+        throw new Exception("Module %s not found! Is it included in the PYTHONPATH? (%s)"
+          .format(module, envVars("PYTHONPATH")))
+      }
+    }
+
+    validateModule("pyspark")
+    validateModule("py4j")
   }
 
   /**
