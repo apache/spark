@@ -96,11 +96,11 @@ object NullPropagation extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressionsUp {
       // Skip redundant folding of literals.
       case l: Literal => l
-      case e @ Count(Literal(null, _)) => Literal(null, e.dataType)
+      case e @ Count(Literal(null, _)) => Literal(0, e.dataType)
       case e @ Sum(Literal(null, _)) => Literal(null, e.dataType)
       case e @ Average(Literal(null, _)) => Literal(null, e.dataType)
-      case e @ IsNull(c @ Rand) => Literal(false, BooleanType)
-      case e @ IsNotNull(c @ Rand) => Literal(true, BooleanType)
+      case e @ IsNull(c) if c.nullable == false => Literal(false, BooleanType)
+      case e @ IsNotNull(c) if c.nullable == false => Literal(true, BooleanType)
       case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
       case e @ GetItem(_, Literal(null, _)) => Literal(null, e.dataType)
       case e @ GetField(Literal(null, _), _) => Literal(null, e.dataType)
@@ -122,13 +122,32 @@ object NullPropagation extends Rule[LogicalPlan] {
           case Literal(candidate, _) if(candidate == v) => true
           case _ => false
         })) => Literal(true, BooleanType)
-      // Put exceptional cases(Unary & Binary Expression if it doesn't produce null with constant 
-      // null operand) before here.
-      case e: UnaryExpression => e.child match {
+      case e: UnaryMinus => e.child match {
         case Literal(null, _) => Literal(null, e.dataType)
         case _ => e
       }
-      case e: BinaryExpression => e.children match {
+      case e: Cast => e.child match {
+        case Literal(null, _) => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: Not => e.child match {
+        case Literal(null, _) => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: And => e // leave it for BooleanSimplification
+      case e: Or => e  // leave it for BooleanSimplification
+      // Put exceptional cases above
+      case e: BinaryArithmetic => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: BinaryPredicate => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: StringRegexExpression => e.children match {
         case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
         case _ => e

@@ -41,23 +41,33 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   override def toString = s"$child[$ordinal]"
 
   override def eval(input: Row): Any = {
-    if (child.dataType.isInstanceOf[ArrayType]) {
-      val baseValue = child.eval(input).asInstanceOf[Seq[_]]
-      val o = ordinal.eval(input).asInstanceOf[Int]
-      if (baseValue == null) {
-        null
-      } else if (o >= baseValue.size || o < 0) {
-        null
-      } else {
-        baseValue(o)
-      }
+    val value = child.eval(input)
+    if(value == null) {
+      null
     } else {
-      val baseValue = child.eval(input).asInstanceOf[Map[Any, _]]
       val key = ordinal.eval(input)
-      if (baseValue == null) {
+      if(key == null) {
         null
       } else {
-        baseValue.get(key).orNull
+        if (child.dataType.isInstanceOf[ArrayType]) {
+          val baseValue = value.asInstanceOf[Seq[_]]
+          val o = key.asInstanceOf[Int]
+          if (baseValue == null) {
+            null
+          } else if (o >= baseValue.size || o < 0) {
+            null
+          } else {
+            baseValue(o)
+          }
+        } else {
+          val baseValue = value.asInstanceOf[Map[Any, _]]
+          val key = ordinal.eval(input)
+          if (baseValue == null) {
+            null
+          } else {
+            baseValue.get(key).orNull
+          }
+        }
       }
     }
   }

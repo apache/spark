@@ -222,11 +222,6 @@ abstract class Expression extends TreeNode[Expression] {
   }
 }
 
-/**
- * Root class for rewritten 2 operands UDF expression. By default, we assume it produces Null if 
- * either one of its operands is null. Exceptional case requires to update the optimization rule 
- * at [[optimizer.ConstantFolding ConstantFolding]]
- */
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
   self: Product =>
 
@@ -243,11 +238,6 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
   self: Product =>
 }
 
-/**
- * Root class for rewritten single operand UDF expression. By default, we assume it produces Null 
- * if its operand is null. Exceptional case requires to update the optimization rule 
- * at [[optimizer.ConstantFolding ConstantFolding]]
- */
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
 
