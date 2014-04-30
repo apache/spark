@@ -201,9 +201,11 @@ class ALS private (
     }
 
     val (userInLinks, userOutLinks) =
-        makeLinkRDDs(numUserBlocks, numProductBlocks, ratingsByUserBlock, userPartitioner, productPartitioner)
+      makeLinkRDDs(numUserBlocks, numProductBlocks, ratingsByUserBlock,
+        userPartitioner, productPartitioner)
     val (productInLinks, productOutLinks) =
-        makeLinkRDDs(numProductBlocks, numUserBlocks, ratingsByProductBlock, productPartitioner, userPartitioner)
+      makeLinkRDDs(numProductBlocks, numUserBlocks, ratingsByProductBlock,
+        productPartitioner, userPartitioner)
 
     // Initialize user and product factors randomly, but use a deterministic seed for each
     // partition so that fault recovery works
@@ -231,26 +233,26 @@ class ALS private (
         users.persist()
         val YtY = Some(sc.broadcast(computeYtY(users)))
         val previousProducts = products
-        products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks, userPartitioner, rank, lambda,
-          alpha, YtY)
+        products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
+          userPartitioner, rank, lambda, alpha, YtY)
         previousProducts.unpersist()
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         products.persist()
         val XtX = Some(sc.broadcast(computeYtY(products)))
         val previousUsers = users
-        users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks, productPartitioner, rank, lambda,
-          alpha, XtX)
+        users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
+          productPartitioner, rank, lambda, alpha, XtX)
         previousUsers.unpersist()
       }
     } else {
       for (iter <- 1 to iterations) {
         // perform ALS update
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
-        products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks, userPartitioner, rank, lambda,
-          alpha, YtY = None)
+        products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
+          userPartitioner, rank, lambda, alpha, YtY = None)
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
-        users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks, productPartitioner, rank, lambda,
-          alpha, YtY = None)
+        users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
+          productPartitioner, rank, lambda, alpha, YtY = None)
       }
     }
 
@@ -364,7 +366,7 @@ class ALS private (
    * Make the in-links table for a block of the users (or products) dataset given a list of
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
-  private def makeInLinkBlock(numUserBlocks: Int, numProductBlocks: Int, ratings: Array[Rating],
+  private def makeInLinkBlock(numProductBlocks: Int, ratings: Array[Rating],
       productPartitioner: Partitioner): InLinkBlock = {
     val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
@@ -397,13 +399,14 @@ class ALS private (
    * the users (or (blockId, (p, u, r)) for the products). We create these simultaneously to avoid
    * having to shuffle the (blockId, (u, p, r)) RDD twice, or to cache it.
    */
-  private def makeLinkRDDs(numUserBlocks: Int, numProductBlocks: Int, ratings: RDD[(Int, Rating)], userPartitioner: Partitioner, productPartitioner: Partitioner)
+  private def makeLinkRDDs(numUserBlocks: Int, numProductBlocks: Int, ratings: RDD[(Int, Rating)],
+    userPartitioner: Partitioner, productPartitioner: Partitioner)
     : (RDD[(Int, InLinkBlock)], RDD[(Int, OutLinkBlock)]) =
   {
     val grouped = ratings.partitionBy(new HashPartitioner(numUserBlocks))
     val links = grouped.mapPartitionsWithIndex((blockId, elements) => {
       val ratings = elements.map{_._2}.toArray
-      val inLinkBlock = makeInLinkBlock(numUserBlocks, numProductBlocks, ratings, productPartitioner)
+      val inLinkBlock = makeInLinkBlock(numProductBlocks, ratings, productPartitioner)
       val outLinkBlock = makeOutLinkBlock(numProductBlocks, ratings, productPartitioner)
       Iterator.single((blockId, (inLinkBlock, outLinkBlock)))
     }, true)
