@@ -52,9 +52,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
         if (child.dataType.isInstanceOf[ArrayType]) {
           val baseValue = value.asInstanceOf[Seq[_]]
           val o = key.asInstanceOf[Int]
-          if (baseValue == null) {
-            null
-          } else if (o >= baseValue.size || o < 0) {
+          if (o >= baseValue.size || o < 0) {
             null
           } else {
             baseValue(o)
@@ -62,11 +60,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
         } else {
           val baseValue = value.asInstanceOf[Map[Any, _]]
           val key = ordinal.eval(input)
-          if (baseValue == null) {
-            null
-          } else {
-            baseValue.get(key).orNull
-          }
+          baseValue.get(key).orNull
         }
       }
     }
