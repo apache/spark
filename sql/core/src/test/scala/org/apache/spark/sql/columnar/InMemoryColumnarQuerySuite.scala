@@ -49,4 +49,28 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)
   }
+
+  test("SPARK-1678 regression: compression must not lose repeated values") {
+    checkAnswer(
+      sql("SELECT * FROM repeatedData"),
+      repeatedData.collect().toSeq)
+
+    TestSQLContext.cacheTable("repeatedData")
+
+    checkAnswer(
+      sql("SELECT * FROM repeatedData"),
+      repeatedData.collect().toSeq)
+  }
+
+  test("with null values") {
+    checkAnswer(
+      sql("SELECT * FROM nullableRepeatedData"),
+      nullableRepeatedData.collect().toSeq)
+
+    TestSQLContext.cacheTable("nullableRepeatedData")
+
+    checkAnswer(
+      sql("SELECT * FROM nullableRepeatedData"),
+      nullableRepeatedData.collect().toSeq)
+  }
 }
