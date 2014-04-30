@@ -97,8 +97,8 @@ object NullPropagation extends Rule[LogicalPlan] {
       // Skip redundant folding of literals.
       case l: Literal => l
       case e @ Count(Literal(null, _)) => Literal(0, e.dataType)
-      case e @ Sum(Literal(null, _)) => Literal(null, e.dataType)
-      case e @ Average(Literal(null, _)) => Literal(null, e.dataType)
+      case e @ Sum(Literal(c, _)) if(c == 0) => Literal(0, e.dataType)
+      case e @ Average(Literal(c, _)) if(c == 0) => Literal(0.0, e.dataType)
       case e @ IsNull(c) if c.nullable == false => Literal(false, BooleanType)
       case e @ IsNotNull(c) if c.nullable == false => Literal(true, BooleanType)
       case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
