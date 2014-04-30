@@ -71,13 +71,13 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
 
     // Create the subdirectory if it doesn't already exist
     var subDir = subDirs(dirId)(subDirId)
-    if (subDir == null) {
+    val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
+    if (subDir == null || !newDir.exists) {
       subDir = subDirs(dirId).synchronized {
         val old = subDirs(dirId)(subDirId)
-        if (old != null) {
+        if (old != null && newDir.exists) {
           old
         } else {
-          val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
           newDir.mkdir()
           subDirs(dirId)(subDirId) = newDir
           newDir

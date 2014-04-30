@@ -25,7 +25,7 @@ import scala.collection.mutable.Queue
 
 import io.netty.buffer.ByteBuf
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.{Logging, SparkException, FetchFailedException}
 import org.apache.spark.network.BufferMessage
 import org.apache.spark.network.ConnectionManagerId
 import org.apache.spark.network.netty.ShuffleCopier
@@ -203,14 +203,22 @@ object BlockFetcherIterator {
       // these all at once because they will just memory-map some files, so they won't consume
       // any memory that might exceed our maxBytesInFlight
       for (id <- localBlocksToFetch) {
-        getLocalFromDisk(id, serializer) match {
-          case Some(iter) => {
-            // Pass 0 as size since it's not in flight
-            results.put(new FetchResult(id, 0, () => iter))
-            logDebug("Got local block " + id)
+        try {
+          getLocalFromDisk(id, serializer) match {
+            case Some(iter) => {
+              // Pass 0 as size since it's not in flight
+              results.put(new FetchResult(id, 0, () => iter))
+              logDebug("Got local block " + id)
+            }
+            case None => {
+              throw new BlockException(id, "Could not get block " + id + " from local machine")
+            }
           }
-          case None => {
-            throw new BlockException(id, "Could not get block " + id + " from local machine")
+        } catch {
+          case e : Throwable => {
+            val blockId = id.asInstanceOf[ShuffleBlockId]
+            throw new FetchFailedException(blockManagerId, blockId.shuffleId, 
+                                           blockId.mapId, blockId.reduceId, e)
           }
         }
       }
