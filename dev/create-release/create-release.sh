@@ -21,47 +21,53 @@
 # Publishes releases to Maven and packages/copies binary release artifacts.
 # Expects to be run in a totally empty directory.
 #
+# Options:
+#  --package-only   only packages an existing release candidate
+#
 # Would be nice to add:
 #  - Send output to stderr and have useful logging in stdout
-#  - Have this use sbt rather than Maven release plug in
 
-GIT_USERNAME=pwendell
-GIT_PASSWORD=XXX
-GPG_PASSPHRASE=XXX
-GIT_BRANCH=branch-0.9
-RELEASE_VERSION=0.9.0-incubating
-RC_NAME=rc2
-USER_NAME=pwendell
+GIT_USERNAME=${GIT_USERNAME:-pwendell}
+GIT_PASSWORD=${GIT_PASSWORD:-XXX}
+GPG_PASSPHRASE=${GPG_PASSPHRASE:-XXX}
+GIT_BRANCH=${GIT_BRANCH:-branch-1.0}
+RELEASE_VERSION=${RELEASE_VERSION:-1.0.0}
+RC_NAME=${RC_NAME:-rc2}
+USER_NAME=${USER_NAME:-pwendell}
 
 set -e
 
 GIT_TAG=v$RELEASE_VERSION-$RC_NAME
 
-# Artifact publishing
+if [[ ! "$@" =~ --package-only ]]; then
+  echo "Creating and publishing release"
+  # Artifact publishing
+  git clone https://git-wip-us.apache.org/repos/asf/spark.git -b $GIT_BRANCH
+  cd spark
+  export MAVEN_OPTS="-Xmx3g -XX:MaxPermSize=1g -XX:ReservedCodeCacheSize=1g"
 
-git clone https://git-wip-us.apache.org/repos/asf/spark.git -b $GIT_BRANCH
-cd spark
-export MAVEN_OPTS="-Xmx3g -XX:MaxPermSize=1g -XX:ReservedCodeCacheSize=1g"
+  mvn -Pyarn release:clean
 
-mvn -Pyarn release:clean
+  mvn -DskipTests \
+    -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
+    -Dusername=$GIT_USERNAME -Dpassword=$GIT_PASSWORD \
+    -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
+    -Pyarn -Phive -Pspark-ganglia-lgpl\
+    -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
+    --batch-mode release:prepare
 
-mvn -DskipTests \
-  -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
-  -Dusername=$GIT_USERNAME -Dpassword=$GIT_PASSWORD \
-  -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-  -Pyarn -Phive -Pspark-ganglia-lgpl\
-  -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
-  --batch-mode release:prepare
+  mvn -DskipTests \
+    -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
+    -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
+    -Pyarn -Phive -Pspark-ganglia-lgpl\
+    release:perform
 
-mvn -DskipTests \
-  -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
-  -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-  -Pyarn -Phive -Pspark-ganglia-lgpl\
-  release:perform
-
-rm -rf spark
+  cd ..
+  rm -rf spark
+fi
 
 # Source and binary tarballs
+echo "Packaging release tarballs"
 git clone https://git-wip-us.apache.org/repos/asf/spark.git
 cd spark
 git checkout --force $GIT_TAG
@@ -109,9 +115,9 @@ make_binary_release "hadoop2" "--with-yarn --hadoop 2.2.0"
 
 # Copy data
 echo "Copying release tarballs"
-ssh $USER_NAME@people.apache.org \
-  mkdir /home/$USER_NAME/public_html/spark-$RELEASE_VERSION-$RC_NAME
 rc_folder=spark-$RELEASE_VERSION-$RC_NAME
+ssh $USER_NAME@people.apache.org \
+  mkdir /home/$USER_NAME/public_html/$rc_folder
 scp spark-* \
   $USER_NAME@people.apache.org:/home/$USER_NAME/public_html/$rc_folder/
 
@@ -121,7 +127,9 @@ cd docs
 PRODUCTION=1 jekyll build
 echo "Copying release documentation"
 rc_docs_folder=${rc_folder}-docs
-rsync -r _site/* $USER_NAME@people.apache.org /home/$USER_NAME/public_html/$rc_docs_folder
+ssh $USER_NAME@people.apache.org \
+  mkdir /home/$USER_NAME/public_html/$rc_docs_folder
+rsync -r _site/* $USER_NAME@people.apache.org:/home/$USER_NAME/public_html/$rc_docs_folder
 
 echo "Release $RELEASE_VERSION completed:"
 echo "Git tag:\t $GIT_TAG"

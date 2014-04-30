@@ -28,6 +28,7 @@ import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -135,6 +136,11 @@ private[spark] object Utils extends Logging {
    */
   def getContextOrSparkClassLoader =
     Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
+
+  /** Determines whether the provided class is loadable in the current thread. */
+  def classIsLoadable(clazz: String): Boolean = {
+    Try { Class.forName(clazz, false, getContextOrSparkClassLoader) }.isSuccess
+  }
 
   /**
    * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
@@ -552,8 +558,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return the string to tell how long has passed in seconds. The passing parameter should be in
-   * millisecond.
+   * Return the string to tell how long has passed in milliseconds.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
     " " + (System.currentTimeMillis - startTimeMs) + " ms"
