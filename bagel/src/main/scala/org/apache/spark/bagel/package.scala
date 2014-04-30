@@ -20,4 +20,4 @@ package org.apache.spark
 /**
  * Comprises of spark bagel which is a spark implementation of pregel.
  */
-package object bagel 
+package object bagel

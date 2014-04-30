@@ -20,4 +20,4 @@ package org.apache.spark
 /**
  * API's mainly intended for developers of executor backends for spark.
  */
-package object executor 
+package object executor

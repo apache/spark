@@ -20,4 +20,4 @@ package org.apache.spark
 /**
  * Spark utilities
  */
-package object util 
+package object util

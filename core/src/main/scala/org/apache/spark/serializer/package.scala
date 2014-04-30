@@ -20,4 +20,4 @@ package org.apache.spark
 /**
  * Plugin your own serializer or use one of these provided serializers.
  */
-package object serializer 
+package object serializer

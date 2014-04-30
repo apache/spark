@@ -20,4 +20,4 @@ package org.apache.spark.graphx
 /**
  * Comprises of various analytics that can be done with spark's graphx library.
  */
-package object lib 
+package object lib

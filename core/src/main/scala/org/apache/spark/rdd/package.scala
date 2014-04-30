@@ -20,4 +20,4 @@ package org.apache.spark
 /**
  * Provides implementation's of various RDDs.
  */
-package object rdd 
+package object rdd

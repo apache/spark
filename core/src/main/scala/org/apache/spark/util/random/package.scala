@@ -20,4 +20,4 @@ package org.apache.spark.util
 /**
  * Utilities of random number generators
  */
-package object random 
+package object random

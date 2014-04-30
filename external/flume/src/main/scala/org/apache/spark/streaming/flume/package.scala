@@ -20,4 +20,4 @@ package org.apache.spark.streaming
 /**
  * Spark streaming receiver for flume.
  */
-package object flume 
+package object flume

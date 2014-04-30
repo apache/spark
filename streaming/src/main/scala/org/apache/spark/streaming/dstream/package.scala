@@ -21,4 +21,4 @@ package org.apache.spark.streaming
  * Comprises of various implementations of DStream.
  * @see [[dstream.DStream]]
  */
-package object dstream 
+package object dstream

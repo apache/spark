@@ -20,4 +20,4 @@ package org.apache.spark.streaming
 /**
  * Kafka receiver for spark streaming,
  */
-package object kafka 
+package object kafka

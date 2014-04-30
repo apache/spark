@@ -20,4 +20,4 @@ package org.apache.spark
 /**
  * Spark's machine learning library.
  */
-package object mllib 
+package object mllib

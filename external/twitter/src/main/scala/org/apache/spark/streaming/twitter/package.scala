@@ -20,4 +20,4 @@ package org.apache.spark.streaming
 /**
  * Twitter feed receiver for spark streaming.
  */
-package object twitter 
+package object twitter

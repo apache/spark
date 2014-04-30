@@ -20,4 +20,4 @@ package org.apache.spark.graphx
 /**
  * Collections of utilities used by graphx.
  */
-package object util 
+package object util
