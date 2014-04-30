@@ -85,7 +85,7 @@ public final class JavaTC {
         }
     });
 
-    long oldCount = 0;
+    long oldCount;
     long nextCount = tc.count();
     do {
       oldCount = nextCount;

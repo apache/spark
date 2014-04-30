@@ -75,7 +75,6 @@ public final class JavaLogQuery {
 
   public static Tuple3<String, String, String> extractKey(String line) {
     Matcher m = apacheLogRegex.matcher(line);
-    List<String> key = Collections.emptyList();
     if (m.find()) {
       String ip = m.group(1);
       String user = m.group(3);

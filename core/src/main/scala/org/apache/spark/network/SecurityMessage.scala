@@ -106,7 +106,6 @@ private[spark] class SecurityMessage() extends Logging {
    * @return BufferMessage
    */
   def toBufferMessage: BufferMessage = {
-    val startTime = System.currentTimeMillis
     val buffers = new ArrayBuffer[ByteBuffer]()
 
     // 4 bytes for the length of the connectionId
