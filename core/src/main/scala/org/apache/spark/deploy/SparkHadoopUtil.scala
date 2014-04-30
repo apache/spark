@@ -35,15 +35,28 @@ class SparkHadoopUtil {
   val conf: Configuration = newConfiguration()
   UserGroupInformation.setConfiguration(conf)
 
-  def runAsUser(user: String)(func: () => Unit) {
+  /** Creates a UserGroupInformation for Spark based on SPARK_USER environment variable. */
+  def createSparkUser(): Option[UserGroupInformation] = {
+    val user = Option(System.getenv("SPARK_USER")).getOrElse(SparkContext.SPARK_UNKNOWN_USER)
     if (user != SparkContext.SPARK_UNKNOWN_USER) {
-      val ugi = UserGroupInformation.createRemoteUser(user)
-      transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
-      ugi.doAs(new PrivilegedExceptionAction[Unit] {
-        def run: Unit = func()
-      })
+      Some(UserGroupInformation.createRemoteUser(user))
     } else {
-      func()
+      None
+    }
+  }
+
+  /**
+   * If a user is specified, we will run the function as that user. We additionally transfer
+   * Spark's tokens to the given UGI to ensure it has access to data written by Spark.
+   */
+  def runAsUser(user: Option[UserGroupInformation])(func: () => Unit) {
+    user match {
+      case Some(ugi) => {
+        transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
+        ugi.doAs(new PrivilegedExceptionAction[Unit] {
+          def run: Unit = func()
+        })}
+      case None => func()
     }
   }
 
