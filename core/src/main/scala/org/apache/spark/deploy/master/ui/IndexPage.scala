@@ -72,6 +72,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         <div class="row-fluid">
           <div class="span12">
             <ul class="unstyled">
+              <li><strong>Version:</strong> {Utils.getSparkVersion}</li>
               <li><strong>URL:</strong> {state.uri}</li>
               <li><strong>Workers:</strong> {state.workers.size}</li>
               <li><strong>Cores:</strong> {state.workers.map(_.cores).sum} Total,
