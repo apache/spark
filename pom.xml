@@ -93,7 +93,6 @@
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
-    <module>sql/hive</module>
     <module>repl</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -902,6 +901,12 @@
         <module>yarn</module>
       </modules>
 
+    </profile>
+    <profile>
+      <id>hive</id>
+      <modules>
+        <module>sql/hive</module>
+      </modules>
     </profile>
 
     <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
