@@ -23,14 +23,12 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.Vector
 
 /**
- * :: Experimental ::
  * Regression model trained using RidgeRegression.
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-@Experimental
-class RidgeRegressionModel(
+class RidgeRegressionModel private[mllib] (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
@@ -45,7 +43,6 @@ class RidgeRegressionModel(
 }
 
 /**
- * :: Experimental ::
  * Train a regression model with L2-regularization using Stochastic Gradient Descent.
  * This solves the l1-regularized least squares regression formulation
  *          f(weights) = 1/n ||A weights-y||^2  + regParam/2 ||weights||^2
@@ -53,7 +50,6 @@ class RidgeRegressionModel(
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
-@Experimental
 class RidgeRegressionWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -82,10 +78,8 @@ class RidgeRegressionWithSGD private (
 }
 
 /**
- * :: Experimental ::
  * Top-level methods for calling RidgeRegression.
  */
-@Experimental
 object RidgeRegressionWithSGD {
 
   /**

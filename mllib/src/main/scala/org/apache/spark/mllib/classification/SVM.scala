@@ -25,14 +25,12 @@ import org.apache.spark.mllib.util.DataValidators
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
  * Model for Support Vector Machines (SVMs).
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-@Experimental
-class SVMModel(
+class SVMModel private[mllib] (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
@@ -40,18 +38,22 @@ class SVMModel(
   private var threshold: Option[Double] = Some(0.0)
 
   /**
+   * :: Experimental ::
    * Sets the threshold that separates positive predictions from negative predictions. An example
    * with prediction score greater than or equal to this threshold is identified as an positive,
    * and negative otherwise. The default value is 0.0.
    */
+  @Experimental
   def setThreshold(threshold: Double): this.type = {
     this.threshold = Some(threshold)
     this
   }
 
   /**
+   * :: Experimental ::
    * Clears the threshold so that `predict` will output raw prediction scores.
    */
+  @Experimental
   def clearThreshold(): this.type = {
     threshold = None
     this
@@ -70,11 +72,9 @@ class SVMModel(
 }
 
 /**
- * :: Experimental ::
  * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
  * NOTE: Labels used in SVM should be {0, 1}.
  */
-@Experimental
 class SVMWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -102,10 +102,8 @@ class SVMWithSGD private (
 }
 
 /**
- * :: Experimental ::
  * Top-level methods for calling SVM. NOTE: Labels used in SVM should be {0, 1}.
  */
-@Experimental
 object SVMWithSGD {
 
   /**
