@@ -36,7 +36,6 @@ import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
 import org.junit.Test;
-import org.junit.Ignore;
 import org.junit.After;
 import org.junit.Before;
 
@@ -48,7 +47,7 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
   public void setUp() {
     testSuite.beforeFunction();
     System.clearProperty("spark.driver.port");
-    System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock");
+    //System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock");
     ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
   }
 
@@ -61,7 +60,7 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
     testSuite.afterFunction();
   }
 
-  @Ignore @Test
+  @Test
   public void testKafkaStream() {
     String topic = "topic1";
     HashMap<String, Integer> topics = new HashMap<String, Integer>();

@@ -48,6 +48,8 @@ class KafkaStreamSuite extends TestSuiteBase {
   val brokerConf = new KafkaConfig(brokerProps)
   var server: KafkaServer = _
 
+  override def useManualClock = false
+
   override def beforeFunction() {
     // Zookeeper server startup
     zookeeper = new EmbeddedZookeeper(zkConnect)
@@ -75,7 +77,7 @@ class KafkaStreamSuite extends TestSuiteBase {
     super.afterFunction()
   }
 
-  ignore("kafka input stream") {
+  test("kafka input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     val topic = "topic1"
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
