@@ -1253,7 +1253,7 @@ class SparkContext(config: SparkConf) extends Logging {
  */
 object SparkContext extends Logging {
 
-  private[spark] val SPARK_VERSION = getClass.getPackage.getImplementationVersion
+  private[spark] val SPARK_VERSION = Utils.getSparkVersion
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
