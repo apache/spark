@@ -30,8 +30,10 @@ import unittest
 
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
-from pyspark.java_gateway import SPARK_HOME
 from pyspark.serializers import read_int
+
+
+SPARK_HOME = os.environ["SPARK_HOME"]
 
 
 class PySparkTestCase(unittest.TestCase):
