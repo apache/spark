@@ -28,7 +28,7 @@ System Properties:
 * `spark.yarn.max.executor.failures`, the maximum number of executor failures before failing the application. Default is the number of executors requested times 2 with minimum of 3.
 * `spark.yarn.historyServer.address`, the address of the Spark history server (i.e. host.com:18080). The address should not contain a scheme (http://). Defaults to not being set since the history server is an optional service. This address is given to the Yarn ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI. 
 
-By default, Spark on YARN will use a Spark jar installed locally, but the Spark jar can also be in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't need to be distributed each time an application runs. To point to a jar on HDFS, export SPARK_JAR=hdfs:/some/path.
+By default, Spark on YARN will use a Spark jar installed locally, but the Spark jar can also be in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't need to be distributed each time an application runs. To point to a jar on HDFS, export SPARK_JAR=hdfs:///some/path.
 
 # Launching Spark on YARN
 

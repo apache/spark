@@ -131,8 +131,9 @@ strategies for disseminating jars:
   or shared via NFS, GlusterFS, etc.
 
 Note that JARs and files are copied to the working directory for each SparkContext on the executor nodes.
-With Mesos and the Spark Standalone cluster manager, this can use up a significant amount of space over
-time and will need to be cleaned up.
+This can use up a significant amount of space over time and will need to be cleaned up. With YARN, cleanup
+is handled automatically, and with Spark standalone, automatic cleanup can be configured with the
+`spark.worker.cleanup.appDataTtl` property.
 
 # Monitoring
 
