@@ -35,7 +35,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                k) implies the feature n is categorical with k categories 0,
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
- * @param maxMemory maximum memory in MB allocated to histogram aggregation. Default value is
+ * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
  *                  128 MB.
  *
  */
@@ -47,4 +47,4 @@ class Strategy (
     val maxBins: Int = 100,
     val quantileCalculationStrategy: QuantileStrategy = Sort,
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-    val maxMemory: Int = 128) extends Serializable
+    val maxMemoryInMB: Int = 128) extends Serializable

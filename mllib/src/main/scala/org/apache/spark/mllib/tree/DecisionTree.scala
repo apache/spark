@@ -77,7 +77,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     // Calculate level for single group construction
 
     // Max memory usage for aggregates
-    val maxMemoryUsage = strategy.maxMemory * 1024 * 1024
+    val maxMemoryUsage = strategy.maxMemoryInMB * 1024 * 1024
     logDebug("max memory usage for aggregates = " + maxMemoryUsage)
     val numElementsPerNode = {
       strategy.algo match {
