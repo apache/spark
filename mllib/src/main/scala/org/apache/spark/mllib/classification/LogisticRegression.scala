@@ -18,10 +18,10 @@
 package org.apache.spark.mllib.classification
 
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{DataValidators, MLUtils}
+import org.apache.spark.mllib.util.{BinaryLabelParser, DataValidators, MLUtils}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -74,11 +74,16 @@ class LogisticRegressionWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
-    private var miniBatchFraction: Double)
+    private var miniBatchFraction: Double,
+    private var isL1Reg: Boolean = false)
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
 
   private val gradient = new LogisticGradient()
-  private val updater = new SimpleUpdater()
+  private val updater = (regParam, isL1Reg) match {
+    case (0.0, _) => new SimpleUpdater()
+    case (regValue, true) => new L1Updater()
+    case _ => new SquaredL2Updater()
+  }
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
@@ -184,17 +189,114 @@ object LogisticRegressionWithSGD {
     train(input, numIterations, 1.0, 1.0)
   }
 
+  /**
+   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size. Each iteration uses
+   * `miniBatchFraction` fraction of the data to calculate the gradient. Can choose to
+   * use stochastic gradient descent or just gradient descent by scanning data sequentially. In
+   * the latter case, the `miniBatchFraction` fraction is ignored. Either no regularization or
+   * l1, l2 regularization can be enabled. A model with non-zero intercept can be trained. The
+   * weights used in gradient descent are initialized using the initial weights provided.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
+   * @param addIntercept train a model with non-zero intercept.
+   * @param stochastic apply gradient descent on sampled data
+   * @param l1 amount of l1 regularization
+   * @param l2 amount of l2 regularization
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double,
+      miniBatchFraction: Double,
+      addIntercept: Boolean,
+      stochastic: Boolean,
+      l1: Option[Double],
+      l2: Option[Double]): LogisticRegressionModel = {
+    val regParam = (l1, l2) match {
+      case (None, None) => 0.0
+      case (Some(v), _) => v
+      case (_, Some(v)) => v
+    }
+    val trainer = new LogisticRegressionWithSGD(stepSize, numIterations,
+      regParam, miniBatchFraction, l1.isDefined)
+    trainer.setIntercept(addIntercept)
+    trainer.optimizer.setStochastic(stochastic)
+    trainer.run(input)
+  }
+
   def main(args: Array[String]) {
-    if (args.length != 4) {
-      println("Usage: LogisticRegression <master> <input_dir> <step_size> " +
-        "<niters>")
+
+    def extractFlagValue(flag: String): Option[String] = {
+      args.flatMap { x =>
+        if (x.startsWith(flag)) {
+          Some(x.stripPrefix(flag))
+        } else {
+          None
+        }
+      }.headOption
+    }
+
+    if (args.length <= 4) {
+      println("Usage: LogisticRegression <master> <input_dir> <model_dir>\n" +
+          "       [<step_size> <niters> [--svmlight] [--l1=reg] [--l2=reg] [--stochastic] " +
+          "[--add_intercept] [--num_features=n] [--minibatch=fraction]] # training\n" +
+          "       [<prediction_dir> --testonly] # testing")
       System.exit(1)
     }
-    val sc = new SparkContext(args(0), "LogisticRegression")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = LogisticRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
-    println("Weights: " + model.weights)
-    println("Intercept: " + model.intercept)
+    val sparkMaster = args(0)
+    val inputDir = args(1)
+    val modelDir = args(2)
+    val sc = new SparkContext(sparkMaster, "LogisticRegression")
+
+    val numFeatures = extractFlagValue("--num_features=").getOrElse("-1").toInt
+
+    val data = if (args.contains("--svmlight"))
+      MLUtils.loadLibSVMData(sc, inputDir, BinaryLabelParser, numFeatures)
+    else
+      MLUtils.loadLabeledData(sc, inputDir)
+
+    if (args.contains("--testonly")) {
+      val predictionFile = args(3)
+
+      // read model
+      val rModel: Seq[(String, Double)]= sc.textFile(modelDir).map { line =>
+        val parts = line.split(":")
+        (parts(0), parts(1).toDouble)
+      } .collect()
+
+      val numFeatures = rModel(0)._2.toInt
+      val intercept = rModel(1)._2
+      val weights = Array.fill(numFeatures) { 0.0d }
+      rModel.slice(2, rModel.length).foreach { kv =>
+        weights(kv._1.toInt) = kv._2
+      }
+      val model = new LogisticRegressionModel(Vectors.dense(weights), intercept)
+
+      val dataLabel = data.map { _.features }
+      data.map { _.label }
+        .zip(model.predict(dataLabel))
+        .map { lp => lp._1 + "," + lp._2 }
+        .saveAsTextFile(predictionFile)
+    } else {
+      // train a model
+      val stepSize = args(3).toDouble
+      val pass = args(4).toInt
+      val addIntercept = args.contains("--add_intercept")
+      val stochastic = args.contains("--stochastic")
+      val l1 = extractFlagValue("--l1=").map { _.toDouble }
+      val l2 = extractFlagValue("--l2=").map { _.toDouble }
+      val minibatch = extractFlagValue("--minibatch=").map { _.toDouble } .getOrElse(1.0)
+      val model = LogisticRegressionWithSGD.train(data, pass, stepSize, minibatch, addIntercept,
+        stochastic, l1, l2)
+
+      // create and RDD[Text] and save it to output
+      sc.makeRDD(model.readableModel).saveAsTextFile(modelDir)
+    }
 
     sc.stop()
   }

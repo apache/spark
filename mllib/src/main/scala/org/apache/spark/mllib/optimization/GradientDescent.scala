@@ -40,6 +40,7 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
   private var numIterations: Int = 100
   private var regParam: Double = 0.0
   private var miniBatchFraction: Double = 1.0
+  private var stochastic: Boolean = true
 
   /**
    * Set the initial step size of SGD for the first step. Default 1.0.
@@ -95,16 +96,36 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
     this
   }
 
+  /**
+   * Set the stochastic parameter. Default is true, which samples data and apply gradient
+   * descent; otherwise gradient descent on each data instance sequentially.
+   */
+  def setStochastic(stochastic: Boolean): this.type  = {
+    this.stochastic = stochastic
+    this
+  }
+
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
-    val (weights, _) = GradientDescent.runMiniBatchSGD(
-      data,
-      gradient,
-      updater,
-      stepSize,
-      numIterations,
-      regParam,
-      miniBatchFraction,
-      initialWeights)
+    val (weights, _) = if (stochastic)
+      GradientDescent.runMiniBatchSGD(
+        data,
+        gradient,
+        updater,
+        stepSize,
+        numIterations,
+        regParam,
+        miniBatchFraction,
+        initialWeights)
+    else
+      GradientDescent.runGradientDescent(
+        data,
+        gradient,
+        updater,
+        stepSize,
+        numIterations,
+        regParam,
+        initialWeights)
+
     weights
   }
 
@@ -192,4 +213,87 @@ object GradientDescent extends Logging {
 
     (weights, stochasticLossHistory.toArray)
   }
+
+  /**
+   * Run gradient descent in parallel, for each partition, scan data sequentially.
+   * In each iteration, we perform gradient descient on each partition separately,
+   * weights are updated sequentially for each data instance inside a partition; afterwards,
+   * the weights are avg across partitions before the next iteration. There is one standard
+   * spark map-reduce in each iteration.
+   *
+   * @param data - Input data for SGD. RDD of the set of data examples, each of
+   *               the form (label, [feature values]).
+   * @param gradient - Gradient object (used to compute the gradient of the loss function of
+   *                   one single data example)
+   * @param updater - Updater function to actually perform a gradient step in a given direction.
+   * @param stepSize - initial step size for the first step
+   * @param numIterations - number of iterations that SGD should be run.
+   * @param regParam - regularization parameter
+   * @return A tuple containing two elements. The first element is a column matrix containing
+   *         weights for every feature, and the second element is an array containing the
+   *         stochastic loss computed for every iteration.
+   */
+  def runGradientDescent(
+      data: RDD[(Double, Vector)],
+      gradient: Gradient,
+      updater: Updater,
+      stepSize: Double,
+      numIterations: Int,
+      regParam: Double,
+      initialWeights: Vector): (Vector, Array[Double]) = {
+
+    val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
+
+    val numPartitions = data.partitions.length
+
+    // Initialize weights as a column vector
+    var weights = Vectors.dense(initialWeights.toArray)
+
+    val iters = new Array[Int](numPartitions)
+    for (i <- 1 to numIterations) {
+
+      def descentPartition(
+          index: Int,
+          iter: Iterator[(Double, Vector)]): Iterator[(Vector, Double, Seq[(Int, Int)])] = {
+
+        var localWeights = Vectors.dense(weights.toArray)
+        val startIter = iters(index)
+        var localIter = startIter
+        var loss = 0.0
+        var regVal = 0.0
+        while (iter.hasNext) {
+          val v = iter.next()
+          localIter += 1
+          val (grad, l) = gradient.compute(v._2, v._1, localWeights)
+          loss += l
+
+          val update = updater.compute(localWeights, grad, stepSize, localIter, regParam)
+          localWeights = update._1
+          regVal = update._2
+        }
+        loss /= (localIter - startIter)
+        Iterator((localWeights, loss+regVal, Seq((index, localIter))))
+      }
+
+      def mergeWeights(
+          m1: (Vector, Double, Seq[(Int, Int)]),
+          m2: (Vector, Double, Seq[(Int, Int)])): (Vector, Double, Seq[(Int, Int)]) = {
+        val sumWeights = Vectors.fromBreeze(m1._1.toBreeze + m2._1.toBreeze)
+        (sumWeights, m1._2 + m2._2, m1._3 ++ m2._3)
+      }
+      val (newWeights, lossSum, iterIndexedSeq) = data.mapPartitionsWithIndex(descentPartition, true)
+          .reduce(mergeWeights)
+      weights = Vectors.fromBreeze(newWeights.toBreeze :*= 1.0/numPartitions)
+      stochasticLossHistory.append(lossSum / numPartitions)
+      iterIndexedSeq.foreach { kv: (Int, Int) =>
+        iters(kv._1) = kv._2
+      }
+    }
+
+    logInfo("GradientDescent.runGradientDescent finished. Last 10 stochastic losses %s".format(
+      stochasticLossHistory.takeRight(10).mkString(", ")))
+
+    (weights, stochasticLossHistory.toArray)
+  }
+
 }

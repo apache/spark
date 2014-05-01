@@ -101,6 +101,21 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
 
     val lossDiff = loss.init.zip(loss.tail).map { case (lhs, rhs) => lhs - rhs }
     assert(lossDiff.count(_ > 0).toDouble / lossDiff.size > 0.8)
+
+    val (_, loss2) = GradientDescent.runGradientDescent(
+      dataRDD,
+      gradient,
+      updater,
+      stepSize,
+      numIterations,
+      regParam,
+      initialWeightsWithIntercept)
+
+    assert(loss2.last - loss2.head < 0, "loss isn't decreasing.")
+
+    val lossDiff2 = loss2.init.zip(loss2.tail).map { case (lhs, rhs) => lhs - rhs }
+    assert(lossDiff2.count(_ > 0).toDouble / lossDiff2.size > 0.8)
+
   }
 
   test("Test the loss and gradient of first iteration with regularization.") {
