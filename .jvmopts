@@ -1,0 +1,5 @@
+-Xmx3g
+-Xss2M
+-XX:+CMSClassUnloadingEnabled
+-XX:MaxPermSize=512M
+-XX:ReservedCodeCacheSize=512m
