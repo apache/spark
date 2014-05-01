@@ -105,6 +105,9 @@ def parse_args():
       help="Launch fresh slaves, but use an existing stopped master if possible")
   parser.add_option("--worker-instances", type="int", default=1,
       help="Number of instances per worker: variable SPARK_WORKER_INSTANCES (default: 1)")
+  parser.add_option("--master-opts", type="string", default="",
+      help="Extra options to give to master through SPARK_MASTER_OPTS variable (e.g -Dspark.worker.timeout=180)")
+
 
 
   (opts, args) = parser.parse_args()
@@ -555,7 +558,8 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     "spark_version": spark_v,
     "shark_version": shark_v,
     "hadoop_major_version": opts.hadoop_major_version,
-    "spark_worker_instances": "%d" % opts.worker_instances
+    "spark_worker_instances": "%d" % opts.worker_instances,
+    "spark_master_opts": opts.master_opts
   }
 
   # Create a temp directory in which we will place all the files to be

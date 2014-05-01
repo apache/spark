@@ -29,4 +29,4 @@ export SHARK_VERSION="{{shark_version}}"
 export HADOOP_MAJOR_VERSION="{{hadoop_major_version}}"
 export SWAP_MB="{{swap}}"
 export SPARK_WORKER_INSTANCES="{{spark_worker_instances}}"
-
+export SPARK_MASTER_OPTS="{{spark_master_opts}}"
