@@ -134,9 +134,14 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
     logger.newFile("John_Valjohn")
     logger.logLine("One")
     logger.logLine("Two three...")
+    logger.newFile("Wolverine")
+    logger.logLine("There was a time")
+    logger.logLine("A time when our enemies knew honor.")
     logger.close()
     assert(readFileContent(new Path(logDirPath, "Jean_Valjean"), codec) === "Who am I?\nDestiny?")
     assert(readFileContent(new Path(logDirPath, "John_Valjohn"), codec) === "One\nTwo three...")
+    assert(readFileContent(new Path(logDirPath, "Wolverine"), codec) ===
+      "There was a time\nA time when our enemies knew honor.")
   }
 
   /**
