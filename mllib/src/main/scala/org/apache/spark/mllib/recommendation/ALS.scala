@@ -796,8 +796,8 @@ object ALS {
       prodOutbound(p) += prodSendGrid.getOrElse((p, u), 0.0)
     }
 
-    val userCounts = userOut.mapValues(x => x.elementIds.length).collectAsMap
-    val prodCounts = prodOut.mapValues(x => x.elementIds.length).collectAsMap
+    val userCounts = userOut.mapValues(x => x.elementIds.length).collectAsMap()
+    val prodCounts = prodOut.mapValues(x => x.elementIds.length).collectAsMap()
 
     val userRatings = countRatings(userIn)
     val prodRatings = countRatings(prodIn)
