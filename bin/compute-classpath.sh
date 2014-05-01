@@ -29,7 +29,6 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH:$FWDIR/conf"
-CLASSPATH=$(echo "$CLASSPATH" | sed s/::/:/g)
 
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
 
