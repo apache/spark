@@ -753,18 +753,18 @@ object ALS {
         ratingsByProductBlock, productPartitioner)
 
     def sendGrid(outLinks: RDD[(Int, OutLinkBlock)]): Map[(Int, Int), Double] = {
-      outLinks.map{ x =>
+      outLinks.map { x =>
         val grid = new mutable.HashMap[(Int, Int), Double]()
         val uPartition = x._1
-        x._2.shouldSend.foreach{ ss =>
-          ss.foreach{ pPartition =>
+        x._2.shouldSend.foreach { ss =>
+          ss.foreach { pPartition =>
             val pair = (uPartition, pPartition)
             grid.put(pair, grid.getOrElse(pair, 0.0) + 1.0)
           }
         }
         grid
-      }.reduce{ (grid1, grid2) =>
-        grid2.foreach{ x =>
+      }.reduce { (grid1, grid2) =>
+        grid2.foreach { x =>
           grid1.put(x._1, grid1.getOrElse(x._1, 0.0) + x._2)
         }
         grid1
@@ -772,10 +772,10 @@ object ALS {
     }
 
     def countRatings(inLinks: RDD[(Int, InLinkBlock)]): Map[Int, Double] = {
-      inLinks.mapValues{ ilb =>
+      inLinks.mapValues { ilb =>
         var numRatings = 0.0
-        ilb.ratingsForBlock.foreach{ ar =>
-          ar.foreach{ p => numRatings += p._1.length }
+        ilb.ratingsForBlock.foreach { ar =>
+          ar.foreach { p => numRatings += p._1.length }
         }
         numRatings
       }.collectAsMap().toMap
