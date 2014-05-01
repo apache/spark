@@ -28,8 +28,6 @@ import org.apache.spark.mllib.tree.impurity.Impurity
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.util.Utils.memoryStringToMb
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * :: Experimental ::
