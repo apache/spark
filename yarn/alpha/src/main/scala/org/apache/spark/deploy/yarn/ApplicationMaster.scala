@@ -70,8 +70,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
   private var registered = false
 
-  private val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(
-    SparkContext.SPARK_UNKNOWN_USER)
+  private val sparkUser = SparkHadoopUtil.createSparkUser()
 
   def run() {
     // Setup the directories so things go to yarn approved directories rather

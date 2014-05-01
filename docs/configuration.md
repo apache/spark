@@ -691,6 +691,17 @@ Apart from these, the following properties are also available, and may be useful
     Set a special library path to use when launching executor JVM's.
   </td>
 </tr>
+<tr>
+  <td>spark.user.cacheUserGroupInformation</td>
+  <td>true</td>
+  <td>
+    Caching UGIs is a workaround for [SPARK-1676](https://issues.apache.org/jira/browse/SPARK-1676)
+    for users who are not using security in a very serious manner. Caching UGIs can produce 
+    security-related exceptions when tokens have an expiry, or are shared between users. On the other
+    hand, not caching UGIs means that every FileSystem.get() call can potentially create and cache a
+    new FileSystem object, which leads to leaked memory and file descriptors.
+  </td>
+</tr>
 
 </table>
 
