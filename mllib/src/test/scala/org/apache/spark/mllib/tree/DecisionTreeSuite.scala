@@ -19,7 +19,7 @@ package org.apache.spark.mllib.tree
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.point.WeightedLabeledPoint
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model.Filter
 import org.apache.spark.mllib.tree.model.Split
@@ -455,7 +455,7 @@ object DecisionTreeSuite {
         val lp = new LabeledPoint(0.0, Vectors.dense(i.toDouble, 1000.0 - i))
         arr(i) = lp
       } else {
-        val lp = new LabeledPoint(1.0, Vectors.dense(i.toDouble, 1000.0 - i))
+        val lp = new WeightedLabeledPoint(1.0, Vectors.dense(i.toDouble, 1000.0 - i))
         arr(i) = lp
       }
     }
@@ -468,7 +468,7 @@ object DecisionTreeSuite {
       if (i < 600) {
         arr(i) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0))
       } else {
-        arr(i) = new LabeledPoint(0.0, Vectors.dense(1.0, 0.0))
+        arr(i) = new WeightedLabeledPoint(0.0, Vectors.dense(1.0, 0.0))
       }
     }
     arr
