@@ -132,7 +132,7 @@ object ADMMLasso extends Logging {
 
     /* Transform the input data into ADMM format */
     def collectBlock(it: Iterator[(Vector, Double)]):
-    Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))] = {
+        Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))] = {
       val lab = new ArrayBuffer[Double]()
       val features = new ArrayBuffer[Double]()
       var row = 0
@@ -189,7 +189,8 @@ object ADMMLasso extends Logging {
 
           val updatedX = if (row >= col) {
             strtrsLapack("T", chol, strtrsLapack("N", chol, q))
-          }else {
+          }
+          else {
             (q :/ penalty) - ((design.t *
               strtrsLapack("T", chol, strtrsLapack("N", chol, design * q))) :/ (penalty * penalty))
           }
