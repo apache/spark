@@ -1063,6 +1063,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Return the absolute path of a file in the given directory.
+   */
+  def getFilePath(dir: File, fileName: String): Path = {
+    assert(dir.isDirectory)
+    val path = new File(dir, fileName).getAbsolutePath
+    new Path(path)
+  }
+
+  /**
    * Indicates whether Spark is currently running unit tests.
    */
   private[spark] def isTesting = {

@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.io.Source
 import scala.util.Try
 
+import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -42,10 +43,11 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     "org.apache.spark.io.LZFCompressionCodec",
     "org.apache.spark.io.SnappyCompressionCodec"
   )
+  private val testDir = Files.createTempDir()
+  private val logDirPath = Utils.getFilePath(testDir, "spark-events")
 
   after {
-    Try { fileSystem.delete(new Path("/tmp/spark-events"), true) }
-    Try { fileSystem.delete(new Path("/tmp/spark-foo"), true) }
+    Try { fileSystem.delete(logDirPath, true) }
   }
 
   test("Parse names of special files") {
@@ -54,7 +56,6 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
   test("Verify special files exist") {
     testSpecialFilesExist()
-    testSpecialFilesExist(logDirPath = Some("/tmp/spark-foo"))
   }
 
   test("Verify special files exist with compression") {
@@ -65,7 +66,6 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
   test("Parse event logging info") {
     testParsingLogInfo()
-    testParsingLogInfo(logDirPath = Some("/tmp/spark-foo"))
   }
 
   test("Parse event logging info with compression") {
@@ -76,7 +76,6 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
   test("Basic event logging") {
     testEventLogging()
-    testEventLogging(logDirPath = Some("/tmp/spark-foo"))
   }
 
   test("Basic event logging with compression") {
@@ -87,7 +86,6 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
   test("End-to-end event logging") {
     testApplicationEventLogging()
-    testApplicationEventLogging(logDirPath = Some("/tmp/spark-foo"))
   }
 
   test("End-to-end event logging with compression") {
@@ -143,9 +141,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    * also exist. Only after the application has completed does the test expect the application
    * completed file to be present.
    */
-  private def testSpecialFilesExist(
-      logDirPath: Option[String] = None,
-      compressionCodec: Option[String] = None) {
+  private def testSpecialFilesExist(compressionCodec: Option[String] = None) {
 
     def assertFilesExist(logFiles: Array[FileStatus], loggerStopped: Boolean) {
       val numCompressionCodecFiles = if (compressionCodec.isDefined) 1 else 0
@@ -164,10 +160,11 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     // Verify logging directory exists
     val conf = getLoggingConf(logDirPath, compressionCodec)
     val eventLogger = new EventLoggingListener("test", conf)
+    eventLogger.start()
     val logPath = new Path(eventLogger.logDir)
+    assert(fileSystem.exists(logPath))
     val logDir = fileSystem.getFileStatus(logPath)
     assert(logDir.isDir)
-    eventLogger.start()
 
     // Verify special files are as expected before stop()
     var logFiles = fileSystem.listStatus(logPath)
@@ -186,9 +183,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    * This includes whether it returns the correct Spark version, compression codec (if any),
    * and the application's completion status.
    */
-  private def testParsingLogInfo(
-      logDirPath: Option[String] = None,
-      compressionCodec: Option[String] = None) {
+  private def testParsingLogInfo(compressionCodec: Option[String] = None) {
 
     def assertInfoCorrect(info: EventLoggingInfo, loggerStopped: Boolean) {
       assert(info.logPaths.size > 0)
@@ -221,9 +216,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    * This creates two simple events, posts them to the EventLoggingListener, and verifies that
    * exactly these two events are logged in the expected file.
    */
-  private def testEventLogging(
-      logDirPath: Option[String] = None,
-      compressionCodec: Option[String] = None) {
+  private def testEventLogging(compressionCodec: Option[String] = None) {
     val conf = getLoggingConf(logDirPath, compressionCodec)
     val eventLogger = new EventLoggingListener("test", conf)
     val listenerBus = new LiveListenerBus
@@ -253,14 +246,12 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    * Test end-to-end event logging functionality in an application.
    * This runs a simple Spark job and asserts that the expected events are logged when expected.
    */
-  private def testApplicationEventLogging(
-      logDirPath: Option[String] = None,
-      compressionCodec: Option[String] = None) {
+  private def testApplicationEventLogging(compressionCodec: Option[String] = None) {
     val conf = getLoggingConf(logDirPath, compressionCodec)
     val sc = new SparkContext("local", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
-    val expectedLogDir = logDirPath.getOrElse(EventLoggingListener.DEFAULT_LOG_DIR)
+    val expectedLogDir = logDirPath.toString
     assert(eventLogger.logDir.startsWith(expectedLogDir))
 
     // Begin listening for events that trigger asserts
@@ -395,15 +386,11 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 object EventLoggingListenerSuite {
 
   /** Get a SparkConf with event logging enabled. */
-  def getLoggingConf(
-      logDir: Option[String] = None,
-      compressionCodec: Option[String] = None) = {
+  def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None) = {
     val conf = new SparkConf
     conf.set("spark.eventLog.enabled", "true")
     conf.set("spark.eventLog.testing", "true")
-    logDir.foreach { dir =>
-      conf.set("spark.eventLog.dir", dir)
-    }
+    conf.set("spark.eventLog.dir", logDir.toString)
     compressionCodec.foreach { codec =>
       conf.set("spark.eventLog.compress", "true")
       conf.set("spark.io.compression.codec", codec)

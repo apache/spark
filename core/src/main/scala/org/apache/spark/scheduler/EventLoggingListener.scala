@@ -68,6 +68,7 @@ private[spark] class EventLoggingListener(
    * If compression is used, log a file that indicates which compression library is used.
    */
   def start() {
+    logger.start()
     logInfo("Logging events to %s".format(logDir))
     if (shouldCompress) {
       val codec =

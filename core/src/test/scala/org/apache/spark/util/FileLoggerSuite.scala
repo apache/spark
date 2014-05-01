@@ -22,6 +22,7 @@ import java.io.IOException
 import scala.io.Source
 import scala.util.Try
 
+import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -37,8 +38,9 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
     "org.apache.spark.io.LZFCompressionCodec",
     "org.apache.spark.io.SnappyCompressionCodec"
   )
-  private val logDir = "/tmp/test-file-logger"
-  private val logDirPath = new Path(logDir)
+  private val testDir = Files.createTempDir()
+  private val logDirPath = Utils.getFilePath(testDir, "test-file-logger")
+  private val logDirPathString = logDirPath.toString
 
   after {
     Try { fileSystem.delete(logDirPath, true) }
@@ -66,12 +68,14 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
 
   test("Logging when directory already exists") {
     // Create the logging directory multiple times
-    new FileLogger(logDir, new SparkConf, overwrite = true)
-    new FileLogger(logDir, new SparkConf, overwrite = true)
-    new FileLogger(logDir, new SparkConf, overwrite = true)
+    new FileLogger(logDirPathString, new SparkConf, overwrite = true).start()
+    new FileLogger(logDirPathString, new SparkConf, overwrite = true).start()
+    new FileLogger(logDirPathString, new SparkConf, overwrite = true).start()
 
     // If overwrite is not enabled, an exception should be thrown
-    intercept[IOException] { new FileLogger(logDir, new SparkConf, overwrite = false) }
+    intercept[IOException] {
+      new FileLogger(logDirPathString, new SparkConf, overwrite = false).start()
+    }
   }
 
 
@@ -87,10 +91,11 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
     val codec = codecName.map { c => CompressionCodec.createCodec(conf) }
     val logger =
       if (codecName.isDefined) {
-        new FileLogger(logDir, conf, compress = true)
+        new FileLogger(logDirPathString, conf, compress = true)
       } else {
-        new FileLogger(logDir, conf)
+        new FileLogger(logDirPathString, conf)
       }
+    logger.start()
     assert(fileSystem.exists(logDirPath))
     assert(fileSystem.getFileStatus(logDirPath).isDir)
     assert(fileSystem.listStatus(logDirPath).size === 0)
@@ -118,20 +123,20 @@ class FileLoggerSuite extends FunSuite with BeforeAndAfter {
     val codec = codecName.map { c => CompressionCodec.createCodec(conf) }
     val logger =
       if (codecName.isDefined) {
-        new FileLogger(logDir, conf, compress = true)
+        new FileLogger(logDirPathString, conf, compress = true)
       } else {
-        new FileLogger(logDir, conf)
+        new FileLogger(logDirPathString, conf)
       }
-
+    logger.start()
     logger.newFile("Jean_Valjean")
     logger.logLine("Who am I?")
     logger.logLine("Destiny?")
     logger.newFile("John_Valjohn")
     logger.logLine("One")
-    logger.logLine("Two three four...")
+    logger.logLine("Two three...")
     logger.close()
-    assert(readFileContent(new Path(logDir + "/Jean_Valjean"), codec) === "Who am I?\nDestiny?")
-    assert(readFileContent(new Path(logDir + "/John_Valjohn"), codec) === "One\nTwo three four...")
+    assert(readFileContent(new Path(logDirPath, "Jean_Valjean"), codec) === "Who am I?\nDestiny?")
+    assert(readFileContent(new Path(logDirPath, "John_Valjohn"), codec) === "One\nTwo three...")
   }
 
   /**

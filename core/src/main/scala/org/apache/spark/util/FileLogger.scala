@@ -63,7 +63,12 @@ private[spark] class FileLogger(
 
   private var writer: Option[PrintWriter] = None
 
-  createLogDir()
+  /**
+   * Start this logger by creating the logging directory.
+   */
+  def start() {
+    createLogDir()
+  }
 
   /**
    * Create a logging directory with the given path.
