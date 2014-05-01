@@ -106,7 +106,7 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
   }
 
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
-    val (weights, _) = if (stochastic)
+    val (weights, _) = if (stochastic) {
       GradientDescent.runMiniBatchSGD(
         data,
         gradient,
@@ -116,7 +116,7 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
         regParam,
         miniBatchFraction,
         initialWeights)
-    else
+    } else {
       GradientDescent.runGradientDescent(
         data,
         gradient,
@@ -125,7 +125,7 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
         numIterations,
         regParam,
         initialWeights)
-
+    }
     weights
   }
 
@@ -272,7 +272,7 @@ object GradientDescent extends Logging {
           regVal = update._2
         }
         loss /= (localIter - startIter)
-        Iterator((localWeights, loss+regVal, Seq((index, localIter))))
+        Iterator((localWeights, loss + regVal, Seq((index, localIter))))
       }
 
       def mergeWeights(
@@ -281,10 +281,11 @@ object GradientDescent extends Logging {
         val sumWeights = Vectors.fromBreeze(m1._1.toBreeze + m2._1.toBreeze)
         (sumWeights, m1._2 + m2._2, m1._3 ++ m2._3)
       }
-      val (newWeights, lossSum, iterIndexedSeq) = data.mapPartitionsWithIndex(descentPartition, true)
+      val (newWeights, lossSum, iterIndexedSeq) =
+        data.mapPartitionsWithIndex(descentPartition, true)
           .reduce(mergeWeights)
-      weights = Vectors.fromBreeze(newWeights.toBreeze :*= 1.0/numPartitions)
-      stochasticLossHistory.append(lossSum / numPartitions)
+      weights = Vectors.fromBreeze(newWeights.toBreeze :*= 1.0 / iterIndexedSeq.size)
+      stochasticLossHistory.append(lossSum / iterIndexedSeq.size)
       iterIndexedSeq.foreach { kv: (Int, Int) =>
         iters(kv._1) = kv._2
       }

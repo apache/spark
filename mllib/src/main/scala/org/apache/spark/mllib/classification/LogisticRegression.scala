@@ -255,10 +255,11 @@ object LogisticRegressionWithSGD {
 
     val numFeatures = extractFlagValue("--num_features=").getOrElse("-1").toInt
 
-    val data = if (args.contains("--svmlight"))
+    val data = if (args.contains("--svmlight")) {
       MLUtils.loadLibSVMData(sc, inputDir, BinaryLabelParser, numFeatures)
-    else
+    } else {
       MLUtils.loadLabeledData(sc, inputDir)
+    }
 
     if (args.contains("--testonly")) {
       val predictionFile = args(3)

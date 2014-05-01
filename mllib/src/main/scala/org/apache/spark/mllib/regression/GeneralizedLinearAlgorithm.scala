@@ -71,18 +71,19 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
   }
 
   /**
-   * Return the model in a sqeuence of string. First row is num_features:N, second row is :intercept,
-   * rest of the file consists of one row per non-zero weight with id:value.
-   * Note that: id is one less than the corresponding feature id.
+   * Return the model in a sqeuence of string. First row is num_features:N,
+   * second row is :intercept, rest of the file consists of one row per
+   * non-zero weight with id:value.
    *
    * @return Seq[String] the trained model
    */
   def readableModel(): Seq[String] = {
     val weightSeq = weights.toArray.zipWithIndex.flatMap { x =>
-        if (x._1 != 0)
+        if (x._1 != 0) {
           Some(x._2.toString + ":" + x._1.toString)
-        else
-        None
+        } else {
+          None
+        }
      }
       Seq("num_features:%d".format(weights.size), ":%f".format(intercept)) ++ weightSeq
     }
