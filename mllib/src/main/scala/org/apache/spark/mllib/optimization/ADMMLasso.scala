@@ -20,6 +20,9 @@ package org.apache.spark.mllib.optimization
 import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{Vector => BV, DenseVector => BDV, DenseMatrix => BDM, cholesky, norm}
+import com.github.fommil.netlib.LAPACK.{getInstance=>lapack}
+import org.netlib.util.intW
+
 
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.{Partitioner, HashPartitioner, Logging}
@@ -121,15 +124,15 @@ object ADMMLasso extends Logging {
 
     val lossHistory = new ArrayBuffer[Double](numIterations)
 
-    // Initialize weights as a column vector
+    /* Initialize weights as a column vector */
     val p = initialWeights.size
 
-    // Consensus variable
+    /* Consensus variable */
     var z =  BDV.zeros[Double](p)
 
-    // Transform the input data into ADMM format
+    /* Transform the input data into ADMM format */
     def collectBlock(it: Iterator[(Vector, Double)]):
-        Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))] = {
+    Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))] = {
       val lab = new ArrayBuffer[Double]()
       val features = new ArrayBuffer[Double]()
       var row = 0
@@ -155,7 +158,7 @@ object ADMMLasso extends Logging {
     val partitionedData = data.map{case (x, y) => (y, x)}
       .partitionBy(new HashPartitioner(numPartitions)).cache()
 
-    // ((lab, design, chol), (x, u))
+    /* ((lab, design, chol), (x, u)) */
     var dividedData = partitionedData.mapPartitions(collectBlock, true)
 
     var iter = 1
@@ -169,15 +172,26 @@ object ADMMLasso extends Logging {
           val localData = it.next()
           val (x, u) = localData._2
           val updatedU = u + ((x - zBroadcast) :* penalty)
-          // Update local x by solving linear system Ax = q
+          /* Update local x by solving linear system Ax = q */
           val (lab, design, chol) = localData._1
           val (row, col) = (design.rows, design.cols)
           val q = (design.t * lab) + (zBroadcast :* penalty) - u
 
+          /* Solve linear system of equations while a is lower-triangular */
+          def strtrsLapack(trans: String, a: BDM[Double], y: BDV[Double]): BDV[Double] = {
+            val tmp = new BDM(a.rows, y.toArray)
+            val info = new intW(0)
+
+            lapack.dtrtrs("L", trans, "N", a.rows, tmp.cols, a.data, a.majorStride,
+              tmp.data, tmp.majorStride, info)
+            tmp.toDenseVector
+          }
+
           val updatedX = if (row >= col) {
-            chol.t \ (chol \ q)
-          } else {
-            (q :/ penalty) - ((design.t *(chol.t\(chol\(design * q)))) :/ (penalty * penalty))
+            strtrsLapack("T", chol, strtrsLapack("N", chol, q))
+          }else {
+            (q :/ penalty) - ((design.t *
+              strtrsLapack("T", chol, strtrsLapack("N", chol, design * q))) :/ (penalty * penalty))
           }
           Iterator((localData._1, (updatedX, updatedU)))
         }
