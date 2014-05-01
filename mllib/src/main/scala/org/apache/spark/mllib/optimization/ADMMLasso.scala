@@ -145,7 +145,7 @@ object ADMMLasso extends Logging {
 
       val designMatrix = new BDM(col, features.toArray).t
 
-      // Precompute the cholesky decomposition for solving linear system inside each partition
+      /* Precompute the cholesky decomposition for solving linear system inside each partition */
       val chol = if (row >= col) {
         cholesky((designMatrix.t * designMatrix) + (BDM.eye[Double](col) :* penalty))
       }
