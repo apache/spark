@@ -17,12 +17,12 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{BinaryLabelParser, DataValidators, MLUtils}
+import org.apache.spark.mllib.util.{BinaryLabelParser, MLUtils, DataValidators}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
 
 /**
  * Classification model trained using Logistic Regression.

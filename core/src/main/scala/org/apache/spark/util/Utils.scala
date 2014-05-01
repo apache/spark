@@ -28,9 +28,9 @@ import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import com.google.common.io.Files
-import org.apache.commons.lang.SystemUtils
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
@@ -49,7 +49,7 @@ private[spark] object Utils extends Logging {
   val random = new Random()
 
   def sparkBin(sparkHome: String, which: String): File = {
-    val suffix = if (SystemUtils.IS_OS_WINDOWS) ".cmd" else ""
+    val suffix = if (isWindows) ".cmd" else ""
     new File(sparkHome + File.separator + "bin", which + suffix)
   }
 
@@ -136,6 +136,11 @@ private[spark] object Utils extends Logging {
    */
   def getContextOrSparkClassLoader =
     Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
+
+  /** Determines whether the provided class is loadable in the current thread. */
+  def classIsLoadable(clazz: String): Boolean = {
+    Try { Class.forName(clazz, false, getContextOrSparkClassLoader) }.isSuccess
+  }
 
   /**
    * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
@@ -553,8 +558,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return the string to tell how long has passed in seconds. The passing parameter should be in
-   * millisecond.
+   * Return the string to tell how long has passed in milliseconds.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
     " " + (System.currentTimeMillis - startTimeMs) + " ms"
@@ -609,7 +613,7 @@ private[spark] object Utils extends Logging {
    */
   def isSymlink(file: File): Boolean = {
     if (file == null) throw new NullPointerException("File must not be null")
-    if (SystemUtils.IS_OS_WINDOWS) return false
+    if (isWindows) return false
     val fileInCanonicalDir = if (file.getParent() == null) {
       file
     } else {
@@ -1013,7 +1017,7 @@ private[spark] object Utils extends Logging {
       throw new IOException("Destination must be relative")
     }
     var cmdSuffix = ""
-    val linkCmd = if (SystemUtils.IS_OS_WINDOWS) {
+    val linkCmd = if (isWindows) {
       // refer to http://technet.microsoft.com/en-us/library/cc771254.aspx
       cmdSuffix = " /s /e /k /h /y /i"
       "cmd /c xcopy "
@@ -1055,5 +1059,18 @@ private[spark] object Utils extends Logging {
    */
   def getHadoopFileSystem(path: String): FileSystem = {
     getHadoopFileSystem(new URI(path))
+  }
+
+  /**
+   * return true if this is Windows.
+   */
+  def isWindows = Option(System.getProperty("os.name")).
+    map(_.startsWith("Windows")).getOrElse(false)
+
+  /**
+   * Indicates whether Spark is currently running unit tests.
+   */
+  private[spark] def isTesting = {
+    sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
   }
 }

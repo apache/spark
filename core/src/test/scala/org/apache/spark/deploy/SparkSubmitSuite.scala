@@ -28,6 +28,9 @@ import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 
 class SparkSubmitSuite extends FunSuite with ShouldMatchers {
+  def beforeAll() {
+    System.setProperty("spark.testing", "true")
+  }
 
   val noOpOutputStream = new OutputStream {
     def write(b: Int) = {}
@@ -74,33 +77,35 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     testPrematureExit(Array("--help"), "Usage: spark-submit")
   }
 
-  test("prints error with unrecognized option") {
+  test("prints error with unrecognized options") {
     testPrematureExit(Array("--blarg"), "Unrecognized option '--blarg'")
     testPrematureExit(Array("-bleg"), "Unrecognized option '-bleg'")
-    testPrematureExit(Array("--master=abc"),
-      "Unrecognized option '--master=abc'. Perhaps you want '--master abc'?")
-  }
-
-  test("handles multiple binary definitions") {
-    val adjacentJars = Array("foo.jar", "bar.jar")
-    testPrematureExit(adjacentJars, "error: Found two conflicting resources")
-
-    val nonAdjacentJars =
-      Array("foo.jar", "--master", "123", "--class", "abc", "bar.jar")
-    testPrematureExit(nonAdjacentJars, "error: Found two conflicting resources")
   }
 
   test("handle binary specified but not class") {
     testPrematureExit(Array("foo.jar"), "Must specify a main class")
   }
 
+  test("handles arguments with --key=val") {
+    val clArgs = Seq("--jars=one.jar,two.jar,three.jar", "--name=myApp")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.jars should be ("one.jar,two.jar,three.jar")
+    appArgs.name should be ("myApp")
+  }
+
+  test("handles arguments to user program") {
+    val clArgs = Seq("--name", "myApp", "userjar.jar", "some", "--random", "args", "here")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.childArgs should be (Seq("some", "--random", "args", "here"))
+  }
+
   test("handles YARN cluster mode") {
-    val clArgs = Array("thejar.jar", "--deploy-mode", "cluster",
+    val clArgs = Seq("--deploy-mode", "cluster",
       "--master", "yarn", "--executor-memory", "5g", "--executor-cores", "5",
       "--class", "org.SomeClass", "--jars", "one.jar,two.jar,three.jar",
-      "--arg", "arg1", "--arg", "arg2", "--driver-memory", "4g",
-      "--queue", "thequeue", "--files", "file1.txt,file2.txt",
-      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6")
+      "--driver-memory", "4g", "--queue", "thequeue", "--files", "file1.txt,file2.txt",
+      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6",
+      "thejar.jar", "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     val childArgsStr = childArgs.mkString(" ")
@@ -117,16 +122,16 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     childArgsStr should include ("--num-executors 6")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
     classpath should have length (0)
-    sysProps should have size (0)
+    sysProps should have size (1)
   }
 
   test("handles YARN client mode") {
-    val clArgs = Array("thejar.jar", "--deploy-mode", "client",
+    val clArgs = Seq("--deploy-mode", "client",
       "--master", "yarn", "--executor-memory", "5g", "--executor-cores", "5",
       "--class", "org.SomeClass", "--jars", "one.jar,two.jar,three.jar",
-      "--arg", "arg1", "--arg", "arg2", "--driver-memory", "4g",
-      "--queue", "thequeue", "--files", "file1.txt,file2.txt",
-      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6")
+      "--driver-memory", "4g", "--queue", "thequeue", "--files", "file1.txt,file2.txt",
+      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6", "thejar.jar",
+      "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
@@ -141,12 +146,13 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     sysProps("spark.yarn.dist.files") should be ("file1.txt,file2.txt")
     sysProps("spark.yarn.dist.archives") should be ("archive1.txt,archive2.txt")
     sysProps("spark.executor.instances") should be ("6")
+    sysProps("SPARK_SUBMIT") should be ("true")
   }
 
   test("handles standalone cluster mode") {
-    val clArgs = Array("thejar.jar", "--deploy-mode", "cluster",
-      "--master", "spark://h:p", "--class", "org.SomeClass", "--arg", "arg1", "--arg", "arg2",
-      "--supervise", "--driver-memory", "4g", "--driver-cores", "5")
+    val clArgs = Seq("--deploy-mode", "cluster",
+      "--master", "spark://h:p", "--class", "org.SomeClass",
+      "--supervise", "--driver-memory", "4g", "--driver-cores", "5", "thejar.jar", "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     val childArgsStr = childArgs.mkString(" ")
@@ -154,14 +160,13 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     childArgsStr should include ("launch spark://h:p thejar.jar org.SomeClass arg1 arg2")
     mainClass should be ("org.apache.spark.deploy.Client")
     classpath should have length (0)
-    sysProps should have size (1) // contains --jar entry
+    sysProps should have size (2) // contains --jar entry and SPARK_SUBMIT
   }
 
   test("handles standalone client mode") {
-    val clArgs = Array("thejar.jar", "--deploy-mode", "client",
+    val clArgs = Seq("--deploy-mode", "client",
       "--master", "spark://h:p", "--executor-memory", "5g", "--total-executor-cores", "5",
-      "--class", "org.SomeClass", "--arg", "arg1", "--arg", "arg2",
-      "--driver-memory", "4g")
+      "--class", "org.SomeClass", "--driver-memory", "4g", "thejar.jar", "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
@@ -172,10 +177,9 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handles mesos client mode") {
-    val clArgs = Array("thejar.jar", "--deploy-mode", "client",
+    val clArgs = Seq("--deploy-mode", "client",
       "--master", "mesos://h:p", "--executor-memory", "5g", "--total-executor-cores", "5",
-      "--class", "org.SomeClass", "--arg", "arg1", "--arg", "arg2",
-      "--driver-memory", "4g")
+      "--class", "org.SomeClass", "--driver-memory", "4g", "thejar.jar", "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
@@ -187,22 +191,24 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
 
   test("launch simple application with spark-submit") {
     runSparkSubmit(
-      Seq("unUsed.jar",
+      Seq(
         "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
         "--name", "testApp",
-        "--master", "local"))
+        "--master", "local",
+        "unUsed.jar"))
   }
 
   test("spark submit includes jars passed in through --jar") {
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
     val jarsString = Seq(jar1, jar2).map(j => j.toString).mkString(",")
-    runSparkSubmit(
-      Seq("unUsed.jar",
-        "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
-        "--name", "testApp",
-        "--master", "local-cluster[2,1,512]",
-        "--jars", jarsString))
+    val args = Seq(
+      "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local-cluster[2,1,512]",
+      "--jars", jarsString,
+      "unused.jar")
+    runSparkSubmit(args)
   }
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
