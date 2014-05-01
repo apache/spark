@@ -472,13 +472,15 @@ class ALS private (
     // Compute the XtX and Xy values for each user by adding products it rated in each product
     // block
     for (productBlock <- 0 until numBlocks) {
-      for (p <- 0 until blockFactors(productBlock).length) {
+      var p = 0
+      while (p < blockFactors(productBlock).length) {
         val x = wrapDoubleArray(blockFactors(productBlock)(p))
         tempXtX.fill(0.0)
         dspr(1.0, x, tempXtX)
         val (us, rs) = inLinkBlock.ratingsForBlock(productBlock)(p)
-        for (i <- 0 until us.length) {
-          if (implicitPrefs) {
+        if (implicitPrefs) {
+          var i = 0
+          while (i < us.length) {
             // Extension to the original paper to handle rs(i) < 0. confidence is a function
             // of |rs(i)| instead so that it is never negative:
             val confidence = 1 + alpha * abs(rs(i))
@@ -489,11 +491,17 @@ class ALS private (
             if (rs(i) > 0) {
               SimpleBlas.axpy(confidence, x, userXy(us(i)))
             }
-          } else {
+            i += 1
+          }
+        } else {
+          var i = 0
+          while (i < us.length) {
             userXtX(us(i)).addi(tempXtX)
             SimpleBlas.axpy(rs(i), x, userXy(us(i)))
+            i += 1
           }
         }
+        p += 1
       }
     }
 
@@ -502,7 +510,11 @@ class ALS private (
       // Compute the full XtX matrix from the lower-triangular part we got above
       fillFullMatrix(userXtX(index), fullXtX)
       // Add regularization
-      (0 until rank).foreach(i => fullXtX.data(i*rank + i) += lambda)
+      var i = 0
+      while (i < rank) {
+        fullXtX.data(i * rank + i) += lambda
+        i += 1
+      }
       // Solve the resulting matrix, which is symmetric and positive-definite
       if (implicitPrefs) {
         Solve.solvePositive(fullXtX.addi(YtY.get.value), userXy(index)).data
