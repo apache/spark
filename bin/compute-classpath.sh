@@ -75,7 +75,7 @@ datanucleus_jars=$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)
 
 if [ -n "$datanucleus_jars" ]; then
   an_assembly_jar=${ASSEMBLY_JAR:-$DEPS_ASSEMBLY_JAR}
-  hive_files=$(jar tvf "$an_assembly_jar" org/apache/hadoop/hive/ql/exec)
+  hive_files=$(jar tvf "$an_assembly_jar" org/apache/hadoop/hive/ql/exec 2>/dev/null)
   if [ -n "$hive_files" ]; then
     echo "Spark assembly has been built with Hive, including Datanucleus jars on classpath" 1>&2
     CLASSPATH=$CLASSPATH:$datanucleus_jars
