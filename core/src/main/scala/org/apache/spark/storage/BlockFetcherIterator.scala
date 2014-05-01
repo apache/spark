@@ -118,11 +118,9 @@ object BlockFetcherIterator {
       })
       bytesInFlight += req.size
       val sizeMap = req.blocks.toMap  // so we can look up the size of each blockID
-      val fetchStart = System.currentTimeMillis()
       val future = connectionManager.sendMessageReliably(cmId, blockMessageArray.toBufferMessage)
       future.onSuccess {
         case Some(message) => {
-          val fetchDone = System.currentTimeMillis()
           val bufferMessage = message.asInstanceOf[BufferMessage]
           val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
           for (blockMessage <- blockMessageArray) {
