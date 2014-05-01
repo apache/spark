@@ -712,9 +712,13 @@ object ALS {
   /**
    * :: DeveloperApi ::
    * Represents the cost attributable to a partition of a single ALS iteration.
+   * `inboundVectors` and `outboundVectors` are the number of feature vectors sent in and out,
+   * respectively, from a block in each iteration.  `outerProducts` is the number of outer products
+   * that need to be accumulated in each iteration.  `subproblems` is the number of least-squares
+   * subproblems solved in each iteration.
    */
   @DeveloperApi
-  case class IterationCost(inboundVectors: Double, outerProducts: Double, choleskies: Double,
+  case class IterationCost(inboundVectors: Double, outerProducts: Double, subproblems: Double,
       outboundVectors: Double)
 
   /**
