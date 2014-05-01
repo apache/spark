@@ -147,6 +147,10 @@ echo "Spark $VERSION built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE
 cp $FWDIR/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
 cp $FWDIR/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 
+if [ "$SPARK_HIVE" == "true" ]; then
+  cp $FWDIR/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
+fi
+
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$FWDIR"/conf/*.template "$DISTDIR"/conf
@@ -154,7 +158,6 @@ cp "$FWDIR"/conf/slaves "$DISTDIR"/conf
 cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/python" "$DISTDIR"
 cp -r "$FWDIR/sbin" "$DISTDIR"
-
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then

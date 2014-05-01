@@ -29,6 +29,7 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH:$FWDIR/conf"
+CLASSPATH=$(echo "$CLASSPATH" | sed s/::/:/g)
 
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
 
@@ -45,14 +46,14 @@ if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/sql/core/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SCALA_VERSION/classes"
 
-  DEPS_ASSEMBLY_JAR=`ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar`
+  DEPS_ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar 2>/dev/null)
   CLASSPATH="$CLASSPATH:$DEPS_ASSEMBLY_JAR"
 else
   # Else use spark-assembly jar from either RELEASE or assembly directory
   if [ -f "$FWDIR/RELEASE" ]; then
-    ASSEMBLY_JAR=`ls "$FWDIR"/lib/spark-assembly*hadoop*.jar`
+    ASSEMBLY_JAR=$(ls "$FWDIR"/lib/spark-assembly*hadoop*.jar 2>/dev/null)
   else
-    ASSEMBLY_JAR=`ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*.jar`
+    ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*.jar 2>/dev/null)
   fi
   CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
 fi
@@ -63,14 +64,21 @@ fi
 # built with Hive, so first check if the datanucleus jars exist, and then ensure the current Spark
 # assembly is built for Hive, before actually populating the CLASSPATH with the jars.
 # Note that this check order is faster (by up to half a second) in the case where Hive is not used.
-num_datanucleus_jars=$(ls "$FWDIR"/lib_managed/jars/ 2>/dev/null | grep "datanucleus-.*\\.jar" | wc -l)
-if [ $num_datanucleus_jars -gt 0 ]; then
-  AN_ASSEMBLY_JAR=${ASSEMBLY_JAR:-$DEPS_ASSEMBLY_JAR}
-  num_hive_files=$(jar tvf "$AN_ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null | wc -l)
-  if [ $num_hive_files -gt 0 ]; then
+if [ -f "$FWDIR/RELEASE" ]; then
+  datanucleus_dir="$FWDIR"/lib
+else
+  datanucleus_dir="$FWDIR"/lib_managed/jars
+fi
+
+datanucleus_jars=$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\.jar")
+datanucleus_jars=$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)
+
+if [ -n "$datanucleus_jars" ]; then
+  an_assembly_jar=${ASSEMBLY_JAR:-$DEPS_ASSEMBLY_JAR}
+  hive_files=$(jar tvf "$an_assembly_jar" org/apache/hadoop/hive/ql/exec)
+  if [ -n "$hive_files" ]; then
     echo "Spark assembly has been built with Hive, including Datanucleus jars on classpath" 1>&2
-    DATANUCLEUSJARS=$(echo "$FWDIR/lib_managed/jars"/datanucleus-*.jar | tr " " :)
-    CLASSPATH=$CLASSPATH:$DATANUCLEUSJARS
+    CLASSPATH=$CLASSPATH:$datanucleus_jars
   fi
 fi
 
@@ -90,10 +98,10 @@ fi
 # Add hadoop conf dir if given -- otherwise FileSystem.*, etc fail !
 # Note, this assumes that there is either a HADOOP_CONF_DIR or YARN_CONF_DIR which hosts
 # the configurtion files.
-if [ "x" != "x$HADOOP_CONF_DIR" ]; then
+if [ -n "$HADOOP_CONF_DIR" ]; then
   CLASSPATH="$CLASSPATH:$HADOOP_CONF_DIR"
 fi
-if [ "x" != "x$YARN_CONF_DIR" ]; then
+if [ -n "$YARN_CONF_DIR" ]; then
   CLASSPATH="$CLASSPATH:$YARN_CONF_DIR"
 fi
 
