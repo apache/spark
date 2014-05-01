@@ -15,32 +15,18 @@
  
  language: scala
  scala:
-   - "2.10.4"
+   - "2.10.3"
  jdk:
-   - oraclejdk8
    - oraclejdk7
-   - openjdk6
+ env:
+  matrix:
+   - TEST="scalastyle assembly/assembly"
+   - TEST="catalyst/test sql/test streaming/test mllib/test graphx/test bagel/test"
+   - TEST=hive/test
  cache:
    directories:
      - $HOME/.m2
      - $HOME/.ivy2
      - $HOME/.sbt
- env:
-  matrix:
-   - SPARK_HADOOP_VERSION=1.2.1
-   - SPARK_HADOOP_VERSION=2.4.0
- before_script:
-   - sudo apt-get install libgfortran3
  script:
-   # TODO: Cannot get hive/test to pass
-   >
-     if [[ $SPARK_HADOOP_VERSION = '2.4.0' ]]; then
-       mvn clean package -DskipTests -Pyarn -Dhadoop.version=$SPARK_HADOOP_VERSION -Dyarn.version=$SPARK_HADOOP_VERSION
-       num_jars=$(ls "$FWDIR"/assembly/target/scala-2.10/ | grep "spark-assembly.*hadoop.*.jar" | wc -l)
-       if [ "$num_jars" -eq "0" ]; then
-        exit -1
-       fi
-       mvn test -Pyarn -Dhadoop.version=$SPARK_HADOOP_VERSION -Dyarn.version=$SPARK_HADOOP_VERSION -am -pl mllib -pl bagel -pl sql/catalyst -pl yarn
-     else
-       SPARK_HADOOP_VERSION=$SPARK_HADOOP_VERSION sbt ++$TRAVIS_SCALA_VERSION assembly/assembly sql/test graphx/test streaming/test
-     fi
+   - "sbt ++$TRAVIS_SCALA_VERSION $TEST"
