@@ -112,6 +112,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats1.*",
     "stats20",
     "alter_merge_stats",
+    "columnstats.*",
+
 
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
     // http://stackoverflow.com/a/1573715
@@ -250,8 +252,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "binarysortable_1",
     "cast1",
     "cluster",
-    "columnstats_partlvl",
-    "columnstats_tbllvl",
     "combine1",
     "compute_stats_binary",
     "compute_stats_boolean",
