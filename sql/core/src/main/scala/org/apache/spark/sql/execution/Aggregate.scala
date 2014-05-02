@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.Aggregator
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, Aggregator, SparkContext}
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -166,7 +165,7 @@ case class Aggregate(
         def mergeCombiners(buf1: ArrayBuffer[Row], buf2: ArrayBuffer[Row]) =
           buf1 ++= buf2
         val aggregator = new Aggregator[Row, Row, ArrayBuffer[Row]](
-          createCombiner, mergeValue, mergeCombiners, new SparkSqlSerializer)
+          createCombiner, mergeValue, mergeCombiners, new SparkSqlSerializer(new SparkConf(false)))
 
         val aggIter = aggregator.combineValuesByKey(
           new Iterator[(Row, Row)] {  // (groupKey, row)
