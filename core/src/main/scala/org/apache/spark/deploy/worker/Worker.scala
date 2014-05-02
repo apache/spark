@@ -244,7 +244,7 @@ private[spark] class Worker(
           }
         } catch {
           case e: Exception => {
-            logError("Failed to launch exector %s/%d for %s".format(appId, execId, appDesc.name))
+            logError("Failed to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
