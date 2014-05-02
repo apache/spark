@@ -23,8 +23,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.SparkSqlSerializer
 import scala.collection.mutable.ArrayBuffer
-;
 
 /**
  * :: DeveloperApi ::
@@ -165,7 +165,8 @@ case class Aggregate(
         def mergeValue(buffer: ArrayBuffer[Row], row: Row) = buffer += row
         def mergeCombiners(buf1: ArrayBuffer[Row], buf2: ArrayBuffer[Row]) =
           buf1 ++= buf2
-        val aggregator = new Aggregator[Row, Row, ArrayBuffer[Row]](createCombiner, mergeValue, mergeCombiners)
+        val aggregator = new Aggregator[Row, Row, ArrayBuffer[Row]](
+          createCombiner, mergeValue, mergeCombiners, new SparkSqlSerializer)
 
         val aggIter = aggregator.combineValuesByKey(
           new Iterator[(Row, Row)] {  // (groupKey, row)
@@ -173,8 +174,8 @@ case class Aggregate(
 
             override final def next(): (Row, Row) = {
               val row = iter.next()
-              // TODO: copy() here for suppressing reference problems. Please investigate the root-cause and
-              // remove copy() here.
+              // TODO: copy() here for suppressing reference problems. Please investigate
+              // the root-cause and remove copy() here.
               (groupingProjection(row).copy(), row.copy())
             }
           },
