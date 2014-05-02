@@ -22,8 +22,9 @@ import java.nio.ByteBuffer
 import akka.actor._
 import akka.remote._
 
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.{SparkContext, Logging, SecurityManager, SparkConf}
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -94,25 +95,32 @@ private[spark] class CoarseGrainedExecutorBackend(
 
 private[spark] object CoarseGrainedExecutorBackend {
   def run(driverUrl: String, executorId: String, hostname: String, cores: Int,
-          workerUrl: Option[String]) {
-    // Debug code
-    Utils.checkHost(hostname)
+    workerUrl: Option[String]) {
 
-    val conf = new SparkConf
-    // Create a new ActorSystem to run the backend, because we can't create a SparkEnv / Executor
-    // before getting started with all our system properties, etc
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0,
-      indestructible = true, conf = conf, new SecurityManager(conf))
-    // set it
-    val sparkHostPort = hostname + ":" + boundPort
-    actorSystem.actorOf(
-      Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId,
-        sparkHostPort, cores),
-      name = "Executor")
-    workerUrl.foreach{ url =>
-      actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+    val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(SparkContext.SPARK_UNKNOWN_USER)
+    SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
+
+        // Debug code
+        Utils.checkHost(hostname)
+
+        val conf = new SparkConf
+        // Create a new ActorSystem to run the backend, because we can't create a SparkEnv / Executor
+        // before getting started with all our system properties, etc
+        val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0,
+          indestructible = true, conf = conf, new SecurityManager(conf))
+        // set it
+        val sparkHostPort = hostname + ":" + boundPort
+        actorSystem.actorOf(
+          Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId,
+            sparkHostPort, cores),
+          name = "Executor")
+        workerUrl.foreach {
+          url =>
+            actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+        }
+        actorSystem.awaitTermination()
+
     }
-    actorSystem.awaitTermination()
   }
 
   def main(args: Array[String]) {

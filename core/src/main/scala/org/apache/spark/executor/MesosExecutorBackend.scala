@@ -23,10 +23,10 @@ import com.google.protobuf.ByteString
 import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver, MesosNativeLibrary}
 import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
 
-import org.apache.spark.Logging
-import org.apache.spark.TaskState
+import org.apache.spark.{SparkContext, Logging, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.Utils
+import org.apache.spark.deploy.SparkHadoopUtil
 
 private[spark] class MesosExecutorBackend
   extends MesosExecutor
@@ -95,9 +95,13 @@ private[spark] class MesosExecutorBackend
  */
 private[spark] object MesosExecutorBackend {
   def main(args: Array[String]) {
-    MesosNativeLibrary.load()
-    // Create a new Executor and start it running
-    val runner = new MesosExecutorBackend()
-    new MesosExecutorDriver(runner).run()
+    val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(SparkContext.SPARK_UNKNOWN_USER)
+    SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
+
+        MesosNativeLibrary.load()
+        // Create a new Executor and start it running
+        val runner = new MesosExecutorBackend()
+        new MesosExecutorDriver(runner).run()
+    }
   }
 }

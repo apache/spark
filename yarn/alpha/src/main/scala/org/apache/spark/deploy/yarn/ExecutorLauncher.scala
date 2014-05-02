@@ -33,6 +33,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
  * An application master that allocates executors on behalf of a driver that is running outside
@@ -279,6 +280,10 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 object ExecutorLauncher {
   def main(argStrings: Array[String]) {
     val args = new ApplicationMasterArguments(argStrings)
-    new ExecutorLauncher(args).run()
+    val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(
+      SparkContext.SPARK_UNKNOWN_USER)
+    SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
+      new ExecutorLauncher(args).run()
+    }
   }
 }

@@ -24,25 +24,30 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{Logging, SparkContext, SparkException}
 
 import scala.collection.JavaConversions._
 
 /**
  * Contains util methods to interact with Hadoop from Spark.
  */
-class SparkHadoopUtil {
+class SparkHadoopUtil extends Logging {
   val conf: Configuration = newConfiguration()
   UserGroupInformation.setConfiguration(conf)
 
+  // IMPORTANT NOTE: If this function is going to be called repeated in the same process
+  // you need to look https://issues.apache.org/jira/browse/HDFS-3545 and possibly
+  // do a FileSystem.closeAllForUGI in order to avoid leaking Filesystems
   def runAsUser(user: String)(func: () => Unit) {
     if (user != SparkContext.SPARK_UNKNOWN_USER) {
+      logInfo("running as user: " + user)
       val ugi = UserGroupInformation.createRemoteUser(user)
       transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
       ugi.doAs(new PrivilegedExceptionAction[Unit] {
         def run: Unit = func()
       })
     } else {
+      logInfo("running as SPARK_UNKNOWN_USER")
       func()
     }
   }
