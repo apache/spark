@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.HashMap
-
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.Aggregator
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import scala.collection.mutable.ArrayBuffer
+;
 
 /**
  * :: DeveloperApi ::
@@ -155,48 +156,56 @@ case class Aggregate(
       }
     } else {
       child.execute().mapPartitions { iter =>
-        val hashTable = new HashMap[Row, Array[AggregateFunction]]
-        val groupingProjection = new MutableProjection(groupingExpressions, childOutput)
+        val groupingProjection = new
+            MutableProjection(groupingExpressions, childOutput)
+        // TODO: Can't use "Array[AggregateFunction]" directly, due to lack of
+        // "concat(AggregateFunction, AggregateFunction)". Should add
+        // AggregateFunction.update(agg: AggregateFunction) in the future.
+        def createCombiner(row: Row) = ArrayBuffer[Row](row)
+        def mergeValue(buffer: ArrayBuffer[Row], row: Row) = buffer += row
+        def mergeCombiners(buf1: ArrayBuffer[Row], buf2: ArrayBuffer[Row]) =
+          buf1 ++= buf2
+        val aggregator = new Aggregator[Row, Row, ArrayBuffer[Row]](createCombiner, mergeValue, mergeCombiners)
 
-        var currentRow: Row = null
-        while (iter.hasNext) {
-          currentRow = iter.next()
-          val currentGroup = groupingProjection(currentRow)
-          var currentBuffer = hashTable.get(currentGroup)
-          if (currentBuffer == null) {
-            currentBuffer = newAggregateBuffer()
-            hashTable.put(currentGroup.copy(), currentBuffer)
-          }
+        val aggIter = aggregator.combineValuesByKey(
+          new Iterator[(Row, Row)] {  // (groupKey, row)
+            override final def hasNext: Boolean = iter.hasNext
 
-          var i = 0
-          while (i < currentBuffer.length) {
-            currentBuffer(i).update(currentRow)
-            i += 1
-          }
-        }
-
+            override final def next(): (Row, Row) = {
+              val row = iter.next()
+              // TODO: copy() here for suppressing reference problems. Please investigate the root-cause and
+              // remove copy() here.
+              (groupingProjection(row).copy(), row.copy())
+            }
+          },
+          null
+        )
         new Iterator[Row] {
-          private[this] val hashTableIter = hashTable.entrySet().iterator()
           private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
-          private[this] val resultProjection =
-            new MutableProjection(resultExpressions, computedSchema ++ namedGroups.map(_._2))
+          private[this] val resultProjection = new MutableProjection(
+            resultExpressions, computedSchema ++ namedGroups.map(_._2))
           private[this] val joinedRow = new JoinedRow
 
-          override final def hasNext: Boolean = hashTableIter.hasNext
+          override final def hasNext: Boolean = aggIter.hasNext
 
           override final def next(): Row = {
-            val currentEntry = hashTableIter.next()
-            val currentGroup = currentEntry.getKey
-            val currentBuffer = currentEntry.getValue
+            val entry = aggIter.next()
+            val group = entry._1
+            val data = entry._2
 
-            var i = 0
-            while (i < currentBuffer.length) {
-              // Evaluating an aggregate buffer returns the result.  No row is required since we
-              // already added all rows in the group using update.
-              aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
-              i += 1
+            val buf = newAggregateBuffer()
+
+            for (i <- 0 to data.length - 1) {
+              val tmp = data(i)
+              for (j <- 0 to buf.length - 1) {
+                buf(j).update(tmp)
+              }
             }
-            resultProjection(joinedRow(aggregateResults, currentGroup))
+
+            for (i <- 0 to buf.length - 1) {
+              aggregateResults(i) = buf(i).eval(EmptyRow)
+            }
+            resultProjection(joinedRow(aggregateResults, group))
           }
         }
       }
