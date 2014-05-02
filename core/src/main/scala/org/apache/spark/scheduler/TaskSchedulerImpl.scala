@@ -31,6 +31,7 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.util.UncaughtExceptionHandler
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -139,6 +140,7 @@ private[spark] class TaskSchedulerImpl(
       import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
             SPECULATION_INTERVAL milliseconds) {
+        Thread.currentThread.setUncaughtExceptionHandler(UncaughtExceptionHandler)
         checkSpeculatableTasks()
       }
     }

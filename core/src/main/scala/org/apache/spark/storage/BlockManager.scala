@@ -155,6 +155,7 @@ private[spark] class BlockManager(
     BlockManagerWorker.startBlockManagerWorker(this)
     if (!BlockManager.getDisableHeartBeatsForTesting(conf)) {
       heartBeatTask = actorSystem.scheduler.schedule(0.seconds, heartBeatFrequency.milliseconds) {
+        Thread.currentThread.setUncaughtExceptionHandler(UncaughtExceptionHandler)
         heartBeat()
       }
     }
