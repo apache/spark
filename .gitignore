@@ -49,3 +49,8 @@ unit-tests.log
 /lib/
 rat-results.txt
 scalastyle.txt
+
+# For Hive
+metastore_db/
+metastore/
+warehouse/
