@@ -50,18 +50,18 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     var curPlan = plan
 
     batches.foreach { batch =>
+      val batchStartPlan = curPlan
       var iteration = 1
       var lastPlan = curPlan
-      curPlan = batch.rules.foldLeft(curPlan) { case (plan, rule) => rule(plan) }
+      var continue = true
 
       // Run until fix point (or the max number of iterations as specified in the strategy.
-      while (iteration < batch.strategy.maxIterations && !curPlan.fastEquals(lastPlan)) {
-        lastPlan = curPlan
+      while (continue) {
         curPlan = batch.rules.foldLeft(curPlan) {
           case (plan, rule) =>
             val result = rule(plan)
             if (!result.fastEquals(plan)) {
-              logger.debug(
+              logger.trace(
                 s"""
                   |=== Applying Rule ${rule.ruleName} ===
                   |${sideBySide(plan.treeString, result.treeString).mkString("\n")}
@@ -71,6 +71,26 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             result
         }
         iteration += 1
+        if (iteration >= batch.strategy.maxIterations) {
+          logger.info(s"Max iterations ($iteration) reached for batch ${batch.name}")
+          continue = false
+        }
+
+        if (curPlan.fastEquals(lastPlan)) {
+          logger.trace(s"Fixed point reached for batch ${batch.name} after $iteration iterations.")
+          continue = false
+        }
+        lastPlan = curPlan
+      }
+
+      if (!batchStartPlan.fastEquals(curPlan)) {
+        logger.debug(
+          s"""
+          |=== Result of Batch ${batch.name} ===
+          |${sideBySide(plan.treeString, curPlan.treeString).mkString("\n")}
+        """.stripMargin)
+      } else {
+        logger.trace(s"Batch ${batch.name} has no effect.")
       }
     }
 
