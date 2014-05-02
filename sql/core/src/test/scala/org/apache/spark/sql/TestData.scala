@@ -47,6 +47,12 @@ object TestData {
       (1, null) ::
       (2, 2) :: Nil)
 
+  case class TestDataLarge(a: Int, b:Int)
+  val testDataLarge: SchemaRDD =
+    TestSQLContext.sparkContext.parallelize(
+      (1 to 10000000).map(i => TestDataLarge(i%1000, i%1000)))
+  testDataLarge.registerAsTable("testDataLarge")
+  
   case class UpperCaseData(N: Int, L: String)
   val upperCaseData =
     TestSQLContext.sparkContext.parallelize(

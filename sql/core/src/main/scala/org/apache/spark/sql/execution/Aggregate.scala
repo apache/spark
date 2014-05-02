@@ -21,9 +21,13 @@ import java.util.HashMap
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.sql.catalyst.expressions.MutableProjection
+import org.apache.spark.Aggregator
 
 /**
  * :: DeveloperApi ::
@@ -129,32 +133,68 @@ case class Aggregate(
     }
   }
 
-  override def execute() = attachTree(this, "execute") {
-    if (groupingExpressions.isEmpty) {
-      child.execute().mapPartitions { iter =>
-        val buffer = newAggregateBuffer()
-        var currentRow: Row = null
-        while (iter.hasNext) {
-          currentRow = iter.next()
-          var i = 0
-          while (i < buffer.length) {
-            buffer(i).update(currentRow)
-            i += 1
+  /**
+   * Implementation of aggregate using external sorting.
+   */
+  private[this] def aggregateWithExternalSorting() = {
+
+    def createCombiner(v: Row) = ArrayBuffer(v)
+    def mergeValue(buf: ArrayBuffer[Row], v: Row) = buf += v
+    def mergeCombiners(c1: ArrayBuffer[Row], c2: ArrayBuffer[Row]) = c1 ++ c2
+
+    child.execute().mapPartitionsWithContext {
+      (context, iter) =>
+        val aggregator =
+          new Aggregator[Row, Row, ArrayBuffer[Row]](createCombiner, mergeValue, mergeCombiners)
+
+        val groupingProjection = new MutableProjection(groupingExpressions, childOutput)
+        val tuplesByGroups = iter.map(x => (groupingProjection(x).copy(), x.copy()))
+        val sortedProjectionGroups =
+          aggregator.combineValuesByKey(tuplesByGroups.toIterator,
+            context, new SparkSqlSerializer(SparkEnv.get.conf))
+
+        new Iterator[Row] {
+          private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
+          private[this] val resultProjection =
+            new MutableProjection(resultExpressions, computedSchema ++ namedGroups.map(_._2))
+          private[this] val joinedRow = new JoinedRow
+
+          override final def hasNext: Boolean = sortedProjectionGroups.hasNext
+
+          override final def next(): Row = {
+            val currentEntry = sortedProjectionGroups.next()
+            val currentGroupKey = currentEntry._1
+            val currentGroupIterator = currentEntry._2.iterator
+
+            val currentBuffer = newAggregateBuffer()
+            while (currentGroupIterator.hasNext) {
+              val currentRow = currentGroupIterator.next()
+              var i = 0
+              while (i < currentBuffer.length) {
+                currentBuffer(i).update(currentRow)
+                i += 1
+              }
+            }
+
+            var i = 0
+            while (i < currentBuffer.length) {
+              // Evaluating an aggregate buffer returns the result.  No row is required since we
+              // already added all rows in the group using update.
+              aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
+              i += 1
+            }
+            resultProjection(joinedRow(aggregateResults, currentGroupKey))
           }
         }
-        val resultProjection = new Projection(resultExpressions, computedSchema)
-        val aggregateResults = new GenericMutableRow(computedAggregates.length)
+    }
+  }
 
-        var i = 0
-        while (i < buffer.length) {
-          aggregateResults(i) = buffer(i).eval(EmptyRow)
-          i += 1
-        }
-
-        Iterator(resultProjection(aggregateResults))
-      }
-    } else {
-      child.execute().mapPartitions { iter =>
+  /**
+   * Implementation of aggregate without external sorting.
+   */
+  private[this] def aggregate() = {
+    child.execute().mapPartitions {
+      iter =>
         val hashTable = new HashMap[Row, Array[AggregateFunction]]
         val groupingProjection = new MutableProjection(groupingExpressions, childOutput)
 
@@ -199,6 +239,41 @@ case class Aggregate(
             resultProjection(joinedRow(aggregateResults, currentGroup))
           }
         }
+    }
+  }
+
+  override def execute() = attachTree(this, "execute") {
+    if (groupingExpressions.isEmpty) {
+      child.execute().mapPartitions {
+        iter =>
+          val buffer = newAggregateBuffer()
+          var currentRow: Row = null
+          while (iter.hasNext) {
+            currentRow = iter.next()
+            var i = 0
+            while (i < buffer.length) {
+              buffer(i).update(currentRow)
+              i += 1
+            }
+          }
+          val resultProjection = new Projection(resultExpressions, computedSchema)
+          val aggregateResults = new GenericMutableRow(computedAggregates.length)
+
+          var i = 0
+          while (i < buffer.length) {
+            aggregateResults(i) = buffer(i).eval(EmptyRow)
+            i += 1
+          }
+
+          Iterator(resultProjection(aggregateResults))
+      }
+    } else {
+      val externalSorting = SparkEnv.get.conf.getBoolean("spark.shuffle.spill", true)
+
+      if (externalSorting) {
+        aggregateWithExternalSorting()
+      } else {
+        aggregate()
       }
     }
   }

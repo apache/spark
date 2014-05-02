@@ -19,6 +19,7 @@ package org.apache.spark
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
+import org.apache.spark.serializer.Serializer
 
 /**
  * :: DeveloperApi ::
@@ -40,8 +41,8 @@ case class Aggregator[K, V, C] (
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]): Iterator[(K, C)] =
     combineValuesByKey(iter, null)
 
-  def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]],
-                         context: TaskContext): Iterator[(K, C)] = {
+  def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]], context: TaskContext,
+                         serializer: Serializer = SparkEnv.get.serializer): Iterator[(K, C)] = {
     if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kv: Product2[K, V] = null
@@ -54,7 +55,8 @@ case class Aggregator[K, V, C] (
       }
       combiners.iterator
     } else {
-      val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+      val combiners =
+        new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners, serializer)
       while (iter.hasNext) {
         val (k, v) = iter.next()
         combiners.insert(k, v)
@@ -70,7 +72,8 @@ case class Aggregator[K, V, C] (
   def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] =
     combineCombinersByKey(iter, null)
 
-  def combineCombinersByKey(iter: Iterator[(K, C)], context: TaskContext) : Iterator[(K, C)] = {
+  def combineCombinersByKey(iter: Iterator[(K, C)], context: TaskContext,
+                            serializer: Serializer = SparkEnv.get.serializer) : Iterator[(K, C)] = {
     if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kc: Product2[K, C] = null
@@ -83,7 +86,8 @@ case class Aggregator[K, V, C] (
       }
       combiners.iterator
     } else {
-      val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
+      val combiners =
+        new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners, serializer)
       while (iter.hasNext) {
         val (k, c) = iter.next()
         combiners.insert(k, c)
