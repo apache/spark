@@ -130,7 +130,8 @@ private[spark] class Executor(
   // NB: Workaround for SPARK-1676. Caching UGIs prevents continuously creating FileSystem
   // objects with "unique" UGIs, but is not a good solution if real UGIs and tokens are needed,
   // mainly because expired tokens cannot be removed from the UGI.
-  val cacheUgi = conf.getBoolean("spark.user.cacheUserGroupInformation", true)
+  // This behavior is a branch-0.9-specific bug fix. See SPARK-1676 for more information.
+  val cacheUgi = conf.getBoolean("spark.user.cacheUserGroupInformation", false)
 
   val cachedSparkUser = SparkHadoopUtil.get.createSparkUser()
   def getSparkUser = if (cacheUgi) cachedSparkUser else SparkHadoopUtil.get.createSparkUser()

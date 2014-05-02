@@ -473,7 +473,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.user.cacheUserGroupInformation</td>
-  <td>true</td>
+  <td>false</td>
   <td>
     Caching UGIs is a workaround for [SPARK-1676](https://issues.apache.org/jira/browse/SPARK-1676)
     for users who are not using security in a very serious manner. Caching UGIs can produce 
