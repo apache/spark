@@ -73,7 +73,6 @@ private[spark] class Worker(
 
   // Index into masterUrls that we're currently trying to register with.
   var masterIndex = 0
-  var wf = "wf"
 
   val masterLock: Object = new Object()
   var master: ActorSelection = null
