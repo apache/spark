@@ -37,7 +37,7 @@ private[spark] trait SparkListenerBus {
    * Post an event to all attached listeners. This does nothing if the event is
    * SparkListenerShutdown.
    */
-  protected def postToAll(event: SparkListenerEvent) {
+  def postToAll(event: SparkListenerEvent) {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         sparkListeners.foreach(_.onStageSubmitted(stageSubmitted))

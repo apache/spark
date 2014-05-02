@@ -1062,15 +1062,25 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * return true if this is Windows.
+   * Return the absolute path of a file in the given directory.
    */
-  def isWindows = Option(System.getProperty("os.name")).
-    map(_.startsWith("Windows")).getOrElse(false)
+  def getFilePath(dir: File, fileName: String): Path = {
+    assert(dir.isDirectory)
+    val path = new File(dir, fileName).getAbsolutePath
+    new Path(path)
+  }
+
+  /**
+   * Return true if this is Windows.
+   */
+  def isWindows = {
+    Option(System.getProperty("os.name")).exists(_.startsWith("Windows"))
+  }
 
   /**
    * Indicates whether Spark is currently running unit tests.
    */
-  private[spark] def isTesting = {
+  def isTesting = {
     sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
   }
 }

@@ -646,11 +646,11 @@ private[spark] object JsonProtocol {
   }
 
   def propertiesFromJson(json: JValue): Properties = {
-    val properties = new Properties()
-    if (json != JNothing) {
-      mapFromJson(json).map { case (k, v) => properties.setProperty(k, v) }
-    }
-    properties
+    Utils.jsonOption(json).map { value =>
+      val properties = new Properties
+      mapFromJson(json).foreach { case (k, v) => properties.setProperty(k, v) }
+      properties
+    }.getOrElse(null)
   }
 
   def UUIDFromJson(json: JValue): UUID = {
