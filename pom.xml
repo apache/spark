@@ -701,9 +701,8 @@
             <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
             <stderr/>
             <environmentVariables>
-              <SPARK_HOME>${basedir}/..</SPARK_HOME>
+              <SPARK_HOME>${session.executionRootDirectory}</SPARK_HOME>
               <SPARK_TESTING>1</SPARK_TESTING>
-              <SPARK_CLASSPATH>${spark.classpath}</SPARK_CLASSPATH>
             </environmentVariables>
           </configuration>
           <executions>

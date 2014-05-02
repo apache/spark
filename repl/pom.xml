@@ -102,7 +102,6 @@
         <configuration>
           <environmentVariables>
             <SPARK_HOME>${basedir}/..</SPARK_HOME>
-            <SPARK_TESTING>1</SPARK_TESTING>
           </environmentVariables>
         </configuration>
       </plugin>
