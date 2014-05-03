@@ -460,9 +460,7 @@ object ApplicationMaster {
 
   def main(argStrings: Array[String]) {
     val args = new ApplicationMasterArguments(argStrings)
-    val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(
-      SparkContext.SPARK_UNKNOWN_USER)
-    SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
+    SparkHadoopUtil.get.runAsSparkUser { () =>
       new ApplicationMaster(args).run()
     }
   }

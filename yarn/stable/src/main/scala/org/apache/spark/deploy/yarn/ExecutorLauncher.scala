@@ -28,7 +28,7 @@ import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import akka.actor._
 import akka.remote._
 import akka.actor.Terminated
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.SplitInfo
@@ -256,9 +256,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 object ExecutorLauncher {
   def main(argStrings: Array[String]) {
     val args = new ApplicationMasterArguments(argStrings)
-    val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(
-      SparkContext.SPARK_UNKNOWN_USER)
-    SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
+    SparkHadoopUtil.get.runAsSparkUser { () =>
       new ExecutorLauncher(args).run()
     }
   }
