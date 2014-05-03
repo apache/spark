@@ -27,6 +27,8 @@ import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.api.python.recommendation.
+{MatrixFactorizationModel=> PythonMatrixFactorizationModel}
 
 /**
  * :: DeveloperApi ::
@@ -384,9 +386,9 @@ class PythonMLLibAPI extends Serializable {
       rank: Int,
       iterations: Int,
       lambda: Double,
-      blocks: Int): MatrixFactorizationModel = {
+      blocks: Int): PythonMatrixFactorizationModel = {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
-    ALS.train(ratings, rank, iterations, lambda, blocks)
+    pythonModel(ALS.train(ratings, rank, iterations, lambda, blocks))
   }
 
   /**
@@ -401,8 +403,12 @@ class PythonMLLibAPI extends Serializable {
       iterations: Int,
       lambda: Double,
       blocks: Int,
-      alpha: Double): MatrixFactorizationModel = {
+      alpha: Double): PythonMatrixFactorizationModel = {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
-    ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
+    pythonModel(ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha))
+  }
+
+  private def pythonModel(model: MatrixFactorizationModel):PythonMatrixFactorizationModel= {
+      new PythonMatrixFactorizationModel(model.rank,model.userFeatures,model.productFeatures)
   }
 }
