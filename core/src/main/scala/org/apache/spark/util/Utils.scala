@@ -220,9 +220,9 @@ private[spark] object Utils extends Logging {
   def hasRootAsShutdownDeleteDir(file: File): Boolean = {
     val absolutePath = file.getAbsolutePath()
     val retval = shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.find { path =>
+      shutdownDeletePaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }.isDefined
+      }
     }
     if (retval) {
       logInfo("path = " + file + ", already present as root for deletion.")
@@ -235,10 +235,10 @@ private[spark] object Utils extends Logging {
   // paths - resulting in Exception and incomplete cleanup.
   def hasRootAsShutdownDeleteDir(file: TachyonFile): Boolean = {
     val absolutePath = file.getPath()
-    val retval = shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.find { path =>
+    val retval = shutdownDeleteTachyonPaths.synchronized {
+      shutdownDeleteTachyonPaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }.isDefined
+      }
     }
     if (retval) {
       logInfo("path = " + file + ", already present as root for deletion.")
