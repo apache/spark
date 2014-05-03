@@ -97,7 +97,7 @@
             <configuration>
               <finalName>${project.artifactId}-${project.version}</finalName>
               <descriptors>
-                <descriptor>../../assembly/src/main/assembly/sprk-hive-dist.xml</descriptor>
+                <descriptor>../../assembly/src/main/assembly/spark-hive-dist.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>
