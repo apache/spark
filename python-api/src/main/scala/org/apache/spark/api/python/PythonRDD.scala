@@ -54,7 +54,16 @@ private[spark] class PythonRDD[T: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
     val env = PythonSparkEnv.get
-    val worker = env.createPythonWorker(pythonExec, envVars.toMap)
+    val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
+
+    // Ensure worker socket is closed on task completion. Closing sockets is idempotent.
+    context.addOnCompleteCallback(() =>
+      try {
+        worker.close()
+      } catch {
+        case e: Exception => logWarning("Failed to close worker socket", e)
+      }
+    )
 
     @volatile var readerException: Exception = null
 
