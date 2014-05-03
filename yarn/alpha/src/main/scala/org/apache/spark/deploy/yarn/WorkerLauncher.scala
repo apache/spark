@@ -33,6 +33,7 @@ import org.apache.spark.{SparkConf, SparkContext, Logging}
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.deploy.SparkHadoopUtil
 
 class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, sparkConf: SparkConf)
   extends Logging {
@@ -265,6 +266,9 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
 object WorkerLauncher {
   def main(argStrings: Array[String]) {
     val args = new ApplicationMasterArguments(argStrings)
-    new WorkerLauncher(args).run()
+    SparkHadoopUtil.get.runAsSparkUser { () =>
+      new WorkerLauncher(args).run()
+    }
   }
 }
+

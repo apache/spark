@@ -68,9 +68,6 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
   private var registered = false
 
-  private val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(
-    SparkContext.SPARK_UNKNOWN_USER)
-
   def run() {
     // Setup the directories so things go to yarn approved directories rather
     // then user specified and /tmp.
@@ -184,7 +181,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       false /* initialize */ ,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
     val t = new Thread {
-      override def run(): Unit = SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
+      override def run() {
+
         var successed = false
         try {
           // Copy
@@ -472,6 +470,8 @@ object ApplicationMaster {
 
   def main(argStrings: Array[String]) {
     val args = new ApplicationMasterArguments(argStrings)
-    new ApplicationMaster(args).run()
+    SparkHadoopUtil.get.runAsSparkUser { () =>
+      new ApplicationMaster(args).run()
+    }
   }
 }
