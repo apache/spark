@@ -86,7 +86,7 @@ the `--help` flag. Here are a few examples of common options:
   --master local[8] \
   my-app.jar
 
-# Run on a Spark cluster
+# Run on a Spark standalone cluster
 ./bin/spark-submit \
   --class my.main.ClassName
   --master spark://mycluster:7077 \
@@ -118,21 +118,22 @@ If you are ever unclear where configuration options are coming from. fine-graine
 information can be printed by adding the `--verbose` option to `./spark-submit`.
 
 ### Advanced Dependency Management
-When using `./bin/spark-submit` jars will be automatically transferred to the cluster. For many
-users this is sufficient. However, advanced users can add jars by calling `addFile` or `addJar`
-on an existing SparkContext. This can be used to distribute JAR files (Java/Scala) or .egg and
-.zip libraries (Python) to executors. Spark uses the following URL scheme to allow different
+When using `./bin/spark-submit` the app jar along with any jars included with the `--jars` option
+will be automatically transferred to the cluster. `--jars` can also be used to distribute .egg and .zip
+libraries for Python to executors. Spark uses the following URL scheme to allow different
 strategies for disseminating jars:
 
 - **file:** - Absolute paths and `file:/` URIs are served by the driver's HTTP file server, and
-  every executor pulls the file from the driver HTTP server
+  every executor pulls the file from the driver HTTP server.
 - **hdfs:**, **http:**, **https:**, **ftp:** - these pull down files and JARs from the URI as expected
 - **local:** - a URI starting with local:/ is expected to exist as a local file on each worker node.  This
   means that no network IO will be incurred, and works well for large files/JARs that are pushed to each worker,
   or shared via NFS, GlusterFS, etc.
 
 Note that JARs and files are copied to the working directory for each SparkContext on the executor nodes.
-Over time this can use up a significant amount of space and will need to be cleaned up.
+This can use up a significant amount of space over time and will need to be cleaned up. With YARN, cleanup
+is handled automatically, and with Spark standalone, automatic cleanup can be configured with the
+`spark.worker.cleanup.appDataTtl` property.
 
 # Monitoring
 
