@@ -71,8 +71,6 @@ private[spark] class Worker(
   // TTL for app folders/data;  after TTL expires it will be cleaned up
   val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
-  // Index into masterUrls that we're currently trying to register with.
-  var masterIndex = 0
 
   val masterLock: Object = new Object()
   var master: ActorSelection = null
@@ -244,7 +242,7 @@ private[spark] class Worker(
           }
         } catch {
           case e: Exception => {
-            logError("Failed to launch exector %s/%d for %s".format(appId, execId, appDesc.name))
+            logError("Failed to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
