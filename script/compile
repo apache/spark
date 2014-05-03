@@ -12,12 +12,14 @@ export SBT_HOME=$FWDIR/sbt
 export SCALA_HOME=$HOME/.sbt/boot/scala-2.10.3
 
 ./make-distribution.sh --hadoop $(cat SHOPIFY_HADOOP_VERSION)
-if [ "$?" != "0" || -e "$FWDIR/lib/spark-assembly*hadoop*.jar" ]; then
+if [ "$?" != "0" ] || [ -e "$FWDIR/lib/spark-assembly*hadoop*.jar" ]; then
   echo "Failed to make spark distro using sbt."
   exit 1
 fi
-# Remove everything not in dist
-find * -maxdepth 0 -name 'dist' -prune -o -exec rm -rf '{}' ';'
-# Copy everything out of dist
-mv dist/* .
+
+# Remove everything not in dist or conf
+find * -maxdepth 0 -name 'dist' -o -name -'conf' -prune -o -exec rm -rf '{}' ';'
+
+# Copy everything out of dist that doesn't exist already
+mv -n dist/* .
 echo $SHA > ./GIT_SHA
