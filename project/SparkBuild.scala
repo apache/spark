@@ -267,8 +267,7 @@ object SparkBuild extends Build {
 
     libraryDependencies ++= Seq(
         "io.netty"          % "netty-all"         % "4.0.17.Final",
-        "org.eclipse.jetty" % "jetty-server"      % jettyVersion excludeAll(excludeJettyServlet),
-        "javax.servlet"     % "javax.servlet-api" % "3.0.1",
+        "org.eclipse.jetty" % "jetty-server"      % jettyVersion,
         "org.eclipse.jetty" % "jetty-util"        % jettyVersion,
         "org.eclipse.jetty" % "jetty-plus"        % jettyVersion,
         "org.eclipse.jetty" % "jetty-security"    % jettyVersion,
@@ -316,7 +315,6 @@ object SparkBuild extends Build {
   val excludeFastutil = ExclusionRule(organization = "it.unimi.dsi")
   val excludeJruby = ExclusionRule(organization = "org.jruby")
   val excludeThrift = ExclusionRule(organization = "org.apache.thrift")
-  val excludeJettyServlet= ExclusionRule(organization = "org.eclipse.jetty.orbit")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
