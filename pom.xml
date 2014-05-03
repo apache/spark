@@ -94,7 +94,6 @@
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
-    <module>sql/hive</module>
     <module>repl</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -1048,6 +1047,12 @@
           <scope>provided</scope>
         </dependency>
       </dependencies>
+    </profile>
+    <profile>
+      <id>hive</id>
+      <modules>
+        <module>sql/hive</module>
+      </modules>
     </profile>
 
   </profiles>
