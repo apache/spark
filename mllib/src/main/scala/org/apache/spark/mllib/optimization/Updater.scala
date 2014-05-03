@@ -128,6 +128,45 @@ class L1Updater extends Updater {
 
 /**
  * :: DeveloperApi ::
+ * Updater for Enhanced L1-RDA regularized problems.
+ *          R(w) = ||w||_1
+ * Ignore the existing weights, but use average of gradient to compute new weights
+ * and apply L1 saturated thresholding. The enhanced version has `rho` which results
+ * in even sparse weights.
+ *  @param rho Enhanced L1 parameter.
+ */
+@DeveloperApi
+class RDAL1Updater(val rho: Double) extends Updater {
+
+  /**
+   * @param gradient - The sum of all previous gradients
+   */
+  override def compute(
+      weightsOld: Vector,
+      gradient: Vector, // sum of the gradients
+      stepSize: Double,
+      iter: Int,
+      regParam: Double): (Vector, Double) = {
+    val thisIterStepSize = math.sqrt(iter) / stepSize
+    val shrinkageVal = regParam + rho / thisIterStepSize
+
+    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
+    val brzGradient = gradient.toBreeze.toDenseVector
+    brzGradient :*= 1.0/iter
+    var i = 0
+    while (i < brzWeights.length) {
+      val wi = brzGradient(i)
+      brzWeights(i) = -thisIterStepSize * signum(wi) * max(0.0, abs(wi) - shrinkageVal)
+      i += 1
+    }
+
+    (Vectors.fromBreeze(brzWeights), brzNorm(brzWeights, 1.0) * regParam)
+  }
+}
+
+
+/**
+ * :: DeveloperApi ::
  * Updater for L2 regularized problems.
  *          R(w) = 1/2 ||w||^2
  * Uses a step-size decreasing with the square root of the number of iterations.

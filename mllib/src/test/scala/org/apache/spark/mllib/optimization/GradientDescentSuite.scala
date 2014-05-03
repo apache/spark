@@ -109,7 +109,8 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
       stepSize,
       numIterations,
       regParam,
-      initialWeightsWithIntercept)
+      initialWeightsWithIntercept,
+      false)
 
     assert(loss2.last - loss2.head < 0, "loss isn't decreasing.")
 

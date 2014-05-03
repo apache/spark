@@ -41,6 +41,7 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
   private var regParam: Double = 0.0
   private var miniBatchFraction: Double = 1.0
   private var stochastic: Boolean = true
+  private var rda: Boolean = false
 
   /**
    * Set the initial step size of SGD for the first step. Default 1.0.
@@ -105,6 +106,11 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
     this
   }
 
+  def setRda(rda: Boolean): this.type  = {
+    this.rda = rda
+    this
+  }
+
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
     val (weights, _) = if (stochastic) {
       GradientDescent.runMiniBatchSGD(
@@ -124,7 +130,8 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
         stepSize,
         numIterations,
         regParam,
-        initialWeights)
+        initialWeights,
+        rda)
     }
     weights
   }
@@ -240,7 +247,8 @@ object GradientDescent extends Logging {
       stepSize: Double,
       numIterations: Int,
       regParam: Double,
-      initialWeights: Vector): (Vector, Array[Double]) = {
+      initialWeights: Vector,
+      rda: Boolean): (Vector, Array[Double]) = {
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
 
@@ -261,11 +269,17 @@ object GradientDescent extends Logging {
         var localIter = startIter
         var loss = 0.0
         var regVal = 0.0
+        var grad = Vectors.dense(new Array[Double](localWeights.size))
         while (iter.hasNext) {
           val v = iter.next()
           localIter += 1
-          val (grad, l) = gradient.compute(v._2, v._1, localWeights)
-          loss += l
+          if (!rda) {
+            val gl = gradient.compute(v._2, v._1, localWeights)
+            grad = gl._1
+            loss += gl._2
+          } else {
+            loss += gradient.compute(v._2, v._1, localWeights, grad)
+          }
 
           val update = updater.compute(localWeights, grad, stepSize, localIter, regParam)
           localWeights = update._1

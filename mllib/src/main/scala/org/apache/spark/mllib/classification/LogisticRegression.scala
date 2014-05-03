@@ -74,16 +74,11 @@ class LogisticRegressionWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
-    private var miniBatchFraction: Double,
-    private var isL1Reg: Boolean = false)
+    private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
 
   private val gradient = new LogisticGradient()
-  private val updater = (regParam, isL1Reg) match {
-    case (0.0, _) => new SimpleUpdater()
-    case (regValue, true) => new L1Updater()
-    case _ => new SquaredL2Updater()
-  }
+  private val updater = new SimpleUpdater()
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
@@ -189,45 +184,6 @@ object LogisticRegressionWithSGD {
     train(input, numIterations, 1.0, 1.0)
   }
 
-  /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
-   * number of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate the gradient. Can choose to
-   * use stochastic gradient descent or just gradient descent by scanning data sequentially. In
-   * the latter case, the `miniBatchFraction` fraction is ignored. Either no regularization or
-   * l1, l2 regularization can be enabled. A model with non-zero intercept can be trained. The
-   * weights used in gradient descent are initialized using the initial weights provided.
-   * NOTE: Labels used in Logistic Regression should be {0, 1}
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param miniBatchFraction Fraction of data to be used per iteration.
-   * @param addIntercept train a model with non-zero intercept.
-   * @param stochastic apply gradient descent on sampled data
-   * @param l1 amount of l1 regularization
-   * @param l2 amount of l2 regularization
-   */
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int,
-      stepSize: Double,
-      miniBatchFraction: Double,
-      addIntercept: Boolean,
-      stochastic: Boolean,
-      l1: Option[Double],
-      l2: Option[Double]): LogisticRegressionModel = {
-    val regParam = (l1, l2) match {
-      case (None, None) => 0.0
-      case (Some(v), _) => v
-      case (_, Some(v)) => v
-    }
-    val trainer = new LogisticRegressionWithSGD(stepSize, numIterations,
-      regParam, miniBatchFraction, l1.isDefined)
-    trainer.setIntercept(addIntercept)
-    trainer.optimizer.setStochastic(stochastic)
-    trainer.run(input)
-  }
 
   def main(args: Array[String]) {
 
@@ -244,7 +200,7 @@ object LogisticRegressionWithSGD {
     if (args.length <= 4) {
       println("Usage: LogisticRegression <master> <input_dir> <model_dir>\n" +
           "       [<step_size> <niters> [--svmlight] [--l1=reg] [--l2=reg] [--stochastic] " +
-          "[--add_intercept] [--num_features=n] [--minibatch=fraction]] # training\n" +
+          "[--add_intercept] [--num_features=n] [--minibatch=fraction] [--rda=rho]] # training\n" +
           "       [<prediction_dir> --testonly] # testing")
       System.exit(1)
     }
@@ -289,11 +245,36 @@ object LogisticRegressionWithSGD {
       val pass = args(4).toInt
       val addIntercept = args.contains("--add_intercept")
       val stochastic = args.contains("--stochastic")
+
       val l1 = extractFlagValue("--l1=").map { _.toDouble }
       val l2 = extractFlagValue("--l2=").map { _.toDouble }
-      val minibatch = extractFlagValue("--minibatch=").map { _.toDouble } .getOrElse(1.0)
-      val model = LogisticRegressionWithSGD.train(data, pass, stepSize, minibatch, addIntercept,
-        stochastic, l1, l2)
+      val rda = extractFlagValue("--rda=").map { _.toDouble }
+      val miniBatch = extractFlagValue("--minibatch=").map { _.toDouble } .getOrElse(1.0)
+
+      val regParam = (l1, l2) match {
+        case (None, None) => 0.0
+        case (Some(v), _) => v
+        case (_, Some(v)) => v
+      }
+      val updater = (regParam, l1.isDefined, rda) match {
+        case (0.0, _, _) => new SimpleUpdater()
+        case (regValue, true, None) => new L1Updater()
+        case (regValue, true, Some(v)) => new RDAL1Updater(v)
+        case _ => new SquaredL2Updater()
+      }
+      val algorithm = new LogisticRegressionWithSGD()
+      algorithm.optimizer
+          .setStepSize(stepSize)
+          .setNumIterations(pass)
+          .setRegParam(regParam)
+          .setMiniBatchFraction(miniBatch)
+          .setUpdater(updater)
+          .setStochastic(stochastic)
+          .setRda(rda.isDefined)
+
+      algorithm.setIntercept(addIntercept)
+
+      val model = algorithm.run(data)
 
       // create and RDD[Text] and save it to output
       sc.makeRDD(model.readableModel).saveAsTextFile(modelDir)
