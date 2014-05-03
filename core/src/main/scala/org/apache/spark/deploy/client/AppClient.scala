@@ -92,8 +92,7 @@ private[spark] class AppClient(
           if (registered) {
             retryTimer.cancel()
           } else if (retries >= REGISTRATION_RETRIES) {
-            logError("All masters are unresponsive! Giving up.")
-            markDead()
+            markDead("All masters are unresponsive! Giving up.")
           } else {
             tryRegisterAllMasters()
           }
@@ -126,8 +125,7 @@ private[spark] class AppClient(
         listener.connected(appId)
 
       case ApplicationRemoved(message) =>
-        logError("Master removed our application: %s; stopping client".format(message))
-        markDisconnected()
+        markDead("Master removed our application: %s".format(message))
         context.stop(self)
 
       case ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) =>
@@ -158,7 +156,7 @@ private[spark] class AppClient(
         logWarning(s"Could not connect to $address: $cause")
 
       case StopAppClient =>
-        markDead()
+        markDead("Application has been stopped.")
         sender ! true
         context.stop(self)
     }
@@ -173,9 +171,9 @@ private[spark] class AppClient(
       }
     }
 
-    def markDead() {
+    def markDead(reason: String) {
       if (!alreadyDead) {
-        listener.dead()
+        listener.dead(reason)
         alreadyDead = true
       }
     }
