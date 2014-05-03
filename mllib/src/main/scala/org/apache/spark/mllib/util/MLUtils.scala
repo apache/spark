@@ -19,7 +19,8 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import breeze.linalg.{Vector => BV, SparseVector => BSV, squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
+  squaredDistance => breezeSquaredDistance}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
@@ -27,7 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
 import org.apache.spark.util.random.BernoulliSampler
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -203,6 +204,18 @@ object MLUtils {
       val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
       (training, validation)
     }.toArray
+  }
+
+  /**
+   * Returns a new vector with 1.0 (bias) appended to the input vector.
+   */
+  def appendBias(vector: Vector): Vector = {
+    val vector1 = vector.toBreeze match {
+      case dv: BDV[Double] => BDV.vertcat(dv, new BDV[Double](Array(1.0)))
+      case sv: BSV[Double] => BSV.vertcat(sv, new BSV[Double](Array(0), Array(1.0), 1))
+      case v: Any => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+    }
+    Vectors.fromBreeze(vector1)
   }
 
   /**

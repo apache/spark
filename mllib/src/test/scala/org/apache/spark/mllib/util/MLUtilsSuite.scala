@@ -29,7 +29,7 @@ import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, norm => breezeNor
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 
@@ -108,6 +108,19 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     val expected = Set("1.1 1:1.23 3:4.56", "0.0 1:1.01 2:2.02 3:3.03")
     assert(lines === expected)
     deleteQuietly(tempDir)
+  }
+
+  test("appendBias") {
+    val sv = Vectors.sparse(3, Seq((0, 1.0), (2, 3.0)))
+    val sv1 = appendBias(sv).asInstanceOf[SparseVector]
+    assert(sv1.size === 4)
+    assert(sv1.indices === Array(0, 2, 3))
+    assert(sv1.values === Array(1.0, 3.0, 1.0))
+
+    val dv = Vectors.dense(1.0, 0.0, 3.0)
+    val dv1 = appendBias(dv).asInstanceOf[DenseVector]
+    assert(dv1.size === 4)
+    assert(dv1.values === Array(1.0, 0.0, 3.0, 1.0))
   }
 
   test("kFold") {
