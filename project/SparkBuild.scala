@@ -267,8 +267,7 @@ object SparkBuild extends Build {
 
     libraryDependencies ++= Seq(
         "io.netty"          % "netty-all"         % "4.0.17.Final",
-        "org.eclipse.jetty" % "jetty-server"      % jettyVersion excludeAll(excludeJettyServlet),
-        "javax.servlet"     % "javax.servlet-api" % "3.0.1",
+        "org.eclipse.jetty" % "jetty-server"      % jettyVersion,
         "org.eclipse.jetty" % "jetty-util"        % jettyVersion,
         "org.eclipse.jetty" % "jetty-plus"        % jettyVersion,
         "org.eclipse.jetty" % "jetty-security"    % jettyVersion,
