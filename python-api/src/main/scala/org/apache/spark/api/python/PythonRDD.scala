@@ -53,7 +53,7 @@ private[spark] class PythonRDD[T: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
-    val env = SparkEnv.get
+    val env = PythonSparkEnv.get
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Ensure worker socket is closed on task completion. Closing sockets is idempotent.
@@ -71,7 +71,7 @@ private[spark] class PythonRDD[T: ClassTag](
     new Thread("stdin writer for " + pythonExec) {
       override def run() {
         try {
-          SparkEnv.set(env)
+          PythonSparkEnv.set(env)
           val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
           val dataOut = new DataOutputStream(stream)
           // Partition index

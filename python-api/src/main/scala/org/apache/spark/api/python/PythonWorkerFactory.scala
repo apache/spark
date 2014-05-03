@@ -25,7 +25,7 @@ import scala.collection.JavaConversions._
 import org.apache.spark._
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
-    extends Logging {
+  extends Logging {
 
   // Because forking processes from Java is expensive, we prefer to launch a single Python daemon
   // (pyspark/daemon.py) and tell it to fork new workers for our tasks. This daemon currently
@@ -86,6 +86,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       // Redirect the worker's stderr to ours
       new Thread("stderr reader for " + pythonExec) {
         setDaemon(true)
+
         override def run() {
           scala.util.control.Exception.ignoring(classOf[IOException]) {
             // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
@@ -103,6 +104,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       // Redirect worker's stdout to our stderr
       new Thread("stdout reader for " + pythonExec) {
         setDaemon(true)
+
         override def run() {
           scala.util.control.Exception.ignoring(classOf[IOException]) {
             // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
@@ -159,6 +161,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         // Redirect the stderr to ours
         new Thread("stderr reader for " + pythonExec) {
           setDaemon(true)
+
           override def run() {
             scala.util.control.Exception.ignoring(classOf[IOException]) {
               // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
@@ -179,6 +182,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         // Redirect further stdout output to our stderr
         new Thread("stdout reader for " + pythonExec) {
           setDaemon(true)
+
           override def run() {
             scala.util.control.Exception.ignoring(classOf[IOException]) {
               // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
