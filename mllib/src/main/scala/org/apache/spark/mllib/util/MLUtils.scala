@@ -134,6 +134,24 @@ object MLUtils {
     loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinPartitions)
 
   /**
+   * Save labeled data in LIBSVM format.
+   * @param data an RDD of LabeledPoint to be saved
+   * @param dir directory to save the data
+   *
+   * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMData]]
+   */
+  def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
+    // TODO: allow to specify label precision and feature precision.
+    val dataStr = data.map { case LabeledPoint(label, features) =>
+      val featureStrings = features.toBreeze.activeIterator.map { case (i, v) =>
+        s"${i + 1}:$v"
+      }
+      (Iterator(label) ++ featureStrings).mkString(" ")
+    }
+    dataStr.saveAsTextFile(dir)
+  }
+
+  /**
    * :: Experimental ::
    * Load labeled data from a file. The data format used here is
    * <L>, <f1> <f2> ...

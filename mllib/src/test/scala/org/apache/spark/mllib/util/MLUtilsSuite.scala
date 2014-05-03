@@ -19,8 +19,8 @@ package org.apache.spark.mllib.util
 
 import java.io.File
 
+import scala.io.Source
 import scala.math
-import scala.util.Random
 
 import org.scalatest.FunSuite
 
@@ -30,6 +30,7 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 
 class MLUtilsSuite extends FunSuite with LocalSparkContext {
@@ -70,8 +71,8 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     Files.write(lines, file, Charsets.US_ASCII)
     val path = tempDir.toURI.toString
 
-    val pointsWithNumFeatures = MLUtils.loadLibSVMData(sc, path, BinaryLabelParser, 6).collect()
-    val pointsWithoutNumFeatures = MLUtils.loadLibSVMData(sc, path).collect()
+    val pointsWithNumFeatures = loadLibSVMData(sc, path, BinaryLabelParser, 6).collect()
+    val pointsWithoutNumFeatures = loadLibSVMData(sc, path).collect()
 
     for (points <- Seq(pointsWithNumFeatures, pointsWithoutNumFeatures)) {
       assert(points.length === 3)
@@ -83,29 +84,41 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       assert(points(2).features === Vectors.sparse(6, Seq((1, 4.0), (3, 5.0), (5, 6.0))))
     }
 
-    val multiclassPoints = MLUtils.loadLibSVMData(sc, path, MulticlassLabelParser).collect()
+    val multiclassPoints = loadLibSVMData(sc, path, MulticlassLabelParser).collect()
     assert(multiclassPoints.length === 3)
     assert(multiclassPoints(0).label === 1.0)
     assert(multiclassPoints(1).label === -1.0)
     assert(multiclassPoints(2).label === -1.0)
 
-    try {
-      file.delete()
-      tempDir.delete()
-    } catch {
-      case t: Throwable =>
-    }
+    deleteQuietly(tempDir)
+  }
+
+  test("saveAsLibSVMFile") {
+    val examples = sc.parallelize(Seq(
+      LabeledPoint(1.1, Vectors.sparse(3, Seq((0, 1.23), (2, 4.56)))),
+      LabeledPoint(0.0, Vectors.dense(1.01, 2.02, 3.03))
+    ), 2)
+    val tempDir = Files.createTempDir()
+    val outputDir = new File(tempDir, "output")
+    MLUtils.saveAsLibSVMFile(examples, outputDir.toURI.toString)
+    val lines = outputDir.listFiles()
+      .filter(_.getName.startsWith("part-"))
+      .flatMap(Source.fromFile(_).getLines())
+      .toSet
+    val expected = Set("1.1 1:1.23 3:4.56", "0.0 1:1.01 2:2.02 3:3.03")
+    assert(lines === expected)
+    deleteQuietly(tempDir)
   }
 
   test("kFold") {
     val data = sc.parallelize(1 to 100, 2)
     val collectedData = data.collect().sorted
-    val twoFoldedRdd = MLUtils.kFold(data, 2, 1)
+    val twoFoldedRdd = kFold(data, 2, 1)
     assert(twoFoldedRdd(0)._1.collect().sorted === twoFoldedRdd(1)._2.collect().sorted)
     assert(twoFoldedRdd(0)._2.collect().sorted === twoFoldedRdd(1)._1.collect().sorted)
     for (folds <- 2 to 10) {
       for (seed <- 1 to 5) {
-        val foldedRdds = MLUtils.kFold(data, folds, seed)
+        val foldedRdds = kFold(data, folds, seed)
         assert(foldedRdds.size === folds)
         foldedRdds.map { case (training, validation) =>
           val result = validation.union(training).collect().sorted
@@ -132,4 +145,16 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  /** Delete a file/directory quietly. */
+  def deleteQuietly(f: File) {
+    if (f.isDirectory) {
+      f.listFiles().foreach(deleteQuietly)
+    }
+    try {
+      f.delete()
+    } catch {
+      case _: Throwable =>
+    }
+  }
 }
+
