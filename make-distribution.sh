@@ -50,6 +50,20 @@ if [ $? == -1 ] ;then
     exit -1;
 fi
 
+if [ -z "${JAVA_HOME}" ]; then
+  echo "Error: JAVA_HOME is not set, cannot proceed."
+  exit -1
+fi
+
+JAVA_CMD=$JAVA_HOME/bin/java
+JAVA_VERSION=$($JAVA_CMD -version 2>&1)
+if ! [[ "$JAVA_VERSION" =~ "1.6" ]]; then
+  echo "Error: Java version was not 1.6. Spark must be compiled with JDK 1.6 "
+  echo "(see SPARK-1703). Output from 'java -version' was:"
+  echo "$JAVA_VERSION"
+  exit -1
+fi
+
 # Initialize defaults
 SPARK_HADOOP_VERSION=1.0.4
 SPARK_YARN=false
