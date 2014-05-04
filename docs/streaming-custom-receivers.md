@@ -23,7 +23,7 @@ should stop receiving data.
 
 Once the data is received, that data can be stored inside Spark
 by calling `store(data)`, which is a method provided by the
-[Receiver](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver).
+[Receiver](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver) class.
 There are number of flavours of `store()` which allow you store the received data
 record-at-a-time or as whole collection of objects / serialized bytes.
 
@@ -196,7 +196,7 @@ The full source code is in the example [JavaCustomReceiver.java](https://github.
 ### Implementing and Using a Custom Actor-based Receiver
 
 Custom [Akka Actors](http://doc.akka.io/docs/akka/2.2.4/scala/actors.html) can also be used to
-receive data. The [ActorHelper](api/scala/index.html#org.apache.spark.streaming.receiver.ActorHelper)
+receive data. The [`ActorHelper`](api/scala/index.html#org.apache.spark.streaming.receiver.ActorHelper)
 trait can be applied on any Akka actor, which allows received data to be stored in Spark using
  `store(...)` methods. The supervisor strategy of this actor can be configured to handle failures, etc.
 
