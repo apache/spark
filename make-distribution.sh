@@ -58,8 +58,8 @@ fi
 JAVA_CMD=$JAVA_HOME/bin/java
 JAVA_VERSION=$($JAVA_CMD -version 2>&1)
 if ! [[ "$JAVA_VERSION" =~ "1.6" ]]; then
-  echo "Error: Java version was not 1.6. Spark must be compiled with JDK 1.6 "
-  echo "(see SPARK-1703). Output from 'java -version' was:"
+  echo "Error: JAVA_HOME must point to a JDK 6 installation (see SPARK-1703)."
+  echo "Output from 'java -version' was:"
   echo "$JAVA_VERSION"
   exit -1
 fi

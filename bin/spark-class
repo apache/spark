@@ -138,12 +138,12 @@ if [ -e "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar ]; then
 fi
 
 # Compute classpath using external script
-CLASSPATH_OUTPUT=$($FWDIR/bin/compute-classpath.sh)
+classpath_output=$($FWDIR/bin/compute-classpath.sh)
 if [[ "$?" != "0" ]]; then
-  echo "$CLASSPATH_OUTPUT"
+  echo "$classpath_output"
   exit 1
 else
-  CLASSPATH=$CLASSPATH_OUTPUT
+  CLASSPATH=$classpath_output
 fi
 
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then
