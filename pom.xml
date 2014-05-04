@@ -792,6 +792,12 @@
         <hadoop.version>0.23.7</hadoop.version>
         <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
       </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
+      </dependencies>
       <modules>
         <module>yarn</module>
       </modules>
