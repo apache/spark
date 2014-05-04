@@ -833,12 +833,6 @@
                 <groupId>org.jboss.netty</groupId>
                 <artifactId>netty</artifactId>
               </exclusion>
-              <!-- SPARK-1693: Dependent on multiple versions of servlet-api jars lead to throw
- an SecurityException when Spark built for hadoop 2.3.0 , 2.4.0  -->
-              <exclusion>
-                <groupId>javax.servlet</groupId>
-                <artifactId>servlet-api</artifactId>
-              </exclusion>
             </exclusions>
           </dependency>
 
@@ -858,10 +852,6 @@
               <exclusion>
                 <groupId>org.jboss.netty</groupId>
                 <artifactId>netty</artifactId>
-              </exclusion>
-              <exclusion>
-                <groupId>javax.servlet</groupId>
-                <artifactId>servlet-api</artifactId>
               </exclusion>
             </exclusions>
           </dependency>
