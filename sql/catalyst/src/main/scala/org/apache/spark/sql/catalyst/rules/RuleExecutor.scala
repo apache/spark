@@ -71,7 +71,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             result
         }
         iteration += 1
-        if (iteration >= batch.strategy.maxIterations) {
+        if (iteration > batch.strategy.maxIterations) {
           logger.info(s"Max iterations ($iteration) reached for batch ${batch.name}")
           continue = false
         }
