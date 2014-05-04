@@ -45,7 +45,7 @@ private[spark] object JsonProtocol {
     ("name" -> obj.desc.name) ~
     ("cores" -> obj.desc.maxCores) ~
     ("user" ->  obj.desc.user) ~
-    ("memoryperslave" -> obj.desc.memoryPerSlave) ~
+    ("memoryperslave" -> obj.desc.memoryPerExecutor) ~
     ("submitdate" -> obj.submitDate.toString) ~
     ("state" -> obj.state.toString) ~
     ("duration" -> obj.duration)
@@ -54,7 +54,7 @@ private[spark] object JsonProtocol {
   def writeApplicationDescription(obj: ApplicationDescription) = {
     ("name" -> obj.name) ~
     ("cores" -> obj.maxCores) ~
-    ("memoryperslave" -> obj.memoryPerSlave) ~
+    ("memoryperslave" -> obj.memoryPerExecutor) ~
     ("user" -> obj.user) ~
     ("sparkhome" -> obj.sparkHome) ~
     ("command" -> obj.command.toString)

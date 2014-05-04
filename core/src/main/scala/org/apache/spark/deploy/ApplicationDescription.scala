@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 private[spark] class ApplicationDescription(
     val name: String,
     val maxCores: Option[Int],
-    val memoryPerSlave: Int,
+    val memoryPerExecutor: Int,
     val command: Command,
     val sparkHome: Option[String],
     var appUiUrl: String,
