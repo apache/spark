@@ -94,7 +94,6 @@
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
-    <module>sql/hive</module>
     <module>repl</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -103,6 +102,8 @@
     <module>external/zeromq</module>
     <module>external/mqtt</module>
     <module>examples</module>
+    <module>sql/hive</module>
+    <module>python-api</module>
   </modules>
 
   <properties>
@@ -739,6 +740,10 @@
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
             <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
             <stderr/>
+            <environmentVariables>
+              <SPARK_HOME>${session.executionRootDirectory}</SPARK_HOME>
+              <SPARK_TESTING>1</SPARK_TESTING>
+            </environmentVariables>
           </configuration>
           <executions>
             <execution>
@@ -952,6 +957,5 @@
         </dependency>
       </dependencies>
     </profile>
-
   </profiles>
 </project>

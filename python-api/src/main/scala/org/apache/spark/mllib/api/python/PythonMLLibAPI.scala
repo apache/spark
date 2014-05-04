@@ -405,4 +405,21 @@ class PythonMLLibAPI extends Serializable {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
   }
+
+  /**
+   * :: DeveloperApi ::
+   * Predict the rating of many users for many products.
+   * This is a Java stub for python predictAll()
+   *
+   * @param model A ALS Model
+   * @param usersProductsJRDD A JavaRDD with serialized tuples (user, product)
+   * @return JavaRDD of serialized Rating objects.
+   */
+  def alsModelPredictAll(
+     model: MatrixFactorizationModel,usersProductsJRDD: JavaRDD[Array[Byte]]):
+     JavaRDD[Array[Byte]] = {
+    val usersProducts = usersProductsJRDD.rdd.map(xBytes => unpackTuple(xBytes))
+    model.predict(usersProducts).map(rate => serializeRating(rate))
+  }
+
 }

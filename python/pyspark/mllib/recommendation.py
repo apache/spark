@@ -52,7 +52,8 @@ class MatrixFactorizationModel(object):
 
     def predictAll(self, usersProducts):
         usersProductsJRDD = _get_unmangled_rdd(usersProducts, _serialize_tuple)
-        return RDD(self._java_model.predict(usersProductsJRDD._jrdd),
+        mllibapi=usersProducts.context._jvm.PythonMLLibAPI()
+        return RDD(mllibapi.alsModelPredictAll(self._java_model, usersProductsJRDD._jrdd),
                    self._context, RatingDeserializer())
 
 class ALS(object):
