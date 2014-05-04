@@ -510,23 +510,31 @@ private[spark] class Master(
     // (within the same worker JVM process)
     if (spreadOutApps) {
       for (app <- waitingApps if app.coresLeft > 0) {
-        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(app.desc.memoryPerExecutor < _.memoryFree).sortBy(_.coresFree).reverse
-        var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
+        var usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+          .filter(_.coresFree > 0).sortBy(_.coresFree).reverse
+        var leftCoreToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
         val numUsable = usableWorkers.length
         // Number of cores of each executor assigned to each worker
-        val assigned = new Array[ListBuffer[Int]](numUsable)
+        val assigned = Array.fill[ListBuffer[Int]](numUsable)(new ListBuffer[Int])
         var pos = 0
-        while (toAssign > 0) {
-          val assignedCore = math.min(coreNumPerExecutor, toAssign)
-          if (usableWorkers(pos).coresFree - assigned(pos).sum > 0) {
-            toAssign -= assignedCore
-            assigned(pos) += assignedCore
+        val memoryNotEnoughFlags = new Array[Boolean](numUsable)
+        while (leftCoreToAssign > 0 && memoryNotEnoughFlags.contains(false)) {
+          val coreToAssign = math.min(coreNumPerExecutor, leftCoreToAssign)
+          if (usableWorkers(pos).coresFree - assigned(pos).sum > coreToAssign &&
+            !memoryNotEnoughFlags(pos)) {
+            if (usableWorkers(pos).memoryFree >
+              app.desc.memoryPerExecutor * (assigned(pos).length + 1)) {
+              leftCoreToAssign -= coreToAssign
+              assigned(pos) += coreToAssign
+            } else {
+              memoryNotEnoughFlags(pos) = true
+            }
           }
           pos = (pos + 1) % numUsable
         }
-        // Now that we've decided how many executors and the core number for each to give on each node,
-        // let's actually give them
+
+        // Now that we've decided how many executors and the core number for each to
+        // give on each node, let's actually give them
         for (pos <- 0 until numUsable) {
           for (execIdx <- 0 until assigned(pos).length) {
             val exec = app.addExecutor(usableWorkers(pos), assigned(pos)(execIdx))
@@ -541,11 +549,11 @@ private[spark] class Master(
         for (app <- waitingApps if app.coresLeft > 0 &&
           app.desc.memoryPerExecutor <= worker.memoryFree) {
           var coresLeft = math.min(worker.coresFree, app.coresLeft)
-          while (coresLeft > 0) {
-            val assignedCore = math.min(coreNumPerExecutor, coresLeft)
-            val exec = app.addExecutor(worker, assignedCore)
+          while (coresLeft > 0 && app.desc.memoryPerExecutor <= worker.memoryFree) {
+            val coreToAssign = math.min(coreNumPerExecutor, coresLeft)
+            val exec = app.addExecutor(worker, coreToAssign)
             launchExecutor(worker, exec)
-            coresLeft -= assignedCore
+            coresLeft -= coreToAssign
             app.state = ApplicationState.RUNNING
           }
         }
@@ -572,7 +580,7 @@ private[spark] class Master(
       }
     }
 
-    if (conf.getBoolean("spark.multiExecutorsPerWorker.enable", false)) {
+    if (!conf.getBoolean("spark.executor.multiPerWorker", false)) {
       startSingleExecutorPerWorker()
     } else {
       startMultiExecutorsPerWorker()
