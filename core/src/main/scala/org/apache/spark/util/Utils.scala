@@ -32,6 +32,7 @@ import scala.util.Try
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
@@ -1073,9 +1074,7 @@ private[spark] object Utils extends Logging {
   /**
    * Return true if this is Windows.
    */
-  def isWindows = {
-    Option(System.getProperty("os.name")).exists(_.startsWith("Windows"))
-  }
+  def isWindows = SystemUtils.IS_OS_WINDOWS;
 
   /**
    * Indicates whether Spark is currently running unit tests.
