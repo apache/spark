@@ -891,7 +891,8 @@ improve the performance of you application. At a high level, you need to conside
   Reducing the processing time of each batch of data by efficiently using cluster resources.
 </li>
 <li>
-  Setting the right batch size such that the data processing can keep up with the data ingestion.
+  Setting the right batch size such that the batches of data can be processed as fast as they
+  are received (that is, data processing keeps up with the data ingestion).
 </li>
 </ol>
 
@@ -901,13 +902,15 @@ each batch. These have been discussed in detail in [Tuning Guide](tuning.html). 
 highlights some of the most important ones.
 
 ### Level of Parallelism in Data Receiving
-Since the receiver of each input stream (other than file stream) runs on a single worker, often
-that proves to be the bottleneck in increasing the throughput. Consider receiving the data
-in parallel through multiple receivers. This can be done by creating two input streams and
-configuring them receive different partitions of the data stream from the data source(s).
-For example, a single Kafka stream receiving two topics of data can split into two
-Kafka streams receiving one topic each. This would run two receivers on two workers, thus allowing
-data to received in parallel, and increasing overall throughput.
+Receiving data over the network (like Kafka, Flume, socket, etc.) requires the data to deserialized
+and stored in Spark. If the data receiving becomes a bottleneck in the system, then consider
+parallelizing the data receiving. Note that each input DStream
+creates a single receiver (running on a worker machine) that receives a single stream of data.
+Receiving multiple data streams can therefore be achieved by creating multiple input DStreams
+and configuring them to receive different partitions of the data stream from the source(s).
+For example, a single Kafka input stream receiving two topics of data can be split into two
+Kafka input streams, each receiving only one topic. This would run two receivers on two workers,
+thus allowing data to received in parallel, and increasing overall throughput.
 
 Another parameter that should be considered is the receiver's blocking interval. For most receivers,
 the received data is coalesced together into large blocks of data before storing inside Spark's memory.
@@ -916,9 +919,10 @@ the received data in a map-like transformation. This blocking interval is determ
 [configuration parameter](configuration.html) `spark.streaming.blockInterval` and the default value
 is 200 milliseconds.
 
-If it is infeasible to parallelize the receiving using multiple input streams / receivers, it is sometimes beneficial to explicitly repartition the input data stream
-(using `inputStream.repartition(<number of partitions>)`) to distribute the received
-data across all the machines in the cluster before further processing.
+An alternative to receiving data with multiple input streams / receivers is to explicitly repartition
+the input data stream (using `inputStream.repartition(<number of partitions>)`).
+This distributes the received batches of data across all the machines in the cluster
+before further processing.
 
 ### Level of Parallelism in Data Processing
 Cluster resources maybe under-utilized if the number of parallel tasks used in any stage of the

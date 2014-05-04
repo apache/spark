@@ -463,7 +463,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(infinite)</td>
   <td>
     Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
-    Periodic cleanups will ensure that metadata older than this duration will be forgetten. This is
+    Periodic cleanups will ensure that metadata older than this duration will be forgotten. This is
     useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
     applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
   </td>
@@ -472,8 +472,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.streaming.blockInterval</td>
   <td>200</td>
   <td>
-    Duration (milliseconds) of how long to batch new objects coming from receivers used
-    in Spark Streaming.
+    Interval (milliseconds) at which data received by Spark Streaming receivers is coalesced
+    into blocks of data before storing them in Spark.
   </td>
 </tr>
 <tr>
