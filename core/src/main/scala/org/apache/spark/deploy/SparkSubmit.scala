@@ -257,8 +257,10 @@ object SparkSubmit {
     try {
       mainMethod.invoke(null, childArgs.toArray)
     } catch {
-      case e: InvocationTargetException =>
-        println("Exception in Invoked Method" + e.getTargetException)
+      case e: InvocationTargetException => e.getCause match {
+        case cause: Throwable => throw cause
+        case null => throw e
+      }
     }
   }
 
