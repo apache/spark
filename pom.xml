@@ -950,10 +950,6 @@
                 <groupId>org.jboss.netty</groupId>
                 <artifactId>netty</artifactId>
               </exclusion>
-              <exclusion>
-                <groupId>javax.servlet</groupId>
-                <artifactId>servlet-api</artifactId>
-              </exclusion>
             </exclusions>
           </dependency>
 
@@ -973,10 +969,6 @@
               <exclusion>
                 <groupId>org.jboss.netty</groupId>
                 <artifactId>netty</artifactId>
-              </exclusion>
-              <exclusion>
-                <groupId>javax.servlet</groupId>
-                <artifactId>servlet-api</artifactId>
               </exclusion>
             </exclusions>
           </dependency>
