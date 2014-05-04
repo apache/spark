@@ -54,3 +54,4 @@ scalastyle.txt
 metastore_db/
 metastore/
 warehouse/
+TempStatsStore/
