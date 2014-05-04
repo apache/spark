@@ -83,18 +83,18 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             <li><strong>Name:</strong> {app.desc.name}</li>
             <li><strong>User:</strong> {app.desc.user}</li>
             <li><strong>Cores:</strong>
-            {
+              {
               if (app.desc.maxCores.isEmpty) {
                 "Unlimited (%s granted)".format(app.coresGranted)
               } else {
                 "%s (%s granted, %s left)".format(
                   app.desc.maxCores.get, app.coresGranted, app.coresLeft)
               }
-            }
+              }
             </li>
             <li>
               <strong>Executor Memory:</strong>
-              {Utils.megabytesToString(app.desc.memoryPerSlave)}
+              {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
             </li>
             <li><strong>Submit Date:</strong> {app.submitDate}</li>
             <li><strong>State:</strong> {app.state}</li>

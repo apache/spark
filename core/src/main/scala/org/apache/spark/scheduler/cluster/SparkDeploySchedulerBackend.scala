@@ -85,6 +85,9 @@ private[spark] class SparkDeploySchedulerBackend(
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       appUIAddress, sc.eventLogDir, sc.eventLogCodec)
 
+    if (conf.getBoolean("spark.executor.multiPerWorker", true)) {
+      appDesc.maxCorePerExecutor = Some(conf.getInt("spark.executor.maxCoreNumPerExecutor", 1))
+    }
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
 

@@ -22,7 +22,7 @@ import java.net.URI
 private[spark] class ApplicationDescription(
     val name: String,
     val maxCores: Option[Int],
-    val memoryPerSlave: Int,
+    val memoryPerExecutorMB: Int,
     val command: Command,
     var appUiUrl: String,
     val eventLogDir: Option[URI] = None,
@@ -35,13 +35,16 @@ private[spark] class ApplicationDescription(
   def copy(
       name: String = name,
       maxCores: Option[Int] = maxCores,
-      memoryPerSlave: Int = memoryPerSlave,
+      memoryPerSlave: Int = memoryPerExecutorMB,
       command: Command = command,
       appUiUrl: String = appUiUrl,
       eventLogDir: Option[URI] = eventLogDir,
       eventLogCodec: Option[String] = eventLogCodec): ApplicationDescription =
     new ApplicationDescription(
       name, maxCores, memoryPerSlave, command, appUiUrl, eventLogDir, eventLogCodec)
+
+  // only valid when spark.executor.multiPerWorker is set to true
+  var maxCorePerExecutor = maxCores
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }
