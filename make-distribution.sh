@@ -55,6 +55,7 @@ SPARK_HADOOP_VERSION=1.0.4
 SPARK_YARN=false
 SPARK_HIVE=false
 SPARK_TACHYON=false
+SPARK_PYTHON=true
 MAKE_TGZ=false
 NAME=none
 
@@ -105,6 +106,12 @@ else
   echo "YARN disabled"
 fi
 
+if [ "$SPARK_PYTHON" == "true" ]; then
+  echo "Python enabled"
+else
+  echo "Python disabled"
+fi
+
 if [ "$SPARK_TACHYON" == "true" ]; then
   echo "Tachyon Enabled"
 else
@@ -122,21 +129,30 @@ else
   MAYBE_HIVE=""
 fi
 
+if [[ "$SPARK_HADOOP_VERSION" =~ "0.23." ]]; then
+  MAYBE_HADOOP023="-Phadoop-0.23"
+else
+  MAYBE_HADOOP023=""
+fi
+
 if [ "$SPARK_YARN" == "true" ]; then
-  if [[ "$SPARK_HADOOP_VERSION" =~ "0.23." ]]; then
-    mvn clean package -DskipTests -Pyarn-alpha -Dhadoop.version=$SPARK_HADOOP_VERSION \
-      -Dyarn.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE -Phadoop-0.23
+  if [[ "$SPARK_HADOOP_VERSION" =~ "0.23." || "$SPARK_HADOOP_VERSION" =~ "2.0." ]]; then
+    MAYBE_YARN="-Pyarn-alpha -Dyarn.version=$SPARK_HADOOP_VERSION"
   else
-    mvn clean package -DskipTests -Pyarn -Dhadoop.version=$SPARK_HADOOP_VERSION \
-      -Dyarn.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
+    MAYBE_YARN="-Pyarn -Dyarn.version=$SPARK_HADOOP_VERSION"
   fi
 else
-  if [[ "$SPARK_HADOOP_VERSION" =~ "0.23." ]]; then
-    mvn clean package -Phadoop-0.23 -DskipTests -Dhadoop.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
-  else
-    mvn clean package -DskipTests -Dhadoop.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
-  fi
+  MAYBE_YARN=""
 fi
+
+if [ "$SPARK_PYTHON" == "true" ]; then
+  MAYBE_PYTHON="-Ppython"
+else
+  MAYBE_PYTHON=""
+fi
+
+mvn clean package -Dhadoop.version=$SPARK_HADOOP_VERSION \
+-DskipTests $MAYBE_HIVE $MAYBE_HADOOP023  $MAYBE_YARN  $MAYBE_PYTHON
 
 # Make directories
 rm -rf "$DISTDIR"
@@ -152,9 +168,11 @@ mkdir "$DISTDIR"/conf
 cp "$FWDIR"/conf/*.template "$DISTDIR"/conf
 cp "$FWDIR"/conf/slaves "$DISTDIR"/conf
 cp -r "$FWDIR/bin" "$DISTDIR"
-cp -r "$FWDIR/python" "$DISTDIR"
 cp -r "$FWDIR/sbin" "$DISTDIR"
 
+if [ "$SPARK_PYTHON" == "true" ]; then
+ cp -r "$FWDIR/python" "$DISTDIR"
+fi
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then

@@ -26,7 +26,6 @@ import akka.actor._
 import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.ConnectionManager
@@ -67,15 +66,14 @@ class SparkEnv (
   // A mapping of thread ID to amount of memory used for shuffle in bytes
   // All accesses should be manually synchronized
   val shuffleMemoryMap = mutable.HashMap[Long, Long]()
-
-  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
+  val closeables = mutable.ListBuffer[java.io.Closeable]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
   private[spark] def stop() {
-    pythonWorkers.foreach { case(key, worker) => worker.stop() }
+    closeables.toList.foreach(_.close())
     httpFileServer.stop()
     mapOutputTracker.stop()
     shuffleFetcher.stop()
@@ -88,22 +86,6 @@ class SparkEnv (
     // down, but let's call it anyway in case it gets fixed in a later release
     // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
     // actorSystem.awaitTermination()
-  }
-
-  private[spark]
-  def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
-    synchronized {
-      val key = (pythonExec, envVars)
-      pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
-    }
-  }
-
-  private[spark]
-  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String]) {
-    synchronized {
-      val key = (pythonExec, envVars)
-      pythonWorkers(key).stop()
-    }
   }
 }
 

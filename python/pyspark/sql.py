@@ -322,7 +322,8 @@ class SchemaRDD(RDD):
         # We have to import the Row class explicitly, so that the reference Pickler has is
         # pyspark.sql.Row instead of __main__.Row
         from pyspark.sql import Row
-        jrdd = self._jschema_rdd.javaToPython()
+        sqlapi= usersProducts.context._jvm.PythonSQLAPI()
+        jrdd = sqlapi.javaToPython(self._jschema_rdd)
         # TODO: This is inefficient, we should construct the Python Row object
         # in Java land in the javaToPython function. May require a custom
         # pickle serializer in Pyrolite
