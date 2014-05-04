@@ -147,7 +147,7 @@ by specifying the IP address and port of the data server.
 
 {% highlight java %}
 // Create a DStream that will connect to serverIP:serverPort
-JavaDStream<String> lines = jssc.socketTextStream(serverIP, serverPort);
+JavaReceiverInputDStream<String> lines = jssc.socketTextStream(serverIP, serverPort);
 {% endhighlight %}
 
 This `lines` DStream represents the stream of data that will be received from the data
