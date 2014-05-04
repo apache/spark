@@ -472,7 +472,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.streaming.blockInterval</td>
   <td>200</td>
   <td>
-    Duration (milliseconds) of how long to batch new objects coming from network receivers used
+    Duration (milliseconds) of how long to batch new objects coming from receivers used
     in Spark Streaming.
   </td>
 </tr>

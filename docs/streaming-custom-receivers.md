@@ -193,7 +193,7 @@ The full source code is in the example [JavaCustomReceiver.java](https://github.
 
 
 
-### Actor-based Receivers
+### Implementing and Using a Custom Actor-based Receiver
 
 Custom [Akka Actors](http://doc.akka.io/docs/akka/2.2.4/scala/actors.html) can also be used to
 receive data. The [ActorHelper](api/scala/index.html#org.apache.spark.streaming.receiver.ActorHelper)

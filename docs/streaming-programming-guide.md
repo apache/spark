@@ -853,6 +853,32 @@ For DStreams that must be checkpointed (that is, DStreams created by `updateStat
 `reduceByKeyAndWindow` with inverse function), the checkpoint interval of the DStream is by
 default set to a multiple of the DStream's sliding interval such that its at least 10 seconds.
 
+## Deployment and Monitoring
+A Spark Streaming application is deployed on a cluster in the same way as any other Spark application.
+Please refer to the [deployment guide](cluster-overview.html) for more details.
+
+Beyond Spark's [monitoring capabilities](monitoring.html), there are additional capabilities
+specific to Spark Streaming. When a StreamingContext is used, the
+[Spark web UI](monitoring.html#web-interfaces) shows
+an additional `Streaming` tab which shows statistics about running receivers (whether
+receivers are active, number of records received, receiver error, etc.)
+and completed batches (batch processing times, queueing delays, etc.). This can be used to
+monitor the progress of the streaming application.
+
+An important thing to notice in the UI are the following two metrics -
+*Processing Time* and *Scheduling Delay* (under *Batch Processing Statistics*). The first is the
+time to process each batch of data, and the second is the time a batch waits in a queue
+for the processing of previous batches to finish. If the batch processing time is consistently more
+than the batch interval and/or the queueing delay keeps increasing, then it indicates the system is
+not able to process the batches as fast they are being generated and falling behind.
+In that case, consider
+[reducing](#reducing-the-processing-time-of-each-batch) the batch processing time.
+
+The progress of a Spark Streaming program can also be monitored using the
+[StreamingListener](api/scala/index.html#org.apache.spark.scheduler.StreamingListener) interface,
+which allows you to get receiver status and processing times. Note that this is a developer API
+and it is likely to be improved upon (i.e., more information reported) in the future.
+
 ***************************************************************************************************  
 
 # Performance Tuning
@@ -874,7 +900,27 @@ There are a number of optimizations that can be done in Spark to minimize the pr
 each batch. These have been discussed in detail in [Tuning Guide](tuning.html). This section
 highlights some of the most important ones.
 
-### Level of Parallelism
+### Level of Parallelism in Data Receiving
+Since the receiver of each input stream (other than file stream) runs on a single worker, often
+that proves to be the bottleneck in increasing the throughput. Consider receiving the data
+in parallel through multiple receivers. This can be done by creating two input streams and
+configuring them receive different partitions of the data stream from the data source(s).
+For example, a single Kafka stream receiving two topics of data can split into two
+Kafka streams receiving one topic each. This would run two receivers on two workers, thus allowing
+data to received in parallel, and increasing overall throughput.
+
+Another parameter that should be considered is the receiver's blocking interval. For most receivers,
+the received data is coalesced together into large blocks of data before storing inside Spark's memory.
+The number of blocks in each batch determines the number of tasks that will be used to process those
+the received data in a map-like transformation. This blocking interval is determined by the
+[configuration parameter](configuration.html) `spark.streaming.blockInterval` and the default value
+is 200 milliseconds.
+
+If it is infeasible to parallelize the receiving using multiple input streams / receivers, it is sometimes beneficial to explicitly repartition the input data stream
+(using `inputStream.repartition(<number of partitions>)`) to distribute the received
+data across all the machines in the cluster before further processing.
+
+### Level of Parallelism in Data Processing
 Cluster resources maybe under-utilized if the number of parallel tasks used in any stage of the
 computation is not high enough. For example, for distributed reduce operations like `reduceByKey`
 and `reduceByKeyAndWindow`, the default number of parallel tasks is 8. You can pass the level of
@@ -946,14 +992,6 @@ would require the input data to be persisted in memory for at least the duration
 Hence it is necessary to set the delay to at least the value of the largest window operation used
 in the Spark Streaming application. If this delay is set too low, the application will throw an
 exception saying so.
-
-## Monitoring
-Besides Spark's in-built [monitoring capabilities](monitoring.html),
-the progress of a Spark Streaming program can also be monitored using the [StreamingListener]
-(api/scala/index.html#org.apache.spark.scheduler.StreamingListener) interface,
-which allows you to get statistics of batch processing times, queueing delays,
-and total end-to-end delays. Note that this is still an experimental API and it is likely to be
-improved upon (i.e., more information reported) in the future.
 
 ## Memory Tuning
 Tuning the memory usage and GC behavior of Spark applications have been discussed in great detail
