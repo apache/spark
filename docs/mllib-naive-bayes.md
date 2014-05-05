@@ -7,13 +7,13 @@ Naive Bayes is a simple multiclass classification algorithm with the assumption 
 between every pair of features. Naive Bayes can be trained very efficiently. Within a single pass to
 the training data, it computes the conditional probability distribution of each feature given label,
 and then it applies Bayes' theorem to compute the conditional probability distribution of label
-given an observation and use it for prediction. For more details, please visit the wikipedia page
+given an observation and use it for prediction. For more details, please visit the Wikipedia page
 [Naive Bayes classifier](http://en.wikipedia.org/wiki/Naive_Bayes_classifier).
 
 In MLlib, we implemented multinomial naive Bayes, which is typically used for document
 classification. Within that context, each observation is a document, each feature represents a term,
-whose value is the frequency of the term. For its formulation, please visit the wikipedia page
-[Multinomial naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
+whose value is the frequency of the term. For its formulation, please visit the Wikipedia page
+[Multinomial Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
 or the section
 [Naive Bayes text classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html)
 from the book Introduction to Information
@@ -58,29 +58,36 @@ optionally smoothing parameter `lambda` as input, and output a
 can be used for evaluation and prediction.
 
 {% highlight java %}
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.classification.NaiveBayes;
+import org.apache.spark.mllib.classification.NaiveBayesModel;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import scala.Tuple2;
 
 JavaRDD<LabeledPoint> training = ... // training set
 JavaRDD<LabeledPoint> test = ... // test set
 
 NaiveBayesModel model = NaiveBayes.train(training.rdd(), 1.0);
 
-JavaRDD<Double> prediction = model.predict(test.map(new Function<LabeledPoint, Vector>() {
-    public Vector call(LabeledPoint p) {
-      return p.features();
+JavaRDD<Double> prediction =
+  test.map(new Function<LabeledPoint, Double>() {
+    @Override public Double call(LabeledPoint p) {
+      return model.predict(p.features());
     }
-  })
+  });
 JavaPairRDD<Double, Double> predictionAndLabel = 
   prediction.zip(test.map(new Function<LabeledPoint, Double>() {
-    public Double call(LabeledPoint p) {
+    @Override public Double call(LabeledPoint p) {
       return p.label();
     }
-  })
+  }));
 double accuracy = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
-    public Boolean call(Tuple2<Double, Double> pl) {
+    @Override public Boolean call(Tuple2<Double, Double> pl) {
       return pl._1() == pl._2();
     }
-  }).count() / test.count()
+  }).count() / test.count();
 {% endhighlight %}
 </div>
 

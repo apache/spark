@@ -77,7 +77,7 @@ val ratesAndPreds = ratings.map{
 }.join(predictions)
 val MSE = ratesAndPreds.map{
     case ((user, product), (r1, r2)) =>  math.pow((r1- r2), 2)
-}.reduce(_ + _)/ratesAndPreds.count
+}.sum / ratesAndPreds.count
 println("Mean Squared Error = " + MSE)
 {% endhighlight %}
 

@@ -225,10 +225,11 @@ algorithm for 200 iterations.
 import org.apache.spark.mllib.optimization.L1Updater
 
 val svmAlg = new SVMWithSGD()
-svmAlg.optimizer.setNumIterations(200)
-  .setRegParam(0.1)
-  .setUpdater(new L1Updater)
-val modelL1 = svmAlg.run(parsedData)
+svmAlg.optimizer.
+  setNumIterations(200).
+  setRegParam(0.1).
+  setUpdater(new L1Updater)
+val modelL1 = svmAlg.run(training)
 {% endhighlight %}
 
 Similarly, you can use replace `SVMWithSGD` by
@@ -322,7 +323,7 @@ val valuesAndPreds = parsedData.map { point =>
   val prediction = model.predict(point.features)
   (point.label, prediction)
 }
-val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.reduce(_ + _) / valuesAndPreds.count
+val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.sum / valuesAndPreds.count
 println("training Mean Squared Error = " + MSE)
 {% endhighlight %}
 
