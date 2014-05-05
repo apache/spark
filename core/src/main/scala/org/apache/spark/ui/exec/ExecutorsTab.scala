@@ -20,6 +20,7 @@ package org.apache.spark.ui.exec
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.ExceptionFailure
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.{SparkUI, WebUITab}
@@ -34,9 +35,11 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "execut
 }
 
 /**
+ * :: DeveloperApi
  * A SparkListener that prepares information to be displayed on the ExecutorsTab
  */
-private[ui] class ExecutorsListener(storageStatusListener: StorageStatusListener)
+@DeveloperApi
+class ExecutorsListener(storageStatusListener: StorageStatusListener)
   extends SparkListener {
 
   val executorToTasksActive = HashMap[String, Int]()
