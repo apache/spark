@@ -36,9 +36,18 @@ can be used for evaluation and prediction.
 
 {% highlight scala %}
 import org.apache.spark.mllib.classification.NaiveBayes
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
 
-val training: RDD[LabeledPoint] = ... // training set
-val test: RDD[LabeledPoint] = ... // test set
+val data = sc.textFile("mllib/data/sample_naive_bayes_data.txt")
+val parsedData = data.map { line =>
+  val parts = line.split(',')
+  LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
+}
+// Split data into training (60%) and test (40%).
+val splits = parsedData.randomSplit(Array(0.6, 0.4), seed = 11L)
+val training = splits(0)
+val test = splits(1)
 
 val model = NaiveBayes.train(training, lambda = 1.0)
 val prediction = model.predict(test.map(_.features))
@@ -69,7 +78,7 @@ import scala.Tuple2;
 JavaRDD<LabeledPoint> training = ... // training set
 JavaRDD<LabeledPoint> test = ... // test set
 
-NaiveBayesModel model = NaiveBayes.train(training.rdd(), 1.0);
+final NaiveBayesModel model = NaiveBayes.train(training.rdd(), 1.0);
 
 JavaRDD<Double> prediction =
   test.map(new Function<LabeledPoint, Double>() {
