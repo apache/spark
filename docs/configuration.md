@@ -289,7 +289,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.closure.serializer</td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
-    Serializer class to use for closures. Currently only the default serializer is supported.
+    Serializer class to use for closures. Currently only the Java serializer is supported.
   </td>
 </tr>
 <tr>
