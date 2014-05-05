@@ -32,8 +32,8 @@ CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH:$FWDIR/conf"
 
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
 
-if [ -n "${JAVA_HOME}" ]; then
-  JAR_CMD="${JAVA_HOME}/bin/jar"
+if [ -n "$JAVA_HOME" ]; then
+  JAR_CMD="$JAVA_HOME/bin/jar"
 else
   JAR_CMD="jar"
 fi
@@ -52,8 +52,7 @@ if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/yarn/stable/target/scala-$SCALA_VERSION/classes"
 
-  DEPS_ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar 2>/dev/null)
-  CLASSPATH="$CLASSPATH:$DEPS_ASSEMBLY_JAR"
+  ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar 2>/dev/null)
 else
   # Else use spark-assembly jar from either RELEASE or assembly directory
   if [ -f "$FWDIR/RELEASE" ]; then
@@ -61,19 +60,22 @@ else
   else
     ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*.jar 2>/dev/null)
   fi
-  jar_error_check=$($JAR_CMD -tf $ASSEMBLY_JAR org/apache/spark/SparkContext 2>&1)
-  if [[ "$jar_error_check" =~ "invalid CEN header" ]]; then
-    echo "Loading Spark jar with '$JAR_CMD' failed. "
-    echo "This is likely because Spark was compiled with Java 7 and run "
-    echo "with Java 6. (see SPARK-1703). Please use Java 7 to run Spark "
-    echo "or build Spark with Java 6."
-    exit 1
-  fi
-  CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
 fi
 
+# Verify that versions of java used to build the jars and run Spark are compatible
+jar_error_check=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" scala/AnyVal 2>&1)
+if [[ "$jar_error_check" =~ "invalid CEN header" ]]; then
+  echo "Loading Spark jar with '$JAR_CMD' failed. "
+  echo "This is likely because Spark was compiled with Java 7 and run "
+  echo "with Java 6. (see SPARK-1703). Please use Java 7 to run Spark "
+  echo "or build Spark with Java 6."
+  exit 1
+fi
+
+CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
+
 # When Hive support is needed, Datanucleus jars must be included on the classpath.
-# Datanucleus jars do not work if only included in the  uber jar as plugin.xml metadata is lost.
+# Datanucleus jars do not work if only included in the uber jar as plugin.xml metadata is lost.
 # Both sbt and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is
 # built with Hive, so first check if the datanucleus jars exist, and then ensure the current Spark
 # assembly is built for Hive, before actually populating the CLASSPATH with the jars.
@@ -88,11 +90,10 @@ datanucleus_jars=$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\.
 datanucleus_jars=$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)
 
 if [ -n "$datanucleus_jars" ]; then
-  an_assembly_jar=${ASSEMBLY_JAR:-$DEPS_ASSEMBLY_JAR}
-  hive_files=$(jar tvf "$an_assembly_jar" org/apache/hadoop/hive/ql/exec 2>/dev/null)
+  hive_files=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null)
   if [ -n "$hive_files" ]; then
     echo "Spark assembly has been built with Hive, including Datanucleus jars on classpath" 1>&2
-    CLASSPATH=$CLASSPATH:$datanucleus_jars
+    CLASSPATH="$CLASSPATH:$datanucleus_jars"
   fi
 fi
 

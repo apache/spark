@@ -51,13 +51,13 @@ if [ $? != 0 ]; then
     exit -1;
 fi
 
-if [ -z "${JAVA_HOME}" ]; then
+if [ -z "$JAVA_HOME" ]; then
   echo "Error: JAVA_HOME is not set, cannot proceed."
   exit -1
 fi
 
-JAVA_CMD=$JAVA_HOME/bin/java
-JAVA_VERSION=$($JAVA_CMD -version 2>&1)
+JAVA_CMD="$JAVA_HOME"/bin/java
+JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
 if ! [[ "$JAVA_VERSION" =~ "1.6" ]]; then
   echo "Error: JAVA_HOME must point to a JDK 6 installation (see SPARK-1703)."
   echo "Output from 'java -version' was:"
