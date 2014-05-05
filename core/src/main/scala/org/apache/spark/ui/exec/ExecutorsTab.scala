@@ -35,7 +35,7 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "execut
 }
 
 /**
- * :: DeveloperApi
+ * :: DeveloperApi ::
  * A SparkListener that prepares information to be displayed on the ExecutorsTab
  */
 @DeveloperApi
