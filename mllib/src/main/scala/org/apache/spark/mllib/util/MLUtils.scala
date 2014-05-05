@@ -134,9 +134,8 @@ object MLUtils {
     loadLibSVMFile(sc, path, LabelParser.getInstance(multiclass), numFeatures, minPartitions)
 
   /**
-   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
-   * with the given label parser, number of features specified explicitly,
-   * and the default number of partitions.
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the default number of
+   * partitions.
    */
   def loadLibSVMFile(
       sc: SparkContext,
@@ -146,9 +145,8 @@ object MLUtils {
     loadLibSVMFile(sc, path, multiclass, numFeatures, sc.defaultMinPartitions)
 
   /**
-   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
-   * with the given label parser, number of features determined automatically,
-   * and the default number of partitions.
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the number of features
+   * determined automatically and the default number of partitions.
    */
   def loadLibSVMFile(
       sc: SparkContext,
@@ -157,8 +155,8 @@ object MLUtils {
     loadLibSVMFile(sc, path, multiclass, -1, sc.defaultMinPartitions)
 
   /**
-   * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint],
-   * with number of features determined automatically and the default number of partitions.
+   * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint], with number of
+   * features determined automatically and the default number of partitions.
    */
   def loadLibSVMFile(sc: SparkContext, path: String): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, multiclass = false, -1, sc.defaultMinPartitions)
@@ -168,7 +166,7 @@ object MLUtils {
    * @param data an RDD of LabeledPoint to be saved
    * @param dir directory to save the data
    *
-   * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMData]]
+   * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
    */
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
     // TODO: allow to specify label precision and feature precision.
