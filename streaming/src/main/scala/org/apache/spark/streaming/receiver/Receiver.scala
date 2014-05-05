@@ -28,9 +28,11 @@ import org.apache.spark.annotation.DeveloperApi
 /**
  * :: DeveloperApi ::
  * Abstract class of a receiver that can be run on worker nodes to receive external data. A
- * custom receiver can be defined by defining the functions onStart() and onStop(). onStart()
+ * custom receiver can be defined by defining the functions `onStart()` and `onStop()`. `onStart()`
  * should define the setup steps necessary to start receiving data,
- * and onStop() should define the cleanup steps necessary to stop receiving data.
+ * and `onStop()` should define the cleanup steps necessary to stop receiving data.
+ * Exceptions while receiving can be handled either by restarting the receiver with `restart(...)`
+ * or stopped completely by `stop(...)` or
  *
  * A custom receiver in Scala would look like this.
  *
