@@ -134,15 +134,13 @@ object NullPropagation extends Rule[LogicalPlan] {
         case Literal(null, _) => Literal(null, e.dataType)
         case _ => e
       }
-      case e: And => e // leave it for BooleanSimplification
-      case e: Or => e  // leave it for BooleanSimplification
-      // Put exceptional cases above
+      // Put exceptional cases above if any
       case e: BinaryArithmetic => e.children match {
         case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
         case _ => e
       }
-      case e: BinaryPredicate => e.children match {
+      case e: BinaryComparison => e.children match {
         case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
         case _ => e

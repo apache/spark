@@ -250,17 +250,17 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
 
-    checkEvaluation(("abcdef" cast StringType).nullable, false)
-    checkEvaluation(("abcdef" cast BinaryType).nullable,false)
-    checkEvaluation(("abcdef" cast BooleanType).nullable, false)
-    checkEvaluation(("abcdef" cast TimestampType).nullable, true)
-    checkEvaluation(("abcdef" cast LongType).nullable, true)
-    checkEvaluation(("abcdef" cast IntegerType).nullable, true)
-    checkEvaluation(("abcdef" cast ShortType).nullable, true)
-    checkEvaluation(("abcdef" cast ByteType).nullable, true)
-    checkEvaluation(("abcdef" cast DecimalType).nullable, true)
-    checkEvaluation(("abcdef" cast DoubleType).nullable, true)
-    checkEvaluation(("abcdef" cast FloatType).nullable, true)
+    assert(("abcdef" cast StringType).nullable === false)
+    assert(("abcdef" cast BinaryType).nullable === false)
+    assert(("abcdef" cast BooleanType).nullable === false)
+    assert(("abcdef" cast TimestampType).nullable === true)
+    assert(("abcdef" cast LongType).nullable === true)
+    assert(("abcdef" cast IntegerType).nullable === true)
+    assert(("abcdef" cast ShortType).nullable === true)
+    assert(("abcdef" cast ByteType).nullable === true)
+    assert(("abcdef" cast DecimalType).nullable === true)
+    assert(("abcdef" cast DoubleType).nullable === true)
+    assert(("abcdef" cast FloatType).nullable === true)
 
     checkEvaluation(Cast(Literal(null, IntegerType), ShortType), null)
   }
