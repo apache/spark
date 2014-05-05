@@ -815,6 +815,7 @@ def main():
     real_main()
   except UsageError, e:
     print >> stderr, "\nError:\n", e
+    sys.exit(1)
 
 
 if __name__ == "__main__":
