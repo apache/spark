@@ -206,7 +206,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
         blockLocations.remove(blockId)
       }
     }
-    listenerBus.post(SparkListenerBlockManagerRemoved(blockManagerId))
+    listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
   }
 
   private def expireDeadHosts() {
@@ -328,6 +328,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+    val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(manager) =>
@@ -343,9 +344,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
         id.hostPort, Utils.bytesToString(maxMemSize)))
 
       blockManagerInfo(id) =
-        new BlockManagerInfo(id, System.currentTimeMillis(), maxMemSize, slaveActor)
+        new BlockManagerInfo(id, time, maxMemSize, slaveActor)
     }
-    listenerBus.post(SparkListenerBlockManagerAdded(id, maxMemSize))
+    listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
   }
 
   private def updateBlockInfo(

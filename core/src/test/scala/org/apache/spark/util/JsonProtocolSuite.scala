@@ -52,9 +52,9 @@ class JsonProtocolSuite extends FunSuite {
       "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
-    val blockManagerAdded = SparkListenerBlockManagerAdded(
+    val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
       BlockManagerId("Stars", "In your multitude...", 300, 400), 500)
-    val blockManagerRemoved = SparkListenerBlockManagerRemoved(
+    val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100, 200))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val applicationStart = SparkListenerApplicationStart("The winner of all", 42L, "Garfield")
