@@ -68,19 +68,10 @@ private[spark] class PythonRDD[T: ClassTag](
       } catch {
         case e: Exception => logWarning("Failed to close worker socket", e)
       }
-
-      // The python worker must be destroyed in the event of cancellation to ensure it unblocks.
-      if (context.interrupted) {
-        try {
-          logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
-          env.destroyPythonWorker(pythonExec, envVars.toMap)
-        } catch {
-          case e: Exception => logError("Exception when trying to kill worker", e)
-        }
-      }
     }
 
     writerThread.start()
+    new MonitorThread(env, worker, context).start()
 
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
@@ -136,6 +127,10 @@ private[spark] class PythonRDD[T: ClassTag](
           }
         } catch {
 
+          case e: Exception if context.interrupted =>
+            logDebug("Exception thrown after task interruption", e)
+            throw new TaskKilledException
+
           case e: Exception if writerThread.exception.isDefined =>
             logError("Python worker exited unexpectedly (crashed)", e)
             logError("This may have been caused by a prior exception:", writerThread.exception.get)
@@ -163,6 +158,8 @@ private[spark] class PythonRDD[T: ClassTag](
     extends Thread(s"stdout writer for $pythonExec") {
 
     @volatile private var _exception: Exception = null
+
+    setDaemon(true)
 
     /** Contains the exception thrown while writing the parent iterator to the Python process. */
     def exception: Option[Exception] = Option(_exception)
@@ -201,16 +198,44 @@ private[spark] class PythonRDD[T: ClassTag](
         // Data values
         PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
         dataOut.flush()
-        worker.shutdownOutput()
       } catch {
-        case e: Exception if context.completed =>
+        case e: Exception if context.completed || context.interrupted =>
           logDebug("Exception thrown after task completion (likely due to cleanup)", e)
 
         case e: Exception =>
           // We must avoid throwing exceptions here, because the thread uncaught exception handler
           // will kill the whole executor (see org.apache.spark.executor.Executor).
           _exception = e
-          Try(worker.shutdownOutput()) // kill Python worker process
+      } finally {
+        Try(worker.shutdownOutput()) // kill Python worker process
+      }
+    }
+  }
+
+  /**
+   * It is necessary to have a monitor thread for python workers if the user cancels with
+   * interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
+   * threads can block indefinitely.
+   */
+  class MonitorThread(env: SparkEnv, worker: Socket, context: TaskContext)
+    extends Thread(s"Worker Monitor for $pythonExec") {
+
+    setDaemon(true)
+
+    override def run() {
+      // Kill the worker if it is interrupted, checking until task completion.
+      // TODO: This has a race condition if interruption occurs, as completed may still become true.
+      while (!context.interrupted && !context.completed) {
+        Thread.sleep(2000)
+      }
+      if (!context.completed) {
+        try {
+          logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
+          env.destroyPythonWorker(pythonExec, envVars.toMap)
+        } catch {
+          case e: Exception =>
+            logError("Exception when trying to kill worker", e)
+        }
       }
     }
   }

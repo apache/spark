@@ -75,11 +75,13 @@ def worker(listen_sock):
     signal.signal(SIGCHLD, handle_sigchld)
 
     # Blocks until the socket is closed by draining the input stream
-    # until it raises an exception.
+    # until it raises an exception or returns EOF.
     def waitSocketClose(sock):
         try:
             while True:
-                sock.recv(4096)
+                # Empty string is returned upon EOF (and only then).
+                if sock.recv(4096) == '':
+                    return
         except:
             pass
 
