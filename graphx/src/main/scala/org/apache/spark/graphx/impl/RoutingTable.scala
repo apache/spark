@@ -20,7 +20,6 @@ package org.apache.spark.graphx.impl
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.PrimitiveVector
 
 /**
