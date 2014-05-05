@@ -613,7 +613,7 @@ def ssh_command(opts):
   return ['ssh'] + ssh_args(opts)
 
 
-# Run a command on a host through ssh, retrying up to two times
+# Run a command on a host through ssh, retrying up to five times
 # and then throwing an exception if ssh continues to fail.
 def ssh(host, opts, command):
   tries = 0
@@ -622,7 +622,7 @@ def ssh(host, opts, command):
       return subprocess.check_call(
         ssh_command(opts) + ['-t', '-t', '%s@%s' % (opts.user, host), stringify_command(command)])
     except subprocess.CalledProcessError as e:
-      if (tries > 2):
+      if (tries > 5):
         # If this was an ssh failure, provide the user with hints.
         if e.returncode == 255:
           raise UsageError("Failed to SSH to remote host {0}.\nPlease check that you have provided the correct --identity-file and --key-pair parameters and try again.".format(host))
@@ -649,7 +649,7 @@ def ssh_write(host, opts, command, input):
     status = proc.wait()
     if status == 0:
       break
-    elif (tries > 2):
+    elif (tries > 5):
       raise RuntimeError("ssh_write failed with error %s" % proc.returncode)
     else:
       print >> stderr, "Error {0} while executing remote command, retrying after 30 seconds".format(status)
