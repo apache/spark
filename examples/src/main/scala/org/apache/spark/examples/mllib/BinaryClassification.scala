@@ -146,7 +146,8 @@ object BinaryClassification {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setMaster(params.master).setAppName(s"BinaryClassification with $params")
+    val conf = new SparkConf().setMaster(params.master)
+        .setAppName(s"BinaryClassification with $params")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)
