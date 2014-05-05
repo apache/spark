@@ -17,12 +17,11 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{BinaryLabelParser, MLUtils, DataValidators}
+import org.apache.spark.mllib.util.DataValidators
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext
 
 /**
  * Classification model trained using Logistic Regression.
@@ -182,104 +181,5 @@ object LogisticRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int): LogisticRegressionModel = {
     train(input, numIterations, 1.0, 1.0)
-  }
-
-
-  def main(args: Array[String]) {
-
-    def extractFlagValue(flag: String): Option[String] = {
-      args.flatMap { x =>
-        if (x.startsWith(flag)) {
-          Some(x.stripPrefix(flag))
-        } else {
-          None
-        }
-      }.headOption
-    }
-
-    if (args.length <= 4) {
-      println("Usage: LogisticRegression <master> <input_dir> <model_dir>\n" +
-          "       [<step_size> <niters> [--svmlight] [--l1=reg] [--l2=reg] [--stochastic] " +
-          "[--add_intercept] [--num_features=n] [--minibatch=fraction] [--rda=rho]] # training\n" +
-          "       [<prediction_dir> --testonly] # testing")
-      System.exit(1)
-    }
-    val sparkMaster = args(0)
-    val inputDir = args(1)
-    val modelDir = args(2)
-    val sc = new SparkContext(sparkMaster, "LogisticRegression")
-
-    val numFeatures = extractFlagValue("--num_features=").getOrElse("-1").toInt
-
-    val data = if (args.contains("--svmlight")) {
-      MLUtils.loadLibSVMData(sc, inputDir, BinaryLabelParser, numFeatures)
-    } else {
-      MLUtils.loadLabeledData(sc, inputDir)
-    }
-
-    if (args.contains("--testonly")) {
-      val predictionFile = args(3)
-
-      // read model
-      val rModel: Seq[(String, Double)]= sc.textFile(modelDir).map { line =>
-        val parts = line.split(":")
-        (parts(0), parts(1).toDouble)
-      } .collect()
-
-      val numFeatures = rModel(0)._2.toInt
-      val intercept = rModel(1)._2
-      val weights = Array.fill(numFeatures) { 0.0d }
-      rModel.slice(2, rModel.length).foreach { kv =>
-        weights(kv._1.toInt) = kv._2
-      }
-      val model = new LogisticRegressionModel(Vectors.dense(weights), intercept)
-
-      val dataLabel = data.map { _.features }
-      data.map { _.label }
-        .zip(model.predict(dataLabel))
-        .map { lp => lp._1 + "," + lp._2 }
-        .saveAsTextFile(predictionFile)
-    } else {
-      // train a model
-      val stepSize = args(3).toDouble
-      val pass = args(4).toInt
-      val addIntercept = args.contains("--add_intercept")
-      val stochastic = args.contains("--stochastic")
-
-      val l1 = extractFlagValue("--l1=").map { _.toDouble }
-      val l2 = extractFlagValue("--l2=").map { _.toDouble }
-      val rda = extractFlagValue("--rda=").map { _.toDouble }
-      val miniBatch = extractFlagValue("--minibatch=").map { _.toDouble } .getOrElse(1.0)
-
-      val regParam = (l1, l2) match {
-        case (None, None) => 0.0
-        case (Some(v), _) => v
-        case (_, Some(v)) => v
-      }
-      val updater = (regParam, l1.isDefined, rda) match {
-        case (0.0, _, _) => new SimpleUpdater()
-        case (regValue, true, None) => new L1Updater()
-        case (regValue, true, Some(v)) => new RDAL1Updater(v)
-        case _ => new SquaredL2Updater()
-      }
-      val algorithm = new LogisticRegressionWithSGD()
-      algorithm.optimizer
-          .setStepSize(stepSize)
-          .setNumIterations(pass)
-          .setRegParam(regParam)
-          .setMiniBatchFraction(miniBatch)
-          .setUpdater(updater)
-          .setStochastic(stochastic)
-          .setRda(rda.isDefined)
-
-      algorithm.setIntercept(addIntercept)
-
-      val model = algorithm.run(data)
-
-      // create and RDD[Text] and save it to output
-      sc.makeRDD(model.readableModel).saveAsTextFile(modelDir)
-    }
-
-    sc.stop()
   }
 }
