@@ -356,7 +356,8 @@ object SparkBuild extends Build {
         "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
         "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
         "com.clearspring.analytics"  % "stream"           % "2.5.1" excludeAll(excludeFastutil),
-        "org.spark-project"          % "pyrolite"         % "2.0.1"
+        "org.spark-project"          % "pyrolite"         % "2.0.1",
+        "net.sf.py4j"                % "py4j"             % "0.8.1"
       ),
     libraryDependencies ++= maybeAvro
   )
@@ -568,7 +569,6 @@ object SparkBuild extends Build {
   )
 
   def assemblyProjSettings = sharedSettings ++ Seq(
-    libraryDependencies += "net.sf.py4j" % "py4j" % "0.8.1",
     name := "spark-assembly",
     assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
     jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },

@@ -79,7 +79,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   }
 
   /** Fill in any undefined values based on the current properties file or built-in defaults. */
-  private def loadDefaults() = {
+  private def loadDefaults(): Unit = {
 
     // Use common defaults file, if not specified by user
     if (propertiesFile == null) {
@@ -112,16 +112,25 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && primaryResource != null) {
-      val jar = new JarFile(primaryResource)
-      // Note that this might still return null if no main-class is set; we catch that later
-      mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
+      try {
+        val jar = new JarFile(primaryResource)
+        // Note that this might still return null if no main-class is set; we catch that later
+        mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
+      } catch {
+        case e: Exception =>
+          SparkSubmit.printErrorAndExit("Failed to read JAR: " + primaryResource)
+          return
+      }
     }
 
     // Global defaults. These should be keep to minimum to avoid confusing behavior.
     master = Option(master).getOrElse("local[*]")
 
     // Set name from main class if not given
-    name = Option(name).orElse(Option(mainClass)).getOrElse(new File(primaryResource).getName)
+    name = Option(name).orElse(Option(mainClass)).orNull
+    if (name == null && primaryResource != null) {
+      name = Utils.stripDirectory(primaryResource)
+    }
   }
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
@@ -133,7 +142,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       SparkSubmit.printErrorAndExit("Must specify a primary resource (JAR or Python file)")
     }
     if (mainClass == null && !isPython) {
-      SparkSubmit.printErrorAndExit("Must specify a main class with --class")
+      SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
     }
     if (pyFiles != null && !isPython) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
@@ -165,6 +174,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     |  queue                   $queue
     |  numExecutors            $numExecutors
     |  files                   $files
+    |  pyFiles                 $pyFiles
     |  archives                $archives
     |  mainClass               $mainClass
     |  primaryResource         $primaryResource
@@ -309,15 +319,15 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       """Usage: spark-submit [options] <app jar | python file> [app options]
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
-        |  --deploy-mode DEPLOY_MODE   Where to run the driver program: either 'client' to run
-        |                              on the local machine, or 'cluster' to run inside cluster.
-        |  --class CLASS_NAME          Your application's main class (for Java apps).
+        |  --deploy-mode DEPLOY_MODE   Where to run the driver program: either "client" to run
+        |                              on the local machine, or "cluster" to run inside cluster.
+        |  --class CLASS_NAME          Your application's main class (for Java / Scala apps).
         |  --name NAME                 A name of your application.
         |  --jars JARS                 Comma-separated list of local jars to include on the driver
         |                              and executor classpaths. Doesn't work for drivers in
-        |                              standalone mode with 'cluster' deploy mode.
-        |  --py-files PY_FILES         Comma-separated list of files to place on the PYTHONPATH
-        |                              for Python apps. Can be .py, .zip, or .egg files.
+        |                              standalone mode with "cluster" deploy mode.
+        |  --py-files PY_FILES         Comma-separated list of .zip or .egg files to place on the
+        |                              PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
@@ -341,7 +351,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |
         | YARN-only:
         |  --executor-cores NUM        Number of cores per executor (Default: 1).
-        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: 'default').
+        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working directory of each executor.""".stripMargin

@@ -78,7 +78,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
 
       // Create and start the worker
-      val pb = new ProcessBuilder(Seq(pythonExec, "-m", "pyspark.worker"))
+      val pb = new ProcessBuilder(Seq(pythonExec, "-u", "-m", "pyspark.worker"))
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars)
       val worker = pb.start()
@@ -151,7 +151,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       try {
         // Create and start the daemon
-        val pb = new ProcessBuilder(Seq(pythonExec, "-m", "pyspark.daemon"))
+        val pb = new ProcessBuilder(Seq(pythonExec, "-u", "-m", "pyspark.daemon"))
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars)
         daemon = pb.start()

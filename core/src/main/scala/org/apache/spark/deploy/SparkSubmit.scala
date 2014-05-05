@@ -60,11 +60,11 @@ object SparkSubmit {
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
 
   private[spark] def printErrorAndExit(str: String) = {
-    printStream.println("error: " + str)
-    printStream.println("run with --help for more information or --verbose for debugging output")
+    printStream.println("Error: " + str)
+    printStream.println("Run with --help for usage help or --verbose for debug output")
     exitFn()
   }
-  private[spark] def printWarning(str: String) = printStream.println("warning: " + str)
+  private[spark] def printWarning(str: String) = printStream.println("Warning: " + str)
 
   /**
    * @return
@@ -83,7 +83,7 @@ object SparkSubmit {
     } else if (appArgs.master.startsWith("mesos")) {
       clusterManager = MESOS
     } else {
-      printErrorAndExit("master must start with yarn, mesos, spark, or local")
+      printErrorAndExit("Master must start with yarn, mesos, spark, or local")
     }
 
     // Because "yarn-cluster" and "yarn-client" encapsulate both the master
@@ -116,9 +116,20 @@ object SparkSubmit {
     var childMainClass = ""
 
     if (clusterManager == MESOS && deployOnCluster) {
-      printErrorAndExit("Mesos does not support running the driver on the cluster")
+      printErrorAndExit("Cannot run driver on the cluster in Mesos")
     }
 
+    // If we're running a Python app, set the Java class to run to be our PythonRunner, add
+    // Python files to deployment list, and pass the main file and Python path to PythonRunner
+    if (appArgs.isPython) {
+      appArgs.mainClass = "org.apache.spark.deploy.PythonRunner"
+      appArgs.files = mergeFileLists(appArgs.files, appArgs.pyFiles, appArgs.primaryResource)
+      val pyFiles = Option(appArgs.pyFiles).getOrElse("")
+      appArgs.childArgs = ArrayBuffer(appArgs.primaryResource, pyFiles) ++ appArgs.childArgs
+      appArgs.primaryResource = RESERVED_JAR_NAME
+    }
+
+    // If we're deploying into YARN, use yarn.Client as a wrapper around the user class
     if (!deployOnCluster) {
       childMainClass = appArgs.mainClass
       if (appArgs.primaryResource != RESERVED_JAR_NAME) {
@@ -130,8 +141,8 @@ object SparkSubmit {
       childArgs += ("--class", appArgs.mainClass)
     }
 
+    // Make sure YARN is included in our build if we're trying to use it
     if (clusterManager == YARN) {
-      // The choice of class is arbitrary, could use any spark-yarn class
       if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
         val msg = "Could not load YARN classes. This copy of Spark may not have been compiled " +
           "with YARN support."
@@ -142,38 +153,39 @@ object SparkSubmit {
     // Special flag to avoid deprecation warnings at the client
     sysProps("SPARK_SUBMIT") = "true"
 
+    // A list of rules to map each argument to system properties or command-line options in
+    // each deploy mode; we iterate through these below
     val options = List[OptionAssigner](
-      new OptionAssigner(appArgs.master, ALL_CLUSTER_MGRS, false, sysProp = "spark.master"),
-      new OptionAssigner(appArgs.driverExtraClassPath, STANDALONE | YARN, true,
+      OptionAssigner(appArgs.master, ALL_CLUSTER_MGRS, false, sysProp = "spark.master"),
+      OptionAssigner(appArgs.driverExtraClassPath, STANDALONE | YARN, true,
         sysProp = "spark.driver.extraClassPath"),
-      new OptionAssigner(appArgs.driverExtraJavaOptions, STANDALONE | YARN, true,
+      OptionAssigner(appArgs.driverExtraJavaOptions, STANDALONE | YARN, true,
         sysProp = "spark.driver.extraJavaOptions"),
-      new OptionAssigner(appArgs.driverExtraLibraryPath, STANDALONE | YARN, true,
+      OptionAssigner(appArgs.driverExtraLibraryPath, STANDALONE | YARN, true,
         sysProp = "spark.driver.extraLibraryPath"),
-      new OptionAssigner(appArgs.driverMemory, YARN, true, clOption = "--driver-memory"),
-      new OptionAssigner(appArgs.name, YARN, true, clOption = "--name"),
-      new OptionAssigner(appArgs.queue, YARN, true, clOption = "--queue"),
-      new OptionAssigner(appArgs.queue, YARN, false, sysProp = "spark.yarn.queue"),
-      new OptionAssigner(appArgs.numExecutors, YARN, true, clOption = "--num-executors"),
-      new OptionAssigner(appArgs.numExecutors, YARN, false, sysProp = "spark.executor.instances"),
-      new OptionAssigner(appArgs.executorMemory, YARN, true, clOption = "--executor-memory"),
-      new OptionAssigner(appArgs.executorMemory, STANDALONE | MESOS | YARN, false,
+      OptionAssigner(appArgs.driverMemory, YARN, true, clOption = "--driver-memory"),
+      OptionAssigner(appArgs.name, YARN, true, clOption = "--name"),
+      OptionAssigner(appArgs.queue, YARN, true, clOption = "--queue"),
+      OptionAssigner(appArgs.queue, YARN, false, sysProp = "spark.yarn.queue"),
+      OptionAssigner(appArgs.numExecutors, YARN, true, clOption = "--num-executors"),
+      OptionAssigner(appArgs.numExecutors, YARN, false, sysProp = "spark.executor.instances"),
+      OptionAssigner(appArgs.executorMemory, YARN, true, clOption = "--executor-memory"),
+      OptionAssigner(appArgs.executorMemory, STANDALONE | MESOS | YARN, false,
         sysProp = "spark.executor.memory"),
-      new OptionAssigner(appArgs.driverMemory, STANDALONE, true, clOption = "--memory"),
-      new OptionAssigner(appArgs.driverCores, STANDALONE, true, clOption = "--cores"),
-      new OptionAssigner(appArgs.executorCores, YARN, true, clOption = "--executor-cores"),
-      new OptionAssigner(appArgs.executorCores, YARN, false, sysProp = "spark.executor.cores"),
-      new OptionAssigner(appArgs.totalExecutorCores, STANDALONE | MESOS, false,
+      OptionAssigner(appArgs.driverMemory, STANDALONE, true, clOption = "--memory"),
+      OptionAssigner(appArgs.driverCores, STANDALONE, true, clOption = "--cores"),
+      OptionAssigner(appArgs.executorCores, YARN, true, clOption = "--executor-cores"),
+      OptionAssigner(appArgs.executorCores, YARN, false, sysProp = "spark.executor.cores"),
+      OptionAssigner(appArgs.totalExecutorCores, STANDALONE | MESOS, false,
         sysProp = "spark.cores.max"),
-      new OptionAssigner(appArgs.files, YARN, false, sysProp = "spark.yarn.dist.files"),
-      new OptionAssigner(appArgs.files, YARN, true, clOption = "--files"),
-      new OptionAssigner(appArgs.archives, YARN, false, sysProp = "spark.yarn.dist.archives"),
-      new OptionAssigner(appArgs.archives, YARN, true, clOption = "--archives"),
-      new OptionAssigner(appArgs.jars, YARN, true, clOption = "--addJars"),
-      new OptionAssigner(appArgs.files, LOCAL | STANDALONE | MESOS, true, sysProp = "spark.files"),
-      new OptionAssigner(appArgs.jars, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.jars"),
-      new OptionAssigner(appArgs.name, LOCAL | STANDALONE | MESOS, false,
-        sysProp = "spark.app.name")
+      OptionAssigner(appArgs.files, YARN, false, sysProp = "spark.yarn.dist.files"),
+      OptionAssigner(appArgs.files, YARN, true, clOption = "--files"),
+      OptionAssigner(appArgs.archives, YARN, false, sysProp = "spark.yarn.dist.archives"),
+      OptionAssigner(appArgs.archives, YARN, true, clOption = "--archives"),
+      OptionAssigner(appArgs.jars, YARN, true, clOption = "--addJars"),
+      OptionAssigner(appArgs.files, LOCAL | STANDALONE | MESOS, true, sysProp = "spark.files"),
+      OptionAssigner(appArgs.jars, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.jars"),
+      OptionAssigner(appArgs.name, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.app.name")
     )
 
     // For client mode make any added jars immediately visible on the classpath
@@ -183,9 +195,10 @@ object SparkSubmit {
       }
     }
 
+    // Map all arguments to command-line options or system properties for our chosen mode
     for (opt <- options) {
       if (opt.value != null && deployOnCluster == opt.deployOnCluster &&
-        (clusterManager & opt.clusterManager) != 0) {
+          (clusterManager & opt.clusterManager) != 0) {
         if (opt.clOption != null) {
           childArgs += (opt.clOption, opt.value)
         } else if (opt.sysProp != null) {
@@ -230,8 +243,8 @@ object SparkSubmit {
   }
 
   private def launch(childArgs: ArrayBuffer[String], childClasspath: ArrayBuffer[String],
-      sysProps: Map[String, String], childMainClass: String, verbose: Boolean = false) {
-
+      sysProps: Map[String, String], childMainClass: String, verbose: Boolean = false)
+  {
     if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
@@ -273,15 +286,26 @@ object SparkSubmit {
     val url = localJarFile.getAbsoluteFile.toURI.toURL
     loader.addURL(url)
   }
+
+  /**
+   * Merge a sequence of comma-separated file lists, some of which may be null to indicate
+   * no files, into a single comma-separated string.
+   */
+  private[spark] def mergeFileLists(lists: String*): String = {
+    val merged = lists.filter(_ != null)
+                      .flatMap(_.split(","))
+                      .mkString(",")
+    if (merged == "") null else merged
+  }
 }
 
 /**
  * Provides an indirection layer for passing arguments as system properties or flags to
  * the user's driver program or to downstream launcher tools.
  */
-private[spark] class OptionAssigner(val value: String,
-  val clusterManager: Int,
-  val deployOnCluster: Boolean,
-  val clOption: String = null,
-  val sysProp: String = null
-) { }
+private[spark] case class OptionAssigner(
+    value: String,
+    clusterManager: Int,
+    deployOnCluster: Boolean,
+    clOption: String = null,
+    sysProp: String = null)
