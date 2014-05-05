@@ -39,7 +39,8 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
     <tr><td>0.23.x</td><td>hadoop-0.23</td></tr>
     <tr><td>1.x to 2.1.x</td><td>(none)</td></tr>
     <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
-    <tr><td>2.3.x and later</td><td>hadoop-2.3</td></tr>
+    <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
+    <tr><td>2.4.x</td><td>hadoop-2.4</td></tr>
   </tbody>
 </table>
 
@@ -78,12 +79,12 @@ Examples:
     $ mvn -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
 
     # Apache Hadoop 2.2.X
-    $ mvn -Pyarn -Phadoop-2.2 -DskipTests clean package
+    $ mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
 
-    # Apache Hadoop 2.3.X and newer
-    $ mvn -Pyarn -Phadoop-2.3 -DskipTests clean package
+    # Apache Hadoop 2.3.X
+    $ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 
-    # Apache Hadoop 2.4.X as a custom version
+    # Apache Hadoop 2.4.X
     $ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.4.0 -DskipTests clean package
 
     # Different versions of HDFS and YARN.

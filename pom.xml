@@ -873,12 +873,11 @@
 
     </profile>
 
-    <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
+    <!-- A series of build profiles where customizations for particular Hadoop releases can be made -->
+
     <profile>
       <id>hadoop-0.23</id>
-      <properties>
-        <hadoop.version>0.23.7</hadoop.version>
-      </properties>
+      <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
       <dependencies>
         <dependency>
           <groupId>org.apache.avro</groupId>
@@ -890,7 +889,6 @@
     <profile>
       <id>hadoop-2.2</id>
       <properties>
-        <hadoop.version>2.2.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
       </properties>
     </profile>
@@ -898,7 +896,14 @@
     <profile>
       <id>hadoop-2.3</id>
       <properties>
-        <hadoop.version>2.3.0</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+        <jets3t.version>0.9.0</jets3t.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>hadoop-2.4</id>
+      <properties>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
       </properties>
