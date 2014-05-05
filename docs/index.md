@@ -67,6 +67,10 @@ In addition, if you wish to run Spark on [YARN](running-on-yarn.html), set
 
 Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.
 
+If you want to access Amazon S3 with a Spark compiled with Hadoop 2.3.0 or newer version, you have to manually update the dependency of
+jets3t to 0.9.0 in the Spark build file (pom.xml or project/SparkBuild.scala), as jets3t 0.9.0 is introduced in the latest
+versions of Hadoop and not backward compatible.
+
 # Where to Go from Here
 
 **Programming guides:**
