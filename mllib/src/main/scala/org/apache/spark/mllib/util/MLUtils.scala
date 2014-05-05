@@ -236,7 +236,7 @@ object MLUtils {
   }
 
   /**
-   * Returns a new vector with 1.0 (bias) appended to the input vector.
+   * Returns a new vector with `1.0` (bias) appended to the input vector.
    */
   def appendBias(vector: Vector): Vector = {
     val vector1 = vector.toBreeze match {
