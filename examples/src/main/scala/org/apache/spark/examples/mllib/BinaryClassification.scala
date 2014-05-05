@@ -96,7 +96,7 @@ object BinaryClassification {
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
-    val examples = MLUtils.loadLibSVMData(sc, params.input).cache()
+    val examples = MLUtils.loadLibSVMFile(sc, params.input).cache()
 
     val splits = examples.randomSplit(Array(0.8, 0.2))
     val training = splits(0).cache()
