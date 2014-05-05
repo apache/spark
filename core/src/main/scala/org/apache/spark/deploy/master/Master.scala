@@ -175,6 +175,8 @@ private[spark] class Master(
       }
     }
 
+    case TriggerSchedule => schedule()
+
     case RevokedLeadership => {
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
@@ -448,7 +450,7 @@ private[spark] class Master(
     }
 
     state = RecoveryState.ALIVE
-    schedule()
+    self ! TriggerSchedule
     logInfo("Recovery complete - resuming operations!")
   }
 
