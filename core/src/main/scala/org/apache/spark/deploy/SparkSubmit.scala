@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
+import java.lang.reflect.InvocationTargetException
 import java.net.{URI, URL}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -137,7 +138,7 @@ object SparkSubmit {
         throw new Exception(msg)
       }
     }
-    
+
     // Special flag to avoid deprecation warnings at the client
     sysProps("SPARK_SUBMIT") = "true"
 
@@ -253,7 +254,14 @@ object SparkSubmit {
 
     val mainClass = Class.forName(childMainClass, true, loader)
     val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
-    mainMethod.invoke(null, childArgs.toArray)
+    try {
+      mainMethod.invoke(null, childArgs.toArray)
+    } catch {
+      case e: InvocationTargetException => e.getCause match {
+        case cause: Throwable => throw cause
+        case null => throw e
+      }
+    }
   }
 
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
