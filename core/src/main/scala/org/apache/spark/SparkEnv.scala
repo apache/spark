@@ -156,13 +156,11 @@ object SparkEnv extends Logging {
       conf.set("spark.driver.port",  boundPort.toString)
     }
 
-    val classLoader = Thread.currentThread.getContextClassLoader
-
     // Create an instance of the class named by the given Java system property, or by
     // defaultClassName if the property is not set, and return it as a T
     def instantiateClass[T](propertyName: String, defaultClassName: String): T = {
       val name = conf.get(propertyName,  defaultClassName)
-      val cls = Class.forName(name, true, classLoader)
+      val cls = Class.forName(name, true, Utils.getContextOrSparkClassLoader)
       // First try with the constructor that takes SparkConf. If we can't find one,
       // use a no-arg constructor instead.
       try {
