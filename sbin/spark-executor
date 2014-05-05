@@ -19,5 +19,10 @@
 
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
+
+. "$sbin/spark-config.sh"
+
 echo "Running spark-executor with framework dir = $FWDIR"
 exec $FWDIR/bin/spark-class org.apache.spark.executor.MesosExecutorBackend
