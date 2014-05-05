@@ -32,6 +32,12 @@ CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH:$FWDIR/conf"
 
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
 
+if [ -n "${JAVA_HOME}" ]; then
+  JAR_CMD="${JAVA_HOME}/bin/jar"
+else
+  JAR_CMD="jar"
+fi
+
 # First check if we have a dependencies jar. If so, include binary classes with the deps jar
 if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SCALA_VERSION/classes"
@@ -54,6 +60,14 @@ else
     ASSEMBLY_JAR=`ls "$FWDIR"/lib/spark-assembly*hadoop*.jar`
   else
     ASSEMBLY_JAR=`ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*.jar`
+  fi
+  jar_error_check=$($JAR_CMD -tf $ASSEMBLY_JAR org/apache/spark/SparkContext 2>&1)
+  if [[ "$jar_error_check" =~ "invalid CEN header" ]]; then
+    echo "Loading Spark jar with '$JAR_CMD' failed. "
+    echo "This is likely because Spark was compiled with Java 7 and run "
+    echo "with Java 6. (see SPARK-1703). Please use Java 7 to run Spark "
+    echo "or build Spark with Java 6."
+    exit 1
   fi
   CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
 fi

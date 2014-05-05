@@ -43,11 +43,26 @@
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
 
-VERSION=$(mvn help:evaluate -Dexpression=project.version | grep -v "INFO" | tail -n 1)
-if [ $? == -1 ] ;then
+set -o pipefail
+VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+if [ $? != 0 ]; then
     echo -e "You need Maven installed to build Spark."
     echo -e "Download Maven from https://maven.apache.org."
     exit -1;
+fi
+
+if [ -z "${JAVA_HOME}" ]; then
+  echo "Error: JAVA_HOME is not set, cannot proceed."
+  exit -1
+fi
+
+JAVA_CMD=$JAVA_HOME/bin/java
+JAVA_VERSION=$($JAVA_CMD -version 2>&1)
+if ! [[ "$JAVA_VERSION" =~ "1.6" ]]; then
+  echo "Error: JAVA_HOME must point to a JDK 6 installation (see SPARK-1703)."
+  echo "Output from 'java -version' was:"
+  echo "$JAVA_VERSION"
+  exit -1
 fi
 
 # Initialize defaults
