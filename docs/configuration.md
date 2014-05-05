@@ -26,10 +26,10 @@ application name), as well as arbitrary key-value pairs through the `set()` meth
 initialize an application as follows:
 
 {% highlight scala %}
-val conf = new SparkConf()
-             .setMaster("local")
-             .setAppName("My application")
-             .set("spark.executor.memory", "1g")
+val conf = new SparkConf().
+             setMaster("local").
+             setAppName("My application").
+             set("spark.executor.memory", "1g")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 

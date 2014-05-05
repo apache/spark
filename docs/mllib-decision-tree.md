@@ -178,7 +178,7 @@ val valuesAndPreds = parsedData.map { point =>
   val prediction = model.predict(point.features)
   (point.label, prediction)
 }
-val MSE = valuesAndPreds.map{ case(v, p) => math.pow((v - p), 2)}.sum / valuesAndPreds.count
+val MSE = valuesAndPreds.map{ case(v, p) => math.pow((v - p), 2)}.mean()
 println("training Mean Squared Error = " + MSE)
 {% endhighlight %}
 </div>
