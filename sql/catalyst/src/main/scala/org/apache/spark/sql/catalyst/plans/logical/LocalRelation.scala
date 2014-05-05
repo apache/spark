@@ -25,6 +25,9 @@ object LocalRelation {
     new LocalRelation(output)
 }
 
+/**
+ * A local logical plan just for test.
+ */
 case class LocalRelation(output: Seq[Attribute], data: Seq[Product] = Nil)
   extends LeafNode with analysis.MultiInstanceRelation {
 
