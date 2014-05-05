@@ -51,13 +51,13 @@ if [ $? != 0 ]; then
     exit -1;
 fi
 
-if [ -z "${JAVA_HOME}" ]; then
+if [ -z "$JAVA_HOME" ]; then
   echo "Error: JAVA_HOME is not set, cannot proceed."
   exit -1
 fi
 
-JAVA_CMD=$JAVA_HOME/bin/java
-JAVA_VERSION=$($JAVA_CMD -version 2>&1)
+JAVA_CMD="$JAVA_HOME"/bin/java
+JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
 if ! [[ "$JAVA_VERSION" =~ "1.6" ]]; then
   echo "Error: JAVA_HOME must point to a JDK 6 installation (see SPARK-1703)."
   echo "Output from 'java -version' was:"
@@ -162,6 +162,10 @@ echo "Spark $VERSION built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE
 cp $FWDIR/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
 cp $FWDIR/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 
+if [ "$SPARK_HIVE" == "true" ]; then
+  cp $FWDIR/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
+fi
+
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$FWDIR"/conf/*.template "$DISTDIR"/conf
@@ -169,7 +173,6 @@ cp "$FWDIR"/conf/slaves "$DISTDIR"/conf
 cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/python" "$DISTDIR"
 cp -r "$FWDIR/sbin" "$DISTDIR"
-
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
