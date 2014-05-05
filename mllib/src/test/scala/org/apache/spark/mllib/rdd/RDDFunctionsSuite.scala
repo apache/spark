@@ -56,4 +56,14 @@ class RDDFunctionsSuite extends FunSuite with LocalSparkContext {
       assert(allReduced.collect().toSeq === Iterator.fill(numPartitions)(sum).toSeq)
     }
   }
+
+  test("binaryTreeReduce") {
+    val data = 0 until 5
+    val expected = data.reduce(_ + _)
+    for (numPartitions <- 1 to 12) {
+      val rdd = sc.parallelize(data, numPartitions)
+      val actual = rdd.binaryTreeReduce(_ + _)
+      assert(actual === expected)
+    }
+  }
 }
