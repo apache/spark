@@ -235,8 +235,10 @@ class JsonProtocolSuite extends FunSuite {
         assertEquals(e1.environmentDetails, e2.environmentDetails)
       case (e1: SparkListenerBlockManagerAdded, e2: SparkListenerBlockManagerAdded) =>
         assert(e1.maxMem === e2.maxMem)
+        assert(e1.time == e2.time)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerBlockManagerRemoved, e2: SparkListenerBlockManagerRemoved) =>
+        assert(e1.time == e2.time)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerUnpersistRDD, e2: SparkListenerUnpersistRDD) =>
         assert(e1.rddId == e2.rddId)
@@ -657,13 +659,14 @@ class JsonProtocolSuite extends FunSuite {
   private val blockManagerAddedJsonString =
     """
       {"Event":"SparkListenerBlockManagerAdded","Block Manager ID":{"Executor ID":"Stars",
-      "Host":"In your multitude...","Port":300,"Netty Port":400},"Maximum Memory":500}
+      "Host":"In your multitude...","Port":300,"Netty Port":400},"Maximum Memory":500,
+      "Timestamp":1}
     """
 
   private val blockManagerRemovedJsonString =
     """
       {"Event":"SparkListenerBlockManagerRemoved","Block Manager ID":{"Executor ID":"Scarce",
-      "Host":"to be counted...","Port":100,"Netty Port":200}}
+      "Host":"to be counted...","Port":100,"Netty Port":200},"Timestamp":1}
     """
 
   private val unpersistRDDJsonString =
