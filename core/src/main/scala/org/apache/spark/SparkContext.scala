@@ -292,13 +292,13 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
   private val heartbeatReceiver = env.actorSystem.actorOf(
     Props(new HeartbeatReceiver(taskScheduler)), "HeartbeatReceiver")
+
+  @volatile private[spark] var dagSchedulerStopped = false
+
   @volatile private[spark] var dagScheduler: DAGScheduler = _
-  try {
-    dagScheduler = new DAGScheduler(this)
-  } catch {
-    case e: Exception => throw
-      new SparkException("DAGScheduler cannot be initialized due to %s".format(e.getMessage))
-  }
+
+  // for work around the current MIMA issue
+  dagScheduler = new DAGScheduler(this)
 
   // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
   // constructor
@@ -1027,7 +1027,8 @@ class SparkContext(config: SparkConf) extends Logging {
       metadataCleaner.cancel()
       env.actorSystem.stop(heartbeatReceiver)
       cleaner.foreach(_.stop())
-      dagSchedulerCopy.stop()
+      dagSchedulerStopped = true
+      dagScheduler.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
@@ -1035,8 +1036,6 @@ class SparkContext(config: SparkConf) extends Logging {
       listenerBus.stop()
       eventLogger.foreach(_.stop())
       logInfo("Successfully stopped SparkContext")
-    } else {
-      logInfo("SparkContext already stopped")
     }
   }
 

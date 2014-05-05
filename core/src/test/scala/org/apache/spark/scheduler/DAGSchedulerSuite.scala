@@ -725,7 +725,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     watch(child)
     child ! "hi"
     expectMsgPF(){ case Terminated(child) => () }
-    assert(scheduler.sc.dagScheduler === null)
+    assert(scheduler.sc.dagSchedulerStopped === true)
   }
 
   /**
