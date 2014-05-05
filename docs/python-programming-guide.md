@@ -63,6 +63,9 @@ All of PySpark's library dependencies, including [Py4J](http://py4j.sourceforge.
 Standalone PySpark applications should be run using the `bin/pyspark` script, which automatically configures the Java and Python environment using the settings in `conf/spark-env.sh` or `.cmd`.
 The script automatically adds the `bin/pyspark` package to the `PYTHONPATH`.
 
+# Running PySpark on YARN
+
+To run PySpark against a YARN cluster, simply set the MASTER environment variable to "yarn-client".
 
 # Interactive Use
 

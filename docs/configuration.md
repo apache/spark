@@ -289,8 +289,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.closure.serializer</td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
-    Serializer class to use for closures. Generally Java is fine unless your distributed functions
-    (e.g. map functions) reference large objects in the driver program.
+    Serializer class to use for closures. Currently only the Java serializer is supported.
   </td>
 </tr>
 <tr>
