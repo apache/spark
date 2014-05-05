@@ -94,8 +94,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
 object NullPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      // Skip redundant folding of literals.
-      case l: Literal => l
       case e @ Count(Literal(null, _)) => Literal(0, e.dataType)
       case e @ Sum(Literal(c, _)) if(c == 0) => Literal(0, e.dataType)
       case e @ Average(Literal(c, _)) if(c == 0) => Literal(0.0, e.dataType)
