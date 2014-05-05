@@ -18,7 +18,7 @@ if [ "$?" != "0" ] || [ -e "$FWDIR/lib/spark-assembly*hadoop*.jar" ]; then
 fi
 
 # Remove everything not in dist or conf
-find * -maxdepth 0 -name 'dist' -o -name -'conf' -prune -o -exec rm -rf '{}' ';'
+find * -maxdepth 0 -name 'dist' -o -name 'conf' -prune -o -exec rm -rf '{}' ';'
 
 # Copy everything out of dist that doesn't exist already
 mv -n dist/* .
