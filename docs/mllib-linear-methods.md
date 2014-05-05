@@ -63,7 +63,7 @@ methods MLlib supports:
   <tbody>
     <tr>
       <td>hinge loss</td><td>$\max \{0, 1-y \wv^T \x \}, \quad y \in \{-1, +1\}$</td>
-      <td>$\begin{cases}-y \cdot \x & \text{if $y \wv^T \x <1$}, \\ 0 &
+      <td>$\begin{cases}-y \cdot \x &amp; \text{if $y \wv^T \x &lt;1$}, \\ 0 &amp;
 \text{otherwise}.\end{cases}$</td>
     </tr>
     <tr>

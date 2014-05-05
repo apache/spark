@@ -109,7 +109,7 @@ smoothing parameter `lambda` as input, and output a
 [NaiveBayesModel](api/pyspark/pyspark.mllib.classification.NaiveBayesModel-class.html), which can be
 used for evaluation and prediction.
 
-<!--- TODO: Make Python's example consistent with Scala's and Java's. --->
+<!-- TODO: Make Python's example consistent with Scala's and Java's. -->
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.classification import NaiveBayes

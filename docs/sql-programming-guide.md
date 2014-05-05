@@ -416,3 +416,4 @@ results = hiveCtx.hql("FROM src SELECT key, value").collect()
 {% endhighlight %}
 
 </div>
+</div>
