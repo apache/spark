@@ -93,7 +93,7 @@ object MovieLensALS {
     val ratings = sc.textFile(params.input).map { line =>
       val fields = line.split("::")
       if (params.implicitPrefs) {
-        Rating(fields(0).toInt, fields(1).toInt, if (fields(2).toInt >= 3) 1.0 else 0.0)
+        Rating(fields(0).toInt, fields(1).toInt, if (fields(2).toDouble >= 2.5) 1.0 else 0.0)
       } else {
         Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
       }
