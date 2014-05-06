@@ -49,24 +49,28 @@ class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_]) {
       includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[Array[Array[VertexId]]] = {
     // Determine which vertices each edge partition needs by creating a mapping from vid to pid.
     val vid2pid: RDD[(VertexId, PartitionID)] = edges.partitionsRDD.mapPartitions { iter =>
-      val (pid: PartitionID, edgePartition: EdgePartition[_]) = iter.next()
-      val numEdges = edgePartition.size
-      val vSet = new VertexSet
-      if (includeSrcAttr) {  // Add src vertices to the set.
+      if (iter.hasNext) {
+        val (pid: PartitionID, edgePartition: EdgePartition[_]) = iter.next()
+        val numEdges = edgePartition.size
+        val vSet = new VertexSet
+        if (includeSrcAttr) {  // Add src vertices to the set.
+          var i = 0
+          while (i < numEdges) {
+            vSet.add(edgePartition.srcIds(i))
+            i += 1
+          }
+        }
+        if (includeDstAttr) {  // Add dst vertices to the set.
         var i = 0
-        while (i < numEdges) {
-          vSet.add(edgePartition.srcIds(i))
-          i += 1
+          while (i < numEdges) {
+            vSet.add(edgePartition.dstIds(i))
+            i += 1
+          }
         }
+        vSet.iterator.map { vid => (vid, pid) }
+      } else {
+        Iterator.empty
       }
-      if (includeDstAttr) {  // Add dst vertices to the set.
-      var i = 0
-        while (i < numEdges) {
-          vSet.add(edgePartition.dstIds(i))
-          i += 1
-        }
-      }
-      vSet.iterator.map { vid => (vid, pid) }
     }
 
     val numEdgePartitions = edges.partitions.size
