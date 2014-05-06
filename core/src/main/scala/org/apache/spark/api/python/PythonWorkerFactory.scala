@@ -38,12 +38,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
   var daemonPort: Int = 0
 
-  // Verify that PYTHONPATH is set
-  private val pythonpaths = envVars.get("PYTHONPATH").toSeq ++ sys.env.get("PYTHONPATH").toSeq
-  private val pythonpath = pythonpaths.mkString(File.pathSeparator)
-  if (pythonpath == "") {
-    throw new Exception("PYTHONPATH is not set when launching python workers!")
-  }
+  val pythonPath = PythonUtils.mergePythonPaths(
+    PythonUtils.sparkPythonPath, envVars.getOrElse("PYTHONPATH", ""))
 
   def create(): Socket = {
     if (useDaemon) {
@@ -86,9 +82,10 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
 
       // Create and start the worker
-      val pb = new ProcessBuilder(Seq(pythonExec, "-m", "pyspark.worker"))
+      val pb = new ProcessBuilder(Seq(pythonExec, "-u", "-m", "pyspark.worker"))
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars)
+      workerEnv.put("PYTHONPATH", pythonPath)
       val worker = pb.start()
 
       // Redirect worker stdout and stderr
@@ -124,9 +121,10 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       try {
         // Create and start the daemon
-        val pb = new ProcessBuilder(Seq(pythonExec, "-m", "pyspark.daemon"))
+        val pb = new ProcessBuilder(Seq(pythonExec, "-u", "-m", "pyspark.daemon"))
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars)
+        workerEnv.put("PYTHONPATH", pythonPath)
         daemon = pb.start()
 
         val in = new DataInputStream(daemon.getInputStream)

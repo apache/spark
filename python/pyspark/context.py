@@ -158,6 +158,12 @@ class SparkContext(object):
         for path in (pyFiles or []):
             self.addPyFile(path)
 
+        # Deploy code dependencies set by spark-submit; these will already have been added
+        # with SparkContext.addFile, so we just need to add them
+        for path in self._conf.get("spark.submit.pyFiles", "").split(","):
+            if path != "":
+                self._python_includes.append(os.path.basename(path))
+
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = \
