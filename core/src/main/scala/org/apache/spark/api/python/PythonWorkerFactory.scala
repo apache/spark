@@ -138,16 +138,17 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       } catch {
         case e: Throwable =>
           val stderr = Option(daemon)
-            .map { d => Source.fromInputStream(d.getErrorStream).getLines().mkString("\n") }
-            .getOrElse("")
+            .map { d => Source.fromInputStream(d.getErrorStream).getLines().toSeq }
+            .getOrElse(Seq.empty)
+          val stderrString = stderr.mkString("  ", "\n  ", "")
 
           stopDaemon()
 
-          if (stderr != "") {
+          if (!stderr.isEmpty) {
             var errorMessage = "\n"
             errorMessage += "Error from python worker:\n"
-            errorMessage += s"  $stderr \n"
-            errorMessage += s"PYTHONPATH was $pythonpath\n"
+            errorMessage += stderrString + "\n"
+            errorMessage += "PYTHONPATH was " + pythonpath + "\n"
             errorMessage += e.toString
 
             // Append error message from python daemon, but keep original stack trace
