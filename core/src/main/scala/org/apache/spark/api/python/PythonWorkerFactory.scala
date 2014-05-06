@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, IOException, OutputStreamWriter}
+import java.io.{DataInputStream, InputStream, IOException, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
 import scala.collection.JavaConversions._
@@ -27,8 +27,6 @@ import org.apache.spark._
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
   extends Logging {
-
-  validatePySpark()
 
   // Because forking processes from Java is expensive, we prefer to launch a single Python daemon
   // (pyspark/daemon.py) and tell it to fork new workers for our tasks. This daemon currently
@@ -40,42 +38,19 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
   var daemonPort: Int = 0
 
+  // Verify that PYTHONPATH is set
+  private val pythonpaths = envVars.get("PYTHONPATH").toSeq ++ sys.env.get("PYTHONPATH").toSeq
+  private val pythonpath = pythonpaths.mkString(":")
+  if (pythonpath == "") {
+    throw new Exception("PYTHONPATH is not set when launching python workers!")
+  }
+
   def create(): Socket = {
     if (useDaemon) {
       createThroughDaemon()
     } else {
       createSimpleWorker()
     }
-  }
-
-  /**
-   * Validate that the required PySpark modules are loadable. If not, throw a helpful exception.
-   */
-  private def validatePySpark(): Unit = {
-
-    // Ensure PYTHONPATH is set
-    val pythonpathNotFound = !(envVars.keys ++ sys.env.keys).contains("PYTHONPATH")
-    if (pythonpathNotFound) {
-      throw new Exception("PYTHONPATH is not set when launching python workers!")
-    }
-
-    /** Attempt to load a python module with the given PYTHONPATH */
-    def validateModule(module: String): Unit = {
-      val pb = new ProcessBuilder(Seq(pythonExec, "-c", "import " + module))
-      pb.redirectErrorStream(true)
-      pb.environment().putAll(envVars)
-      val process = pb.start()
-      val processOutput = Source.fromInputStream(process.getInputStream).getLines()
-      val moduleNotFound = processOutput.exists(_.contains("No module named " + module))
-      if (moduleNotFound) {
-        val pythonpaths = envVars.get("PYTHONPATH").toSeq ++ sys.env.get("PYTHONPATH").toSeq
-        throw new Exception("Module %s not found! Is it included in the PYTHONPATH? (%s)"
-          .format(module, pythonpaths.mkString(":")))
-      }
-    }
-
-    validateModule("pyspark")
-    validateModule("py4j")
   }
 
   /**
@@ -116,39 +91,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       workerEnv.putAll(envVars)
       val worker = pb.start()
 
-      // Redirect the worker's stderr to ours
-      new Thread("stderr reader for " + pythonExec) {
-        setDaemon(true)
-        override def run() {
-          scala.util.control.Exception.ignoring(classOf[IOException]) {
-            // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-            val in = worker.getErrorStream
-            val buf = new Array[Byte](1024)
-            var len = in.read(buf)
-            while (len != -1) {
-              System.err.write(buf, 0, len)
-              len = in.read(buf)
-            }
-          }
-        }
-      }.start()
-
-      // Redirect worker's stdout to our stderr
-      new Thread("stdout reader for " + pythonExec) {
-        setDaemon(true)
-        override def run() {
-          scala.util.control.Exception.ignoring(classOf[IOException]) {
-            // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-            val in = worker.getInputStream
-            val buf = new Array[Byte](1024)
-            var len = in.read(buf)
-            while (len != -1) {
-              System.err.write(buf, 0, len)
-              len = in.read(buf)
-            }
-          }
-        }
-      }.start()
+      // Redirect worker stdout and stderr
+      redirectStream("stdout reader for " + pythonExec, worker.getInputStream)
+      redirectStream("stderr reader for " + pythonExec, worker.getErrorStream)
 
       // Tell the worker our port
       val out = new OutputStreamWriter(worker.getOutputStream)
@@ -171,6 +116,26 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     null
   }
 
+  /**
+   * Redirect the given input stream to our stderr in a separate thread.
+   */
+  private def redirectStream(threadName: String, in: InputStream) {
+    new Thread(threadName) {
+      setDaemon(true)
+      override def run() {
+        scala.util.control.Exception.ignoring(classOf[IOException]) {
+          // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
+          val buf = new Array[Byte](1024)
+          var len = in.read(buf)
+          while (len != -1) {
+            System.err.write(buf, 0, len)
+            len = in.read(buf)
+          }
+        }
+      }
+    }.start()
+  }
+
   def stop() {
     stopDaemon()
   }
@@ -189,46 +154,27 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         workerEnv.putAll(envVars)
         daemon = pb.start()
 
-        // Redirect the stderr to ours
-        new Thread("stderr reader for " + pythonExec) {
-          setDaemon(true)
-          override def run() {
-            scala.util.control.Exception.ignoring(classOf[IOException]) {
-              // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-              val in = daemon.getErrorStream
-              val buf = new Array[Byte](1024)
-              var len = in.read(buf)
-              while (len != -1) {
-                System.err.write(buf, 0, len)
-                len = in.read(buf)
-              }
-            }
-          }
-        }.start()
-
         val in = new DataInputStream(daemon.getInputStream)
         daemonPort = in.readInt()
 
-        // Redirect further stdout output to our stderr
-        new Thread("stdout reader for " + pythonExec) {
-          setDaemon(true)
-          override def run() {
-            scala.util.control.Exception.ignoring(classOf[IOException]) {
-              // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-              val buf = new Array[Byte](1024)
-              var len = in.read(buf)
-              while (len != -1) {
-                System.err.write(buf, 0, len)
-                len = in.read(buf)
-              }
-            }
-          }
-        }.start()
+        // Redirect worker stdout and stderr
+        redirectStream("stdout reader for " + pythonExec, in)
+        redirectStream("stderr reader for " + pythonExec, in)
+
       } catch {
-        case e: Throwable => {
+        case e: Throwable =>
+          val stderr = Source.fromInputStream(daemon.getErrorStream).getLines().mkString("\n")
           stopDaemon()
-          throw e
-        }
+
+          // Append error message from python daemon, but keep original stack trace
+          val errorMessage =
+            s"""
+              |Exception from python worker - "$stderr"
+              |PYTHONPATH was "$pythonpath"
+            """.stripMargin
+          val wrappedException = new SparkException(errorMessage)
+          wrappedException.setStackTrace(e.getStackTrace)
+          throw wrappedException
       }
 
       // Important: don't close daemon's stdin (daemon.getOutputStream) so it can correctly
