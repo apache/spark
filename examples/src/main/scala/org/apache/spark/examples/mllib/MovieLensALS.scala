@@ -93,7 +93,7 @@ object MovieLensALS {
     val ratings = sc.textFile(params.input).map { line =>
       val fields = line.split("::")
       if (params.implicitPrefs) {
-        Rating(fields(0).toInt, fields(1).toInt, if (fields(2).toDouble >= 2.5) 1.0 else 0.0)
+        Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
       } else {
         Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
       }
@@ -107,7 +107,12 @@ object MovieLensALS {
 
     val splits = ratings.randomSplit(Array(0.8, 0.2))
     val training = splits(0).cache()
-    val test = splits(1).cache()
+    val test = if (params.implicitPrefs) {
+      splits(1)
+      .map(x => Rating(x.user, x.product, if(x.rating >= 0) 1.0 else 0.0))
+    } else {
+      splits(1)
+    }.cache()
 
     val numTraining = training.count()
     val numTest = test.count()
@@ -122,7 +127,7 @@ object MovieLensALS {
       .setImplicitPrefs(params.implicitPrefs)
       .run(training)
 
-    val rmse = computeRmse(model, test, numTest)
+    val rmse = computeRmse(model, test, params)
 
     println(s"Test RMSE = $rmse.")
 
@@ -130,11 +135,17 @@ object MovieLensALS {
   }
 
   /** Compute RMSE (Root Mean Squared Error). */
-  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], n: Long) = {
+  def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], params: Params) = {
     val predictions: RDD[Rating] = model.predict(data.map(x => (x.user, x.product)))
-    val predictionsAndRatings = predictions.map(x => ((x.user, x.product), x.rating))
-      .join(data.map(x => ((x.user, x.product), x.rating)))
-      .values
-    math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
+    val predictionsAndRatings = if (params.implicitPrefs) {
+      predictions.map(x => (
+        (x.user, x.product),
+        if (x.rating > 1.0) 1.0 else if (x.rating < 0.0) 0.0 else x.rating
+      )).join(data.map(x => ((x.user, x.product), x.rating)))
+    } else {
+      predictions.map(x => ((x.user, x.product), x.rating))
+        .join(data.map(x => ((x.user, x.product), x.rating)))
+    }
+    math.sqrt(predictionsAndRatings.values.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
   }
 }
