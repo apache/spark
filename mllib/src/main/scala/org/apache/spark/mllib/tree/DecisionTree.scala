@@ -275,8 +275,8 @@ object DecisionTree extends Serializable with Logging {
   private val InvalidBinIndex = -1
 
   /**
-   * Returns an array of optimal splits for all nodes at a given level. Splits the tasks into
-   * multiple groups if the level-wise training tasks could lead to memory overflow.
+   * Returns an array of optimal splits for all nodes at a given level. Splits the task into
+   * multiple groups if the level-wise training task could lead to memory overflow.
    *
    * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
    *              for DecisionTree
