@@ -115,7 +115,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.storage.memoryFraction</td>
   <td>0.6</td>
   <td>
-    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
+    Max fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
     generation of objects in the JVM, which by default is given 0.6 of the heap, but you can increase
     it if you configure your own old generation size.
   </td>
