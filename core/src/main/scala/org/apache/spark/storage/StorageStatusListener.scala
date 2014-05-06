@@ -19,12 +19,15 @@ package org.apache.spark.storage
 
 import scala.collection.mutable
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 
 /**
- * A SparkListener that maintains executor storage status
+ * :: DeveloperApi ::
+ * A SparkListener that maintains executor storage status.
  */
-private[spark] class StorageStatusListener extends SparkListener {
+@DeveloperApi
+class StorageStatusListener extends SparkListener {
   private val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
 
   def storageStatusList = executorIdToStorageStatus.values.toSeq

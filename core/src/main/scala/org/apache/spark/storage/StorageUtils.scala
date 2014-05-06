@@ -21,9 +21,14 @@ import scala.collection.Map
 import scala.collection.mutable
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
 
-/** Storage information for each BlockManager. */
-private[spark] class StorageStatus(
+/**
+ * :: DeveloperApi ::
+ * Storage information for each BlockManager.
+ */
+@DeveloperApi
+class StorageStatus(
     val blockManagerId: BlockManagerId,
     val maxMem: Long,
     val blocks: mutable.Map[BlockId, BlockStatus] = mutable.Map.empty) {
