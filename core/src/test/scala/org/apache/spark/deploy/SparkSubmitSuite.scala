@@ -83,7 +83,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handle binary specified but not class") {
-    testPrematureExit(Array("foo.jar"), "Must specify a main class")
+    testPrematureExit(Array("foo.jar"), "No main class")
   }
 
   test("handles arguments with --key=val") {
@@ -94,9 +94,9 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handles arguments to user program") {
-    val clArgs = Seq("--name", "myApp", "userjar.jar", "some", "--random", "args", "here")
+    val clArgs = Seq("--name", "myApp", "--class", "Foo", "userjar.jar", "some", "--weird", "args")
     val appArgs = new SparkSubmitArguments(clArgs)
-    appArgs.childArgs should be (Seq("some", "--random", "args", "here"))
+    appArgs.childArgs should be (Seq("some", "--weird", "args"))
   }
 
   test("handles YARN cluster mode") {
