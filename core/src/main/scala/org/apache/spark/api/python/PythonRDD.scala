@@ -179,17 +179,17 @@ private[spark] class PythonRDD[T: ClassTag](
         dataOut.writeInt(split.index)
         // sparkFilesDir
         PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
+        // Python includes (*.zip and *.egg files)
+        dataOut.writeInt(pythonIncludes.length)
+        for (include <- pythonIncludes) {
+          PythonRDD.writeUTF(include, dataOut)
+        }
         // Broadcast variables
         dataOut.writeInt(broadcastVars.length)
         for (broadcast <- broadcastVars) {
           dataOut.writeLong(broadcast.id)
           dataOut.writeInt(broadcast.value.length)
           dataOut.write(broadcast.value)
-        }
-        // Python includes (*.zip and *.egg files)
-        dataOut.writeInt(pythonIncludes.length)
-        for (include <- pythonIncludes) {
-          PythonRDD.writeUTF(include, dataOut)
         }
         dataOut.flush()
         // Serialized command:
