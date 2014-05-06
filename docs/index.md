@@ -70,7 +70,7 @@ You may also want to set `SPARK_HIVE` to `true` to build Spark Hive module.
 	SPARK_HIVE=true sbt/sbt assembly
 
 Mix the environment variables - `SPARK_HADOOP_VERSION`, `SPARK_YARN`, and `SPARK_HIVE` - to match
-your needs.
+your (assembly) needs.
 
 Note that on Windows, you need to set the environment variables on separate lines, e.g.
 
