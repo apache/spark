@@ -60,12 +60,9 @@ By default, PySpark requires `python` to be available on the system `PATH` and u
 
 All of PySpark's library dependencies, including [Py4J](http://py4j.sourceforge.net/), are bundled with PySpark and automatically imported.
 
-Standalone PySpark applications should be run using the `bin/pyspark` script, which automatically configures the Java and Python environment using the settings in `conf/spark-env.sh` or `.cmd`.
-The script automatically adds the `bin/pyspark` package to the `PYTHONPATH`.
+Standalone PySpark applications should be run using the `bin/spark-submit` script, which automatically
+configures the Java and Python environment for running Spark.
 
-# Running PySpark on YARN
-
-To run PySpark against a YARN cluster, simply set the MASTER environment variable to "yarn-client".
 
 # Interactive Use
 
@@ -103,7 +100,7 @@ $ MASTER=local[4] ./bin/pyspark
 
 ## IPython
 
-It is also possible to launch PySpark in [IPython](http://ipython.org), the
+It is also possible to launch the PySpark shell in [IPython](http://ipython.org), the
 enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To
 use IPython, set the `IPYTHON` variable to `1` when running `bin/pyspark`:
 
@@ -123,18 +120,17 @@ IPython also works on a cluster or on multiple cores if you set the `MASTER` env
 
 # Standalone Programs
 
-PySpark can also be used from standalone Python scripts by creating a SparkContext in your script and running the script using `bin/pyspark`.
+PySpark can also be used from standalone Python scripts by creating a SparkContext in your script and running the script using `bin/spark-submit`.
 The Quick Start guide includes a [complete example](quick-start.html#a-standalone-app-in-python) of a standalone Python application.
 
-Code dependencies can be deployed by listing them in the `pyFiles` option in the SparkContext constructor:
+Code dependencies can be deployed by passing .zip or .egg files in the `--py-files` option of `spark-submit`:
 
-{% highlight python %}
-from pyspark import SparkContext
-sc = SparkContext("local", "App Name", pyFiles=['MyFile.py', 'lib.zip', 'app.egg'])
+{% highlight bash %}
+./bin/spark-submit --py-files lib1.zip,lib2.zip my_script.py
 {% endhighlight %}
 
 Files listed here will be added to the `PYTHONPATH` and shipped to remote worker machines.
-Code dependencies can be added to an existing SparkContext using its `addPyFile()` method.
+Code dependencies can also be added to an existing SparkContext at runtime using its `addPyFile()` method.
 
 You can set [configuration properties](configuration.html#spark-properties) by passing a
 [SparkConf](api/python/pyspark.conf.SparkConf-class.html) object to SparkContext:
@@ -142,11 +138,15 @@ You can set [configuration properties](configuration.html#spark-properties) by p
 {% highlight python %}
 from pyspark import SparkConf, SparkContext
 conf = (SparkConf()
-         .setMaster("local")
          .setAppName("My app")
          .set("spark.executor.memory", "1g"))
 sc = SparkContext(conf = conf)
 {% endhighlight %}
+
+`spark-submit` supports launching Python applications on standalone, Mesos or YARN clusters, through
+its `--master` argument. However, it currently requires the Python driver program to run on the local
+machine, not the cluster (i.e. the `--deploy-mode` parameter cannot be `cluster`).
+
 
 # API Docs
 
@@ -164,6 +164,6 @@ some example applications.
 PySpark also includes several sample programs in the [`python/examples` folder](https://github.com/apache/spark/tree/master/python/examples).
 You can run them by passing the files to `pyspark`; e.g.:
 
-    ./bin/pyspark python/examples/wordcount.py
+    ./bin/spark-submit python/examples/wordcount.py
 
 Each program prints usage help when run without arguments.
