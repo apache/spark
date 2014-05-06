@@ -27,8 +27,6 @@ from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 def launch_gateway():
     SPARK_HOME = os.environ["SPARK_HOME"]
 
-    set_env_vars_for_yarn()
-
     gateway_port = -1
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
@@ -78,29 +76,3 @@ def launch_gateway():
     java_import(gateway.jvm, "scala.Tuple2")
 
     return gateway
-
-
-def set_env_vars_for_yarn():
-    # Add the spark jar, which includes the pyspark files, to the python path
-    env_map = parse_env(os.environ.get("SPARK_YARN_USER_ENV", ""))
-    if "PYTHONPATH" in env_map:
-        env_map["PYTHONPATH"] += ":spark.jar"
-    else:
-        env_map["PYTHONPATH"] = "spark.jar"
-
-    os.environ["SPARK_YARN_USER_ENV"] = ",".join(k + '=' + v for (k, v) in env_map.items())
-
-
-def parse_env(env_str):
-    # Turns a comma-separated of env settings into a dict that maps env vars to
-    # their values.
-    env = {}
-    for var_str in env_str.split(","):
-        parts = var_str.split("=")
-        if len(parts) == 2:
-            env[parts[0]] = parts[1]
-        elif len(var_str) > 0:
-            print "Invalid entry in SPARK_YARN_USER_ENV: " + var_str
-            sys.exit(1)
-
-    return env

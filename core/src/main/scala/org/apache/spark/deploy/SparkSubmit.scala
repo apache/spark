@@ -116,17 +116,21 @@ object SparkSubmit {
     var childMainClass = ""
 
     if (clusterManager == MESOS && deployOnCluster) {
-      printErrorAndExit("Cannot run driver on the cluster in Mesos")
+      printErrorAndExit("Cannot currently run driver on the cluster in Mesos")
     }
 
     // If we're running a Python app, set the Java class to run to be our PythonRunner, add
     // Python files to deployment list, and pass the main file and Python path to PythonRunner
     if (appArgs.isPython) {
+      if (deployOnCluster) {
+        printErrorAndExit("Cannot currently run Python driver programs on cluster")
+      }
       appArgs.mainClass = "org.apache.spark.deploy.PythonRunner"
       appArgs.files = mergeFileLists(appArgs.files, appArgs.pyFiles, appArgs.primaryResource)
       val pyFiles = Option(appArgs.pyFiles).getOrElse("")
       appArgs.childArgs = ArrayBuffer(appArgs.primaryResource, pyFiles) ++ appArgs.childArgs
       appArgs.primaryResource = RESERVED_JAR_NAME
+      sysProps("spark.submit.pyFiles") = pyFiles
     }
 
     // If we're deploying into YARN, use yarn.Client as a wrapper around the user class
@@ -144,9 +148,8 @@ object SparkSubmit {
     // Make sure YARN is included in our build if we're trying to use it
     if (clusterManager == YARN) {
       if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
-        val msg = "Could not load YARN classes. This copy of Spark may not have been compiled " +
-          "with YARN support."
-        throw new Exception(msg)
+        printErrorAndExit("Could not load YARN classes. " +
+          "This copy of Spark may not have been compiled with YARN support.")
       }
     }
 
@@ -183,6 +186,7 @@ object SparkSubmit {
       OptionAssigner(appArgs.archives, YARN, false, sysProp = "spark.yarn.dist.archives"),
       OptionAssigner(appArgs.archives, YARN, true, clOption = "--archives"),
       OptionAssigner(appArgs.jars, YARN, true, clOption = "--addJars"),
+      OptionAssigner(appArgs.files, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.files"),
       OptionAssigner(appArgs.files, LOCAL | STANDALONE | MESOS, true, sysProp = "spark.files"),
       OptionAssigner(appArgs.jars, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.jars"),
       OptionAssigner(appArgs.name, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.app.name")
@@ -210,8 +214,11 @@ object SparkSubmit {
     // For standalone mode, add the application jar automatically so the user doesn't have to
     // call sc.addJar. TODO: Standalone mode in the cluster
     if (clusterManager == STANDALONE) {
-      val existingJars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
-      sysProps.put("spark.jars", (existingJars ++ Seq(appArgs.primaryResource)).mkString(","))
+      var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
+      if (appArgs.primaryResource != RESERVED_JAR_NAME) {
+        jars = jars ++ Seq(appArgs.primaryResource)
+      }
+      sysProps.put("spark.jars", jars.mkString(","))
     }
 
     if (deployOnCluster && clusterManager == STANDALONE) {
