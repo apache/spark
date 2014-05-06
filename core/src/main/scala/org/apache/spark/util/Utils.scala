@@ -779,6 +779,18 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Execute a block of code that evaluates to Unit, forwarding any uncaught exceptions to the
+   * default UncaughtExceptionHandler
+   */
+  def tryOrExit(block: => Unit) {
+    try {
+      block
+    } catch {
+      case t: Throwable => UncaughtExceptionHandler.uncaughtException(Thread.currentThread, t)
+    }
+  }
+
+  /**
    * A regular expression to match classes of the "core" Spark API that we want to skip when
    * finding the call site of a method.
    */
