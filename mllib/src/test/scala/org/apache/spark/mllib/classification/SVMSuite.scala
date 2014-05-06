@@ -69,7 +69,6 @@ class SVMSuite extends FunSuite with LocalSparkContext {
     assert(numOffPredictions < input.length / 5)
   }
 
-
   test("SVM using local random SGD") {
     val nPoints = 10000
 
@@ -83,7 +82,7 @@ class SVMSuite extends FunSuite with LocalSparkContext {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val svm = new SVMWithSGD()
+    val svm = new SVMWithSGD().setIntercept(true)
     svm.optimizer.setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
 
     val model = svm.run(testRDD)
@@ -115,7 +114,7 @@ class SVMSuite extends FunSuite with LocalSparkContext {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val svm = new SVMWithSGD()
+    val svm = new SVMWithSGD().setIntercept(true)
     svm.optimizer.setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
 
     val model = svm.run(testRDD, initialWeights)

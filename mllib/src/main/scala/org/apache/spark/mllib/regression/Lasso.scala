@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.rdd.RDD
@@ -27,7 +28,7 @@ import org.apache.spark.rdd.RDD
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class LassoModel(
+class LassoModel private[mllib] (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
@@ -64,20 +65,11 @@ class LassoWithSGD private (
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
-  // We don't want to penalize the intercept, so set this to false.
-  super.setIntercept(false)
-
   /**
    * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
    * regParam: 1.0, miniBatchFraction: 1.0}.
    */
   def this() = this(1.0, 100, 1.0, 1.0)
-
-  override def setIntercept(addIntercept: Boolean): this.type = {
-    // TODO: Support adding intercept.
-    if (addIntercept) throw new UnsupportedOperationException("Adding intercept is not supported.")
-    this
-  }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
     new LassoModel(weights, intercept)

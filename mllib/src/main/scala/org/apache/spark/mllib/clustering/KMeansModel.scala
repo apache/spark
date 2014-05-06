@@ -24,7 +24,7 @@ import org.apache.spark.mllib.linalg.Vector
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
-class KMeansModel(val clusterCenters: Array[Vector]) extends Serializable {
+class KMeansModel private[mllib] (val clusterCenters: Array[Vector]) extends Serializable {
 
   /** Total number of clusters. */
   def k: Int = clusterCenters.length

@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.evaluation.binary
+package org.apache.spark.mllib.evaluation
 
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.mllib.evaluation.AreaUnderCurve
 
 class BinaryClassificationMetricsSuite extends FunSuite with LocalSparkContext {
   test("binary evaluation metrics") {

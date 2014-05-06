@@ -22,7 +22,7 @@ import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
-import org.apache.spark.mllib.util.{MulticlassLabelParser, MLUtils}
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.optimization.{SimpleUpdater, SquaredL2Updater, L1Updater}
 
 /**
@@ -82,7 +82,7 @@ object LinearRegression extends App {
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
-    val examples = MLUtils.loadLibSVMData(sc, params.input, MulticlassLabelParser).cache()
+    val examples = MLUtils.loadLibSVMFile(sc, params.input, multiclass = true).cache()
 
     val splits = examples.randomSplit(Array(0.8, 0.2))
     val training = splits(0).cache()

@@ -22,7 +22,7 @@ import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.classification.{LogisticRegressionWithSGD, SVMWithSGD}
-import org.apache.spark.mllib.evaluation.binary.BinaryClassificationMetrics
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
 
@@ -96,7 +96,7 @@ object BinaryClassification {
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
-    val examples = MLUtils.loadLibSVMData(sc, params.input).cache()
+    val examples = MLUtils.loadLibSVMFile(sc, params.input).cache()
 
     val splits = examples.randomSplit(Array(0.8, 0.2))
     val training = splits(0).cache()

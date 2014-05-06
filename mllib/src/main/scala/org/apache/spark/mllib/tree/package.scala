@@ -15,19 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.rdd
+package org.apache.spark.mllib
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.LocalSparkContext
-
-class VectorRDDsSuite extends FunSuite with LocalSparkContext {
-
-  test("from array rdd") {
-    val data = Seq(Array(1.0, 2.0), Array(3.0, 4.0))
-    val arrayRdd = sc.parallelize(data, 2)
-    val vectorRdd = VectorRDDs.fromArrayRDD(arrayRdd)
-    assert(arrayRdd.collect().map(v => Vectors.dense(v)) === vectorRdd.collect())
-  }
+/**
+ * This package contains the default implementation of the decision tree algorithm, which supports:
+ *  - binary classification,
+ *  - regression,
+ *  - information loss calculation with entropy and Gini for classification and
+ *    variance for regression,
+ *  - both continuous and categorical features.
+ */
+package object tree {
 }

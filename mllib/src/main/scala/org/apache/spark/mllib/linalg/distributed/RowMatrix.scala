@@ -427,6 +427,7 @@ class RowMatrix(
   }
 }
 
+@Experimental
 object RowMatrix {
 
   /**

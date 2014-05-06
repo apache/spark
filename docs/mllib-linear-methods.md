@@ -180,7 +180,7 @@ error.
 {% highlight scala %}
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.classification.SVMWithSGD
-import org.apache.spark.mllib.evaluation.binary.BinaryClassificationMetrics
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLUtils

@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -81,6 +82,7 @@ class KMeans private (
    * this many times with random starting conditions (configured by the initialization mode), then
    * return the best clustering found over any run. Default: 1.
    */
+  @Experimental
   def setRuns(runs: Int): KMeans = {
     if (runs <= 0) {
       throw new IllegalArgumentException("Number of runs must be positive")

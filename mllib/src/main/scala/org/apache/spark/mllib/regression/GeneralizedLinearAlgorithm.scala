@@ -19,13 +19,14 @@ package org.apache.spark.mllib.regression
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
+ * :: DeveloperApi ::
  * GeneralizedLinearModel (GLM) represents a model trained using
  * GeneralizedLinearAlgorithm. GLMs consist of a weight vector and
  * an intercept.
@@ -33,6 +34,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
+@DeveloperApi
 abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double)
   extends Serializable {
 
@@ -72,9 +74,11 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
 }
 
 /**
+ * :: DeveloperApi ::
  * GeneralizedLinearAlgorithm implements methods to train a Generalized Linear Model (GLM).
  * This class should be extended with an Optimizer to create a new GLM.
  */
+@DeveloperApi
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   extends Logging with Serializable {
 
@@ -83,8 +87,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /** The optimizer to solve the problem. */
   def optimizer: Optimizer
 
-  /** Whether to add intercept (default: true). */
-  protected var addIntercept: Boolean = true
+  /** Whether to add intercept (default: false). */
+  protected var addIntercept: Boolean = false
 
   protected var validateData: Boolean = true
 
@@ -94,7 +98,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   protected def createModel(weights: Vector, intercept: Double): M
 
   /**
-   * Set if the algorithm should add an intercept. Default true.
+   * Set if the algorithm should add an intercept. Default false.
+   * We set the default to false because adding the intercept will cause memory allocation.
    */
   def setIntercept(addIntercept: Boolean): this.type = {
     this.addIntercept = addIntercept
@@ -102,10 +107,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
-   * :: Experimental ::
    * Set if the algorithm should validate data before training. Default true.
    */
-  @Experimental
   def setValidateData(validateData: Boolean): this.type = {
     this.validateData = validateData
     this
