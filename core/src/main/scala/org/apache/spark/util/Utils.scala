@@ -46,7 +46,6 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
-
   val random = new Random()
 
   def sparkBin(sparkHome: String, which: String): File = {
@@ -1081,5 +1080,12 @@ private[spark] object Utils extends Logging {
    */
   def isTesting = {
     sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
+  }
+
+  /**
+   * Strip the directory from a path name
+   */
+  def stripDirectory(path: String): String = {
+    path.split(File.separator).last
   }
 }

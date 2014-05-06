@@ -45,8 +45,7 @@ class ReplSuite extends FunSuite {
     }
     val interp = new SparkILoop(in, new PrintWriter(out), master)
     org.apache.spark.repl.Main.interp = interp
-    val separator = System.getProperty("path.separator")
-    interp.process(Array("-classpath", paths.mkString(separator)))
+    interp.process(Array("-classpath", paths.mkString(File.pathSeparator)))
     org.apache.spark.repl.Main.interp = null
     if (interp.sparkContext != null) {
       interp.sparkContext.stop()
