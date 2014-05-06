@@ -53,7 +53,7 @@ JAVA_CMD="$JAVA_HOME"/bin/java
 JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
 if ! [[ "$JAVA_VERSION" =~ "1.6" ]]; then
   echo "***NOTE***: JAVA_HOME is not set to a JDK 6 installation. The resulting"
-  echo "***NOTE***: distribution will not support Java 6. See SPARK-1703."
+  echo "            distribution will not support Java 6. See SPARK-1703."
   echo "Output from 'java -version' was:"
   echo "$JAVA_VERSION"
 fi
