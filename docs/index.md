@@ -15,7 +15,7 @@ Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). All you n
 
 # Building
 
-Spark uses [Simple Build Tool](http://www.scala-sbt.org), which is bundled with it. To compile the code, go into the top-level Spark directory and run
+Spark uses [sbt](http://www.scala-sbt.org), which is bundled with it. To compile the code, go into the top-level Spark directory and run
 
     sbt/sbt assembly
 
@@ -58,14 +58,23 @@ Hadoop, you must build Spark against the same version that your cluster uses.
 By default, Spark links to Hadoop 1.0.4. You can change this by setting the
 `SPARK_HADOOP_VERSION` variable when compiling:
 
-    SPARK_HADOOP_VERSION=2.2.0 sbt/sbt assembly
+    SPARK_HADOOP_VERSION=2.4.0 sbt/sbt assembly
 
 In addition, if you wish to run Spark on [YARN](running-on-yarn.html), set
 `SPARK_YARN` to `true`:
 
-    SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
+    SPARK_HADOOP_VERSION=2.4.0 SPARK_YARN=true sbt/sbt assembly
 
-Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.
+You may also want to set `SPARK_HIVE` to `true` to build Spark Hive module.
+
+	SPARK_HIVE=true sbt/sbt assembly
+
+Mix the environment variables - `SPARK_HADOOP_VERSION`, `SPARK_YARN`, and `SPARK_HIVE` to match
+your needs.
+
+Note that on Windows, you need to set the environment variables on separate lines, e.g.
+
+	set SPARK_HADOOP_VERSION=2.4.0
 
 # Where to Go from Here
 
