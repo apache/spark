@@ -135,6 +135,6 @@ object MovieLensALS {
     val predictionsAndRatings = predictions.map(x => ((x.user, x.product), x.rating))
       .join(data.map(x => ((x.user, x.product), x.rating)))
       .values
-    math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).reduce(_ + _) / n)
+    math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
   }
 }
