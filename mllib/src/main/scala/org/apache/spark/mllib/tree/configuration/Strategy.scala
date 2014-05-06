@@ -36,7 +36,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
  * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
- *                  128 MB.
+ *                      128 MB.
  *
  */
 @Experimental
