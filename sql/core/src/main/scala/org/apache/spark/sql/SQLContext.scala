@@ -162,8 +162,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Caches the specified table in-memory. */
   def cacheTable(tableName: String): Unit = {
     val currentTable = catalog.lookupRelation(None, tableName)
+    val useCompression =
+      sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
     val asInMemoryRelation =
-      InMemoryColumnarTableScan(currentTable.output, executePlan(currentTable).executedPlan)
+      InMemoryColumnarTableScan(
+        currentTable.output, executePlan(currentTable).executedPlan, useCompression)
 
     catalog.registerTable(None, tableName, SparkLogicalPlan(asInMemoryRelation))
   }
@@ -173,7 +176,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     EliminateAnalysisOperators(catalog.lookupRelation(None, tableName)) match {
       // This is kind of a hack to make sure that if this was just an RDD registered as a table,
       // we reregister the RDD as a table.
-      case SparkLogicalPlan(inMem @ InMemoryColumnarTableScan(_, e: ExistingRdd)) =>
+      case SparkLogicalPlan(inMem @ InMemoryColumnarTableScan(_, e: ExistingRdd, _)) =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
         catalog.registerTable(None, tableName, SparkLogicalPlan(e))

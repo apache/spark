@@ -72,7 +72,12 @@ class BooleanBitSetSuite extends FunSuite {
     buffer.rewind().position(headerSize + 4)
 
     val decoder = BooleanBitSet.decoder(buffer, BOOLEAN)
-    values.foreach(expectResult(_, "Wrong decoded value")(decoder.next()))
+    if (values.nonEmpty) {
+      values.foreach {
+        assert(decoder.hasNext)
+        expectResult(_, "Wrong decoded value")(decoder.next())
+      }
+    }
     assert(!decoder.hasNext)
   }
 
