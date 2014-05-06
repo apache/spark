@@ -586,15 +586,17 @@ private[spark] object Utils extends Logging {
    * Don't follow directories if they are symlinks.
    */
   def deleteRecursively(file: File) {
-    if ((file.isDirectory) && !isSymlink(file)) {
-      for (child <- listFilesSafely(file)) {
-        deleteRecursively(child)
+    if (file != null) {
+      if ((file.isDirectory) && !isSymlink(file)) {
+        for (child <- listFilesSafely(file)) {
+          deleteRecursively(child)
+        }
       }
-    }
-    if (!file.delete()) {
-      // Delete can also fail if the file simply did not exist
-      if (file.exists()) {
-        throw new IOException("Failed to delete: " + file.getAbsolutePath)
+      if (!file.delete()) {
+        // Delete can also fail if the file simply did not exist
+        if (file.exists()) {
+          throw new IOException("Failed to delete: " + file.getAbsolutePath)
+        }
       }
     }
   }
