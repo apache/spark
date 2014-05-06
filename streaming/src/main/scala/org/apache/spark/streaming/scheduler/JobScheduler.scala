@@ -58,7 +58,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       def receive = {
         case event: JobSchedulerEvent => processEvent(event)
       }
-    }), "JobScheduler")
+    }))
 
     listenerBus.start()
     receiverTracker = new ReceiverTracker(ssc)
