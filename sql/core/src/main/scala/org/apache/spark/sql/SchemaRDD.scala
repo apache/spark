@@ -342,14 +342,16 @@ class SchemaRDD(
 
   // Transformations (return a new RDD)
 
-  override def coalesce(numPartitions: Int, shuffle: Boolean = false): SchemaRDD =
-    applySchema(super.coalesce(numPartitions, shuffle))
+  override def coalesce(numPartitions: Int, shuffle: Boolean = false)
+                       (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.coalesce(numPartitions, shuffle)(ord))
 
   override def distinct(): SchemaRDD =
     applySchema(super.distinct())
 
-  override def distinct(numPartitions: Int): SchemaRDD =
-    applySchema(super.distinct(numPartitions))
+  override def distinct(numPartitions: Int)
+                       (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.distinct(numPartitions)(ord))
 
   override def filter(f: Row => Boolean): SchemaRDD =
     applySchema(super.filter(f))
@@ -357,14 +359,16 @@ class SchemaRDD(
   override def intersection(other: RDD[Row]): SchemaRDD =
     applySchema(super.intersection(other))
 
-  override def intersection(other: RDD[Row], partitioner: Partitioner): SchemaRDD =
-    applySchema(super.intersection(other, partitioner))
+  override def intersection(other: RDD[Row], partitioner: Partitioner)
+                           (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.intersection(other, partitioner)(ord))
 
   override def intersection(other: RDD[Row], numPartitions: Int): SchemaRDD =
     applySchema(super.intersection(other, numPartitions))
 
-  override def repartition(numPartitions: Int): SchemaRDD =
-    applySchema(super.repartition(numPartitions))
+  override def repartition(numPartitions: Int)
+                          (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.repartition(numPartitions)(ord))
 
   override def subtract(other: RDD[Row]): SchemaRDD =
     applySchema(super.subtract(other))
@@ -372,6 +376,7 @@ class SchemaRDD(
   override def subtract(other: RDD[Row], numPartitions: Int): SchemaRDD =
     applySchema(super.subtract(other, numPartitions))
 
-  override def subtract(other: RDD[Row], p: Partitioner): SchemaRDD =
-    applySchema(super.subtract(other, p))
+  override def subtract(other: RDD[Row], p: Partitioner)
+                       (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.subtract(other, p)(ord))
 }
