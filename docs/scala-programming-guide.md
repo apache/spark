@@ -278,10 +278,13 @@ iterative algorithms with Spark and for interactive use from the interpreter.
 You can mark an RDD to be persisted using the `persist()` or `cache()` methods on it. The first time
 it is computed in an action, it will be kept in memory on the nodes. The cache is fault-tolerant --
 if any partition of an RDD is lost, it will automatically be recomputed using the transformations
-that originally created it.
+that originally created it. Note: in a multi-stage job, Spark saves the map output files from map
+stages to the filesystem, so it only needs to rerun the last reduce stage. This means that multi-stage
+jobs that are rerun will often not recompute the full dependency graph. The lack of recomputation,
+in this case, does not indicate that RDDs are cached.
 
-In addition, each RDD can be stored using a different *storage level*, allowing you, for example, to
-persist the dataset on disk, or persist it in memory but as serialized Java objects (to save space),
+In addition, each cached RDD can be stored using a different *storage level*, allowing you, for example,
+to persist the dataset on disk, or persist it in memory but as serialized Java objects (to save space),
 or replicate it across nodes, or store the data in off-heap memory in [Tachyon](http://tachyon-project.org/).
 These levels are chosen by passing a
 [`org.apache.spark.storage.StorageLevel`](api/scala/index.html#org.apache.spark.storage.StorageLevel)
