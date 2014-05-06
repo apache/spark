@@ -163,7 +163,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def cacheTable(tableName: String): Unit = {
     val currentTable = catalog.lookupRelation(None, tableName)
     val useCompression =
-      sparkContext.conf.getBoolean("spark.sql.inMemoryCompression.enabled", false)
+      sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
     val asInMemoryRelation =
       InMemoryColumnarTableScan(
         currentTable.output, executePlan(currentTable).executedPlan, useCompression)
