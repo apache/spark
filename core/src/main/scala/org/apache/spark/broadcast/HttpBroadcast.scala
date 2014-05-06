@@ -173,9 +173,8 @@ private[spark] object HttpBroadcast extends Logging {
       serOut.writeObject(value)
       serOut.close()
       files += file.getAbsolutePath
-    }
-    finally {
-      fileOutputStream.close
+    } finally {
+      fileOutputStream.close()
     }
   }
 

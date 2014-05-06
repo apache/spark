@@ -79,10 +79,15 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     val outputStream = new FileOutputStream(file)
     try {
       blockManager.dataSerializeStream(blockId, outputStream, values)
+      outputStream.close()
+    } catch {
+      case e: Throwable => {
+        outputStream.close()
+        if(file.exists()) file.delete()
+        throw e
+      }
     }
-    finally {
-      outputStream.close
-    }
+
     val length = file.length
 
     val timeTaken = System.currentTimeMillis - startTime

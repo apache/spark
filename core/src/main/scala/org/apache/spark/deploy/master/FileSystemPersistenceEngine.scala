@@ -85,8 +85,7 @@ private[spark] class FileSystemPersistenceEngine(
     val out = new FileOutputStream(file)
     try {
       out.write(serialized)
-    }
-    finally {
+    } finally {
       out.close()
     }
   }
@@ -96,8 +95,7 @@ private[spark] class FileSystemPersistenceEngine(
     val dis = new DataInputStream(new FileInputStream(file))
     try {
       dis.readFully(fileData)
-    }
-    finally {
+    } finally {
       dis.close()
     }
 

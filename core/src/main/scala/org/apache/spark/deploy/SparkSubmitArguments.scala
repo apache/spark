@@ -327,17 +327,14 @@ object SparkSubmitArguments {
     val inputStream = new FileInputStream(file)
     try {
       val properties = new Properties()
-      try {
-        properties.load(inputStream)
-      } catch {
-        case e: IOException =>
-          val message = s"Failed when loading Spark properties file ${file.getName}"
-          throw new SparkException(message, e)
-      }
+      properties.load(inputStream)
       properties.stringPropertyNames().toSeq.map(k => (k, properties(k)))
-    }
-    finally {
-      inputStream.close
+    } catch {
+      case e: IOException =>
+        val message = s"Failed when loading Spark properties file ${file.getName}"
+        throw new SparkException(message, e)
+    } finally {
+      inputStream.close()
     }
   }
 }
