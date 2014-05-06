@@ -405,8 +405,8 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    val leftFilter = Filter(new Split(0,400,FeatureType.Continuous,List()),-1)
-    val rightFilter = Filter(new Split(0,400,FeatureType.Continuous,List()),1)
+    val leftFilter = Filter(new Split(0, 400, FeatureType.Continuous,List()), -1)
+    val rightFilter = Filter(new Split(0, 400, FeatureType.Continuous,List()) ,1)
     val filters = Array[List[Filter]](List(),List(leftFilter),List(rightFilter))
     val parentImpurities = Array(0.5, 0.5, 0.5)
 
@@ -444,7 +444,7 @@ object DecisionTreeSuite {
 
   def generateOrderedLabeledPointsWithLabel0(): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](1000)
-    for (i <- 0 until 1000){
+    for (i <- 0 until 1000) {
       val lp = new LabeledPoint(0.0, Vectors.dense(i.toDouble, 1000.0 - i))
       arr(i) = lp
     }
@@ -453,7 +453,7 @@ object DecisionTreeSuite {
 
   def generateOrderedLabeledPointsWithLabel1(): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](1000)
-    for (i <- 0 until 1000){
+    for (i <- 0 until 1000) {
       val lp = new LabeledPoint(1.0, Vectors.dense(i.toDouble, 999.0 - i))
       arr(i) = lp
     }
@@ -462,7 +462,7 @@ object DecisionTreeSuite {
 
   def generateOrderedLabeledPoints(): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](1000)
-    for (i <- 0 until 1000){
+    for (i <- 0 until 1000) {
       if (i < 600){
         val lp = new LabeledPoint(0.0, Vectors.dense(i.toDouble, 1000.0 - i))
         arr(i) = lp
@@ -476,7 +476,7 @@ object DecisionTreeSuite {
 
   def generateCategoricalDataPoints(): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](1000)
-    for (i <- 0 until 1000){
+    for (i <- 0 until 1000) {
       if (i < 600){
         arr(i) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0))
       } else {
