@@ -167,12 +167,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           stopDaemon()
 
           // Append error message from python daemon, but keep original stack trace
-          val errorMessage =
-            s"""
-              |Exception from python worker - "$stderr"
-              |PYTHONPATH was "$pythonpath"
-            """.stripMargin
-          val wrappedException = new SparkException(errorMessage)
+          val errorMessage = s"""
+            |Exception from python worker - "$stderr"
+            |PYTHONPATH was "$pythonpath"
+            |$e"""
+          val wrappedException = new SparkException(errorMessage.stripMargin)
           wrappedException.setStackTrace(e.getStackTrace)
           throw wrappedException
       }
