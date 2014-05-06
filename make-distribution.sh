@@ -146,8 +146,8 @@ if [[ "$SPARK_YARN" == "true" ]]; then
      [[ "$SPARK_HADOOP_VERSION" =~ ^1\.[0-9]\. ]] ||
      [[ "$SPARK_HADOOP_VERSION" =~ ^2\.[0-1]\. ]]; then
     BUILD_COMMAND="$BUILD_COMMAND -Pyarn-alpha"
-  # For hadoop versions 2.2.x to 2.4.x, use the yarn profile
-  elif [[ "$SPARK_HADOOP_VERSION" =~ ^2.[2-4]. ]]; then
+  # For hadoop versions 2.2+, use the yarn profile
+  elif [[ "$SPARK_HADOOP_VERSION" =~ ^2.[2-9]. ]]; then
     BUILD_COMMAND="$BUILD_COMMAND -Pyarn"
   fi
   BUILD_COMMAND="$BUILD_COMMAND -Dyarn.version=$SPARK_HADOOP_VERSION"
