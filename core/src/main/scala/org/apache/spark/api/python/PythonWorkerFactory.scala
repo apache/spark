@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, InputStream, IOException, OutputStreamWriter}
+import java.io.{DataInputStream, File, InputStream, IOException, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
 import scala.collection.JavaConversions._
@@ -40,7 +40,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   // Verify that PYTHONPATH is set
   private val pythonpaths = envVars.get("PYTHONPATH").toSeq ++ sys.env.get("PYTHONPATH").toSeq
-  private val pythonpath = pythonpaths.mkString(":")
+  private val pythonpath = pythonpaths.mkString(File.pathSeparator)
   if (pythonpath == "") {
     throw new Exception("PYTHONPATH is not set when launching python workers!")
   }
@@ -92,8 +92,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       val worker = pb.start()
 
       // Redirect worker stdout and stderr
-      redirectStream("stdout reader for " + pythonExec, worker.getInputStream)
-      redirectStream("stderr reader for " + pythonExec, worker.getErrorStream)
+      redirectWorkerStreams(worker.getInputStream, worker.getErrorStream)
 
       // Tell the worker our port
       val out = new OutputStreamWriter(worker.getOutputStream)
@@ -116,6 +115,68 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     null
   }
 
+  private def startDaemon() {
+    synchronized {
+      // Is it already running?
+      if (daemon != null) {
+        return
+      }
+
+      try {
+        // Create and start the daemon
+        val pb = new ProcessBuilder(Seq(pythonExec, "-m", "pyspark.daemon"))
+        val workerEnv = pb.environment()
+        workerEnv.putAll(envVars)
+        daemon = pb.start()
+
+        val in = new DataInputStream(daemon.getInputStream)
+        daemonPort = in.readInt()
+
+        // Redirect worker stdout and stderr
+        redirectWorkerStreams(in, daemon.getErrorStream)
+
+      } catch {
+        case e: Throwable =>
+          val stderr = Option(daemon)
+            .map { d => Source.fromInputStream(d.getErrorStream).getLines().mkString("\n") }
+            .getOrElse("")
+
+          stopDaemon()
+
+          if (stderr != "") {
+            var errorMessage = "\n"
+            errorMessage += "Error from python worker:\n"
+            errorMessage += s"  $stderr \n"
+            errorMessage += s"PYTHONPATH was $pythonpath\n"
+            errorMessage += e.toString
+
+            // Append error message from python daemon, but keep original stack trace
+            val wrappedException = new SparkException(errorMessage)
+            wrappedException.setStackTrace(e.getStackTrace)
+            throw wrappedException
+          } else {
+            throw e
+          }
+      }
+
+      // Important: don't close daemon's stdin (daemon.getOutputStream) so it can correctly
+      // detect our disappearance.
+    }
+  }
+
+  /**
+   * Redirect a worker's stdout and stderr to our stderr in the background.
+   */
+  private def redirectWorkerStreams(stdout: InputStream, stderr: InputStream) {
+    try {
+      redirectStream("stdout reader for " + pythonExec, stdout)
+      redirectStream("stderr reader for " + pythonExec, stderr)
+    } catch {
+      case e: Throwable =>
+        logWarning("Exception in redirecting worker streams")
+    }
+  }
+
   /**
    * Redirect the given input stream to our stderr in a separate thread.
    */
@@ -136,51 +197,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }.start()
   }
 
-  def stop() {
-    stopDaemon()
-  }
-
-  private def startDaemon() {
-    synchronized {
-      // Is it already running?
-      if (daemon != null) {
-        return
-      }
-
-      try {
-        // Create and start the daemon
-        val pb = new ProcessBuilder(Seq(pythonExec, "-m", "pyspark.daemon"))
-        val workerEnv = pb.environment()
-        workerEnv.putAll(envVars)
-        daemon = pb.start()
-
-        val in = new DataInputStream(daemon.getInputStream)
-        daemonPort = in.readInt()
-
-        // Redirect worker stdout and stderr
-        redirectStream("stdout reader for " + pythonExec, in)
-        redirectStream("stderr reader for " + pythonExec, in)
-
-      } catch {
-        case e: Throwable =>
-          val stderr = Source.fromInputStream(daemon.getErrorStream).getLines().mkString("\n")
-          stopDaemon()
-
-          // Append error message from python daemon, but keep original stack trace
-          val errorMessage = s"""
-            |Exception from python worker - "$stderr"
-            |PYTHONPATH was "$pythonpath"
-            |$e"""
-          val wrappedException = new SparkException(errorMessage.stripMargin)
-          wrappedException.setStackTrace(e.getStackTrace)
-          throw wrappedException
-      }
-
-      // Important: don't close daemon's stdin (daemon.getOutputStream) so it can correctly
-      // detect our disappearance.
-    }
-  }
-
   private def stopDaemon() {
     synchronized {
       // Request shutdown of existing daemon by sending SIGTERM
@@ -191,5 +207,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       daemon = null
       daemonPort = 0
     }
+  }
+
+  def stop() {
+    stopDaemon()
   }
 }
