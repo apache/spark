@@ -20,45 +20,45 @@ package org.apache.spark.deploy
 import java.io.File
 import java.util.Date
 
-import net.liftweb.json.Diff
-import net.liftweb.json.{JsonAST, JsonParser}
-import net.liftweb.json.JsonAST.{JNothing, JValue}
+import com.fasterxml.jackson.core.JsonParseException
+import org.json4s._
+import org.json4s.jackson.JsonMethods
 import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, RecoveryState, WorkerInfo}
-import org.apache.spark.deploy.worker.{ExecutorRunner, DriverRunner}
+import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 
 class JsonProtocolSuite extends FunSuite {
 
   test("writeApplicationInfo") {
     val output = JsonProtocol.writeApplicationInfo(createAppInfo())
     assertValidJson(output)
-    assertValidDataInJson(output, JsonParser.parse(JsonConstants.appInfoJsonStr))
+    assertValidDataInJson(output, JsonMethods.parse(JsonConstants.appInfoJsonStr))
   }
 
   test("writeWorkerInfo") {
     val output = JsonProtocol.writeWorkerInfo(createWorkerInfo())
     assertValidJson(output)
-    assertValidDataInJson(output, JsonParser.parse(JsonConstants.workerInfoJsonStr))
+    assertValidDataInJson(output, JsonMethods.parse(JsonConstants.workerInfoJsonStr))
   }
 
   test("writeApplicationDescription") {
     val output = JsonProtocol.writeApplicationDescription(createAppDesc())
     assertValidJson(output)
-    assertValidDataInJson(output, JsonParser.parse(JsonConstants.appDescJsonStr))
+    assertValidDataInJson(output, JsonMethods.parse(JsonConstants.appDescJsonStr))
   }
 
   test("writeExecutorRunner") {
     val output = JsonProtocol.writeExecutorRunner(createExecutorRunner())
     assertValidJson(output)
-    assertValidDataInJson(output, JsonParser.parse(JsonConstants.executorRunnerJsonStr))
+    assertValidDataInJson(output, JsonMethods.parse(JsonConstants.executorRunnerJsonStr))
   }
 
   test("writeDriverInfo") {
     val output = JsonProtocol.writeDriverInfo(createDriverInfo())
     assertValidJson(output)
-    assertValidDataInJson(output, JsonParser.parse(JsonConstants.driverInfoJsonStr))
+    assertValidDataInJson(output, JsonMethods.parse(JsonConstants.driverInfoJsonStr))
   }
 
   test("writeMasterState") {
@@ -71,7 +71,7 @@ class JsonProtocolSuite extends FunSuite {
       activeDrivers, completedDrivers, RecoveryState.ALIVE)
     val output = JsonProtocol.writeMasterState(stateResponse)
     assertValidJson(output)
-    assertValidDataInJson(output, JsonParser.parse(JsonConstants.masterStateJsonStr))
+    assertValidDataInJson(output, JsonMethods.parse(JsonConstants.masterStateJsonStr))
   }
 
   test("writeWorkerState") {
@@ -83,24 +83,24 @@ class JsonProtocolSuite extends FunSuite {
       finishedExecutors, drivers, finishedDrivers, "masterUrl", 4, 1234, 4, 1234, "masterWebUiUrl")
     val output = JsonProtocol.writeWorkerState(stateResponse)
     assertValidJson(output)
-    assertValidDataInJson(output, JsonParser.parse(JsonConstants.workerStateJsonStr))
+    assertValidDataInJson(output, JsonMethods.parse(JsonConstants.workerStateJsonStr))
   }
 
   def createAppDesc(): ApplicationDescription = {
-    val cmd = new Command("mainClass", List("arg1", "arg2"), Map())
+    val cmd = new Command("mainClass", List("arg1", "arg2"), Map(), Seq(), Seq())
     new ApplicationDescription("name", Some(4), 1234, cmd, Some("sparkHome"), "appUiUrl")
   }
 
   def createAppInfo() : ApplicationInfo = {
     val appInfo = new ApplicationInfo(JsonConstants.appInfoStartTime,
-      "id", createAppDesc(), JsonConstants.submitDate, null, "appUriStr", Int.MaxValue)
+      "id", createAppDesc(), JsonConstants.submitDate, null, Int.MaxValue)
     appInfo.endTime = JsonConstants.currTimeInMillis
     appInfo
   }
 
   def createDriverCommand() = new Command(
     "org.apache.spark.FakeClass", Seq("some arg --and-some options -g foo"),
-    Map(("K1", "V1"), ("K2", "V2"))
+    Map(("K1", "V1"), ("K2", "V2")), Seq("cp1", "cp2"), Seq("lp1", "lp2"), Some("-Dfoo")
   )
 
   def createDriverDesc() = new DriverDescription("hdfs://some-dir/some.jar", 100, 3,
@@ -125,17 +125,20 @@ class JsonProtocolSuite extends FunSuite {
 
   def assertValidJson(json: JValue) {
     try {
-      JsonParser.parse(JsonAST.compactRender(json))
+      JsonMethods.parse(JsonMethods.compact(json))
     } catch {
-      case e: JsonParser.ParseException => fail("Invalid Json detected", e)
+      case e: JsonParseException => fail("Invalid Json detected", e)
     }
   }
 
   def assertValidDataInJson(validateJson: JValue, expectedJson: JValue) {
     val Diff(c, a, d) = validateJson diff expectedJson
-    assert(c === JNothing, "Json changed")
-    assert(a === JNothing, "Json added")
-    assert(d === JNothing, "Json deleted")
+    val validatePretty = JsonMethods.pretty(validateJson)
+    val expectedPretty = JsonMethods.pretty(expectedJson)
+    val errorMessage = s"Expected:\n$expectedPretty\nFound:\n$validatePretty"
+    assert(c === JNothing, s"$errorMessage\nChanged:\n${JsonMethods.pretty(c)}")
+    assert(a === JNothing, s"$errorMessage\nAdded:\n${JsonMethods.pretty(a)}")
+    assert(d === JNothing, s"$errorMessage\nDelected:\n${JsonMethods.pretty(d)}")
   }
 }
 
@@ -145,12 +148,12 @@ object JsonConstants {
   val submitDate = new Date(123456789)
   val appInfoJsonStr =
     """
-      |{"starttime":3,"id":"id","name":"name","appuiurl":"appUriStr",
+      |{"starttime":3,"id":"id","name":"name",
       |"cores":4,"user":"%s",
       |"memoryperslave":1234,"submitdate":"%s",
       |"state":"WAITING","duration":%d}
     """.format(System.getProperty("user.name", "<unknown>"),
-        submitDate.toString, (currTimeInMillis - appInfoStartTime)).stripMargin
+        submitDate.toString, currTimeInMillis - appInfoStartTime).stripMargin
 
   val workerInfoJsonStr =
     """
@@ -165,7 +168,7 @@ object JsonConstants {
     """
       |{"name":"name","cores":4,"memoryperslave":1234,
       |"user":"%s","sparkhome":"sparkHome",
-      |"command":"Command(mainClass,List(arg1, arg2),Map())"}
+      |"command":"Command(mainClass,List(arg1, arg2),Map(),List(),List(),None)"}
     """.format(System.getProperty("user.name", "<unknown>")).stripMargin
 
   val executorRunnerJsonStr =

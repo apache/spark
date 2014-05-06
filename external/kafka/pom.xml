@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-incubating-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -29,7 +29,7 @@
   <artifactId>spark-streaming-kafka_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project External Kafka</name>
-  <url>http://spark.incubator.apache.org/</url>
+  <url>http://spark.apache.org/</url>
 
   <dependencies>
     <dependency>
@@ -61,6 +61,10 @@
           <groupId>net.sf.jopt-simple</groupId>
           <artifactId>jopt-simple</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-simple</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -76,11 +80,6 @@
     <dependency>
       <groupId>com.novocode</groupId>
       <artifactId>junit-interface</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-log4j12</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

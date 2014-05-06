@@ -70,10 +70,10 @@ def parse_args():
            "slaves across multiple (an additional $0.01/Gb for bandwidth" +
            "between zones applies)")
   parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
-  parser.add_option("-v", "--spark-version", default="0.8.0",
+  parser.add_option("-v", "--spark-version", default="0.9.1",
       help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
   parser.add_option("--spark-git-repo",
-      default="https://github.com/apache/incubator-spark",
+      default="https://github.com/apache/spark",
       help="Github repo from which to checkout supplied commit hash")
   parser.add_option("--hadoop-major-version", default="1",
       help="Major version of Hadoop (default: 1)")
@@ -157,7 +157,7 @@ def is_active(instance):
 
 # Return correct versions of Spark and Shark, given the supplied Spark version
 def get_spark_shark_version(opts):
-  spark_shark_map = {"0.7.3": "0.7.1", "0.8.0": "0.8.0"}
+  spark_shark_map = {"0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0", "0.9.1": "0.9.1"}
   version = opts.spark_version.replace("v", "")
   if version not in spark_shark_map:
     print >> stderr, "Don't know about Spark version: %s" % version
@@ -189,7 +189,12 @@ def get_spark_ami(opts):
     "i2.xlarge":   "hvm",
     "i2.2xlarge":  "hvm",
     "i2.4xlarge":  "hvm",
-    "i2.8xlarge":  "hvm"
+    "i2.8xlarge":  "hvm",
+    "c3.large":    "pvm",
+    "c3.xlarge":   "pvm",
+    "c3.2xlarge":  "pvm",
+    "c3.4xlarge":  "pvm",
+    "c3.8xlarge":  "pvm"
   }
   if opts.instance_type in instance_types:
     instance_type = instance_types[opts.instance_type]
@@ -213,6 +218,12 @@ def get_spark_ami(opts):
 # Returns a tuple of EC2 reservation objects for the master and slaves
 # Fails if there already instances running in the cluster's groups.
 def launch_cluster(conn, opts, cluster_name):
+  if opts.identity_file is None:
+    print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
+    sys.exit(1)
+  if opts.key_pair is None:
+    print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
+    sys.exit(1)    
   print "Setting up security groups..."
   master_group = get_or_make_group(conn, cluster_name + "-master")
   slave_group = get_or_make_group(conn, cluster_name + "-slaves")
@@ -387,15 +398,13 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
   if any((master_nodes, slave_nodes)):
     print ("Found %d master(s), %d slaves" %
            (len(master_nodes), len(slave_nodes)))
-  if (master_nodes != [] and slave_nodes != []) or not die_on_error:
+  if master_nodes != [] or not die_on_error:
     return (master_nodes, slave_nodes)
   else:
     if master_nodes == [] and slave_nodes != []:
-      print "ERROR: Could not find master in group " + cluster_name + "-master"
-    elif master_nodes != [] and slave_nodes == []:
-      print "ERROR: Could not find slaves in group " + cluster_name + "-slaves"
+      print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name + "-master"
     else:
-      print "ERROR: Could not find any existing cluster"
+      print >> sys.stderr, "ERROR: Could not find any existing cluster"
     sys.exit(1)
 
 
@@ -486,7 +495,12 @@ def get_num_disks(instance_type):
     "i2.xlarge":   1,
     "i2.2xlarge":  2,
     "i2.4xlarge":  4,
-    "i2.8xlarge":  8
+    "i2.8xlarge":  8,
+    "c3.large":    2,
+    "c3.xlarge":   2,
+    "c3.2xlarge":  2,
+    "c3.4xlarge":  2,
+    "c3.8xlarge":  2
   }
   if instance_type in disks_by_instance:
     return disks_by_instance[instance_type]
@@ -664,6 +678,9 @@ def real_main():
     opts.zone = random.choice(conn.get_all_zones()).name
 
   if action == "launch":
+    if opts.slaves <= 0:
+      print >> sys.stderr, "ERROR: You have to start at least 1 slave"
+      sys.exit(1)
     if opts.resume:
       (master_nodes, slave_nodes) = get_existing_cluster(
           conn, opts, cluster_name)

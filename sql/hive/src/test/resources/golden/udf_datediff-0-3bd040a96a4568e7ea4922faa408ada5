@@ -1,0 +1,1 @@
+datediff(date1, date2) - Returns the number of days between date1 and date2

@@ -17,34 +17,50 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.collection.mutable
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 
-import org.jblas.DoubleMatrix
-
-import org.apache.spark.{SparkContext, Logging}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.Logging
+import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.util.MLUtils
 
 /**
+ * :: Experimental ::
  * Model for Naive Bayes Classifiers.
  *
- * @param pi Log of class priors, whose dimension is C.
- * @param theta Log of class conditional probabilities, whose dimension is CxD.
+ * @param labels list of labels
+ * @param pi log of class priors, whose dimension is C, number of labels
+ * @param theta log of class conditional probabilities, whose dimension is C-by-D,
+ *              where D is number of features
  */
-class NaiveBayesModel(val pi: Array[Double], val theta: Array[Array[Double]])
-  extends ClassificationModel with Serializable {
+@Experimental
+class NaiveBayesModel(
+    val labels: Array[Double],
+    val pi: Array[Double],
+    val theta: Array[Array[Double]]) extends ClassificationModel with Serializable {
 
-  // Create a column vector that can be used for predictions
-  private val _pi = new DoubleMatrix(pi.length, 1, pi: _*)
-  private val _theta = new DoubleMatrix(theta)
+  private val brzPi = new BDV[Double](pi)
+  private val brzTheta = new BDM[Double](theta.length, theta(0).length)
 
-  def predict(testData: RDD[Array[Double]]): RDD[Double] = testData.map(predict)
+  {
+    // Need to put an extra pair of braces to prevent Scala treating `i` as a member.
+    var i = 0
+    while (i < theta.length) {
+      var j = 0
+      while (j < theta(i).length) {
+        brzTheta(i, j) = theta(i)(j)
+        j += 1
+      }
+      i += 1
+    }
+  }
 
-  def predict(testData: Array[Double]): Double = {
-    val dataMatrix = new DoubleMatrix(testData.length, 1, testData: _*)
-    val result = _pi.add(_theta.mmul(dataMatrix))
-    result.argmax()
+  override def predict(testData: RDD[Vector]): RDD[Double] = testData.map(predict)
+
+  override def predict(testData: Vector): Double = {
+    labels(brzArgmax(brzPi + brzTheta * testData.toBreeze))
   }
 }
 
@@ -56,9 +72,8 @@ class NaiveBayesModel(val pi: Array[Double], val theta: Array[Array[Double]])
  * document classification.  By making every vector a 0-1 vector, it can also be used as
  * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
  */
-class NaiveBayes private (var lambda: Double)
-  extends Serializable with Logging
-{
+class NaiveBayes private (private var lambda: Double) extends Serializable with Logging {
+
   def this() = this(1.0)
 
   /** Set the smoothing parameter. Default: 1.0. */
@@ -70,45 +85,42 @@ class NaiveBayes private (var lambda: Double)
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
    *
-   * @param data RDD of (label, array of features) pairs.
+   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    */
   def run(data: RDD[LabeledPoint]) = {
-    // Aggregates all sample points to driver side to get sample count and summed feature vector
-    // for each label.  The shape of `zeroCombiner` & `aggregated` is:
-    //
-    //    label: Int -> (count: Int, featuresSum: DoubleMatrix)
-    val zeroCombiner = mutable.Map.empty[Int, (Int, DoubleMatrix)]
-    val aggregated = data.aggregate(zeroCombiner)({ (combiner, point) =>
-      point match {
-        case LabeledPoint(label, features) =>
-          val (count, featuresSum) = combiner.getOrElse(label.toInt, (0, DoubleMatrix.zeros(1)))
-          val fs = new DoubleMatrix(features.length, 1, features: _*)
-          combiner += label.toInt -> (count + 1, featuresSum.addi(fs))
+    // Aggregates term frequencies per label.
+    // TODO: Calling combineByKey and collect creates two stages, we can implement something
+    // TODO: similar to reduceByKeyLocally to save one stage.
+    val aggregated = data.map(p => (p.label, p.features)).combineByKey[(Long, BDV[Double])](
+      createCombiner = (v: Vector) => (1L, v.toBreeze.toDenseVector),
+      mergeValue = (c: (Long, BDV[Double]), v: Vector) => (c._1 + 1L, c._2 += v.toBreeze),
+      mergeCombiners = (c1: (Long, BDV[Double]), c2: (Long, BDV[Double])) =>
+        (c1._1 + c2._1, c1._2 += c2._2)
+    ).collect()
+    val numLabels = aggregated.length
+    var numDocuments = 0L
+    aggregated.foreach { case (_, (n, _)) =>
+      numDocuments += n
+    }
+    val numFeatures = aggregated.head match { case (_, (_, v)) => v.size }
+    val labels = new Array[Double](numLabels)
+    val pi = new Array[Double](numLabels)
+    val theta = Array.fill(numLabels)(new Array[Double](numFeatures))
+    val piLogDenom = math.log(numDocuments + numLabels * lambda)
+    var i = 0
+    aggregated.foreach { case (label, (n, sumTermFreqs)) =>
+      labels(i) = label
+      val thetaLogDenom = math.log(brzSum(sumTermFreqs) + numFeatures * lambda)
+      pi(i) = math.log(n + lambda) - piLogDenom
+      var j = 0
+      while (j < numFeatures) {
+        theta(i)(j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+        j += 1
       }
-    }, { (lhs, rhs) =>
-      for ((label, (c, fs)) <- rhs) {
-        val (count, featuresSum) = lhs.getOrElse(label, (0, DoubleMatrix.zeros(1)))
-        lhs(label) = (count + c, featuresSum.addi(fs))
-      }
-      lhs
-    })
-
-    // Kinds of label
-    val C = aggregated.size
-    // Total sample count
-    val N = aggregated.values.map(_._1).sum
-
-    val pi = new Array[Double](C)
-    val theta = new Array[Array[Double]](C)
-    val piLogDenom = math.log(N + C * lambda)
-
-    for ((label, (count, fs)) <- aggregated) {
-      val thetaLogDenom = math.log(fs.sum() + fs.length * lambda)
-      pi(label) = math.log(count + lambda) - piLogDenom
-      theta(label) = fs.toArray.map(f => math.log(f + lambda) - thetaLogDenom)
+      i += 1
     }
 
-    new NaiveBayesModel(pi, theta)
+    new NaiveBayesModel(labels, pi, theta)
   }
 }
 
@@ -144,23 +156,5 @@ object NaiveBayes {
    */
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
     new NaiveBayes(lambda).run(input)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length != 2 && args.length != 3) {
-      println("Usage: NaiveBayes <master> <input_dir> [<lambda>]")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "NaiveBayes")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = if (args.length == 2) {
-      NaiveBayes.train(data)
-    } else {
-      NaiveBayes.train(data, args(2).toDouble)
-    }
-    println("Pi: " + model.pi.mkString("[", ", ", "]"))
-    println("Theta:\n" + model.theta.map(_.mkString("[", ", ", "]")).mkString("[", "\n ", "]"))
-
-    sc.stop()
   }
 }

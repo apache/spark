@@ -44,8 +44,11 @@ This setting configures the serializer used for not only shuffling data between 
 nodes but also when serializing RDDs to disk.  The only reason Kryo is not the default is because of the custom
 registration requirement, but we recommend trying it in any network-intensive application.
 
-Finally, to register your classes with Kryo, create a public class that extends
-[`org.apache.spark.serializer.KryoRegistrator`](api/core/index.html#org.apache.spark.serializer.KryoRegistrator) and set the
+Spark automatically includes Kryo serializers for the many commonly-used core Scala classes covered
+in the AllScalaRegistrar from the [Twitter chill](https://github.com/twitter/chill) library.
+
+To register your own custom classes with Kryo, create a public class that extends
+[`org.apache.spark.serializer.KryoRegistrator`](api/scala/index.html#org.apache.spark.serializer.KryoRegistrator) and set the
 `spark.kryo.registrator` config property to point to it, as follows:
 
 {% highlight scala %}
@@ -72,8 +75,8 @@ If your objects are large, you may also need to increase the `spark.kryoserializ
 config property. The default is 2, but this value needs to be large enough to hold the *largest*
 object you will serialize.
 
-Finally, if you don't register your classes, Kryo will still work, but it will have to store the
-full class name with each object, which is wasteful.
+Finally, if you don't register your custom classes, Kryo will still work, but it will have to store
+the full class name with each object, which is wasteful.
 
 # Memory Tuning
 
@@ -87,9 +90,10 @@ than the "raw" data inside their fields. This is due to several reasons:
 * Each distinct Java object has an "object header", which is about 16 bytes and contains information
   such as a pointer to its class. For an object with very little data in it (say one `Int` field), this
   can be bigger than the data.
-* Java Strings have about 40 bytes of overhead over the raw string data (since they store it in an
+* Java `String`s have about 40 bytes of overhead over the raw string data (since they store it in an
   array of `Char`s and keep extra data such as the length), and store each character
-  as *two* bytes due to Unicode. Thus a 10-character string can easily consume 60 bytes.
+  as *two* bytes due to `String`'s internal usage of UTF-16 encoding. Thus a 10-character string can
+  easily consume 60 bytes.
 * Common collection classes, such as `HashMap` and `LinkedList`, use linked data structures, where
   there is a "wrapper" object for each entry (e.g. `Map.Entry`). This object not only has a header,
   but also pointers (typically 8 bytes each) to the next object in the list.
@@ -160,8 +164,8 @@ their work directories), *not* on your driver program.
 **Cache Size Tuning**
 
 One important configuration parameter for GC is the amount of memory that should be used for caching RDDs.
-By default, Spark uses 66% of the configured executor memory (`spark.executor.memory` or `SPARK_MEM`) to
-cache RDDs. This means that 33% of memory is available for any objects created during task execution.
+By default, Spark uses 60% of the configured executor memory (`spark.executor.memory`) to
+cache RDDs. This means that 40% of memory is available for any objects created during task execution.
 
 In case your tasks slow down and you find that your JVM is garbage-collecting frequently or running out of
 memory, lowering this value will help reduce the memory consumption. To change this to say 50%, you can call
@@ -218,7 +222,7 @@ enough. Spark automatically sets the number of "map" tasks to run on each file a
 (though you can control it through optional parameters to `SparkContext.textFile`, etc), and for
 distributed "reduce" operations, such as `groupByKey` and `reduceByKey`, it uses the largest
 parent RDD's number of partitions. You can pass the level of parallelism as a second argument
-(see the [`spark.PairRDDFunctions`](api/core/index.html#org.apache.spark.rdd.PairRDDFunctions) documentation),
+(see the [`spark.PairRDDFunctions`](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) documentation),
 or set the config property `spark.default.parallelism` to change the default.
 In general, we recommend 2-3 tasks per CPU core in your cluster.
 

@@ -1,0 +1,129 @@
+ABSTRACT SYNTAX TREE:
+  (TOK_ANALYZE (TOK_TAB (TOK_TABNAME Employee_Part) (TOK_PARTSPEC (TOK_PARTVAL employeeSalary 4000.0))) (TOK_TABCOLNAME employeeID))
+
+STAGE DEPENDENCIES:
+  Stage-0 is a root stage
+  Stage-1 is a root stage
+
+STAGE PLANS:
+  Stage: Stage-0
+    Map Reduce
+      Alias -> Map Operator Tree:
+        employee_part 
+          TableScan
+            alias: employee_part
+            GatherStats: false
+            Select Operator
+              expressions:
+                    expr: employeeid
+                    type: int
+              outputColumnNames: employeeid
+              Group By Operator
+                aggregations:
+                      expr: compute_stats(employeeid, 16)
+                bucketGroup: false
+                mode: hash
+                outputColumnNames: _col0
+                Reduce Output Operator
+                  sort order: 
+                  tag: -1
+                  value expressions:
+                        expr: _col0
+                        type: struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,bitvector:string,numbitvectors:int>
+      Path -> Alias:
+        file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sharkWarehouse7107609744565894054/employee_part/employeesalary=4000.0 [employee_part]
+      Path -> Partition:
+        file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sharkWarehouse7107609744565894054/employee_part/employeesalary=4000.0 
+          Partition
+            base file name: employeesalary=4000.0
+            input format: org.apache.hadoop.mapred.TextInputFormat
+            output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+            partition values:
+              employeesalary 4000.0
+            properties:
+              bucket_count -1
+              columns employeeid,employeename
+              columns.types int:string
+              field.delim |
+              file.inputformat org.apache.hadoop.mapred.TextInputFormat
+              file.outputformat org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+              location file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sharkWarehouse7107609744565894054/employee_part/employeesalary=4000.0
+              name default.employee_part
+              numFiles 1
+              numRows 0
+              partition_columns employeesalary
+              rawDataSize 0
+              serialization.ddl struct employee_part { i32 employeeid, string employeename}
+              serialization.format |
+              serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+              totalSize 105
+              transient_lastDdlTime 1389728706
+            serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+          
+              input format: org.apache.hadoop.mapred.TextInputFormat
+              output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+              properties:
+                bucket_count -1
+                columns employeeid,employeename
+                columns.types int:string
+                field.delim |
+                file.inputformat org.apache.hadoop.mapred.TextInputFormat
+                file.outputformat org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                location file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sharkWarehouse7107609744565894054/employee_part
+                name default.employee_part
+                numFiles 2
+                numPartitions 2
+                numRows 0
+                partition_columns employeesalary
+                rawDataSize 0
+                serialization.ddl struct employee_part { i32 employeeid, string employeename}
+                serialization.format |
+                serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                totalSize 210
+                transient_lastDdlTime 1389728706
+              serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+              name: default.employee_part
+            name: default.employee_part
+      Truncated Path -> Alias:
+        /employee_part/employeesalary=4000.0 [employee_part]
+      Needs Tagging: false
+      Reduce Operator Tree:
+        Group By Operator
+          aggregations:
+                expr: compute_stats(VALUE._col0)
+          bucketGroup: false
+          mode: mergepartial
+          outputColumnNames: _col0
+          Select Operator
+            expressions:
+                  expr: _col0
+                  type: struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,numdistinctvalues:bigint>
+            outputColumnNames: _col0
+            File Output Operator
+              compressed: false
+              GlobalTableId: 0
+              directory: file:/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/marmbrus/hive_2014-01-14_11-45-24_849_6968895828655634809-1/-ext-10001
+              NumFilesPerFileSink: 1
+              Stats Publishing Key Prefix: file:/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/marmbrus/hive_2014-01-14_11-45-24_849_6968895828655634809-1/-ext-10001/
+              table:
+                  input format: org.apache.hadoop.mapred.TextInputFormat
+                  output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                  properties:
+                    columns _col0
+                    columns.types struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,numdistinctvalues:bigint>
+                    escape.delim \
+                    hive.serialization.extend.nesting.levels true
+                    serialization.format 1
+              TotalFiles: 1
+              GatherStats: false
+              MultiFileSpray: false
+
+  Stage: Stage-1
+    Column Stats Work
+      Column Stats Desc:
+          Columns: employeeID
+          Column Types: int
+          Partition: employeesalary=4000.0
+          Table: Employee_Part
+          Is Table Level Stats: false
+

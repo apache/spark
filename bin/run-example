@@ -30,10 +30,7 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
-# Load environment variables from conf/spark-env.sh, if it exists
-if [ -e "$FWDIR/conf/spark-env.sh" ] ; then
-  . $FWDIR/conf/spark-env.sh
-fi
+. $FWDIR/bin/load-spark-env.sh
 
 if [ -z "$1" ]; then
   echo "Usage: run-example <example-class> [<args>]" >&2
@@ -43,12 +40,15 @@ fi
 # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
 # to avoid the -sources and -doc packages that are built by publish-local.
 EXAMPLES_DIR="$FWDIR"/examples
-SPARK_EXAMPLES_JAR=""
-if [ -e "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar ]; then
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar`
+
+if [ -f "$FWDIR/RELEASE" ]; then
+  export SPARK_EXAMPLES_JAR=`ls "$FWDIR"/lib/spark-examples-*hadoop*.jar`
+elif [ -e "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.jar ]; then
+  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.jar`
 fi
+
 if [[ -z $SPARK_EXAMPLES_JAR ]]; then
-  echo "Failed to find Spark examples assembly in $FWDIR/examples/target" >&2
+  echo "Failed to find Spark examples assembly in $FWDIR/lib or $FWDIR/examples/target" >&2
   echo "You need to build Spark with sbt/sbt assembly before running this program" >&2
   exit 1
 fi
@@ -78,7 +78,6 @@ fi
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 JAVA_OPTS="$SPARK_JAVA_OPTS"
-JAVA_OPTS="$JAVA_OPTS -Djava.library.path=$SPARK_LIBRARY_PATH"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e "$FWDIR/conf/java-opts" ] ; then
   JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"

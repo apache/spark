@@ -17,17 +17,19 @@
 
 package org.apache.spark
 
-import java.io.{FileWriter, PrintWriter, File}
+import java.io.{File, FileWriter}
 
 import scala.io.Source
 
 import com.google.common.io.Files
-import org.scalatest.FunSuite
 import org.apache.hadoop.io._
-import org.apache.hadoop.io.compress.{DefaultCodec, CompressionCodec, GzipCodec}
+import org.apache.hadoop.io.compress.DefaultCodec
+import org.apache.hadoop.mapred.{JobConf, FileAlreadyExistsException, TextOutputFormat}
+import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
+import org.apache.hadoop.mapreduce.Job
+import org.scalatest.FunSuite
 
-
-import SparkContext._
+import org.apache.spark.SparkContext._
 
 class FileSuite extends FunSuite with LocalSparkContext {
 
@@ -104,7 +106,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val tempDir = Files.createTempDir()
     val outputDir = new File(tempDir, "output").getAbsolutePath
-    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), "a" * x)) 
+    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), "a" * x))
     nums.saveAsSequenceFile(outputDir)
     // Try reading the output back as a SequenceFile
     val output = sc.sequenceFile[IntWritable, Text](outputDir)
@@ -208,5 +210,71 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(rdd.count() === 3)
     assert(rdd.count() === 3)
     assert(rdd.count() === 3)
+  }
+
+  test ("prevent user from overwriting the empty directory (old Hadoop API)") {
+    sc = new SparkContext("local", "test")
+    val tempdir = Files.createTempDir()
+    val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    intercept[FileAlreadyExistsException] {
+      randomRDD.saveAsTextFile(tempdir.getPath)
+    }
+  }
+
+  test ("prevent user from overwriting the non-empty directory (old Hadoop API)") {
+    sc = new SparkContext("local", "test")
+    val tempdir = Files.createTempDir()
+    val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    randomRDD.saveAsTextFile(tempdir.getPath + "/output")
+    assert(new File(tempdir.getPath + "/output/part-00000").exists() === true)
+    intercept[FileAlreadyExistsException] {
+      randomRDD.saveAsTextFile(tempdir.getPath + "/output")
+    }
+  }
+
+  test ("prevent user from overwriting the empty directory (new Hadoop API)") {
+    sc = new SparkContext("local", "test")
+    val tempdir = Files.createTempDir()
+    val randomRDD = sc.parallelize(Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+    intercept[FileAlreadyExistsException] {
+      randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](tempdir.getPath)
+    }
+  }
+
+  test ("prevent user from overwriting the non-empty directory (new Hadoop API)") {
+    sc = new SparkContext("local", "test")
+    val tempdir = Files.createTempDir()
+    val randomRDD = sc.parallelize(Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+    randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](tempdir.getPath + "/output")
+    assert(new File(tempdir.getPath + "/output/part-r-00000").exists() === true)
+    intercept[FileAlreadyExistsException] {
+      randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](tempdir.getPath)
+    }
+  }
+
+  test ("save Hadoop Dataset through old Hadoop API") {
+    sc = new SparkContext("local", "test")
+    val tempdir = Files.createTempDir()
+    val randomRDD = sc.parallelize(Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+    val job = new JobConf()
+    job.setOutputKeyClass(classOf[String])
+    job.setOutputValueClass(classOf[String])
+    job.set("mapred.output.format.class", classOf[TextOutputFormat[String, String]].getName)
+    job.set("mapred.output.dir", tempdir.getPath + "/outputDataset_old")
+    randomRDD.saveAsHadoopDataset(job)
+    assert(new File(tempdir.getPath + "/outputDataset_old/part-00000").exists() === true)
+  }
+
+  test ("save Hadoop Dataset through new Hadoop API") {
+    sc = new SparkContext("local", "test")
+    val tempdir = Files.createTempDir()
+    val randomRDD = sc.parallelize(Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+    val job = new Job(sc.hadoopConfiguration)
+    job.setOutputKeyClass(classOf[String])
+    job.setOutputValueClass(classOf[String])
+    job.setOutputFormatClass(classOf[NewTextOutputFormat[String, String]])
+    job.getConfiguration.set("mapred.output.dir", tempdir.getPath + "/outputDataset_new")
+    randomRDD.saveAsNewAPIHadoopDataset(job.getConfiguration)
+    assert(new File(tempdir.getPath + "/outputDataset_new/part-r-00000").exists() === true)
   }
 }

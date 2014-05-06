@@ -6,7 +6,7 @@ title: Spark Configuration
 Spark provides three locations to configure the system:
 
 * [Spark properties](#spark-properties) control most application parameters and can be set by passing
-  a [SparkConf](api/core/index.html#org.apache.spark.SparkConf) object to SparkContext, or through Java
+  a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object to SparkContext, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
@@ -16,7 +16,7 @@ Spark provides three locations to configure the system:
 # Spark Properties
 
 Spark properties control most application settings and are configured separately for each application.
-The preferred way to set them is by passing a [SparkConf](api/core/index.html#org.apache.spark.SparkConf)
+The preferred way to set them is by passing a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf)
 class to your SparkContext constructor.
 Alternatively, Spark will also load them from Java system properties, for compatibility with old versions
 of Spark.
@@ -53,7 +53,7 @@ there are at least five properties that you will commonly want to control:
     in serialized form. The default of Java serialization works with any Serializable Java object but is
     quite slow, so we recommend <a href="tuning.html">using <code>org.apache.spark.serializer.KryoSerializer</code>
     and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of
-    <a href="api/core/index.html#org.apache.spark.serializer.Serializer"><code>org.apache.spark.Serializer</code></a>.
+    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer"><code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
 <tr>
@@ -62,7 +62,7 @@ there are at least five properties that you will commonly want to control:
   <td>
     If you use Kryo serialization, set this class to register your custom classes with Kryo.
     It should be set to a class that extends
-    <a href="api/core/index.html#org.apache.spark.serializer.KryoRegistrator"><code>KryoRegistrator</code></a>.
+    <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator"><code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
 </tr>
@@ -73,6 +73,9 @@ there are at least five properties that you will commonly want to control:
     Directory to use for "scratch" space in Spark, including map output files and RDDs that get stored
     on disk. This should be on a fast, local disk in your system. It can also be a comma-separated
     list of multiple directories on different disks.
+
+    NOTE: In Spark 1.0 and later this will be overriden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
+    LOCAL_DIRS (YARN) envrionment variables set by the cluster manager.
   </td>
 </tr>
 <tr>
@@ -96,7 +99,13 @@ Apart from these, the following properties are also available, and may be useful
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td>spark.default.parallelism</td>
-  <td>8</td>
+  <td>
+    <ul>
+      <li>Mesos fine grained mode: 8</li>
+      <li>Local mode: core number of the local machine</li>
+      <li>Others: total core number of all executor nodes or 2, whichever is larger</li>
+    </ul>
+  </td>
   <td>
     Default number of tasks to use across the cluster for distributed shuffle operations (<code>groupByKey</code>,
     <code>reduceByKey</code>, etc) when not set by user.
@@ -123,6 +132,30 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.storage.memoryMapThreshold</td>
+  <td>8192</td>
+  <td>
+    Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
+    This prevents Spark from memory mapping very small blocks. In general, memory
+    mapping has high overhead for blocks close to or below the page size of the operating system.
+  </td>
+</tr>
+<tr>
+  <td>spark.tachyonStore.baseDir</td>
+  <td>System.getProperty("java.io.tmpdir")</td>
+  <td>
+    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by <code>spark.tachyonStore.url</code>.
+    It can also be a comma-separated list of multiple directories on Tachyon file system.
+  </td>
+</tr>
+<tr>
+  <td>spark.tachyonStore.url</td>
+  <td>tachyon://localhost:19998</td>
+  <td>
+    The URL of the underlying Tachyon file system in the TachyonStore.
+  </td>
+</tr>
+<tr>
   <td>spark.mesos.coarse</td>
   <td>false</td>
   <td>
@@ -145,6 +178,41 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many stages the Spark UI remembers before garbage collecting.
+  </td>
+</tr>
+<tr>
+  <td>spark.ui.filters</td>
+  <td>None</td>
+  <td>
+    Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
+    standard javax servlet Filter. Parameters to each filter can also be specified by setting a
+    java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
+    (e.g.-Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
+  </td>
+</tr>
+<tr>
+  <td>spark.ui.acls.enable</td>
+  <td>false</td>
+  <td>
+    Whether spark web ui acls should are enabled. If enabled, this checks to see if the user has
+    access permissions to view the web ui. See <code>spark.ui.view.acls</code> for more details.
+    Also note this requires the user to be known, if the user comes across as null no checks
+    are done. Filters can be used to authenticate and set the user.
+  </td>
+</tr>
+<tr>
+  <td>spark.ui.view.acls</td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users that have view access to the spark web ui. By default only the
+    user that started the Spark job has view access.
+  </td>
+</tr>
+<tr>
+  <td>spark.ui.killEnabled</td>
+  <td>true</td>
+  <td>
+    Allows stages and corresponding jobs to be killed from the web ui.
   </td>
 </tr>
 <tr>
@@ -202,6 +270,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.scheduler.revive.interval</td>
+  <td>1000</td>
+  <td>
+    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
+  </td>
+</tr>
+<tr>
   <td>spark.reducer.maxMbInFlight</td>
   <td>48</td>
   <td>
@@ -235,6 +310,17 @@ Apart from these, the following properties are also available, and may be useful
     Maximum object size to allow within Kryo (the library needs to create a buffer at least as
     large as the largest single object you'll serialize). Increase this if you get a "buffer limit
     exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each worker.
+  </td>
+</tr>
+<tr>
+  <td>spark.serializer.objectStreamReset</td>
+  <td>10000</td>
+  <td>
+    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
+    objects to prevent writing redundant data, however that stops garbage collection of those
+    objects. By calling 'reset' you flush that info from the serializer, and allow old
+    objects to be collected. To turn off this periodic reset set it to a value of <= 0.
+    By default it will reset the serializer every 10,000 objects.
   </td>
 </tr>
 <tr>
@@ -288,6 +374,32 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.worker.cleanup.enabled</td>
+  <td>true</td>
+  <td>
+    Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
+    mode, as YARN works differently.
+  </td>
+</tr>
+<tr>
+  <td>spark.worker.cleanup.interval</td>
+  <td>1800 (30 minutes)</td>
+  <td>
+    Controls the interval, in seconds, at which the worker cleans up old application work dirs
+    on the local machine.
+  </td>
+</tr>
+<tr>
+  <td>spark.worker.cleanup.appDataTtl</td>
+  <td>7 * 24 * 3600 (7 days)</td>
+  <td>
+    The number of seconds to retain application work directories on each worker.  This is a Time To Live
+    and should depend on the amount of available disk space you have.  Application logs and jars are
+    downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
+    especially if you run jobs very frequently.
+  </td>
+</tr>
+<tr>
   <td>spark.akka.frameSize</td>
   <td>10</td>
   <td>
@@ -329,7 +441,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.akka.heartbeat.interval</td>
   <td>1000</td>
   <td>
-    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those. 
+    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those.
   </td>
 </tr>
 <tr>
@@ -366,10 +478,13 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.streaming.unpersist</td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Force RDDs generated and persisted by Spark Streaming to be automatically unpersisted from
-    Spark's memory. Setting this to true is likely to reduce Spark's RDD memory usage.
+    Spark's memory. The raw input data received by Spark Streaming is also automatically cleared.
+    Setting this to false will allow the raw data and persisted RDDs to be accessible outside the
+    streaming application as they will not be cleared automatically. But it comes at the cost of
+    higher memory usage in Spark.
   </td>
 </tr>
 <tr>
@@ -384,7 +499,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.broadcast.blockSize</td>
   <td>4096</td>
   <td>
-    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>. 
+    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
   </td>
 </tr>
@@ -444,7 +559,30 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.logConf</td>
   <td>false</td>
   <td>
-    Log the supplied SparkConf as INFO at start of spark context.
+    Whether to log the supplied SparkConf as INFO at start of spark context.
+  </td>
+</tr>
+<tr>
+  <td>spark.eventLog.enabled</td>
+  <td>false</td>
+  <td>
+    Whether to log spark events, useful for reconstructing the Web UI after the application has finished.
+  </td>
+</tr>
+<tr>
+  <td>spark.eventLog.compress</td>
+  <td>false</td>
+  <td>
+    Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
+  </td>
+</tr>
+<tr>
+  <td>spark.eventLog.dir</td>
+  <td>file:///tmp/spark-events</td>
+  <td>
+    Base directory in which spark events are logged, if <code>spark.eventLog.enabled</code> is true.
+    Within this base directory, Spark creates a sub-directory for each application, and logs the events
+    specific to the application in this directory.
   </td>
 </tr>
 <tr>
@@ -455,7 +593,7 @@ Apart from these, the following properties are also available, and may be useful
     to consolidate them onto as few nodes as possible. Spreading out is usually better for
     data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
     <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-    applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
+    applications; you can set it through <code>SPARK_MASTER_OPTS</code> in <code>spark-env.sh</code>.
   </td>
 </tr>
 <tr>
@@ -468,8 +606,8 @@ Apart from these, the following properties are also available, and may be useful
     Set this lower on a shared cluster to prevent users from grabbing
     the whole cluster by default. <br/>
     <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-    applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
-</td>
+    applications; you can set it through <code>SPARK_MASTER_OPTS</code> in <code>spark-env.sh</code>.
+  </td>
 </tr>
 <tr>
   <td>spark.files.overwrite</td>
@@ -478,6 +616,82 @@ Apart from these, the following properties are also available, and may be useful
     Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
   </td>
 </tr>
+<tr>
+  <td>spark.files.fetchTimeout</td>
+  <td>false</td>
+  <td>
+    Communication timeout to use when fetching files added through SparkContext.addFile() from
+    the driver.
+  </td>
+</tr>
+<tr>
+  <td>spark.files.userClassPathFirst</td>
+  <td>false</td>
+  <td>
+    (Experimental) Whether to give user-added jars precedence over Spark's own jars when
+    loading classes in Executors. This feature can be used to mitigate conflicts between
+    Spark's dependencies and user dependencies. It is currently an experimental feature.
+  </td>
+</tr>
+<tr>
+  <td>spark.authenticate</td>
+  <td>false</td>
+  <td>
+    Whether spark authenticates its internal connections. See <code>spark.authenticate.secret</code> if not
+    running on Yarn.
+  </td>
+</tr>
+<tr>
+  <td>spark.authenticate.secret</td>
+  <td>None</td>
+  <td>
+    Set the secret key used for Spark to authenticate between components. This needs to be set if
+    not running on Yarn and authentication is enabled.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.auth.wait.timeout</td>
+  <td>30</td>
+  <td>
+    Number of seconds for the connection to wait for authentication to occur before timing
+    out and giving up.
+  </td>
+</tr>
+<tr>
+  <td>spark.task.cpus</td>
+  <td>1</td>
+  <td>
+    Number of cores to allocate for each task.
+  </td>
+</tr>
+<tr>
+  <td>spark.executor.extraJavaOptions</td>
+  <td>(none)</td>
+  <td>
+    A string of extra JVM options to pass to executors. For instance, GC settings or other
+    logging. Note that it is illegal to set Spark properties or heap size settings with this 
+    option. Spark properties should be set using a SparkConf object or the 
+    spark-defaults.conf file used with the spark-submit script. Heap size settings can be set
+    with spark.executor.memory.
+  </td>
+</tr>
+<tr>
+  <td>spark.executor.extraClassPath</td>
+  <td>(none)</td>
+  <td>
+    Extra classpath entries to append to the classpath of executors. This exists primarily
+    for backwards-compatibility with older versions of Spark. Users typically should not need
+    to set this option.
+  </td>
+</tr>
+<tr>
+  <td>spark.executor.extraLibraryPath</td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching executor JVM's.
+  </td>
+</tr>
+
 </table>
 
 ## Viewing Spark Properties
@@ -488,10 +702,9 @@ This is a useful place to check to make sure that your properties have been set 
 # Environment Variables
 
 Certain Spark settings can be configured through environment variables, which are read from the `conf/spark-env.sh`
-script in the directory where Spark is installed (or `conf/spark-env.cmd` on Windows). These variables are meant to be for machine-specific settings, such
-as library search paths. While Spark properties can also be set there through `SPARK_JAVA_OPTS`, for per-application settings, we recommend setting
-these properties within the application instead of in `spark-env.sh` so that different applications can use different
-settings.
+script in the directory where Spark is installed (or `conf/spark-env.cmd` on Windows). In Standalone and Mesos modes,
+this file can give machine specific information such as hostnames. It is also sourced when running local
+Spark applications or submission scripts.
 
 Note that `conf/spark-env.sh` does not exist by default when Spark is installed. However, you can copy
 `conf/spark-env.sh.template` to create it. Make sure you make the copy executable.
@@ -501,13 +714,7 @@ The following variables can be set in `spark-env.sh`:
 * `JAVA_HOME`, the location where Java is installed (if it's not on your default `PATH`)
 * `PYSPARK_PYTHON`, the Python binary to use for PySpark
 * `SPARK_LOCAL_IP`, to configure which IP address of the machine to bind to.
-* `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
-* `SPARK_CLASSPATH`, to add elements to Spark's classpath that you want to be present for _all_ applications.
-   Note that applications can also add dependencies for themselves through `SparkContext.addJar` -- we recommend
-   doing that when possible.
-* `SPARK_JAVA_OPTS`, to add JVM options. This includes Java options like garbage collector settings and any system
-   properties that you'd like to pass with `-D`. One use case is to set some Spark properties differently on this
-   machine, e.g., `-Dspark.local.dir=/disk1,/disk2`.
+* `SPARK_PUBLIC_DNS`, the hostname your Spark program will advertise to other machines.
 * Options for the Spark [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores
   to use on each machine and maximum memory.
 

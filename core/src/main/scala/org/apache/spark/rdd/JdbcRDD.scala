@@ -27,7 +27,7 @@ import org.apache.spark.util.NextIterator
 private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) extends Partition {
   override def index = idx
 }
-
+// TODO: Expose a jdbcRDD function in SparkContext and mark this as semi-private
 /**
  * An RDD that executes an SQL query on a JDBC connection and reads results.
  * For usage example, see test case JdbcRDDSuite.
@@ -116,7 +116,7 @@ class JdbcRDD[T: ClassTag](
 }
 
 object JdbcRDD {
-  def resultSetToObjectArray(rs: ResultSet) = {
+  def resultSetToObjectArray(rs: ResultSet): Array[Object] = {
     Array.tabulate[Object](rs.getMetaData.getColumnCount)(i => rs.getObject(i + 1))
   }
 }

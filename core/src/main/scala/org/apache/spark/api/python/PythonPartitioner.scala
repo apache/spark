@@ -17,8 +17,6 @@
 
 package org.apache.spark.api.python
 
-import java.util.Arrays
-
 import org.apache.spark.Partitioner
 import org.apache.spark.util.Utils
 

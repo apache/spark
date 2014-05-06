@@ -21,14 +21,14 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>13</version>
+    <version>14</version>
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
-  <version>1.0.0-incubating-SNAPSHOT</version>
+  <version>1.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
-  <url>http://spark.incubator.apache.org/</url>
+  <url>http://spark.apache.org/</url>
   <licenses>
     <license>
       <name>Apache 2.0 License</name>
@@ -37,9 +37,9 @@
     </license>
   </licenses>
   <scm>
-    <connection>scm:git:git@github.com:apache/incubator-spark.git</connection>
-    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/incubator-spark.git</developerConnection>
-    <url>scm:git:git@github.com:apache/incubator-spark.git</url>
+    <connection>scm:git:git@github.com:apache/spark.git</connection>
+    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/spark.git</developerConnection>
+    <url>scm:git:git@github.com:apache/spark.git</url>
     <tag>HEAD</tag>
   </scm>
   <developers>
@@ -49,38 +49,38 @@
       <email>matei.zaharia@gmail.com</email>
       <url>http://www.cs.berkeley.edu/~matei</url>
       <organization>Apache Software Foundation</organization>
-      <organizationUrl>http://spark.incubator.apache.org</organizationUrl>
+      <organizationUrl>http://spark.apache.org</organizationUrl>
     </developer>
   </developers>
   <issueManagement>
     <system>JIRA</system>
-    <url>https://spark-project.atlassian.net/browse/SPARK</url>
+    <url>https://issues.apache.org/jira/browse/SPARK</url>
   </issueManagement>
 
   <prerequisites>
-    <maven>3.0.0</maven>
+    <maven>3.0.4</maven>
   </prerequisites>
 
   <mailingLists>
     <mailingList>
       <name>Dev Mailing List</name>
-      <post>dev@spark.incubator.apache.org</post>
-      <subscribe>dev-subscribe@spark.incubator.apache.org</subscribe>
-      <unsubscribe>dev-unsubscribe@spark.incubator.apache.org</unsubscribe>
+      <post>dev@spark.apache.org</post>
+      <subscribe>dev-subscribe@spark.apache.org</subscribe>
+      <unsubscribe>dev-unsubscribe@spark.apache.org</unsubscribe>
     </mailingList>
 
     <mailingList>
       <name>User Mailing List</name>
-      <post>user@spark.incubator.apache.org</post>
-      <subscribe>user-subscribe@spark.incubator.apache.org</subscribe>
-      <unsubscribe>user-unsubscribe@spark.incubator.apache.org</unsubscribe>
+      <post>user@spark.apache.org</post>
+      <subscribe>user-subscribe@spark.apache.org</subscribe>
+      <unsubscribe>user-unsubscribe@spark.apache.org</unsubscribe>
     </mailingList>
 
     <mailingList>
       <name>Commits Mailing List</name>
-      <post>commits@spark.incubator.apache.org</post>
-      <subscribe>commits-subscribe@spark.incubator.apache.org</subscribe>
-      <unsubscribe>commits-unsubscribe@spark.incubator.apache.org</unsubscribe>
+      <post>commits@spark.apache.org</post>
+      <subscribe>commits-subscribe@spark.apache.org</subscribe>
+      <unsubscribe>commits-unsubscribe@spark.apache.org</unsubscribe>
     </mailingList>
   </mailingLists>
 
@@ -91,6 +91,9 @@
     <module>mllib</module>
     <module>tools</module>
     <module>streaming</module>
+    <module>sql/catalyst</module>
+    <module>sql/core</module>
+    <module>sql/hive</module>
     <module>repl</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -107,17 +110,24 @@
 
     <java.version>1.6</java.version>
 
-    <scala.version>2.10.3</scala.version>
+    <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
     <mesos.version>0.13.0</mesos.version>
     <akka.group>org.spark-project.akka</akka.group>
     <akka.version>2.2.3-shaded-protobuf</akka.version>
-    <slf4j.version>1.7.2</slf4j.version>
+    <slf4j.version>1.7.5</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>1.0.4</hadoop.version>
     <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>0.23.7</yarn.version>
     <hbase.version>0.94.6</hbase.version>
+    <hive.version>0.12.0</hive.version>
+    <parquet.version>1.3.2</parquet.version>
+    <jblas.version>1.2.3</jblas.version>
+    <jetty.version>8.1.14.v20131031</jetty.version>
+    <chill.version>0.3.6</chill.version>
+    <codahale.metrics.version>3.0.0</codahale.metrics.version>
+    <avro.version>1.7.4</avro.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
@@ -127,7 +137,19 @@
     <repository>
       <id>maven-repo</id> <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
+      <!-- HTTPS is unavailable for Maven Central -->
       <url>http://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>apache-repo</id>
+      <name>Apache Repository</name>
+      <url>https://repository.apache.org/content/repositories/releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -138,7 +160,18 @@
     <repository>
       <id>jboss-repo</id>
       <name>JBoss Repository</name>
-      <url>http://repository.jboss.org/nexus/content/repositories/releases</url>
+      <url>https://repository.jboss.org/nexus/content/repositories/releases</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>mqtt-repo</id>
+      <name>MQTT Repository</name>
+      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -150,6 +183,12 @@
       <id>cloudera-repo</id>
       <name>Cloudera Repository</name>
       <url>https://repository.cloudera.com/artifactory/cloudera-repos</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
     </repository>
   </repositories>
 
@@ -157,8 +196,23 @@
     <dependencies>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-util</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-security</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-plus</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
-        <version>7.6.8.v20121106</version>
+        <version>${jetty.version}</version>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>
@@ -186,6 +240,17 @@
         <version>${slf4j.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>jcl-over-slf4j</artifactId>
+        <version>${slf4j.version}</version>
+        <!-- <scope>runtime</scope> --> <!-- more correct, but scalac 2.10.3 doesn't like it -->
+      </dependency>
+      <dependency>
+        <groupId>log4j</groupId>
+        <artifactId>log4j</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+      <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
         <version>1.0.0</version>
@@ -196,14 +261,16 @@
         <version>1.0.5</version>
       </dependency>
       <dependency>
-        <groupId>org.ow2.asm</groupId>
-        <artifactId>asm</artifactId>
-        <version>4.0</version>
-      </dependency>
-      <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
-        <version>2.4.0</version>
+        <version>2.5.1</version>
+        <exclusions>
+          <!-- Only HyperLogLog is used, which doesn't depend on fastutil -->
+          <exclusion>
+            <groupId>it.unimi.dsi</groupId>
+            <artifactId>fastutil</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <!-- In theory we need not directly depend on protobuf since Spark does not directly
            use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
@@ -218,12 +285,32 @@
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
-        <version>0.3.1</version>
+        <version>${chill.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm-commons</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
-        <version>0.3.1</version>
+        <version>${chill.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm-commons</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
@@ -270,11 +357,6 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>it.unimi.dsi</groupId>
-        <artifactId>fastutil</artifactId>
-        <version>6.4.4</version>
-      </dependency>
-      <dependency>
         <groupId>colt</groupId>
         <artifactId>colt</artifactId>
         <version>1.2.0</version>
@@ -285,55 +367,53 @@
         <version>${mesos.version}</version>
       </dependency>
       <dependency>
+        <groupId>commons-net</groupId>
+        <artifactId>commons-net</artifactId>
+        <version>2.2</version>
+      </dependency>
+      <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.13.Final</version>
+        <version>4.0.17.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
         <version>10.4.2.0</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>net.liftweb</groupId>
-        <artifactId>lift-json_${scala.binary.version}</artifactId>
-        <version>2.5.1</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scalap</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.codahale.metrics</groupId>
         <artifactId>metrics-core</artifactId>
-        <version>3.0.0</version>
+        <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
         <groupId>com.codahale.metrics</groupId>
         <artifactId>metrics-jvm</artifactId>
-        <version>3.0.0</version>
+        <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
         <groupId>com.codahale.metrics</groupId>
         <artifactId>metrics-json</artifactId>
-        <version>3.0.0</version>
+        <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
         <groupId>com.codahale.metrics</groupId>
         <artifactId>metrics-ganglia</artifactId>
-        <version>3.0.0</version>
+        <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
         <groupId>com.codahale.metrics</groupId>
         <artifactId>metrics-graphite</artifactId>
-        <version>3.0.0</version>
+        <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scala-reflect</artifactId>
         <version>${scala.version}</version>
       </dependency>
       <dependency>
@@ -347,9 +427,14 @@
         <version>${scala.version}</version>
       </dependency>
       <dependency>
-        <groupId>log4j</groupId>
-        <artifactId>log4j</artifactId>
-        <version>${log4j.version}</version>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scala-actors</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scalap</artifactId>
+        <version>${scala.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
@@ -358,23 +443,12 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-          <groupId>org.mockito</groupId>
-          <artifactId>mockito-all</artifactId>
-          <scope>test</scope>
-          <version>1.8.5</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-io</groupId>
-        <artifactId>commons-io</artifactId>
-        <version>2.4</version>
-      </dependency>
-      <dependency>
         <groupId>org.easymock</groupId>
         <artifactId>easymock</artifactId>
         <version>3.1</version>
         <scope>test</scope>
       </dependency>
-     <dependency>
+      <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-all</artifactId>
         <version>1.8.5</version>
@@ -393,9 +467,9 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper</artifactId>
-        <version>3.4.5</version>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-recipes</artifactId>
+        <version>2.4.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
@@ -413,16 +487,69 @@
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>*</artifactId>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro</artifactId>
+        <version>${avro.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.sonatype.sisu.inject</groupId>
-            <artifactId>*</artifactId>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro-ipc</artifactId>
+        <version>${avro.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>jetty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>jetty-util</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro-mapred</artifactId>
+        <version>${avro.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -441,16 +568,12 @@
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.sonatype.sisu.inject</groupId>
-            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -464,16 +587,12 @@
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.sonatype.sisu.inject</groupId>
-            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -488,39 +607,20 @@
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.sonatype.sisu.inject</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <!-- Specify Avro version because Kafka also has it as a dependency -->
-      <dependency>
-        <groupId>org.apache.avro</groupId>
-        <artifactId>avro</artifactId>
-        <version>1.7.4</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.avro</groupId>
-        <artifactId>avro-ipc</artifactId>
-        <version>1.7.4</version>
-        <exclusions>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <!-- Matches the version of jackson-core-asl pulled in by avro -->
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-mapper-asl</artifactId>
+        <version>1.8.8</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -531,7 +631,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>1.1.1</version>
+          <version>1.3.1</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -541,7 +641,7 @@
               <configuration>
                 <rules>
                   <requireMavenVersion>
-                    <version>3.0.0</version>
+                    <version>3.0.4</version>
                   </requireMavenVersion>
                   <requireJavaVersion>
                     <version>${java.version}</version>
@@ -554,12 +654,12 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
-          <version>1.7</version>
+          <version>1.8</version>
         </plugin>
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>3.1.5</version>
+          <version>3.1.6</version>
           <executions>
             <execution>
               <id>scala-compile-first</id>
@@ -590,9 +690,9 @@
             <args>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
+              <arg>-feature</arg>
             </args>
             <jvmArgs>
-              <jvmArg>-Xms64m</jvmArg>
               <jvmArg>-Xms1024m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
               <jvmArg>-XX:PermSize=${PermGen}</jvmArg>
@@ -609,18 +709,19 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>2.5.1</version>
+          <version>3.1</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
             <encoding>UTF-8</encoding>
             <maxmem>1024m</maxmem>
+            <fork>true</fork>
           </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>2.12.4</version>
+          <version>2.17</version>
           <configuration>
             <!-- Uses scalatest instead -->
             <skipTests>true</skipTests>
@@ -629,13 +730,13 @@
         <plugin>
           <groupId>org.scalatest</groupId>
           <artifactId>scalatest-maven-plugin</artifactId>
-          <version>1.0-M2</version>
+          <version>1.0-RC2</version>
           <configuration>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
-            <argLine>-Xms64m -Xmx3g</argLine>
-            <stderr />
+            <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+            <stderr/>
           </configuration>
           <executions>
             <execution>
@@ -659,7 +760,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>2.0</version>
+          <version>2.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -690,7 +791,7 @@
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
-           <id>add-scala-sources</id>
+            <id>add-scala-sources</id>
             <phase>generate-sources</phase>
             <goals>
               <goal>add-source</goal>
@@ -727,6 +828,17 @@
   </build>
 
   <profiles>
+    <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
+    <profile>
+      <id>hadoop-0.23</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+
     <profile>
       <id>yarn-alpha</id>
       <properties>
@@ -735,9 +847,46 @@
         <hadoop.version>0.23.7</hadoop.version>
         <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
       </properties>
-
       <modules>
         <module>yarn</module>
+      </modules>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
+    <profile>
+      <id>spark-ganglia-lgpl</id>
+      <modules>
+        <module>extras/spark-ganglia-lgpl</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>java8-tests</id>
+      <build>
+        <plugins>
+          <!-- Needed for publishing test jars as it is needed by java8-tests -->
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-jar-plugin</artifactId>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>test-jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+
+      <modules>
+        <module>extras/java8-tests</module>
       </modules>
 
     </profile>
@@ -754,5 +903,52 @@
       </modules>
 
     </profile>
+
+    <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
+    <profile>
+      <id>hadoop-provided</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-api</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-common</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-client</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro-ipc</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper</artifactId>
+          <version>3.4.5</version>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+
   </profiles>
 </project>

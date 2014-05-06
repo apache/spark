@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.collection
 
-
 /**
  * A simple, fixed-size bit set implementation. This implementation is fast because it avoids
  * safety/bound checking.
@@ -85,6 +84,45 @@ class BitSet(numBits: Int) extends Serializable {
     while( ind < other.numWords ) {
       newBS.words(ind) = other.words(ind)
       ind += 1
+    }
+    newBS
+  }
+
+  /**
+   * Compute the symmetric difference by performing bit-wise XOR of the two sets returning the
+   * result.
+   */
+  def ^(other: BitSet): BitSet = {
+    val newBS = new BitSet(math.max(capacity, other.capacity))
+    val smaller = math.min(numWords, other.numWords)
+    var ind = 0
+    while (ind < smaller) {
+      newBS.words(ind) = words(ind) ^ other.words(ind)
+      ind += 1
+    }
+    if (ind < numWords) {
+      Array.copy( words, ind, newBS.words, ind, numWords - ind )
+    }
+    if (ind < other.numWords) {
+      Array.copy( other.words, ind, newBS.words, ind, other.numWords - ind )
+    }
+    newBS
+  }
+
+  /**
+   * Compute the difference of the two sets by performing bit-wise AND-NOT returning the
+   * result.
+   */
+  def andNot(other: BitSet): BitSet = {
+    val newBS = new BitSet(capacity)
+    val smaller = math.min(numWords, other.numWords)
+    var ind = 0
+    while (ind < smaller) {
+      newBS.words(ind) = words(ind) & ~other.words(ind)
+      ind += 1
+    }
+    if (ind < numWords) {
+      Array.copy( words, ind, newBS.words, ind, numWords - ind )
     }
     newBS
   }

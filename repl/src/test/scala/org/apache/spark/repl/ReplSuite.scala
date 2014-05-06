@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 import org.apache.spark.SparkContext
+import org.apache.commons.lang3.StringEscapeUtils
 
 
 class ReplSuite extends FunSuite {
@@ -185,11 +186,12 @@ class ReplSuite extends FunSuite {
     out.close()
     val output = runInterpreter("local",
       """
-        |var file = sc.textFile("%s/input").cache()
+        |var file = sc.textFile("%s").cache()
         |file.count()
         |file.count()
         |file.count()
-      """.stripMargin.format(tempDir.getAbsolutePath))
+      """.stripMargin.format(StringEscapeUtils.escapeJava(
+        tempDir.getAbsolutePath + File.separator + "input")))
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Long = 3", output)
@@ -241,5 +243,16 @@ class ReplSuite extends FunSuite {
       assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
       assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
     }
+  }
+
+  test("collecting objects of class defined in repl") {
+    val output = runInterpreter("local[2]",
+      """
+        |case class Foo(i: Int)
+        |val ret = sc.parallelize((1 to 100).map(Foo), 10).collect
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains("ret: Array[Foo] = Array(Foo(1),", output)
   }
 }

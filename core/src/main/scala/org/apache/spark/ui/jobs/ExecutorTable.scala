@@ -17,20 +17,17 @@
 
 package org.apache.spark.ui.jobs
 
+import scala.collection.mutable
 import scala.xml.Node
 
-import org.apache.spark.scheduler.SchedulingMode
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
-import scala.collection.mutable
 
 /** Page showing executor summary */
-private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) {
+private[ui] class ExecutorTable(stageId: Int, parent: JobProgressTab) {
+  private val listener = parent.listener
 
-  val listener = parent.listener
-  val dateFmt = parent.dateFmt
-  val isFairScheduler = listener.sc.getSchedulingMode == SchedulingMode.FAIR
-
-  def toNodeSeq(): Seq[Node] = {
+  def toNodeSeq: Seq[Node] = {
     listener.synchronized {
       executorTable()
     }
@@ -58,11 +55,9 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
   }
 
   private def createExecutorTable() : Seq[Node] = {
-    // make a executor-id -> address map
+    // Make an executor-id -> address map
     val executorIdToAddress = mutable.HashMap[String, String]()
-    val storageStatusList = parent.sc.getExecutorStorageStatus
-    for (statusId <- 0 until storageStatusList.size) {
-      val blockManagerId = parent.sc.getExecutorStorageStatus(statusId).blockManagerId
+    listener.blockManagerIds.foreach { blockManagerId =>
       val address = blockManagerId.hostPort
       val executorId = blockManagerId.executorId
       executorIdToAddress.put(executorId, address)
@@ -70,25 +65,23 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
 
     val executorIdToSummary = listener.stageIdToExecutorSummaries.get(stageId)
     executorIdToSummary match {
-      case Some(x) => {
-        x.toSeq.sortBy(_._1).map{
-          case (k,v) => {
-            <tr>
-              <td>{k}</td>
-              <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
-              <td>{parent.formatDuration(v.taskTime)}</td>
-              <td>{v.failedTasks + v.succeededTasks}</td>
-              <td>{v.failedTasks}</td>
-              <td>{v.succeededTasks}</td>
-              <td>{Utils.bytesToString(v.shuffleRead)}</td>
-              <td>{Utils.bytesToString(v.shuffleWrite)}</td>
-              <td>{Utils.bytesToString(v.memoryBytesSpilled)}</td>
-              <td>{Utils.bytesToString(v.diskBytesSpilled)}</td>
-            </tr>
-          }
+      case Some(x) =>
+        x.toSeq.sortBy(_._1).map { case (k, v) => {
+          <tr>
+            <td>{k}</td>
+            <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
+            <td>{UIUtils.formatDuration(v.taskTime)}</td>
+            <td>{v.failedTasks + v.succeededTasks}</td>
+            <td>{v.failedTasks}</td>
+            <td>{v.succeededTasks}</td>
+            <td>{Utils.bytesToString(v.shuffleRead)}</td>
+            <td>{Utils.bytesToString(v.shuffleWrite)}</td>
+            <td>{Utils.bytesToString(v.memoryBytesSpilled)}</td>
+            <td>{Utils.bytesToString(v.diskBytesSpilled)}</td>
+          </tr>
         }
       }
-      case _ => { Seq[Node]() }
+      case _ => Seq[Node]()
     }
   }
 }

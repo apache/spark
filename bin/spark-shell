@@ -19,10 +19,6 @@
 
 #
 # Shell script for starting the Spark Shell REPL
-# Note that it will set MASTER to spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}
-# if those two env vars are set in spark-env.sh but MASTER is not.
-# Options:
-#    -c <cores>    Set the number of cores for REPL to use
 
 cygwin=false
 case "`uname`" in
@@ -32,33 +28,31 @@ esac
 # Enter posix mode for bash
 set -o posix
 
+if [[ "$@" == *--help* ]]; then
+  echo "Usage: ./bin/spark-shell [options]"
+  ./bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exit 0
+fi
+
+## Global script variables
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
-for o in "$@"; do
-  if [ "$1" = "-c" -o "$1" = "--cores" ]; then
-    shift
-    if [ -n "$1" ]; then
-      OPTIONS="-Dspark.cores.max=$1"
-      shift
-    fi
-  fi
-done
-
-# Set MASTER from spark-env if possible
-DEFAULT_SPARK_MASTER_PORT=7077
-if [ -z "$MASTER" ]; then
-  if [ -e "$FWDIR/conf/spark-env.sh" ]; then
-    . "$FWDIR/conf/spark-env.sh"
-  fi
-  if [ "x" != "x$SPARK_MASTER_IP" ]; then
-    if [ "y" != "y$SPARK_MASTER_PORT" ]; then
-      SPARK_MASTER_PORT="${SPARK_MASTER_PORT}"
+function main(){
+    if $cygwin; then
+        # Workaround for issue involving JLine and Cygwin
+        # (see http://sourceforge.net/p/jline/bugs/40/).
+        # If you're using the Mintty terminal emulator in Cygwin, may need to set the
+        # "Backspace sends ^H" setting in "Keys" section of the Mintty options
+        # (see https://github.com/sbt/sbt/issues/562).
+        stty -icanon min 1 -echo > /dev/null 2>&1
+        export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djline.terminal=unix"
+        $FWDIR/bin/spark-submit spark-internal "$@" --class org.apache.spark.repl.Main
+        stty icanon echo > /dev/null 2>&1
     else
-      SPARK_MASTER_PORT=$DEFAULT_SPARK_MASTER_PORT
+        export SPARK_SUBMIT_OPTS
+        $FWDIR/bin/spark-submit spark-internal "$@" --class org.apache.spark.repl.Main
     fi
-    export MASTER="spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}"
-  fi
-fi
+}
 
 # Copy restore-TTY-on-exit functions from Scala script so spark-shell exits properly even in
 # binary distribution of Spark where Scala is not installed
@@ -88,20 +82,10 @@ if [[ ! $? ]]; then
   saved_stty=""
 fi
 
-if $cygwin; then
-    # Workaround for issue involving JLine and Cygwin
-    # (see http://sourceforge.net/p/jline/bugs/40/).
-    # If you're using the Mintty terminal emulator in Cygwin, may need to set the
-    # "Backspace sends ^H" setting in "Keys" section of the Mintty options
-    # (see https://github.com/sbt/sbt/issues/562).
-    stty -icanon min 1 -echo > /dev/null 2>&1
-    $FWDIR/bin/spark-class -Djline.terminal=unix $OPTIONS org.apache.spark.repl.Main "$@"
-    stty icanon echo > /dev/null 2>&1
-else
-    $FWDIR/bin/spark-class $OPTIONS org.apache.spark.repl.Main "$@"
-fi
+main "$@"
 
 # record the exit status lest it be overwritten:
 # then reenable echo and propagate the code.
 exit_status=$?
 onExit
+

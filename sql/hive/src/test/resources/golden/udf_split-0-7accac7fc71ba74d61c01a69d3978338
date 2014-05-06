@@ -1,0 +1,1 @@
+split(str, regex) - Splits str around occurances that match regex

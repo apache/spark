@@ -10,7 +10,7 @@ In addition to running on the Mesos or YARN cluster managers, Spark also provide
 
 # Installing Spark Standalone to a Cluster
 
-To install Spark Standlone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](index.html#building).
+To install Spark Standalone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](index.html#building).
 
 # Starting a Cluster Manually
 
@@ -139,17 +139,20 @@ constructor](scala-programming-guide.html#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
 
-    MASTER=spark://IP:PORT ./bin/spark-shell
+    ./bin/spark-shell --master spark://IP:PORT
 
 Note that if you are running spark-shell from one of the spark cluster machines, the `bin/spark-shell` script will
 automatically set MASTER from the `SPARK_MASTER_IP` and `SPARK_MASTER_PORT` variables in `conf/spark-env.sh`.
 
-You can also pass an option `-c <numCores>` to control the number of cores that spark-shell uses on the cluster.
+You can also pass an option `--cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
-# Launching Applications Inside the Cluster
+# Launching Compiled Spark Applications
 
-You may also run your application entirely inside of the cluster by submitting your application driver using the submission client. The syntax for submitting applications is as follows:
+Spark supports two deploy modes. Spark applications may run with the driver inside the client process or entirely inside the cluster.
 
+The spark-submit script described in the [cluster mode overview](cluster-overview.html) provides the most straightforward way to submit a compiled Spark application to the cluster in either deploy mode. For info on the lower-level invocations used to launch an app inside the cluster, read ahead.
+
+## Launching Applications Inside the Cluster
 
     ./bin/spark-class org.apache.spark.deploy.Client launch
        [client-options] \

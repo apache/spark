@@ -102,7 +102,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   override def reverse: Graph[VD, ED] = {
     val newETable = edges.mapEdgePartitions((pid, part) => part.reverse)
-    new GraphImpl(vertices, newETable, routingTable, replicatedVertexView)
+    GraphImpl(vertices, newETable)
   }
 
   override def mapVertices[VD2: ClassTag](f: (VertexId, VD) => VD2): Graph[VD2, ED] = {
@@ -190,14 +190,14 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     new GraphImpl(vertices, newETable, routingTable, replicatedVertexView)
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // ///////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
-  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // ///////////////////////////////////////////////////////////////////////////////////////////////
 
   override def mapReduceTriplets[A: ClassTag](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None) = {
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None): VertexRDD[A] = {
 
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
@@ -391,6 +391,6 @@ object GraphImpl {
     // TODO: Consider doing map side distinct before shuffle.
     new ShuffledRDD[VertexId, Int, (VertexId, Int)](
       edges.collectVertexIds.map(vid => (vid, 0)), partitioner)
-      .setSerializer(classOf[VertexIdMsgSerializer].getName)
+      .setSerializer(new VertexIdMsgSerializer)
   }
 } // end of object GraphImpl

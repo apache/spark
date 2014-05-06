@@ -17,11 +17,14 @@
 
 package org.apache.spark
 
-import scala.reflect.ClassTag
-import org.scalatest.FunSuite
 import java.io.File
-import org.apache.spark.rdd._
+
+import scala.reflect.ClassTag
+
+import org.scalatest.FunSuite
+
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd._
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
 
@@ -429,7 +432,6 @@ object CheckpointSuite {
   // This is a custom cogroup function that does not use mapValues like
   // the PairRDDFunctions.cogroup()
   def cogroup[K, V](first: RDD[(K, V)], second: RDD[(K, V)], part: Partitioner) = {
-    //println("First = " + first + ", second = " + second)
     new CoGroupedRDD[K](
       Seq(first.asInstanceOf[RDD[(K, _)]], second.asInstanceOf[RDD[(K, _)]]),
       part

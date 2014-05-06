@@ -21,8 +21,7 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.TaskDescription
-import org.apache.spark.util.{Utils, SerializableBuffer}
-
+import org.apache.spark.util.{SerializableBuffer, Utils}
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
@@ -31,7 +30,8 @@ private[spark] object CoarseGrainedClusterMessages {
   // Driver to executors
   case class LaunchTask(task: TaskDescription) extends CoarseGrainedClusterMessage
 
-  case class KillTask(taskId: Long, executor: String) extends CoarseGrainedClusterMessage
+  case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
+    extends CoarseGrainedClusterMessage
 
   case class RegisteredExecutor(sparkProperties: Seq[(String, String)])
     extends CoarseGrainedClusterMessage

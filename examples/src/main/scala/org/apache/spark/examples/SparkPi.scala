@@ -18,8 +18,8 @@
 package org.apache.spark.examples
 
 import scala.math.random
+
 import org.apache.spark._
-import SparkContext._
 
 /** Computes an approximation to pi */
 object SparkPi {
@@ -29,7 +29,7 @@ object SparkPi {
       System.exit(1)
     }
     val spark = new SparkContext(args(0), "SparkPi",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
     val slices = if (args.length > 1) args(1).toInt else 2
     val n = 100000 * slices
     val count = spark.parallelize(1 to n, slices).map { i =>

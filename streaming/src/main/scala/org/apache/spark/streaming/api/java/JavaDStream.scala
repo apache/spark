@@ -23,6 +23,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
 
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import org.apache.spark.streaming.dstream.DStream
 
@@ -41,7 +42,7 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classTag: ClassTag[T]
 
   /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(f: JFunction[T, java.lang.Boolean]): JavaDStream[T] =
-    dstream.filter((x => f(x).booleanValue()))
+    dstream.filter((x => f.call(x).booleanValue()))
 
   /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
   def cache(): JavaDStream[T] = dstream.cache()
@@ -96,6 +97,10 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classTag: ClassTag[T]
 }
 
 object JavaDStream {
+  /**
+   * Convert a scala [[org.apache.spark.streaming.dstream.DStream]] to a Java-friendly
+   * [[org.apache.spark.streaming.api.java.JavaDStream]].
+   */
   implicit def fromDStream[T: ClassTag](dstream: DStream[T]): JavaDStream[T] =
     new JavaDStream[T](dstream)
 }

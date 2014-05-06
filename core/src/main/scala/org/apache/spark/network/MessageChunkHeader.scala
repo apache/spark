@@ -21,13 +21,13 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 
-
 private[spark] class MessageChunkHeader(
     val typ: Long,
     val id: Int,
     val totalSize: Int,
     val chunkSize: Int,
     val other: Int,
+    val securityNeg: Int,
     val address: InetSocketAddress) {
   lazy val buffer = {
     // No need to change this, at 'use' time, we do a reverse lookup of the hostname.
@@ -41,6 +41,7 @@ private[spark] class MessageChunkHeader(
       putInt(totalSize).
       putInt(chunkSize).
       putInt(other).
+      putInt(securityNeg).
       putInt(ip.size).
       put(ip).
       putInt(port).
@@ -49,12 +50,13 @@ private[spark] class MessageChunkHeader(
   }
 
   override def toString = "" + this.getClass.getSimpleName + ":" + id + " of type " + typ +
-      " and sizes " + totalSize + " / " + chunkSize + " bytes"
+      " and sizes " + totalSize + " / " + chunkSize + " bytes, securityNeg: " + securityNeg
+
 }
 
 
 private[spark] object MessageChunkHeader {
-  val HEADER_SIZE = 40
+  val HEADER_SIZE = 44
 
   def create(buffer: ByteBuffer): MessageChunkHeader = {
     if (buffer.remaining != HEADER_SIZE) {
@@ -65,11 +67,13 @@ private[spark] object MessageChunkHeader {
     val totalSize = buffer.getInt()
     val chunkSize = buffer.getInt()
     val other = buffer.getInt()
+    val securityNeg = buffer.getInt()
     val ipSize = buffer.getInt()
     val ipBytes = new Array[Byte](ipSize)
     buffer.get(ipBytes)
     val ip = InetAddress.getByAddress(ipBytes)
     val port = buffer.getInt()
-    new MessageChunkHeader(typ, id, totalSize, chunkSize, other, new InetSocketAddress(ip, port))
+    new MessageChunkHeader(typ, id, totalSize, chunkSize, other, securityNeg,
+      new InetSocketAddress(ip, port))
   }
 }

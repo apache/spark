@@ -1,0 +1,5 @@
+xpath_number(xml, xpath) - Returns a double value that matches the xpath expression
+Synonyms: xpath_double
+Example:
+  > SELECT xpath_number('<a><b>1</b><b>2</b></a>','sum(a/b)') FROM src LIMIT 1;
+  3.0

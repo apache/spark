@@ -22,12 +22,20 @@ import scala.annotation.tailrec
 import java.io.OutputStream
 import java.util.concurrent.TimeUnit._
 
+import org.apache.spark.Logging
+
+
 private[streaming]
-class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends OutputStream {
-  val SYNC_INTERVAL = NANOSECONDS.convert(10, SECONDS)
-  val CHUNK_SIZE = 8192
-  var lastSyncTime = System.nanoTime
-  var bytesWrittenSinceSync: Long = 0
+class RateLimitedOutputStream(out: OutputStream, desiredBytesPerSec: Int)
+  extends OutputStream
+  with Logging {
+
+  require(desiredBytesPerSec > 0)
+
+  private val SYNC_INTERVAL = NANOSECONDS.convert(10, SECONDS)
+  private val CHUNK_SIZE = 8192
+  private var lastSyncTime = System.nanoTime
+  private var bytesWrittenSinceSync = 0L
 
   override def write(b: Int) {
     waitToWrite(1)
@@ -59,9 +67,9 @@ class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends Outpu
   @tailrec
   private def waitToWrite(numBytes: Int) {
     val now = System.nanoTime
-    val elapsedSecs = SECONDS.convert(math.max(now - lastSyncTime, 1), NANOSECONDS)
-    val rate = bytesWrittenSinceSync.toDouble / elapsedSecs
-    if (rate < bytesPerSec) {
+    val elapsedNanosecs = math.max(now - lastSyncTime, 1)
+    val rate = bytesWrittenSinceSync.toDouble * 1000000000 / elapsedNanosecs
+    if (rate < desiredBytesPerSec) {
       // It's okay to write; just update some variables and return
       bytesWrittenSinceSync += numBytes
       if (now > lastSyncTime + SYNC_INTERVAL) {
@@ -71,13 +79,14 @@ class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends Outpu
       }
     } else {
       // Calculate how much time we should sleep to bring ourselves to the desired rate.
-      // Based on throttler in Kafka
-      // scalastyle:off
-      // (https://github.com/kafka-dev/kafka/blob/master/core/src/main/scala/kafka/utils/Throttler.scala)
-      // scalastyle:on
-      val sleepTime = MILLISECONDS.convert((bytesWrittenSinceSync / bytesPerSec - elapsedSecs),
-        SECONDS)
-      if (sleepTime > 0) Thread.sleep(sleepTime)
+      val targetTimeInMillis = bytesWrittenSinceSync * 1000 / desiredBytesPerSec
+      val elapsedTimeInMillis = elapsedNanosecs / 1000000
+      val sleepTimeInMillis = targetTimeInMillis - elapsedTimeInMillis
+      if (sleepTimeInMillis > 0) {
+        logTrace("Natural rate is " + rate + " per second but desired rate is " +
+          desiredBytesPerSec + ", sleeping for " + sleepTimeInMillis + " ms to compensate.")
+        Thread.sleep(sleepTimeInMillis)
+      }
       waitToWrite(numBytes)
     }
   }

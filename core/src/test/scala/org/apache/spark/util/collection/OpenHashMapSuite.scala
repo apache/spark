@@ -18,8 +18,10 @@
 package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
+
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
+
 import org.apache.spark.util.SizeEstimator
 
 class OpenHashMapSuite extends FunSuite with ShouldMatchers {

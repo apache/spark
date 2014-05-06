@@ -17,25 +17,27 @@
 
 package org.apache.spark.deploy.master.ui
 
+import javax.servlet.http.HttpServletRequest
+
 import scala.concurrent.Await
 import scala.xml.Node
 
 import akka.pattern.ask
-import javax.servlet.http.HttpServletRequest
-import net.liftweb.json.JsonAST.JValue
+import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.ExecutorInfo
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class ApplicationPage(parent: MasterWebUI) {
-  val master = parent.masterActorRef
-  val timeout = parent.timeout
+private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
+
+  private val master = parent.masterActorRef
+  private val timeout = parent.timeout
 
   /** Executor details for a particular application */
-  def renderJson(request: HttpServletRequest): JValue = {
+  override def renderJson(request: HttpServletRequest): JValue = {
     val appId = request.getParameter("appId")
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, timeout)
@@ -81,7 +83,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
               </li>
               <li><strong>Submit Date:</strong> {app.submitDate}</li>
               <li><strong>State:</strong> {app.state}</li>
-              <li><strong><a href={app.appUiUrl}>Application Detail UI</a></strong></li>
+              <li><strong><a href={app.desc.appUiUrl}>Application Detail UI</a></strong></li>
             </ul>
           </div>
         </div>
@@ -95,7 +97,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
     UIUtils.basicSparkPage(content, "Application: " + app.desc.name)
   }
 
-  def executorRow(executor: ExecutorInfo): Seq[Node] = {
+  private def executorRow(executor: ExecutorInfo): Seq[Node] = {
     <tr>
       <td>{executor.id}</td>
       <td>

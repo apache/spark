@@ -19,21 +19,16 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 
-class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
+class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
 
-  private val createCombiner: (Int => ArrayBuffer[Int]) = i => ArrayBuffer[Int](i)
-  private val mergeValue: (ArrayBuffer[Int], Int) => ArrayBuffer[Int] = (buffer, i) => {
-    buffer += i
-  }
-  private val mergeCombiners: (ArrayBuffer[Int], ArrayBuffer[Int]) => ArrayBuffer[Int] =
-    (buf1, buf2) => {
-      buf1 ++= buf2
-    }
+  private def createCombiner(i: Int) = ArrayBuffer[Int](i)
+  private def mergeValue(buffer: ArrayBuffer[Int], i: Int) = buffer += i
+  private def mergeCombiners(buf1: ArrayBuffer[Int], buf2: ArrayBuffer[Int]) = buf1 ++= buf2
 
   test("simple insert") {
     val conf = new SparkConf(false)
@@ -179,9 +174,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with Local
     assert(result1.toSet == Set[(Int, Int)]((0, 5), (1, 5)))
 
     // groupByKey
-    val result2 = rdd.groupByKey().collect()
+    val result2 = rdd.groupByKey().collect().map(x => (x._1, x._2.toList)).toSet
     assert(result2.toSet == Set[(Int, Seq[Int])]
-      ((0, ArrayBuffer[Int](1, 1, 1, 1, 1)), (1, ArrayBuffer[Int](1, 1, 1, 1, 1))))
+      ((0, List[Int](1, 1, 1, 1, 1)), (1, List[Int](1, 1, 1, 1, 1))))
   }
 
   test("simple cogroup") {
@@ -203,13 +198,13 @@ class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with Local
   }
 
   test("spilling") {
-    // TODO: Use SparkConf (which currently throws connection reset exception)
-    System.setProperty("spark.shuffle.memoryFraction", "0.001")
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
     // reduceByKey - should spill ~8 times
     val rddA = sc.parallelize(0 until 100000).map(i => (i/2, i))
-    val resultA = rddA.reduceByKey(math.max(_, _)).collect()
+    val resultA = rddA.reduceByKey(math.max).collect()
     assert(resultA.length == 50000)
     resultA.foreach { case(k, v) =>
       k match {
@@ -252,7 +247,73 @@ class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with Local
         case _ =>
       }
     }
+  }
 
-    System.clearProperty("spark.shuffle.memoryFraction")
+  test("spilling with hash collisions") {
+    val conf = new SparkConf(true)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
+
+    def createCombiner(i: String) = ArrayBuffer[String](i)
+    def mergeValue(buffer: ArrayBuffer[String], i: String) = buffer += i
+    def mergeCombiners(buffer1: ArrayBuffer[String], buffer2: ArrayBuffer[String]) =
+      buffer1 ++= buffer2
+
+    val map = new ExternalAppendOnlyMap[String, String, ArrayBuffer[String]](
+      createCombiner, mergeValue, mergeCombiners)
+
+    val collisionPairs = Seq(
+      ("Aa", "BB"),                   // 2112
+      ("to", "v1"),                   // 3707
+      ("variants", "gelato"),         // -1249574770
+      ("Teheran", "Siblings"),        // 231609873
+      ("misused", "horsemints"),      // 1069518484
+      ("isohel", "epistolaries"),     // -1179291542
+      ("righto", "buzzards"),         // -931102253
+      ("hierarch", "crinolines"),     // -1732884796
+      ("inwork", "hypercatalexes"),   // -1183663690
+      ("wainages", "presentencing"),  // 240183619
+      ("trichothecenes", "locular"),  // 339006536
+      ("pomatoes", "eructation")      // 568647356
+    )
+
+    (1 to 100000).map(_.toString).foreach { i => map.insert(i, i) }
+    collisionPairs.foreach { case (w1, w2) =>
+      map.insert(w1, w2)
+      map.insert(w2, w1)
+    }
+
+    // A map of collision pairs in both directions
+    val collisionPairsMap = (collisionPairs ++ collisionPairs.map(_.swap)).toMap
+
+    // Avoid map.size or map.iterator.length because this destructively sorts the underlying map
+    var count = 0
+
+    val it = map.iterator
+    while (it.hasNext) {
+      val kv = it.next()
+      val expectedValue = ArrayBuffer[String](collisionPairsMap.getOrElse(kv._1, kv._1))
+      assert(kv._2.equals(expectedValue))
+      count += 1
+    }
+    assert(count == 100000 + collisionPairs.size * 2)
+  }
+
+  test("spilling with hash collisions using the Int.MaxValue key") {
+    val conf = new SparkConf(true)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
+
+    val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
+      mergeValue, mergeCombiners)
+
+    (1 to 100000).foreach { i => map.insert(i, i) }
+    map.insert(Int.MaxValue, Int.MaxValue)
+
+    val it = map.iterator
+    while (it.hasNext) {
+      // Should not throw NoSuchElementException
+      it.next()
+    }
   }
 }

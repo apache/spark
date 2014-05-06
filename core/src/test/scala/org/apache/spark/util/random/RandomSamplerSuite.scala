@@ -17,11 +17,11 @@
 
 package org.apache.spark.util.random
 
+import java.util.Random
+
+import cern.jet.random.Poisson
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.mock.EasyMockSugar
-
-import java.util.Random
-import cern.jet.random.Poisson
 
 class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar {
 
@@ -41,10 +41,21 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
         random.nextDouble().andReturn(x)
       }
     }
-    whenExecuting(random)
-    {
+    whenExecuting(random) {
       val sampler = new BernoulliSampler[Int](0.25, 0.55)(random)
       assert(sampler.sample(a.iterator).toList == List(3, 4, 5))
+    }
+  }
+
+  test("BernoulliSamplerWithRangeInverse") {
+    expecting {
+      for(x <- Seq(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)) {
+        random.nextDouble().andReturn(x)
+      }
+    }
+    whenExecuting(random) {
+      val sampler = new BernoulliSampler[Int](0.25, 0.55, true)(random)
+      assert(sampler.sample(a.iterator).toList === List(1, 2, 6, 7, 8, 9))
     }
   }
 
@@ -54,8 +65,7 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
         random.nextDouble().andReturn(x)
       }
     }
-    whenExecuting(random)
-    {
+    whenExecuting(random) {
       val sampler = new BernoulliSampler[Int](0.35)(random)
       assert(sampler.sample(a.iterator).toList == List(1, 2, 3))
     }
@@ -67,8 +77,7 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
         random.nextDouble().andReturn(x)
       }
     }
-    whenExecuting(random)
-    {
+    whenExecuting(random) {
       val sampler = new BernoulliSampler[Int](0.25, 0.55, true)(random)
       assert(sampler.sample(a.iterator).toList == List(1, 2, 6, 7, 8, 9))
     }
@@ -78,8 +87,7 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
     expecting {
       random.setSeed(10L)
     }
-    whenExecuting(random)
-    {
+    whenExecuting(random) {
       val sampler = new BernoulliSampler[Int](0.2)(random)
       sampler.setSeed(10L)
     }

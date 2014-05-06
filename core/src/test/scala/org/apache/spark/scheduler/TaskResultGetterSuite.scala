@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkEnv}
 import org.apache.spark.storage.TaskResultBlockId
 
 /**
@@ -93,10 +93,10 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
     // If this test hangs, it's probably because no resource offers were made after the task
     // failed.
     val scheduler: TaskSchedulerImpl = sc.taskScheduler match {
-      case clusterScheduler: TaskSchedulerImpl =>
-        clusterScheduler
+      case taskScheduler: TaskSchedulerImpl =>
+        taskScheduler
       case _ =>
-        assert(false, "Expect local cluster to use ClusterScheduler")
+        assert(false, "Expect local cluster to use TaskSchedulerImpl")
         throw new ClassCastException
     }
     scheduler.taskResultGetter = new ResultDeletingTaskResultGetter(sc.env, scheduler)

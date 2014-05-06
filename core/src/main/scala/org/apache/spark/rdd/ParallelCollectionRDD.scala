@@ -17,14 +17,15 @@
 
 package org.apache.spark.rdd
 
+import java.io._
+
+import scala.Serializable
+import scala.collection.Map
 import scala.collection.immutable.NumericRange
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.Map
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import java.io._
-import scala.Serializable
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.Utils
 

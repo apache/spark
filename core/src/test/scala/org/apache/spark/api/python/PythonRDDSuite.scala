@@ -17,10 +17,9 @@
 
 package org.apache.spark.api.python
 
-import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
-
 import java.io.{ByteArrayOutputStream, DataOutputStream}
+
+import org.scalatest.FunSuite
 
 class PythonRDDSuite extends FunSuite {
 

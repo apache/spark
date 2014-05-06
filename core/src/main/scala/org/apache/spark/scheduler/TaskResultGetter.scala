@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.concurrent.{LinkedBlockingDeque, ThreadFactory, ThreadPoolExecutor, TimeUnit}
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -86,13 +85,13 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
         try {
           if (serializedData != null && serializedData.limit() > 0) {
             reason = serializer.get().deserialize[TaskEndReason](
-              serializedData, getClass.getClassLoader)
+              serializedData, Utils.getSparkClassLoader)
           }
         } catch {
           case cnd: ClassNotFoundException =>
             // Log an error but keep going here -- the task failed, so not catastropic if we can't
             // deserialize the reason.
-            val loader = Thread.currentThread.getContextClassLoader
+            val loader = Utils.getContextOrSparkClassLoader
             logError(
               "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
           case ex: Throwable => {}

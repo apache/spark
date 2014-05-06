@@ -24,11 +24,22 @@
 sbin=`dirname "$0"`
 sbin=`cd "$sbin"; pwd`
 
+TACHYON_STR=""
+
+while (( "$#" )); do
+case $1 in
+    --with-tachyon)
+      TACHYON_STR="--with-tachyon"
+      ;;
+  esac
+shift
+done
+
 # Load the Spark configuration
 . "$sbin/spark-config.sh"
 
 # Start Master
-"$sbin"/start-master.sh
+"$sbin"/start-master.sh $TACHYON_STR
 
 # Start Workers
-"$sbin"/start-slaves.sh
+"$sbin"/start-slaves.sh $TACHYON_STR

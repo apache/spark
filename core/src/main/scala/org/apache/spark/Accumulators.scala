@@ -19,8 +19,9 @@ package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
 
-import scala.collection.mutable.Map
 import scala.collection.generic.Growable
+import scala.collection.mutable.Map
+
 import org.apache.spark.serializer.JavaSerializer
 
 /**
@@ -103,8 +104,11 @@ class Accumulable[R, T] (
    * Set the accumulator's value; only allowed on master.
    */
   def value_= (newValue: R) {
-    if (!deserialized) value_ = newValue
-    else throw new UnsupportedOperationException("Can't assign accumulator value in task")
+    if (!deserialized) {
+      value_ = newValue
+    } else {
+      throw new UnsupportedOperationException("Can't assign accumulator value in task")
+    }
   }
 
   /**
@@ -188,8 +192,8 @@ class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Ser
  * A simpler value of [[Accumulable]] where the result type being accumulated is the same
  * as the types of elements being merged, i.e. variables that are only "added" to through an
  * associative operation and can therefore be efficiently supported in parallel. They can be used
- * to implement counters (as in MapReduce) or sums. Spark natively supports accumulators of type
- * `Int` and `Double`, and programmers can add support for new types.
+ * to implement counters (as in MapReduce) or sums. Spark natively supports accumulators of numeric
+ * value types, and programmers can add support for new types.
  *
  * An accumulator is created from an initial value `v` by calling [[SparkContext#accumulator]].
  * Tasks running on the cluster can then add to it using the [[Accumulable#+=]] operator.

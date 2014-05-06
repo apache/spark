@@ -17,14 +17,14 @@
 
 package org.apache.spark.metrics
 
-import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
-
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, Logging}
+import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
 import org.apache.spark.metrics.source.Source
 
@@ -64,7 +64,7 @@ import org.apache.spark.metrics.source.Source
  * [options] is the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (val instance: String,
-    conf: SparkConf) extends Logging {
+    conf: SparkConf, securityMgr: SecurityManager) extends Logging {
 
   val confFile = conf.get("spark.metrics.conf", null)
   val metricsConfig = new MetricsConfig(Option(confFile))
@@ -129,17 +129,19 @@ private[spark] class MetricsSystem private (val instance: String,
 
     sinkConfigs.foreach { kv =>
       val classPath = kv._2.getProperty("class")
-      try {
-        val sink = Class.forName(classPath)
-          .getConstructor(classOf[Properties], classOf[MetricRegistry])
-          .newInstance(kv._2, registry)
-        if (kv._1 == "servlet") {
-           metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
-        } else {
-          sinks += sink.asInstanceOf[Sink]
+      if (null != classPath) {
+        try {
+          val sink = Class.forName(classPath)
+            .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+            .newInstance(kv._2, registry, securityMgr)
+          if (kv._1 == "servlet") {
+            metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
+          } else {
+            sinks += sink.asInstanceOf[Sink]
+          }
+        } catch {
+          case e: Exception => logError("Sink class " + classPath + " cannot be instantialized", e)
         }
-      } catch {
-        case e: Exception => logError("Sink class " + classPath + " cannot be instantialized", e)
       }
     }
   }
@@ -160,6 +162,7 @@ private[spark] object MetricsSystem {
     }
   }
 
-  def createMetricsSystem(instance: String, conf: SparkConf): MetricsSystem =
-    new MetricsSystem(instance, conf)
+  def createMetricsSystem(instance: String, conf: SparkConf,
+      securityMgr: SecurityManager): MetricsSystem =
+    new MetricsSystem(instance, conf, securityMgr)
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.rdd
 
 import org.scalatest.FunSuite
+
 import org.apache.spark.SharedSparkContext
 import org.apache.spark.util.random.RandomSampler
 

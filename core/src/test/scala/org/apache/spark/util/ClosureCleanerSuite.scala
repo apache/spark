@@ -17,12 +17,10 @@
 
 package org.apache.spark.util
 
-import java.io.NotSerializableException
-
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.SparkContext
 
 class ClosureCleanerSuite extends FunSuite {
   test("closures inside an object") {
@@ -71,7 +69,7 @@ object TestObject {
 
 class TestClass extends Serializable {
   var x = 5
-  
+
   def getX = x
 
   def run(): Int = {

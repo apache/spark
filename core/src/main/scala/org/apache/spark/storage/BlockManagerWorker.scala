@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.{Logging}
+import org.apache.spark.Logging
 import org.apache.spark.network._
 import org.apache.spark.util.Utils
 

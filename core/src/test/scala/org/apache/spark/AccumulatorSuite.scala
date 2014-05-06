@@ -17,12 +17,11 @@
 
 package org.apache.spark
 
+import scala.collection.mutable
+
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
-import collection.mutable
-import java.util.Random
-import scala.math.exp
-import scala.math.signum
+
 import org.apache.spark.SparkContext._
 
 class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
@@ -67,7 +66,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkConte
 
   test ("add value to collection accumulators") {
     val maxI = 1000
-    for (nThreads <- List(1, 10)) { //test single & multi-threaded
+    for (nThreads <- List(1, 10)) { // test single & multi-threaded
       sc = new SparkContext("local[" + nThreads + "]", "test")
       val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
       val d = sc.parallelize(1 to maxI)
@@ -84,7 +83,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkConte
 
   test ("value not readable in tasks") {
     val maxI = 1000
-    for (nThreads <- List(1, 10)) { //test single & multi-threaded
+    for (nThreads <- List(1, 10)) { // test single & multi-threaded
       sc = new SparkContext("local[" + nThreads + "]", "test")
       val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
       val d = sc.parallelize(1 to maxI)
@@ -125,7 +124,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkConte
 
   test ("localValue readable in tasks") {
     val maxI = 1000
-    for (nThreads <- List(1, 10)) { //test single & multi-threaded
+    for (nThreads <- List(1, 10)) { // test single & multi-threaded
       sc = new SparkContext("local[" + nThreads + "]", "test")
       val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
       val groupedInts = (1 to (maxI/20)).map {x => (20 * (x - 1) to 20 * x).toSet}
