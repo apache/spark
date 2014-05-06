@@ -60,11 +60,9 @@ trait ExecutorRunnableUtil extends Logging {
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
     JAVA_OPTS += ClientBase.getLog4jConfiguration(localResources)
 
-    // This is needed for the authentication configs because the Executor has to know whether
-    // to use authentication before it registers with the Scheduler.
-    // We should see if it makes sense to only do for the auth settings, but for now just do them
-    // all.
-    for ((k, v) <- sparkConf.getAll) {
+    // This is needed for the authentication configs because the Executor has to
+    // know whether to use authentication before it registers with the Scheduler.
+    for ((k, v) <- sparkConf.getAll.filter{case (k, v) => k.startsWith("spark.auth")}) {
       JAVA_OPTS += "-D" + k + "=" + "\\\"" + v + "\\\""
     }
 
