@@ -132,6 +132,14 @@ class JavaSQLContext(sparkContext: JavaSparkContext) {
         case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
         case c: Class[_] if c == java.lang.Float.TYPE => FloatType
         case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+
+        case c: Class[_] if c == classOf[java.lang.Short] => ShortType
+        case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
+        case c: Class[_] if c == classOf[java.lang.Long] => LongType
+        case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
+        case c: Class[_] if c == classOf[java.lang.Byte] => ByteType
+        case c: Class[_] if c == classOf[java.lang.Float] => FloatType
+        case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
       }
       // TODO: Nullability could be stricter.
       AttributeReference(property.getName, dataType, nullable = true)()

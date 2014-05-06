@@ -36,6 +36,24 @@ case class ReflectData(
     timestampField: Timestamp,
     seqInt: Seq[Int])
 
+case class NullReflectData(
+    intField: java.lang.Integer,
+    longField: java.lang.Long,
+    floatField: java.lang.Float,
+    doubleField: java.lang.Double,
+    shortField: java.lang.Short,
+    byteField: java.lang.Byte,
+    booleanField: java.lang.Boolean)
+
+case class OptionalReflectData(
+    intField: Option[Int],
+    longField: Option[Long],
+    floatField: Option[Float],
+    doubleField: Option[Double],
+    shortField: Option[Short],
+    byteField: Option[Byte],
+    booleanField: Option[Boolean])
+
 case class ReflectBinary(data: Array[Byte])
 
 class ScalaReflectionRelationSuite extends FunSuite {
@@ -46,6 +64,22 @@ class ScalaReflectionRelationSuite extends FunSuite {
     rdd.registerAsTable("reflectData")
 
     assert(sql("SELECT * FROM reflectData").collect().head === data.productIterator.toSeq)
+  }
+
+  test("query case class RDD with nulls") {
+    val data = NullReflectData(null, null, null, null, null, null, null)
+    val rdd = sparkContext.parallelize(data :: Nil)
+    rdd.registerAsTable("reflectNullData")
+
+    assert(sql("SELECT * FROM reflectNullData").collect().head === Seq.fill(7)(null))
+  }
+
+  test("query case class RDD with Nones") {
+    val data = OptionalReflectData(None, None, None, None, None, None, None)
+    val rdd = sparkContext.parallelize(data :: Nil)
+    rdd.registerAsTable("reflectOptionalData")
+
+    assert(sql("SELECT * FROM reflectOptionalData").collect().head === Seq.fill(7)(null))
   }
 
   // Equality is broken for Arrays, so we test that separately.
