@@ -280,13 +280,11 @@ private[spark] object Utils extends Logging {
           out.write(buf, 0, n)
         }
       }
-    }
-    finally {
+    } finally {
       if (closeStreams) {
         try {
           in.close()
-        }
-        finally {
+        } finally {
           out.close()
         }
       }
@@ -843,8 +841,7 @@ private[spark] object Utils extends Logging {
     try {
       stream.skip(effectiveStart)
       stream.read(buff)
-    }
-    finally {
+    } finally {
       stream.close()
     }
     Source.fromBytes(buff).mkString
