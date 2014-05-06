@@ -164,6 +164,7 @@ case class Sort(
 @DeveloperApi
 object ExistingRdd {
   def convertToCatalyst(a: Any): Any = a match {
+    case o: Option[_] => o.orNull
     case s: Seq[Any] => s.map(convertToCatalyst)
     case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
     case other => other
@@ -180,7 +181,7 @@ object ExistingRdd {
         bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {
-            mutableRow(i) = r.productElement(i)
+            mutableRow(i) = convertToCatalyst(r.productElement(i))
             i += 1
           }
 

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Row => ScalaRow}
 /**
  * A result row from a SparkSQL query.
  */
-class Row(row: ScalaRow) extends Serializable {
+class Row(private[spark] val row: ScalaRow) extends Serializable {
 
   /** Returns the number of columns present in this Row. */
   def length: Int = row.length

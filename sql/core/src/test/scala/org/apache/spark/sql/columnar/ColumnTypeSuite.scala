@@ -21,11 +21,12 @@ import java.nio.ByteBuffer
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
-class ColumnTypeSuite extends FunSuite {
+class ColumnTypeSuite extends FunSuite with Logging {
   val DEFAULT_BUFFER_SIZE = 512
 
   test("defaultSize") {
@@ -163,7 +164,7 @@ class ColumnTypeSuite extends FunSuite {
 
       buffer.rewind()
       seq.foreach { expected =>
-        println("buffer = " + buffer + ", expected = " + expected)
+        logger.info("buffer = " + buffer + ", expected = " + expected)
         val extracted = columnType.extract(buffer)
         assert(
           expected === extracted,
