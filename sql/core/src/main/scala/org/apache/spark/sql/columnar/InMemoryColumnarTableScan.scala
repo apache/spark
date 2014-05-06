@@ -20,8 +20,12 @@ package org.apache.spark.sql.columnar
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Attribute}
 import org.apache.spark.sql.execution.{SparkPlan, LeafNode}
 import org.apache.spark.sql.Row
+import org.apache.spark.SparkConf
 
-private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], child: SparkPlan)
+private[sql] case class InMemoryColumnarTableScan(
+    attributes: Seq[Attribute],
+    child: SparkPlan,
+    useCompression: Boolean)
   extends LeafNode {
 
   override def output: Seq[Attribute] = attributes
@@ -30,7 +34,7 @@ private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], ch
     val output = child.output
     val cached = child.execute().mapPartitions { iterator =>
       val columnBuilders = output.map { attribute =>
-        ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name)
+        ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name, useCompression)
       }.toArray
 
       var row: Row = null
