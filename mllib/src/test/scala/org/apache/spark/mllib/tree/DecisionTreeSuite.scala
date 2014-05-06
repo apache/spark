@@ -405,9 +405,9 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    val leftFilter = Filter(new Split(0, 400, FeatureType.Continuous,List()), -1)
-    val rightFilter = Filter(new Split(0, 400, FeatureType.Continuous,List()) ,1)
-    val filters = Array[List[Filter]](List(),List(leftFilter),List(rightFilter))
+    val leftFilter = Filter(new Split(0, 400, FeatureType.Continuous, List()), -1)
+    val rightFilter = Filter(new Split(0, 400, FeatureType.Continuous, List()) ,1)
+    val filters = Array[List[Filter]](List(),List(leftFilter), List(rightFilter))
     val parentImpurities = Array(0.5, 0.5, 0.5)
 
     // Single group second level tree construction.
