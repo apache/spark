@@ -37,7 +37,7 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
   test("linear regression") {
     val testRDD = sc.parallelize(LinearDataGenerator.generateLinearInput(
       3.0, Array(10.0, 10.0), 100, 42), 2).cache()
-    val linReg = new LinearRegressionWithSGD()
+    val linReg = new LinearRegressionWithSGD().setIntercept(true)
     linReg.optimizer.setNumIterations(1000).setStepSize(1.0)
 
     val model = linReg.run(testRDD)

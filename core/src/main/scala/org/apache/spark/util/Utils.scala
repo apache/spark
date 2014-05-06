@@ -32,6 +32,7 @@ import scala.util.Try
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
@@ -220,9 +221,9 @@ private[spark] object Utils extends Logging {
   def hasRootAsShutdownDeleteDir(file: File): Boolean = {
     val absolutePath = file.getAbsolutePath()
     val retval = shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.find { path =>
+      shutdownDeletePaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }.isDefined
+      }
     }
     if (retval) {
       logInfo("path = " + file + ", already present as root for deletion.")
@@ -235,10 +236,10 @@ private[spark] object Utils extends Logging {
   // paths - resulting in Exception and incomplete cleanup.
   def hasRootAsShutdownDeleteDir(file: TachyonFile): Boolean = {
     val absolutePath = file.getPath()
-    val retval = shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.find { path =>
+    val retval = shutdownDeleteTachyonPaths.synchronized {
+      shutdownDeleteTachyonPaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }.isDefined
+      }
     }
     if (retval) {
       logInfo("path = " + file + ", already present as root for deletion.")
@@ -1062,15 +1063,23 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * return true if this is Windows.
+   * Return the absolute path of a file in the given directory.
    */
-  def isWindows = Option(System.getProperty("os.name")).
-    map(_.startsWith("Windows")).getOrElse(false)
+  def getFilePath(dir: File, fileName: String): Path = {
+    assert(dir.isDirectory)
+    val path = new File(dir, fileName).getAbsolutePath
+    new Path(path)
+  }
+
+  /**
+   * Return true if this is Windows.
+   */
+  def isWindows = SystemUtils.IS_OS_WINDOWS
 
   /**
    * Indicates whether Spark is currently running unit tests.
    */
-  private[spark] def isTesting = {
+  def isTesting = {
     sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
   }
 }
