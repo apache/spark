@@ -42,11 +42,11 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
 
   override def eval(input: Row): Any = {
     val value = child.eval(input)
-    if(value == null) {
+    if (value == null) {
       null
     } else {
       val key = ordinal.eval(input)
-      if(key == null) {
+      if (key == null) {
         null
       } else {
         if (child.dataType.isInstanceOf[ArrayType]) {

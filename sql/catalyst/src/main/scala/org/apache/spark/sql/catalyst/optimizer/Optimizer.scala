@@ -95,8 +95,8 @@ object NullPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ Count(Literal(null, _)) => Literal(0, e.dataType)
-      case e @ Sum(Literal(c, _)) if(c == 0) => Literal(0, e.dataType)
-      case e @ Average(Literal(c, _)) if(c == 0) => Literal(0.0, e.dataType)
+      case e @ Sum(Literal(c, _)) if c == 0 => Literal(0, e.dataType)
+      case e @ Average(Literal(c, _)) if c == 0 => Literal(0.0, e.dataType)
       case e @ IsNull(c) if c.nullable == false => Literal(false, BooleanType)
       case e @ IsNotNull(c) if c.nullable == false => Literal(true, BooleanType)
       case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
@@ -107,17 +107,17 @@ object NullPropagation extends Rule[LogicalPlan] {
           case Literal(null, _) => false
           case _ => true
         })
-        if(newChildren.length == 0) {
+        if (newChildren.length == 0) {
           Literal(null, e.dataType)
-        } else if(newChildren.length == 1) {
+        } else if (newChildren.length == 1) {
           newChildren(0)
         } else {
           Coalesce(newChildren)
         }
       }
-      case e @ If(Literal(v, _), trueValue, falseValue) => if(v == true) trueValue else falseValue
-      case e @ In(Literal(v, _), list) if(list.exists(c => c match {
-          case Literal(candidate, _) if(candidate == v) => true
+      case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue
+      case e @ In(Literal(v, _), list) if (list.exists(c => c match {
+          case Literal(candidate, _) if candidate == v => true
           case _ => false
         })) => Literal(true, BooleanType)
       case e: UnaryMinus => e.child match {
@@ -151,6 +151,7 @@ object NullPropagation extends Rule[LogicalPlan] {
     }
   }
 }
+
 /**
  * Replaces [[catalyst.expressions.Expression Expressions]] that can be statically evaluated with
  * equivalent [[catalyst.expressions.Literal Literal]] values.
