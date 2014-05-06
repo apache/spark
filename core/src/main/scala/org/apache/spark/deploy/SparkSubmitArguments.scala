@@ -333,6 +333,6 @@ object SparkSubmitArguments {
         val message = s"Failed when loading Spark properties file ${file.getName}"
         throw new SparkException(message, e)
     }
-    properties.stringPropertyNames().toSeq.map(k => (k, properties(k)))
+    properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
   }
 }
