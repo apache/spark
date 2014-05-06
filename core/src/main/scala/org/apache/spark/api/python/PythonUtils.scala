@@ -29,7 +29,7 @@ private[spark] object PythonUtils {
   /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
   def sparkPythonPath: String = {
     val pythonPath = new ArrayBuffer[String]
-    for(sparkHome <- sys.env.get("SPARK_HOME")) {
+    for (sparkHome <- sys.env.get("SPARK_HOME")) {
       pythonPath += Seq(sparkHome, "python").mkString(File.separator)
       pythonPath += Seq(sparkHome, "python", "lib", "py4j-0.8.1-src.zip").mkString(File.separator)
     }
