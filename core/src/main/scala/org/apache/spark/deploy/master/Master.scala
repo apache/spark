@@ -520,9 +520,9 @@ private[spark] class Master(
         val memoryNotEnoughFlags = new Array[Boolean](numUsable)
         while (leftCoreToAssign > 0 && memoryNotEnoughFlags.contains(false)) {
           val coreToAssign = math.min(coreNumPerExecutor, leftCoreToAssign)
-          if (usableWorkers(pos).coresFree - assigned(pos).sum > coreToAssign &&
+          if (usableWorkers(pos).coresFree - assigned(pos).sum >= coreToAssign &&
             !memoryNotEnoughFlags(pos)) {
-            if (usableWorkers(pos).memoryFree >
+            if (usableWorkers(pos).memoryFree >=
               app.desc.memoryPerExecutor * (assigned(pos).length + 1)) {
               leftCoreToAssign -= coreToAssign
               assigned(pos) += coreToAssign
