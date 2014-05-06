@@ -54,7 +54,8 @@ class DogStatsd(object):
     def increment(self, metric, value=1, tags=None, sample_rate=1):
         """
         Increment a counter, optionally setting a value, tags and a sample
-        rate.
+        rate. Tags is an optional list of key value pairs separated by
+        colons.
 
         >>> statsd.increment('page.views')
         >>> statsd.increment('files.transferred', 124)
@@ -134,9 +135,11 @@ class DogStatsd(object):
         if sample_rate != 1:
             payload.extend(["|@", sample_rate])
         if tags:
-            payload.extend(["|#", ",".join(tags)])
+            if not type(tags) is list:
+                tags = [tags]
+            payload.extend(["|#", ",".join([str(tag) for tag in tags])])
 
         try:
             self.socket.send("".join(imap(str, payload)))
         except socket.error:
-            log.exception("Error submitting metric")
+            log.exception("Error submitting metric %s" % metric)
