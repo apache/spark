@@ -33,6 +33,9 @@ class HiveQuerySuite extends HiveComparisonTest {
     hiveql("FROM src SELECT key").collect()
   }
 
+  createQueryTest("Constant Folding Optimization for AVG_SUM_COUNT",
+    "SELECT AVG(0), SUM(0), COUNT(null), COUNT(value) FROM src GROUP BY key")
+
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")
 

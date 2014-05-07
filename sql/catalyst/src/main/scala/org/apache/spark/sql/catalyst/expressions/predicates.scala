@@ -65,8 +65,7 @@ abstract class BinaryPredicate extends BinaryExpression with Predicate {
   def nullable = left.nullable || right.nullable
 }
 
-case class Not(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
-  def references = child.references
+case class Not(child: Expression) extends UnaryExpression with Predicate {
   override def foldable = child.foldable
   def nullable = child.nullable
   override def toString = s"NOT $child"
