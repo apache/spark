@@ -23,7 +23,7 @@ from pyspark.mllib._common import \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
     _linear_predictor_typecheck, _have_scipy, _scipy_issparse
-from pyspark.mllib.linalg import SparseVector
+from pyspark.mllib.linalg import SparseVector, Vectors
 
 
 class LabeledPoint(object):
@@ -44,6 +44,26 @@ class LabeledPoint(object):
         else:
             raise TypeError("Expected NumPy array, list, SparseVector, or scipy.sparse matrix")
 
+    def __str__(self):
+        return "(" + ",".join((str(self.label), Vectors.stringify(self.features))) + ")"
+
+
+    @staticmethod
+    def parse(s):
+        """
+        Parses a string resulted from str() to a LabeledPoint.
+
+        >>> print LabeledPoint.parse("(1.0,[0.0,1.0])")
+        (1.0,[0.0,1.0])
+        >>> print LabeledPoint.parse("(1.0,(2,[1],[1.0]))")
+        (1.0,(2,[1],[1.0]))
+        """
+        return LabeledPoint._parse_structured(eval(s))
+
+
+    @staticmethod
+    def _parse_structured(data):
+        return LabeledPoint(data[0], Vectors._parse_structured(data[1]))
 
 class LinearModel(object):
     """A linear model that has a vector of coefficients and an intercept."""

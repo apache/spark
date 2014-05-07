@@ -233,6 +233,7 @@ class Vectors(object):
         """
         return array(elements, dtype=float64)
 
+
     @staticmethod
     def parse(s):
         """
@@ -245,6 +246,7 @@ class Vectors(object):
         """
         return Vectors._parse_structured(eval(s))
 
+
     @staticmethod
     def _parse_structured(data):
         if type(data) == list:
@@ -253,6 +255,7 @@ class Vectors(object):
             return Vectors.sparse(data[0], data[1], data[2])
         else:
             raise SyntaxError("Cannot recognize " + data)
+
 
     @staticmethod
     def stringify(vector):
