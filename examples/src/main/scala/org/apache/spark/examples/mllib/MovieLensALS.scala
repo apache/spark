@@ -64,7 +64,7 @@ object MovieLensALS {
         .text(s"use Kryo serialization")
         .action((_, c) => c.copy(kryo = true))
       opt[Unit]("implicitPrefs")
-        .text(s"use implicit preference")
+        .text("use implicit preference")
         .action((_, c) => c.copy(implicitPrefs = true))
       arg[String]("<input>")
         .required()
@@ -93,7 +93,7 @@ object MovieLensALS {
     val ratings = sc.textFile(params.input).map { line =>
       val fields = line.split("::")
       if (params.implicitPrefs) {
-        /**
+        /*
          * MovieLens ratings are on a scale of 1-5:
          * 5: Must see
          * 4: Will enjoy
@@ -105,9 +105,7 @@ object MovieLensALS {
          * 5 -> 2.5, 4 -> 1.5, 3 -> 0.5, 2 -> -0.5, 1 -> -1.5. This mappings means unobserved
          * entries are generally between It's okay and Fairly bad.
          * The semantics of 0 in this expanded world of non-positive weights
-         * are "the same as never having interacted at all"
-         * It's possible that 0 values are ignored when constructing the sparse representation,
-         * because the 0s are implicit. This would be a problem, at least, a theoretical one.
+         * are "the same as never having interacted at all".
          */
         Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
       } else {
@@ -124,14 +122,14 @@ object MovieLensALS {
     val splits = ratings.randomSplit(Array(0.8, 0.2))
     val training = splits(0).cache()
     val test = if (params.implicitPrefs) {
-      /**
+      /*
        * 0 means "don't know" and positive values mean "confident that the prediction should be 1".
        * Negative values means "confident that the prediction should be 0".
        * We have in this case used some kind of weighted RMSE. The weight is the absolute value of
        * the confidence. The error is the difference between prediction and either 1 or 0,
        * depending on whether r is positive or negative.
        */
-      splits(1).map(x => Rating(x.user, x.product, if(x.rating > 0) 1.0 else 0.0))
+      splits(1).map(x => Rating(x.user, x.product, if (x.rating > 0) 1.0 else 0.0))
     } else {
       splits(1)
     }.cache()
@@ -159,12 +157,12 @@ object MovieLensALS {
   /** Compute RMSE (Root Mean Squared Error). */
   def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], implicitPrefs: Boolean) = {
 
-    def evalRating(r: Double) =
-      if (!implicitPrefs) r else if (r > 1.0) 1.0 else if (r < 0.0) 0.0 else r
+    def mapPredictedRating(r: Double) = if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
 
     val predictions: RDD[Rating] = model.predict(data.map(x => (x.user, x.product)))
-    val predictionsAndRatings = predictions.map(x => ((x.user, x.product), evalRating(x.rating)))
-        .join(data.map(x => ((x.user, x.product), x.rating))).values
+    val predictionsAndRatings = predictions.map{ x =>
+      ((x.user, x.product), mapPredictedRating(x.rating))
+    }.join(data.map(x => ((x.user, x.product), x.rating))).values
     math.sqrt(predictionsAndRatings.map(x => (x._1 - x._2) * (x._1 - x._2)).mean())
   }
 }
