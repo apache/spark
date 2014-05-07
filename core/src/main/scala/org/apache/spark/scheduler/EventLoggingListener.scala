@@ -18,11 +18,16 @@
 package org.apache.spark.scheduler
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
+import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{FileLogger, JsonProtocol}
 
@@ -36,29 +41,38 @@ import org.apache.spark.util.{FileLogger, JsonProtocol}
  *   spark.eventLog.dir - Path to the directory in which events are logged.
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
  */
-private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
+private[spark] class EventLoggingListener(
+    appName: String,
+    sparkConf: SparkConf,
+    hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration())
   extends SparkListener with Logging {
 
   import EventLoggingListener._
 
-  private val shouldCompress = conf.getBoolean("spark.eventLog.compress", false)
-  private val shouldOverwrite = conf.getBoolean("spark.eventLog.overwrite", false)
-  private val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-  private val logBaseDir = conf.get("spark.eventLog.dir", "/tmp/spark-events").stripSuffix("/")
+  private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
+  private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
+  private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
+  private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
+  private val logBaseDir = sparkConf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
   private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis
   val logDir = logBaseDir + "/" + name
 
-  private val logger =
-    new FileLogger(logDir, conf, outputBufferSize, shouldCompress, shouldOverwrite)
+  protected val logger = new FileLogger(logDir, sparkConf, hadoopConf, outputBufferSize,
+    shouldCompress, shouldOverwrite, Some(LOG_FILE_PERMISSIONS))
+
+  // For testing. Keep track of all JSON serialized events that have been logged.
+  private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
   /**
    * Begin logging events.
    * If compression is used, log a file that indicates which compression library is used.
    */
   def start() {
+    logger.start()
     logInfo("Logging events to %s".format(logDir))
     if (shouldCompress) {
-      val codec = conf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
+      val codec =
+        sparkConf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
       logger.newFile(COMPRESSION_CODEC_PREFIX + codec)
     }
     logger.newFile(SPARK_VERSION_PREFIX + SparkContext.SPARK_VERSION)
@@ -67,10 +81,13 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
 
   /** Log the event as JSON. */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
-    val eventJson = compact(render(JsonProtocol.sparkEventToJson(event)))
-    logger.logLine(eventJson)
+    val eventJson = JsonProtocol.sparkEventToJson(event)
+    logger.logLine(compact(render(eventJson)))
     if (flushLogger) {
       logger.flush()
+    }
+    if (testing) {
+      loggedEvents += eventJson
     }
   }
 
@@ -115,10 +132,12 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
 }
 
 private[spark] object EventLoggingListener extends Logging {
+  val DEFAULT_LOG_DIR = "/tmp/spark-events"
   val LOG_PREFIX = "EVENT_LOG_"
   val SPARK_VERSION_PREFIX = "SPARK_VERSION_"
   val COMPRESSION_CODEC_PREFIX = "COMPRESSION_CODEC_"
   val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
+  val LOG_FILE_PERMISSIONS = FsPermission.createImmutable(Integer.parseInt("770", 8).toShort)
 
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = new mutable.HashMap[String, CompressionCodec]

@@ -71,7 +71,7 @@ case class ScriptTransformation(
       iter
         .map(outputProjection)
         // TODO: Use SerDe
-        .map(_.mkString("", "\t", "\n").getBytes).foreach(outputStream.write)
+        .map(_.mkString("", "\t", "\n").getBytes("utf-8")).foreach(outputStream.write)
       outputStream.close()
       readerThread.join()
       outputLines.toIterator

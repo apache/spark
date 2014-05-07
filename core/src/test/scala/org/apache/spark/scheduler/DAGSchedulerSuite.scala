@@ -21,6 +21,8 @@ import scala.Tuple2
 import scala.collection.mutable.{HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 
+import akka.actor._
+import akka.testkit.{ImplicitSender, TestKit, TestActorRef}
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark._
@@ -28,19 +30,16 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 
-/**
- * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler
- * rather than spawning an event loop thread as happens in the real code. They use EasyMock
- * to mock out two classes that DAGScheduler interacts with: TaskScheduler (to which TaskSets are
- * submitted) and BlockManagerMaster (from which cache locations are retrieved and to which dead
- * host notifications are sent). In addition, tests may check for side effects on a non-mocked
- * MapOutputTracker instance.
- *
- * Tests primarily consist of running DAGScheduler#processEvent and
- * DAGScheduler#submitWaitingStages (via test utility functions like runEvent or respondToTaskSet)
- * and capturing the resulting TaskSets from the mock TaskScheduler.
- */
-class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
+class BuggyDAGEventProcessActor extends Actor {
+  val state = 0
+  def receive = {
+    case _ => throw new SparkException("error")
+  }
+}
+
+class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuite
+  with ImplicitSender with BeforeAndAfter with LocalSparkContext {
+
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
@@ -59,7 +58,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
       taskSets += taskSet
     }
-    override def cancelTasks(stageId: Int) {
+    override def cancelTasks(stageId: Int, interruptThread: Boolean) {
       cancelledStages += stageId
     }
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
@@ -83,6 +82,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
 
   var mapOutputTracker: MapOutputTrackerMaster = null
   var scheduler: DAGScheduler = null
+  var dagEventProcessTestActor: TestActorRef[DAGSchedulerEventProcessActor] = null
 
   /**
    * Set of cache locations to return from our mock BlockManagerMaster.
@@ -122,6 +122,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     results.clear()
     mapOutputTracker = new MapOutputTrackerMaster(conf)
     scheduler = new DAGScheduler(
+        sc,
         taskScheduler,
         sc.listenerBus,
         mapOutputTracker,
@@ -132,10 +133,13 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
         runLocallyWithinThread(job)
       }
     }
+    dagEventProcessTestActor = TestActorRef[DAGSchedulerEventProcessActor](
+      Props(classOf[DAGSchedulerEventProcessActor], scheduler))(system)
   }
 
-  after {
-    scheduler.stop()
+  override def afterAll() {
+    super.afterAll()
+    TestKit.shutdownActorSystem(system)
   }
 
   /**
@@ -179,8 +183,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
    * DAGScheduler event loop.
    */
   private def runEvent(event: DAGSchedulerEvent) {
-    assert(!scheduler.processEvent(event))
-    scheduler.submitWaitingStages()
+    dagEventProcessTestActor.receive(event)
   }
 
   /**
@@ -210,7 +213,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       listener: JobListener = jobListener): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
     runEvent(JobSubmitted(jobId, rdd, func, partitions, allowLocal, null, listener))
-    return jobId
+    jobId
   }
 
   /** Sends TaskSetFailed to the scheduler. */
@@ -224,19 +227,17 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   }
 
   test("zero split job") {
-    val rdd = makeRdd(0, Nil)
     var numResults = 0
     val fakeListener = new JobListener() {
       override def taskSucceeded(partition: Int, value: Any) = numResults += 1
       override def jobFailed(exception: Exception) = throw exception
     }
-    submit(rdd, Array(), listener = fakeListener)
+    submit(makeRdd(0, Nil), Array(), listener = fakeListener)
     assert(numResults === 0)
   }
 
   test("run trivial job") {
-    val rdd = makeRdd(1, Nil)
-    submit(rdd, Array(0))
+    submit(makeRdd(1, Nil), Array(0))
     complete(taskSets(0), List((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
@@ -530,6 +531,18 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assertDataStructuresEmpty
   }
 
+  test("DAGSchedulerActorSupervisor closes the SparkContext when EventProcessActor crashes") {
+    val actorSystem = ActorSystem("test")
+    val supervisor = actorSystem.actorOf(
+      Props(classOf[DAGSchedulerActorSupervisor], scheduler), "dagSupervisor")
+    supervisor ! Props[BuggyDAGEventProcessActor]
+    val child = expectMsgType[ActorRef]
+    watch(child)
+    child ! "hi"
+    expectMsgPF(){ case Terminated(child) => () }
+    assert(scheduler.sc.dagScheduler === null)
+  }
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
@@ -562,3 +575,4 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(scheduler.waitingStages.isEmpty)
   }
 }
+

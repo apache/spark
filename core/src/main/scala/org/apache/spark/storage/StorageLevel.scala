@@ -19,15 +19,20 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
+ * :: DeveloperApi ::
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
  * or Tachyon, whether to drop the RDD to disk if it falls out of memory or Tachyon , whether to
  * keep the data in memory in a serialized format, and whether to replicate the RDD partitions on
  * multiple nodes.
+ *
  * The [[org.apache.spark.storage.StorageLevel$]] singleton object contains some static constants
  * for commonly useful storage levels. To create your own storage level object, use the
  * factory method of the singleton object (`StorageLevel(...)`).
  */
+@DeveloperApi
 class StorageLevel private(
     private var useDisk_ : Boolean,
     private var useMemory_ : Boolean,
@@ -52,9 +57,9 @@ class StorageLevel private(
   assert(replication < 40, "Replication restricted to be less than 40 for calculating hashcodes")
 
   if (useOffHeap) {
-    require(useDisk == false, "Off-heap storage level does not support using disk")
-    require(useMemory == false, "Off-heap storage level does not support using heap memory")
-    require(deserialized == false, "Off-heap storage level does not support deserialized storage")
+    require(!useDisk, "Off-heap storage level does not support using disk")
+    require(!useMemory, "Off-heap storage level does not support using heap memory")
+    require(!deserialized, "Off-heap storage level does not support deserialized storage")
     require(replication == 1, "Off-heap storage level does not support multiple replication")
   }
 
@@ -142,21 +147,37 @@ object StorageLevel {
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
   val OFF_HEAP = new StorageLevel(false, false, true, false)
 
-  /** Create a new StorageLevel object without setting useOffHeap */
+  /**
+   * :: DeveloperApi ::
+   * Create a new StorageLevel object without setting useOffHeap.
+   */
+  @DeveloperApi
   def apply(useDisk: Boolean, useMemory: Boolean, useOffHeap: Boolean,
     deserialized: Boolean, replication: Int) = getCachedStorageLevel(
       new StorageLevel(useDisk, useMemory, useOffHeap, deserialized, replication))
 
-  /** Create a new StorageLevel object */
+  /**
+   * :: DeveloperApi ::
+   * Create a new StorageLevel object.
+   */
+  @DeveloperApi
   def apply(useDisk: Boolean, useMemory: Boolean,
     deserialized: Boolean, replication: Int = 1) = getCachedStorageLevel(
       new StorageLevel(useDisk, useMemory, false, deserialized, replication))
 
-  /** Create a new StorageLevel object from its integer representation */
+  /**
+   * :: DeveloperApi ::
+   * Create a new StorageLevel object from its integer representation.
+   */
+  @DeveloperApi
   def apply(flags: Int, replication: Int): StorageLevel =
     getCachedStorageLevel(new StorageLevel(flags, replication))
 
-  /** Read StorageLevel object from ObjectInput stream */
+  /**
+   * :: DeveloperApi ::
+   * Read StorageLevel object from ObjectInput stream.
+   */
+  @DeveloperApi
   def apply(in: ObjectInput): StorageLevel = {
     val obj = new StorageLevel()
     obj.readExternal(in)

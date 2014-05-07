@@ -24,7 +24,11 @@ import org.apache.spark.sql.catalyst.types._
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   override def foldable = child.foldable
-  def nullable = child.nullable
+  def nullable = (child.dataType, dataType) match {
+    case (StringType, _: NumericType) => true
+    case (StringType, TimestampType)  => true
+    case _                            => child.nullable
+  }
   override def toString = s"CAST($child, $dataType)"
 
   type EvaluatedType = Any
@@ -111,7 +115,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case StringType => nullOrCast[String](_, s => try s.toLong catch {
       case _: NumberFormatException => null
     })
-    case BooleanType => nullOrCast[Boolean](_, b => if(b) 1 else 0)
+    case BooleanType => nullOrCast[Boolean](_, b => if(b) 1L else 0L)
     case TimestampType => nullOrCast[Timestamp](_, t => timestampToLong(t))
     case DecimalType => nullOrCast[BigDecimal](_, _.toLong)
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
@@ -131,7 +135,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case StringType => nullOrCast[String](_, s => try s.toShort catch {
       case _: NumberFormatException => null
     })
-    case BooleanType => nullOrCast[Boolean](_, b => if(b) 1 else 0)
+    case BooleanType => nullOrCast[Boolean](_, b => if(b) 1.toShort else 0.toShort)
     case TimestampType => nullOrCast[Timestamp](_, t => timestampToLong(t).toShort)
     case DecimalType => nullOrCast[BigDecimal](_, _.toShort)
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
@@ -141,7 +145,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case StringType => nullOrCast[String](_, s => try s.toByte catch {
       case _: NumberFormatException => null
     })
-    case BooleanType => nullOrCast[Boolean](_, b => if(b) 1 else 0)
+    case BooleanType => nullOrCast[Boolean](_, b => if(b) 1.toByte else 0.toByte)
     case TimestampType => nullOrCast[Timestamp](_, t => timestampToLong(t).toByte)
     case DecimalType => nullOrCast[BigDecimal](_, _.toByte)
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
@@ -162,7 +166,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case StringType => nullOrCast[String](_, s => try s.toDouble catch {
       case _: NumberFormatException => null
     })
-    case BooleanType => nullOrCast[Boolean](_, b => if(b) 1 else 0)
+    case BooleanType => nullOrCast[Boolean](_, b => if(b) 1d else 0d)
     case TimestampType => nullOrCast[Timestamp](_, t => timestampToDouble(t))
     case DecimalType => nullOrCast[BigDecimal](_, _.toDouble)
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)
@@ -172,7 +176,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case StringType => nullOrCast[String](_, s => try s.toFloat catch {
       case _: NumberFormatException => null
     })
-    case BooleanType => nullOrCast[Boolean](_, b => if(b) 1 else 0)
+    case BooleanType => nullOrCast[Boolean](_, b => if(b) 1f else 0f)
     case TimestampType => nullOrCast[Timestamp](_, t => timestampToDouble(t).toFloat)
     case DecimalType => nullOrCast[BigDecimal](_, _.toFloat)
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)

@@ -43,7 +43,7 @@ private[spark] trait TaskScheduler extends Lifecycle {
   def submitTasks(taskSet: TaskSet): Unit
 
   // Cancel a stage.
-  def cancelTasks(stageId: Int)
+  def cancelTasks(stageId: Int, interruptThread: Boolean)
 
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit

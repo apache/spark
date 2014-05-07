@@ -9,25 +9,26 @@ It also supports a rich set of higher-level tools including [Shark](http://shark
 
 # Downloading
 
-Get Spark by visiting the [downloads page](http://spark.apache.org/downloads.html) of the Apache Spark site. This documentation is for Spark version {{site.SPARK_VERSION}}.
+Get Spark by visiting the [downloads page](http://spark.apache.org/downloads.html) of the Apache Spark site. This documentation is for Spark version {{site.SPARK_VERSION}}. The downloads page 
+contains Spark packages for many popular HDFS versions. If you'd like to build Spark from 
+scratch, visit the [building with Maven](building-with-maven.html) page.
 
-Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). All you need to run it is to have `java` to installed on your system `PATH`, or the `JAVA_HOME` environment variable pointing to a Java installation.
+Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). All you need to run it is 
+to have `java` to installed on your system `PATH`, or the `JAVA_HOME` environment variable 
+pointing to a Java installation.
 
-# Building
-
-Spark uses [Simple Build Tool](http://www.scala-sbt.org), which is bundled with it. To compile the code, go into the top-level Spark directory and run
-
-    sbt/sbt assembly
-
-For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_BINARY_VERSION}}. If you write applications in Scala, you will need to use a compatible Scala version (e.g. {{site.SCALA_BINARY_VERSION}}.X) -- newer major versions may not work. You can get the right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
+For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_BINARY_VERSION}}. 
+If you write applications in Scala, you will need to use a compatible Scala version 
+(e.g. {{site.SCALA_BINARY_VERSION}}.X) -- newer major versions may not work. You can get the 
+right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
 
 # Running the Examples and Shell
 
-Spark comes with several sample programs.  Scala and Java examples are in the `examples` directory, and Python examples are in `python/examples`.
+Spark comes with several sample programs.  Scala, Java and Python examples are in the `examples/src/main` directory.
 To run one of the Java or Scala sample programs, use `./bin/run-example <class> <params>` in the top-level Spark directory
 (the `bin/run-example` script sets up the appropriate paths and launches that program).
 For example, try `./bin/run-example org.apache.spark.examples.SparkPi local`.
-To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try `./bin/pyspark ./python/examples/pi.py local`.
+To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try `./bin/pyspark ./examples/src/main/python/pi.py local`.
 
 Each example prints usage help when run with no parameters.
 
@@ -49,23 +50,6 @@ options for deployment:
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
 * [Apache Mesos](running-on-mesos.html)
 * [Hadoop YARN](running-on-yarn.html)
-
-# A Note About Hadoop Versions
-
-Spark uses the Hadoop-client library to talk to HDFS and other Hadoop-supported
-storage systems. Because the HDFS protocol has changed in different versions of
-Hadoop, you must build Spark against the same version that your cluster uses.
-By default, Spark links to Hadoop 1.0.4. You can change this by setting the
-`SPARK_HADOOP_VERSION` variable when compiling:
-
-    SPARK_HADOOP_VERSION=2.2.0 sbt/sbt assembly
-
-In addition, if you wish to run Spark on [YARN](running-on-yarn.html), set
-`SPARK_YARN` to `true`:
-
-    SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
-
-Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.
 
 # Where to Go from Here
 
@@ -112,10 +96,10 @@ Note that on Windows, you need to set the environment variables on separate line
 * [Shark](http://shark.cs.berkeley.edu): Apache Hive over Spark
 * [Mailing Lists](http://spark.apache.org/mailing-lists.html): ask questions about Spark here
 * [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
-  exercises about Spark, Shark, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/agenda-2012),
-  [slides](http://ampcamp.berkeley.edu/agenda-2012) and [exercises](http://ampcamp.berkeley.edu/exercises-2012) are
+  exercises about Spark, Shark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/3/),
+  [slides](http://ampcamp.berkeley.edu/3/) and [exercises](http://ampcamp.berkeley.edu/3/exercises/) are
   available online for free.
-* [Code Examples](http://spark.apache.org/examples.html): more are also available in the [examples subfolder](https://github.com/apache/spark/tree/master/examples/src/main/scala/) of Spark
+* [Code Examples](http://spark.apache.org/examples.html): more are also available in the [examples subfolder](https://github.com/apache/spark/tree/master/examples/src/main/scala/org/apache/spark/) of Spark
 * [Paper Describing Spark](http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf)
 * [Paper Describing Spark Streaming](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf)
 

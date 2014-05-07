@@ -22,7 +22,7 @@ import java.lang.management.ManagementFactory
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 /**
- * Command-line parser for the master.
+ * Command-line parser for the worker.
  */
 private[spark] class WorkerArguments(args: Array[String]) {
   var host = Utils.localHostName()

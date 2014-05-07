@@ -60,6 +60,7 @@ private[spark] class AppClient(
     var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times
+    var registrationRetryTimer: Option[Cancellable] = None
 
     override def preStart() {
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
@@ -83,22 +84,20 @@ private[spark] class AppClient(
 
     def registerWithMaster() {
       tryRegisterAllMasters()
-
       import context.dispatcher
       var retries = 0
-      lazy val retryTimer: Cancellable =
+      registrationRetryTimer = Some {
         context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
           retries += 1
           if (registered) {
-            retryTimer.cancel()
+            registrationRetryTimer.foreach(_.cancel())
           } else if (retries >= REGISTRATION_RETRIES) {
-            logError("All masters are unresponsive! Giving up.")
-            markDead()
+            markDead("All masters are unresponsive! Giving up.")
           } else {
             tryRegisterAllMasters()
           }
         }
-      retryTimer // start timer
+      }
     }
 
     def changeMaster(url: String) {
@@ -126,8 +125,7 @@ private[spark] class AppClient(
         listener.connected(appId)
 
       case ApplicationRemoved(message) =>
-        logError("Master removed our application: %s; stopping client".format(message))
-        markDisconnected()
+        markDead("Master removed our application: %s".format(message))
         context.stop(self)
 
       case ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) =>
@@ -158,7 +156,7 @@ private[spark] class AppClient(
         logWarning(s"Could not connect to $address: $cause")
 
       case StopAppClient =>
-        markDead()
+        markDead("Application has been stopped.")
         sender ! true
         context.stop(self)
     }
@@ -173,12 +171,17 @@ private[spark] class AppClient(
       }
     }
 
-    def markDead() {
+    def markDead(reason: String) {
       if (!alreadyDead) {
-        listener.dead()
+        listener.dead(reason)
         alreadyDead = true
       }
     }
+
+    override def postStop() {
+      registrationRetryTimer.foreach(_.cancel())
+    }
+
   }
 
   override protected def doStart() {

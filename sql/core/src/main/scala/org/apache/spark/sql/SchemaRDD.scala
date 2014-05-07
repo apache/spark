@@ -133,7 +133,7 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Project(exprs, logicalPlan))
 
   /**
-   * Filters the ouput, only returning those rows where `condition` evaluates to true.
+   * Filters the output, only returning those rows where `condition` evaluates to true.
    *
    * {{{
    *   schemaRDD.where('a === 'b)
@@ -151,9 +151,9 @@ class SchemaRDD(
    *
    * @param otherPlan the [[SchemaRDD]] that should be joined with this one.
    * @param joinType One of `Inner`, `LeftOuter`, `RightOuter`, or `FullOuter`. Defaults to `Inner.`
-   * @param on       An optional condition for the join operation.  This is equivilent to the `ON`
+   * @param on       An optional condition for the join operation.  This is equivalent to the `ON`
    *                 clause in standard SQL.  In the case of `Inner` joins, specifying a
-   *                 `condition` is equivilent to adding `where` clauses after the `join`.
+   *                 `condition` is equivalent to adding `where` clauses after the `join`.
    *
    * @group Query
    */
@@ -195,7 +195,7 @@ class SchemaRDD(
 
   /**
    * Applies a qualifier to the attributes of this relation.  Can be used to disambiguate attributes
-   * with the same name, for example, when peforming self-joins.
+   * with the same name, for example, when performing self-joins.
    *
    * {{{
    *   val x = schemaRDD.where('a === 1).as('x)
@@ -256,10 +256,11 @@ class SchemaRDD(
    * @group Query
    */
   @Experimental
+  override
   def sample(
-      fraction: Double,
       withReplacement: Boolean = true,
-      seed: Int = (math.random * 1000).toInt) =
+      fraction: Double,
+      seed: Long) =
     new SchemaRDD(sqlContext, Sample(fraction, withReplacement, seed, logicalPlan))
 
   /**

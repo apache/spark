@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 import org.apache.spark.SparkContext
+import org.apache.commons.lang3.StringEscapeUtils
 
 
 class ReplSuite extends FunSuite {
@@ -44,8 +45,7 @@ class ReplSuite extends FunSuite {
     }
     val interp = new SparkILoop(in, new PrintWriter(out), master)
     org.apache.spark.repl.Main.interp = interp
-    val separator = System.getProperty("path.separator")
-    interp.process(Array("-classpath", paths.mkString(separator)))
+    interp.process(Array("-classpath", paths.mkString(File.pathSeparator)))
     org.apache.spark.repl.Main.interp = null
     if (interp.sparkContext != null) {
       interp.sparkContext.stop()
@@ -185,11 +185,12 @@ class ReplSuite extends FunSuite {
     out.close()
     val output = runInterpreter("local",
       """
-        |var file = sc.textFile("%s/input").cache()
+        |var file = sc.textFile("%s").cache()
         |file.count()
         |file.count()
         |file.count()
-      """.stripMargin.format(tempDir.getAbsolutePath))
+      """.stripMargin.format(StringEscapeUtils.escapeJava(
+        tempDir.getAbsolutePath + File.separator + "input")))
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Long = 3", output)

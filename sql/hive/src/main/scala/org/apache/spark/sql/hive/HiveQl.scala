@@ -347,7 +347,11 @@ private[hive] object HiveQl {
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     // Just fake explain for any of the native commands.
     case Token("TOK_EXPLAIN", explainArgs) if nativeCommands contains explainArgs.head.getText =>
-      NoRelation
+      ExplainCommand(NoRelation)
+    // Create tables aren't native commands due to CTAS queries, but we still don't need to
+    // explain them.
+    case Token("TOK_EXPLAIN", explainArgs) if explainArgs.head.getText == "TOK_CREATETABLE" =>
+      ExplainCommand(NoRelation)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: _ :: Nil =
