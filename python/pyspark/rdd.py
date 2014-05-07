@@ -538,8 +538,8 @@ class RDD(object):
         """
         Return an RDD created by piping elements to a forked external process.
 
-        >>> sc.parallelize([1, 2, 3]).pipe('cat').collect()
-        ['1', '2', '3']
+        >>> sc.parallelize(['1', '2', '', '3']).pipe('cat').collect()
+        ['1', '2', '', '3']
         """
         def func(iterator):
             pipe = Popen(shlex.split(command), env=env, stdin=PIPE, stdout=PIPE)
@@ -548,7 +548,7 @@ class RDD(object):
                     out.write(str(obj).rstrip('\n') + '\n')
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()
-            return (x.rstrip('\n') for x in pipe.stdout)
+            return (x.rstrip('\n') for x in iter(pipe.stdout.readline, ''))
         return self.mapPartitions(func)
 
     def foreach(self, f):

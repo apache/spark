@@ -62,6 +62,7 @@ if [[ ! "$@" =~ --package-only ]]; then
     -Pyarn -Phive -Pspark-ganglia-lgpl\
     release:perform
 
+  cd ..
   rm -rf spark
 fi
 
@@ -114,9 +115,9 @@ make_binary_release "hadoop2" "--with-yarn --hadoop 2.2.0"
 
 # Copy data
 echo "Copying release tarballs"
-ssh $USER_NAME@people.apache.org \
-  mkdir /home/$USER_NAME/public_html/spark-$RELEASE_VERSION-$RC_NAME
 rc_folder=spark-$RELEASE_VERSION-$RC_NAME
+ssh $USER_NAME@people.apache.org \
+  mkdir /home/$USER_NAME/public_html/$rc_folder
 scp spark-* \
   $USER_NAME@people.apache.org:/home/$USER_NAME/public_html/$rc_folder/
 
@@ -126,7 +127,9 @@ cd docs
 PRODUCTION=1 jekyll build
 echo "Copying release documentation"
 rc_docs_folder=${rc_folder}-docs
-rsync -r _site/* $USER_NAME@people.apache.org /home/$USER_NAME/public_html/$rc_docs_folder
+ssh $USER_NAME@people.apache.org \
+  mkdir /home/$USER_NAME/public_html/$rc_docs_folder
+rsync -r _site/* $USER_NAME@people.apache.org:/home/$USER_NAME/public_html/$rc_docs_folder
 
 echo "Release $RELEASE_VERSION completed:"
 echo "Git tag:\t $GIT_TAG"

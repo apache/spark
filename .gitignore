@@ -51,3 +51,9 @@ unit-tests.log
 rat-results.txt
 scalastyle.txt
 conf/spark-defaults.conf.bak
+
+# For Hive
+metastore_db/
+metastore/
+warehouse/
+TempStatsStore/

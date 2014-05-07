@@ -83,7 +83,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handle binary specified but not class") {
-    testPrematureExit(Array("foo.jar"), "Must specify a main class")
+    testPrematureExit(Array("foo.jar"), "No main class")
   }
 
   test("handles arguments with --key=val") {
@@ -94,9 +94,9 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handles arguments to user program") {
-    val clArgs = Seq("--name", "myApp", "userjar.jar", "some", "--random", "args", "here")
+    val clArgs = Seq("--name", "myApp", "--class", "Foo", "userjar.jar", "some", "--weird", "args")
     val appArgs = new SparkSubmitArguments(clArgs)
-    appArgs.childArgs should be (Seq("some", "--random", "args", "here"))
+    appArgs.childArgs should be (Seq("some", "--weird", "args"))
   }
 
   test("handles YARN cluster mode") {
@@ -122,7 +122,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     childArgsStr should include ("--num-executors 6")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
     classpath should have length (0)
-    sysProps should have size (0)
+    sysProps should have size (1)
   }
 
   test("handles YARN client mode") {
@@ -146,6 +146,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     sysProps("spark.yarn.dist.files") should be ("file1.txt,file2.txt")
     sysProps("spark.yarn.dist.archives") should be ("archive1.txt,archive2.txt")
     sysProps("spark.executor.instances") should be ("6")
+    sysProps("SPARK_SUBMIT") should be ("true")
   }
 
   test("handles standalone cluster mode") {
@@ -159,7 +160,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     childArgsStr should include ("launch spark://h:p thejar.jar org.SomeClass arg1 arg2")
     mainClass should be ("org.apache.spark.deploy.Client")
     classpath should have length (0)
-    sysProps should have size (1) // contains --jar entry
+    sysProps should have size (2) // contains --jar entry and SPARK_SUBMIT
   }
 
   test("handles standalone client mode") {

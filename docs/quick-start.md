@@ -9,11 +9,9 @@ title: Quick Start
 This tutorial provides a quick introduction to using Spark. We will first introduce the API through Spark's interactive Scala shell (don't worry if you don't know Scala -- you will not need much for this), then show how to write standalone applications in Scala, Java, and Python.
 See the [programming guide](scala-programming-guide.html) for a more complete reference.
 
-To follow along with this guide, you only need to have successfully built Spark on one machine. Simply go into your Spark directory and run:
-
-{% highlight bash %}
-$ sbt/sbt assembly
-{% endhighlight %}
+To follow along with this guide, first download a packaged release of Spark from the
+[Spark website](http://spark.apache.org/downloads.html). Since we won't be using HDFS,
+you can download a package for any version of Hadoop.
 
 # Interactive Analysis with the Spark Shell
 

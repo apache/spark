@@ -103,6 +103,12 @@ def parse_args():
       help="When destroying a cluster, delete the security groups that were created")
   parser.add_option("--use-existing-master", action="store_true", default=False,
       help="Launch fresh slaves, but use an existing stopped master if possible")
+  parser.add_option("--worker-instances", type="int", default=1,
+      help="Number of instances per worker: variable SPARK_WORKER_INSTANCES (default: 1)")
+  parser.add_option("--master-opts", type="string", default="",
+      help="Extra options to give to master through SPARK_MASTER_OPTS variable (e.g -Dspark.worker.timeout=180)")
+
+
 
   (opts, args) = parser.parse_args()
   if len(args) != 2:
@@ -223,7 +229,7 @@ def launch_cluster(conn, opts, cluster_name):
     sys.exit(1)
   if opts.key_pair is None:
     print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
-    sys.exit(1)    
+    sys.exit(1)
   print "Setting up security groups..."
   master_group = get_or_make_group(conn, cluster_name + "-master")
   slave_group = get_or_make_group(conn, cluster_name + "-slaves")
@@ -551,7 +557,9 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     "modules": '\n'.join(modules),
     "spark_version": spark_v,
     "shark_version": shark_v,
-    "hadoop_major_version": opts.hadoop_major_version
+    "hadoop_major_version": opts.hadoop_major_version,
+    "spark_worker_instances": "%d" % opts.worker_instances,
+    "spark_master_opts": opts.master_opts
   }
 
   # Create a temp directory in which we will place all the files to be
@@ -604,7 +612,7 @@ def ssh_command(opts):
   return ['ssh'] + ssh_args(opts)
 
 
-# Run a command on a host through ssh, retrying up to two times
+# Run a command on a host through ssh, retrying up to five times
 # and then throwing an exception if ssh continues to fail.
 def ssh(host, opts, command):
   tries = 0
@@ -613,7 +621,7 @@ def ssh(host, opts, command):
       return subprocess.check_call(
         ssh_command(opts) + ['-t', '-t', '%s@%s' % (opts.user, host), stringify_command(command)])
     except subprocess.CalledProcessError as e:
-      if (tries > 2):
+      if (tries > 5):
         # If this was an ssh failure, provide the user with hints.
         if e.returncode == 255:
           raise UsageError("Failed to SSH to remote host {0}.\nPlease check that you have provided the correct --identity-file and --key-pair parameters and try again.".format(host))
@@ -640,7 +648,7 @@ def ssh_write(host, opts, command, input):
     status = proc.wait()
     if status == 0:
       break
-    elif (tries > 2):
+    elif (tries > 5):
       raise RuntimeError("ssh_write failed with error %s" % proc.returncode)
     else:
       print >> stderr, "Error {0} while executing remote command, retrying after 30 seconds".format(status)
@@ -806,6 +814,7 @@ def main():
     real_main()
   except UsageError, e:
     print >> stderr, "\nError:\n", e
+    sys.exit(1)
 
 
 if __name__ == "__main__":

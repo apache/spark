@@ -29,9 +29,22 @@ You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
 ## Specifying the Hadoop version ##
 
-Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 1.0.4 by default.
+Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 1.0.4 by default. Note that certain build profiles are required for particular Hadoop versions:
 
-For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop versions without YARN, use:
+<table class="table">
+  <thead>
+    <tr><th>Hadoop version</th><th>Profile required</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>0.23.x</td><td>hadoop-0.23</td></tr>
+    <tr><td>1.x to 2.1.x</td><td>(none)</td></tr>
+    <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
+    <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
+    <tr><td>2.4.x</td><td>hadoop-2.4</td></tr>
+  </tbody>
+</table>
+
+For Apache Hadoop versions 1.x, Cloudera CDH "mr1" distributions, and other Hadoop versions without YARN, use:
 
     # Apache Hadoop 1.2.1
     $ mvn -Dhadoop.version=1.2.1 -DskipTests clean package
@@ -39,16 +52,43 @@ For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop versions wit
     # Cloudera CDH 4.2.0 with MapReduce v1
     $ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
 
-For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions with YARN, you should enable the "yarn-alpha" or "yarn" profile and set the "hadoop.version", "yarn.version" property:
+    # Apache Hadoop 0.23.x
+    $ mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
+
+For Apache Hadoop 2.x, 0.23.x, Cloudera CDH, and other Hadoop versions with YARN, you can enable the "yarn-alpha" or "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". The additional build profile required depends on the YARN version:
+
+<table class="table">
+  <thead>
+    <tr><th>YARN version</th><th>Profile required</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>0.23.x to 2.1.x</td><td>yarn-alpha</td></tr>
+    <tr><td>2.2.x and later</td><td>yarn</td></tr>
+  </tbody>
+</table>
+
+Examples:
 
     # Apache Hadoop 2.0.5-alpha
-    $ mvn -Pyarn-alpha -Dhadoop.version=2.0.5-alpha -Dyarn.version=2.0.5-alpha -DskipTests clean package
+    $ mvn -Pyarn-alpha -Dhadoop.version=2.0.5-alpha -DskipTests clean package
 
-    # Cloudera CDH 4.2.0 with MapReduce v2
-    $ mvn -Pyarn-alpha -Dhadoop.version=2.0.0-cdh4.2.0 -Dyarn.version=2.0.0-cdh4.2.0 -DskipTests clean package
+    # Cloudera CDH 4.2.0
+    $ mvn -Pyarn-alpha -Dhadoop.version=2.0.0-cdh4.2.0 -DskipTests clean package
 
-    # Apache Hadoop 2.2.X ( e.g. 2.2.0 as below ) and newer
-    $ mvn -Pyarn -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -DskipTests clean package
+    # Apache Hadoop 0.23.x
+    $ mvn -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
+
+    # Apache Hadoop 2.2.X
+    $ mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
+
+    # Apache Hadoop 2.3.X
+    $ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
+
+    # Apache Hadoop 2.4.X
+    $ mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
+
+    # Different versions of HDFS and YARN.
+    $ mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
 
 ## Spark Tests in Maven ##
 
