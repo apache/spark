@@ -458,7 +458,8 @@ private[spark] class Master(
    * two executors on the same worker).
    */
   private def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
-    worker.memoryFree >= app.desc.memoryPerExecutor && !worker.hasExecutor(app)
+    worker.memoryFree >= app.desc.memoryPerExecutor && !worker.hasExecutor(app) &&
+    worker.coresFree > 0
   }
 
   private def startSingleExecutorPerWorker() {
@@ -505,29 +506,37 @@ private[spark] class Master(
   }
 
   private def startMultiExecutorsPerWorker() {
-    val coreNumPerExecutor = conf.getInt("spark.executor.coreNumPerExecutor", 1)
     // allow user to run multiple executors in the same worker
     // (within the same worker JVM process)
     if (spreadOutApps) {
+      var usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+        .filter(_.coresFree > 0).sortBy(_.coresFree).reverse
       for (app <- waitingApps if app.coresLeft > 0) {
-        var usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(_.coresFree > 0).sortBy(_.coresFree).reverse
+        val maxCoreNumPerExecutor = app.desc.maxCorePerExecutor.get
+        var mostFreeCoreWorkerPos = 0
         var leftCoreToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
         val numUsable = usableWorkers.length
         // Number of cores of each executor assigned to each worker
         val assigned = Array.fill[ListBuffer[Int]](numUsable)(new ListBuffer[Int])
+        val assignedSum = Array.fill[Int](numUsable)(0)
         var pos = 0
-        val memoryNotEnoughFlags = new Array[Boolean](numUsable)
-        while (leftCoreToAssign > 0 && memoryNotEnoughFlags.contains(false)) {
-          val coreToAssign = math.min(coreNumPerExecutor, leftCoreToAssign)
-          if (usableWorkers(pos).coresFree - assigned(pos).sum >= coreToAssign &&
-            !memoryNotEnoughFlags(pos)) {
+        var noEnoughMemoryWorkerNum = 0
+        var maxPossibleCore = usableWorkers(mostFreeCoreWorkerPos).coresFree
+        while (leftCoreToAssign > 0 && noEnoughMemoryWorkerNum < numUsable) {
+          if (usableWorkers(mostFreeCoreWorkerPos).coresFree < usableWorkers(pos).coresFree) {
+            mostFreeCoreWorkerPos = pos
+            maxPossibleCore = usableWorkers(mostFreeCoreWorkerPos).coresFree
+          }
+          val coreToAssign = math.min(math.min(maxCoreNumPerExecutor, maxPossibleCore),
+            leftCoreToAssign)
+          if (usableWorkers(pos).coresFree - assignedSum(pos) >= coreToAssign) {
             if (usableWorkers(pos).memoryFree >=
               app.desc.memoryPerExecutor * (assigned(pos).length + 1)) {
               leftCoreToAssign -= coreToAssign
               assigned(pos) += coreToAssign
+              assignedSum(pos) += coreToAssign
             } else {
-              memoryNotEnoughFlags(pos) = true
+              noEnoughMemoryWorkerNum += 1
             }
           }
           pos = (pos + 1) % numUsable
@@ -548,6 +557,7 @@ private[spark] class Master(
       for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
         for (app <- waitingApps if app.coresLeft > 0 &&
           app.desc.memoryPerExecutor <= worker.memoryFree) {
+          val coreNumPerExecutor = app.desc.maxCorePerExecutor.get
           var coresLeft = math.min(worker.coresFree, app.coresLeft)
           while (coresLeft > 0 && app.desc.memoryPerExecutor <= worker.memoryFree) {
             val coreToAssign = math.min(coreNumPerExecutor, coresLeft)
