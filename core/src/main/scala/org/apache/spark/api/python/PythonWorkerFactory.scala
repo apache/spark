@@ -21,12 +21,14 @@ import java.io.{DataInputStream, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
 import scala.collection.JavaConversions._
-import scala.io.Source
 
 import org.apache.spark._
+import org.apache.spark.util.Utils
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
   extends Logging {
+
+  import PythonWorkerFactory._
 
   // Because forking processes from Java is expensive, we prefer to launch a single Python daemon
   // (pyspark/daemon.py) and tell it to fork new workers for our tasks. This daemon currently
@@ -137,18 +139,21 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       } catch {
         case e: Throwable =>
+
+          // If the daemon exists, wait for it to finish and get its stderr
           val stderr = Option(daemon)
-            .map { d => Source.fromInputStream(d.getErrorStream).getLines().toSeq }
-            .getOrElse(Seq.empty)
-          val stderrString = stderr.mkString("  ", "\n  ", "")
+            .flatMap { d => Utils.getStderr(d, PROCESS_WAIT_TIMEOUT_MS) }
+            .getOrElse("")
 
           stopDaemon()
 
-          if (!stderr.isEmpty) {
+          if (stderr != "") {
+            val formattedStderr = stderr.replace("\n", "\n  ")
             var errorMessage = "\n"
             errorMessage += "Error from python worker:\n"
-            errorMessage += stderrString + "\n"
-            errorMessage += "PYTHONPATH was " + pythonPath + "\n"
+            errorMessage += "  " + formattedStderr + "\n"
+            errorMessage += "PYTHONPATH was: \n"
+            errorMessage += "  " + pythonPath + "\n"
             errorMessage += e.toString
 
             // Append error message from python daemon, but keep original stack trace
@@ -193,4 +198,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   def stop() {
     stopDaemon()
   }
+}
+
+private object PythonWorkerFactory {
+  val PROCESS_WAIT_TIMEOUT_MS = 10000
 }
