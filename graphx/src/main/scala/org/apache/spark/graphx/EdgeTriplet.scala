@@ -64,5 +64,5 @@ class EdgeTriplet[VD, ED] extends Edge[ED] {
 
   override def toString = ((srcId, srcAttr), (dstId, dstAttr), attr).toString()
 
-  def toTuple = ((srcId, srcAttr), (dstId, dstAttr), attr)
+  def toTuple: ((VertexId, VD), (VertexId, VD), ED) = ((srcId, srcAttr), (dstId, dstAttr), attr)
 }
