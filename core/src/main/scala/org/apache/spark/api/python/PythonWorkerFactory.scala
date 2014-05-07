@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, File, InputStream, IOException, OutputStreamWriter}
+import java.io.{DataInputStream, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
 import scala.collection.JavaConversions._
@@ -39,7 +39,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   var daemonPort: Int = 0
 
   val pythonPath = PythonUtils.mergePythonPaths(
-    PythonUtils.sparkPythonPath, envVars.getOrElse("PYTHONPATH", ""))
+    PythonUtils.sparkPythonPath,
+    envVars.getOrElse("PYTHONPATH", ""),
+    sys.env.getOrElse("PYTHONPATH", ""))
 
   def create(): Socket = {
     if (useDaemon) {
@@ -146,7 +148,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
             var errorMessage = "\n"
             errorMessage += "Error from python worker:\n"
             errorMessage += stderrString + "\n"
-            errorMessage += "PYTHONPATH was " + pythonpath + "\n"
+            errorMessage += "PYTHONPATH was " + pythonPath + "\n"
             errorMessage += e.toString
 
             // Append error message from python daemon, but keep original stack trace
@@ -164,36 +166,16 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   /**
-   * Redirect a worker's stdout and stderr to our stderr in the background.
+   * Redirect a worker's stdout and stderr to our stderr.
    */
   private def redirectWorkerStreams(stdout: InputStream, stderr: InputStream) {
     try {
-      redirectStream("stdout reader for " + pythonExec, stdout)
-      redirectStream("stderr reader for " + pythonExec, stderr)
+      new RedirectThread(stdout, System.err, "stdout reader for " + pythonExec).start()
+      new RedirectThread(stderr, System.err, "stderr reader for " + pythonExec).start()
     } catch {
       case e: Throwable =>
         logWarning("Exception in redirecting worker streams")
     }
-  }
-
-  /**
-   * Redirect the given input stream to our stderr in a separate thread.
-   */
-  private def redirectStream(threadName: String, in: InputStream) {
-    new Thread(threadName) {
-      setDaemon(true)
-      override def run() {
-        scala.util.control.Exception.ignoring(classOf[IOException]) {
-          // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-          val buf = new Array[Byte](1024)
-          var len = in.read(buf)
-          while (len != -1) {
-            System.err.write(buf, 0, len)
-            len = in.read(buf)
-          }
-        }
-      }
-    }.start()
   }
 
   private def stopDaemon() {
