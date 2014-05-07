@@ -236,7 +236,7 @@ class Vectors(object):
     @staticmethod
     def parse(s):
         """
-        Parses a string resulted from str() into a vector.
+        Parses a string resulted from Vectors.stringify() into a vector.
 
         >>> Vectors.parse("[0.0,1.0]")
         array([ 0.,  1.])
@@ -253,6 +253,22 @@ class Vectors(object):
             return Vectors.sparse(data[0], data[1], data[2])
         else:
             raise SyntaxError("Cannot recognize " + data)
+
+    @staticmethod
+    def stringify(vector):
+        """
+        Converts a vector into a string, which can be recognized by
+        Vectors.parse().
+
+        >>> Vectors.stringify(Vectors.sparse(2, [1], [1.0]))
+        '(2,[1],[1.0])'
+        >>> Vectors.stringify(Vectors.dense([0.0, 1.0]))
+        '[0.0,1.0]'
+        """
+        if type(vector) == SparseVector:
+            return str(vector)
+        else:
+            return "[" + ",".join([str(v) for v in vector]) + "]"
 
 def _test():
     import doctest
