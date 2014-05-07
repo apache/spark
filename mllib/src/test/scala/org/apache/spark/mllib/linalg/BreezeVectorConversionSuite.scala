@@ -19,7 +19,7 @@ package org.apache.spark.mllib.linalg
 
 import org.scalatest.FunSuite
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, VectorBuilder => BVB}
 
 /**
  * Test Breeze vector conversions.
@@ -54,5 +54,17 @@ class BreezeVectorConversionSuite extends FunSuite {
     assert(vec.size === n)
     assert(vec.indices.eq(indices), "should not copy data")
     assert(vec.values.eq(values), "should not copy data")
+  }
+
+  test("sparse breeze by vector builder to vector") {
+    val builder = new BVB[Double](n)
+    for (i <- 0 until indices.length) {
+      builder.add(indices(i), values(i))
+    }
+    val breeze = builder.toSparseVector
+    val vec = Vectors.fromBreeze(breeze).asInstanceOf[SparseVector]
+    assert(vec.size === n)
+    assert(vec.indices === indices)
+    assert(vec.values === values)
   }
 }

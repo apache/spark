@@ -138,8 +138,7 @@ object Vectors {
       case v: BSV[Double] =>
         if (v.index.length == v.used) {
           new SparseVector(v.length, v.index, v.data)
-        }
-        else {
+        } else {
           new SparseVector(v.length, v.index.slice(0, v.used), v.data.slice(0, v.used))
         }
       case v: BV[_] =>
