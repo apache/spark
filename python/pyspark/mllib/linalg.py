@@ -43,11 +43,11 @@ class SparseVector(object):
                or two sorted lists containing indices and values.
 
         >>> print SparseVector(4, {1: 1.0, 3: 5.5})
-        [1: 1.0, 3: 5.5]
+        (4,[1,3],[1.0,5.5])
         >>> print SparseVector(4, [(1, 1.0), (3, 5.5)])
-        [1: 1.0, 3: 5.5]
+        (4,[1,3],[1.0,5.5])
         >>> print SparseVector(4, [1, 3], [1.0, 5.5])
-        [1: 1.0, 3: 5.5]
+        (4,[1,3],[1.0,5.5])
         """
         assert type(size) == int, "first argument must be an int"
         self.size = size
@@ -161,10 +161,9 @@ class SparseVector(object):
             return result
 
     def __str__(self):
-        inds = self.indices
-        vals = self.values
-        entries = ", ".join(["{0}: {1}".format(inds[i], vals[i]) for i in xrange(len(inds))])
-        return "[" + entries + "]"
+        inds = "[" + ",".join([str(i) for i in self.indices]) + "]"
+        vals = "[" + ",".join([str(v) for v in self.values]) + "]"
+        return "(" + ",".join((str(self.size), inds, vals)) + ")"
 
     def __repr__(self):
         inds = self.indices
@@ -215,11 +214,11 @@ class Vectors(object):
                      or two sorted lists containing indices and values.
 
         >>> print Vectors.sparse(4, {1: 1.0, 3: 5.5})
-        [1: 1.0, 3: 5.5]
+        (4,[1,3],[1.0,5.5])
         >>> print Vectors.sparse(4, [(1, 1.0), (3, 5.5)])
-        [1: 1.0, 3: 5.5]
+        (4,[1,3],[1.0,5.5])
         >>> print Vectors.sparse(4, [1, 3], [1.0, 5.5])
-        [1: 1.0, 3: 5.5]
+        (4,[1,3],[1.0,5.5])
         """
         return SparseVector(size, *args)
 
