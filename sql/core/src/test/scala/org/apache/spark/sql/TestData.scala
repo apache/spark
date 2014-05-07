@@ -73,4 +73,15 @@ object TestData {
       ArrayData(Seq(1,2,3), Seq(Seq(1,2,3))) ::
       ArrayData(Seq(2,3,4), Seq(Seq(2,3,4))) :: Nil)
   arrayData.registerAsTable("arrayData")
+
+  case class StringData(s: String)
+  val repeatedData =
+    TestSQLContext.sparkContext.parallelize(List.fill(2)(StringData("test")))
+  repeatedData.registerAsTable("repeatedData")
+
+  val nullableRepeatedData =
+    TestSQLContext.sparkContext.parallelize(
+      List.fill(2)(StringData(null)) ++
+      List.fill(2)(StringData("test")))
+  nullableRepeatedData.registerAsTable("nullableRepeatedData")
 }

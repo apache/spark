@@ -183,6 +183,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
         "Received records = " + TestReceiver.counter.get() + ", " +
           "processed records = " + runningCount
       )
+      Thread.sleep(100)
     }
   }
 

@@ -38,12 +38,6 @@
     <dependency>
       <groupId>net.java.dev.jets3t</groupId>
       <artifactId>jets3t</artifactId>
-      <exclusions>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.curator</groupId>
@@ -68,6 +62,10 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
     </dependency>
     <dependency>
       <groupId>com.google.code.findbugs</groupId>
@@ -249,6 +247,11 @@
       <artifactId>pyrolite</artifactId>
       <version>2.0.1</version>
     </dependency>
+    <dependency>
+      <groupId>net.sf.py4j</groupId>
+      <artifactId>py4j</artifactId>
+      <version>0.8.1</version>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -294,6 +297,48 @@
           </environmentVariables>
         </configuration>
       </plugin>
+      <!-- Unzip py4j so we can include its files in the jar -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>1.2.1</version>
+        <executions>
+          <execution>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <executable>unzip</executable>
+          <workingDirectory>../python</workingDirectory>
+          <arguments>
+            <argument>-o</argument>
+            <argument>lib/py4j*.zip</argument>
+            <argument>-d</argument>
+            <argument>build</argument>
+          </arguments>
+        </configuration>
+      </plugin>
     </plugins>
+    
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <directory>../python</directory>
+        <includes>
+          <include>pyspark/*.py</include>
+        </includes>
+      </resource>
+      <resource>
+        <directory>../python/build</directory>
+        <includes>
+          <include>py4j/*.py</include>
+        </includes>
+      </resource>
+    </resources>
   </build>
 </project>

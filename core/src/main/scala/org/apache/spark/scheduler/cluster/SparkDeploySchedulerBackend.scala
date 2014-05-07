@@ -83,10 +83,10 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  override def dead() {
+  override def dead(reason: String) {
     if (!stopping) {
-      logError("Spark cluster looks dead, giving up.")
-      scheduler.error("Spark cluster looks down")
+      logError("Application has been killed. Reason: " + reason)
+      scheduler.error(reason)
     }
   }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{FileOutputStream, BufferedOutputStream, PrintWriter, IOException}
+import java.io.{BufferedOutputStream, FileOutputStream, IOException, PrintWriter}
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 
 /**
@@ -39,8 +40,8 @@ import org.apache.spark.io.CompressionCodec
  */
 private[spark] class FileLogger(
     logDir: String,
-    conf: SparkConf,
-    hadoopConfiguration: Configuration,
+    sparkConf: SparkConf,
+    hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(),
     outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
     overwrite: Boolean = true,
@@ -55,14 +56,19 @@ private[spark] class FileLogger(
   var fileIndex = 0
 
   // Only used if compression is enabled
-  private lazy val compressionCodec = CompressionCodec.createCodec(conf)
+  private lazy val compressionCodec = CompressionCodec.createCodec(sparkConf)
 
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
   private var writer: Option[PrintWriter] = None
 
-  createLogDir()
+  /**
+   * Start this logger by creating the logging directory.
+   */
+  def start() {
+    createLogDir()
+  }
 
   /**
    * Create a logging directory with the given path.
@@ -83,7 +89,7 @@ private[spark] class FileLogger(
     }
     if (dirPermissions.isDefined) {
       val fsStatus = fileSystem.getFileStatus(path)
-      if (fsStatus.getPermission().toShort() != dirPermissions.get.toShort) {
+      if (fsStatus.getPermission.toShort != dirPermissions.get.toShort) {
         fileSystem.setPermission(path, dirPermissions.get)
       }
     }
@@ -92,14 +98,14 @@ private[spark] class FileLogger(
   /**
    * Create a new writer for the file identified by the given path.
    * If the permissions are not passed in, it will default to use the permissions
-   * (dirpermissions) used when class was instantiated.
+   * (dirPermissions) used when class was instantiated.
    */
   private def createWriter(fileName: String, perms: Option[FsPermission] = None): PrintWriter = {
     val logPath = logDir + "/" + fileName
     val uri = new URI(logPath)
-    val defaultFs = FileSystem.getDefaultUri(hadoopConfiguration).getScheme
-    val isDefaultLocal = (defaultFs == null || defaultFs == "file")
     val path = new Path(logPath)
+    val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
+    val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
      * Therefore, for local files, use FileOutputStream instead. */
@@ -112,7 +118,7 @@ private[spark] class FileLogger(
         hadoopDataStream.get
       }
 
-    perms.orElse(dirPermissions).foreach {p => fileSystem.setPermission(path, p)}
+    perms.orElse(dirPermissions).foreach { p => fileSystem.setPermission(path, p) }
     val bstream = new BufferedOutputStream(dstream, outputBufferSize)
     val cstream = if (compress) compressionCodec.compressedOutputStream(bstream) else bstream
     new PrintWriter(cstream)
@@ -127,7 +133,7 @@ private[spark] class FileLogger(
     val writeInfo = if (!withTime) {
       msg
     } else {
-      val date = new Date(System.currentTimeMillis())
+      val date = new Date(System.currentTimeMillis)
       dateFormat.get.format(date) + ": " + msg
     }
     writer.foreach(_.print(writeInfo))
