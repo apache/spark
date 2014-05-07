@@ -233,6 +233,26 @@ class Vectors(object):
         """
         return array(elements, dtype=float64)
 
+    @staticmethod
+    def parse(s):
+        """
+        Parses a string resulted from str() into a vector.
+
+        >>> Vectors.parse("[0.0,1.0]")
+        array([ 0.,  1.])
+        >>> print Vectors.parse("(2,[1],[1.0])")
+        (2,[1],[1.0])
+        """
+        return Vectors._parse_structured(eval(s))
+
+    @staticmethod
+    def _parse_structured(data):
+        if type(data) == list:
+            return Vectors.dense(data)
+        elif type(data) == tuple:
+            return Vectors.sparse(data[0], data[1], data[2])
+        else:
+            raise SyntaxError("Cannot recognize " + data)
 
 def _test():
     import doctest
