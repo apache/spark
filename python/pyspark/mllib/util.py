@@ -23,12 +23,14 @@ from pyspark.mllib._common import _convert_vector
 
 class MLUtils:
     """
-    Helper methods to load, save and pre-process data used in ML Lib.
+    Helper methods to load, save and pre-process data used in MLlib.
     """
 
     @staticmethod
     def _parse_libsvm_line(line, multiclass):
-        """Parses a line in LIBSVM format into (label, indices, values)."""
+        """
+        Parses a line in LIBSVM format into (label, indices, values).
+        """
         items = line.split(None)
         label = float(items[0])
         if not multiclass:
@@ -64,30 +66,37 @@ class MLUtils:
     @staticmethod
     def loadLibSVMFile(sc, path, multiclass=False, numFeatures=-1, minPartitions=None):
         """
-        Loads labeled data in the LIBSVM format into an RDD[LabeledPoint].
-        The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
-        Each line represents a labeled sparse feature vector using the following format:
+        Loads labeled data in the LIBSVM format into an RDD of
+        LabeledPoint. The LIBSVM format is a text-based format used by
+        LIBSVM and LIBLINEAR. Each line represents a labeled sparse
+        feature vector using the following format:
 
         label index1:value1 index2:value2 ...
 
-        where the indices are one-based and in ascending order.
-        This method parses each line into a [[org.apache.spark.mllib.regression.LabeledPoint]],
-        where the feature indices are converted to zero-based.
+        where the indices are one-based and in ascending order. This
+        method parses each line into a LabeledPoint, where the feature
+        indices are converted to zero-based.
 
-        :param sc: Spark context
-        :param path: file or directory path in any Hadoop-supported file system URI
-        :param multiclass: whether the input labels contain more than two classes. If false, any
-                           label with value greater than 0.5 will be mapped to 1.0, or 0.0
-                           otherwise. So it works for both +1/-1 and 1/0 cases. If true, the double
-                           value parsed directly from the label string will be used as the label
-                           value.
-        :param numFeatures: number of features, which will be determined from the input data if a
-                            nonpositive value is given. This is useful when the dataset is already
-                            split into multiple files and you want to load them separately, because
-                            some features may not present in certain files, which leads to
-                            inconsistent feature dimensions.
-        :param minPartitions: min number of partitions
-        :return: labeled data stored as an RDD[LabeledPoint]
+        @param sc: Spark context
+        @param path: file or directory path in any Hadoop-supported file
+                     system URI
+        @param multiclass: whether the input labels contain more than
+                           two classes. If false, any label with value
+                           greater than 0.5 will be mapped to 1.0, or
+                           0.0 otherwise. So it works for both +1/-1 and
+                           1/0 cases. If true, the double value parsed
+                           directly from the label string will be used
+                           as the label value.
+        @param numFeatures: number of features, which will be determined
+                            from the input data if a nonpositive value
+                            is given. This is useful when the dataset is
+                            already split into multiple files and you
+                            want to load them separately, because some
+                            features may not present in certain files,
+                            which leads to inconsistent feature
+                            dimensions.
+        @param minPartitions: min number of partitions
+        @return: labeled data stored as an RDD of LabeledPoint
 
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
@@ -132,8 +141,8 @@ class MLUtils:
         """
         Save labeled data in LIBSVM format.
 
-        :param data: data an RDD of LabeledPoint to be saved
-        :param dir: directory to save the data
+        @param data: an RDD of LabeledPoint to be saved
+        @param dir: directory to save the data
 
         >>> from tempfile import NamedTemporaryFile
         >>> from fileinput import input
@@ -158,7 +167,7 @@ def _test():
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs,optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)
