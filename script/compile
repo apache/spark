@@ -11,7 +11,17 @@ export LOCAL_SBT_DIR=1
 export SBT_HOME=$FWDIR/sbt
 export SCALA_HOME=$HOME/.sbt/boot/scala-2.10.3
 
+# Find JAVA_HOME on OS X and Linux
+uname=$(uname)
+if [[ "$uname" == "Darwin" ]]; then
+  JAVA_HOME=$(/usr/libexec/java_home -v 1.7)
+else
+  JAVA_HOME=/usr/lib/jvm/default-java/
+fi
+export JAVA_HOME=$JAVA_HOME
+
 ./make-distribution.sh --hadoop $(cat SHOPIFY_HADOOP_VERSION)
+
 if [ "$?" != "0" ] || [ -e "$FWDIR/lib/spark-assembly*hadoop*.jar" ]; then
   echo "Failed to make spark distro using sbt."
   exit 1
