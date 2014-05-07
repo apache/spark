@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vector, VectorParsers}
 
 /**
  * Class that represents the features and labels of a data point.
@@ -27,6 +27,25 @@ import org.apache.spark.mllib.linalg.Vector
  */
 case class LabeledPoint(label: Double, features: Vector) {
   override def toString: String = {
-    "LabeledPoint(%s, %s)".format(label, features)
+    Seq(label, features).mkString("(", ",", ")")
   }
+}
+
+object LabeledPoint {
+  /** Parses a string into an [[org.apache.spark.mllib.regression.LabeledPoint]]. */
+  def parse(s: String) = LabeledPointParsers.parse(s)
+}
+
+/**
+ * Parsers for string representation of [[org.apache.spark.mllib.regression.LabeledPoint]].
+ */
+private[mllib] class LabeledPointParsers extends VectorParsers {
+  lazy val labeledPoint: Parser[LabeledPoint] = "(" ~ floatingPointNumber ~ "," ~ vector ~ ")" ^^ {
+    case "(" ~ l ~ "," ~ v ~ ")" => LabeledPoint(l.toDouble, v)
+  }
+}
+
+private[mllib] object LabeledPointParsers extends LabeledPointParsers {
+  /** Parses a string into an [[org.apache.spark.mllib.regression.LabeledPoint]]. */
+  def parse(s: String): LabeledPoint = parse(labeledPoint, s).get
 }

@@ -100,4 +100,27 @@ class VectorsSuite extends FunSuite {
     assert(vec2(6) === 4.0)
     assert(vec2(7) === 0.0)
   }
+
+  test("parse vectors") {
+    val vectors = Seq(
+      Vectors.dense(Array.empty[Double]),
+      Vectors.dense(1.0),
+      Vectors.dense(1.0, 0.0, -2.0),
+      Vectors.sparse(0, Array.empty[Int], Array.empty[Double]),
+      Vectors.sparse(1, Array(0), Array(1.0)),
+      Vectors.sparse(3, Array(0, 2), Array(1.0, -2.0)))
+    vectors.foreach { v =>
+      val v1 = Vectors.parse(v.toString)
+      assert(v.getClass === v1.getClass)
+      assert(v === v1)
+    }
+
+    val malformatted = Seq("1", "[1,]", "[1,2", "(1,[1,2])", "(1,[1],[2.0,1.0])")
+    malformatted.foreach { s =>
+      intercept[RuntimeException] {
+        Vectors.parse(s)
+        println(s"Didn't detect malformatted string $s.")
+      }
+    }
+  }
 }

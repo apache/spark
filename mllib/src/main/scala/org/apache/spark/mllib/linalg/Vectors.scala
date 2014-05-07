@@ -22,6 +22,7 @@ import java.util.Arrays
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
+import scala.util.parsing.combinator.JavaTokenParsers
 
 import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV}
 
@@ -124,6 +125,8 @@ object Vectors {
     }.toSeq)
   }
 
+  private[mllib] def parse(s: String): Vector = VectorParsers(s)
+
   /**
    * Creates a vector instance from a breeze vector.
    */
@@ -171,8 +174,11 @@ class SparseVector(
     val indices: Array[Int],
     val values: Array[Double]) extends Vector {
 
+  require(indices.length == values.length)
+
   override def toString: String = {
-    "(" + size + "," + indices.zip(values).mkString("[", "," ,"]") + ")"
+    Seq(size, indices.mkString("[", ",", "]"), values.mkString("[", ",", "]"))
+      .mkString("(", ",", ")")
   }
 
   override def toArray: Array[Double] = {
@@ -187,4 +193,29 @@ class SparseVector(
   }
 
   private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+}
+
+/**
+ * Parsers for string representation of [[org.apache.spark.mllib.linalg.Vector]].
+ */
+private[mllib] class VectorParsers extends JavaTokenParsers {
+  lazy val indices: Parser[Array[Int]] = "[" ~ repsep(wholeNumber, ",") ~ "]" ^^ {
+    case "[" ~ ii ~ "]" => ii.map(_.toInt).toArray
+  }
+  lazy val values: Parser[Array[Double]] = "[" ~ repsep(floatingPointNumber, ",") ~ "]" ^^ {
+    case "[" ~ vv ~ "]" => vv.map(_.toDouble).toArray
+  }
+  lazy val denseVector: Parser[DenseVector] = values ^^ {
+    case vv => new DenseVector(vv)
+  }
+  lazy val sparseVector: Parser[SparseVector] =
+    "(" ~ wholeNumber ~ "," ~ indices ~ "," ~ values ~ ")" ^^ {
+      case "(" ~ size ~ "," ~ ii ~ "," ~ vv ~ ")" => new SparseVector(size.toInt, ii, vv)
+    }
+  lazy val vector: Parser[Vector] = denseVector | sparseVector
+}
+
+private[mllib] object VectorParsers extends VectorParsers {
+  /** Parses a string into an [[org.apache.spark.mllib.linalg.Vector]]. */
+  def apply(s: String): Vector = parse(vector, s).get
 }
