@@ -26,19 +26,16 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val appRows = parent.appIdToInfo.values.toSeq.sortBy { app => -app.lastUpdated }
-    val appTable = UIUtils.listingTable(appHeader, appRow, appRows)
+    val apps = parent.getApplicationList(0, -1)
+    val appTable = UIUtils.listingTable(appHeader, appRow, apps)
     val content =
       <div class="row-fluid">
         <div class="span12">
-          <ul class="unstyled">
-            <li><strong>Event Log Location: </strong> {parent.baseLogDir}</li>
-          </ul>
           {
-            if (parent.appIdToInfo.size > 0) {
+            if (apps.size > 0) {
               <h4>
-                Showing {parent.appIdToInfo.size}/{parent.getNumApplications}
-                Completed Application{if (parent.getNumApplications > 1) "s" else ""}
+                Showing {apps.size}/{apps.size}
+                Completed Application{if (apps.size > 1) "s" else ""}
               </h4> ++
               appTable
             } else {
@@ -56,18 +53,16 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     "Completed",
     "Duration",
     "Spark User",
-    "Log Directory",
     "Last Updated")
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    val appName = if (info.started) info.name else info.logDirPath.getName
-    val uiAddress = parent.getAddress + info.ui.basePath
+    val appName = if (info.started) info.name else info.id
+    val uiAddress = "/history/" + info.id
     val startTime = if (info.started) UIUtils.formatDate(info.startTime) else "Not started"
     val endTime = if (info.completed) UIUtils.formatDate(info.endTime) else "Not completed"
     val difference = if (info.started && info.completed) info.endTime - info.startTime else -1L
     val duration = if (difference > 0) UIUtils.formatDuration(difference) else "---"
     val sparkUser = if (info.started) info.sparkUser else "Unknown user"
-    val logDirectory = info.logDirPath.getName
     val lastUpdated = UIUtils.formatDate(info.lastUpdated)
     <tr>
       <td><a href={uiAddress}>{appName}</a></td>
@@ -75,7 +70,6 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
       <td>{endTime}</td>
       <td>{duration}</td>
       <td>{sparkUser}</td>
-      <td>{logDirectory}</td>
       <td>{lastUpdated}</td>
     </tr>
   }
