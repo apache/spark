@@ -293,32 +293,7 @@ class EdgePartition[
   def upgradeIterator(
       edgeIter: Iterator[Edge[ED]], includeSrc: Boolean = true, includeDst: Boolean = true)
     : Iterator[EdgeTriplet[VD, ED]] = {
-    val tripletIter = new Iterator[EdgeTriplet[VD, ED]] {
-      private[this] val triplet = new EdgeTriplet[VD, ED]
-      override def hasNext = edgeIter.hasNext
-      override def next() = {
-        triplet.set(edgeIter.next())
-      }
-    }
-    val withSrc =
-      if (includeSrc) {
-        tripletIter.map { triplet =>
-          triplet.srcAttr = EdgePartition.this.vertices(triplet.srcId)
-          triplet
-        }
-      } else {
-        tripletIter
-      }
-    val withDst =
-      if (includeDst) {
-        withSrc.map { triplet =>
-          triplet.dstAttr = EdgePartition.this.vertices(triplet.dstId)
-          triplet
-        }
-      } else {
-        withSrc
-      }
-    withDst
+    new ReusingEdgeTripletIterator(edgeIter, this, includeSrc, includeDst)
   }
 
   /**
