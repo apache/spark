@@ -231,6 +231,120 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(1)(3) === null)
   }
 
+  test("extract categories from a number for multiclass classification") {
+    val l = DecisionTree.extractMultiClassCategories(13, 10)
+    assert(l.length === 3)
+    assert(List(3.0, 2.0, 0.0).toSeq == l.toSeq)
+  }
+
+  test("split and bin calculations for categorical variables wiht multiclass classification") {
+    val arr = DecisionTreeSuite.generateCategoricalDataPoints()
+    assert(arr.length === 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(
+      Classification,
+      Gini,
+      maxDepth = 3,
+      maxBins = 100,
+      categoricalFeaturesInfo = Map(0 -> 2, 1-> 2),
+      numClassesForClassification = 3)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+
+    // Expecting 2^3 - 1 = 7 bins/splits
+    assert(splits(0)(0).feature === 0)
+    assert(splits(0)(0).threshold === Double.MinValue)
+    assert(splits(0)(0).featureType === Categorical)
+    assert(splits(0)(0).categories.length === 1)
+    assert(splits(0)(0).categories.contains(0.0))
+    assert(splits(1)(0).feature === 1)
+    assert(splits(1)(0).threshold === Double.MinValue)
+    assert(splits(1)(0).featureType === Categorical)
+    assert(splits(1)(0).categories.length === 1)
+    assert(splits(1)(0).categories.contains(0.0))
+
+    assert(splits(0)(1).feature === 0)
+    assert(splits(0)(1).threshold === Double.MinValue)
+    assert(splits(0)(1).featureType === Categorical)
+    assert(splits(0)(1).categories.length === 1)
+    assert(splits(0)(1).categories.contains(1.0))
+    assert(splits(1)(1).feature === 1)
+    assert(splits(1)(1).threshold === Double.MinValue)
+    assert(splits(1)(1).featureType === Categorical)
+    assert(splits(1)(1).categories.length === 1)
+    assert(splits(1)(1).categories.contains(1.0))
+
+    assert(splits(0)(2).feature === 0)
+    assert(splits(0)(2).threshold === Double.MinValue)
+    assert(splits(0)(2).featureType === Categorical)
+    assert(splits(0)(2).categories.length === 2)
+    assert(splits(0)(2).categories.contains(0.0))
+    assert(splits(0)(2).categories.contains(1.0))
+    assert(splits(1)(2).feature === 1)
+    assert(splits(1)(2).threshold === Double.MinValue)
+    assert(splits(1)(2).featureType === Categorical)
+    assert(splits(1)(2).categories.length === 2)
+    assert(splits(1)(2).categories.contains(0.0))
+    assert(splits(1)(2).categories.contains(1.0))
+
+    assert(splits(0)(3) === null)
+
+
+    // Check bins.
+
+    assert(bins(0)(0).category === Double.MinValue)
+    assert(bins(0)(0).lowSplit.categories.length === 0)
+    assert(bins(0)(0).highSplit.categories.length === 1)
+    assert(bins(0)(0).highSplit.categories.contains(0.0))
+    assert(bins(1)(0).category === Double.MinValue)
+    assert(bins(1)(0).lowSplit.categories.length === 0)
+    assert(bins(1)(0).highSplit.categories.length === 1)
+    assert(bins(1)(0).highSplit.categories.contains(0.0))
+
+    assert(bins(0)(1).category === Double.MinValue)
+    assert(bins(0)(1).lowSplit.categories.length === 1)
+    assert(bins(0)(1).lowSplit.categories.contains(0.0))
+    assert(bins(0)(1).highSplit.categories.length === 1)
+    assert(bins(0)(1).highSplit.categories.contains(1.0))
+    assert(bins(1)(1).category === Double.MinValue)
+    assert(bins(1)(1).lowSplit.categories.length === 1)
+    assert(bins(1)(1).lowSplit.categories.contains(0.0))
+    assert(bins(1)(1).highSplit.categories.length === 1)
+    assert(bins(1)(1).highSplit.categories.contains(1.0))
+
+    assert(bins(0)(2).category === Double.MinValue)
+    assert(bins(0)(2).lowSplit.categories.length === 1)
+    assert(bins(0)(2).lowSplit.categories.contains(1.0))
+    assert(bins(0)(2).highSplit.categories.length === 2)
+    assert(bins(0)(2).highSplit.categories.contains(1.0))
+    assert(bins(0)(2).highSplit.categories.contains(0.0))
+    assert(bins(1)(2).category === Double.MinValue)
+    assert(bins(1)(2).lowSplit.categories.length === 1)
+    assert(bins(1)(2).lowSplit.categories.contains(1.0))
+    assert(bins(1)(2).highSplit.categories.length === 2)
+    assert(bins(1)(2).highSplit.categories.contains(1.0))
+    assert(bins(1)(2).highSplit.categories.contains(0.0))
+
+    assert(bins(0)(3) === null)
+    assert(bins(1)(3) === null)
+
+  }
+
+  test("split and bin calculations for categorical variables with no sample for one category " +
+    "for multiclass classification") {
+    val arr = DecisionTreeSuite.generateCategoricalDataPoints()
+    assert(arr.length === 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(
+      Classification,
+      Gini,
+      maxDepth = 3,
+      maxBins = 100,
+      categoricalFeaturesInfo = Map(0 -> 3, 1-> 3),
+      numClassesForClassification = 3)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+
+  }
+
   test("classification stump with all categorical variables") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
@@ -430,29 +544,29 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
 object DecisionTreeSuite {
 
-  def generateOrderedLabeledPointsWithLabel0(): Array[LabeledPoint] = {
-    val arr = new Array[LabeledPoint](1000)
+  def generateOrderedLabeledPointsWithLabel0(): Array[WeightedLabeledPoint] = {
+    val arr = new Array[WeightedLabeledPoint](1000)
     for (i <- 0 until 1000) {
-      val lp = new LabeledPoint(0.0, Vectors.dense(i.toDouble, 1000.0 - i))
+      val lp = new WeightedLabeledPoint(0.0, Vectors.dense(i.toDouble, 1000.0 - i))
       arr(i) = lp
     }
     arr
   }
 
-  def generateOrderedLabeledPointsWithLabel1(): Array[LabeledPoint] = {
-    val arr = new Array[LabeledPoint](1000)
+  def generateOrderedLabeledPointsWithLabel1(): Array[WeightedLabeledPoint] = {
+    val arr = new Array[WeightedLabeledPoint](1000)
     for (i <- 0 until 1000) {
-      val lp = new LabeledPoint(1.0, Vectors.dense(i.toDouble, 999.0 - i))
+      val lp = new WeightedLabeledPoint(1.0, Vectors.dense(i.toDouble, 999.0 - i))
       arr(i) = lp
     }
     arr
   }
 
-  def generateOrderedLabeledPoints(): Array[LabeledPoint] = {
-    val arr = new Array[LabeledPoint](1000)
+  def generateOrderedLabeledPoints(): Array[WeightedLabeledPoint] = {
+    val arr = new Array[WeightedLabeledPoint](1000)
     for (i <- 0 until 1000) {
       if (i < 600) {
-        val lp = new LabeledPoint(0.0, Vectors.dense(i.toDouble, 1000.0 - i))
+        val lp = new WeightedLabeledPoint(0.0, Vectors.dense(i.toDouble, 1000.0 - i))
         arr(i) = lp
       } else {
         val lp = new WeightedLabeledPoint(1.0, Vectors.dense(i.toDouble, 1000.0 - i))
@@ -462,11 +576,11 @@ object DecisionTreeSuite {
     arr
   }
 
-  def generateCategoricalDataPoints(): Array[LabeledPoint] = {
-    val arr = new Array[LabeledPoint](1000)
+  def generateCategoricalDataPoints(): Array[WeightedLabeledPoint] = {
+    val arr = new Array[WeightedLabeledPoint](1000)
     for (i <- 0 until 1000) {
       if (i < 600) {
-        arr(i) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0))
+        arr(i) = new WeightedLabeledPoint(1.0, Vectors.dense(0.0, 1.0))
       } else {
         arr(i) = new WeightedLabeledPoint(0.0, Vectors.dense(1.0, 0.0))
       }

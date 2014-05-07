@@ -1003,8 +1003,6 @@ object DecisionTree extends Serializable with Logging {
     val numBins = if (maxBins <= count) maxBins else count.toInt
     logDebug("numBins = " + numBins)
 
-    // TODO: Multiclass modification here
-
     /*
      * Ensure #bins is always greater than the categories. For multiclass classification,
      * #bins should be greater than 2^(maxCategories - 1) - 1.
@@ -1058,17 +1056,18 @@ object DecisionTree extends Serializable with Logging {
 
             // Use different bin/split calculation strategy for multiclass classification
             if (strategy.isMultiClassification) {
-              // Iterate from 1 to 2^maxFeatureValue leading to 2^(maxFeatureValue- 1) - 1
+              // Iterate from 0 to 2^maxFeatureValue - 1 leading to 2^(maxFeatureValue- 1) - 1
               // combinations.
-              var index = 1
-              while (index < math.pow(2.0, maxFeatureValue).toInt) {
-                val categories: List[Double] = extractMultiClassCategories(index, maxFeatureValue)
+              var index = 0
+              while (index < math.pow(2.0, maxFeatureValue).toInt - 1) {
+                val categories: List[Double]
+                  = extractMultiClassCategories(index + 1, maxFeatureValue)
                 splits(featureIndex)(index)
                   = new Split(featureIndex, Double.MinValue, Categorical, categories)
                 bins(featureIndex)(index) = {
                   if (index == 0) {
                     new Bin(new DummyCategoricalSplit(featureIndex, Categorical),
-                      splits(featureIndex)(0), Categorical, index)
+                      splits(featureIndex)(0), Categorical, Double.MinValue)
                   } else {
                     new Bin(splits(featureIndex)(index-1), splits(featureIndex)(index), Categorical,
                       Double.MinValue)
@@ -1147,19 +1146,24 @@ object DecisionTree extends Serializable with Logging {
   }
 
   /**
-   * Nested method to extract list of eligible categories given an index
+   * Nested method to extract list of eligible categories given an index. It extracts the
+   * position of ones in a binary representation of the input. If binary
+   * representation of an number is 01101 (13), the output list should (3.0, 2.0,
+   * 0.0). The maxFeatureValue depict the number of rightmost digits that will be tested for ones.
    */
-  private def extractMultiClassCategories(i: Int, maxFeatureValue: Double): List[Double] = {
-    // TODO: Test this
+  private[tree] def extractMultiClassCategories(
+      input: Int,
+      maxFeatureValue: Int): List[Double] = {
     var categories = List[Double]()
     var j = 0
+    var bitShiftedInput = input
     while (j < maxFeatureValue) {
-      var copy = i
-      if (copy % 2 != 0) {
+      if (bitShiftedInput % 2 != 0) {
         // updating the list of categories.
         categories = j.toDouble :: categories
       }
-      copy = copy >> 1
+      //Right shift by one
+      bitShiftedInput = bitShiftedInput >> 1
       j += 1
     }
     categories
