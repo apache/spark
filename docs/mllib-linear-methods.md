@@ -63,7 +63,7 @@ methods MLlib supports:
   <tbody>
     <tr>
       <td>hinge loss</td><td>$\max \{0, 1-y \wv^T \x \}, \quad y \in \{-1, +1\}$</td>
-      <td>$\begin{cases}-y \cdot \x & \text{if $y \wv^T \x <1$}, \\ 0 &
+      <td>$\begin{cases}-y \cdot \x &amp; \text{if $y \wv^T \x &lt;1$}, \\ 0 &amp;
 \text{otherwise}.\end{cases}$</td>
     </tr>
     <tr>
@@ -225,10 +225,11 @@ algorithm for 200 iterations.
 import org.apache.spark.mllib.optimization.L1Updater
 
 val svmAlg = new SVMWithSGD()
-svmAlg.optimizer.setNumIterations(200)
-  .setRegParam(0.1)
-  .setUpdater(new L1Updater)
-val modelL1 = svmAlg.run(parsedData)
+svmAlg.optimizer.
+  setNumIterations(200).
+  setRegParam(0.1).
+  setUpdater(new L1Updater)
+val modelL1 = svmAlg.run(training)
 {% endhighlight %}
 
 Similarly, you can use replace `SVMWithSGD` by
@@ -322,7 +323,7 @@ val valuesAndPreds = parsedData.map { point =>
   val prediction = model.predict(point.features)
   (point.label, prediction)
 }
-val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.reduce(_ + _) / valuesAndPreds.count
+val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.mean()
 println("training Mean Squared Error = " + MSE)
 {% endhighlight %}
 
