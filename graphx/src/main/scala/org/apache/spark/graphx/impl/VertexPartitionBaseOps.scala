@@ -105,7 +105,7 @@ private[graphx] abstract class VertexPartitionBaseOps
         }
         i = newMask.nextSetBit(i + 1)
       }
-      toOps(this.withValues(other.values)).withMask(newMask)
+      this.withValues(other.values).withMask(newMask)
     }
   }
 
