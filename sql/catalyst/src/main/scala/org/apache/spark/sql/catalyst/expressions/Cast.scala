@@ -182,7 +182,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)
   }
 
-  def cast: Any => Any = dataType match {
+  private lazy val cast: Any => Any = dataType match {
     case StringType => castToString
     case BinaryType => castToBinary
     case DecimalType => castToDecimal
