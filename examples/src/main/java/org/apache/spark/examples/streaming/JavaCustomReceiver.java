@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.examples;
+package org.apache.spark.examples.streaming;
 
 import com.google.common.collect.Lists;
 
@@ -48,7 +48,7 @@ import java.util.regex.Pattern;
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
  * and then run the example
- *    `$ ./run org.apache.spark.streaming.examples.JavaCustomReceiver local[2] localhost 9999`
+ *    `$ ./run org.apache.spark.examples.streaming.JavaCustomReceiver local[2] localhost 9999`
  */
 
 public class JavaCustomReceiver extends Receiver<String> {
@@ -149,5 +149,3 @@ public class JavaCustomReceiver extends Receiver<String> {
     }
   }
 }
-
-
