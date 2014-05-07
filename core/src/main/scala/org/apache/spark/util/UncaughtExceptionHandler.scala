@@ -22,6 +22,7 @@ import org.apache.spark.Logging
 
 private[spark] object UncaughtExceptionHandler
   extends Thread.UncaughtExceptionHandler with Logging {
+
   override def uncaughtException(thread: Thread, exception: Throwable) {
     try {
       logError("Uncaught exception in thread " + thread, exception)
