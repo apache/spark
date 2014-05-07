@@ -48,12 +48,12 @@ how to access a cluster. To create a `SparkContext` you first need to build a `S
 that contains information about your application.
 
 {% highlight scala %}
-val conf = new SparkConf().setAppName(<app name>).setMaster(<master>)
+val conf = new SparkConf().setAppName(appName).setMaster(master)
 new SparkContext(conf)
 {% endhighlight %}
 
-The `<master>` parameter is a string specifying a [Spark, Mesos or YARN cluster URL](#master-urls)
-to connect to, or a special "local" string to run in local mode, as described below. `<app name>` is
+The `master` parameter is a string specifying a [Spark, Mesos or YARN cluster URL](#master-urls)
+to connect to, or a special "local" string to run in local mode, as described below. `appName` is
 a name for your application, which will be shown in the cluster web UI. It's also possible to set
 these variables [using a configuration file](cluster-overview.html#loading-configurations-from-a-file)
 which avoids hard-coding the master name in your application.
@@ -81,9 +81,8 @@ The master URL passed to Spark can be in one of the following formats:
 <table class="table">
 <tr><th>Master URL</th><th>Meaning</th></tr>
 <tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
-<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine).
+<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). </td></tr>
 <tr><td> local[*] </td><td> Run Spark locally with as many worker threads as logical cores on your machine.</td></tr>
-</td></tr>
 <tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
         cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default.
 </td></tr>
