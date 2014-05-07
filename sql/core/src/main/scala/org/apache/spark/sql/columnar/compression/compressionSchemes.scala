@@ -157,7 +157,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
       currentValue
     }
 
-    override def hasNext = buffer.hasRemaining
+    override def hasNext = valueCount < run || buffer.hasRemaining
   }
 }
 

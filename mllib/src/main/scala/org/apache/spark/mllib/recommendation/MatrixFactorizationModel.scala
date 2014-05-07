@@ -17,14 +17,13 @@
 
 package org.apache.spark.mllib.recommendation
 
-import org.jblas._
+import org.jblas.DoubleMatrix
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.api.python.PythonMLLibAPI
-
 
 /**
  * Model representing the result of matrix factorization.
@@ -35,12 +34,10 @@ import org.apache.spark.mllib.api.python.PythonMLLibAPI
  * @param productFeatures RDD of tuples where each tuple represents the productId
  *                        and the features computed for this product.
  */
-class MatrixFactorizationModel(
+class MatrixFactorizationModel private[mllib] (
     val rank: Int,
     val userFeatures: RDD[(Int, Array[Double])],
-    val productFeatures: RDD[(Int, Array[Double])])
-  extends Serializable
-{
+    val productFeatures: RDD[(Int, Array[Double])]) extends Serializable {
   /** Predict the rating of one user for one product. */
   def predict(user: Int, product: Int): Double = {
     val userVector = new DoubleMatrix(userFeatures.lookup(user).head)
@@ -76,6 +73,7 @@ class MatrixFactorizationModel(
    * @param usersProductsJRDD A JavaRDD with serialized tuples (user, product)
    * @return JavaRDD of serialized Rating objects.
    */
+  @DeveloperApi
   def predict(usersProductsJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
     val pythonAPI = new PythonMLLibAPI()
     val usersProducts = usersProductsJRDD.rdd.map(xBytes => pythonAPI.unpackTuple(xBytes))

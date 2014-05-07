@@ -81,8 +81,11 @@ class RunLengthEncodingSuite extends FunSuite {
 
       val decoder = RunLengthEncoding.decoder(buffer, columnType)
 
-      inputSeq.foreach { i =>
-        expectResult(values(i), "Wrong decoded value")(decoder.next())
+      if (inputSeq.nonEmpty) {
+        inputSeq.foreach { i =>
+          assert(decoder.hasNext)
+          expectResult(values(i), "Wrong decoded value")(decoder.next())
+        }
       }
 
       assert(!decoder.hasNext)

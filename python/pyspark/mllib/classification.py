@@ -90,7 +90,7 @@ class SVMModel(LinearModel):
     >>> svm.predict(array([1.0])) > 0
     True
     >>> sparse_data = [
-    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {0: -1.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
     ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
@@ -98,7 +98,7 @@ class SVMModel(LinearModel):
     >>> svm = SVMWithSGD.train(sc.parallelize(sparse_data))
     >>> svm.predict(SparseVector(2, {1: 1.0})) > 0
     True
-    >>> svm.predict(SparseVector(2, {1: 0.0})) <= 0
+    >>> svm.predict(SparseVector(2, {0: -1.0})) <= 0
     True
     """
     def predict(self, x):
