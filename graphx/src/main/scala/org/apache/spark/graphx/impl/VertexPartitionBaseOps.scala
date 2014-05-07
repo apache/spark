@@ -171,11 +171,11 @@ private[graphx] abstract class VertexPartitionBaseOps
     : Self[VD2] = {
     val newMask = new BitSet(self.capacity)
     val newValues = new Array[VD2](self.capacity)
-    iter.foreach { case (vid, vdata) =>
-      val pos = self.index.getPos(vid)
+    iter.foreach { pair =>
+      val pos = self.index.getPos(pair._1)
       if (pos >= 0) {
         newMask.set(pos)
-        newValues(pos) = vdata
+        newValues(pos) = pair._2
       }
     }
     this.withValues(newValues).withMask(newMask)
@@ -189,11 +189,11 @@ private[graphx] abstract class VertexPartitionBaseOps
     val newMask = new BitSet(self.capacity)
     val newValues = new Array[VD](self.capacity)
     System.arraycopy(self.values, 0, newValues, 0, newValues.length)
-    iter.foreach { case (vid, vdata) =>
-      val pos = self.index.getPos(vid)
+    iter.foreach { pair =>
+      val pos = self.index.getPos(pair._1)
       if (pos >= 0) {
         newMask.set(pos)
-        newValues(pos) = vdata
+        newValues(pos) = pair._2
       }
     }
     this.withValues(newValues).withMask(newMask)

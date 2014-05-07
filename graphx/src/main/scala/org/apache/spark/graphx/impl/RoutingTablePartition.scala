@@ -76,7 +76,9 @@ object RoutingTablePartition {
     edgePartition.dstIds.iterator.foreach { dstId =>
       map.changeValue(dstId, 0x2, (b: Byte) => (b | 0x2).toByte)
     }
-    map.iterator.map { case (vid, position) => new RoutingTableMessage(vid, pid, position) }
+    map.iterator.map { vidAndPosition =>
+      new RoutingTableMessage(vidAndPosition._1, pid, vidAndPosition._2)
+    }
   }
 
   /** Build a `RoutingTablePartition` from `RoutingTableMessage`s. */

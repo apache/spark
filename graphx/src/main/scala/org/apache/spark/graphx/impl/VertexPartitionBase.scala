@@ -33,8 +33,8 @@ private[graphx] object VertexPartitionBase {
   def initFrom[VD: ClassTag](iter: Iterator[(VertexId, VD)])
     : (VertexIdToIndexMap, Array[VD], BitSet) = {
     val map = new PrimitiveKeyOpenHashMap[VertexId, VD]
-    iter.foreach { case (k, v) =>
-      map(k) = v
+    iter.foreach { pair =>
+      map(pair._1) = pair._2
     }
     (map.keySet, map._values, map.keySet.getBitSet)
   }
@@ -46,8 +46,8 @@ private[graphx] object VertexPartitionBase {
   def initFrom[VD: ClassTag](iter: Iterator[(VertexId, VD)], mergeFunc: (VD, VD) => VD)
     : (VertexIdToIndexMap, Array[VD], BitSet) = {
     val map = new PrimitiveKeyOpenHashMap[VertexId, VD]
-    iter.foreach { case (k, v) =>
-      map.setMerge(k, v, mergeFunc)
+    iter.foreach { pair =>
+      map.setMerge(pair._1, pair._2, mergeFunc)
     }
     (map.keySet, map._values, map.keySet.getBitSet)
   }
