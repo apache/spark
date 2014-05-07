@@ -60,11 +60,16 @@ trait ExecutorRunnableUtil extends Logging {
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
     JAVA_OPTS += ClientBase.getLog4jConfiguration(localResources)
 
-    // This is needed for the authentication configs because the Executor has to
-    // know whether to use authentication before it registers with the Scheduler.
-    for ((k, v) <- sparkConf.getAll.filter{case (k, v) => k.startsWith("spark.auth")}) {
-      JAVA_OPTS += "-D" + k + "=" + "\\\"" + v + "\\\""
-    }
+    // Certain configs need to be passed here because they are needed before the Executor
+    // registers with the Scheduler and transfers the spark configs. Since the Executor backend
+    // uses Akka to connect to the scheduler, the akka settings are needed as well as the
+    // authentication settings.
+    sparkConf.getAll.
+      filter { case (k, v) => k.startsWith("spark.auth") || k.startsWith("spark.akka") }.
+      foreach { case (k, v) => JAVA_OPTS += "-D" + k + "=" + "\\\"" + v + "\\\"" }
+
+    sparkConf.getAkkaConf.
+      foreach { case (k, v) => JAVA_OPTS += "-D" + k + "=" + "\\\"" + v + "\\\"" }
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
