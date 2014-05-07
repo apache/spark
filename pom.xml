@@ -128,6 +128,7 @@
     <chill.version>0.3.6</chill.version>
     <codahale.metrics.version>3.0.0</codahale.metrics.version>
     <avro.version>1.7.4</avro.version>
+    <jets3t.version>0.7.1</jets3t.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
@@ -564,12 +565,19 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <!-- See SPARK-1556 for info on this dependency: -->
       <dependency>
         <groupId>net.java.dev.jets3t</groupId>
         <artifactId>jets3t</artifactId>
-        <version>0.7.1</version>
+        <version>${jets3t.version}</version>
+        <scope>runtime</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
-
       <dependency>
         <!-- Matches the version of jackson-core-asl pulled in by avro -->
         <groupId>org.codehaus.jackson</groupId>
@@ -786,36 +794,6 @@
   </build>
 
   <profiles>
-    <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
-    <profile>
-      <id>hadoop-0.23</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-
-    <profile>
-      <id>yarn-alpha</id>
-      <properties>
-        <hadoop.major.version>2</hadoop.major.version>
-        <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
-        <hadoop.version>0.23.7</hadoop.version>
-        <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
-      </properties>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-      <modules>
-        <module>yarn</module>
-      </modules>
-
-    </profile>
 
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
     <profile>
@@ -851,12 +829,127 @@
     </profile>
 
     <profile>
-      <id>yarn</id>
+      <id>hive</id>
+      <modules>
+        <module>sql/hive</module>
+      </modules>
+    </profile>
+
+    <!-- A series of build profiles where customizations for particular Hadoop releases can be made -->
+
+    <profile>
+      <id>hadoop-0.23</id>
+      <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <profile>
+      <id>hadoop-2.2</id>
       <properties>
-        <hadoop.major.version>2</hadoop.major.version>
-        <hadoop.version>2.2.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
       </properties>
+    </profile>
+
+    <profile>
+      <id>hadoop-2.3</id>
+      <properties>
+        <protobuf.version>2.5.0</protobuf.version>
+        <jets3t.version>0.9.0</jets3t.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>hadoop-2.4</id>
+      <properties>
+        <protobuf.version>2.5.0</protobuf.version>
+        <jets3t.version>0.9.0</jets3t.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>yarn-alpha</id>
+      <modules>
+        <module>yarn</module>
+      </modules>
+      <dependencyManagement>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-api</artifactId>
+            <version>${yarn.version}</version>
+            <exclusions>
+              <exclusion>
+                <groupId>asm</groupId>
+                <artifactId>asm</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.ow2.asm</groupId>
+                <artifactId>asm</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.jboss.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+            </exclusions>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-common</artifactId>
+            <version>${yarn.version}</version>
+            <exclusions>
+              <exclusion>
+                <groupId>asm</groupId>
+                <artifactId>asm</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.ow2.asm</groupId>
+                <artifactId>asm</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.jboss.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>javax.servlet</groupId>
+                <artifactId>servlet-api</artifactId>
+              </exclusion>
+            </exclusions>
+          </dependency>
+
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-client</artifactId>
+            <version>${yarn.version}</version>
+            <exclusions>
+              <exclusion>
+                <groupId>asm</groupId>
+                <artifactId>asm</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.ow2.asm</groupId>
+                <artifactId>asm</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.jboss.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>javax.servlet</groupId>
+                <artifactId>servlet-api</artifactId>
+              </exclusion>
+            </exclusions>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
+    </profile>
+
+    <profile>
+      <id>yarn</id>
       <modules>
         <module>yarn</module>
       </modules>
@@ -956,6 +1049,11 @@
         </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-server-web-proxy</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-yarn-client</artifactId>
           <scope>provided</scope>
         </dependency>
@@ -977,12 +1075,5 @@
         </dependency>
       </dependencies>
     </profile>
-    <profile>
-      <id>hive</id>
-      <modules>
-        <module>sql/hive</module>
-      </modules>
-    </profile>
-
   </profiles>
 </project>
