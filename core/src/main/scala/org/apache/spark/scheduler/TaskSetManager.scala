@@ -27,10 +27,10 @@ import scala.math.max
 import scala.math.min
 
 import org.apache.spark.{ExceptionFailure, ExecutorLostFailure, FetchFailed, Logging, Resubmitted,
-  SparkEnv, Success, TaskEndReason, TaskKilled, TaskResultLost, TaskState}
+  SparkEnv, SparkException, Success, TaskEndReason, TaskKilled, TaskResultLost, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.{Clock, SystemClock}
+import org.apache.spark.util.{AkkaUtils, Clock, SystemClock}
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -56,6 +56,7 @@ private[spark] class TaskSetManager(
 {
   val conf = sched.sc.conf
 
+  private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
   /*
    * Sometimes if an executor is dead or in an otherwise invalid state, the driver
    * does not realize right away leading to repeated task failures. If enabled,
@@ -414,6 +415,14 @@ private[spark] class TaskSetManager(
           // we assume the task can be serialized without exceptions.
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
+          if (serializedTask.limit >= akkaFrameSize - 1024) {
+            val msg = "Serialized task %s:%d were %d bytes which " +
+              "exceeds spark.akka.frameSize (%d bytes)."
+            val exception = new SparkException(msg.format(taskSet.id,
+              index, serializedTask.limit, akkaFrameSize))
+            logError(msg, exception)
+            throw exception
+          }
           val timeTaken = clock.getTime() - startTime
           addRunningTask(taskId)
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
