@@ -1065,7 +1065,8 @@ class DAGScheduler(
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptThread)
             } catch {
-              case e: UnsupportedOperationException => logInfo(s"Could not cancel tasks for stage $stageId", e)
+              case e: UnsupportedOperationException =>
+                logInfo(s"Could not cancel tasks for stage $stageId", e)
             } finally {
               val stageInfo = stageToInfos(stage)
               stageInfo.stageFailed(failureReason)
