@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
+import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
@@ -236,6 +237,16 @@ private[hive] case class HiveGenericUdf(name: String, children: Seq[Expression])
 
   @transient
   protected lazy val returnInspector = function.initialize(argumentInspectors.toArray)
+
+  @transient
+  protected lazy val isUDFDeterministic = {
+    val udfType = function.getClass().getAnnotation(classOf[HiveUDFType])
+    (udfType != null && udfType.deterministic())
+  }
+
+  override def foldable = {
+    isUDFDeterministic && children.foldLeft(true)((prev, n) => prev && n.foldable)
+  }
 
   val dataType: DataType = inspectorToDataType(returnInspector)
 
