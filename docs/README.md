@@ -14,9 +14,10 @@ The markdown code can be compiled to HTML using the
 [Jekyll tool](http://jekyllrb.com).
 To use the `jekyll` command, you will need to have Jekyll installed. 
 The easiest way to do this is via a Ruby Gem, see the 
-[jekyll installation instructions](http://jekyllrb.com/docs/installation). 
-Compiling the site with Jekyll will create a directory called 
-_site containing index.html as well as the rest of the compiled files.
+[jekyll installation instructions](http://jekyllrb.com/docs/installation).
+If not already installed, you need to install `kramdown` with `sudo gem install kramdown`.
+Execute `jekyll` from the `docs/` directory. Compiling the site with Jekyll will create a directory called
+`_site` containing index.html as well as the rest of the compiled files.
 
 You can modify the default Jekyll build as follows:
 
@@ -44,6 +45,6 @@ You can build just the Spark scaladoc by running `sbt/sbt doc` from the SPARK_PR
 
 Similarly, you can build just the PySpark epydoc by running `epydoc --config epydoc.conf` from the SPARK_PROJECT_ROOT/pyspark directory. Documentation is only generated for classes that are listed as public in `__init__.py`.
 
-When you run `jekyll` in the docs directory, it will also copy over the scaladoc for the various Spark subprojects into the docs directory (and then also into the _site directory). We use a jekyll plugin to run `sbt/sbt doc` before building the site so if you haven't run it (recently) it may take some time as it generates all of the scaladoc.  The jekyll plugin also generates the PySpark docs using [epydoc](http://epydoc.sourceforge.net/).
+When you run `jekyll` in the `docs` directory, it will also copy over the scaladoc for the various Spark subprojects into the `docs` directory (and then also into the `_site` directory). We use a jekyll plugin to run `sbt/sbt doc` before building the site so if you haven't run it (recently) it may take some time as it generates all of the scaladoc.  The jekyll plugin also generates the PySpark docs using [epydoc](http://epydoc.sourceforge.net/).
 
 NOTE: To skip the step of building and copying over the Scala and Python API docs, run `SKIP_API=1 jekyll`.

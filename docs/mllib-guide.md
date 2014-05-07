@@ -94,7 +94,7 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
 double[] array = ... // a double array
-Vector vector = Vectors.dense(array) // a dense vector
+Vector vector = Vectors.dense(array); // a dense vector
 {% endhighlight %}
 
 [`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to

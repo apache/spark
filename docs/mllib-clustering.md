@@ -18,7 +18,7 @@ models are trained for each cluster).
 MLlib supports
 [k-means](http://en.wikipedia.org/wiki/K-means_clustering) clustering, one of
 the most commonly used clustering algorithms that clusters the data points into
-predfined number of clusters. The MLlib implementation includes a parallelized
+predefined number of clusters. The MLlib implementation includes a parallelized
 variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
 called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 The implementation in MLlib has the following parameters:  
@@ -30,7 +30,7 @@ initialization via k-means\|\|.
 * *runs* is the number of times to run the k-means algorithm (k-means is not
 guaranteed to find a globally optimal solution, and when run multiple times on
 a given dataset, the algorithm returns the best clustering result).
-* *initializiationSteps* determines the number of steps in the k-means\|\| algorithm.
+* *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged. 
 
 ## Examples

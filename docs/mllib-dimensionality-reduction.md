@@ -44,6 +44,10 @@ say, less than $1000$, but many rows, which we call *tall-and-skinny*.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
+import org.apache.spark.mllib.linalg.Matrix
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.mllib.linalg.SingularValueDecomposition
+
 val mat: RowMatrix = ...
 
 // Compute the top 20 singular values and corresponding singular vectors.
@@ -74,6 +78,9 @@ and use them to project the vectors into a low-dimensional space.
 The number of columns should be small, e.g, less than 1000.
 
 {% highlight scala %}
+import org.apache.spark.mllib.linalg.Matrix
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
+
 val mat: RowMatrix = ...
 
 // Compute the top 10 principal components.
