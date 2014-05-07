@@ -100,14 +100,15 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
 
-  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql/hive")) {
-    new File("src/test/resources/")
+  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
   } else {
-    new File("sql/hive/src/test/resources")
+    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" + 
+      File.separator + "resources")
   }
 
   def getHiveFile(path: String): File = {
-    val stripped = path.replaceAll("""\.\.\/""", "")
+    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
     hiveDevHome
       .map(new File(_, stripped))
       .filter(_.exists)

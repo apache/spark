@@ -17,8 +17,14 @@
 
 package org.apache.spark.ui.jobs
 
-/** class for reporting aggregated metrics for each executors in stageUI */
-private[ui] class ExecutorSummary {
+import org.apache.spark.annotation.DeveloperApi
+
+/**
+ * :: DeveloperApi ::
+ * Class for reporting aggregated metrics for each executor in stage UI.
+ */
+@DeveloperApi
+class ExecutorSummary {
   var taskTime : Long = 0
   var failedTasks : Int = 0
   var succeededTasks : Int = 0

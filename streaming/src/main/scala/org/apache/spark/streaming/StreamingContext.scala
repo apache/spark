@@ -154,6 +154,10 @@ class StreamingContext private[streaming] (
 
   private[streaming] val uiTab = new StreamingTab(this)
 
+  /** Register streaming source to metrics system */
+  private val streamingSource = new StreamingSource(this)
+  SparkEnv.get.metricsSystem.registerSource(streamingSource)
+
   /** Enumeration to identify current state of the StreamingContext */
   private[streaming] object StreamingContextState extends Enumeration {
     type CheckpointState = Value
@@ -495,7 +499,10 @@ class StreamingContext private[streaming] (
 
 object StreamingContext extends Logging {
 
-  implicit def toPairDStreamFunctions[K: ClassTag, V: ClassTag](stream: DStream[(K,V)]) = {
+  private[streaming] val DEFAULT_CLEANER_TTL = 3600
+
+  implicit def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
+      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     new PairDStreamFunctions[K, V](stream)
   }
 

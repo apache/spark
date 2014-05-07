@@ -57,7 +57,7 @@ class FlumeStreamSuite extends TestSuiteBase {
 
     for (i <- 0 until input.size) {
       val event = new AvroFlumeEvent
-      event.setBody(ByteBuffer.wrap(input(i).toString.getBytes()))
+      event.setBody(ByteBuffer.wrap(input(i).toString.getBytes("utf-8")))
       event.setHeaders(Map[CharSequence, CharSequence]("test" -> "header"))
       client.append(event)
       Thread.sleep(500)

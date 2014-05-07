@@ -143,13 +143,13 @@ class SQLContext:
         """
         return SchemaRDD(self._ssql_ctx.table(tableName), self)
 
-    def cacheTable(tableName):
+    def cacheTable(self, tableName):
         """
         Caches the specified table in-memory.
         """
         self._ssql_ctx.cacheTable(tableName)
 
-    def uncacheTable(tableName):
+    def uncacheTable(self, tableName):
         """
         Removes the specified table from the in-memory cache.
         """
@@ -359,6 +359,35 @@ class SchemaRDD(RDD):
             return checkpointFile.get()
         else:
             return None
+
+    def coalesce(self, numPartitions, shuffle=False):
+        rdd = self._jschema_rdd.coalesce(numPartitions, shuffle)
+        return SchemaRDD(rdd, self.sql_ctx)
+
+    def distinct(self):
+        rdd = self._jschema_rdd.distinct()
+        return SchemaRDD(rdd, self.sql_ctx)
+
+    def intersection(self, other):
+        if (other.__class__ is SchemaRDD):
+            rdd = self._jschema_rdd.intersection(other._jschema_rdd)
+            return SchemaRDD(rdd, self.sql_ctx)
+        else:
+            raise ValueError("Can only intersect with another SchemaRDD")
+
+    def repartition(self, numPartitions):
+        rdd = self._jschema_rdd.repartition(numPartitions)
+        return SchemaRDD(rdd, self.sql_ctx)
+
+    def subtract(self, other, numPartitions=None):
+        if (other.__class__ is SchemaRDD):
+            if numPartitions is None:
+                rdd = self._jschema_rdd.subtract(other._jschema_rdd)
+            else:
+                rdd = self._jschema_rdd.subtract(other._jschema_rdd, numPartitions)
+            return SchemaRDD(rdd, self.sql_ctx)
+        else:
+            raise ValueError("Can only subtract another SchemaRDD")
 
 def _test():
     import doctest

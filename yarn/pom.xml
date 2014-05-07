@@ -28,7 +28,7 @@
   <artifactId>yarn-parent_2.10</artifactId>
   <packaging>pom</packaging>
   <name>Spark Project YARN Parent POM</name>
-  
+
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -45,12 +45,15 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-server-web-proxy</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-yarn-client</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
-      <version>${yarn.version}</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
@@ -70,15 +73,6 @@
       <modules>
         <module>alpha</module>
       </modules>
-
-      <!-- SPARK-1121: SPARK-1121: Adds an explicit dependency on Avro to work around
-           a Hadoop 0.23.X issue -->
-      <dependencies>
-         <dependency>
-           <groupId>org.apache.avro</groupId>
-           <artifactId>avro</artifactId>
-         </dependency>
-      </dependencies>
     </profile>
 
     <profile>
@@ -137,7 +131,7 @@
               <target>
                 <property name="spark.classpath" refid="maven.test.classpath" />
                 <property environment="env" />
-                <fail message="Please set the SCALA_HOME (or SCALA_LIBRARY_PATH if scala is on the path) environment variables and retry.">  
+                <fail message="Please set the SCALA_HOME (or SCALA_LIBRARY_PATH if scala is on the path) environment variables and retry.">
                   <condition>
                     <not>
                       <or>

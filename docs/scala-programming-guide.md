@@ -48,29 +48,30 @@ how to access a cluster. To create a `SparkContext` you first need to build a `S
 that contains information about your application.
 
 {% highlight scala %}
-val conf = new SparkConf().setAppName(<app name>).setMaster(<master>)
+val conf = new SparkConf().setAppName(appName).setMaster(master)
 new SparkContext(conf)
 {% endhighlight %}
 
-The `<master>` parameter is a string specifying a [Spark, Mesos or YARN cluster URL](#master-urls)
-to connect to, or a special "local" string to run in local mode, as described below. `<app name>` is
+The `master` parameter is a string specifying a [Spark, Mesos or YARN cluster URL](#master-urls)
+to connect to, or a special "local" string to run in local mode, as described below. `appName` is
 a name for your application, which will be shown in the cluster web UI. It's also possible to set
 these variables [using a configuration file](cluster-overview.html#loading-configurations-from-a-file)
 which avoids hard-coding the master name in your application.
 
 In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
-context connects to using the `MASTER` environment variable, and you can add JARs to the classpath
-with the `ADD_JARS` variable. For example, to run `bin/spark-shell` on exactly four cores, use
+context connects to using the `--master` argument, and you can add JARs to the classpath
+by passing a comma separated list to the `--jars` argument. For example, to run 
+`bin/spark-shell` on exactly four cores, use
 
 {% highlight bash %}
-$ MASTER=local[4] ./bin/spark-shell
+$ ./bin/spark-shell --master local[4]
 {% endhighlight %}
 
 Or, to also add `code.jar` to its classpath, use:
 
 {% highlight bash %}
-$ MASTER=local[4] ADD_JARS=code.jar ./bin/spark-shell
+$ ./bin/spark-shell --master local[4] --jars code.jar
 {% endhighlight %}
 
 ### Master URLs
@@ -80,9 +81,8 @@ The master URL passed to Spark can be in one of the following formats:
 <table class="table">
 <tr><th>Master URL</th><th>Meaning</th></tr>
 <tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
-<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine).
+<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). </td></tr>
 <tr><td> local[*] </td><td> Run Spark locally with as many worker threads as logical cores on your machine.</td></tr>
-</td></tr>
 <tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
         cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default.
 </td></tr>
@@ -145,7 +145,7 @@ RDDs support two types of operations: *transformations*, which create a new data
 
 All transformations in Spark are <i>lazy</i>, in that they do not compute their results right away. Instead, they just remember the transformations applied to some base dataset (e.g. a file). The transformations are only computed when an action requires a result to be returned to the driver program. This design enables Spark to run more efficiently -- for example, we can realize that a dataset created through `map` will be used in a `reduce` and return only the result of the `reduce` to the driver, rather than the larger mapped dataset.
 
-By default, each transformed RDD is recomputed each time you run an action on it. However, you may also *persist* an RDD in memory using the `persist` (or `cache`) method, in which case Spark will keep the elements around on the cluster for much faster access the next time you query it. There is also support for persisting datasets on disk, or replicated across the cluster. The next section in this document describes these options.
+By default, each transformed RDD may be recomputed each time you run an action on it. However, you may also *persist* an RDD in memory using the `persist` (or `cache`) method, in which case Spark will keep the elements around on the cluster for much faster access the next time you query it. There is also support for persisting datasets on disk, or replicated across the cluster. The next section in this document describes these options.
 
 The following tables list the transformations and actions currently supported (see also the [RDD API doc](api/scala/index.html#org.apache.spark.rdd.RDD) for details):
 
@@ -279,8 +279,8 @@ it is computed in an action, it will be kept in memory on the nodes. The cache i
 if any partition of an RDD is lost, it will automatically be recomputed using the transformations
 that originally created it.
 
-In addition, each RDD can be stored using a different *storage level*, allowing you, for example, to
-persist the dataset on disk, or persist it in memory but as serialized Java objects (to save space),
+In addition, each persisted RDD can be stored using a different *storage level*, allowing you, for example,
+to persist the dataset on disk, or persist it in memory but as serialized Java objects (to save space),
 or replicate it across nodes, or store the data in off-heap memory in [Tachyon](http://tachyon-project.org/).
 These levels are chosen by passing a
 [`org.apache.spark.storage.StorageLevel`](api/scala/index.html#org.apache.spark.storage.StorageLevel)
@@ -329,6 +329,8 @@ available storage levels is:
   <td> Same as the levels above, but replicate each partition on two cluster nodes. </td>
 </tr>
 </table>
+
+Spark sometimes automatically persists intermediate state from RDD operations, even without users calling persist() or cache(). In particular, if a shuffle happens when computing an RDD, Spark will keep the outputs from the map side of the shuffle on disk to avoid re-computing the entire dependency graph if an RDD is re-used. We still recommend users call persist() if they plan to re-use an RDD iteratively.
 
 ### Which Storage Level to Choose?
 

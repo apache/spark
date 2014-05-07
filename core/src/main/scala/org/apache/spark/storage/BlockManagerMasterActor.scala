@@ -28,6 +28,7 @@ import akka.actor.{Actor, ActorRef, Cancellable}
 import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -203,7 +204,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       val locations = blockLocations.get(blockId)
       locations -= blockManagerId
       if (locations.size == 0) {
-        blockLocations.remove(locations)
+        blockLocations.remove(blockId)
       }
     }
     listenerBus.post(SparkListenerBlockManagerRemoved(blockManagerId))
@@ -411,7 +412,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 }
 
-private[spark] case class BlockStatus(
+@DeveloperApi
+case class BlockStatus(
     storageLevel: StorageLevel,
     memSize: Long,
     diskSize: Long,

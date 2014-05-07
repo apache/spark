@@ -42,12 +42,12 @@ import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
 private[graphx]
 class EdgePartition[
     @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag, VD: ClassTag](
-    val srcIds: Array[VertexId],
-    val dstIds: Array[VertexId],
-    val data: Array[ED],
-    val index: PrimitiveKeyOpenHashMap[VertexId, Int],
-    val vertices: VertexPartition[VD],
-    val activeSet: Option[VertexSet] = None
+    @transient val srcIds: Array[VertexId],
+    @transient val dstIds: Array[VertexId],
+    @transient val data: Array[ED],
+    @transient val index: PrimitiveKeyOpenHashMap[VertexId, Int],
+    @transient val vertices: VertexPartition[VD],
+    @transient val activeSet: Option[VertexSet] = None
   ) extends Serializable {
 
   /** Return a new `EdgePartition` with the specified edge data. */

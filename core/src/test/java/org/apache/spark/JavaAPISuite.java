@@ -182,13 +182,30 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(2, foreachCalls);
   }
 
-    @Test
-    public void toLocalIterator() {
-        List<Integer> correct = Arrays.asList(1, 2, 3, 4);
-        JavaRDD<Integer> rdd = sc.parallelize(correct);
-        List<Integer> result = Lists.newArrayList(rdd.toLocalIterator());
-        Assert.assertTrue(correct.equals(result));
-    }
+  @Test
+  public void toLocalIterator() {
+    List<Integer> correct = Arrays.asList(1, 2, 3, 4);
+    JavaRDD<Integer> rdd = sc.parallelize(correct);
+    List<Integer> result = Lists.newArrayList(rdd.toLocalIterator());
+    Assert.assertTrue(correct.equals(result));
+  }
+
+  @Test
+  public void zipWithUniqueId() {
+    List<Integer> dataArray = Arrays.asList(1, 2, 3, 4);
+    JavaPairRDD<Integer, Long> zip = sc.parallelize(dataArray).zipWithUniqueId();
+    JavaRDD<Long> indexes = zip.values();
+    Assert.assertTrue(new HashSet<Long>(indexes.collect()).size() == 4);
+  }
+
+  @Test
+  public void zipWithIndex() {
+    List<Integer> dataArray = Arrays.asList(1, 2, 3, 4);
+    JavaPairRDD<Integer, Long> zip = sc.parallelize(dataArray).zipWithIndex();
+    JavaRDD<Long> indexes = zip.values();
+    List<Long> correctIndexes = Arrays.asList(0L, 1L, 2L, 3L);
+    Assert.assertTrue(indexes.collect().equals(correctIndexes));
+  }
 
   @SuppressWarnings("unchecked")
   @Test
@@ -610,8 +627,8 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void wholeTextFiles() throws IOException {
-    byte[] content1 = "spark is easy to use.\n".getBytes();
-    byte[] content2 = "spark is also easy to use.\n".getBytes();
+    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+    byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
 
     File tempDir = Files.createTempDir();
     String tempDirName = tempDir.getAbsolutePath();

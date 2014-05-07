@@ -165,7 +165,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       ssc = new StreamingContext(sc, Milliseconds(100))
       var runningCount = 0
       TestReceiver.counter.set(1)
-      val input = ssc.networkStream(new TestReceiver)
+      val input = ssc.receiverStream(new TestReceiver)
       input.count.foreachRDD(rdd => {
         val count = rdd.first()
         runningCount += count.toInt
@@ -183,6 +183,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
         "Received records = " + TestReceiver.counter.get() + ", " +
           "processed records = " + runningCount
       )
+      Thread.sleep(100)
     }
   }
 

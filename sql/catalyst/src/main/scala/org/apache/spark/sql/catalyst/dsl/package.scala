@@ -114,37 +114,37 @@ package object dsl {
       def attr = analysis.UnresolvedAttribute(s)
 
       /** Creates a new AttributeReference of type boolean */
-      def boolean = AttributeReference(s, BooleanType, nullable = false)()
+      def boolean = AttributeReference(s, BooleanType, nullable = true)()
 
       /** Creates a new AttributeReference of type byte */
-      def byte = AttributeReference(s, ByteType, nullable = false)()
+      def byte = AttributeReference(s, ByteType, nullable = true)()
 
       /** Creates a new AttributeReference of type short */
-      def short = AttributeReference(s, ShortType, nullable = false)()
+      def short = AttributeReference(s, ShortType, nullable = true)()
 
       /** Creates a new AttributeReference of type int */
-      def int = AttributeReference(s, IntegerType, nullable = false)()
+      def int = AttributeReference(s, IntegerType, nullable = true)()
 
       /** Creates a new AttributeReference of type long */
-      def long = AttributeReference(s, LongType, nullable = false)()
+      def long = AttributeReference(s, LongType, nullable = true)()
 
       /** Creates a new AttributeReference of type float */
-      def float = AttributeReference(s, FloatType, nullable = false)()
+      def float = AttributeReference(s, FloatType, nullable = true)()
 
       /** Creates a new AttributeReference of type double */
-      def double = AttributeReference(s, DoubleType, nullable = false)()
+      def double = AttributeReference(s, DoubleType, nullable = true)()
 
       /** Creates a new AttributeReference of type string */
-      def string = AttributeReference(s, StringType, nullable = false)()
+      def string = AttributeReference(s, StringType, nullable = true)()
 
       /** Creates a new AttributeReference of type decimal */
-      def decimal = AttributeReference(s, DecimalType, nullable = false)()
+      def decimal = AttributeReference(s, DecimalType, nullable = true)()
 
       /** Creates a new AttributeReference of type timestamp */
-      def timestamp = AttributeReference(s, TimestampType, nullable = false)()
+      def timestamp = AttributeReference(s, TimestampType, nullable = true)()
 
       /** Creates a new AttributeReference of type binary */
-      def binary = AttributeReference(s, BinaryType, nullable = false)()
+      def binary = AttributeReference(s, BinaryType, nullable = true)()
     }
 
     implicit class DslAttribute(a: AttributeReference) {

@@ -114,6 +114,8 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 import sqlContext._
 
 // Define the schema using a case class.
+// Note: Case classes in Scala 2.10 can support only up to 22 fields. To work around this limit, 
+// you can use custom classes that implement the Product interface.
 case class Person(name: String, age: Int)
 
 // Create an RDD of Person objects and register it as a table.
@@ -143,19 +145,19 @@ public static class Person implements Serializable {
   private String name;
   private int age;
 
-  String getName() {
+  public String getName() {
     return name;
   }
 
-  void setName(String name) {
+  public void setName(String name) {
     this.name = name;
   }
 
-  int getAge() {
+  public int getAge() {
     return age;
   }
 
-  void setAge(int age) {
+  public void setAge(int age) {
     this.age = age;
   }
 }
@@ -413,4 +415,5 @@ results = hiveCtx.hql("FROM src SELECT key, value").collect()
 
 {% endhighlight %}
 
+</div>
 </div>
