@@ -416,10 +416,10 @@ private[spark] class TaskSetManager(
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           if (serializedTask.limit >= akkaFrameSize - 1024) {
-            val msg = "Serialized task %s:%d were %d bytes which " +
+            var msg = "Serialized task %s:%d were %d bytes which " +
               "exceeds spark.akka.frameSize (%d bytes)."
-            val exception = new SparkException(msg.format(taskSet.id,
-              index, serializedTask.limit, akkaFrameSize))
+            msg = msg.format(taskSet.id, index, serializedTask.limit, akkaFrameSize)
+            val exception = new SparkException(msg)
             logError(msg, exception)
             throw exception
           }
