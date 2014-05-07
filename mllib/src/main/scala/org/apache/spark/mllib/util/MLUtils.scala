@@ -180,6 +180,39 @@ object MLUtils {
   }
 
   /**
+   * Loads vectors saved using `RDD[Vector]#saveAsTextFile`.
+   * @param sc Spark context
+   * @param path file or directory path in any Hadoop-supported file system URI
+   * @param minPartitions min number of partitions
+   * @return vectors stored as an RDD[Vector]
+   */
+  def loadVectors(sc: SparkContext, path: String, minPartitions: Int): RDD[Vector] =
+    sc.textFile(path, minPartitions).map(Vectors.parse)
+
+  /**
+   * Loads vectors saved using `RDD[Vector]#saveAsTextFile` with the default number of partitions.
+   */
+  def loadVectors(sc: SparkContext, path: String): RDD[Vector] =
+    sc.textFile(path, sc.defaultMinPartitions).map(Vectors.parse)
+
+  /**
+   * Loads labeled points saved using `RDD[LabeledPoint]#saveAsTextFile`.
+   * @param sc Spark context
+   * @param path file or directory path in any Hadoop-supported file system URI
+   * @param minPartitions min number of partitions
+   * @return labeled points stored as an RDD[LabeledPoint]
+   */
+  def loadLabeledPoints(sc: SparkContext, path: String, minPartitions: Int): RDD[LabeledPoint] =
+    sc.textFile(path, minPartitions).map(LabeledPoint.parse)
+
+  /**
+   * Loads labeled points saved using `RDD[LabeledPoint]#saveAsTextFile` with the default number of
+   * partitions.
+   */
+  def loadLabeledPoints(sc: SparkContext, dir: String): RDD[LabeledPoint] =
+    loadLabeledPoints(sc, dir, sc.defaultMinPartitions)
+
+  /**
    * :: Experimental ::
    * Load labeled data from a file. The data format used here is
    * <L>, <f1> <f2> ...

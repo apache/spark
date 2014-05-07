@@ -125,7 +125,11 @@ object Vectors {
     }.toSeq)
   }
 
-  private[mllib] def parse(s: String): Vector = VectorParsers(s)
+  /**
+   * Parses a string resulted from `Vector#toString` into
+   * an [[org.apache.spark.mllib.linalg.Vector]].
+   */
+  def parse(s: String): Vector = VectorParsers.parse(s)
 
   /**
    * Creates a vector instance from a breeze vector.
@@ -217,5 +221,5 @@ private[mllib] class VectorParsers extends JavaTokenParsers {
 
 private[mllib] object VectorParsers extends VectorParsers {
   /** Parses a string into an [[org.apache.spark.mllib.linalg.Vector]]. */
-  def apply(s: String): Vector = parse(vector, s).get
+  def parse(s: String): Vector = parse(vector, s).get
 }

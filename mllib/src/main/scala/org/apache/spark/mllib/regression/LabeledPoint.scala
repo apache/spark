@@ -32,7 +32,10 @@ case class LabeledPoint(label: Double, features: Vector) {
 }
 
 object LabeledPoint {
-  /** Parses a string into an [[org.apache.spark.mllib.regression.LabeledPoint]]. */
+  /**
+   * Parses a string resulted from `LabeledPoint#toString` into
+   * an [[org.apache.spark.mllib.regression.LabeledPoint]].
+   */
   def parse(s: String) = LabeledPointParsers.parse(s)
 }
 
