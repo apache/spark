@@ -334,6 +334,8 @@ object DecisionTree extends Serializable with Logging {
    * @param filters Filters for all nodes at a given level
    * @param splits possible splits for all features
    * @param bins possible bins for all features
+   * @param numGroups total number of node groups at the current level. Default value is set to 1.
+   * @param groupIndex index of the node group being processed. Default value is set to 0.
    * @return array of splits with best splits for all nodes at a given level.
    */
   private def findBestSplitsPerGroup(
