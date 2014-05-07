@@ -59,8 +59,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
 
     whenExecuting(blockManager) {
-      val context = new TaskContext(0, 0, 0, interrupted = false, runningLocally = false,
-        taskMetrics = TaskMetrics.empty)
+      val context = new TaskContext(0, 0, 0)
       val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
       assert(value.toList === List(1, 2, 3, 4))
     }
@@ -72,8 +71,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
 
     whenExecuting(blockManager) {
-      val context = new TaskContext(0, 0, 0, interrupted = false, runningLocally = false,
-        taskMetrics = TaskMetrics.empty)
+      val context = new TaskContext(0, 0, 0)
       val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
       assert(value.toList === List(5, 6, 7))
     }
@@ -86,8 +84,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
 
     whenExecuting(blockManager) {
-      val context = new TaskContext(0, 0, 0, runningLocally = true, interrupted = false,
-        taskMetrics = TaskMetrics.empty)
+      val context = new TaskContext(0, 0, 0)
       val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
       assert(value.toList === List(1, 2, 3, 4))
     }
