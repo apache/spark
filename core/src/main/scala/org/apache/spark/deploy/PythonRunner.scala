@@ -17,13 +17,10 @@
 
 package org.apache.spark.deploy
 
-import java.io.{IOException, File, InputStream, OutputStream}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
-import org.apache.spark.SparkContext
-import org.apache.spark.api.python.PythonUtils
+import org.apache.spark.api.python.{PythonUtils, RedirectThread}
 
 /**
  * A main class used by spark-submit to launch Python applications. It executes python as a
@@ -61,24 +58,5 @@ object PythonRunner {
     new RedirectThread(process.getInputStream, System.out, "redirect output").start()
 
     System.exit(process.waitFor())
-  }
-
-  /**
-   * A utility class to redirect the child process's stdout or stderr
-   */
-  class RedirectThread(in: InputStream, out: OutputStream, name: String) extends Thread(name) {
-    setDaemon(true)
-    override def run() {
-      scala.util.control.Exception.ignoring(classOf[IOException]) {
-        // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-        val buf = new Array[Byte](1024)
-        var len = in.read(buf)
-        while (len != -1) {
-          out.write(buf, 0, len)
-          out.flush()
-          len = in.read(buf)
-        }
-      }
-    }
   }
 }
