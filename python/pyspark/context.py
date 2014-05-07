@@ -453,7 +453,7 @@ class SparkContext(object):
         >>> lock = threading.Lock()
         >>> def map_func(x):
         ...     sleep(100)
-        ...     return x * x
+        ...     raise Exception("Task should have been cancelled")
         >>> def start_job(x):
         ...     global result
         ...     try:

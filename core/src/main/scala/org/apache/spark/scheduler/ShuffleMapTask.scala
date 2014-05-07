@@ -17,11 +17,13 @@
 
 package org.apache.spark.scheduler
 
+import scala.language.existentials
+
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.HashMap
-import scala.language.existentials
+import scala.util.Try
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -196,7 +198,11 @@ private[spark] class ShuffleMapTask(
     } finally {
       // Release the writers back to the shuffle block manager.
       if (shuffle != null && shuffle.writers != null) {
-        shuffle.releaseWriters(success)
+        try {
+          shuffle.releaseWriters(success)
+        } catch {
+          case e: Exception => logError("Failed to release shuffle writers", e)
+        }
       }
       // Execute the callbacks on task completion.
       context.executeOnCompleteCallbacks()
