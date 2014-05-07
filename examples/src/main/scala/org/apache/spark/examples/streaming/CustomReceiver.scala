@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.examples
+package org.apache.spark.examples.streaming
 
 import java.io.{InputStreamReader, BufferedReader, InputStream}
 import java.net.Socket
@@ -37,7 +37,7 @@ import org.apache.spark.streaming.receiver.Receiver
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
  * and then run the example
- *    `$ ./run org.apache.spark.streaming.examples.CustomReceiver local[2] localhost 9999`
+ *    `$ ./run org.apache.spark.examples.streaming.CustomReceiver local[2] localhost 9999`
  */
 object CustomReceiver {
   def main(args: Array[String]) {
