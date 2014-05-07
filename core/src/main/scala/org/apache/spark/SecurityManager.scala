@@ -146,8 +146,9 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
 
   private val secretKey = generateSecretKey()
-  logInfo("SecurityManager, is authentication enabled: " + authOn +
-    " are ui acls enabled: " + uiAclsOn + " users with view permissions: " + viewAcls.toString())
+  logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
+    "; ui acls " + (if (uiAclsOn) "enabled" else "disabled") +
+    "; users with view permissions: " + viewAcls.toString())
 
   // Set our own authenticator to properly negotiate user/password for HTTP connections.
   // This is needed by the HTTP client fetching from the HttpServer. Put here so its
