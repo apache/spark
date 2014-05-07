@@ -66,12 +66,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       try {
         new Socket(daemonHost, daemonPort)
       } catch {
-        case exc: SocketException => {
+        case exc: SocketException =>
           logWarning("Python daemon unexpectedly quit, attempting to restart")
           stopDaemon()
           startDaemon()
           new Socket(daemonHost, daemonPort)
-        }
         case e: Throwable => throw e
       }
     }
@@ -93,7 +92,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       val worker = pb.start()
 
       // Redirect worker stdout and stderr
-      redirectWorkerStreams(worker.getInputStream, worker.getErrorStream)
+      redirectStreamsToStderr(worker.getInputStream, worker.getErrorStream)
 
       // Tell the worker our port
       val out = new OutputStreamWriter(worker.getOutputStream)
@@ -134,11 +133,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         val in = new DataInputStream(daemon.getInputStream)
         daemonPort = in.readInt()
 
-        // Redirect worker stdout and stderr
-        redirectWorkerStreams(in, daemon.getErrorStream)
+        // Redirect daemon stdout and stderr
+        redirectStreamsToStderr(in, daemon.getErrorStream)
 
       } catch {
-        case e: Throwable =>
+        case e: Exception =>
 
           // If the daemon exists, wait for it to finish and get its stderr
           val stderr = Option(daemon)
@@ -171,15 +170,15 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   /**
-   * Redirect a worker's stdout and stderr to our stderr.
+   * Redirect the given streams to our stderr in separate threads.
    */
-  private def redirectWorkerStreams(stdout: InputStream, stderr: InputStream) {
+  private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream) {
     try {
       new RedirectThread(stdout, System.err, "stdout reader for " + pythonExec).start()
       new RedirectThread(stderr, System.err, "stderr reader for " + pythonExec).start()
     } catch {
-      case e: Throwable =>
-        logWarning("Exception in redirecting worker streams")
+      case e: Exception =>
+        logError("Exception in redirecting streams", e)
     }
   }
 
