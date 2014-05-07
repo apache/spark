@@ -129,7 +129,7 @@ ssc.awaitTermination()  // Wait for the computation to terminate
 {% endhighlight %}
 
 The complete code can be found in the Spark Streaming example
-[NetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/streaming/examples/NetworkWordCount.scala).
+[NetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/NetworkWordCount.scala).
 <br>
 
 </div>
@@ -215,7 +215,7 @@ jssc.awaitTermination();   // Wait for the computation to terminate
 {% endhighlight %}
 
 The complete code can be found in the Spark Streaming example
-[JavaNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/streaming/examples/JavaNetworkWordCount.java).
+[JavaNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaNetworkWordCount.java).
 <br>
 
 </div>
@@ -234,12 +234,12 @@ Then, in a different terminal, you can start the example by using
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight bash %}
-$ ./bin/run-example org.apache.spark.streaming.examples.NetworkWordCount local[2] localhost 9999
+$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount local[2] localhost 9999
 {% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
 {% highlight bash %}
-$ ./bin/run-example org.apache.spark.streaming.examples.JavaNetworkWordCount local[2] localhost 9999
+$ ./bin/run-example org.apache.spark.examples.streaming.JavaNetworkWordCount local[2] localhost 9999
 {% endhighlight %}
 </div>
 </div>
@@ -268,7 +268,7 @@ hello world
 {% highlight bash %}
 # TERMINAL 2: RUNNING NetworkWordCount or JavaNetworkWordCount
 
-$ ./bin/run-example org.apache.spark.streaming.examples.NetworkWordCount local[2] localhost 9999
+$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount local[2] localhost 9999
 ...
 -------------------------------------------
 Time: 1357008430000 ms
@@ -609,7 +609,7 @@ JavaPairDStream<String, Integer> runningCounts = pairs.updateStateByKey(updateFu
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Scala code, take a look at the example
-[StatefulNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/streaming/examples/StatefulNetworkWordCount.scala).
+[StatefulNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/StatefulNetworkWordCount.scala).
 
 <h4>Transform Operation</h4>
 
@@ -1135,7 +1135,7 @@ If the `checkpointDirectory` exists, then the context will be recreated from the
 If the directory does not exist (i.e., running for the first time),
 then the function `functionToCreateContext` will be called to create a new
 context and set up the DStreams. See the Scala example
-[RecoverableNetworkWordCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/streaming/examples/RecoverableNetworkWordCount.scala).
+[RecoverableNetworkWordCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/RecoverableNetworkWordCount.scala).
 This example appends the word counts of network data into a file.
 
 You can also explicitly create a `StreamingContext` from the checkpoint data and start the
@@ -1174,7 +1174,7 @@ If the `checkpointDirectory` exists, then the context will be recreated from the
 If the directory does not exist (i.e., running for the first time),
 then the function `contextFactory` will be called to create a new
 context and set up the DStreams. See the Scala example
-[JavaRecoverableWordCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/streaming/examples/JavaRecoverableWordCount.scala)
+[JavaRecoverableWordCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/JavaRecoverableWordCount.scala)
 (note that this example is missing in the 0.9 release, so you can test it using the master branch).
 This example appends the word counts of network data into a file.
 
@@ -1374,7 +1374,6 @@ package and renamed for better clarity.
     [ZeroMQUtils](api/java/org/apache/spark/streaming/zeromq/ZeroMQUtils.html), and
     [MQTTUtils](api/java/org/apache/spark/streaming/mqtt/MQTTUtils.html)
 
-* More examples in [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/streaming/examples)
-  and [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/streaming/examples)
-* [Paper](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf) and
-[video](http://youtu.be/g171ndOHgJ0) describing Spark Streaming.
+* More examples in [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming)
+  and [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming)
+* [Paper](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf) and [video](http://youtu.be/g171ndOHgJ0) describing Spark Streaming.

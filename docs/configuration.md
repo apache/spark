@@ -26,10 +26,10 @@ application name), as well as arbitrary key-value pairs through the `set()` meth
 initialize an application as follows:
 
 {% highlight scala %}
-val conf = new SparkConf()
-             .setMaster("local")
-             .setAppName("My application")
-             .set("spark.executor.memory", "1g")
+val conf = new SparkConf().
+             setMaster("local").
+             setAppName("My application").
+             set("spark.executor.memory", "1g")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
@@ -318,7 +318,7 @@ Apart from these, the following properties are also available, and may be useful
     When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
     objects to prevent writing redundant data, however that stops garbage collection of those
     objects. By calling 'reset' you flush that info from the serializer, and allow old
-    objects to be collected. To turn off this periodic reset set it to a value of <= 0.
+    objects to be collected. To turn off this periodic reset set it to a value &lt;= 0.
     By default it will reset the serializer every 10,000 objects.
   </td>
 </tr>
