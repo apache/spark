@@ -39,14 +39,29 @@
 # 5) ./bin/spark-shell --master spark://my-master-ip:7077
 #
 
+set -o pipefail
 # Figure out where the Spark framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
 
-VERSION=$(mvn help:evaluate -Dexpression=project.version | grep -v "INFO" | tail -n 1)
-if [ $? == -1 ] ;then
+if [ -z "$JAVA_HOME" ]; then
+  echo "Error: JAVA_HOME is not set, cannot proceed."
+  exit -1
+fi
+
+JAVA_CMD="$JAVA_HOME"/bin/java
+JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
+if ! [[ "$JAVA_VERSION" =~ "1.6" ]]; then
+  echo "***NOTE***: JAVA_HOME is not set to a JDK 6 installation. The resulting"
+  echo "            distribution will not support Java 6. See SPARK-1703."
+  echo "Output from 'java -version' was:"
+  echo "$JAVA_VERSION"
+fi
+
+VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+if [ $? != 0 ]; then
     echo -e "You need Maven installed to build Spark."
-    echo -e "Download Maven from https://maven.apache.org."
+    echo -e "Download Maven from https://maven.apache.org/"
     exit -1;
 fi
 
@@ -116,27 +131,34 @@ cd $FWDIR
 
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
-if [ "$SPARK_HIVE" == "true" ]; then
-  MAYBE_HIVE="-Phive"
-else
-  MAYBE_HIVE=""
-fi
+BUILD_COMMAND="mvn clean package"
 
-if [ "$SPARK_YARN" == "true" ]; then
-  if [[ "$SPARK_HADOOP_VERSION" =~ "0.23." ]]; then
-    mvn clean package -DskipTests -Pyarn-alpha -Dhadoop.version=$SPARK_HADOOP_VERSION \
-      -Dyarn.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE -Phadoop-0.23
-  else
-    mvn clean package -DskipTests -Pyarn -Dhadoop.version=$SPARK_HADOOP_VERSION \
-      -Dyarn.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
+# Use special profiles for hadoop versions 0.23.x, 2.2.x, 2.3.x, 2.4.x
+if [[ "$SPARK_HADOOP_VERSION" =~ ^0\.23\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-0.23"; fi
+if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.2\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.2"; fi
+if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.3\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.3"; fi
+if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.4\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.4"; fi
+if [[ "$SPARK_HIVE" == "true" ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phive"; fi
+if [[ "$SPARK_YARN" == "true" ]]; then
+  # For hadoop versions 0.23.x to 2.1.x, use the yarn-alpha profile
+  if [[ "$SPARK_HADOOP_VERSION" =~ ^0\.2[3-9]\. ]] ||
+     [[ "$SPARK_HADOOP_VERSION" =~ ^0\.[3-9][0-9]\. ]] ||
+     [[ "$SPARK_HADOOP_VERSION" =~ ^1\.[0-9]\. ]] ||
+     [[ "$SPARK_HADOOP_VERSION" =~ ^2\.[0-1]\. ]]; then
+    BUILD_COMMAND="$BUILD_COMMAND -Pyarn-alpha"
+  # For hadoop versions 2.2+, use the yarn profile
+  elif [[ "$SPARK_HADOOP_VERSION" =~ ^2.[2-9]. ]]; then
+    BUILD_COMMAND="$BUILD_COMMAND -Pyarn"
   fi
-else
-  if [[ "$SPARK_HADOOP_VERSION" =~ "0.23." ]]; then
-    mvn clean package -Phadoop-0.23 -DskipTests -Dhadoop.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
-  else
-    mvn clean package -DskipTests -Dhadoop.version=$SPARK_HADOOP_VERSION $MAYBE_HIVE
-  fi
+  BUILD_COMMAND="$BUILD_COMMAND -Dyarn.version=$SPARK_HADOOP_VERSION"
 fi
+BUILD_COMMAND="$BUILD_COMMAND -Dhadoop.version=$SPARK_HADOOP_VERSION"
+BUILD_COMMAND="$BUILD_COMMAND -DskipTests"
+
+# Actually build the jar
+echo -e "\nBuilding with..."
+echo -e "\$ $BUILD_COMMAND\n"
+${BUILD_COMMAND}
 
 # Make directories
 rm -rf "$DISTDIR"
