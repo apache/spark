@@ -23,7 +23,6 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.mock.EasyMockSugar
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage._
 
 // TODO: Test the CacheManager's thread-safety aspects
@@ -84,7 +83,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
 
     whenExecuting(blockManager) {
-      val context = new TaskContext(0, 0, 0)
+      val context = new TaskContext(0, 0, 0, runningLocally = true)
       val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
       assert(value.toList === List(1, 2, 3, 4))
     }
