@@ -60,6 +60,6 @@ class TaskContext(
   def executeOnCompleteCallbacks() {
     completed = true
     // Process complete callbacks in the reverse order of registration
-    onCompleteCallbacks.reverse.foreach{ _() }
+    onCompleteCallbacks.reverse.foreach { _() }
   }
 }
