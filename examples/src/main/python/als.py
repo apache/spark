@@ -38,7 +38,7 @@ def update(i, vec, mat, ratings):
     ff = mat.shape[1]
     
     XtX = mat.T * mat
-    XtY = mat.T * ratings[i, :].T
+    Xty = mat.T * ratings[i, :].T
     
     for j in range(ff):
         XtX[j,j] += LAMBDA * uu
