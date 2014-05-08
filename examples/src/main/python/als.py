@@ -40,7 +40,9 @@ def update(i, vec, mat, ratings):
     XtX = mat.T * mat
     XtY = mat.T * ratings[i, :].T
     
-    XtX += np.eye(ff, ff) * LAMBDA * uu
+    for j in range(ff):
+        XtX[j,j] += LAMBDA * uu
+    
     return np.linalg.solve(XtX, Xty)
 
 if __name__ == "__main__":
