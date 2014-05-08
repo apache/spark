@@ -56,15 +56,12 @@ class BreezeVectorConversionSuite extends FunSuite {
     assert(vec.values.eq(values), "should not copy data")
   }
 
-  test("sparse breeze by vector builder to vector") {
-    val builder = new BVB[Double](n)
-    for (i <- 0 until indices.length) {
-      builder.add(indices(i), values(i))
-    }
-    val breeze = builder.toSparseVector
+  test("sparse breeze with partially-used arrays to vector") {
+    val activeSize = 3
+    val breeze = new BSV[Double](indices, values, activeSize, n)
     val vec = Vectors.fromBreeze(breeze).asInstanceOf[SparseVector]
     assert(vec.size === n)
-    assert(vec.indices === indices)
-    assert(vec.values === values)
+    assert(vec.indices === indices.slice(0, activeSize))
+    assert(vec.values === values.slice(0, activeSize))
   }
 }
