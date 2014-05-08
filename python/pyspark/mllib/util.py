@@ -106,24 +106,18 @@ class MLUtils:
         >>> examples = MLUtils.loadLibSVMFile(sc, tempFile.name).collect()
         >>> multiclass_examples = MLUtils.loadLibSVMFile(sc, tempFile.name, True).collect()
         >>> tempFile.close()
-        >>> examples[0].label
-        1.0
-        >>> examples[0].features.size
-        6
-        >>> print examples[0].features
-        [0: 1.0, 2: 2.0, 4: 3.0]
-        >>> examples[1].label
-        0.0
-        >>> examples[1].features.size
-        6
-        >>> print examples[1].features
-        []
-        >>> examples[2].label
-        0.0
-        >>> examples[2].features.size
-        6
-        >>> print examples[2].features
-        [1: 4.0, 3: 5.0, 5: 6.0]
+        >>> type(examples[0]) == LabeledPoint
+        True
+        >>> print examples[0]
+        (1.0,(6,[0,2,4],[1.0,2.0,3.0]))
+        >>> type(examples[1]) == LabeledPoint
+        True
+        >>> print examples[1]
+        (0.0,(6,[],[]))
+        >>> type(examples[2]) == LabeledPoint
+        True
+        >>> print examples[2]
+        (0.0,(6,[1,3,5],[4.0,5.0,6.0]))
         >>> multiclass_examples[1].label
         -1.0
         """
@@ -159,6 +153,37 @@ class MLUtils:
         lines = data.map(lambda p: MLUtils._convert_labeled_point_to_libsvm(p))
         lines.saveAsTextFile(dir)
 
+
+    @staticmethod
+    def loadLabeledPoints(sc, path, minPartitions=None):
+        """
+        Load labeled points saved using RDD.saveAsTextFile.
+
+        @param sc: Spark context
+        @param path: file or directory path in any Hadoop-supported file
+                     system URI
+        @param minPartitions: min number of partitions
+        @return: labeled data stored as an RDD of LabeledPoint
+
+        >>> from tempfile import NamedTemporaryFile
+        >>> from pyspark.mllib.util import MLUtils
+        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, 1.23), (2, 4.56)])), \
+                        LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
+        >>> tempFile = NamedTemporaryFile(delete=True)
+        >>> tempFile.close()
+        >>> sc.parallelize(examples, 1).saveAsTextFile(tempFile.name)
+        >>> loaded = MLUtils.loadLabeledPoints(sc, tempFile.name).collect()
+        >>> type(loaded[0]) == LabeledPoint
+        True
+        >>> print examples[0]
+        (1.1,(3,[0,2],[1.23,4.56]))
+        >>> type(examples[1]) == LabeledPoint
+        True
+        >>> print examples[1]
+        (0.0,[1.01,2.02,3.03])
+
+        """
+        return sc.textFile(path, minPartitions).map(LabeledPoint.parse)
 
 def _test():
     import doctest
