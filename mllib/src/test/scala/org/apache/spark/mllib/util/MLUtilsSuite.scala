@@ -182,7 +182,6 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     val tempDir = Files.createTempDir()
     val outputDir = new File(tempDir, "points")
     val path = outputDir.toURI.toString
-    println(path)
     points.saveAsTextFile(path)
     val loaded = loadLabeledPoints(sc, path)
     assert(points.collect().toSet === loaded.collect().toSet)

@@ -181,7 +181,6 @@ class MLUtils:
         True
         >>> print examples[1]
         (0.0,[1.01,2.02,3.03])
-
         """
         return sc.textFile(path, minPartitions).map(LabeledPoint.parse)
 
