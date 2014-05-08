@@ -573,14 +573,7 @@ object SparkBuild extends Build {
     name := "spark-assembly",
     assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
     jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
-    jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" } ,
-    mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>
-      {
-        case PathList("org", "datanucleus", xs @ _*)         => MergeStrategy.discard
-        case x => old(x)
-      }
-    }
-
+    jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" }
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(
