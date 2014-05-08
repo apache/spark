@@ -390,23 +390,6 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 % c2, 1, row)
   }
 
-  test("BinaryPredicate") {
-    val row = new GenericRow(Array[Any](true, false, null))
-    val c1 = 'a.boolean.at(0)
-    val c2 = 'a.boolean.at(1)
-    val c3 = 'a.boolean.at(2)
-
-    checkEvaluation(And(c1, c1), true, row)
-    checkEvaluation(And(c1, c2), false, row)
-    checkEvaluation(And(c1, c3), null, row)
-    checkEvaluation(And(c1, Literal(null, BooleanType)), null, row)
-    checkEvaluation(And(Literal(null, BooleanType), c2), false, row)
-    checkEvaluation(And(Literal(null, BooleanType), Literal(null, BooleanType)), null, row)
-
-    checkEvaluation(c1 && c2, false, row)
-    checkEvaluation(c1 || c2, true, row)
-  }
-
   test("BinaryComparison") {
     val row = new GenericRow(Array[Any](1, 2, 3, null))
     val c1 = 'a.int.at(0)
