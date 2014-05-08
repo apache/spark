@@ -381,6 +381,30 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Add(c1, Literal(null, IntegerType)), null, row)
     checkEvaluation(Add(Literal(null, IntegerType), c2), null, row)
     checkEvaluation(Add(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(-c1, -1, row)
+    checkEvaluation(c1 + c2, 3, row)
+    checkEvaluation(c1 - c2, -1, row)
+    checkEvaluation(c1 * c2, 2, row)
+    checkEvaluation(c1 / c2, 0, row)
+    checkEvaluation(c1 % c2, 1, row)
+  }
+
+  test("BinaryPredicate") {
+    val row = new GenericRow(Array[Any](true, false, null))
+    val c1 = 'a.boolean.at(0)
+    val c2 = 'a.boolean.at(1)
+    val c3 = 'a.boolean.at(2)
+
+    checkEvaluation(And(c1, c1), true, row)
+    checkEvaluation(And(c1, c2), false, row)
+    checkEvaluation(And(c1, c3), null, row)
+    checkEvaluation(And(c1, Literal(null, BooleanType)), null, row)
+    checkEvaluation(And(Literal(null, BooleanType), c2), false, row)
+    checkEvaluation(And(Literal(null, BooleanType), Literal(null, BooleanType)), null, row)
+
+    checkEvaluation(c1 && c2, false, row)
+    checkEvaluation(c1 || c2, true, row)
   }
 
   test("BinaryComparison") {
@@ -395,6 +419,13 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(LessThan(c1, Literal(null, IntegerType)), null, row)
     checkEvaluation(LessThan(Literal(null, IntegerType), c2), null, row)
     checkEvaluation(LessThan(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(c1 < c2, true, row)
+    checkEvaluation(c1 <= c2, true, row)
+    checkEvaluation(c1 > c2, false, row)
+    checkEvaluation(c1 >= c2, false, row)
+    checkEvaluation(c1 === c2, false, row)
+    checkEvaluation(c1 !== c2, true, row)
   }
 }
 
