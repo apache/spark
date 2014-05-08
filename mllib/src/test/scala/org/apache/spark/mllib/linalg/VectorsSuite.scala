@@ -115,7 +115,7 @@ class VectorsSuite extends FunSuite {
       assert(v === v1)
     }
 
-    val malformatted = Seq("1", "[1,]", "[1,2", "(1,[1,2])", "(1,[1],[2.0,1.0])")
+    val malformatted = Seq("1", "[1,,]", "[1,2", "(1,[1,2])", "(1,[1],[2.0,1.0])")
     malformatted.foreach { s =>
       intercept[RuntimeException] {
         Vectors.parse(s)

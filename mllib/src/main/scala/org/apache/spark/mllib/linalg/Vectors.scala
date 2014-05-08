@@ -17,14 +17,16 @@
 
 package org.apache.spark.mllib.linalg
 
-import java.lang.{Iterable => JavaIterable, Integer => JavaInteger, Double => JavaDouble}
+import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => JavaIterable}
 import java.util.Arrays
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
 import scala.util.parsing.combinator.JavaTokenParsers
 
-import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
+
+import org.apache.spark.mllib.util.NumericParser
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
@@ -129,7 +131,20 @@ object Vectors {
    * Parses a string resulted from `Vector#toString` into
    * an [[org.apache.spark.mllib.linalg.Vector]].
    */
-  def parse(s: String): Vector = VectorParsers.parse(s)
+  def parse(s: String): Vector = {
+    parseNumeric(NumericParser.parse(s))
+  }
+
+  private[mllib] def parseNumeric(any: Any): Vector = {
+    any match {
+      case values: Array[Double] =>
+        Vectors.dense(values)
+      case Seq(size: Double, indices: Array[Double], values: Array[Double]) =>
+        Vectors.sparse(size.toInt, indices.map(_.toInt), values)
+      case other =>
+        sys.error(s"Cannot parse $other.")
+    }
+  }
 
   /**
    * Creates a vector instance from a breeze vector.

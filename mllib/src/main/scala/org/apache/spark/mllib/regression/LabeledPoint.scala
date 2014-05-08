@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.mllib.linalg.{Vectors, Vector, VectorParsers}
+import org.apache.spark.mllib.util.NumericParser
 
 /**
  * Class that represents the features and labels of a data point.
@@ -36,7 +37,21 @@ object LabeledPoint {
    * Parses a string resulted from `LabeledPoint#toString` into
    * an [[org.apache.spark.mllib.regression.LabeledPoint]].
    */
-  def parse(s: String) = LabeledPointParsers.parse(s)
+  def parse(s: String): LabeledPoint = {
+    if (s.startsWith("(") || s.startsWith(")")) {
+      NumericParser.parse(s) match {
+        case Seq(label: Double, numeric: Any) =>
+          LabeledPoint(label, Vectors.parseNumeric(numeric))
+        case other =>
+          sys.error(s"Cannot parse $other.")
+      }
+    } else {
+      val parts = s.split(',')
+      val label = parts(0).toDouble
+      val features = Vectors.dense(parts(1).trim().split(' ').map(_.toDouble))
+      LabeledPoint(label, features)
+    }
+  }
 }
 
 /**
