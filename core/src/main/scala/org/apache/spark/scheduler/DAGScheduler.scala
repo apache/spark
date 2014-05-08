@@ -39,6 +39,7 @@ import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
 import org.apache.spark.util.Utils
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -888,6 +889,15 @@ class DAGScheduler(
                 } {
                   logInfo("Submitting " + stage + " (" + stage.rdd + "), which is now runnable")
                   submitMissingTasks(stage, jobId)
+                }
+              }
+            } else {
+              //ShuffleMap stage not finished yet. Maybe we can remove the stage barrier here.
+              if (taskScheduler.isInstanceOf[TaskSchedulerImpl] && taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.isInstanceOf[CoarseGrainedSchedulerBackend]) {
+                val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.asInstanceOf[CoarseGrainedSchedulerBackend]
+                if (backend.freeCoreCount.get() > 0) {
+                  logInfo("We have "+backend.totalCoreCount.get()+" CPUs. "+pendingTasks(stage).size+" tasks are running/pending. "+
+                    backend.freeCoreCount.get()+" cores are free. "+waitingStages.size+" stages are waiting to be submitted. ---lirui")
                 }
               }
             }
