@@ -49,8 +49,7 @@ class SparseVector(object):
         >>> print SparseVector(4, [1, 3], [1.0, 5.5])
         (4,[1,3],[1.0,5.5])
         """
-        assert type(size) == int, "first argument must be an int"
-        self.size = size
+        self.size = int(size)
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
         if len(args) == 1:
             pairs = args[0]
