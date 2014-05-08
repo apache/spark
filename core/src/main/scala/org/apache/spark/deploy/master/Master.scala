@@ -511,8 +511,8 @@ private[spark] class Master(
     if (spreadOutApps) {
       for (app <- waitingApps if app.coresLeft > 0) {
         var usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(worker => worker.coresFree > 0 && worker.memoryFree >= app.desc.memoryPerExecutor).
-          sortBy(_.coresFree).reverse
+          .filter(worker => worker.coresFree > 0 && worker.memoryFree >=
+          app.desc.memoryPerExecutor).sortBy(_.coresFree).reverse
         val maxCoreNumPerExecutor = app.desc.maxCorePerExecutor.get
         var mostFreeCoreWorkerPos = 0
         var leftCoreToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
