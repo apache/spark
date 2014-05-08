@@ -57,10 +57,14 @@ package object dsl {
   trait ImplicitOperators {
     def expr: Expression
 
+    def unary_- = UnaryMinus(expr)
+    def unary_! = Not(expr)
+
     def + (other: Expression) = Add(expr, other)
     def - (other: Expression) = Subtract(expr, other)
     def * (other: Expression) = Multiply(expr, other)
     def / (other: Expression) = Divide(expr, other)
+    def % (other: Expression) = Remainder(expr, other)
 
     def && (other: Expression) = And(expr, other)
     def || (other: Expression) = Or(expr, other)
