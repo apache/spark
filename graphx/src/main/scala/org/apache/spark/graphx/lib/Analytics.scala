@@ -27,6 +27,11 @@ import org.apache.spark.graphx.PartitionStrategy._
 object Analytics extends Logging {
 
   def main(args: Array[String]): Unit = {
+    if (args.length < 2) {
+      System.err.println("Usage: Analytics <taskType> <file> [other options]")
+      System.exit(1)
+    }
+
     val taskType = args(0)
     val fname = args(1)
     val options =  args.drop(2).map { arg =>
