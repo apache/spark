@@ -28,13 +28,12 @@ import org.apache.spark.executor.TaskMetrics
  */
 @DeveloperApi
 class TaskContext(
-  val stageId: Int,
-  val partitionId: Int,
-  val attemptId: Long,
-  val runningLocally: Boolean = false,
-  @volatile var interrupted: Boolean = false,
-  private[spark] val taskMetrics: TaskMetrics = TaskMetrics.empty
-) extends Serializable {
+    val stageId: Int,
+    val partitionId: Int,
+    val attemptId: Long,
+    val runningLocally: Boolean = false,
+    private[spark] val taskMetrics: TaskMetrics = TaskMetrics.empty)
+  extends Serializable {
 
   @deprecated("use partitionId", "0.8.1")
   def splitId = partitionId
@@ -42,7 +41,10 @@ class TaskContext(
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[() => Unit]
 
-  // Set to true when the task is completed, before the onCompleteCallbacks are executed.
+  // Whether the corresponding task has been killed.
+  @volatile var interrupted: Boolean = false
+
+  // Whether the task has completed, before the onCompleteCallbacks are executed.
   @volatile var completed: Boolean = false
 
   /**
@@ -58,6 +60,6 @@ class TaskContext(
   def executeOnCompleteCallbacks() {
     completed = true
     // Process complete callbacks in the reverse order of registration
-    onCompleteCallbacks.reverse.foreach{_()}
+    onCompleteCallbacks.reverse.foreach { _() }
   }
 }
