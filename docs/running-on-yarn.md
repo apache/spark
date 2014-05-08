@@ -43,13 +43,12 @@ Unlike in Spark standalone and Mesos mode, in which the master's address is spec
 
 To launch a Spark application in yarn-cluster mode:
 
-    ./bin/spark-submit --class path.to.your.Class --master yarn-cluster --deploy-mode cluster [options] <app jar> [app options]
+    ./bin/spark-submit --class path.to.your.Class --master yarn-cluster [options] <app jar> [app options]
     
 For example:
 
     $ ./bin/spark-submit --class org.apache.spark.examples.SparkPi \
         --master yarn-cluster \
-        --deploy-mode cluster \
         --num-executors 3 \
         --driver-memory 4g \
         --executor-memory 2g \
@@ -69,10 +68,9 @@ In yarn-cluster mode, the driver runs on a different machine than the client, so
 
     $ ./bin/spark-submit --class my.main.Class \
         --master yarn-cluster \
-        --deploy-mode cluster \
         --jars my-other-jar.jar,my-other-other-jar.jar
         my-main-jar.jar
-        [app arguments]
+        app_arg1 app_arg2
 
 # Debugging your Application
 
