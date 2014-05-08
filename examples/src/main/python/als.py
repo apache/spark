@@ -36,14 +36,13 @@ def rmse(R, ms, us):
 def update(i, vec, mat, ratings):
     uu = mat.shape[0]
     ff = mat.shape[1]
-    XtX = matrix(np.zeros((ff, ff)))
-    Xty = np.zeros((ff, 1))
-
-    for j in range(uu):
-        v = mat[j, :]
-        XtX += v.T * v
-        Xty += v.T * ratings[i, j]
-    XtX += np.eye(ff, ff) * LAMBDA * uu
+    
+    XtX = mat.T * mat
+    XtY = mat.T * ratings[i, :].T
+    
+    for j in range(ff):
+        XtX[j,j] += LAMBDA * uu
+    
     return np.linalg.solve(XtX, Xty)
 
 if __name__ == "__main__":
