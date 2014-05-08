@@ -28,14 +28,10 @@ import org.apache.spark.storage.StorageLevel
  */
 object SparkTachyonPi {
   def main(args: Array[String]) {
-    if (args.length == 0) {
-      System.err.println("Usage: SparkTachyonPi <master> [<slices>]")
-      System.exit(1)
-    }
-    val spark = new SparkContext(args(0), "SparkTachyonPi",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
+    val sparkConf = new SparkConf().setAppName("SparkTachyonPi")
+    val spark = new SparkContext(sparkConf)
 
-    val slices = if (args.length > 1) args(1).toInt else 2
+    val slices = if (args.length > 0) args(0).toInt else 2
     val n = 100000 * slices
 
     val rdd = spark.parallelize(1 to n, slices)
