@@ -61,7 +61,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   test("3VL Not") {
     notTrueTable.foreach {
       case (v, answer) =>
-        val expr = Not(Literal(v, BooleanType))
+        val expr = ! Literal(v, BooleanType)
         val result = expr.eval(null)
         if (result != answer)
           fail(s"$expr should not evaluate to $result, expected: $answer")    }
