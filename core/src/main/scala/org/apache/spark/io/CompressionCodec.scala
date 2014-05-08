@@ -24,6 +24,7 @@ import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -49,7 +50,7 @@ private[spark] object CompressionCodec {
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
-    val ctor = Class.forName(codecName, true, Thread.currentThread.getContextClassLoader)
+    val ctor = Class.forName(codecName, true, Utils.getContextOrSparkClassLoader)
       .getConstructor(classOf[SparkConf])
     ctor.newInstance(conf).asInstanceOf[CompressionCodec]
   }

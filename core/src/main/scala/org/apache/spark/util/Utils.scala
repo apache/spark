@@ -46,7 +46,6 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
-
   val random = new Random()
 
   def sparkBin(sparkHome: String, which: String): File = {
@@ -1082,4 +1081,48 @@ private[spark] object Utils extends Logging {
   def isTesting = {
     sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
   }
+
+  /**
+   * Strip the directory from a path name
+   */
+  def stripDirectory(path: String): String = {
+    path.split(File.separator).last
+  }
+
+  /**
+   * Wait for a process to terminate for at most the specified duration.
+   * Return whether the process actually terminated after the given timeout.
+   */
+  def waitForProcess(process: Process, timeoutMs: Long): Boolean = {
+    var terminated = false
+    val startTime = System.currentTimeMillis
+    while (!terminated) {
+      try {
+        process.exitValue
+        terminated = true
+      } catch {
+        case e: IllegalThreadStateException =>
+          // Process not terminated yet
+          if (System.currentTimeMillis - startTime > timeoutMs) {
+            return false
+          }
+          Thread.sleep(100)
+      }
+    }
+    true
+  }
+
+  /**
+   * Return the stderr of a process after waiting for the process to terminate.
+   * If the process does not terminate within the specified timeout, return None.
+   */
+  def getStderr(process: Process, timeoutMs: Long): Option[String] = {
+    val terminated = Utils.waitForProcess(process, timeoutMs)
+    if (terminated) {
+      Some(Source.fromInputStream(process.getErrorStream).getLines().mkString("\n"))
+    } else {
+      None
+    }
+  }
+
 }

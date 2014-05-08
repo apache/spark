@@ -181,7 +181,7 @@ The following table summarizes terms you'll see used to refer to cluster concept
       <td>Distinguishes where the driver process runs. In "cluster" mode, the framework launches
         the driver inside of the cluster. In "client" mode, the submitter launches the driver
         outside of the cluster.</td>
-    <tr>
+    </tr>
     <tr>
       <td>Worker node</td>
       <td>Any node that can run application code in the cluster</td>

@@ -75,8 +75,8 @@ object SparseNaiveBayes {
     val minPartitions =
       if (params.minPartitions > 0) params.minPartitions else sc.defaultMinPartitions
 
-    val examples = MLUtils.loadLibSVMData(sc, params.input, MulticlassLabelParser,
-      params.numFeatures, minPartitions)
+    val examples =
+      MLUtils.loadLibSVMFile(sc, params.input, multiclass = true, params.numFeatures, minPartitions)
     // Cache examples because it will be used in both training and evaluation.
     examples.cache()
 

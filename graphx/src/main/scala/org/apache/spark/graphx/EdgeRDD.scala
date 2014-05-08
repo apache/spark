@@ -51,18 +51,12 @@ class EdgeRDD[@specialized ED: ClassTag](
 
   override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect()
 
-  override def persist(newLevel: StorageLevel): EdgeRDD[ED] = {
+  override def persist(newLevel: StorageLevel): this.type = {
     partitionsRDD.persist(newLevel)
     this
   }
 
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
-  override def persist(): EdgeRDD[ED] = persist(StorageLevel.MEMORY_ONLY)
-
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
-  override def cache(): EdgeRDD[ED] = persist()
-
-  override def unpersist(blocking: Boolean = true): EdgeRDD[ED] = {
+  override def unpersist(blocking: Boolean = true): this.type = {
     partitionsRDD.unpersist(blocking)
     this
   }
