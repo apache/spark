@@ -18,6 +18,7 @@ conf/java-opts
 conf/spark-env.sh
 conf/streaming-env.sh
 conf/log4j.properties
+conf/spark-defaults.conf
 docs/_site
 docs/api
 target/
@@ -48,3 +49,9 @@ unit-tests.log
 /lib/
 rat-results.txt
 scalastyle.txt
+
+# For Hive
+metastore_db/
+metastore/
+warehouse/
+TempStatsStore/

@@ -28,14 +28,14 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("simple columnar query") {
     val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
+    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan, true))
 
     checkAnswer(scan, testData.collect().toSeq)
   }
 
   test("projection") {
     val plan = TestSQLContext.executePlan(testData.select('value, 'key).logicalPlan).executedPlan
-    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
+    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan, true))
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
@@ -44,9 +44,33 @@ class InMemoryColumnarQuerySuite extends QueryTest {
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
     val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
+    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan, true))
 
     checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)
+  }
+
+  test("SPARK-1678 regression: compression must not lose repeated values") {
+    checkAnswer(
+      sql("SELECT * FROM repeatedData"),
+      repeatedData.collect().toSeq)
+
+    TestSQLContext.cacheTable("repeatedData")
+
+    checkAnswer(
+      sql("SELECT * FROM repeatedData"),
+      repeatedData.collect().toSeq)
+  }
+
+  test("with null values") {
+    checkAnswer(
+      sql("SELECT * FROM nullableRepeatedData"),
+      nullableRepeatedData.collect().toSeq)
+
+    TestSQLContext.cacheTable("nullableRepeatedData")
+
+    checkAnswer(
+      sql("SELECT * FROM nullableRepeatedData"),
+      nullableRepeatedData.collect().toSeq)
   }
 }

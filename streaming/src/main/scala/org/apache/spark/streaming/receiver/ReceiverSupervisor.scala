@@ -88,15 +88,29 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Report errors. */
   def reportError(message: String, throwable: Throwable)
 
-  /** Start the executor */
+  /** Called when supervisor is started */
+  protected def onStart() { }
+
+  /** Called when supervisor is stopped */
+  protected def onStop(message: String, error: Option[Throwable]) { }
+
+  /** Called when receiver is started */
+  protected def onReceiverStart() { }
+
+  /** Called when receiver is stopped */
+  protected def onReceiverStop(message: String, error: Option[Throwable]) { }
+
+  /** Start the supervisor */
   def start() {
+    onStart()
     startReceiver()
   }
 
-  /** Mark the executor and the receiver for stopping */
+  /** Mark the supervisor and the receiver for stopping */
   def stop(message: String, error: Option[Throwable]) {
     stoppingError = error.orNull
     stopReceiver(message, error)
+    onStop(message, error)
     stopLatch.countDown()
   }
 
@@ -104,6 +118,8 @@ private[streaming] abstract class ReceiverSupervisor(
   def startReceiver(): Unit = synchronized {
     try {
       logInfo("Starting receiver")
+      receiver.onStart()
+      logInfo("Called receiver onStart")
       onReceiverStart()
       receiverState = Started
     } catch {
@@ -115,7 +131,10 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Stop receiver */
   def stopReceiver(message: String, error: Option[Throwable]): Unit = synchronized {
     try {
+      logInfo("Stopping receiver with message: " + message + ": " + error.getOrElse(""))
       receiverState = Stopped
+      receiver.onStop()
+      logInfo("Called receiver onStop")
       onReceiverStop(message, error)
     } catch {
       case t: Throwable =>
@@ -130,32 +149,16 @@ private[streaming] abstract class ReceiverSupervisor(
 
   /** Restart receiver with delay */
   def restartReceiver(message: String, error: Option[Throwable], delay: Int) {
-    logWarning("Restarting receiver with delay " + delay + " ms: " + message,
-      error.getOrElse(null))
-    stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
-    future {
+    Future {
+      logWarning("Restarting receiver with delay " + delay + " ms: " + message,
+        error.getOrElse(null))
+      stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)
-      logDebug("Starting receiver again")
+      logInfo("Starting receiver again")
       startReceiver()
       logInfo("Receiver started again")
     }
-  }
-
-  /** Called when the receiver needs to be started */
-  protected def onReceiverStart(): Unit = synchronized {
-    // Call user-defined onStart()
-    logInfo("Calling receiver onStart")
-    receiver.onStart()
-    logInfo("Called receiver onStart")
-  }
-
-  /** Called when the receiver needs to be stopped */
-  protected def onReceiverStop(message: String, error: Option[Throwable]): Unit = synchronized {
-    // Call user-defined onStop()
-    logInfo("Calling receiver onStop")
-    receiver.onStop()
-    logInfo("Called receiver onStop")
   }
 
   /** Check if receiver has been marked for stopping */
@@ -164,7 +167,14 @@ private[streaming] abstract class ReceiverSupervisor(
     receiverState == Started
   }
 
-  /** Wait the thread until the executor is stopped */
+  /** Check if receiver has been marked for stopping */
+  def isReceiverStopped() = {
+    logDebug("state = " + receiverState)
+    receiverState == Stopped
+  }
+
+
+  /** Wait the thread until the supervisor is stopped */
   def awaitTermination() {
     stopLatch.await()
     logInfo("Waiting for executor stop is over")

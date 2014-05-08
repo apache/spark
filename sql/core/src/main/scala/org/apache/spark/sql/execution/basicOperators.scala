@@ -57,9 +57,9 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class Sample(fraction: Double, withReplacement: Boolean, seed: Int, child: SparkPlan)
-    extends UnaryNode {
-
+case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: SparkPlan)
+  extends UnaryNode
+{
   override def output = child.output
 
   // TODO: How to pick seed?
@@ -164,6 +164,7 @@ case class Sort(
 @DeveloperApi
 object ExistingRdd {
   def convertToCatalyst(a: Any): Any = a match {
+    case o: Option[_] => o.orNull
     case s: Seq[Any] => s.map(convertToCatalyst)
     case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
     case other => other
@@ -180,7 +181,7 @@ object ExistingRdd {
         bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {
-            mutableRow(i) = r.productElement(i)
+            mutableRow(i) = convertToCatalyst(r.productElement(i))
             i += 1
           }
 

@@ -24,7 +24,11 @@ import org.apache.spark.sql.catalyst.types._
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   override def foldable = child.foldable
-  def nullable = child.nullable
+  def nullable = (child.dataType, dataType) match {
+    case (StringType, _: NumericType) => true
+    case (StringType, TimestampType)  => true
+    case _                            => child.nullable
+  }
   override def toString = s"CAST($child, $dataType)"
 
   type EvaluatedType = Any
@@ -178,7 +182,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case x: NumericType => b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)
   }
 
-  def cast: Any => Any = dataType match {
+  private lazy val cast: Any => Any = dataType match {
     case StringType => castToString
     case BinaryType => castToBinary
     case DecimalType => castToDecimal

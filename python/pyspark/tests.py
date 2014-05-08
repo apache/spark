@@ -22,16 +22,21 @@ individual modules.
 from fileinput import input
 from glob import glob
 import os
+import re
 import shutil
+import subprocess
 import sys
-from tempfile import NamedTemporaryFile
+import tempfile
 import time
 import unittest
+import zipfile
 
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
-from pyspark.java_gateway import SPARK_HOME
 from pyspark.serializers import read_int
+
+
+SPARK_HOME = os.environ["SPARK_HOME"]
 
 
 class PySparkTestCase(unittest.TestCase):
@@ -53,7 +58,7 @@ class TestCheckpoint(PySparkTestCase):
 
     def setUp(self):
         PySparkTestCase.setUp(self)
-        self.checkpointDir = NamedTemporaryFile(delete=False)
+        self.checkpointDir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.checkpointDir.name)
         self.sc.setCheckpointDir(self.checkpointDir.name)
 
@@ -146,7 +151,7 @@ class TestRDDFunctions(PySparkTestCase):
         # Regression test for SPARK-970
         x = u"\u00A1Hola, mundo!"
         data = self.sc.parallelize([x])
-        tempFile = NamedTemporaryFile(delete=True)
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
         tempFile.close()
         data.saveAsTextFile(tempFile.name)
         raw_contents = ''.join(input(glob(tempFile.name + "/part-0000*")))
@@ -170,7 +175,7 @@ class TestRDDFunctions(PySparkTestCase):
 
     def test_deleting_input_files(self):
         # Regression test for SPARK-1025
-        tempFile = NamedTemporaryFile(delete=False)
+        tempFile = tempfile.NamedTemporaryFile(delete=False)
         tempFile.write("Hello World!")
         tempFile.close()
         data = self.sc.textFile(tempFile.name)
@@ -233,6 +238,126 @@ class TestDaemon(unittest.TestCase):
         """Ensure that daemon and workers terminate on SIGTERM."""
         from signal import SIGTERM
         self.do_termination_test(lambda daemon: os.kill(daemon.pid, SIGTERM))
+
+
+class TestSparkSubmit(unittest.TestCase):
+    def setUp(self):
+        self.programDir = tempfile.mkdtemp()
+        self.sparkSubmit = os.path.join(os.environ.get("SPARK_HOME"), "bin", "spark-submit")
+
+    def tearDown(self):
+        shutil.rmtree(self.programDir)
+
+    def createTempFile(self, name, content):
+        """
+        Create a temp file with the given name and content and return its path.
+        Strips leading spaces from content up to the first '|' in each line.
+        """
+        pattern = re.compile(r'^ *\|', re.MULTILINE)
+        content = re.sub(pattern, '', content.strip())
+        path = os.path.join(self.programDir, name)
+        with open(path, "w") as f:
+            f.write(content)
+        return path
+
+    def createFileInZip(self, name, content):
+        """
+        Create a zip archive containing a file with the given content and return its path.
+        Strips leading spaces from content up to the first '|' in each line.
+        """
+        pattern = re.compile(r'^ *\|', re.MULTILINE)
+        content = re.sub(pattern, '', content.strip())
+        path = os.path.join(self.programDir, name + ".zip")
+        with zipfile.ZipFile(path, 'w') as zip:
+            zip.writestr(name, content)
+        return path
+
+    def test_single_script(self):
+        """Submit and test a single script file"""
+        script = self.createTempFile("test.py", """
+            |from pyspark import SparkContext
+            |
+            |sc = SparkContext()
+            |print sc.parallelize([1, 2, 3]).map(lambda x: x * 2).collect()
+            """)
+        proc = subprocess.Popen([self.sparkSubmit, script], stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("[2, 4, 6]", out)
+
+    def test_script_with_local_functions(self):
+        """Submit and test a single script file calling a global function"""
+        script = self.createTempFile("test.py", """
+            |from pyspark import SparkContext
+            |
+            |def foo(x):
+            |    return x * 3
+            |
+            |sc = SparkContext()
+            |print sc.parallelize([1, 2, 3]).map(foo).collect()
+            """)
+        proc = subprocess.Popen([self.sparkSubmit, script], stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("[3, 6, 9]", out)
+
+    def test_module_dependency(self):
+        """Submit and test a script with a dependency on another module"""
+        script = self.createTempFile("test.py", """
+            |from pyspark import SparkContext
+            |from mylib import myfunc
+            |
+            |sc = SparkContext()
+            |print sc.parallelize([1, 2, 3]).map(myfunc).collect()
+            """)
+        zip = self.createFileInZip("mylib.py", """
+            |def myfunc(x):
+            |    return x + 1
+            """)
+        proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, script],
+            stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("[2, 3, 4]", out)
+
+    def test_module_dependency_on_cluster(self):
+        """Submit and test a script with a dependency on another module on a cluster"""
+        script = self.createTempFile("test.py", """
+            |from pyspark import SparkContext
+            |from mylib import myfunc
+            |
+            |sc = SparkContext()
+            |print sc.parallelize([1, 2, 3]).map(myfunc).collect()
+            """)
+        zip = self.createFileInZip("mylib.py", """
+            |def myfunc(x):
+            |    return x + 1
+            """)
+        proc = subprocess.Popen(
+            [self.sparkSubmit, "--py-files", zip, "--master", "local-cluster[1,1,512]", script],
+            stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("[2, 3, 4]", out)
+
+    def test_single_script_on_cluster(self):
+        """Submit and test a single script on a cluster"""
+        script = self.createTempFile("test.py", """
+            |from pyspark import SparkContext
+            |
+            |def foo(x):
+            |    return x * 2
+            |
+            |sc = SparkContext()
+            |print sc.parallelize([1, 2, 3]).map(foo).collect()
+            """)
+        proc = subprocess.Popen(
+            [self.sparkSubmit, "--master", "local-cluster[1,1,512]", script],
+            stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("[2, 4, 6]", out)
+
 
 if __name__ == "__main__":
     unittest.main()

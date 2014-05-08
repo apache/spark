@@ -158,6 +158,12 @@ class SparkContext(object):
         for path in (pyFiles or []):
             self.addPyFile(path)
 
+        # Deploy code dependencies set by spark-submit; these will already have been added
+        # with SparkContext.addFile, so we just need to add them
+        for path in self._conf.get("spark.submit.pyFiles", "").split(","):
+            if path != "":
+                self._python_includes.append(os.path.basename(path))
+
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = \
@@ -429,7 +435,7 @@ class SparkContext(object):
                                storageLevel.deserialized,
                                storageLevel.replication)
 
-    def setJobGroup(self, groupId, description):
+    def setJobGroup(self, groupId, description, interruptOnCancel=False):
         """
         Assigns a group ID to all the jobs started by this thread until the group ID is set to a
         different value or cleared.
@@ -437,8 +443,41 @@ class SparkContext(object):
         Often, a unit of execution in an application consists of multiple Spark actions or jobs.
         Application programmers can use this method to group all those jobs together and give a
         group description. Once set, the Spark web UI will associate such jobs with this group.
+
+        The application can use L{SparkContext.cancelJobGroup} to cancel all
+        running jobs in this group.
+
+        >>> import thread, threading
+        >>> from time import sleep
+        >>> result = "Not Set"
+        >>> lock = threading.Lock()
+        >>> def map_func(x):
+        ...     sleep(100)
+        ...     raise Exception("Task should have been cancelled")
+        >>> def start_job(x):
+        ...     global result
+        ...     try:
+        ...         sc.setJobGroup("job_to_cancel", "some description")
+        ...         result = sc.parallelize(range(x)).map(map_func).collect()
+        ...     except Exception as e:
+        ...         result = "Cancelled"
+        ...     lock.release()
+        >>> def stop_job():
+        ...     sleep(5)
+        ...     sc.cancelJobGroup("job_to_cancel")
+        >>> supress = lock.acquire()
+        >>> supress = thread.start_new_thread(start_job, (10,))
+        >>> supress = thread.start_new_thread(stop_job, tuple())
+        >>> supress = lock.acquire()
+        >>> print result
+        Cancelled
+
+        If interruptOnCancel is set to true for the job group, then job cancellation will result
+        in Thread.interrupt() being called on the job's executor threads. This is useful to help ensure
+        that the tasks are actually stopped in a timely manner, but is off by default due to HDFS-1208,
+        where HDFS may respond to Thread.interrupt() by marking nodes as dead.
         """
-        self._jsc.setJobGroup(groupId, description)
+        self._jsc.setJobGroup(groupId, description, interruptOnCancel)
 
     def setLocalProperty(self, key, value):
         """
@@ -459,6 +498,19 @@ class SparkContext(object):
         Get SPARK_USER for user who is running SparkContext.
         """
         return self._jsc.sc().sparkUser()
+
+    def cancelJobGroup(self, groupId):
+        """
+        Cancel active jobs for the specified group. See L{SparkContext.setJobGroup}
+        for more information.
+        """
+        self._jsc.sc().cancelJobGroup(groupId)
+
+    def cancelAllJobs(self):
+        """
+        Cancel all jobs that have been scheduled or are running.
+        """
+        self._jsc.sc().cancelAllJobs()
 
 def _test():
     import atexit

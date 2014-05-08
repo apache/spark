@@ -28,9 +28,11 @@ import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
@@ -44,8 +46,12 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
+  val random = new Random()
 
-  val osName = System.getProperty("os.name")
+  def sparkBin(sparkHome: String, which: String): File = {
+    val suffix = if (isWindows) ".cmd" else ""
+    new File(sparkHome + File.separator + "bin", which + suffix)
+  }
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -131,6 +137,11 @@ private[spark] object Utils extends Logging {
   def getContextOrSparkClassLoader =
     Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
 
+  /** Determines whether the provided class is loadable in the current thread. */
+  def classIsLoadable(clazz: String): Boolean = {
+    Try { Class.forName(clazz, false, getContextOrSparkClassLoader) }.isSuccess
+  }
+
   /**
    * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
    */
@@ -209,9 +220,9 @@ private[spark] object Utils extends Logging {
   def hasRootAsShutdownDeleteDir(file: File): Boolean = {
     val absolutePath = file.getAbsolutePath()
     val retval = shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.find { path =>
+      shutdownDeletePaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }.isDefined
+      }
     }
     if (retval) {
       logInfo("path = " + file + ", already present as root for deletion.")
@@ -224,10 +235,10 @@ private[spark] object Utils extends Logging {
   // paths - resulting in Exception and incomplete cleanup.
   def hasRootAsShutdownDeleteDir(file: TachyonFile): Boolean = {
     val absolutePath = file.getPath()
-    val retval = shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.find { path =>
+    val retval = shutdownDeleteTachyonPaths.synchronized {
+      shutdownDeleteTachyonPaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }.isDefined
+      }
     }
     if (retval) {
       logInfo("path = " + file + ", already present as root for deletion.")
@@ -547,8 +558,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return the string to tell how long has passed in seconds. The passing parameter should be in
-   * millisecond.
+   * Return the string to tell how long has passed in milliseconds.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
     " " + (System.currentTimeMillis - startTimeMs) + " ms"
@@ -603,7 +613,7 @@ private[spark] object Utils extends Logging {
    */
   def isSymlink(file: File): Boolean = {
     if (file == null) throw new NullPointerException("File must not be null")
-    if (osName.startsWith("Windows")) return false
+    if (isWindows) return false
     val fileInCanonicalDir = if (file.getParent() == null) {
       file
     } else {
@@ -811,8 +821,7 @@ private[spark] object Utils extends Logging {
           } else {
             el.getMethodName
           }
-        }
-        else {
+        } else {
           firstUserLine = el.getLineNumber
           firstUserFile = el.getFileName
           firstUserClass = el.getClassName
@@ -1007,10 +1016,18 @@ private[spark] object Utils extends Logging {
     if (dst.isAbsolute()) {
       throw new IOException("Destination must be relative")
     }
-    val linkCmd = if (osName.startsWith("Windows")) "copy" else "ln -sf"
+    var cmdSuffix = ""
+    val linkCmd = if (isWindows) {
+      // refer to http://technet.microsoft.com/en-us/library/cc771254.aspx
+      cmdSuffix = " /s /e /k /h /y /i"
+      "cmd /c xcopy "
+    } else {
+      cmdSuffix = ""
+      "ln -sf "
+    }
     import scala.sys.process._
-    (linkCmd + " " + src.getAbsolutePath() + " " + dst.getPath()) lines_! ProcessLogger(line =>
-       (logInfo(line)))
+    (linkCmd + src.getAbsolutePath() + " " + dst.getPath() + cmdSuffix) lines_!
+      ProcessLogger(line => (logInfo(line)))
   }
 
 
@@ -1043,4 +1060,69 @@ private[spark] object Utils extends Logging {
   def getHadoopFileSystem(path: String): FileSystem = {
     getHadoopFileSystem(new URI(path))
   }
+
+  /**
+   * Return the absolute path of a file in the given directory.
+   */
+  def getFilePath(dir: File, fileName: String): Path = {
+    assert(dir.isDirectory)
+    val path = new File(dir, fileName).getAbsolutePath
+    new Path(path)
+  }
+
+  /**
+   * Return true if this is Windows.
+   */
+  def isWindows = SystemUtils.IS_OS_WINDOWS
+
+  /**
+   * Indicates whether Spark is currently running unit tests.
+   */
+  def isTesting = {
+    sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
+  }
+
+  /**
+   * Strip the directory from a path name
+   */
+  def stripDirectory(path: String): String = {
+    path.split(File.separator).last
+  }
+
+  /**
+   * Wait for a process to terminate for at most the specified duration.
+   * Return whether the process actually terminated after the given timeout.
+   */
+  def waitForProcess(process: Process, timeoutMs: Long): Boolean = {
+    var terminated = false
+    val startTime = System.currentTimeMillis
+    while (!terminated) {
+      try {
+        process.exitValue
+        terminated = true
+      } catch {
+        case e: IllegalThreadStateException =>
+          // Process not terminated yet
+          if (System.currentTimeMillis - startTime > timeoutMs) {
+            return false
+          }
+          Thread.sleep(100)
+      }
+    }
+    true
+  }
+
+  /**
+   * Return the stderr of a process after waiting for the process to terminate.
+   * If the process does not terminate within the specified timeout, return None.
+   */
+  def getStderr(process: Process, timeoutMs: Long): Option[String] = {
+    val terminated = Utils.waitForProcess(process, timeoutMs)
+    if (terminated) {
+      Some(Source.fromInputStream(process.getErrorStream).getLines().mkString("\n"))
+    } else {
+      None
+    }
+  }
+
 }

@@ -28,10 +28,33 @@ class SQLQuerySuite extends QueryTest {
   // Make sure the tables are loaded.
   TestData
 
+  test("index into array") {
+    checkAnswer(
+      sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
+      arrayData.map(d => (d.data, d.data(0), d.data(0) + d.data(1), d.data(1))).collect().toSeq)
+  }
+
+  test("index into array of arrays") {
+    checkAnswer(
+      sql(
+        "SELECT nestedData, nestedData[0][0], nestedData[0][0] + nestedData[0][1] FROM arrayData"),
+      arrayData.map(d =>
+        (d.nestedData,
+         d.nestedData(0)(0),
+         d.nestedData(0)(0) + d.nestedData(0)(1))).collect().toSeq)
+  }
+
   test("agg") {
     checkAnswer(
       sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
       Seq((1,3),(2,3),(3,3)))
+  }
+
+  test("aggregates with nulls") {
+    checkAnswer(
+      sql("SELECT MIN(a), MAX(a), AVG(a), SUM(a), COUNT(a) FROM nullInts"),
+      (1, 3, 2, 6, 3) :: Nil
+    )
   }
 
   test("select *") {

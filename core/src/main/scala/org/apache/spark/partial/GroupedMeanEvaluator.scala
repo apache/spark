@@ -61,7 +61,6 @@ private[spark] class GroupedMeanEvaluator[T](totalOutputs: Int, confidence: Doub
     } else if (outputsMerged == 0) {
       new HashMap[T, BoundedDouble]
     } else {
-      val p = outputsMerged.toDouble / totalOutputs
       val studentTCacher = new StudentTCacher(confidence)
       val result = new JHashMap[T, BoundedDouble](sums.size)
       val iter = sums.entrySet.iterator()

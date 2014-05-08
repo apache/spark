@@ -158,8 +158,11 @@ private[parquet] class CatalystGroupConverter(
     a => a.dataType match {
       case ctype: NativeType =>
         // note: for some reason matching for StringType fails so use this ugly if instead
-        if (ctype == StringType) new CatalystPrimitiveStringConverter(this, schema.indexOf(a))
-        else new CatalystPrimitiveConverter(this, schema.indexOf(a))
+        if (ctype == StringType) {
+          new CatalystPrimitiveStringConverter(this, schema.indexOf(a))
+        } else {
+          new CatalystPrimitiveConverter(this, schema.indexOf(a))
+        }
       case _ => throw new RuntimeException(
         s"unable to convert datatype ${a.dataType.toString} in CatalystGroupConverter")
     }

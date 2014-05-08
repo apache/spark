@@ -128,7 +128,7 @@ abstract class RDD[T: ClassTag](
   @transient var name: String = null
 
   /** Assign a name to this RDD */
-  def setName(_name: String): RDD[T] = {
+  def setName(_name: String): this.type = {
     name = _name
     this
   }
@@ -138,7 +138,7 @@ abstract class RDD[T: ClassTag](
    * it is computed. This can only be used to assign a new storage level if the RDD does not
    * have a storage level set yet..
    */
-  def persist(newLevel: StorageLevel): RDD[T] = {
+  def persist(newLevel: StorageLevel): this.type = {
     // TODO: Handle changes of StorageLevel
     if (storageLevel != StorageLevel.NONE && newLevel != storageLevel) {
       throw new UnsupportedOperationException(
@@ -152,10 +152,10 @@ abstract class RDD[T: ClassTag](
   }
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
-  def persist(): RDD[T] = persist(StorageLevel.MEMORY_ONLY)
+  def persist(): this.type = persist(StorageLevel.MEMORY_ONLY)
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
-  def cache(): RDD[T] = persist()
+  def cache(): this.type = persist()
 
   /**
    * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
@@ -163,7 +163,7 @@ abstract class RDD[T: ClassTag](
    * @param blocking Whether to block until all blocks are deleted.
    * @return This RDD.
    */
-  def unpersist(blocking: Boolean = true): RDD[T] = {
+  def unpersist(blocking: Boolean = true): this.type = {
     logInfo("Removing RDD " + id + " from persistence list")
     sc.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE
@@ -341,7 +341,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] = {
+  def sample(withReplacement: Boolean, 
+      fraction: Double, 
+      seed: Long = Utils.random.nextLong): RDD[T] = {
     require(fraction >= 0.0, "Invalid fraction value: " + fraction)
     if (withReplacement) {
       new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), seed)
@@ -354,11 +356,11 @@ abstract class RDD[T: ClassTag](
    * Randomly splits this RDD with the provided weights.
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1
-   * @param seed random seed, default to System.nanoTime
+   * @param seed random seed
    *
    * @return split RDDs in an array
    */
-  def randomSplit(weights: Array[Double], seed: Long = System.nanoTime): Array[RDD[T]] = {
+  def randomSplit(weights: Array[Double], seed: Long = Utils.random.nextLong): Array[RDD[T]] = {
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
@@ -366,7 +368,8 @@ abstract class RDD[T: ClassTag](
     }.toArray
   }
 
-  def takeSample(withReplacement: Boolean, num: Int, seed: Int): Array[T] = {
+  def takeSample(withReplacement: Boolean, num: Int, seed: Long = Utils.random.nextLong): Array[T] =
+  {
     var fraction = 0.0
     var total = 0
     val multiplier = 3.0
@@ -1139,9 +1142,9 @@ abstract class RDD[T: ClassTag](
   @transient private var doCheckpointCalled = false
 
   /**
-   * Performs the checkpointing of this RDD by saving this. It is called by the DAGScheduler
-   * after a job using this RDD has completed (therefore the RDD has been materialized and
-   * potentially stored in memory). doCheckpoint() is called recursively on the parent RDDs.
+   * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
+   * has completed (therefore the RDD has been materialized and potentially stored in memory).
+   * doCheckpoint() is called recursively on the parent RDDs.
    */
   private[spark] def doCheckpoint() {
     if (!doCheckpointCalled) {
