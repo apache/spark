@@ -20,6 +20,7 @@ package org.apache.spark.graphx
 import java.io.{EOFException, ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.util.Random
+import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
 
@@ -173,7 +174,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
 
       val bin = new ByteArrayInputStream(bout.toByteArray)
       val dstream = new ShuffleDeserializationStream(bin) {
-        def readObject[T](): T = {
+        def readObject[T: ClassTag](): T = {
           readVarLong(optimizePositive).asInstanceOf[T]
         }
       }

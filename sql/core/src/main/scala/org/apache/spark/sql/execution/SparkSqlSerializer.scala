@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.nio.ByteBuffer
 
+import scala.reflect.ClassTag
+
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Serializer, Kryo}
 
@@ -59,11 +61,11 @@ private[sql] object SparkSqlSerializer {
     new KryoSerializer(sparkConf)
   }
 
-  def serialize[T](o: T): Array[Byte] = {
+  def serialize[T: ClassTag](o: T): Array[Byte] = {
     ser.newInstance().serialize(o).array()
   }
 
-  def deserialize[T](bytes: Array[Byte]): T  = {
+  def deserialize[T: ClassTag](bytes: Array[Byte]): T  = {
     ser.newInstance().deserialize[T](ByteBuffer.wrap(bytes))
   }
 }
