@@ -27,6 +27,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.Logging
 import org.apache.spark.streaming.receiver.Receiver
+import scala.language.higherKinds
 
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
 *
@@ -39,11 +40,12 @@ import org.apache.spark.streaming.receiver.Receiver
 */
 private[streaming]
 class TwitterInputDStream(
-    @transient ssc_ : StreamingContext,
-    twitterAuth: Option[Authorization],
-    filters: Seq[String],
-    storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[Status](ssc_)  {
+                           @transient ssc_ : StreamingContext,
+                           twitterAuth: Option[Authorization],
+                           keywordFilters: Seq[String],
+                           storageLevel: StorageLevel,
+                           geoLocationFilter: Seq[Seq[Double]]
+                           ) extends ReceiverInputDStream[Status](ssc_)  {
 
   private def createOAuthAuthorization(): Authorization = {
     new OAuthAuthorization(new ConfigurationBuilder().build())
@@ -52,16 +54,17 @@ class TwitterInputDStream(
   private val authorization = twitterAuth.getOrElse(createOAuthAuthorization())
 
   override def getReceiver(): Receiver[Status] = {
-    new TwitterReceiver(authorization, filters, storageLevel)
+    new TwitterReceiver(authorization, keywordFilters, storageLevel, geoLocationFilter)
   }
 }
 
 private[streaming]
 class TwitterReceiver(
-    twitterAuth: Authorization,
-    filters: Seq[String],
-    storageLevel: StorageLevel
-  ) extends Receiver[Status](storageLevel) with Logging {
+                       twitterAuth: Authorization,
+                       keywordFilters: Seq[String],
+                       storageLevel: StorageLevel,
+                       geoLocationFilter: Seq[Seq[Double]]
+                       ) extends Receiver[Status](storageLevel) with Logging {
 
   var twitterStream: TwitterStream = _
 
@@ -82,10 +85,21 @@ class TwitterReceiver(
     })
 
     val query = new FilterQuery
-    if (filters.size > 0) {
-      query.track(filters.toArray)
+    if (keywordFilters.size > 0) {
+      query.track(keywordFilters.toArray)
+    }
+
+    if (geoLocationFilter.size > 0){
+      println(arrayToString(ss2aa(geoLocationFilter)))
+      query.locations(ss2aa(geoLocationFilter))
+
+    }
+
+    if(keywordFilters.size + geoLocationFilter.size > 0){
+      println(query.toString())
       twitterStream.filter(query)
-    } else {
+    }
+    else {
       twitterStream.sample()
     }
     logInfo("Twitter receiver started")
@@ -95,4 +109,13 @@ class TwitterReceiver(
     twitterStream.shutdown()
     logInfo("Twitter receiver stopped")
   }
+
+  def arrayToString(a: Array[Array[Double]]) : String = {
+    val str = for (l <- a) yield l.mkString("{", ",", "}")
+    str.mkString("{",",\n","}")
+  }
+
+  def ss2aa[A,B[_],C[_]](c: C[B[A]])(
+    implicit b2seq: B[A] => Seq[A], c2seq: C[B[A]] => Seq[B[A]], ma: ClassManifest[A]
+    ) = c2seq(c).map(b => b2seq(b).toArray).toArray
 }
