@@ -71,18 +71,12 @@ class VertexRDD[@specialized VD: ClassTag](
   override protected def getPreferredLocations(s: Partition): Seq[String] =
     partitionsRDD.preferredLocations(s)
 
-  override def persist(newLevel: StorageLevel): VertexRDD[VD] = {
+  override def persist(newLevel: StorageLevel): this.type = {
     partitionsRDD.persist(newLevel)
     this
   }
 
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
-  override def persist(): VertexRDD[VD] = persist(StorageLevel.MEMORY_ONLY)
-
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
-  override def cache(): VertexRDD[VD] = persist()
-
-  override def unpersist(blocking: Boolean = true): VertexRDD[VD] = {
+  override def unpersist(blocking: Boolean = true): this.type = {
     partitionsRDD.unpersist(blocking)
     this
   }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.trees
 
 abstract sealed class SortDirection
 case object Ascending extends SortDirection
@@ -27,7 +28,10 @@ case object Descending extends SortDirection
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
  */
-case class SortOrder(child: Expression, direction: SortDirection) extends UnaryExpression {
+case class SortOrder(child: Expression, direction: SortDirection) extends Expression 
+    with trees.UnaryNode[Expression] {
+
+  override def references = child.references
   override def dataType = child.dataType
   override def nullable = child.nullable
 

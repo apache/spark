@@ -50,6 +50,13 @@ class SQLQuerySuite extends QueryTest {
       Seq((1,3),(2,3),(3,3)))
   }
 
+  test("aggregates with nulls") {
+    checkAnswer(
+      sql("SELECT MIN(a), MAX(a), AVG(a), SUM(a), COUNT(a) FROM nullInts"),
+      (1, 3, 2, 6, 3) :: Nil
+    )
+  }
+
   test("select *") {
     checkAnswer(
       sql("SELECT * FROM testData"),
