@@ -24,34 +24,33 @@ import kafka.producer._
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.kafka._
+import org.apache.spark.SparkConf
 
-// scalastyle:off
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
- * Usage: KafkaWordCount <master> <zkQuorum> <group> <topics> <numThreads>
- *   <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
+ * Usage: KafkaWordCount <zkQuorum> <group> <topics> <numThreads>
  *   <zkQuorum> is a list of one or more zookeeper servers that make quorum
  *   <group> is the name of kafka consumer group
  *   <topics> is a list of one or more kafka topics to consume from
  *   <numThreads> is the number of threads the kafka consumer should use
  *
  * Example:
- *    `./bin/run-example org.apache.spark.examples.streaming.KafkaWordCount local[2] zoo01,zoo02,zoo03 my-consumer-group topic1,topic2 1`
+ *    `./bin/spark-submit examples.jar \
+ *    --class org.apache.spark.examples.streaming.KafkaWordCount local[2] zoo01,zoo02,zoo03 \
+ *    my-consumer-group topic1,topic2 1`
  */
-// scalastyle:on
 object KafkaWordCount {
   def main(args: Array[String]) {
-    if (args.length < 5) {
-      System.err.println("Usage: KafkaWordCount <master> <zkQuorum> <group> <topics> <numThreads>")
+    if (args.length < 4) {
+      System.err.println("Usage: KafkaWordCount <zkQuorum> <group> <topics> <numThreads>")
       System.exit(1)
     }
 
     StreamingExamples.setStreamingLogLevels()
 
-    val Array(master, zkQuorum, group, topics, numThreads) = args
-
-    val ssc =  new StreamingContext(master, "KafkaWordCount", Seconds(2),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
+    val Array(zkQuorum, group, topics, numThreads) = args
+    val sparkConf = new SparkConf().setAppName("KafkaWordCount")
+    val ssc =  new StreamingContext(sparkConf, Seconds(2))
     ssc.checkpoint("checkpoint")
 
     val topicpMap = topics.split(",").map((_,numThreads.toInt)).toMap
