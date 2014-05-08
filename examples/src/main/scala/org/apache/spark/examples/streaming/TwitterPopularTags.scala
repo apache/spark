@@ -21,6 +21,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 import StreamingContext._
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.twitter._
+import org.apache.spark.SparkConf
 
 /**
  * Calculates popular hashtags (topics) over sliding 10 and 60 second windows from a Twitter
@@ -30,18 +31,12 @@ import org.apache.spark.streaming.twitter._
  */
 object TwitterPopularTags {
   def main(args: Array[String]) {
-    if (args.length < 1) {
-      System.err.println("Usage: TwitterPopularTags <master>" +
-        " [filter1] [filter2] ... [filter n]")
-      System.exit(1)
-    }
 
     StreamingExamples.setStreamingLogLevels()
 
-    val (master, filters) = (args.head, args.tail)
-
-    val ssc = new StreamingContext(master, "TwitterPopularTags", Seconds(2),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
+    val filters = args
+    val sparkConf = new SparkConf().setAppName("TwitterPopularTags")
+    val ssc = new StreamingContext(sparkConf, Seconds(2))
     val stream = TwitterUtils.createStream(ssc, None, filters)
 
     val hashTags = stream.flatMap(status => status.getText.split(" ").filter(_.startsWith("#")))
