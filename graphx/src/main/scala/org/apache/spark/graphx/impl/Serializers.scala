@@ -402,7 +402,8 @@ private[graphx] sealed trait ShuffleSerializerInstance extends SerializerInstanc
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = throw new UnsupportedOperationException
 
-  override def deserialize[T: ClassTag](bytes: ByteBuffer): T = throw new UnsupportedOperationException
+  override def deserialize[T: ClassTag](bytes: ByteBuffer): T =
+    throw new UnsupportedOperationException
 
   override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T =
     throw new UnsupportedOperationException
