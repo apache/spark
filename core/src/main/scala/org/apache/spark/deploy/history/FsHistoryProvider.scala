@@ -83,6 +83,7 @@ class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
     }
 
     checkForLogs()
+    logCheckingThread.setDaemon(true)
     logCheckingThread.start()
   }
 
@@ -90,10 +91,13 @@ class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
     stopped = true
     logCheckingThread.interrupt()
     logCheckingThread.join()
+    fs.close()
   }
 
-  override def getListing(offset: Int, limit: Int): Seq[ApplicationHistoryInfo] = {
-    appList.get()
+  override def getListing(offset: Int, count: Int) = {
+    val list = appList.get()
+    val theOffset = if (offset < list.size) offset else 0
+    (list.slice(theOffset, Math.min(theOffset + count, list.size)), theOffset, list.size)
   }
 
   override def getAppInfo(appId: String): ApplicationHistoryInfo = {

@@ -25,17 +25,29 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
+  val pageSize = 20
+
   def render(request: HttpServletRequest): Seq[Node] = {
-    val apps = parent.getApplicationList(0, -1)
+    val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
+    val requestedFirst = (requestedPage - 1) * pageSize
+    val (apps, actualFirst, count) = parent.getApplicationList(requestedFirst, pageSize)
+    val actualPage = (actualFirst / pageSize) + 1
+    val last = Math.min(actualFirst + pageSize, count) - 1
+    val pageCount = count / pageSize + (if (count % pageSize > 0) 1 else 0)
+
     val appTable = UIUtils.listingTable(appHeader, appRow, apps)
     val content =
       <div class="row-fluid">
         <div class="span12">
           {
-            if (apps.size > 0) {
+            if (count > 0) {
               <h4>
-                Showing {apps.size}/{apps.size}
-                Completed Application{if (apps.size > 1) "s" else ""}
+                Showing {actualFirst + 1}-{last + 1} of {count}
+                Application{if (last - actualFirst > 1) "s" else ""}
+                <span style="float: right">
+                  {if (actualPage > 1) <a href={"/?page=" + (actualPage - 1)}>&lt;</a>}
+                  {if (actualPage < pageCount) <a href={"/?page=" + (actualPage + 1)}>&gt;</a>}
+                </span>
               </h4> ++
               appTable
             } else {
