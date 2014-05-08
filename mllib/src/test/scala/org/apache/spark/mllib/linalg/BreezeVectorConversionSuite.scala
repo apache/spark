@@ -19,7 +19,7 @@ package org.apache.spark.mllib.linalg
 
 import org.scalatest.FunSuite
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, VectorBuilder => BVB}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
 /**
  * Test Breeze vector conversions.
