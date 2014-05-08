@@ -51,7 +51,7 @@ object DecisionTreeRunner {
       algo: Algo = Classification,
       maxDepth: Int = 5,
       impurity: ImpurityType = Gini,
-      maxBins: Int = 20)
+      maxBins: Int = 100)
 
   def main(args: Array[String]) {
     val defaultParams = Params()
