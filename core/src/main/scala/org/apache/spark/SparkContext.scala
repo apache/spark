@@ -74,10 +74,10 @@ class SparkContext(config: SparkConf) extends Logging {
    * be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
    */
-    @DeveloperApi
-    def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
-      this(config)
-      this.preferredNodeLocationData = preferredNodeLocationData
+  @DeveloperApi
+  def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
+    this(config)
+    this.preferredNodeLocationData = preferredNodeLocationData
   }
 
   /**

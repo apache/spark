@@ -17,8 +17,16 @@
 
 package org.apache.spark.examples.streaming;
 
-import com.google.common.collect.Lists;
+
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
+
 import scala.Tuple2;
+
+import com.google.common.collect.Lists;
+
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
@@ -28,25 +36,17 @@ import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
-
 public final class JavaQueueStream {
   private JavaQueueStream() {
   }
 
   public static void main(String[] args) throws Exception {
-    if (args.length < 1) {
-      System.err.println("Usage: JavaQueueStream <master>");
-      System.exit(1);
-    }
 
     StreamingExamples.setStreamingLogLevels();
+    SparkConf sparkConf = new SparkConf().setAppName("JavaQueueStream");
 
     // Create the context
-    JavaStreamingContext ssc = new JavaStreamingContext(args[0], "QueueStream", new Duration(1000),
-            System.getenv("SPARK_HOME"), JavaStreamingContext.jarOfClass(JavaQueueStream.class));
+    JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, new Duration(1000));
 
     // Create the queue through which RDDs can be pushed to
     // a QueueInputDStream

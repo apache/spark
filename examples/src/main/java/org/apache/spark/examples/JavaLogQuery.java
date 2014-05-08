@@ -20,6 +20,7 @@ package org.apache.spark.examples;
 import com.google.common.collect.Lists;
 import scala.Tuple2;
 import scala.Tuple3;
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -34,6 +35,8 @@ import java.util.regex.Pattern;
 
 /**
  * Executes a roll up-style query against Apache logs.
+ *  
+ * Usage: JavaLogQuery [logFile]
  */
 public final class JavaLogQuery {
 
@@ -97,15 +100,11 @@ public final class JavaLogQuery {
   }
 
   public static void main(String[] args) {
-    if (args.length == 0) {
-      System.err.println("Usage: JavaLogQuery <master> [logFile]");
-      System.exit(1);
-    }
 
-    JavaSparkContext jsc = new JavaSparkContext(args[0], "JavaLogQuery",
-      System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaLogQuery.class));
+    SparkConf sparkConf = new SparkConf().setAppName("JavaLogQuery");
+    JavaSparkContext jsc = new JavaSparkContext(sparkConf);
 
-    JavaRDD<String> dataSet = (args.length == 2) ? jsc.textFile(args[1]) : jsc.parallelize(exampleApacheLogs);
+    JavaRDD<String> dataSet = (args.length == 1) ? jsc.textFile(args[0]) : jsc.parallelize(exampleApacheLogs);
 
     JavaPairRDD<Tuple3<String, String, String>, Stats> extracted = dataSet.mapToPair(new PairFunction<String, Tuple3<String, String, String>, Stats>() {
       @Override

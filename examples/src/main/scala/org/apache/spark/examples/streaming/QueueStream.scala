@@ -19,6 +19,7 @@ package org.apache.spark.examples.streaming
 
 import scala.collection.mutable.SynchronizedQueue
 
+import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
@@ -26,16 +27,11 @@ import org.apache.spark.streaming.StreamingContext._
 object QueueStream {
 
   def main(args: Array[String]) {
-    if (args.length < 1) {
-      System.err.println("Usage: QueueStream <master>")
-      System.exit(1)
-    }
 
     StreamingExamples.setStreamingLogLevels()
-
+    val sparkConf = new SparkConf().setAppName("QueueStream")
     // Create the context
-    val ssc = new StreamingContext(args(0), "QueueStream", Seconds(1),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
+    val ssc = new StreamingContext(sparkConf, Seconds(1))
 
     // Create the queue through which RDDs can be pushed to
     // a QueueInputDStream

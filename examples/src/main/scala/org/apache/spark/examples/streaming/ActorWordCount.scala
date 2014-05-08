@@ -126,31 +126,30 @@ object FeederActor {
 /**
  * A sample word count program demonstrating the use of plugging in
  * Actor as Receiver
- * Usage: ActorWordCount <master> <hostname> <port>
- *   <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
+ * Usage: ActorWordCount <hostname> <port>
  *   <hostname> and <port> describe the AkkaSystem that Spark Sample feeder is running on.
  *
  * To run this example locally, you may run Feeder Actor as
- *    `$ ./bin/run-example org.apache.spark.examples.streaming.FeederActor 127.0.1.1 9999`
+ *    `./bin/spark-submit examples.jar \
+ *    --class org.apache.spark.examples.streaming.FeederActor 127.0.1.1 9999`
  * and then run the example
- *    `./bin/run-example org.apache.spark.examples.streaming.ActorWordCount local[2] 127.0.1.1 9999`
+ *    `./bin/spark-submit examples.jar --class org.apache.spark.examples.streaming.ActorWordCount \
+ *     127.0.1.1 9999`
  */
 object ActorWordCount {
   def main(args: Array[String]) {
-    if (args.length < 3) {
+    if (args.length < 2) {
       System.err.println(
-        "Usage: ActorWordCount <master> <hostname> <port>" +
-        "In local mode, <master> should be 'local[n]' with n > 1")
+        "Usage: ActorWordCount <hostname> <port>")
       System.exit(1)
     }
 
     StreamingExamples.setStreamingLogLevels()
 
-    val Seq(master, host, port) = args.toSeq
-
+    val Seq(host, port) = args.toSeq
+    val sparkConf = new SparkConf().setAppName("ActorWordCount")
     // Create the context and set the batch size
-    val ssc = new StreamingContext(master, "ActorWordCount", Seconds(2),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
+    val ssc = new StreamingContext(sparkConf, Seconds(2))
 
     /*
      * Following is the use of actorStream to plug in custom actor as receiver

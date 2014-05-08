@@ -17,6 +17,7 @@
 
 package org.apache.spark.examples.streaming;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.examples.streaming.StreamingExamples;
 import org.apache.spark.streaming.*;
@@ -31,9 +32,8 @@ import org.apache.spark.streaming.flume.SparkFlumeEvent;
  *  an Avro server on at the request host:port address and listen for requests.
  *  Your Flume AvroSink should be pointed to this address.
  *
- *  Usage: JavaFlumeEventCount <master> <host> <port>
+ *  Usage: JavaFlumeEventCount <host> <port>
  *
- *    <master> is a Spark master URL
  *    <host> is the host the Flume receiver will be started on - a receiver
  *           creates a server and listens for flume events.
  *    <port> is the port the Flume receiver will listen on.
@@ -43,22 +43,19 @@ public final class JavaFlumeEventCount {
   }
 
   public static void main(String[] args) {
-    if (args.length != 3) {
-      System.err.println("Usage: JavaFlumeEventCount <master> <host> <port>");
+    if (args.length != 2) {
+      System.err.println("Usage: JavaFlumeEventCount <host> <port>");
       System.exit(1);
     }
 
     StreamingExamples.setStreamingLogLevels();
 
-    String master = args[0];
-    String host = args[1];
-    int port = Integer.parseInt(args[2]);
+    String host = args[0];
+    int port = Integer.parseInt(args[1]);
 
     Duration batchInterval = new Duration(2000);
-
-    JavaStreamingContext ssc = new JavaStreamingContext(master, "FlumeEventCount", batchInterval,
-            System.getenv("SPARK_HOME"),
-            JavaStreamingContext.jarOfClass(JavaFlumeEventCount.class));
+    SparkConf sparkConf = new SparkConf().setAppName("JavaFlumeEventCount");
+    JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, batchInterval);
     JavaReceiverInputDStream<SparkFlumeEvent> flumeStream = FlumeUtils.createStream(ssc, "localhost", port);
 
     flumeStream.count();

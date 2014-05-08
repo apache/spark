@@ -88,32 +88,24 @@ object SparkALS {
   }
 
   def main(args: Array[String]) {
-    if (args.length == 0) {
-      System.err.println("Usage: SparkALS <master> [<M> <U> <F> <iters> <slices>]")
-      System.exit(1)
-    }
-
-    var host = ""
     var slices = 0
 
-    val options = (0 to 5).map(i => if (i < args.length) Some(args(i)) else None)
+    val options = (0 to 4).map(i => if (i < args.length) Some(args(i)) else None)
 
     options.toArray match {
-      case Array(host_, m, u, f, iters, slices_) =>
-        host = host_.get
+      case Array(m, u, f, iters, slices_) =>
         M = m.getOrElse("100").toInt
         U = u.getOrElse("500").toInt
         F = f.getOrElse("10").toInt
         ITERATIONS = iters.getOrElse("5").toInt
         slices = slices_.getOrElse("2").toInt
       case _ =>
-        System.err.println("Usage: SparkALS <master> [<M> <U> <F> <iters> <slices>]")
+        System.err.println("Usage: SparkALS [M] [U] [F] [iters] [slices]")
         System.exit(1)
     }
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
-
-    val sc = new SparkContext(host, "SparkALS",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
+    val sparkConf = new SparkConf().setAppName("SparkALS")
+    val sc = new SparkContext(sparkConf)
 
     val R = generateR()
 

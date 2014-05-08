@@ -21,7 +21,7 @@ import java.util.Random
 
 import breeze.linalg.{Vector, DenseVector, squaredDistance}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 
 /**
@@ -52,16 +52,16 @@ object SparkKMeans {
   }
 
   def main(args: Array[String]) {
-    if (args.length < 4) {
-        System.err.println("Usage: SparkLocalKMeans <master> <file> <k> <convergeDist>")
-        System.exit(1)
+    if (args.length < 3) {
+      System.err.println("Usage: SparkKMeans <file> <k> <convergeDist>")
+      System.exit(1)
     }
-    val sc = new SparkContext(args(0), "SparkLocalKMeans",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
-    val lines = sc.textFile(args(1))
+    val sparkConf = new SparkConf().setAppName("SparkKMeans")
+    val sc = new SparkContext(sparkConf)
+    val lines = sc.textFile(args(0))
     val data = lines.map(parseVector _).cache()
-    val K = args(2).toInt
-    val convergeDist = args(3).toDouble
+    val K = args(1).toInt
+    val convergeDist = args(2).toDouble
 
     val kPoints = data.takeSample(withReplacement = false, K, 42).toArray
     var tempDist = 1.0

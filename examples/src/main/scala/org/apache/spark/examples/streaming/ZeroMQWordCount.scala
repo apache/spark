@@ -28,6 +28,7 @@ import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.zeromq._
 
 import scala.language.implicitConversions
+import org.apache.spark.SparkConf
 
 /**
  * A simple publisher for demonstration purposes, repeatedly publishes random Messages
@@ -63,30 +64,28 @@ object SimpleZeroMQPublisher {
  * Install zeroMQ (release 2.1) core libraries. [ZeroMQ Install guide]
  * (http://www.zeromq.org/intro:get-the-software)
  *
- * Usage: ZeroMQWordCount <master> <zeroMQurl> <topic>
- * In local mode, <master> should be 'local[n]' with n > 1
+ * Usage: ZeroMQWordCount <zeroMQurl> <topic>
  *   <zeroMQurl> and <topic> describe where zeroMq publisher is running.
  *
  * To run this example locally, you may run publisher as
- *    `$ ./bin/run-example org.apache.spark.examples.streaming.SimpleZeroMQPublisher tcp://127.0.1.1:1234 foo.bar`
+ *    `$ ./bin/spark-submit examples.jar \
+ *    --class org.apache.spark.examples.streaming.SimpleZeroMQPublisher tcp://127.0.1.1:1234 foo.bar`
  * and run the example as
- *    `$ ./bin/run-example org.apache.spark.examples.streaming.ZeroMQWordCount local[2] tcp://127.0.1.1:1234 foo`
+ *    `$ ./bin/spark-submit examples.jar \
+ *    --class org.apache.spark.examples.streaming.ZeroMQWordCount tcp://127.0.1.1:1234 foo`
  */
 // scalastyle:on
 object ZeroMQWordCount {
   def main(args: Array[String]) {
-    if (args.length < 3) {
-      System.err.println(
-        "Usage: ZeroMQWordCount <master> <zeroMQurl> <topic>" +
-          "In local mode, <master> should be 'local[n]' with n > 1")
+    if (args.length < 2) {
+      System.err.println("Usage: ZeroMQWordCount <zeroMQurl> <topic>")
       System.exit(1)
     }
     StreamingExamples.setStreamingLogLevels()
-    val Seq(master, url, topic) = args.toSeq
-
+    val Seq(url, topic) = args.toSeq
+    val sparkConf = new SparkConf().setAppName("ZeroMQWordCount")
     // Create the context and set the batch size
-    val ssc = new StreamingContext(master, "ZeroMQWordCount", Seconds(2),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
+    val ssc = new StreamingContext(sparkConf, Seconds(2))
 
     def bytesToStringIterator(x: Seq[ByteString]) = (x.map(_.utf8String)).iterator
 

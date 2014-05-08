@@ -17,6 +17,7 @@
 
 package org.apache.spark.examples.streaming
 
+import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.util.IntParam
@@ -27,29 +28,26 @@ import org.apache.spark.util.IntParam
  * will only work with spark.streaming.util.RawTextSender running on all worker nodes
  * and with Spark using Kryo serialization (set Java property "spark.serializer" to
  * "org.apache.spark.serializer.KryoSerializer").
- * Usage: RawNetworkGrep <master> <numStreams> <host> <port> <batchMillis>
- *   <master> is the Spark master URL
+ * Usage: RawNetworkGrep <numStreams> <host> <port> <batchMillis>
  *   <numStream> is the number rawNetworkStreams, which should be same as number
  *               of work nodes in the cluster
  *   <host> is "localhost".
  *   <port> is the port on which RawTextSender is running in the worker nodes.
  *   <batchMillise> is the Spark Streaming batch duration in milliseconds.
  */
-
 object RawNetworkGrep {
   def main(args: Array[String]) {
-    if (args.length != 5) {
-      System.err.println("Usage: RawNetworkGrep <master> <numStreams> <host> <port> <batchMillis>")
+    if (args.length != 4) {
+      System.err.println("Usage: RawNetworkGrep <numStreams> <host> <port> <batchMillis>")
       System.exit(1)
     }
 
     StreamingExamples.setStreamingLogLevels()
 
-    val Array(master, IntParam(numStreams), host, IntParam(port), IntParam(batchMillis)) = args
-
+    val Array(IntParam(numStreams), host, IntParam(port), IntParam(batchMillis)) = args
+    val sparkConf = new SparkConf().setAppName("RawNetworkGrep")
     // Create the context
-    val ssc = new StreamingContext(master, "RawNetworkGrep", Milliseconds(batchMillis),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
+    val ssc = new StreamingContext(sparkConf, Duration(batchMillis))
 
     val rawStreams = (1 to numStreams).map(_ =>
       ssc.rawSocketStream[String](host, port, StorageLevel.MEMORY_ONLY_SER_2)).toArray

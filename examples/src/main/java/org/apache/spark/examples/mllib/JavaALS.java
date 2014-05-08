@@ -17,6 +17,7 @@
 
 package org.apache.spark.examples.mllib;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
@@ -57,23 +58,22 @@ public final class JavaALS {
 
   public static void main(String[] args) {
 
-    if (args.length != 5 && args.length != 6) {
+    if (args.length < 4) {
       System.err.println(
-          "Usage: JavaALS <master> <ratings_file> <rank> <iterations> <output_dir> [<blocks>]");
+        "Usage: JavaALS <ratings_file> <rank> <iterations> <output_dir> [<blocks>]");
       System.exit(1);
     }
-
-    int rank = Integer.parseInt(args[2]);
-    int iterations = Integer.parseInt(args[3]);
-    String outputDir = args[4];
+    SparkConf sparkConf = new SparkConf().setAppName("JavaALS");
+    int rank = Integer.parseInt(args[1]);
+    int iterations = Integer.parseInt(args[2]);
+    String outputDir = args[3];
     int blocks = -1;
-    if (args.length == 6) {
-      blocks = Integer.parseInt(args[5]);
+    if (args.length == 5) {
+      blocks = Integer.parseInt(args[4]);
     }
 
-    JavaSparkContext sc = new JavaSparkContext(args[0], "JavaALS",
-        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaALS.class));
-    JavaRDD<String> lines = sc.textFile(args[1]);
+    JavaSparkContext sc = new JavaSparkContext(sparkConf);
+    JavaRDD<String> lines = sc.textFile(args[0]);
 
     JavaRDD<Rating> ratings = lines.map(new ParseRating());
 
