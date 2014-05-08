@@ -130,7 +130,7 @@ If you have JDK 8 installed but it is not the system default, you can set JAVA_H
 
 ## Building for PySpark on YARN ##
 
-There is a known problem with building an assembly jar for running PySpark on YARN on Red Hat based operating systems. If you wish to run PySpark on a YARN cluster with Red Hat installed, we recommend that you build the jar elsewhere, then ship it over to the cluster. We are investigating the exact cause for this.
+PySpark on YARN is only supported if the jar is built with maven. Further, there is a known problem with building this assembly jar on Red Hat based operating systems (see SPARK-1753). If you wish to run PySpark on a YARN cluster with Red Hat installed, we recommend that you build the jar elsewhere, then ship it over to the cluster. We are investigating the exact cause for this.
 
 ## Packaging without Hadoop dependencies for deployment on YARN ##
 
