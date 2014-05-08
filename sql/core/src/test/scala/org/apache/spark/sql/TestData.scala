@@ -84,4 +84,14 @@ object TestData {
       List.fill(2)(StringData(null)) ++
       List.fill(2)(StringData("test")))
   nullableRepeatedData.registerAsTable("nullableRepeatedData")
+
+  case class NullInts(a: Integer)
+  val nullInts =
+    TestSQLContext.sparkContext.parallelize(
+      NullInts(1) ::
+      NullInts(2) ::
+      NullInts(3) ::
+      NullInts(null) :: Nil
+    )
+  nullInts.registerAsTable("nullInts")
 }
