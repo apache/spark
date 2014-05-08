@@ -165,7 +165,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     def testVarLongEncoding(v: Long, optimizePositive: Boolean) {
       val bout = new ByteArrayOutputStream
       val stream = new ShuffleSerializationStream(bout) {
-        def writeObject[T](t: T): SerializationStream = {
+        def writeObject[T: ClassTag](t: T): SerializationStream = {
           writeVarLong(t.asInstanceOf[Long], optimizePositive = optimizePositive)
           this
         }
