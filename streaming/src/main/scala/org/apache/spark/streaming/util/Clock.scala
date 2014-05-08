@@ -24,21 +24,22 @@ trait Clock {
 }
 
 private[streaming]
-class SystemClock() extends Clock {
+class SystemClock(val startTimeMs: Option[Long] = None) extends Clock {
 
   val minPollTime = 25L
+  val deltaTimeMs = startTimeMs.map(_ - System.currentTimeMillis()).getOrElse(0L)
 
   def currentTime(): Long = {
-    System.currentTimeMillis()
+    System.currentTimeMillis() + deltaTimeMs
   }
 
   def waitTillTime(targetTime: Long): Long = {
-    var currentTime = 0L
-    currentTime = System.currentTimeMillis()
+    var currTime = 0L
+    currTime = currentTime()
 
-    var waitTime = targetTime - currentTime
+    var waitTime = targetTime - currTime
     if (waitTime <= 0) {
-      return currentTime
+      return currTime
     }
 
     val pollTime = {
@@ -50,10 +51,10 @@ class SystemClock() extends Clock {
     }
 
     while (true) {
-      currentTime = System.currentTimeMillis()
-      waitTime = targetTime - currentTime
+      currTime = currentTime()
+      waitTime = targetTime - currTime
       if (waitTime <= 0) {
-        return currentTime
+        return currTime
       }
       val sleepTime =
         if (waitTime < pollTime) {

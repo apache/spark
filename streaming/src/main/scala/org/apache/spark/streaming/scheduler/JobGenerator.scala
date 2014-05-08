@@ -20,7 +20,7 @@ package org.apache.spark.streaming.scheduler
 import akka.actor.{ActorRef, ActorSystem, Props, Actor}
 import org.apache.spark.{SparkException, SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
-import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
+import org.apache.spark.streaming.util.{SystemClock, ManualClock, RecurringTimer, Clock}
 import scala.util.{Failure, Success, Try}
 
 /** Event classes for JobGenerator */
@@ -44,7 +44,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   val clock = {
     val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
-    Class.forName(clockClass).newInstance().asInstanceOf[Clock]
+
+    if (clockClass == "org.apache.spark.streaming.util.SystemClock") {
+      val startTimeMs = ssc.sc.conf.getOption("spark.streaming.clock.startTimeMs").map(_.toLong)
+      new SystemClock(startTimeMs)
+    } else {
+      Class.forName(clockClass).newInstance().asInstanceOf[Clock]
+    }
   }
 
   private val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
