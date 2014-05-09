@@ -35,7 +35,7 @@ if [[ -z $SPARK_EXAMPLES_JAR ]]; then
   exit 1
 fi
 
-EXAMPLE_MASTER=${MASTER:-"local[2]"}
+EXAMPLE_MASTER=${MASTER:-"local[*]"}
 
 if [ -n "$1" ]; then
   EXAMPLE_CLASS="$1"
@@ -43,7 +43,7 @@ if [ -n "$1" ]; then
 else 
   echo "usage: ./bin/run-example <example-class> [<example-args>]" 
   echo "  - set MASTER=XX to use a specific master"
-  echo "  - can use abbreviated example class name (e.g. SparkPi)"
+  echo "  - can use abbreviated example class name (e.g. SparkPi, mllib.MovieLensALS)"
   echo
   exit -1
 fi
