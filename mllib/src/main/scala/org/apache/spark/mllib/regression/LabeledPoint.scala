@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.mllib.linalg.{Vectors, Vector, VectorParsers}
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.NumericParser
 
 /**
@@ -45,33 +45,11 @@ object LabeledPoint {
         case other =>
           sys.error(s"Cannot parse $other.")
       }
-    } else {
+    } else { // dense format used before v1.0
       val parts = s.split(',')
       val label = parts(0).toDouble
       val features = Vectors.dense(parts(1).trim().split(' ').map(_.toDouble))
       LabeledPoint(label, features)
     }
   }
-}
-
-/**
- * Parsers for string representation of [[org.apache.spark.mllib.regression.LabeledPoint]].
- */
-private[mllib] class LabeledPointParsers extends VectorParsers {
-  /** Parser for the dense format used before v1.0. */
-  lazy val labeledPointV0: Parser[LabeledPoint] =
-    floatingPointNumber ~ "," ~ rep(floatingPointNumber) ^^ {
-      case l ~ "," ~ vv => LabeledPoint(l.toDouble, Vectors.dense(vv.map(_.toDouble).toArray))
-    }
-  /** Parser for strings resulted from `LabeledPoint#toString` in v1.0. */
-  lazy val labeledPointV1: Parser[LabeledPoint] =
-    "(" ~ floatingPointNumber ~ "," ~ vector ~ ")" ^^ {
-      case "(" ~ l ~ "," ~ v ~ ")" => LabeledPoint(l.toDouble, v)
-    }
-  lazy val labeledPoint: Parser[LabeledPoint] = labeledPointV1 | labeledPointV0
-}
-
-private[mllib] object LabeledPointParsers extends LabeledPointParsers {
-  /** Parses a string into an [[org.apache.spark.mllib.regression.LabeledPoint]]. */
-  def parse(s: String): LabeledPoint = parse(labeledPoint, s).get
 }

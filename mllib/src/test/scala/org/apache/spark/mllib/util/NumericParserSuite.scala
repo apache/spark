@@ -39,9 +39,7 @@ class NumericParserSuite extends FunSuite {
     }
     val expected = Seq('(', '(', 1.0, 2e3, ')', -4.0, '[', 5e-6, 7e8, ']', 9.0, ')')
     assert(expected === tokens)
-  }
 
-  test("tokenizer on malformatted strings") {
     val malformatted = Seq("a", "[1,,]", "0.123.4", "1 2", "3+4")
     malformatted.foreach { s =>
       intercept[RuntimeException] {
