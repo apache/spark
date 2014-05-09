@@ -119,6 +119,56 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * Aggregate the values of each key, using given combine functions and a neutral "zero value".
+   * This function can return a different result type, U, than the type of the values in this RDD,
+   * V. Thus, we need one operation for merging a T into a U and one operation for merging two U's,
+   * as in scala.TraversableOnce. The former operation is used for merging values within a partition,
+   * and the latter is used for merging values between partitions. To avoid memory allocation, both
+   * of these functions are allowed to modify and return their first argument instead of creating a
+   * new U.
+   */
+  def aggregateByKey[U: ClassTag](zeroValue: U, partitioner: Partitioner)(seqOp: (U, V) => U,
+      combOp: (U, U) => U): RDD[(K, U)] = {
+    // Serialize the zero value to a byte array so that we can get a new clone of it on each key
+    val zeroBuffer = SparkEnv.get.closureSerializer.newInstance().serialize(zeroValue)
+    val zeroArray = new Array[Byte](zeroBuffer.limit)
+    zeroBuffer.get(zeroArray)
+
+    lazy val cachedSerializer = SparkEnv.get.closureSerializer.newInstance()
+    def createZero() = cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
+
+    combineByKey[U]((v: V) => seqOp(createZero(), v), seqOp, combOp, partitioner)
+  }
+
+  /**
+   * Aggregate the values of each key, using given combine functions and a neutral "zero value".
+   * This function can return a different result type, U, than the type of the values in this RDD,
+   * V. Thus, we need one operation for merging a T into a U and one operation for merging two U's,
+   * as in scala.TraversableOnce. The former operation is used for merging values within a partition,
+   * and the latter is used for merging values between partitions. To avoid memory allocation, both
+   * of these functions are allowed to modify and return their first argument instead of creating a
+   * new U.
+   */
+  def aggregateByKey[U: ClassTag](zeroValue: U, numPartitions: Int)(seqOp: (U, V) => U,
+      combOp: (U, U) => U): RDD[(K, U)] = {
+    aggregateByKey(zeroValue, new HashPartitioner(numPartitions))(seqOp, combOp)
+  }
+
+  /**
+   * Aggregate the values of each key, using given combine functions and a neutral "zero value".
+   * This function can return a different result type, U, than the type of the values in this RDD,
+   * V. Thus, we need one operation for merging a T into a U and one operation for merging two U's,
+   * as in scala.TraversableOnce. The former operation is used for merging values within a partition,
+   * and the latter is used for merging values between partitions. To avoid memory allocation, both
+   * of these functions are allowed to modify and return their first argument instead of creating a
+   * new U.
+   */
+  def aggregateByKey[U: ClassTag](zeroValue: U)(seqOp: (U, V) => U,
+      combOp: (U, U) => U): RDD[(K, U)] = {
+    aggregateByKey(zeroValue, defaultPartitioner(self))(seqOp, combOp)
+  }
+
+  /**
    * Merge the values for each key using an associative function and a neutral "zero value" which
    * may be added to the result an arbitrary number of times, and must not change the result
    * (e.g., Nil for list concatenation, 0 for addition, or 1 for multiplication.).
