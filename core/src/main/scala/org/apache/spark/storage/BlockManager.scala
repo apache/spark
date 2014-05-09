@@ -1045,6 +1045,9 @@ private[spark] object BlockManager extends Logging {
 
   def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
+    if (memoryFraction > 1 && memoryFraction <= 0) {
+      logWarning("spark.storage.memoryFraction should be between 0 and 1.")
+    }
     (Runtime.getRuntime.maxMemory * memoryFraction).toLong
   }
 
