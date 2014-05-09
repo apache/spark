@@ -129,16 +129,21 @@ class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
       // For any application that either (i) is not listed or (ii) has changed since the last time
       // the listing was created (defined by the log dir's modification time), load the app's info.
       // Otherwise just reuse what's already in memory.
-      appList.set(logInfos
-        .map { dir =>
-          val curr = currentApps.getOrElse(dir.getPath().getName(), null)
-          if (curr == null || curr.lastUpdated < getModificationTime(dir)) {
-            loadAppInfo(dir, false)
-          } else {
-            curr
+      val newApps = new mutable.ListBuffer[ApplicationHistoryInfo]
+      for (dir <- logInfos) {
+        val curr = currentApps.getOrElse(dir.getPath().getName(), null)
+        if (curr == null || curr.lastUpdated < getModificationTime(dir)) {
+          try {
+            newApps += loadAppInfo(dir, false)
+          } catch {
+            case e: Exception => logError(s"Failed to load app info from directory $dir.")
           }
+        } else {
+          newApps += curr
         }
-        .sortBy { info => -info.lastUpdated })
+      }
+
+      appList.set(newApps.sortBy { info => -info.lastUpdated })
     } catch {
       case t: Throwable => logError("Exception in checking for event log updates", t)
     }
