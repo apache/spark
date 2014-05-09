@@ -1,8 +1,25 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.mllib.util
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
-object NumericTokenizer {
+private[mllib] object NumericTokenizer {
   val NUMBER = -1
   val END = -2
 }
@@ -16,7 +33,7 @@ import NumericTokenizer._
  *  - array: an array of numbers stored as `[v0,v1,...,vn]`
  *  - tuple: a list of numbers, arrays, or tuples stored as `(...)`
  *
-   @param s input string
+ * @param s input string
  * @param start start index
  * @param end end index
  */
@@ -45,12 +62,6 @@ private[mllib] class NumericTokenizer(s: String, start: Int, end: Int) {
   def next(): Int = {
     if (cur < end) {
       val c = s(cur)
-      if (c == ',' && allowComma) {
-        cur += 1
-        allowComma = false
-        return next()
-      }
-
       c match {
         case '(' | '[' =>
           allowComma = false
@@ -90,6 +101,9 @@ private[mllib] class NumericTokenizer(s: String, start: Int, end: Int) {
   }
 }
 
+/**
+ * Simple parser for tokens from [[org.apache.spark.mllib.util.NumericTokenizer]].
+ */
 private[mllib] object NumericParser {
 
   /** Parses a string into a Double, an Array[Double], or a Seq[Any]. */
@@ -119,7 +133,7 @@ private[mllib] object NumericParser {
     values.toArray
   }
 
-  private def parseTuple(tokenizer: NumericTokenizer): List[_] = {
+  private def parseTuple(tokenizer: NumericTokenizer): Seq[_] = {
     val items = ListBuffer.empty[Any]
     var token = tokenizer.next()
     while (token != ')' && token != END) {
@@ -134,6 +148,6 @@ private[mllib] object NumericParser {
       token = tokenizer.next()
     }
     require(token == ')')
-    items.toList
+    items.toSeq
   }
 }
