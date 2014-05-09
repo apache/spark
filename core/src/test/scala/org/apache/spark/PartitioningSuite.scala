@@ -66,6 +66,40 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     assert(descendingP4 != p4)
   }
 
+  test("BoundaryPartitioner equality") {
+    // Make an RDD where all the elements are the same so that the partition range bounds
+    // are deterministically all the same.
+    val rdd = sc.parallelize(1.to(4000)).map(x => (x, x))
+
+    val p2 = new BoundaryPartitioner(2, rdd, 1000)
+    val p4 = new BoundaryPartitioner(4, rdd, 1000)
+    val anotherP4 = new BoundaryPartitioner(4, rdd)
+
+    assert(p2 === p2)
+    assert(p4 === p4)
+    assert(p2 != p4)
+    assert(p4 != p2)
+    assert(p4 === anotherP4)
+    assert(anotherP4 === p4)
+  }
+
+  test("BoundaryPartitioner getPartition") {
+    val rdd = sc.parallelize(1.to(2000)).map(x => (x, x))
+    val partitioner = new BoundaryPartitioner(4, rdd,  500)
+    1.to(2000).map { element => {
+      val partition = partitioner.getPartition(element)
+      if (element <= 500) {
+        assert(partition === 0)
+      } else if (element > 501 && element <= 1000) {
+        assert(partition === 1)
+      } else if (element > 1001 && element <= 1500) {
+        assert(partition === 2)
+      } else if (element > 1501 && element <= 2000) {
+        assert(partition === 3)
+      }
+    }}
+  }
+
   test("RangePartitioner getPartition") {
     val rdd = sc.parallelize(1.to(2000)).map(x => (x, x))
     // We have different behaviour of getPartition for partitions with less than 1000 and more than
