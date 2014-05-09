@@ -39,6 +39,4 @@ private[master] object MasterMessages {
   case object RequestWebUIPort
 
   case class WebUIPortResponse(webUIBoundPort: Int)
-
-  case object TriggerSchedule
 }

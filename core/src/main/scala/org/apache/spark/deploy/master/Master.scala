@@ -177,8 +177,7 @@ private[spark] class Master(
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedDrivers, storedWorkers)
-        recoverCallable = context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis)
-        { self ! CompleteRecovery }
+        recoverCallable = context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis, self, CompleteRecovery)
       }
     }
 
