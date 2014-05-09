@@ -20,7 +20,7 @@ package org.apache.spark.deploy.master
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ListBuffer, ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -457,35 +457,17 @@ private[spark] class Master(
    * launched an executor for the app on it (right now the standalone backend doesn't like having
    * two executors on the same worker).
    */
-  def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
-    worker.memoryFree >= app.desc.memoryPerSlave && !worker.hasExecutor(app)
+  private def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
+    worker.memoryFree >= app.desc.memoryPerExecutor && !worker.hasExecutor(app) &&
+    worker.coresFree > 0
   }
 
-  /**
-   * Schedule the currently available resources among waiting apps. This method will be called
-   * every time a new app joins or resource availability changes.
-   */
-  def schedule() {
-    if (state != RecoveryState.ALIVE) { return }
-
-    // First schedule drivers, they take strict precedence over applications
-    val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
-    for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
-      for (driver <- waitingDrivers) {
-        if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
-          launchDriver(worker, driver)
-          waitingDrivers -= driver
-        }
-      }
-    }
-
-    // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
-    // in the queue, then the second app, etc.
+  private def startSingleExecutorPerWorker() {
     if (spreadOutApps) {
       // Try to spread out each app among all the nodes, until it has all its cores
       for (app <- waitingApps if app.coresLeft > 0) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-                                   .filter(canUse(app, _)).sortBy(_.coresFree).reverse
+          .filter(canUse(app, _)).sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
         var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
@@ -520,6 +502,109 @@ private[spark] class Master(
           }
         }
       }
+    }
+  }
+
+  private def startMultiExecutorsPerWorker() {
+    // allow user to run multiple executors in the same worker
+    // (within the same worker JVM process)
+    if (spreadOutApps) {
+      for (app <- waitingApps if app.coresLeft > 0) {
+        var usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+          .filter(worker => worker.coresFree > 0 && worker.memoryFree >=
+          app.desc.memoryPerExecutor).sortBy(_.coresFree).reverse
+        val maxCoreNumPerExecutor = app.desc.maxCorePerExecutor.get
+        var mostFreeCoreWorkerPos = 0
+        val maxAvailableSlots = usableWorkers.map(worker => math.min(worker.coresFree,
+          worker.memoryFree / app.desc.memoryPerExecutor)).sum
+        var leftCoreToAssign = math.min(app.coresLeft, maxAvailableSlots)
+        val numUsable = usableWorkers.length
+        // Number of cores of each executor assigned to each worker
+        val assigned = Array.fill[ListBuffer[Int]](numUsable)(new ListBuffer[Int])
+        val assignedSum = Array.fill[Int](numUsable)(0)
+        var pos = 0
+        val noEnoughMemoryWorkers = new HashSet[Int]
+        var maxPossibleCore = usableWorkers(mostFreeCoreWorkerPos).coresFree
+        while (leftCoreToAssign > 0 && noEnoughMemoryWorkers.size < numUsable) {
+          if ((usableWorkers(mostFreeCoreWorkerPos).coresFree - assignedSum(mostFreeCoreWorkerPos) <
+            usableWorkers(pos).coresFree - assignedSum(pos) ||
+            noEnoughMemoryWorkers.contains(mostFreeCoreWorkerPos)) &&
+            usableWorkers(pos).coresFree - assignedSum(pos) > 0 &&
+            usableWorkers(pos).memoryFree >=
+              app.desc.memoryPerExecutor * (assigned(pos).length + 1)) {
+            mostFreeCoreWorkerPos = pos
+          }
+          maxPossibleCore = usableWorkers(mostFreeCoreWorkerPos).coresFree -
+            assignedSum(mostFreeCoreWorkerPos)
+          val coreToAssign = math.min(math.min(maxCoreNumPerExecutor, maxPossibleCore),
+            leftCoreToAssign)
+          if (usableWorkers(pos).coresFree - assignedSum(pos) >= coreToAssign) {
+            if (usableWorkers(pos).memoryFree >=
+              app.desc.memoryPerExecutor * (assigned(pos).length + 1)) {
+              leftCoreToAssign -= coreToAssign
+              assigned(pos) += coreToAssign
+              assignedSum(pos) += coreToAssign
+            }
+          }
+          if (usableWorkers(pos).memoryFree < app.desc.memoryPerExecutor *
+            (assigned(pos).length + 1)) {
+            noEnoughMemoryWorkers += pos
+          }
+          pos = (pos + 1) % numUsable
+        }
+
+        // Now that we've decided how many executors and the core number for each to
+        // give on each node, let's actually give them
+        for (pos <- 0 until numUsable) {
+          for (execIdx <- 0 until assigned(pos).length) {
+            val exec = app.addExecutor(usableWorkers(pos), assigned(pos)(execIdx))
+            launchExecutor(usableWorkers(pos), exec)
+            app.state = ApplicationState.RUNNING
+          }
+        }
+      }
+    } else {
+      // Pack each app into as few nodes as possible until we've assigned all its cores
+      for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
+        for (app <- waitingApps if app.coresLeft > 0 &&
+          app.desc.memoryPerExecutor <= worker.memoryFree) {
+          val coreNumPerExecutor = app.desc.maxCorePerExecutor.get
+          var coresLeft = math.min(worker.coresFree, app.coresLeft)
+          while (coresLeft > 0 && app.desc.memoryPerExecutor <= worker.memoryFree) {
+            val coreToAssign = math.min(coreNumPerExecutor, coresLeft)
+            val exec = app.addExecutor(worker, coreToAssign)
+            launchExecutor(worker, exec)
+            coresLeft -= coreToAssign
+            app.state = ApplicationState.RUNNING
+          }
+        }
+      }
+    }
+  }
+
+
+  /**
+   * Schedule the currently available resources among waiting apps. This method will be called
+   * every time a new app joins or resource availability changes.
+   */
+  def schedule() {
+    if (state != RecoveryState.ALIVE) { return }
+
+    // First schedule drivers, they take strict precedence over applications
+    val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
+    for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
+      for (driver <- waitingDrivers) {
+        if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
+          launchDriver(worker, driver)
+          waitingDrivers -= driver
+        }
+      }
+    }
+
+    if (!conf.getBoolean("spark.executor.multiPerWorker", true)) {
+      startSingleExecutorPerWorker()
+    } else {
+      startMultiExecutorsPerWorker()
     }
   }
 

@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 private[spark] class ApplicationDescription(
     val name: String,
     val maxCores: Option[Int],
-    val memoryPerSlave: Int,
+    val memoryPerExecutor: Int, // in Mb
     val command: Command,
     val sparkHome: Option[String],
     var appUiUrl: String,
@@ -28,6 +28,7 @@ private[spark] class ApplicationDescription(
   extends Serializable {
 
   val user = System.getProperty("user.name", "<unknown>")
-
+  // only valid when spark.executor.multiPerWorker is set to true
+  var maxCorePerExecutor = maxCores
   override def toString: String = "ApplicationDescription(" + name + ")"
 }
