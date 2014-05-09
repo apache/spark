@@ -271,8 +271,8 @@ object SparkBuild extends Build {
         "org.eclipse.jetty" % "jetty-util"     % jettyVersion,
         "org.eclipse.jetty" % "jetty-plus"     % jettyVersion,
         "org.eclipse.jetty" % "jetty-security" % jettyVersion,
-        "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
-        "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
+        "org.scalatest"    %% "scalatest"       % "2.1.5"  % "test",
+        "org.scalacheck"   %% "scalacheck"      % "1.11.3" % "test",
         "com.novocode"      % "junit-interface" % "0.10"   % "test",
         "org.easymock"      % "easymock"        % "3.1"    % "test",
         "org.mockito"       % "mockito-all"     % "1.8.5"  % "test"

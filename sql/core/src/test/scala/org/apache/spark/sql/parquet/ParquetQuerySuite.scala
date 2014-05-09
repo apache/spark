@@ -19,7 +19,7 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
 
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.mapreduce.Job
@@ -42,7 +42,7 @@ import org.apache.spark.sql.test.TestSQLContext._
 
 case class TestRDDEntry(key: Int, value: String)
 
-class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
+class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   import TestData._
   TestData // Load test data tables.
 
