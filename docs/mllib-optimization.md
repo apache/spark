@@ -182,7 +182,7 @@ See the example below. It will be addressed in the next release.
 
 The L1 regularization by using 
 [L1Updater](api/mllib/index.html#org.apache.spark.mllib.optimization.L1Updater) will not work since the 
-soft-thresholding logic in L1Updater is designed for gradient descent.
+soft-thresholding logic in L1Updater is designed for gradient descent. See the developer's note.
 
 The L-BFGS method
 [LBFGS.runLBFGS](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS)
@@ -195,8 +195,7 @@ functions, e.g., hinge, logistic, least-squares.  The gradient class takes as
 input a training example, its label, and the current parameter value. 
 * `updater` is a class that computes the gradient and loss of objective function 
 of the regularization part for L-BFGS. MLlib includes updaters for cases without 
-regularization, as well as L2 regularizer. Note that L1 regularizer doesn't work
-for L-BFGS. See the developer's note.
+regularization, as well as L2 regularizer. 
 * `numCorrections` is the number of corrections used in the L-BFGS update. 10 is 
 recommended.
 * `maxNumIterations` is the maximal number of iterations that L-BFGS can be run.
