@@ -515,7 +515,9 @@ private[spark] class Master(
           app.desc.memoryPerExecutor).sortBy(_.coresFree).reverse
         val maxCoreNumPerExecutor = app.desc.maxCorePerExecutor.get
         var mostFreeCoreWorkerPos = 0
-        var leftCoreToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
+        val maxAvailableSlots = usableWorkers.map(worker => math.min(worker.coresFree,
+          worker.memoryFree / app.desc.memoryPerExecutor)).sum
+        var leftCoreToAssign = math.min(app.coresLeft, maxAvailableSlots)
         val numUsable = usableWorkers.length
         // Number of cores of each executor assigned to each worker
         val assigned = Array.fill[ListBuffer[Int]](numUsable)(new ListBuffer[Int])
