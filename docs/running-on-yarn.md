@@ -82,11 +82,12 @@ will print out the contents of all log files from all containers from the given 
 
 When log aggregation isn't turned on, logs are retained locally on each machine under YARN_APP_LOGS_DIR, which is usually configured to /tmp/logs or $HADOOP_HOME/logs/userlogs depending on the Hadoop version and installation. Viewing logs for a container requires going to the host that contains them and looking in this directory.  Subdirectories organize log files by application ID and container ID.
 
-To review per container launch environment, increase yarn.nodemanager.delete.debug-delay-sec to a
+To review per-container launch environment, increase yarn.nodemanager.delete.debug-delay-sec to a
 large value (e.g. 36000), and then access the application cache through yarn.nodemanager.local-dirs
 on the nodes on which containers are launched. This directory contains the launch script, jars, and
 all environment variables used for launching each container. This process is useful for debugging
-classpath problems in particular.
+classpath problems in particular. (Note that enabling this requires admin privileges on cluster
+settings and a restart of all node managers. Thus, this is not applicable to hosted clusters).
 
 # Important notes
 
