@@ -23,4 +23,7 @@ echoerr() { echo "$@" 1>&2; }
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 export MESOS_NATIVE_LIBRARY=/usr/local/lib/libmesos.so
-export MASTER=zk://127.0.0.1:2181/mesos
+#export MASTER=zk://127.0.0.1:2181/mesos
+export MASTER=zk://kafka01.chi.shopify.com:2181/mesos
+export MESOS_EXECUTOR_URI=http://pack.chi.shopify.com/packages/Shopify/spark/f2c3b1c8cbbfde10be0db6ac0977232c66c3e63e.tar.gz
+
