@@ -195,9 +195,14 @@ object HistoryServer {
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
 
+    Runtime.getRuntime().addShutdownHook(new Thread("HistoryServerStopper") {
+        override def run() = {
+          server.stop()
+        }
+      })
+
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
-    server.stop()
   }
 
   def initSecurity() {

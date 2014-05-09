@@ -54,7 +54,7 @@ class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
    */
   private val logCheckingThread = new Thread("LogCheckingThread") {
     override def run() = Utils.logUncaughtExceptions {
-      while (!stopped) {
+      while (true) {
         val now = System.currentTimeMillis
         if (now - lastLogCheckTime > UPDATE_INTERVAL_MS) {
           Thread.sleep(UPDATE_INTERVAL_MS)
@@ -67,8 +67,6 @@ class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
       }
     }
   }
-
-  @volatile private var stopped = false
 
   initialize()
 
@@ -85,13 +83,6 @@ class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
     checkForLogs()
     logCheckingThread.setDaemon(true)
     logCheckingThread.start()
-  }
-
-  override def stop() = {
-    stopped = true
-    logCheckingThread.interrupt()
-    logCheckingThread.join()
-    fs.close()
   }
 
   override def getListing(offset: Int, count: Int) = {
