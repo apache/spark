@@ -106,11 +106,6 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
     this
   }
 
-  def setRda(rda: Boolean): this.type  = {
-    this.rda = rda
-    this
-  }
-
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
     val (weights, _) = if (stochastic) {
       GradientDescent.runMiniBatchSGD(

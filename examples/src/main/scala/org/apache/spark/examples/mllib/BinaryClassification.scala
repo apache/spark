@@ -24,7 +24,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.classification.{SVMModel, LogisticRegressionModel, LogisticRegressionWithSGD, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.binary.BinaryClassificationMetrics
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.optimization.{RDAL1Updater, SquaredL2Updater, L1Updater}
+import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
 import org.apache.spark.mllib.regression.{LabeledPoint, GeneralizedLinearModel}
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.rdd.RDD
@@ -45,7 +45,7 @@ object BinaryClassification {
 
   object RegType extends Enumeration {
     type RegType = Value
-    val L1, L2, RDA = Value
+    val L1, L2 = Value
   }
 
   object Mode extends Enumeration {
@@ -58,7 +58,6 @@ object BinaryClassification {
   import Mode._
 
   case class Params(
-      master: String = null,
       input: String = null,
       model: String = null,
       numIterations: Int = 100,
@@ -66,11 +65,10 @@ object BinaryClassification {
       algorithm: Algorithm = LR,
       regType: RegType = L2,
       regParam: Double = 0.1,
-      mode: Mode = SPLIT,
+      test: Boolean = false,
       addIntercept: Boolean = false,
       stochastic: Boolean = false,
       miniBatch: Double = 1.0,
-      rdaRho: Double = 0.0,
       prediction: String = null)
 
   def main(args: Array[String]) {
@@ -95,10 +93,9 @@ object BinaryClassification {
       opt[Double]("regParam")
         .text(s"regularization parameter, default: ${defaultParams.regParam}")
         .action((x, c) => c.copy(regParam = x))
-      opt[String]("mode")
-          .text(s"mode (${Mode.values.mkString(",")}), " +
-          s"default: ${defaultParams.mode}")
-          .action((x, c) => c.copy(mode = Mode.withName(x)))
+      opt[Unit]("test")
+          .text("test given model")
+          .action((x, c) => c.copy(test = true))
       opt[Unit]("addIntercept")
         .text("add interept 1.0 to input data")
         .action((_, c) => c.copy(addIntercept = true))
@@ -108,16 +105,9 @@ object BinaryClassification {
       opt[Double]("miniBatch")
         .text("sample fraction per gradient descent step")
         .action((x, c) => c.copy(miniBatch = x))
-      opt[Double]("rdaRho")
-        .text("sparsity for enhanced rda")
-        .action((x, c) => c.copy(rdaRho = x))
       opt[String]("prediction")
           .text("prediction file")
           .action((x, c) => c.copy(prediction = x))
-      arg[String]("<master>")
-          .required()
-          .text("spark master")
-          .action((x, c) => c.copy(master = x))
       arg[String]("<input>")
         .required()
         .text("input paths to labeled examples in LIBSVM format")
@@ -146,93 +136,84 @@ object BinaryClassification {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setMaster(params.master)
-        .setAppName(s"BinaryClassification with $params")
+    val conf = new SparkConf().setAppName(s"BinaryClassification with $params")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
     val examples = MLUtils.loadLibSVMData(sc, params.input).cache()
 
-    val (training, test) = params.mode match {
-      case TRAIN => (examples, sc.emptyRDD[LabeledPoint])
-      case TEST => (sc.emptyRDD[LabeledPoint], examples)
-      case SPLIT =>
-        val splits = examples.randomSplit(Array(0.8, 0.2))
-        val training = splits(0).cache()
-        val test = splits(1).cache()
-        examples.unpersist(blocking = false)
-        (training, test)
+    val (training, test) = if (params.test) {
+      (sc.emptyRDD[LabeledPoint], examples)
+    } else {
+      val splits = examples.randomSplit(Array(0.8, 0.2))
+      val training = splits(0).cache()
+      val test = splits(1).cache()
+      examples.unpersist(blocking = false)
+      (training, test)
     }
 
     val numTraining = training.count()
     val numTest = test.count()
     println(s"Training: $numTraining, test: $numTest.")
 
-    val model = params.mode match {
-      case TEST =>
-        val strModel: Seq[(String, Double)]= sc.textFile(params.model).map { line =>
-          val parts = line.split(":")
-          (parts(0), parts(1).toDouble)
-        } .collect()
-        val (weights, intercept) = parseModel(strModel)
+    val model = if (params.test) {
+      val strModel: Seq[(String, Double)]= sc.textFile(params.model).map { line =>
+        val parts = line.split(":")
+        (parts(0), parts(1).toDouble)
+      } .collect()
+      val (weights, intercept) = parseModel(strModel)
 
-        params.algorithm match {
-          case LR => new LogisticRegressionModel(weights, intercept)
-          case SVM => new SVMModel(weights, intercept)
-        }
-
-      case _ =>
-
-        val updater = params.regType match {
-          case L1 => new L1Updater()
-          case L2 => new SquaredL2Updater()
-          case RDA => new RDAL1Updater(params.rdaRho)
-        }
-
-        val (algorithm, optimizer) = params.algorithm match {
-          case LR =>
-            val lr = new LogisticRegressionWithSGD()
-            (lr, lr.optimizer)
-          case SVM =>
-            val svm = new SVMWithSGD()
-            (svm, svm.optimizer)
-        }
-        algorithm.setIntercept(params.addIntercept)
-        optimizer
-              .setNumIterations(params.numIterations)
-              .setStepSize(params.stepSize)
-              .setUpdater(updater)
-              .setRegParam(params.regParam)
-              .setMiniBatchFraction(params.miniBatch)
-              .setStochastic(params.stochastic)
-              .setRda(params.regType == RDA)
-        val model = algorithm.run(training)
-
-        sc.makeRDD(model.readableModel).saveAsTextFile(params.model)
-
-        model
-    }
-
-    if (params.mode != TRAIN) {
       params.algorithm match {
-        case LR => model.asInstanceOf[LogisticRegressionModel].clearThreshold()
-        case SVM => model.asInstanceOf[SVMModel].clearThreshold()
+        case LR => new LogisticRegressionModel(weights, intercept)
+        case SVM => new SVMModel(weights, intercept)
+      }
+    } else {
+      val updater = params.regType match {
+        case L1 => new L1Updater()
+        case L2 => new SquaredL2Updater()
       }
 
-      val prediction = model.predict(test.map(_.features))
-      val predictionAndLabel = prediction.zip(test.map(_.label))
-
-      if (params.prediction != null) {
-        predictionAndLabel.map { lp => lp._2 + "," + lp._1 }
-            .saveAsTextFile(params.prediction)
+      val (algorithm, optimizer) = params.algorithm match {
+        case LR =>
+          val lr = new LogisticRegressionWithSGD()
+          (lr, lr.optimizer)
+        case SVM =>
+          val svm = new SVMWithSGD()
+          (svm, svm.optimizer)
       }
+      algorithm.setIntercept(params.addIntercept)
+      optimizer
+            .setNumIterations(params.numIterations)
+            .setStepSize(params.stepSize)
+            .setUpdater(updater)
+            .setRegParam(params.regParam)
+            .setMiniBatchFraction(params.miniBatch)
+            .setStochastic(params.stochastic)
+      val model = algorithm.run(training)
 
-      val metrics = new BinaryClassificationMetrics(predictionAndLabel)
+      sc.makeRDD(model.readableModel).saveAsTextFile(params.model)
 
-      println(s"Test areaUnderPR = ${metrics.areaUnderPR()}.")
-      println(s"Test areaUnderROC = ${metrics.areaUnderROC()}.")
+      model
     }
+
+    params.algorithm match {
+      case LR => model.asInstanceOf[LogisticRegressionModel].clearThreshold()
+      case SVM => model.asInstanceOf[SVMModel].clearThreshold()
+    }
+
+    val prediction = model.predict(test.map(_.features))
+    val predictionAndLabel = prediction.zip(test.map(_.label))
+
+    if (params.prediction != null) {
+      predictionAndLabel.map { lp => lp._2 + "," + lp._1 }
+          .saveAsTextFile(params.prediction)
+    }
+
+    val metrics = new BinaryClassificationMetrics(predictionAndLabel)
+
+    println(s"Test areaUnderPR = ${metrics.areaUnderPR()}.")
+    println(s"Test areaUnderROC = ${metrics.areaUnderROC()}.")
 
     sc.stop()
   }

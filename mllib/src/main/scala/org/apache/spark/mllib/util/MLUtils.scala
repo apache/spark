@@ -76,7 +76,7 @@ object MLUtils {
     } else {
       parsed.map { items =>
         if (items.length > 1) {
-          items.tail.map { _.split(':')(0).toInt }.max
+          items.last.split(':')(0).toInt
         } else {
           0
         }
