@@ -39,21 +39,22 @@ And run the following command, which should also return 1000:
 ## Example Programs
 
 Spark also comes with several sample programs in the `examples` directory.
-To run one of them, use the `./bin/spark-submit` script. For example:
+To run one of them, use `./bin/run-example <class> [<params>]`. For example:
 
-    ./bin/spark-submit \
-      --class org.apache.spark.examples.SparkLR \
-      --master local[2] \
-      lib/spark-examples*.jar
+    ./bin/run-example org.apache.spark.examples.SparkLR
 
-will run the Logistic Regression example locally on 2 CPUs.
+will run the Logistic Regression example locally.
+
+You can set the MASTER environment variable when running examples to submit
+examples to a cluster. This can be a mesos:// or spark:// URL, 
+"yarn-cluster" or "yarn-client" to run on YARN, and "local" to run 
+locally with one thread, or "local[N]" to run locally with N thread. You 
+can also use an abbreviated class name if the class is in the `examples`
+package. For instance:
+
+    MASTER=spark://host:7077 ./bin/run-example SparkPi
 
 Many of the example programs print usage help if no params are given.
-
-When running Spark examples you can pass `--master` parameter to the submission
-script. This can be a mesos:// or spark:// URL, "yarn-cluster" or "yarn-client"
-to run on YARN, and "local" to run locally with one thread, or "local[N]" to 
-run locally with N thread.
 
 ## Running Tests
 

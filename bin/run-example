@@ -35,27 +35,25 @@ if [[ -z $SPARK_EXAMPLES_JAR ]]; then
   exit 1
 fi
 
-SPARK_EXAMPLES_JAR_REL=${SPARK_EXAMPLES_JAR#$FWDIR/}
-
-EXAMPLE_CLASS="<example-class>"
-EXAMPLE_ARGS="[<example args>]"
-EXAMPLE_MASTER=${MASTER:-"<master>"}
+EXAMPLE_MASTER=${MASTER:-"local[2]"}
 
 if [ -n "$1" ]; then
   EXAMPLE_CLASS="$1"
   shift
+else 
+  echo "usage: ./bin/run-example <example-class> [<example-args>]" 
+  echo "  - set MASTER=XX to use a specific master"
+  echo "  - can use abbreviated example class name (e.g. SparkPi)"
+  echo
+  exit -1
 fi
 
-if [ -n "$1" ]; then
-  EXAMPLE_ARGS="$@"
+if [[ ! $EXAMPLE_CLASS == org.apache.spark.examples* ]]; then
+  EXAMPLE_CLASS="org.apache.spark.examples.$EXAMPLE_CLASS"
 fi
 
-echo "NOTE: This script has been replaced with ./bin/spark-submit. Please run:" >&2
-echo
-echo "./bin/spark-submit \\" >&2
-echo "  --master $EXAMPLE_MASTER \\" >&2
-echo "  --class $EXAMPLE_CLASS \\" >&2
-echo "  $SPARK_EXAMPLES_JAR_REL \\" >&2
-echo "  $EXAMPLE_ARGS" >&2
-echo
-exit 1
+./bin/spark-submit \
+  --master $EXAMPLE_MASTER \
+  --class $EXAMPLE_CLASS \
+  $SPARK_EXAMPLES_JAR \
+  "$@"
