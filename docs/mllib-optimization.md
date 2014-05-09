@@ -128,24 +128,19 @@ is sampled, i.e. `$|S|=$ miniBatchFraction $\cdot n = 1$`, then the algorithm is
 standard SGD. In that case, the step direction depends from the uniformly random sampling of the
 point.
 
-### Limited-memory BFGS
-[Limited-memory BFGS (L-BFGS)](http://en.wikipedia.org/wiki/Limited-memory_BFGS) is an optimization 
+### L-BFGS
+[L-BFGS](http://en.wikipedia.org/wiki/Limited-memory_BFGS) is an optimization 
 algorithm in the family of quasi-Newton methods to solve the optimization problems of the form 
-`$\min_{\wv \in\R^d} \; f(\wv)$`. The L-BFGS approximates the objective function locally as a quadratic
-without evaluating the second partial derivatives of the objective function to construct the 
+`$\min_{\wv \in\R^d} \; f(\wv)$`. The L-BFGS method approximates the objective function locally as a 
+quadratic without evaluating the second partial derivatives of the objective function to construct the 
 Hessian matrix. The Hessian matrix is approximated by previous gradient evaluations, so there is no 
 vertical scalability issue (the number of training features) when computing the Hessian matrix 
-explicitly in Newton method. As a result, L-BFGS often achieves rapider convergence compared with 
+explicitly in Newton's method. As a result, L-BFGS often achieves rapider convergence compared with 
 other first-order optimization. 
-
-Since the Hessian is constructed approximately from previous gradient evaluations, the objective 
-function can not be changed during the optimization process. As a result, Stochastic L-BFGS will 
-not work naively by just using miniBatch; therefore, we don't provide this until we have better 
-understanding.  
 
 ## Implementation in MLlib
 
-### Gradient descent and Stochastic gradient descent
+### Gradient descent and stochastic gradient descent
 Gradient descent methods including stochastic subgradient descent (SGD) as
 included as a low-level primitive in `MLlib`, upon which various ML algorithms 
 are developed, see the 
@@ -182,11 +177,11 @@ Available algorithms for gradient descent:
 L-BFGS is currently only a low-level optimization primitive in `MLlib`. If you want to use L-BFGS in various 
 ML algorithms such as Linear Regression, and Logistic Regression, you have to pass the gradient of objective
 function, and updater into optimizer yourself instead of using the training APIs like 
-[LogisticRegression.LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegression).
+[LogisticRegression.LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
 See the example below. It will be addressed in the next release. 
 
 The L1 regularization by using 
-[Updater.L1Updater](api/mllib/index.html#org.apache.spark.mllib.optimization.Updater) will not work since the 
+[L1Updater](api/mllib/index.html#org.apache.spark.mllib.optimization.L1Updater) will not work since the 
 soft-thresholding logic in L1Updater is designed for gradient descent.
 
 The L-BFGS method
@@ -198,17 +193,17 @@ being optimized, i.e., with respect to a single training example, at the
 current parameter value. MLlib includes gradient classes for common loss
 functions, e.g., hinge, logistic, least-squares.  The gradient class takes as
 input a training example, its label, and the current parameter value. 
-* `updater` is a class originally designed for gradient decent which computes 
-the actual gradient descent step. However, we're able to take the gradient and 
-loss of objective function of regularization for L-BFGS by ignoring the part of logic
-only for gradient decent such as adaptive step size stuff. We will refactorize
-this into regularizer to replace updater to separate the logic between 
-regularization and step update later. 
+* `updater` is a class that computes the gradient and loss of objective function 
+of the regularization part for L-BFGS. MLlib includes updaters for cases without 
+regularization, as well as L2 regularizer. Note that L1 regularizer doesn't work
+for L-BFGS. See the developer's note.
 * `numCorrections` is the number of corrections used in the L-BFGS update. 10 is 
 recommended.
 * `maxNumIterations` is the maximal number of iterations that L-BFGS can be run.
 * `regParam` is the regularization parameter when using regularization.
-* `return` A tuple containing two elements. The first element is a column matrix
+
+
+The `return` is a tuple containing two elements. The first element is a column matrix
 containing weights for every feature, and the second element is an array containing 
 the loss computed for every iteration.
 
@@ -220,7 +215,6 @@ import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.classification.LogisticRegressionModel
-import breeze.linalg.{DenseVector => BDV}
 
 val data = MLUtils.loadLibSVMFile(sc, "mllib/data/sample_libsvm_data.txt")
 val numFeatures = data.take(1)(0).features.size
@@ -229,10 +223,7 @@ val numFeatures = data.take(1)(0).features.size
 val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
 
 // Prepend 1 into the training data as intercept.
-val training = splits(0).map(x =>
-  (x.label, Vectors.fromBreeze(
-    BDV.vertcat(BDV.ones[Double](1), x.features.toBreeze.toDenseVector)))
-).cache()
+val training = splits(0).map(x => (x.label, MLUtils.appendBias(x.features))).cache()
 
 val test = splits(1)
 
@@ -274,3 +265,17 @@ println("Loss of each step in training process")
 loss.foreach(println)
 println("Area under ROC = " + auROC)
 {% endhighlight %}
+
+#### Developer's note
+
+Since the Hessian is constructed approximately from previous gradient evaluations, 
+the objective function can not be changed during the optimization process. 
+As a result, Stochastic L-BFGS will not work naively by just using miniBatch; 
+therefore, we don't provide this until we have better understanding.
+
+* `updater` is a class originally designed for gradient decent which computes 
+the actual gradient descent step. However, we're able to take the gradient and 
+loss of objective function of regularization for L-BFGS by ignoring the part of logic
+only for gradient decent such as adaptive step size stuff. We will refactorize
+this into regularizer to replace updater to separate the logic between 
+regularization and step update later. 
