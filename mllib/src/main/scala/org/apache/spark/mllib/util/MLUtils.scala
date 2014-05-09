@@ -19,16 +19,17 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import breeze.linalg.{Vector => BV, SparseVector => BSV, squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
+  squaredDistance => breezeSquaredDistance}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.SparkContext._
 import org.apache.spark.util.random.BernoulliSampler
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -54,13 +55,16 @@ object MLUtils {
    *
    * @param sc Spark context
    * @param path file or directory path in any Hadoop-supported file system URI
-   * @param labelParser parser for labels, default: 1.0 if label > 0.5 or 0.0 otherwise
+   * @param labelParser parser for labels
    * @param numFeatures number of features, which will be determined from the input data if a
-   *                    negative value is given. The default value is -1.
-   * @param minPartitions min number of partitions, default: sc.defaultMinPartitions
+   *                    nonpositive value is given. This is useful when the dataset is already split
+   *                    into multiple files and you want to load them separately, because some
+   *                    features may not present in certain files, which leads to inconsistent
+   *                    feature dimensions.
+   * @param minPartitions min number of partitions
    * @return labeled data stored as an RDD[LabeledPoint]
    */
-  def loadLibSVMData(
+  private def loadLibSVMFile(
       sc: SparkContext,
       path: String,
       labelParser: LabelParser,
@@ -68,63 +72,112 @@ object MLUtils {
       minPartitions: Int): RDD[LabeledPoint] = {
     val parsed = sc.textFile(path, minPartitions)
       .map(_.trim)
-      .filter(!_.isEmpty)
-      .map(_.split(' '))
+      .filter(line => !(line.isEmpty || line.startsWith("#")))
+      .map { line =>
+        val items = line.split(' ')
+        val label = labelParser.parse(items.head)
+        val (indices, values) = items.tail.map { item =>
+          val indexAndValue = item.split(':')
+          val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
+          val value = indexAndValue(1).toDouble
+          (index, value)
+        }.unzip
+        (label, indices.toArray, values.toArray)
+      }
+
     // Determine number of features.
-    val d = if (numFeatures >= 0) {
+    val d = if (numFeatures > 0) {
       numFeatures
     } else {
-      parsed.map { items =>
-        if (items.length > 1) {
-          items.last.split(':')(0).toInt
-        } else {
-          0
-        }
-      }.reduce(math.max)
+      parsed.persist(StorageLevel.MEMORY_ONLY)
+      parsed.map { case (label, indices, values) =>
+        indices.lastOption.getOrElse(0)
+      }.reduce(math.max) + 1
     }
-    parsed.map { items =>
-      val label = labelParser.parse(items.head)
-      val (indices, values) = items.tail.map { item =>
-        val indexAndValue = item.split(':')
-        val index = indexAndValue(0).toInt - 1
-        val value = indexAndValue(1).toDouble
-        (index, value)
-      }.unzip
-      LabeledPoint(label, Vectors.sparse(d, indices.toArray, values.toArray))
+
+    parsed.map { case (label, indices, values) =>
+      LabeledPoint(label, Vectors.sparse(d, indices, values))
     }
   }
 
-  // Convenient methods for calling from Java.
+  // Convenient methods for `loadLibSVMFile`.
 
   /**
-   * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint],
-   * with number of features determined automatically and the default number of partitions.
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint].
+   * The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
+   * Each line represents a labeled sparse feature vector using the following format:
+   * {{{label index1:value1 index2:value2 ...}}}
+   * where the indices are one-based and in ascending order.
+   * This method parses each line into a [[org.apache.spark.mllib.regression.LabeledPoint]],
+   * where the feature indices are converted to zero-based.
+   *
+   * @param sc Spark context
+   * @param path file or directory path in any Hadoop-supported file system URI
+   * @param multiclass whether the input labels contain more than two classes. If false, any label
+   *                   with value greater than 0.5 will be mapped to 1.0, or 0.0 otherwise. So it
+   *                   works for both +1/-1 and 1/0 cases. If true, the double value parsed directly
+   *                   from the label string will be used as the label value.
+   * @param numFeatures number of features, which will be determined from the input data if a
+   *                    nonpositive value is given. This is useful when the dataset is already split
+   *                    into multiple files and you want to load them separately, because some
+   *                    features may not present in certain files, which leads to inconsistent
+   *                    feature dimensions.
+   * @param minPartitions min number of partitions
+   * @return labeled data stored as an RDD[LabeledPoint]
    */
-  def loadLibSVMData(sc: SparkContext, path: String): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, BinaryLabelParser, -1, sc.defaultMinPartitions)
-
-  /**
-   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
-   * with the given label parser, number of features determined automatically,
-   * and the default number of partitions.
-   */
-  def loadLibSVMData(
+   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
-      labelParser: LabelParser): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, labelParser, -1, sc.defaultMinPartitions)
+      multiclass: Boolean,
+      numFeatures: Int,
+      minPartitions: Int): RDD[LabeledPoint] =
+    loadLibSVMFile(sc, path, LabelParser.getInstance(multiclass), numFeatures, minPartitions)
 
   /**
-   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
-   * with the given label parser, number of features specified explicitly,
-   * and the default number of partitions.
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the default number of
+   * partitions.
    */
-  def loadLibSVMData(
+  def loadLibSVMFile(
       sc: SparkContext,
       path: String,
-      labelParser: LabelParser,
+      multiclass: Boolean,
       numFeatures: Int): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinPartitions)
+    loadLibSVMFile(sc, path, multiclass, numFeatures, sc.defaultMinPartitions)
+
+  /**
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the number of features
+   * determined automatically and the default number of partitions.
+   */
+  def loadLibSVMFile(
+      sc: SparkContext,
+      path: String,
+      multiclass: Boolean): RDD[LabeledPoint] =
+    loadLibSVMFile(sc, path, multiclass, -1, sc.defaultMinPartitions)
+
+  /**
+   * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint], with number of
+   * features determined automatically and the default number of partitions.
+   */
+  def loadLibSVMFile(sc: SparkContext, path: String): RDD[LabeledPoint] =
+    loadLibSVMFile(sc, path, multiclass = false, -1, sc.defaultMinPartitions)
+
+  /**
+   * Save labeled data in LIBSVM format.
+   * @param data an RDD of LabeledPoint to be saved
+   * @param dir directory to save the data
+   *
+   * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
+   */
+  def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
+    // TODO: allow to specify label precision and feature precision.
+    val dataStr = data.map { case LabeledPoint(label, features) =>
+      val featureStrings = features.toBreeze.activeIterator.map { case (i, v) =>
+        s"${i + 1}:$v"
+      }
+      (Iterator(label) ++ featureStrings).mkString(" ")
+    }
+    dataStr.saveAsTextFile(dir)
+  }
 
   /**
    * :: Experimental ::
@@ -163,10 +216,12 @@ object MLUtils {
   }
 
   /**
+   * :: Experimental ::
    * Return a k element array of pairs of RDDs with the first element of each pair
    * containing the training data, a complement of the validation data and the second
    * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
    */
+  @Experimental
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map { fold =>
@@ -176,6 +231,18 @@ object MLUtils {
       val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
       (training, validation)
     }.toArray
+  }
+
+  /**
+   * Returns a new vector with `1.0` (bias) appended to the input vector.
+   */
+  def appendBias(vector: Vector): Vector = {
+    val vector1 = vector.toBreeze match {
+      case dv: BDV[Double] => BDV.vertcat(dv, new BDV[Double](Array(1.0)))
+      case sv: BSV[Double] => BSV.vertcat(sv, new BSV[Double](Array(0), Array(1.0), 1))
+      case v: Any => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+    }
+    Vectors.fromBreeze(vector1)
   }
 
   /**

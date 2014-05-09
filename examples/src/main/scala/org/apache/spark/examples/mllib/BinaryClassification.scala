@@ -21,13 +21,11 @@ import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.classification.{SVMModel, LogisticRegressionModel, LogisticRegressionWithSGD, SVMWithSGD}
-import org.apache.spark.mllib.evaluation.binary.BinaryClassificationMetrics
+import org.apache.spark.mllib.classification.{LogisticRegressionWithSGD, SVMWithSGD}
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
-import org.apache.spark.mllib.regression.{LabeledPoint, GeneralizedLinearModel}
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
  * An example app for binary classification. Run with
@@ -48,14 +46,8 @@ object BinaryClassification {
     val L1, L2 = Value
   }
 
-  object Mode extends Enumeration {
-    type Mode = Value
-    val TRAIN, TEST, SPLIT = Value
-  }
-
   import Algorithm._
   import RegType._
-  import Mode._
 
   case class Params(
       input: String = null,
@@ -125,23 +117,13 @@ object BinaryClassification {
     }
   }
 
-  def parseModel(strModel: Seq[(String, Double)]): (Vector, Double) = {
-    val numFeatures = strModel(0)._2.toInt
-    val intercept = strModel(1)._2
-    val weights = Array.fill(numFeatures) { 0.0d }
-    strModel.slice(2, strModel.length).foreach { kv =>
-      weights(kv._1.toInt) = kv._2
-    }
-    (Vectors.dense(weights), intercept)
-  }
-
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"BinaryClassification with $params")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
-    val examples = MLUtils.loadLibSVMData(sc, params.input).cache()
+    val examples = MLUtils.loadLibSVMFile(sc, params.input).cache()
 
     val (training, test) = if (params.test) {
       (sc.emptyRDD[LabeledPoint], examples)
@@ -149,7 +131,6 @@ object BinaryClassification {
       val splits = examples.randomSplit(Array(0.8, 0.2))
       val training = splits(0).cache()
       val test = splits(1).cache()
-      examples.unpersist(blocking = false)
       (training, test)
     }
 
@@ -157,16 +138,17 @@ object BinaryClassification {
     val numTest = test.count()
     println(s"Training: $numTraining, test: $numTest.")
 
-    val model = if (params.test) {
-      val strModel: Seq[(String, Double)]= sc.textFile(params.model).map { line =>
-        val parts = line.split(":")
-        (parts(0), parts(1).toDouble)
-      } .collect()
-      val (weights, intercept) = parseModel(strModel)
+    if (!params.test) {
+      examples.unpersist(blocking = false)
+    }
 
+    val model = if (params.test) {
+      val strModel = sc.textFile(params.model).collect()
       params.algorithm match {
-        case LR => new LogisticRegressionModel(weights, intercept)
-        case SVM => new SVMModel(weights, intercept)
+        case LR =>
+          new LogisticRegressionWithSGD().deserializeModel(strModel).clearThreshold()
+        case SVM =>
+          new SVMWithSGD().deserializeModel(strModel).clearThreshold()
       }
     } else {
       val updater = params.regType match {
@@ -174,32 +156,34 @@ object BinaryClassification {
         case L2 => new SquaredL2Updater()
       }
 
-      val (algorithm, optimizer) = params.algorithm match {
+      params.algorithm match {
         case LR =>
-          val lr = new LogisticRegressionWithSGD()
-          (lr, lr.optimizer)
+          val algorithm = new LogisticRegressionWithSGD()
+              .setIntercept(params.addIntercept)
+          algorithm.optimizer
+              .setNumIterations(params.numIterations)
+              .setStepSize(params.stepSize)
+              .setUpdater(updater)
+              .setRegParam(params.regParam)
+              .setMiniBatchFraction(params.miniBatch)
+              .setStochastic(params.stochastic)
+          val model = algorithm.run(training).clearThreshold()
+          sc.makeRDD(algorithm.serializeModel(model)).saveAsTextFile(params.model)
+          model
         case SVM =>
-          val svm = new SVMWithSGD()
-          (svm, svm.optimizer)
+          val algorithm = new SVMWithSGD()
+              .setIntercept(params.addIntercept)
+          algorithm.optimizer
+              .setNumIterations(params.numIterations)
+              .setStepSize(params.stepSize)
+              .setUpdater(updater)
+              .setRegParam(params.regParam)
+              .setMiniBatchFraction(params.miniBatch)
+              .setStochastic(params.stochastic)
+          val model = algorithm.run(training).clearThreshold()
+          sc.makeRDD(algorithm.serializeModel(model)).saveAsTextFile(params.model)
+          model
       }
-      algorithm.setIntercept(params.addIntercept)
-      optimizer
-            .setNumIterations(params.numIterations)
-            .setStepSize(params.stepSize)
-            .setUpdater(updater)
-            .setRegParam(params.regParam)
-            .setMiniBatchFraction(params.miniBatch)
-            .setStochastic(params.stochastic)
-      val model = algorithm.run(training)
-
-      sc.makeRDD(model.readableModel).saveAsTextFile(params.model)
-
-      model
-    }
-
-    params.algorithm match {
-      case LR => model.asInstanceOf[LogisticRegressionModel].clearThreshold()
-      case SVM => model.asInstanceOf[SVMModel].clearThreshold()
     }
 
     val prediction = model.predict(test.map(_.features))

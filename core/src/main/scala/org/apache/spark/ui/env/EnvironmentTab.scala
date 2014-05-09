@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.env
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.ui._
 
@@ -30,9 +31,11 @@ private[ui] class EnvironmentTab(parent: SparkUI) extends WebUITab(parent, "envi
 }
 
 /**
+ * :: DeveloperApi ::
  * A SparkListener that prepares information to be displayed on the EnvironmentTab
  */
-private[ui] class EnvironmentListener extends SparkListener {
+@DeveloperApi
+class EnvironmentListener extends SparkListener {
   var jvmInformation = Seq[(String, String)]()
   var sparkProperties = Seq[(String, String)]()
   var systemProperties = Seq[(String, String)]()

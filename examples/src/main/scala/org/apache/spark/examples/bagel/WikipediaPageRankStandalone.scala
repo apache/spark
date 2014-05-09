@@ -30,22 +30,20 @@ import org.apache.spark.rdd.RDD
 
 object WikipediaPageRankStandalone {
   def main(args: Array[String]) {
-    if (args.length < 5) {
+    if (args.length < 4) {
       System.err.println("Usage: WikipediaPageRankStandalone <inputFile> <threshold> " +
-        "<numIterations> <host> <usePartitioner>")
+        "<numIterations> <usePartitioner>")
       System.exit(-1)
     }
     val sparkConf = new SparkConf()
     sparkConf.set("spark.serializer", "spark.bagel.examples.WPRSerializer")
 
-
     val inputFile = args(0)
     val threshold = args(1).toDouble
     val numIterations = args(2).toInt
-    val host = args(3)
-    val usePartitioner = args(4).toBoolean
+    val usePartitioner = args(3).toBoolean
 
-    sparkConf.setMaster(host).setAppName("WikipediaPageRankStandalone")
+    sparkConf.setAppName("WikipediaPageRankStandalone")
 
     val sc = new SparkContext(sparkConf)
 

@@ -21,19 +21,17 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
- * :: DeveloperApi ::
  * Class used to solve an optimization problem using Gradient Descent.
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */
-@DeveloperApi
-class GradientDescent(private var gradient: Gradient, private var updater: Updater)
+class GradientDescent private[mllib] (private var gradient: Gradient, private var updater: Updater)
   extends Optimizer with Logging {
 
   private var stepSize: Double = 1.0
@@ -41,7 +39,6 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
   private var regParam: Double = 0.0
   private var miniBatchFraction: Double = 1.0
   private var stochastic: Boolean = true
-  private var rda: Boolean = false
 
   /**
    * Set the initial step size of SGD for the first step. Default 1.0.
@@ -53,9 +50,11 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
   }
 
   /**
+   * :: Experimental ::
    * Set fraction of data to be used for each SGD iteration.
    * Default 1.0 (corresponding to deterministic/classical gradient descent)
    */
+  @Experimental
   def setMiniBatchFraction(fraction: Double): this.type = {
     this.miniBatchFraction = fraction
     this
@@ -106,6 +105,14 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
     this
   }
 
+  /**
+   * :: DeveloperApi ::
+   * Runs gradient descent on the given training data.
+   * @param data training data
+   * @param initialWeights initial weights
+   * @return solution vector
+   */
+  @DeveloperApi
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
     val (weights, _) = if (stochastic) {
       GradientDescent.runMiniBatchSGD(
@@ -125,8 +132,7 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
         stepSize,
         numIterations,
         regParam,
-        initialWeights,
-        rda)
+        initialWeights)
     }
     weights
   }
@@ -242,8 +248,7 @@ object GradientDescent extends Logging {
       stepSize: Double,
       numIterations: Int,
       regParam: Double,
-      initialWeights: Vector,
-      rda: Boolean): (Vector, Array[Double]) = {
+      initialWeights: Vector): (Vector, Array[Double]) = {
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
 
@@ -264,17 +269,11 @@ object GradientDescent extends Logging {
         var localIter = startIter
         var loss = 0.0
         var regVal = 0.0
-        var grad = Vectors.dense(new Array[Double](localWeights.size))
         while (iter.hasNext) {
           val v = iter.next()
           localIter += 1
-          if (!rda) {
-            val gl = gradient.compute(v._2, v._1, localWeights)
-            grad = gl._1
-            loss += gl._2
-          } else {
-            loss += gradient.compute(v._2, v._1, localWeights, grad)
-          }
+          val (grad, l) = gradient.compute(v._2, v._1, localWeights)
+          loss += l
 
           val update = updater.compute(localWeights, grad, stepSize, localIter, regParam)
           localWeights = update._1

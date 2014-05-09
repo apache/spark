@@ -19,13 +19,14 @@ package org.apache.spark.mllib.regression
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
+ * :: DeveloperApi ::
  * GeneralizedLinearModel (GLM) represents a model trained using
  * GeneralizedLinearAlgorithm. GLMs consist of a weight vector and
  * an intercept.
@@ -33,6 +34,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
+@DeveloperApi
 abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double)
   extends Serializable {
 
@@ -69,30 +71,14 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
   def predict(testData: Vector): Double = {
     predictPoint(testData, weights, intercept)
   }
-
-  /**
-   * Return the model in a sqeuence of string. First row is num_features:N,
-   * second row is :intercept, rest of the file consists of one row per
-   * non-zero weight with id:value.
-   *
-   * @return Seq[String] the trained model
-   */
-  def readableModel(): Seq[String] = {
-    val weightSeq = weights.toArray.zipWithIndex.flatMap { x =>
-        if (x._1 != 0) {
-          Some(x._2.toString + ":" + x._1.toString)
-        } else {
-          None
-        }
-     }
-      Seq("num_features:%d".format(weights.size), ":%f".format(intercept)) ++ weightSeq
-    }
 }
 
 /**
+ * :: DeveloperApi ::
  * GeneralizedLinearAlgorithm implements methods to train a Generalized Linear Model (GLM).
  * This class should be extended with an Optimizer to create a new GLM.
  */
+@DeveloperApi
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   extends Logging with Serializable {
 
@@ -101,8 +87,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /** The optimizer to solve the problem. */
   def optimizer: Optimizer
 
-  /** Whether to add intercept (default: true). */
-  protected var addIntercept: Boolean = true
+  /** Whether to add intercept (default: false). */
+  protected var addIntercept: Boolean = false
 
   protected var validateData: Boolean = true
 
@@ -112,7 +98,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   protected def createModel(weights: Vector, intercept: Double): M
 
   /**
-   * Set if the algorithm should add an intercept. Default true.
+   * Set if the algorithm should add an intercept. Default false.
+   * We set the default to false because adding the intercept will cause memory allocation.
    */
   def setIntercept(addIntercept: Boolean): this.type = {
     this.addIntercept = addIntercept
@@ -120,13 +107,57 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
-   * :: Experimental ::
    * Set if the algorithm should validate data before training. Default true.
    */
-  @Experimental
   def setValidateData(validateData: Boolean): this.type = {
     this.validateData = validateData
     this
+  }
+
+  /**
+   * Return the model in a sqeuence of string. First row is num_features:N,
+   * second row is :intercept, rest of the file consists of one row per
+   * non-zero weight with id:value.
+   *
+   * @param model The linear model.
+   * @return Seq[String] sequence of string for model.
+   */
+  def serializeModel(model: M): Seq[String] = {
+    val weightSeq = model.weights.toArray.zipWithIndex.flatMap { x =>
+      if (x._1 != 0) {
+        Some(x._2.toString + ":" + x._1.toString)
+      } else {
+        None
+      }
+    }
+    Seq("num_features:%d".format(model.weights.size),
+      ":%f".format(model.intercept)) ++ weightSeq
+  }
+
+  /**
+   * Create a linear model from a string representation, which is created
+   * by serializeModel.
+   *
+   * @param strModel Sequence of string for the model.
+   * @return The linear model.
+   */
+  def deserializeModel(strModel: Seq[String]): M = {
+    val keyValues = strModel.map { line =>
+      val parts = line.split(":")
+      (parts(0), parts(1).toDouble)
+    }
+
+    if (keyValues(0)._1 != "num_features" ||
+      keyValues(1)._1 != "") {
+      throw new Exception("Invalid model header")
+    }
+    val numFeatures = keyValues(0)._2.toInt
+    val intercept = keyValues(1)._2
+    val weights = Array.fill(numFeatures) { 0.0d }
+    keyValues.view(2, keyValues.length).foreach { kv =>
+      weights(kv._1.toInt) = kv._2
+    }
+    createModel(Vectors.dense(weights), intercept)
   }
 
   /**

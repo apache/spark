@@ -9,7 +9,7 @@ title: <a href="mllib-guide.html">MLlib</a> - Basics
 MLlib supports local vectors and matrices stored on a single machine, 
 as well as distributed matrices backed by one or more RDDs.
 In the current implementation, local vectors and matrices are simple data models 
-to serve public interfaces. The underly linear algebra operations are provided by
+to serve public interfaces. The underlying linear algebra operations are provided by
 [Breeze](http://www.scalanlp.org/) and [jblas](http://jblas.org/).
 A training example used in supervised learning is called "labeled point" in MLlib.
 
@@ -184,7 +184,7 @@ After loading, the feature indices are converted to zero-based.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`MLUtils.loadLibSVMData`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
+[`MLUtils.loadLibSVMFile`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
 examples stored in LIBSVM format.
 
 {% highlight scala %}
@@ -192,12 +192,12 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
-val training: RDD[LabeledPoint] = MLUtils.loadLibSVMData(sc, "mllib/data/sample_libsvm_data.txt")
+val training: RDD[LabeledPoint] = MLUtils.loadLibSVMFile(sc, "mllib/data/sample_libsvm_data.txt")
 {% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
-[`MLUtils.loadLibSVMData`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
+[`MLUtils.loadLibSVMFile`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
 examples stored in LIBSVM format.
 
 {% highlight java %}
@@ -205,7 +205,7 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.rdd.RDDimport;
 
-RDD[LabeledPoint] training = MLUtils.loadLibSVMData(sc, "mllib/data/sample_libsvm_data.txt")
+RDD<LabeledPoint> training = MLUtils.loadLibSVMFile(jsc, "mllib/data/sample_libsvm_data.txt");
 {% endhighlight %}
 </div>
 </div>
@@ -307,6 +307,7 @@ A [`RowMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.R
 created from a `JavaRDD<Vector>` instance.  Then we can compute its column summary statistics.
 
 {% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 
@@ -348,10 +349,10 @@ val mat: RowMatrix = ... // a RowMatrix
 val summary: MultivariateStatisticalSummary = mat.computeColumnSummaryStatistics()
 println(summary.mean) // a dense vector containing the mean value for each column
 println(summary.variance) // column-wise variance
-println(summary.numNonzers) // number of nonzeros in each column
+println(summary.numNonzeros) // number of nonzeros in each column
 
 // Compute the covariance matrix.
-val Cov: Matrix = mat.computeCovariance()
+val cov: Matrix = mat.computeCovariance()
 {% endhighlight %}
 </div>
 </div>
@@ -397,11 +398,12 @@ wrapper over `(long, Vector)`.  An `IndexedRowMatrix` can be converted to a `Row
 its row indices.
 
 {% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.distributed.IndexedRow;
 import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
 import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 
-JavaRDD[IndexedRow] rows = ... // a JavaRDD of indexed rows
+JavaRDD<IndexedRow> rows = ... // a JavaRDD of indexed rows
 // Create an IndexedRowMatrix from a JavaRDD<IndexedRow>.
 IndexedRowMatrix mat = new IndexedRowMatrix(rows.rdd());
 
@@ -458,7 +460,9 @@ wrapper over `(long, long, double)`.  A `CoordinateMatrix` can be converted to a
 with sparse rows by calling `toIndexedRowMatrix`.
 
 {% highlight scala %}
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
+import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
 import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
 
 JavaRDD<MatrixEntry> entries = ... // a JavaRDD of matrix entries
