@@ -531,8 +531,9 @@ private[spark] class Master(
             usableWorkers(pos).memoryFree >=
               app.desc.memoryPerExecutor * (assigned(pos).length + 1)) {
             mostFreeCoreWorkerPos = pos
-            maxPossibleCore = usableWorkers(pos).coresFree - assignedSum(pos)
           }
+          maxPossibleCore = usableWorkers(mostFreeCoreWorkerPos).coresFree -
+            assignedSum(mostFreeCoreWorkerPos)
           val coreToAssign = math.min(math.min(maxCoreNumPerExecutor, maxPossibleCore),
             leftCoreToAssign)
           if (usableWorkers(pos).coresFree - assignedSum(pos) >= coreToAssign) {
