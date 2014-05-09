@@ -123,6 +123,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
     classpath should have length (0)
     sysProps("spark.app.name") should be ("beauty")
+    sysProps("spark.jars") should be ("thejar.jar")
     sysProps("SPARK_SUBMIT") should be ("true")
   }
 
@@ -142,6 +143,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     classpath should contain ("two.jar")
     classpath should contain ("three.jar")
     sysProps("spark.app.name") should be ("trill")
+    sysProps("spark.jars") should be ("one.jar,two.jar,three.jar,thejar.jar")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.executor.cores") should be ("5")
     sysProps("spark.yarn.queue") should be ("thequeue")
@@ -192,15 +194,17 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("launch simple application with spark-submit") {
-    runSparkSubmit(
-      Seq(
-        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
-        "--name", "testApp",
-        "--master", "local",
-        "unUsed.jar"))
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local",
+      unusedJar.toString)
+    runSparkSubmit(args)
   }
 
   test("spark submit includes jars passed in through --jar") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
     val jarsString = Seq(jar1, jar2).map(j => j.toString).mkString(",")
@@ -209,7 +213,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
       "--name", "testApp",
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
-      "unused.jar")
+      unusedJar.toString)
     runSparkSubmit(args)
   }
 
