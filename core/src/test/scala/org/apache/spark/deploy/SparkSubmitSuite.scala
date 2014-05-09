@@ -87,25 +87,40 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handles arguments with --key=val") {
-    val clArgs = Seq("--jars=one.jar,two.jar,three.jar", "--name=myApp")
+    val clArgs = Seq(
+      "--jars=one.jar,two.jar,three.jar",
+      "--name=myApp")
     val appArgs = new SparkSubmitArguments(clArgs)
     appArgs.jars should be ("one.jar,two.jar,three.jar")
     appArgs.name should be ("myApp")
   }
 
   test("handles arguments to user program") {
-    val clArgs = Seq("--name", "myApp", "--class", "Foo", "userjar.jar", "some", "--weird", "args")
+    val clArgs = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "userjar.jar", "some",
+      "--weird", "args")
     val appArgs = new SparkSubmitArguments(clArgs)
     appArgs.childArgs should be (Seq("some", "--weird", "args"))
   }
 
   test("handles YARN cluster mode") {
-    val clArgs = Seq("--deploy-mode", "cluster",
-      "--master", "yarn", "--executor-memory", "5g", "--executor-cores", "5",
-      "--class", "org.SomeClass", "--jars", "one.jar,two.jar,three.jar",
-      "--driver-memory", "4g", "--queue", "thequeue", "--files", "file1.txt,file2.txt",
-      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6", "--name", "beauty",
-      "thejar.jar", "arg1", "arg2")
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "yarn",
+      "--executor-memory", "5g",
+      "--executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--jars", "one.jar,two.jar,three.jar",
+      "--driver-memory", "4g",
+      "--queue", "thequeue",
+      "--files", "file1.txt,file2.txt",
+      "--archives", "archive1.txt,archive2.txt",
+      "--num-executors", "6",
+      "--name", "beauty",
+      "thejar.jar",
+      "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     val childArgsStr = childArgs.mkString(" ")
@@ -128,12 +143,21 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handles YARN client mode") {
-    val clArgs = Seq("--deploy-mode", "client",
-      "--master", "yarn", "--executor-memory", "5g", "--executor-cores", "5",
-      "--class", "org.SomeClass", "--jars", "one.jar,two.jar,three.jar",
-      "--driver-memory", "4g", "--queue", "thequeue", "--files", "file1.txt,file2.txt",
-      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6", "--name", "trill",
-      "thejar.jar", "arg1", "arg2")
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "yarn",
+      "--executor-memory", "5g",
+      "--executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--jars", "one.jar,two.jar,three.jar",
+      "--driver-memory", "4g",
+      "--queue", "thequeue",
+      "--files", "file1.txt,file2.txt",
+      "--archives", "archive1.txt,archive2.txt",
+      "--num-executors", "6",
+      "--name", "trill",
+      "thejar.jar",
+      "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
@@ -154,9 +178,15 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handles standalone cluster mode") {
-    val clArgs = Seq("--deploy-mode", "cluster",
-      "--master", "spark://h:p", "--class", "org.SomeClass",
-      "--supervise", "--driver-memory", "4g", "--driver-cores", "5", "thejar.jar", "arg1", "arg2")
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "spark://h:p",
+      "--class", "org.SomeClass",
+      "--supervise",
+      "--driver-memory", "4g",
+      "--driver-cores", "5",
+      "thejar.jar",
+      "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     val childArgsStr = childArgs.mkString(" ")
@@ -168,9 +198,15 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handles standalone client mode") {
-    val clArgs = Seq("--deploy-mode", "client",
-      "--master", "spark://h:p", "--executor-memory", "5g", "--total-executor-cores", "5",
-      "--class", "org.SomeClass", "--driver-memory", "4g", "thejar.jar", "arg1", "arg2")
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "spark://h:p",
+      "--executor-memory", "5g",
+      "--total-executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--driver-memory", "4g",
+      "thejar.jar",
+      "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
@@ -181,9 +217,15 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handles mesos client mode") {
-    val clArgs = Seq("--deploy-mode", "client",
-      "--master", "mesos://h:p", "--executor-memory", "5g", "--total-executor-cores", "5",
-      "--class", "org.SomeClass", "--driver-memory", "4g", "thejar.jar", "arg1", "arg2")
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "mesos://h:p",
+      "--executor-memory", "5g",
+      "--total-executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--driver-memory", "4g",
+      "thejar.jar",
+      "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
@@ -231,7 +273,7 @@ object JarCreationTest {
   def main(args: Array[String]) {
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
-    val result = sc.makeRDD(1 to 100, 10).mapPartitions{ x =>
+    val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
       var foundClasses = false
       try {
         Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
@@ -252,7 +294,6 @@ object SimpleApplicationTest {
   def main(args: Array[String]) {
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
-
     val configs = Seq("spark.master", "spark.app.name")
     for (config <- configs) {
       val masterValue = conf.get(config)
@@ -270,6 +311,5 @@ object SimpleApplicationTest {
           s"Master had $config=$masterValue but executor had $config=$executorValue")
       }
     }
-
   }
 }

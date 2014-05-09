@@ -67,8 +67,7 @@ object SparkSubmit {
   private[spark] def printWarning(str: String) = printStream.println("Warning: " + str)
 
   /**
-   * @return
-   *         a tuple containing the arguments for the child, a list of classpath
+   * @return a tuple containing the arguments for the child, a list of classpath
    *         entries for the child, a list of system propertes, a list of env vars
    *         and the main class for the child
    */
@@ -248,9 +247,12 @@ object SparkSubmit {
     (childArgs, childClasspath, sysProps, childMainClass)
   }
 
-  private def launch(childArgs: ArrayBuffer[String], childClasspath: ArrayBuffer[String],
-      sysProps: Map[String, String], childMainClass: String, verbose: Boolean = false)
-  {
+  private def launch(
+      childArgs: ArrayBuffer[String],
+      childClasspath: ArrayBuffer[String],
+      sysProps: Map[String, String],
+      childMainClass: String,
+      verbose: Boolean = false) {
     if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
