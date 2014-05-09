@@ -28,6 +28,7 @@ import akka.pattern.ask
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util._
+import scala.collection.mutable
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
@@ -83,6 +84,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * On the workers, it simply serves as a cache, in which a miss triggers a fetch from the
    * master's corresponding HashMap.
    */
+  //TODO: we should also record if the output for a shuffle is partial
   protected val mapStatuses: Map[Int, Array[MapStatus]]
 
   /**
@@ -121,6 +123,57 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * a given shuffle.
    */
   def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
+    val statuses = getMapStatusesForShuffle(shuffleId, reduceId)
+    statuses.synchronized {
+      MapOutputTracker.convertMapStatuses(shuffleId, reduceId, statuses)
+    }
+  }
+
+  /** Called to get current epoch number. */
+  def getEpoch: Long = {
+    epochLock.synchronized {
+      return epoch
+    }
+  }
+
+  /**
+   * Called from executors to update the epoch number, potentially clearing old outputs
+   * because of a fetch failure. Each worker task calls this with the latest epoch
+   * number on the master at the time it was created.
+   */
+  def updateEpoch(newEpoch: Long) {
+    epochLock.synchronized {
+      if (newEpoch > epoch) {
+        logInfo("Updating epoch to " + newEpoch + " and clearing cache")
+        epoch = newEpoch
+        mapStatuses.clear()
+      }
+    }
+  }
+
+  /** Unregister shuffle data. */
+  def unregisterShuffle(shuffleId: Int) {
+    mapStatuses.remove(shuffleId)
+  }
+
+  /** Stop the tracker. */
+  def stop() { }
+
+  //check if the map output for a shuffle is partial
+  def partialOutputForShuffle(shuffleId: Int) = {
+    if (mapStatuses.get(shuffleId).isDefined) {
+      mapStatuses.get(shuffleId).get.exists(_ == null)
+    } else {
+      false
+    }
+  }
+
+  //get map statuses for a shuffle
+  def getMapStatusesForShuffle(shuffleId: Int, reduceId: Int): Array[MapStatus]={
+    //we remove the previously fetched outputs if it's partial
+    if (partialOutputForShuffle(shuffleId)) {
+      mapStatuses -= shuffleId
+    }
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
@@ -164,49 +217,15 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         }
       }
       if (fetchedStatuses != null) {
-        fetchedStatuses.synchronized {
-          return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, fetchedStatuses)
-        }
+        fetchedStatuses
       } else {
         throw new FetchFailedException(null, shuffleId, -1, reduceId,
           new Exception("Missing all output locations for shuffle " + shuffleId))
       }
     } else {
-      statuses.synchronized {
-        return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, statuses)
-      }
+      statuses
     }
   }
-
-  /** Called to get current epoch number. */
-  def getEpoch: Long = {
-    epochLock.synchronized {
-      return epoch
-    }
-  }
-
-  /**
-   * Called from executors to update the epoch number, potentially clearing old outputs
-   * because of a fetch failure. Each worker task calls this with the latest epoch
-   * number on the master at the time it was created.
-   */
-  def updateEpoch(newEpoch: Long) {
-    epochLock.synchronized {
-      if (newEpoch > epoch) {
-        logInfo("Updating epoch to " + newEpoch + " and clearing cache")
-        epoch = newEpoch
-        mapStatuses.clear()
-      }
-    }
-  }
-
-  /** Unregister shuffle data. */
-  def unregisterShuffle(shuffleId: Int) {
-    mapStatuses.remove(shuffleId)
-  }
-
-  /** Stop the tracker. */
-  def stop() { }
 }
 
 /**
@@ -371,8 +390,10 @@ private[spark] object MapOutputTracker {
     statuses.map {
       status =>
         if (status == null) {
-          throw new FetchFailedException(null, shuffleId, -1, reduceId,
-            new Exception("Missing an output location for shuffle " + shuffleId))
+          //TODO: need to distinguish whether this is due to failed map tasks or partial outputs
+          (null, 0)
+//          throw new FetchFailedException(null, shuffleId, -1, reduceId,
+//            new Exception("Missing an output location for shuffle " + shuffleId))
         } else {
           (status.location, decompressSize(status.compressedSizes(reduceId)))
         }
