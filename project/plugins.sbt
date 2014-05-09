@@ -4,6 +4,8 @@ resolvers += Resolver.url("artifactory", url("http://scalasbt.artifactoryonline.
 
 resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
 
+resolvers += "sbt-plugins" at "http://repo.scala-sbt.org/scalasbt/sbt-plugin-releases"
+
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.10.2")
 
 addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "2.2.0")
@@ -24,3 +26,5 @@ addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.6")
 addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.0")
 
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.0")
+
+addSbtPlugin("com.cavorite" % "sbt-avro" % "0.3.2")

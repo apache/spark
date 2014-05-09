@@ -16,10 +16,15 @@
  */
 
 import sbt._
+import sbt.ClasspathDependency
 import sbt.Classpaths.publishTask
+import sbt.ExclusionRule
 import sbt.Keys._
+import sbt.Task
 import sbtassembly.Plugin._
 import AssemblyKeys._
+import sbtavro.SbtAvro._
+import scala.Some
 import scala.util.Properties
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
@@ -140,8 +145,11 @@ object SparkBuild extends Build {
   lazy val externalKafka = Project("external-kafka", file("external/kafka"), settings = kafkaSettings)
     .dependsOn(streaming % "compile->compile;test->test")
 
+  lazy val externalFlumeSink = Project("external-flume-sink", file("external/flume-sink"), settings = flumeSinkSettings)
+
   lazy val externalFlume = Project("external-flume", file("external/flume"), settings = flumeSettings)
-    .dependsOn(streaming % "compile->compile;test->test")
+    .dependsOn(streaming % "compile->compile;test->test").dependsOn(externalFlumeSink)
+
 
   lazy val externalZeromq = Project("external-zeromq", file("external/zeromq"), settings = zeromqSettings)
     .dependsOn(streaming % "compile->compile;test->test")
@@ -149,8 +157,8 @@ object SparkBuild extends Build {
   lazy val externalMqtt = Project("external-mqtt", file("external/mqtt"), settings = mqttSettings)
     .dependsOn(streaming % "compile->compile;test->test")
 
-  lazy val allExternal = Seq[ClasspathDependency](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
-  lazy val allExternalRefs = Seq[ProjectReference](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
+  lazy val allExternal = Seq[ClasspathDependency](externalTwitter, externalKafka, externalFlume, externalFlumeSink, externalZeromq, externalMqtt)
+  lazy val allExternalRefs = Seq[ProjectReference](externalTwitter, externalKafka, externalFlume, externalFlumeSink, externalZeromq, externalMqtt)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
     .dependsOn(core, mllib, graphx, bagel, streaming, hive) dependsOn(allExternal: _*)
@@ -622,6 +630,18 @@ object SparkBuild extends Build {
     )
   )
 
+  def flumeSinkSettings() = {
+    sharedSettings ++ Seq(
+      name := "spark-streaming-flume-sink",
+      previousArtifact := sparkPreviousArtifact("spark-streaming-flume-sink"),
+      libraryDependencies ++= Seq(
+        "org.apache.flume" % "flume-ng-sdk" % "1.4.0" % "compile"
+          excludeAll(excludeJBossNetty, excludeThrift),
+        "org.apache.flume" % "flume-ng-core" % "1.4.0" % "compile"
+          excludeAll(excludeJBossNetty, excludeThrift)
+      )
+    ) ++ sbtavro.SbtAvro.avroSettings
+  }
   def zeromqSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-zeromq",
     previousArtifact := sparkPreviousArtifact("spark-streaming-zeromq"),
