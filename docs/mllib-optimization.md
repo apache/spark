@@ -28,7 +28,6 @@ title: <a href="mllib-guide.html">MLlib</a> - Optimization
 ## Mathematical description
 
 ### Gradient descent
-
 The simplest method to solve optimization problems of the form `$\min_{\wv \in\R^d} \; f(\wv)$`
 is [gradient descent](http://en.wikipedia.org/wiki/Gradient_descent).
 Such first-order optimization methods (including gradient descent and stochastic variants
@@ -266,7 +265,6 @@ println("Area under ROC = " + auROC)
 {% endhighlight %}
 
 #### Developer's note
-
 Since the Hessian is constructed approximately from previous gradient evaluations, 
 the objective function can not be changed during the optimization process. 
 As a result, Stochastic L-BFGS will not work naively by just using miniBatch; 
