@@ -188,7 +188,7 @@ object SparkSubmit {
       OptionAssigner(args.jars, YARN, true, clOption = "--addJars"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.files"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, true, sysProp = "spark.files"),
-      OptionAssigner(args.jars, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.jars"),
+      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, false, sysProp = "spark.jars"),
       OptionAssigner(args.name, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.app.name")
     )
 
@@ -211,15 +211,12 @@ object SparkSubmit {
       }
     }
 
-    // For standalone mode, add the application jar automatically so the user doesn't have to
-    // call sc.addJar. TODO: Standalone mode in the cluster
-    if (clusterManager == STANDALONE) {
-      var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
-      if (args.primaryResource != RESERVED_JAR_NAME) {
-        jars = jars ++ Seq(args.primaryResource)
-      }
-      sysProps.put("spark.jars", jars.mkString(","))
+    // Add the application jar automatically so the user doesn't have to call sc.addJar
+    var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
+    if (args.primaryResource != RESERVED_JAR_NAME) {
+      jars = jars ++ Seq(args.primaryResource)
     }
+    sysProps.put("spark.jars", jars.mkString(","))
 
     if (deployOnCluster && clusterManager == STANDALONE) {
       if (args.supervise) {
