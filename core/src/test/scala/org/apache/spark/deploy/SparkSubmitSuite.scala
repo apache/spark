@@ -99,7 +99,8 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     val clArgs = Seq(
       "--name", "myApp",
       "--class", "Foo",
-      "userjar.jar", "some",
+      "userjar.jar",
+      "some",
       "--weird", "args")
     val appArgs = new SparkSubmitArguments(clArgs)
     appArgs.childArgs should be (Seq("some", "--weird", "args"))
@@ -138,7 +139,6 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
     classpath should have length (0)
     sysProps("spark.app.name") should be ("beauty")
-    sysProps("spark.jars") should be ("thejar.jar")
     sysProps("SPARK_SUBMIT") should be ("true")
   }
 

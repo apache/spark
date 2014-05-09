@@ -114,13 +114,16 @@ object SparkSubmit {
     val sysProps = new HashMap[String, String]()
     var childMainClass = ""
 
+    val isPython = args.isPython
+    val isYarnCluster = clusterManager == YARN && deployOnCluster
+
     if (clusterManager == MESOS && deployOnCluster) {
       printErrorAndExit("Cannot currently run driver on the cluster in Mesos")
     }
 
     // If we're running a Python app, set the Java class to run to be our PythonRunner, add
     // Python files to deployment list, and pass the main file and Python path to PythonRunner
-    if (args.isPython) {
+    if (isPython) {
       if (deployOnCluster) {
         printErrorAndExit("Cannot currently run Python driver programs on cluster")
       }
@@ -212,11 +215,15 @@ object SparkSubmit {
     }
 
     // Add the application jar automatically so the user doesn't have to call sc.addJar
-    var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
-    if (args.primaryResource != RESERVED_JAR_NAME) {
-      jars = jars ++ Seq(args.primaryResource)
+    // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
+    // For python files, the primary resource is already distributed as a regular file
+    if (!isYarnCluster && !isPython) {
+      var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
+      if (args.primaryResource != RESERVED_JAR_NAME) {
+        jars = jars ++ Seq(args.primaryResource)
+      }
+      sysProps.put("spark.jars", jars.mkString(","))
     }
-    sysProps.put("spark.jars", jars.mkString(","))
 
     // Standalone cluster specific configurations
     if (deployOnCluster && clusterManager == STANDALONE) {
