@@ -675,8 +675,8 @@ private[spark] class Master(
         webUi.attachSparkUI(ui)
         return true
       } catch {
-        case t: Throwable =>
-          logError("Exception in replaying log for application %s (%s)".format(appName, app.id), t)
+        case e: Exception =>
+          logError("Exception in replaying log for application %s (%s)".format(appName, app.id), e)
       }
     } else {
       logWarning("Application %s (%s) has no valid logs: %s".format(appName, app.id, eventLogDir))

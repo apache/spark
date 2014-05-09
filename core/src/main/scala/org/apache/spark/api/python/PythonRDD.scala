@@ -170,7 +170,7 @@ private[spark] class PythonRDD[T: ClassTag](
       this.interrupt()
     }
 
-    override def run() {
+    override def run(): Unit = Utils.logUncaughtExceptions {
       try {
         SparkEnv.set(env)
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
@@ -281,7 +281,7 @@ private[spark] object PythonRDD {
       }
     } catch {
       case eof: EOFException => {}
-      case e: Throwable => throw e
+      case e: Exception => throw e
     }
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
