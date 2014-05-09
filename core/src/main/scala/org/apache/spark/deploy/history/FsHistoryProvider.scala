@@ -74,10 +74,12 @@ class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
     // Validate the log directory.
     val path = new Path(logDir)
     if (!fs.exists(path)) {
-      throw new IllegalArgumentException("Logging directory specified does not exist: %s".format(logDir))
+      throw new IllegalArgumentException(
+        "Logging directory specified does not exist: %s".format(logDir))
     }
     if (!fs.getFileStatus(path).isDir) {
-      throw new IllegalArgumentException("Logging directory specified is not a directory: %s".format(logDir))
+      throw new IllegalArgumentException(
+        "Logging directory specified is not a directory: %s".format(logDir))
     }
 
     checkForLogs()
