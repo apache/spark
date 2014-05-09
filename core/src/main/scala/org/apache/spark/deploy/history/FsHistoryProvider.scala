@@ -103,15 +103,9 @@ class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
   }
 
   /**
-   * Check for any updates to event logs in the base directory. This is only effective once
-   * the server has been bound.
-   *
-   * If a new completed application is found, the server renders the associated SparkUI
-   * from the application's event logs, attaches this UI to itself, and stores metadata
-   * information for this application.
-   *
-   * If the logs for an existing completed application are no longer found, the server
-   * removes all associated information and detaches the SparkUI.
+   * Builds the application list based on the current contents of the log directory.
+   * Tries to reuse as much of the data already in memory as possible, but not reading
+   * applications that hasn't been updated since last time the logs were checked.
    */
   def checkForLogs() = synchronized {
     lastLogCheckTime = System.currentTimeMillis
