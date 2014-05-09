@@ -330,9 +330,9 @@ abstract class RDD[T: ClassTag](
     if (shuffle) {
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, (Int, T)](map(x => (Utils.random.nextInt(), x)),
+        new ShuffledRDD[T, Null, (T, Null)](map(x => (x, null)),
         new HashPartitioner(numPartitions)),
-        numPartitions).values
+        numPartitions).keys
     } else {
       new CoalescedRDD(this, numPartitions)
     }
