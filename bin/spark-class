@@ -114,7 +114,7 @@ if [ ! -f "$FWDIR/RELEASE" ]; then
   jars_list=$(ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/ | grep "spark-assembly.*hadoop.*.jar")
   if [ "$num_jars" -eq "0" ]; then
     echo "Failed to find Spark assembly in $FWDIR/assembly/target/scala-$SCALA_VERSION/" >&2
-    echo "You need to build Spark with 'sbt/sbt assembly' before running this program." >&2
+    echo "You need to build Spark before running this program." >&2
     exit 1
   fi
   if [ "$num_jars" -gt "1" ]; then
