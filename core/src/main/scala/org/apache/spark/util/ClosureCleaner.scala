@@ -188,15 +188,17 @@ private[spark]
 class ReturnStatementFinder extends ClassVisitor(ASM4) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    if(name.contains("apply"))
+    if(name.contains("apply")) {
       new MethodVisitor(ASM4) {
         override def visitTypeInsn(op: Int, tp: String) {
-          if(op == NEW && tp.contains("scala/runtime/NonLocalReturnControl"))
+          if(op == NEW && tp.contains("scala/runtime/NonLocalReturnControl")) {
             throw new SparkException("Return statements aren't allowed in Spark closures")
+          }
         }
       }
-    else
+    } else {
       new MethodVisitor(ASM4) {}
+    }
   }
 }
 
