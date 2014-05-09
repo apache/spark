@@ -59,7 +59,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
     val convergenceTol = 1e-12
     val maxNumIterations = 10
 
-    val (_, loss) = LBFGS.runMiniBatchLBFGS(
+    val (_, loss) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       simpleUpdater,
@@ -67,7 +67,6 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
       convergenceTol,
       maxNumIterations,
       regParam,
-      miniBatchFrac,
       initialWeightsWithIntercept)
 
     // Since the cost function is convex, the loss is guaranteed to be monotonically decreasing
@@ -104,7 +103,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
     val convergenceTol = 1e-12
     val maxNumIterations = 10
 
-    val (weightLBFGS, lossLBFGS) = LBFGS.runMiniBatchLBFGS(
+    val (weightLBFGS, lossLBFGS) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -112,7 +111,6 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
       convergenceTol,
       maxNumIterations,
       regParam,
-      miniBatchFrac,
       initialWeightsWithIntercept)
 
     val numGDIterations = 50
@@ -150,7 +148,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
     val maxNumIterations = 8
     var convergenceTol = 0.0
 
-    val (_, lossLBFGS1) = LBFGS.runMiniBatchLBFGS(
+    val (_, lossLBFGS1) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -158,7 +156,6 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
       convergenceTol,
       maxNumIterations,
       regParam,
-      miniBatchFrac,
       initialWeightsWithIntercept)
 
     // Note that the first loss is computed with initial weights,
@@ -166,7 +163,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
     assert(lossLBFGS1.length == 9)
 
     convergenceTol = 0.1
-    val (_, lossLBFGS2) = LBFGS.runMiniBatchLBFGS(
+    val (_, lossLBFGS2) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -174,7 +171,6 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
       convergenceTol,
       maxNumIterations,
       regParam,
-      miniBatchFrac,
       initialWeightsWithIntercept)
 
     // Based on observation, lossLBFGS2 runs 3 iterations, no theoretically guaranteed.
@@ -182,7 +178,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
     assert((lossLBFGS2(2) - lossLBFGS2(3)) / lossLBFGS2(2) < convergenceTol)
 
     convergenceTol = 0.01
-    val (_, lossLBFGS3) = LBFGS.runMiniBatchLBFGS(
+    val (_, lossLBFGS3) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -190,7 +186,6 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
       convergenceTol,
       maxNumIterations,
       regParam,
-      miniBatchFrac,
       initialWeightsWithIntercept)
 
     // With smaller convergenceTol, it takes more steps.

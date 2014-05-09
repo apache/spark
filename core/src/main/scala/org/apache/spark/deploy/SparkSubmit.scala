@@ -160,6 +160,7 @@ object SparkSubmit {
     // each deploy mode; we iterate through these below
     val options = List[OptionAssigner](
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, false, sysProp = "spark.master"),
+      OptionAssigner(args.name, ALL_CLUSTER_MGRS, false, sysProp = "spark.app.name"),
       OptionAssigner(args.driverExtraClassPath, STANDALONE | YARN, true,
         sysProp = "spark.driver.extraClassPath"),
       OptionAssigner(args.driverExtraJavaOptions, STANDALONE | YARN, true,
@@ -167,7 +168,7 @@ object SparkSubmit {
       OptionAssigner(args.driverExtraLibraryPath, STANDALONE | YARN, true,
         sysProp = "spark.driver.extraLibraryPath"),
       OptionAssigner(args.driverMemory, YARN, true, clOption = "--driver-memory"),
-      OptionAssigner(args.name, YARN, true, clOption = "--name"),
+      OptionAssigner(args.name, YARN, true, clOption = "--name", sysProp = "spark.app.name"),
       OptionAssigner(args.queue, YARN, true, clOption = "--queue"),
       OptionAssigner(args.queue, YARN, false, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, true, clOption = "--num-executors"),
@@ -188,8 +189,7 @@ object SparkSubmit {
       OptionAssigner(args.jars, YARN, true, clOption = "--addJars"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.files"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, true, sysProp = "spark.files"),
-      OptionAssigner(args.jars, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.jars"),
-      OptionAssigner(args.name, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.app.name")
+      OptionAssigner(args.jars, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.jars")
     )
 
     // For client mode make any added jars immediately visible on the classpath
@@ -205,7 +205,8 @@ object SparkSubmit {
           (clusterManager & opt.clusterManager) != 0) {
         if (opt.clOption != null) {
           childArgs += (opt.clOption, opt.value)
-        } else if (opt.sysProp != null) {
+        }
+        if (opt.sysProp != null) {
           sysProps.put(opt.sysProp, opt.value)
         }
       }

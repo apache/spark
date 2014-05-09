@@ -53,7 +53,7 @@ For example:
         --driver-memory 4g \
         --executor-memory 2g \
         --executor-cores 1
-        examples/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
+        lib/spark-examples*.jar \
         10
 
 The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Viewing Logs" section below for how to see driver and executor logs.
