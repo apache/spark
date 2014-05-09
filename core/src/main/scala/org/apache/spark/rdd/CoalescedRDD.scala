@@ -41,13 +41,6 @@ private[spark] case class CoalescedRDDPartition(
                                   ) extends Partition {
   var parents: Seq[Partition] = parentsIndices.map(rdd.partitions(_))
 
-  @throws(classOf[IOException])
-  private def writeObject(oos: ObjectOutputStream) {
-    // Update the reference to parent partition at the time of task serialization
-    parents = parentsIndices.map(rdd.partitions(_))
-    oos.defaultWriteObject()
-  }
-
   /**
    * Computes how many of the parents partitions have getPreferredLocation
    * as one of their preferredLocations
