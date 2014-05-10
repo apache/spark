@@ -94,6 +94,7 @@ private[spark] class PythonRDD[T: ClassTag](
               val obj = new Array[Byte](length)
               stream.readFully(obj)
               obj
+            case 0 => Array.empty[Byte]
             case SpecialLengths.TIMING_DATA =>
               // Timing data from worker
               val bootTime = stream.readLong()
@@ -123,7 +124,7 @@ private[spark] class PythonRDD[T: ClassTag](
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
-              Array.empty[Byte]
+              null
           }
         } catch {
 
@@ -143,7 +144,7 @@ private[spark] class PythonRDD[T: ClassTag](
 
       var _nextObj = read()
 
-      def hasNext = _nextObj.length != 0
+      def hasNext = _nextObj != null
     }
     new InterruptibleIterator(context, stdoutIterator)
   }
