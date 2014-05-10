@@ -20,6 +20,7 @@ package org.apache.spark.graphx
 import java.io.{EOFException, ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.util.Random
+import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
 
@@ -164,7 +165,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     def testVarLongEncoding(v: Long, optimizePositive: Boolean) {
       val bout = new ByteArrayOutputStream
       val stream = new ShuffleSerializationStream(bout) {
-        def writeObject[T](t: T): SerializationStream = {
+        def writeObject[T: ClassTag](t: T): SerializationStream = {
           writeVarLong(t.asInstanceOf[Long], optimizePositive = optimizePositive)
           this
         }
@@ -173,7 +174,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
 
       val bin = new ByteArrayInputStream(bout.toByteArray)
       val dstream = new ShuffleDeserializationStream(bin) {
-        def readObject[T](): T = {
+        def readObject[T: ClassTag](): T = {
           readVarLong(optimizePositive).asInstanceOf[T]
         }
       }

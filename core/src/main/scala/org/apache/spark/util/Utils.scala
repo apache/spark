@@ -850,7 +850,7 @@ private[spark] object Utils extends Logging {
   /**
    * Clone an object using a Spark serializer.
    */
-  def clone[T](value: T, serializer: SerializerInstance): T = {
+  def clone[T: ClassTag](value: T, serializer: SerializerInstance): T = {
     serializer.deserialize[T](serializer.serialize(value))
   }
 

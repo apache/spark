@@ -18,6 +18,7 @@
 package org.apache.spark.serializer
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import org.scalatest.FunSuite
@@ -31,7 +32,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("basic types") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(1)
@@ -61,7 +62,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("pairs") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check((1, 1))
@@ -85,7 +86,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("Scala data structures") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(List[Int]())
@@ -108,7 +109,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("ranges") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
       // Check that very long ranges don't get written one element at a time
       assert(ser.serialize(t).limit < 100)
@@ -129,7 +130,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
 
   test("custom registrator") {
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T](t: T) {
+    def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
 

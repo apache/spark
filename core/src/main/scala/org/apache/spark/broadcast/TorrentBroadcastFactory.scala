@@ -17,6 +17,8 @@
 
 package org.apache.spark.broadcast
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{SecurityManager, SparkConf}
 
 /**
@@ -30,7 +32,7 @@ class TorrentBroadcastFactory extends BroadcastFactory {
     TorrentBroadcast.initialize(isDriver, conf)
   }
 
-  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
+  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long) =
     new TorrentBroadcast[T](value_, isLocal, id)
 
   def stop() { TorrentBroadcast.stop() }

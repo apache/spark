@@ -21,6 +21,7 @@ import java.io.{ObjectInputStream, Serializable}
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
+import scala.reflect.ClassTag
 
 import org.apache.spark.serializer.JavaSerializer
 
@@ -164,9 +165,9 @@ trait AccumulableParam[R, T] extends Serializable {
   def zero(initialValue: R): R
 }
 
-private[spark]
-class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable, T]
-  extends AccumulableParam[R,T] {
+private[spark] class
+GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
+  extends AccumulableParam[R, T] {
 
   def addAccumulator(growable: R, elem: T): R = {
     growable += elem

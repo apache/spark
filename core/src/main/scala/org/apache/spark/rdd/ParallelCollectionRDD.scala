@@ -77,7 +77,7 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
         slice = in.readInt()
 
         val ser = sfactory.newInstance()
-        Utils.deserializeViaNestedStream(in, ser)(ds => values = ds.readObject())
+        Utils.deserializeViaNestedStream(in, ser)(ds => values = ds.readObject[Seq[T]]())
     }
   }
 }
