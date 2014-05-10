@@ -77,10 +77,10 @@ class ExternalAppendOnlyMap[K, V, C](
     val memoryFraction = sparkConf.getDouble("spark.shuffle.memoryFraction", 0.3)
     val safetyFraction = sparkConf.getDouble("spark.shuffle.safetyFraction", 0.8)
     if (memoryFraction > 1 && memoryFraction < 0) {
-      throw new Exception("spark.shuffle.memoryFraction should be between 0 and 1.")
+      throw new IllegalArgumentException("spark.shuffle.memoryFraction should be between 0 and 1.")
     }
     if (safetyFraction > 1 && safetyFraction < 0) {
-      throw new Exception("spark.shuffle.safetyFraction should be between 0 and 1.")
+      throw new IllegalArgumentException("spark.shuffle.safetyFraction should be between 0 and 1.")
     }
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
