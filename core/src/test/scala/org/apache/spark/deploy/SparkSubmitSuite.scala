@@ -104,7 +104,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
       "--master", "yarn", "--executor-memory", "5g", "--executor-cores", "5",
       "--class", "org.SomeClass", "--jars", "one.jar,two.jar,three.jar",
       "--driver-memory", "4g", "--queue", "thequeue", "--files", "file1.txt,file2.txt",
-      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6",
+      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6", "--name", "beauty",
       "thejar.jar", "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
@@ -122,7 +122,8 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     childArgsStr should include ("--num-executors 6")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
     classpath should have length (0)
-    sysProps should have size (1)
+    sysProps("spark.app.name") should be ("beauty")
+    sysProps("SPARK_SUBMIT") should be ("true")
   }
 
   test("handles YARN client mode") {
@@ -130,8 +131,8 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
       "--master", "yarn", "--executor-memory", "5g", "--executor-cores", "5",
       "--class", "org.SomeClass", "--jars", "one.jar,two.jar,three.jar",
       "--driver-memory", "4g", "--queue", "thequeue", "--files", "file1.txt,file2.txt",
-      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6", "thejar.jar",
-      "arg1", "arg2")
+      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6", "--name", "trill",
+      "thejar.jar", "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
@@ -140,6 +141,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     classpath should contain ("one.jar")
     classpath should contain ("two.jar")
     classpath should contain ("three.jar")
+    sysProps("spark.app.name") should be ("trill")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.executor.cores") should be ("5")
     sysProps("spark.yarn.queue") should be ("thequeue")

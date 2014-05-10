@@ -300,7 +300,7 @@ object SparkBuild extends Build {
   val jets3tVersion = if ("^2\\.[3-9]+".r.findFirstIn(hadoopVersion).isDefined) "0.9.0" else "0.7.1"
   val jettyVersion = "8.1.14.v20131031"
   val hiveVersion = "0.12.0"
-  val parquetVersion = "1.3.2"
+  val parquetVersion = "1.4.3"
   val slf4jVersion = "1.7.5"
 
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
@@ -579,12 +579,13 @@ object SparkBuild extends Build {
   def extraAssemblySettings() = Seq(
     test in assembly := {},
     mergeStrategy in assembly := {
-      case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
-      case m if m.toLowerCase.matches("meta-inf.*\\.sf$") => MergeStrategy.discard
-      case "log4j.properties" => MergeStrategy.discard
+      case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
+      case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
+      case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
+      case "log4j.properties"                                  => MergeStrategy.discard
       case m if m.toLowerCase.startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
-      case "reference.conf" => MergeStrategy.concat
-      case _ => MergeStrategy.first
+      case "reference.conf"                                    => MergeStrategy.concat
+      case _                                                   => MergeStrategy.first
     }
   )
 

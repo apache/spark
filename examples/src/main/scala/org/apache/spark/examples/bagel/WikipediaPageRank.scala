@@ -32,22 +32,22 @@ import scala.xml.{XML,NodeSeq}
  */
 object WikipediaPageRank {
   def main(args: Array[String]) {
-    if (args.length < 5) {
+    if (args.length < 4) {
       System.err.println(
-        "Usage: WikipediaPageRank <inputFile> <threshold> <numPartitions> <host> <usePartitioner>")
+        "Usage: WikipediaPageRank <inputFile> <threshold> <numPartitions> <usePartitioner>")
       System.exit(-1)
     }
     val sparkConf = new SparkConf()
+    sparkConf.setAppName("WikipediaPageRank")
     sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     sparkConf.set("spark.kryo.registrator",  classOf[PRKryoRegistrator].getName)
 
     val inputFile = args(0)
     val threshold = args(1).toDouble
     val numPartitions = args(2).toInt
-    val host = args(3)
-    val usePartitioner = args(4).toBoolean
+    val usePartitioner = args(3).toBoolean
 
-    sparkConf.setMaster(host).setAppName("WikipediaPageRank")
+    sparkConf.setAppName("WikipediaPageRank")
     val sc = new SparkContext(sparkConf)
 
     // Parse the Wikipedia page data into a graph
