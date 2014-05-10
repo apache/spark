@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,30 +15,6 @@
 # limitations under the License.
 #
 
-# This script loads spark-env.sh if it exists, and ensures it is only loaded once.
-# spark-env.sh is loaded from SPARK_CONF_DIR if set, or within the current directory's
-# conf/ subdirectory.
+This folder is the "conf" folder for Spark when launch via the init debian scripts.
 
-if [ -z "$SPARK_ENV_LOADED" ]; then
-  export SPARK_ENV_LOADED=1
-
-  # Returns the parent of the directory this script lives in.
-  parent_dir="$(cd `dirname $0`/..; pwd)"
-
-  use_conf_dir=${SPARK_CONF_DIR:-"$parent_dir/conf"}
-
-  if [ -f "${use_conf_dir}/spark-env.sh" ]; then
-    # Promote all variable declarations to environment (exported) variables
-    set -a
-    . "${use_conf_dir}/spark-env.sh"
-    set +a
-  fi
-
-  # load the debian default conf, if any
-  if [ -f "/etc/default/spark" ]; then
-    set -a
-    . "/etc/default/spark"
-    set +a
-  fi
-
-fi
+Some template files can be found in /usr/share/apache-spark/conf/

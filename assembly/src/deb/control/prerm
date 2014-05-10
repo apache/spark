@@ -1,0 +1,29 @@
+#!/bin/sh
+set -e
+
+stopSpark() {
+	if [ -x "/etc/init.d/apache-spark-slave" ]; then
+		if [ -x "`which invoke-rc.d 2>/dev/null`" ]; then
+			invoke-rc.d apache-spark-slave stop || true
+		else
+			/etc/init.d/apache-spark-slave stop || true
+		fi
+	fi
+	if [ -x "/etc/init.d/apache-spark-master" ]; then
+		if [ -x "`which invoke-rc.d 2>/dev/null`" ]; then
+			invoke-rc.d apache-spark-master stop || true
+		else
+			/etc/init.d/apache-spark-master stop || true
+		fi
+	fi
+}
+
+case "$1" in
+	upgrade)
+	# since we don't know which service to restart, don't stop anything
+	#stopSpark
+	;;
+	remove)
+	stopSpark
+	;;
+esac

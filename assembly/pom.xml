@@ -39,6 +39,7 @@
     <deb.pkg.name>apache-spark</deb.pkg.name>
     <deb.install.path>/usr/share/apache-spark</deb.install.path>
     <deb.user>root</deb.user>
+    <deb.group>root</deb.group>
   </properties>
 
   <dependencies>
@@ -243,8 +244,8 @@
                       <mapper>
                         <type>perm</type>
                         <user>${deb.user}</user>
-                        <group>${deb.user}</group>
-                        <prefix>${deb.install.path}/jars</prefix>
+                        <group>${deb.group}</group>
+                        <prefix>${deb.install.path}/lib</prefix>
                       </mapper>
                     </data>
                     <data>
@@ -253,17 +254,18 @@
                       <mapper>
                         <type>perm</type>
                         <user>${deb.user}</user>
-                        <group>${deb.user}</group>
+                        <group>${deb.group}</group>
                         <prefix>${deb.install.path}</prefix>
                       </mapper>
                     </data>
                     <data>
                       <src>${basedir}/../conf</src>
                       <type>directory</type>
+                      <excludes>.DS_Store</excludes>
                       <mapper>
                         <type>perm</type>
                         <user>${deb.user}</user>
-                        <group>${deb.user}</group>
+                        <group>${deb.group}</group>
                         <prefix>${deb.install.path}/conf</prefix>
                         <filemode>744</filemode>
                       </mapper>
@@ -271,10 +273,11 @@
                     <data>
                       <src>${basedir}/../bin</src>
                       <type>directory</type>
+                      <excludes>.DS_Store</excludes>
                       <mapper>
                         <type>perm</type>
                         <user>${deb.user}</user>
-                        <group>${deb.user}</group>
+                        <group>${deb.group}</group>
                         <prefix>${deb.install.path}/bin</prefix>
                         <filemode>744</filemode>
                       </mapper>
@@ -282,10 +285,11 @@
                     <data>
                       <src>${basedir}/../sbin</src>
                       <type>directory</type>
+                      <excludes>.DS_Store</excludes>
                       <mapper>
                         <type>perm</type>
                         <user>${deb.user}</user>
-                        <group>${deb.user}</group>
+                        <group>${deb.group}</group>
                         <prefix>${deb.install.path}/sbin</prefix>
                         <filemode>744</filemode>
                       </mapper>
@@ -293,12 +297,47 @@
                     <data>
                       <src>${basedir}/../python</src>
                       <type>directory</type>
+                      <excludes>.DS_Store</excludes>
                       <mapper>
                         <type>perm</type>
                         <user>${deb.user}</user>
-                        <group>${deb.user}</group>
+                        <group>${deb.group}</group>
                         <prefix>${deb.install.path}/python</prefix>
                         <filemode>744</filemode>
+                      </mapper>
+                    </data>
+                    <data>
+                      <src>${basedir}/src/deb/default/</src>
+                      <type>directory</type>
+                      <excludes>.DS_Store</excludes>
+                      <mapper>
+                        <type>perm</type>
+                        <prefix>/etc/default</prefix>
+                        <user>${deb.user}</user>
+                        <group>${deb.group}</group>
+                      </mapper>
+                    </data>
+                    <data>
+                      <src>${basedir}/src/deb/init.d/</src>
+                      <type>directory</type>
+                      <excludes>.DS_Store</excludes>
+                      <mapper>
+                        <type>perm</type>
+                        <prefix>/etc/init.d</prefix>
+                        <filemode>755</filemode>
+                        <user>${deb.user}</user>
+                        <group>${deb.group}</group>
+                      </mapper>
+                    </data>
+                    <data>
+                      <src>${basedir}/src/deb/etc/</src>
+                      <type>directory</type>
+                      <excludes>.DS_Store</excludes>
+                      <mapper>
+                        <type>perm</type>
+                        <prefix>/etc/apache-spark</prefix>
+                        <user>${deb.user}</user>
+                        <group>${deb.group}</group>
                       </mapper>
                     </data>
                   </dataSet>
