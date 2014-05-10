@@ -28,7 +28,7 @@ import org.apache.spark.streaming.StreamingContext._
  *
  * To run this on your local machine on directory `localdir`, run this example
  *    `$ bin/run-example \
-  *     org.apache.spark.examples.streaming.HdfsWordCount localdir`
+ *       org.apache.spark.examples.streaming.HdfsWordCount localdir`
  *
  * Then create a text file in `localdir` and the words in the file will get counted.
  */

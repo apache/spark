@@ -34,8 +34,8 @@ import org.apache.spark.SparkConf
 object TwitterPopularTags {
   def main(args: Array[String]) {
     if (args.length < 4) {
-      System.err.println("Usage: TwitterPopularTags <consumer key> <consumer secret> <access token> " +
-        "<access token secret> [<filters>]")
+      System.err.println("Usage: TwitterPopularTags <consumer key> <consumer secret> " +
+        "<access token> <access token secret> [<filters>]")
       System.exit(1)
     }
 

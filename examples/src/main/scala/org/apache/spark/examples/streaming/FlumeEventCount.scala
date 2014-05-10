@@ -41,7 +41,7 @@ import org.apache.spark.util.IntParam
  */
 object FlumeEventCount {
   def main(args: Array[String]) {
-    if (args.length != 3) {
+    if (args.length < 2) {
       System.err.println(
         "Usage: FlumeEventCount <host> <port>")
       System.exit(1)
