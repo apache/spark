@@ -49,7 +49,5 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[GraphXPrimitiveKeyOpenHashMap[VertexId, Int]])
     kryo.register(classOf[OpenHashSet[Int]])
     kryo.register(classOf[OpenHashSet[Long]])
-    // This avoids a large number of hash table lookups.
-    kryo.setReferences(false)
   }
 }
