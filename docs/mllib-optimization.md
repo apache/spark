@@ -127,7 +127,7 @@ is sampled, i.e. `$|S|=$ miniBatchFraction $\cdot n = 1$`, then the algorithm is
 standard SGD. In that case, the step direction depends from the uniformly random sampling of the
 point.
 
-### L-BFGS
+### Limited-memory BFGS (L-BFGS)
 [L-BFGS](http://en.wikipedia.org/wiki/Limited-memory_BFGS) is an optimization 
 algorithm in the family of quasi-Newton methods to solve the optimization problems of the form 
 `$\min_{\wv \in\R^d} \; f(\wv)$`. The L-BFGS method approximates the objective function locally as a 
@@ -150,12 +150,12 @@ The SGD method
 [GradientDescent.runMiniBatchSGD](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 has the following parameters:
 
-* `gradient` is a class that computes the stochastic gradient of the function
+* `Gradient` is a class that computes the stochastic gradient of the function
 being optimized, i.e., with respect to a single training example, at the
 current parameter value. MLlib includes gradient classes for common loss
 functions, e.g., hinge, logistic, least-squares.  The gradient class takes as
 input a training example, its label, and the current parameter value. 
-* `updater` is a class that performs the actual gradient descent step, i.e. 
+* `Updater` is a class that performs the actual gradient descent step, i.e. 
 updating the weights in each iteration, for a given gradient of the loss part.
 The updater is also responsible to perform the update from the regularization 
 part. MLlib includes updaters for cases without regularization, as well as
@@ -172,11 +172,11 @@ Available algorithms for gradient descent:
 
 * [GradientDescent.runMiniBatchSGD](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 
-### Limited-memory BFGS
+### L-BFGS
 L-BFGS is currently only a low-level optimization primitive in `MLlib`. If you want to use L-BFGS in various 
 ML algorithms such as Linear Regression, and Logistic Regression, you have to pass the gradient of objective
 function, and updater into optimizer yourself instead of using the training APIs like 
-[LogisticRegression.LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
+[LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
 See the example below. It will be addressed in the next release. 
 
 The L1 regularization by using 
@@ -187,19 +187,18 @@ The L-BFGS method
 [LBFGS.runLBFGS](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS)
 has the following parameters:
 
-* `gradient` is a class that computes the gradient of the objective function
+* `Gradient` is a class that computes the gradient of the objective function
 being optimized, i.e., with respect to a single training example, at the
 current parameter value. MLlib includes gradient classes for common loss
 functions, e.g., hinge, logistic, least-squares.  The gradient class takes as
 input a training example, its label, and the current parameter value. 
-* `updater` is a class that computes the gradient and loss of objective function 
+* `Updater` is a class that computes the gradient and loss of objective function 
 of the regularization part for L-BFGS. MLlib includes updaters for cases without 
 regularization, as well as L2 regularizer. 
 * `numCorrections` is the number of corrections used in the L-BFGS update. 10 is 
 recommended.
 * `maxNumIterations` is the maximal number of iterations that L-BFGS can be run.
 * `regParam` is the regularization parameter when using regularization.
-
 
 The `return` is a tuple containing two elements. The first element is a column matrix
 containing weights for every feature, and the second element is an array containing 
@@ -220,7 +219,7 @@ val numFeatures = data.take(1)(0).features.size
 // Split data into training (60%) and test (40%).
 val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
 
-// Prepend 1 into the training data as intercept.
+// Append 1 into the training data as intercept.
 val training = splits(0).map(x => (x.label, MLUtils.appendBias(x.features))).cache()
 
 val test = splits(1)
@@ -243,8 +242,8 @@ val (weightsWithIntercept, loss) = LBFGS.runLBFGS(
   initialWeightsWithIntercept)
 
 val model = new LogisticRegressionModel(
-  Vectors.dense(weightsWithIntercept.toArray.slice(1, weightsWithIntercept.size)),
-  weightsWithIntercept(0))
+  Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1)),
+  weightsWithIntercept(weightsWithIntercept.size - 1))
 
 // Clear the default threshold.
 model.clearThreshold()
@@ -270,7 +269,7 @@ the objective function can not be changed during the optimization process.
 As a result, Stochastic L-BFGS will not work naively by just using miniBatch; 
 therefore, we don't provide this until we have better understanding.
 
-* `updater` is a class originally designed for gradient decent which computes 
+* `Updater` is a class originally designed for gradient decent which computes 
 the actual gradient descent step. However, we're able to take the gradient and 
 loss of objective function of regularization for L-BFGS by ignoring the part of logic
 only for gradient decent such as adaptive step size stuff. We will refactorize
