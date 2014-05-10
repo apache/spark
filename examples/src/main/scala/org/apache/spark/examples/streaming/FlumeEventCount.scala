@@ -30,8 +30,11 @@ import org.apache.spark.util.IntParam
  *  an Avro server on at the request host:port address and listen for requests.
  *  Your Flume AvroSink should be pointed to this address.
  *
- *  Usage: FlumeEventCount <host> <port>
+ *  To run this example,
  *
+ *  $ `bin/run-example <host> <port> `
+ *
+ *  where
  *    <host> is the host the Flume receiver will be started on - a receiver
  *           creates a server and listens for flume events.
  *    <port> is the port the Flume receiver will listen on.
@@ -49,8 +52,9 @@ object FlumeEventCount {
     val Array(host, IntParam(port)) = args
 
     val batchInterval = Milliseconds(2000)
-    val sparkConf = new SparkConf().setAppName("FlumeEventCount")
+
     // Create the context and set the batch size
+    val sparkConf = new SparkConf().setAppName("FlumeEventCount")
     val ssc = new StreamingContext(sparkConf, batchInterval)
 
     // Create a flume stream
