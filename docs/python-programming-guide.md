@@ -45,7 +45,7 @@ errors = logData.filter(is_error)
 
 PySpark will automatically ship these functions to executors, along with any objects that they reference.
 Instances of classes will be serialized and shipped to executors by PySpark, but classes themselves cannot be automatically distributed to executors.
-The [Standalone Use](#standalone-use) section describes how to ship code dependencies to executors.
+The [Standalone Use](#standalone-programs) section describes how to ship code dependencies to executors.
 
 In addition, PySpark fully supports interactive use---simply run `./bin/pyspark` to launch an interactive shell.
 
