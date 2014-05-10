@@ -9,9 +9,12 @@ with these distributions:
 
 # Compile-time Hadoop Version
 
-When compiling Spark, you'll need to specify the Hadoop version by [defining the hadoop.version property](building-with-maven.html):
+When compiling Spark, you'll need to specify the Hadoop version by defining the `hadoop.version`
+property. For certain versions, you will need to specify additional profiles. For more detail,
+see the guide on [building with maven](building-with-maven.html#specifying-the-hadoop-version):
 
     mvn -Dhadoop.version=1.0.4 -DskipTests clean package
+    mvn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
 
 The table below lists the corresponding `hadoop.version` code for each CDH/HDP release. Note that
 some Hadoop releases are binary compatible across client versions. This means the pre-built Spark

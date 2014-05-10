@@ -193,13 +193,20 @@ Behind the scenes, this invokes the standalone Client to launch your application
 
 Keep in mind that your driver program will be executed on a remote worker machine. You can control the execution environment in the following ways:
 
- * _Environment variables_: These will be captured from the environment in which you launch the client and applied when launching the driver program.
- * _Java options_: You can add java options by setting `SPARK_JAVA_OPTS` in the environment in which you launch the submission client. (Note: as of Spark 1.0, spark options should be specified through `conf/spark-defaults.conf`, which is only loaded through spark-submit.)
- * _Dependencies_: You'll still need to call `sc.addJar` inside of your program to make your bundled application jar visible on all worker nodes.
+ * __Environment variables__: These are captured from the environment within which the client
+ is launched and applied when launching the driver program. These environment variables should be
+ exported in `conf/spark-env.sh`.
+ * __Java options__: You can add java options by setting `SPARK_JAVA_OPTS` in the environment in
+ which you launch the submission client. (_Note_: as of Spark 1.0, application specific
+ [Spark configuration properties](configuration.html#spark-properties) should be specified through
+ `conf/spark-defaults.conf` loaded by `spark-submit`.)
+ * __Dependencies__: If your application is launched through `spark-submit`, then the application
+ jar is automatically distributed to all worker nodes. Otherwise, you'll need to explicitly add the
+ jar through `sc.addJars`.
 
 Once you submit a driver program, it will appear in the cluster management UI at port 8080 and
-be assigned an identifier. If you'd like to prematurely terminate the program, you can do so using
-the same client:
+be assigned an identifier. If you'd like to prematurely terminate the program, you can do so as
+follows:
 
     ./bin/spark-class org.apache.spark.deploy.Client kill <driverId>
 
@@ -225,7 +232,7 @@ default for applications that don't set `spark.cores.max` to something less than
 Do this by adding the following to `conf/spark-env.sh`:
 
 {% highlight bash %}
-export SPARK_JAVA_OPTS="-Dspark.deploy.defaultCores=<value>"
+export SPARK_MASTER_OPTS="-Dspark.deploy.defaultCores=<value>"
 {% endhighlight %}
 
 This is useful on shared clusters where users might not have configured a maximum number of cores

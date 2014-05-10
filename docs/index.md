@@ -25,20 +25,23 @@ right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/
 # Running the Examples and Shell
 
 Spark comes with several sample programs.  Scala, Java and Python examples are in the `examples/src/main` directory.
-To run one of the Java or Scala sample programs, use `./bin/run-example <class> <params>` in the top-level Spark directory
-(the `bin/run-example` script sets up the appropriate paths and launches that program).
-For example, try `./bin/run-example org.apache.spark.examples.SparkPi local`.
-To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try `./bin/pyspark ./examples/src/main/python/pi.py local`.
+To run one of the Java or Scala sample programs, use `bin/run-example <class> [params]` in the top-level Spark directory. For example,
 
-Each example prints usage help when run with no parameters.
+    ./bin/run-example SparkPi 10
 
-Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
-to connect to. This can be a [URL for a distributed cluster](scala-programming-guide.html#master-urls),
+You can also run Spark interactively through modified versions of the Scala shell. This is a great way to learn the framework.
+
+    ./bin/spark-shell --master local[2]
+
+The `--master` option specifies the [master URL for a distributed cluster](scala-programming-guide.html#master-urls),
 or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
-`local` for testing.
+`local` for testing. For a full list of options, run Spark shell with the `--help` option.
 
-Finally, you can run Spark interactively through modified versions of the Scala shell (`./bin/spark-shell`) or
-Python interpreter (`./bin/pyspark`). These are a great way to learn the framework.
+If Scala is not your cup of tea, you can also try out Spark using the python interface with `bin/pyspark <program> [params]`. For example,
+
+    ./bin/pyspark examples/src/main/python/pi.py local[2] 10
+
+or simply `bin/pyspark` without any arguments to run Spark interactively in a python interpreter.
 
 # Launching on a Cluster
 

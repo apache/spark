@@ -60,7 +60,7 @@ The above starts a YARN client program which starts the default Application Mast
 
 To launch a Spark application in yarn-client mode, do the same, but replace "yarn-cluster" with "yarn-client".  To run spark-shell:
 
-    $ MASTER=yarn-client ./bin/spark-shell
+    $ ./bin/spark-shell --master yarn-client
 
 ## Adding additional jars
 
