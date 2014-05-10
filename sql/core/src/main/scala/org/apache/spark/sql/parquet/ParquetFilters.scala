@@ -356,8 +356,9 @@ private[parquet] object ComparisonFilter {
           new BooleanPredicateFunction {
             def functionToApply(input: Boolean): Boolean = input == value
           }
-        )),
+      )),
       predicate)
+
   def createStringFilter(
       columnName: String,
       value: String,
@@ -370,8 +371,9 @@ private[parquet] object ComparisonFilter {
           new ColumnPredicates.PredicateFunction[String]  {
             def functionToApply(input: String): Boolean = input == value
           }
-        )),
+      )),
       predicate)
+
   def createIntFilter(
       columnName: String,
       func: Int => Boolean,
@@ -384,8 +386,9 @@ private[parquet] object ComparisonFilter {
           new IntegerPredicateFunction {
             def functionToApply(input: Int) = func(input)
           }
-        )),
+      )),
       predicate)
+
   def createLongFilter(
       columnName: String,
       func: Long => Boolean,
@@ -398,8 +401,9 @@ private[parquet] object ComparisonFilter {
           new LongPredicateFunction {
             def functionToApply(input: Long) = func(input)
           }
-        )),
+      )),
       predicate)
+
   def createDoubleFilter(
       columnName: String,
       func: Double => Boolean,
@@ -412,8 +416,9 @@ private[parquet] object ComparisonFilter {
           new DoublePredicateFunction {
             def functionToApply(input: Double) = func(input)
           }
-        )),
+      )),
       predicate)
+
   def createFloatFilter(
       columnName: String,
       func: Float => Boolean,
@@ -426,6 +431,6 @@ private[parquet] object ComparisonFilter {
           new FloatPredicateFunction {
             def functionToApply(input: Float) = func(input)
           }
-        )),
+      )),
       predicate)
 }
