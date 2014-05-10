@@ -28,6 +28,8 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
+import scala.reflect.ClassTag
+
 object WikipediaPageRankStandalone {
   def main(args: Array[String]) {
     if (args.length < 4) {
@@ -143,15 +145,15 @@ class WPRSerializer extends org.apache.spark.serializer.Serializer {
 }
 
 class WPRSerializerInstance extends SerializerInstance {
-  def serialize[T](t: T): ByteBuffer = {
+  def serialize[T: ClassTag](t: T): ByteBuffer = {
     throw new UnsupportedOperationException()
   }
 
-  def deserialize[T](bytes: ByteBuffer): T = {
+  def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     throw new UnsupportedOperationException()
   }
 
-  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
+  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
     throw new UnsupportedOperationException()
   }
 
@@ -167,7 +169,7 @@ class WPRSerializerInstance extends SerializerInstance {
 class WPRSerializationStream(os: OutputStream) extends SerializationStream {
   val dos = new DataOutputStream(os)
 
-  def writeObject[T](t: T): SerializationStream = t match {
+  def writeObject[T: ClassTag](t: T): SerializationStream = t match {
     case (id: String, wrapper: ArrayBuffer[_]) => wrapper(0) match {
       case links: Array[String] => {
         dos.writeInt(0) // links
@@ -200,7 +202,7 @@ class WPRSerializationStream(os: OutputStream) extends SerializationStream {
 class WPRDeserializationStream(is: InputStream) extends DeserializationStream {
   val dis = new DataInputStream(is)
 
-  def readObject[T](): T = {
+  def readObject[T: ClassTag](): T = {
     val typeId = dis.readInt()
     typeId match {
       case 0 => {
