@@ -18,6 +18,7 @@
 package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
+import org.apache.spark.Logging
 
 
 /**
@@ -52,7 +53,7 @@ import scala.reflect.ClassTag
  * }}}
  *
  */
-object Pregel {
+object Pregel extends Logging {
 
   /**
    * Execute a Pregel-like iterative vertex-parallel abstraction.  The
@@ -142,6 +143,9 @@ object Pregel {
       // hides oldMessages (depended on by newVerts), newVerts (depended on by messages), and the
       // vertices of prevG (depended on by newVerts, oldMessages, and the vertices of g).
       activeMessages = messages.count()
+
+      logInfo("Pregel finished iteration " + i)
+
       // Unpersist the RDDs hidden by newly-materialized RDDs
       oldMessages.unpersist(blocking=false)
       newVerts.unpersist(blocking=false)
