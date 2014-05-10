@@ -104,7 +104,7 @@ private[spark] class Master(
 
   var leaderElectionAgent: ActorRef = _
 
-  private var recoverCallable: Cancellable = _
+  private var recoveryCompletionTask: Cancellable = _
 
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
@@ -155,8 +155,8 @@ private[spark] class Master(
 
   override def postStop() {
     // prevent the CompleteRecovery message sending to restarted master
-    if (recoverCallable != null) {
-      recoverCallable.cancel()
+    if (recoveryCompletionTask != null) {
+      recoveryCompletionTask.cancel()
     }
     webUi.stop()
     fileSystemsUsed.foreach(_.close())
@@ -177,7 +177,7 @@ private[spark] class Master(
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedDrivers, storedWorkers)
-        recoverCallable = context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis, self,
+        recoveryCompletionTask = context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis, self,
           CompleteRecovery)
       }
     }
