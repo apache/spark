@@ -1,4 +1,4 @@
-package org.apache.spark.graphx.lib
+package org.apache.spark.examples.graphx
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx.PartitionStrategy
@@ -131,6 +131,4 @@ object SynthBenchmark {
     println(s"Run time:  ${runTime/1000.0} seconds")
 
   }
-
-
 }
