@@ -447,7 +447,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
    */
-  def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)
+  def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)(fakeClassTag)
 
   /** Shut down the SparkContext. */
   def stop() {
