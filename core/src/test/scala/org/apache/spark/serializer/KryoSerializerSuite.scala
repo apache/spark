@@ -193,6 +193,35 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   }
 }
 
+class KryoSerializerResizableOutputSuite extends FunSuite {
+  import org.apache.spark.SparkConf
+  import org.apache.spark.SparkContext
+  import org.apache.spark.LocalSparkContext
+  import org.apache.spark.SparkException
+
+  // trial and error showed this will not serialize with 1mb buffer
+  val x = (1 to 400000).toArray
+
+  test("kryo without resizable output buffer should fail on large array") {
+    val conf = new SparkConf(false)
+    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    conf.set("spark.kryoserializer.buffer.mb", "1")
+    val sc = new SparkContext("local", "test", conf)
+    intercept[SparkException](sc.parallelize(x).collect)
+    LocalSparkContext.stop(sc)
+  }
+
+  test("kryo with resizable output buffer should succeed on large array") {
+    val conf = new SparkConf(false)
+    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    conf.set("spark.kryoserializer.buffer.mb", "1")
+    conf.set("spark.kryoserializer.buffer.max.mb", "2")
+    val sc = new SparkContext("local", "test", conf)
+    assert(sc.parallelize(x).collect === x)
+    LocalSparkContext.stop(sc)
+  }
+}
+
 object KryoTest {
   case class CaseClass(i: Int, s: String) {}
 
