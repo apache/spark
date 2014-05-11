@@ -28,12 +28,9 @@ object SynthBenchmark {
   /**
    * To run this program use the following:
    *
-   * bin/spark-class org.apache.spark.graphx.lib.SynthBenchmark -host="local[4]"
+   * MASTER=spark://foobar bin/run-example graphx.SynthBenchmark -app=pagerank
    *
-   * Required Options:
-   *   -host The spark job scheduler
-   *
-   * Additional Options:
+   * Options:
    *   -app "pagerank" or "cc" for pagerank or connected components. (Default: pagerank)
    *   -niters the number of iterations of pagerank to use (Default: 10)
    *   -numVertices the number of vertices in the graph (Default: 1000000)
@@ -52,7 +49,6 @@ object SynthBenchmark {
         }
     }
 
-    var host: String = null
     var app = "pagerank"
     var niter = 10
     var numVertices = 1000000
@@ -63,7 +59,6 @@ object SynthBenchmark {
     var degFile: String = ""
 
     options.foreach {
-      case ("host", v) => host = v
       case ("app", v) => app = v
       case ("niter", v) => niter = v.toInt
       case ("nverts", v) => numVertices = v.toInt
@@ -75,16 +70,12 @@ object SynthBenchmark {
       case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
     }
 
-    if (host == null) {
-      println("No -host option specified!")
-      System.exit(1)
-    }
-
     val conf = new SparkConf()
+      .setAppName(s"GraphX Synth Benchmark (nverts = $numVertices, app = $app)")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
 
-    val sc = new SparkContext(host, s"GraphX Synth Benchmark (nverts = $numVertices)", conf)
+    val sc = new SparkContext(conf)
 
     // Create the graph
     var graph = GraphGenerators.logNormalGraph(sc, numVertices, numEPart.getOrElse(sc.defaultParallelism), mu, sigma)
