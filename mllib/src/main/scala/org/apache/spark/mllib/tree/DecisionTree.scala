@@ -681,36 +681,47 @@ object DecisionTree extends Serializable with Logging {
         topImpurity: Double): InformationGainStats = {
       strategy.algo match {
         case Classification =>
-          // TODO: Modify here
-          val left0Count = leftNodeAgg(featureIndex)(splitIndex)(0)
-          val left1Count = leftNodeAgg(featureIndex)(splitIndex)(1)
-          val leftCount = left0Count + left1Count
-
-          val right0Count = rightNodeAgg(featureIndex)(splitIndex)(0)
-          val right1Count = rightNodeAgg(featureIndex)(splitIndex)(1)
-          val rightCount = right0Count + right1Count
+          var classIndex = 0
+          val leftCounts: Array[Double] = new Array[Double](numClasses)
+          val rightCounts: Array[Double] = new Array[Double](numClasses)
+          var leftTotalCount = 0.0
+          var rightTotalCount = 0.0
+          while (classIndex < numClasses) {
+            val leftClassCount = leftNodeAgg(featureIndex)(splitIndex)(classIndex)
+            val rightClassCount = rightNodeAgg(featureIndex)(splitIndex)(classIndex)
+            leftCounts(classIndex) = leftClassCount
+            leftTotalCount += leftClassCount
+            rightCounts(classIndex) = rightClassCount
+            rightTotalCount += rightClassCount
+            classIndex += 1
+          }
 
           val impurity = {
             if (level > 0) {
               topImpurity
             } else {
               // Calculate impurity for root node.
-              strategy.impurity.calculate(left0Count + right0Count, left1Count + right1Count)
+              val rootNodeCounts = new Array[Double](numClasses)
+              var classIndex = 0
+              while (classIndex < numClasses) {
+                rootNodeCounts(classIndex) = leftCounts(classIndex) + rightCounts(classIndex)
+              }
+              strategy.impurity.calculate(rootNodeCounts, leftTotalCount + rightTotalCount)
             }
           }
 
-          if (leftCount == 0) {
+          if (leftTotalCount == 0) {
             return new InformationGainStats(0, topImpurity, Double.MinValue, topImpurity,1)
           }
-          if (rightCount == 0) {
+          if (rightTotalCount == 0) {
             return new InformationGainStats(0, topImpurity, topImpurity, Double.MinValue,0)
           }
 
-          val leftImpurity = strategy.impurity.calculate(left0Count, left1Count)
-          val rightImpurity = strategy.impurity.calculate(right0Count, right1Count)
+          val leftImpurity = strategy.impurity.calculate(leftCounts, leftTotalCount)
+          val rightImpurity = strategy.impurity.calculate(rightCounts, rightTotalCount)
 
-          val leftWeight = leftCount.toDouble / (leftCount + rightCount)
-          val rightWeight = rightCount.toDouble / (leftCount + rightCount)
+          val leftWeight = leftTotalCount.toDouble / (leftTotalCount + rightTotalCount)
+          val rightWeight = rightTotalCount.toDouble / (leftTotalCount + rightTotalCount)
 
           val gain = {
             if (level > 0) {
@@ -720,7 +731,8 @@ object DecisionTree extends Serializable with Logging {
             }
           }
 
-          val predict = (left1Count + right1Count) / (leftCount + rightCount)
+          //TODO: Make modification here
+          val predict = (leftCounts(1) + rightCounts(1)) / (leftTotalCount + rightTotalCount)
 
           new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict)
         case Regression =>
@@ -782,7 +794,6 @@ object DecisionTree extends Serializable with Logging {
         binData: Array[Double]): (Array[Array[Array[Double]]], Array[Array[Array[Double]]]) = {
       strategy.algo match {
         case Classification =>
-          // TODO: Multiclass modification here
 
           // Initialize left and right split aggregates.
           val leftNodeAgg = Array.ofDim[Double](numFeatures, numBins - 1, numClasses)
@@ -793,17 +804,19 @@ object DecisionTree extends Serializable with Logging {
             while (featureIndex < numFeatures){
               val numCategories = strategy.categoricalFeaturesInfo(featureIndex)
               val maxSplits = math.pow(2, numCategories) - 1
-              var i = 0
-              // TODO: Add multiclass case here
-              while (i < maxSplits) {
+              var splitIndex = 0
+              while (splitIndex < maxSplits) {
                 var classIndex = 0
                 while (classIndex < numClasses) {
                   // shift for this featureIndex
                   val shift = numClasses * featureIndex * numBins
-
+                  leftNodeAgg(featureIndex)(splitIndex)(classIndex)
+                    = binData(shift + classIndex)
+                  rightNodeAgg(featureIndex)(splitIndex)(classIndex)
+                    = binData(shift + numClasses + classIndex)
                   classIndex += 1
                 }
-                i += 1
+                splitIndex += 1
               }
               featureIndex += 1
             }
@@ -931,8 +944,6 @@ object DecisionTree extends Serializable with Logging {
         binData: Array[Double],
         nodeImpurity: Double): (Split, InformationGainStats) = {
 
-      // TODO: Multiclass modification here
-
       logDebug("node impurity = " + nodeImpurity)
 
       // Extract left right node aggregates.
@@ -977,9 +988,8 @@ object DecisionTree extends Serializable with Logging {
     def getBinDataForNode(node: Int): Array[Double] = {
       strategy.algo match {
         case Classification =>
-          // TODO: Multiclass modification here
-          val shift = 2 * node * numBins * numFeatures
-          val binsForNode = binAggregates.slice(shift, shift + 2 * numBins * numFeatures)
+          val shift = numClasses * node * numBins * numFeatures
+          val binsForNode = binAggregates.slice(shift, shift + numClasses * numBins * numFeatures)
           binsForNode
         case Regression =>
           val shift = 3 * node * numBins * numFeatures

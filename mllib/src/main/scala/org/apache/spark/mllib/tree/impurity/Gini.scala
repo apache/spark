@@ -30,21 +30,22 @@ object Gini extends Impurity {
 
   /**
    * :: DeveloperApi ::
-   * Gini coefficient calculation
-   * @param c0 count of instances with label 0
-   * @param c1 count of instances with label 1
-   * @return Gini coefficient value
+   * information calculation for multiclass classification
+   * @param counts Array[Double] with counts for each label
+   * @param totalCount sum of counts for all labels
+   * @return information value
    */
   @DeveloperApi
-  override def calculate(c0: Double, c1: Double): Double = {
-    if (c0 == 0 || c1 == 0) {
-      0
-    } else {
-      val total = c0 + c1
-      val f0 = c0 / total
-      val f1 = c1 / total
-      1 - f0 * f0 - f1 * f1
+  override def calculate(counts: Array[Double], totalCount: Double): Double = {
+    val numClasses = counts.length
+    var impurity = 1.0
+    var classIndex = 0
+    while (classIndex < numClasses) {
+      val freq = counts(classIndex) / totalCount
+      impurity -= freq * freq
+      classIndex += 1
     }
+    impurity
   }
 
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =

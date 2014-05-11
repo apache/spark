@@ -25,7 +25,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
  */
 @Experimental
 object Variance extends Impurity {
-   override def calculate(c0: Double, c1: Double): Double =
+   override def calculate(counts: Array[Double], totalCounts: Double): Double =
      throw new UnsupportedOperationException("Variance.calculate")
 
   /**
