@@ -449,9 +449,9 @@ private[parquet] class CatalystNativeArrayConverter(
     protected[parquet] var capacity: Int = CatalystArrayConverter.INITIAL_ARRAY_SIZE)
   extends GroupConverter with CatalystConverter {
 
-  type nativeType = elementType.JvmType
+  type NativeType = elementType.JvmType
 
-  private var buffer: CatalystConverter.ArrayScalaType[nativeType] =
+  private var buffer: CatalystConverter.ArrayScalaType[NativeType] =
     elementType.classTag.newArray(capacity)
 
   private var elements: Int = 0
@@ -475,43 +475,43 @@ private[parquet] class CatalystNativeArrayConverter(
   // Overriden here to avoid auto-boxing for primitive types
   override protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[nativeType]
+    buffer(elements) = value.asInstanceOf[NativeType]
     elements += 1
   }
 
   override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[nativeType]
+    buffer(elements) = value.asInstanceOf[NativeType]
     elements += 1
   }
 
   override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[nativeType]
+    buffer(elements) = value.asInstanceOf[NativeType]
     elements += 1
   }
 
   override protected[parquet] def updateDouble(fieldIndex: Int, value: Double): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[nativeType]
+    buffer(elements) = value.asInstanceOf[NativeType]
     elements += 1
   }
 
   override protected[parquet] def updateFloat(fieldIndex: Int, value: Float): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[nativeType]
+    buffer(elements) = value.asInstanceOf[NativeType]
     elements += 1
   }
 
   override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.getBytes.asInstanceOf[nativeType]
+    buffer(elements) = value.getBytes.asInstanceOf[NativeType]
     elements += 1
   }
 
   override protected[parquet] def updateString(fieldIndex: Int, value: Binary): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.toStringUsingUTF8.asInstanceOf[nativeType]
+    buffer(elements) = value.toStringUsingUTF8.asInstanceOf[NativeType]
     elements += 1
   }
 
@@ -533,7 +533,7 @@ private[parquet] class CatalystNativeArrayConverter(
   private def checkGrowBuffer(): Unit = {
     if (elements >= capacity) {
       val newCapacity = 2 * capacity
-      val tmp: CatalystConverter.ArrayScalaType[nativeType] =
+      val tmp: CatalystConverter.ArrayScalaType[NativeType] =
         elementType.classTag.newArray(newCapacity)
       Array.copy(buffer, 0, tmp, 0, capacity)
       buffer = tmp

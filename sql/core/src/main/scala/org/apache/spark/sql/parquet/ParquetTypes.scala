@@ -176,7 +176,7 @@ private[parquet] object ParquetTypesConverter {
 
   /**
    * Converts a given Catalyst [[org.apache.spark.sql.catalyst.types.DataType]] into
-   * the corrponsing Parquet `Type`.
+   * the corresponding Parquet `Type`.
    *
    * The conversion follows the rules below:
    * <ul>

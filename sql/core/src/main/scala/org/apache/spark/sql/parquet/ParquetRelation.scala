@@ -151,7 +151,7 @@ private[sql] object ParquetRelation {
     }
 
     if (fs.exists(path) &&
-      !fs.getFileStatus(path)
+        !fs.getFileStatus(path)
         .getPermission
         .getUserAction
         .implies(FsAction.READ_WRITE)) {
