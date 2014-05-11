@@ -24,6 +24,10 @@ import akka.actor.Props
 import akka.util.ByteString
 
 import java.io.{File, BufferedWriter, OutputStreamWriter}
+import org.apache.hadoop.fs.{Path}
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+
 import java.net.{InetSocketAddress, SocketException, ServerSocket}
 import java.nio.charset.Charset
 import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
@@ -43,12 +47,14 @@ import org.apache.spark.streaming.receiver.{ActorHelper, Receiver}
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
   test("socket input stream") {
+    if (false) {
     // Start the server
     val testServer = new TestServer()
     testServer.start()
 
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
+    logInfo("port: " + testServer.port.toString)
     val networkStream = ssc.socketTextStream(
       "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
@@ -89,8 +95,67 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     for (i <- 0 until output.size) {
       assert(output(i) === expectedOutput(i))
     }
+    }
   }
 
+
+  test("recursive file input stream") {
+    // Disable manual clock as FileInputDStream does not work with manual clock
+    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+
+    // Set up the streaming context and input streams
+    val testDir = Files.createTempDir()
+    val ssc = new StreamingContext(conf, batchDuration)
+    val defaultFilter = (path: Path) => { !path.getName().startsWith(".") }
+
+
+    val fileStream = ssc.fileStream[ LongWritable, Text, TextInputFormat](
+      testDir.toString, defaultFilter, true, true
+    ).map(_._2.toString)
+
+
+    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+    def output = outputBuffer.flatMap(x => x)
+    val outputStream = new TestOutputStream(fileStream, outputBuffer)
+    outputStream.register()
+    ssc.start()
+
+    // Create files in the temporary directory so that Spark Streaming can read data from it
+    val input = Seq(1, 2, 3, 4, 5)
+    val expectedOutput = input.map(_.toString)
+    Thread.sleep(1000)
+    for (i <- 0 until input.size) {
+      val dir = new File(testDir.toString + "/folder/adsf/").mkdirs()
+      val file = new File(testDir, "/folder/adsf/" + i.toString)
+      Files.write(input(i) + "\n", file, Charset.forName("UTF-8"))
+      logInfo("Created file " + file)
+      Thread.sleep(batchDuration.milliseconds)
+      Thread.sleep(1000)
+    }
+    val startTime = System.currentTimeMillis()
+    Thread.sleep(1000)
+    val timeTaken = System.currentTimeMillis() - startTime
+    assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
+    logInfo("Stopping context")
+    ssc.stop()
+
+    // Verify whether data received by Spark Streaming was as expected
+    logInfo("--------------------------------")
+    logInfo("output, size = " + outputBuffer.size)
+    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("expected output, size = " + expectedOutput.size)
+    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("--------------------------------")
+
+    // Verify whether all the elements received are as expected
+    // (whether the elements were received one in each interval is not verified)
+    assert(output.toList === expectedOutput.toList)
+
+    Utils.deleteRecursively(testDir)
+
+    // Enable manual clock back again for other tests
+    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+  }
 
   test("file input stream") {
     // Disable manual clock as FileInputDStream does not work with manual clock
@@ -140,6 +205,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Enable manual clock back again for other tests
     conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    
+
   }
 
   // TODO: This test works in IntelliJ but not through SBT
