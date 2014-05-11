@@ -53,12 +53,6 @@
       <groupId>${akka.group}</groupId>
       <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
       <version>${akka.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.jboss.netty</groupId>
-          <artifactId>netty</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
