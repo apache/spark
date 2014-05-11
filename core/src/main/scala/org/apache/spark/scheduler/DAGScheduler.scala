@@ -893,6 +893,7 @@ class DAGScheduler(
               }
             } else {
               //ShuffleMap stage not finished yet. Maybe we can remove the stage barrier here.
+              //TODO: need a better way to get the number of free CPUs
               if (taskScheduler.isInstanceOf[TaskSchedulerImpl] && taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.isInstanceOf[CoarseGrainedSchedulerBackend]) {
                 val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.asInstanceOf[CoarseGrainedSchedulerBackend]
                 //there are free cores and waiting stages
@@ -907,7 +908,7 @@ class DAGScheduler(
                   logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
                   waitingStages -= preStartedStage
                   runningStages += preStartedStage
-                  submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage))
+                  submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage).get)
                 }
               }
             }

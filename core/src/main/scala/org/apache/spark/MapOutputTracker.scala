@@ -391,7 +391,7 @@ private[spark] object MapOutputTracker {
       status =>
         if (status == null) {
           //TODO: need to distinguish whether this is due to failed map tasks or partial outputs
-          (null, 0)
+          (null, 0.toLong)
 //          throw new FetchFailedException(null, shuffleId, -1, reduceId,
 //            new Exception("Missing an output location for shuffle " + shuffleId))
         } else {

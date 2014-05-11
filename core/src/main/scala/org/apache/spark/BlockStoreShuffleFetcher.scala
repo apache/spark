@@ -22,7 +22,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.executor.ShuffleReadMetrics
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
+import org.apache.spark.storage.{BlockFetcherIterator, BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.CompletionIterator
 
 private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
@@ -79,7 +79,8 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
       }
     }
 
-    var blockFetcherItr = blockManager.getMultiple(blocksByAddress, serializer)
+    val blockFetcherItr = blockManager.getMultiple(blocksByAddress, serializer)
+    var itr = blockFetcherItr.flatMap(unpackBlock)
     if (!missingMapOutputs.isEmpty) {
       logInfo("We're missing outputs of " + missingMapOutputs.size + " map tasks.Wait for them to finish. ---lirui")
       do {
@@ -96,9 +97,9 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
         case (address, splits) =>
           (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
       }
-      blockFetcherItr = blockFetcherItr ++ blockManager.getMultiple(missingBlocksByAddress, serializer)
+      val missingBlockFetcherItr = blockManager.getMultiple(missingBlocksByAddress, serializer)
+      itr = itr ++ missingBlockFetcherItr.flatMap(unpackBlock)
     }
-    val itr = blockFetcherItr.flatMap(unpackBlock)
 
     val completionIter = CompletionIterator[T, Iterator[T]](itr, {
       val shuffleMetrics = new ShuffleReadMetrics
