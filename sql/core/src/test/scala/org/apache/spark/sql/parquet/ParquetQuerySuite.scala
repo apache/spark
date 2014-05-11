@@ -399,7 +399,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Importing nested Parquet file (Addressbook)") {
-    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     val result = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir1.toString)
       .toSchemaRDD
@@ -408,23 +407,32 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result.size === 2)
     val first_record = result(0)
     val second_record = result(1)
-    val first_owner_numbers = result(0)(1)
-    val first_contacts = result(0)(2)
+    assert(first_record != null)
+    assert(second_record != null)
     assert(first_record.size === 3)
     assert(second_record(1) === null)
     assert(second_record(2) === null)
     assert(second_record(0) === "A. Nonymous")
     assert(first_record(0) === "Julien Le Dem")
+    val first_owner_numbers = first_record(1)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]]
+    val first_contacts = first_record(2)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]]
+    assert(first_owner_numbers != null)
     assert(first_owner_numbers(0) === "555 123 4567")
     assert(first_owner_numbers(2) === "XXX XXX XXXX")
-    assert(first_contacts(0).size === 2)
-    assert(first_contacts(0)(0) === "Dmitriy Ryaboy")
-    assert(first_contacts(0)(1) === "555 987 6543")
-    assert(first_contacts(1)(0) === "Chris Aniszczyk")
+    assert(first_contacts(0)
+      .asInstanceOf[CatalystConverter.StructScalaType[_]].size === 2)
+    val first_contacts_entry_one = first_contacts(0)
+      .asInstanceOf[CatalystConverter.StructScalaType[_]]
+    assert(first_contacts_entry_one(0) === "Dmitriy Ryaboy")
+    assert(first_contacts_entry_one(1) === "555 987 6543")
+    val first_contacts_entry_two = first_contacts(1)
+      .asInstanceOf[CatalystConverter.StructScalaType[_]]
+    assert(first_contacts_entry_two(0) === "Chris Aniszczyk")
   }
 
   test("Importing nested Parquet file (nested numbers)") {
-    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     val result = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir2.toString)
       .toSchemaRDD
@@ -433,19 +441,27 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result(0).size === 5, "number of fields in row incorrect")
     assert(result(0)(0) === 1)
     assert(result(0)(1) === 7)
-    assert(result(0)(2).size === 3)
-    assert(result(0)(2)(0) === (1.toLong << 32))
-    assert(result(0)(2)(1) === (1.toLong << 33))
-    assert(result(0)(2)(2) === (1.toLong << 34))
-    assert(result(0)(3)(0).size === 2)
-    assert(result(0)(3)(0)(0) === 2.5)
-    assert(result(0)(3)(0)(1) === false)
-    assert(result(0)(4).size === 2)
-    assert(result(0)(4)(0).size === 2)
-    assert(result(0)(4)(1).size === 1)
-    assert(result(0)(4)(0)(0)(0) === 7)
-    assert(result(0)(4)(0)(1)(0) === 8)
-    assert(result(0)(4)(1)(0)(0) === 9)
+    val subresult1 = result(0)(2).asInstanceOf[CatalystConverter.ArrayScalaType[_]]
+    assert(subresult1.size === 3)
+    assert(subresult1(0) === (1.toLong << 32))
+    assert(subresult1(1) === (1.toLong << 33))
+    assert(subresult1(2) === (1.toLong << 34))
+    val subresult2 = result(0)(3)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
+      .asInstanceOf[CatalystConverter.StructScalaType[_]]
+    assert(subresult2.size === 2)
+    assert(subresult2(0) === 2.5)
+    assert(subresult2(1) === false)
+    val subresult3 = result(0)(4)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]]
+    assert(subresult3.size === 2)
+    assert(subresult3(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]].size === 2)
+    val subresult4 = subresult3(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]]
+    assert(subresult4(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 7)
+    assert(subresult4(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 8)
+    assert(subresult3(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]].size === 1)
+    assert(subresult3(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 9)
   }
 
   test("Simple query on addressbook") {
@@ -458,7 +474,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Projection in addressbook") {
-    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir1.toString)
       .toSchemaRDD
@@ -473,7 +488,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Simple query on nested int data") {
-    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir2.toString)
       .toSchemaRDD
@@ -484,17 +498,23 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result1(0)(0) === 2.5)
     val result2 = sql("SELECT entries[0] FROM data").collect()
     assert(result2.size === 1)
-    assert(result2(0)(0).size === 2)
-    assert(result2(0)(0)(0) === 2.5)
-    assert(result2(0)(0)(1) === false)
+    val subresult1 = result2(0)(0).asInstanceOf[CatalystConverter.StructScalaType[_]]
+    assert(subresult1.size === 2)
+    assert(subresult1(0) === 2.5)
+    assert(subresult1(1) === false)
     val result3 = sql("SELECT outerouter FROM data").collect()
-    assert(result3(0)(0)(0)(0)(0) === 7)
-    assert(result3(0)(0)(0)(1)(0) === 8)
-    assert(result3(0)(0)(1)(0)(0) === 9)
+    val subresult2 = result3(0)(0)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]]
+    assert(subresult2(0).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 7)
+    assert(subresult2(1).asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 8)
+    assert(result3(0)(0)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](1)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 9)
   }
 
   test("nested structs") {
-    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir3.toString)
       .toSchemaRDD
@@ -514,32 +534,38 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("simple map") {
-    implicit def anyToMap(value: Any) = value.asInstanceOf[Map[String, Int]]
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir4.toString)
       .toSchemaRDD
     data.registerAsTable("mapTable")
     val result1 = sql("SELECT data1 FROM mapTable").collect()
     assert(result1.size === 1)
-    assert(result1(0)(0).toMap.getOrElse("key1", 0) === 1)
-    assert(result1(0)(0).toMap.getOrElse("key2", 0) === 2)
+    assert(result1(0)(0)
+      .asInstanceOf[CatalystConverter.MapScalaType[String, _]]
+      .getOrElse("key1", 0) === 1)
+    assert(result1(0)(0)
+      .asInstanceOf[CatalystConverter.MapScalaType[String, _]]
+      .getOrElse("key2", 0) === 2)
     val result2 = sql("SELECT data1[key1] FROM mapTable").collect()
     assert(result2(0)(0) === 1)
   }
 
   test("map with struct values") {
-    implicit def anyToMap(value: Any) = value.asInstanceOf[Map[String, Row]]
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir4.toString)
       .toSchemaRDD
     data.registerAsTable("mapTable")
     val result1 = sql("SELECT data2 FROM mapTable").collect()
     assert(result1.size === 1)
-    val entry1 = result1(0)(0).getOrElse("7", null)
+    val entry1 = result1(0)(0)
+      .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
+      .getOrElse("7", null)
     assert(entry1 != null)
     assert(entry1(0) === 42)
     assert(entry1(1) === "the answer")
-    val entry2 = result1(0)(0).getOrElse("8", null)
+    val entry2 = result1(0)(0)
+      .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
+      .getOrElse("8", null)
     assert(entry2 != null)
     assert(entry2(0) === 49)
     assert(entry2(1) === null)
@@ -552,7 +578,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   test("Writing out Addressbook and reading it back in") {
     // TODO: find out why CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME
     // has no effect in this test case
-    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     val tmpdir = Utils.createTempDir()
     Utils.deleteRecursively(tmpdir)
     val result = TestSQLContext
@@ -574,7 +599,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Writing out Map and reading it back in") {
-    implicit def anyToMap(value: Any) = value.asInstanceOf[Map[String, Row]]
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir4.toString)
       .toSchemaRDD
@@ -590,11 +614,15 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result1(0)(0) === 2)
     val result2 = sql("SELECT data2 FROM tmpmapcopy").collect()
     assert(result2.size === 1)
-    val entry1 = result2(0)(0).getOrElse("7", null)
+    val entry1 = result2(0)(0)
+      .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
+      .getOrElse("7", null)
     assert(entry1 != null)
     assert(entry1(0) === 42)
     assert(entry1(1) === "the answer")
-    val entry2 = result2(0)(0).getOrElse("8", null)
+    val entry2 = result2(0)(0)
+      .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.StructScalaType[_]]]
+      .getOrElse("8", null)
     assert(entry2 != null)
     assert(entry2(0) === 49)
     assert(entry2(1) === null)
@@ -705,39 +733,41 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(resultPrimitives(0)(1) === 0.5)
     assert(resultPrimitives(0)(2) === "foo")
     val resultPrimitiveArray = sql("SELECT testPrimitiveArray FROM avroTable").collect()
-    assert(resultPrimitiveArray(0)(0).asInstanceOf[Row](0) === 1)
-    assert(resultPrimitiveArray(0)(0).asInstanceOf[Row](1) === 2)
-    assert(resultPrimitiveArray(0)(0).asInstanceOf[Row](2) === 3)
+    assert(resultPrimitiveArray(0)(0)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0) === 1)
+    assert(resultPrimitiveArray(0)(0)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](1) === 2)
+    assert(resultPrimitiveArray(0)(0)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](2) === 3)
     val resultComplexArray = sql("SELECT testComplexArray FROM avroTable").collect()
-    assert(resultComplexArray(0)(0).asInstanceOf[Row].size === 2)
+    assert(resultComplexArray(0)(0)
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]].size === 2)
     assert(
       resultComplexArray(0)(0)
-      .asInstanceOf[Row]
-      .apply(0)
-      .asInstanceOf[Map[String, String]].get("key11").get.equals("data11"))
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](0)
+      .asInstanceOf[CatalystConverter.MapScalaType[String, String]]
+        .get("key11").get.equals("data11"))
     assert(
       resultComplexArray(0)(0)
-      .asInstanceOf[Row]
-      .apply(1)
-      .asInstanceOf[Map[String, String]].get("key22").get.equals("data22"))
+      .asInstanceOf[CatalystConverter.ArrayScalaType[_]](1)
+      .asInstanceOf[CatalystConverter.MapScalaType[String, String]]
+        .get("key22").get.equals("data22"))
     val resultPrimitiveMap = sql("SELECT testPrimitiveMap FROM avroTable").collect()
     assert(
       resultPrimitiveMap(0)(0)
-      .asInstanceOf[Map[String, Boolean]].get("key1").get === true)
+      .asInstanceOf[CatalystConverter.MapScalaType[String, Boolean]].get("key1").get === true)
     assert(
       resultPrimitiveMap(0)(0)
-      .asInstanceOf[Map[String, Boolean]].get("key2").get === false)
+      .asInstanceOf[CatalystConverter.MapScalaType[String, Boolean]].get("key2").get === false)
     val resultComplexMap = sql("SELECT testComplexMap FROM avroTable").collect()
     val mapResult1 =
       resultComplexMap(0)(0)
-      .asInstanceOf[Map[String, Row]]
-      .get("compKey1")
-      .get
+      .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.ArrayScalaType[_]]]
+      .get("compKey1").get
     val mapResult2 =
       resultComplexMap(0)(0)
-        .asInstanceOf[Map[String, Row]]
-        .get("compKey2")
-        .get
+        .asInstanceOf[CatalystConverter.MapScalaType[String, CatalystConverter.ArrayScalaType[_]]]
+        .get("compKey2").get
     assert(mapResult1(0) === 0.1f)
     assert(mapResult1(2) === 0.3f)
     assert(mapResult2(0) === 1.1f)

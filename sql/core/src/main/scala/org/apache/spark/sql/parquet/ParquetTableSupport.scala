@@ -140,9 +140,15 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writeValue(schema: DataType, value: Any): Unit = {
     if (value != null && value != Nil) {
       schema match {
-        case t @ ArrayType(_) => writeArray(t, value.asInstanceOf[Row])
-        case t @ MapType(_, _) => writeMap(t, value.asInstanceOf[Map[Any, Any]])
-        case t @ StructType(_) => writeStruct(t, value.asInstanceOf[Row])
+        case t @ ArrayType(_) => writeArray(
+          t,
+          value.asInstanceOf[CatalystConverter.ArrayScalaType[_]])
+        case t @ MapType(_, _) => writeMap(
+          t,
+          value.asInstanceOf[CatalystConverter.MapScalaType[_, _]])
+        case t @ StructType(_) => writeStruct(
+          t,
+          value.asInstanceOf[CatalystConverter.StructScalaType[_]])
         case _ => writePrimitive(schema.asInstanceOf[PrimitiveType], value)
       }
     }
@@ -166,7 +172,9 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     }
   }
 
-  private[parquet] def writeStruct(schema: StructType, struct: Row): Unit = {
+  private[parquet] def writeStruct(
+      schema: StructType,
+      struct: CatalystConverter.StructScalaType[_]): Unit = {
     if (struct != null && struct != Nil) {
       val fields = schema.fields.toArray
       writer.startGroup()
@@ -183,7 +191,11 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     }
   }
 
-  private[parquet] def writeArray(schema: ArrayType, array: Row): Unit = {
+  // TODO: support null values, see
+  // https://issues.apache.org/jira/browse/SPARK-1649
+  private[parquet] def writeArray(
+      schema: ArrayType,
+      array: CatalystConverter.ArrayScalaType[_]): Unit = {
     val elementType = schema.elementType
     writer.startGroup()
     if (array.size > 0) {
@@ -198,8 +210,11 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     writer.endGroup()
   }
 
-  // TODO: this does not allow null values! Should these be supported?
-  private[parquet] def writeMap(schema: MapType, map: Map[_, _]): Unit = {
+  // TODO: support null values, see
+  // https://issues.apache.org/jira/browse/SPARK-1649
+  private[parquet] def writeMap(
+      schema: MapType,
+      map: CatalystConverter.MapScalaType[_, _]): Unit = {
     writer.startGroup()
     if (map.size > 0) {
       writer.startField(CatalystConverter.MAP_SCHEMA_NAME, 0)

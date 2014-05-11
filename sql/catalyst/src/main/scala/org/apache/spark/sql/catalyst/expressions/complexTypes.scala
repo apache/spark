@@ -50,7 +50,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
         null
       } else {
         if (child.dataType.isInstanceOf[ArrayType]) {
-          val baseValue = value.asInstanceOf[Seq[_]]
+          val baseValue = value.asInstanceOf[Array[_]]
           val o = key.asInstanceOf[Int]
           if (o >= baseValue.size || o < 0) {
             null
@@ -92,7 +92,7 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
   override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[StructType]
 
   override def eval(input: Row): Any = {
-    val baseValue = child.eval(input).asInstanceOf[Row]
+    val baseValue = child.eval(input).asInstanceOf[Seq[_]]
     if (baseValue == null) null else baseValue(ordinal)
   }
 

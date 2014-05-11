@@ -23,12 +23,12 @@ import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
 import parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.expressions.{NativeRow, GenericRow, Row, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row, Attribute}
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 
 /**
- * Collection of converters of Parquet types (Group and primitive types) that
- * model arrays and maps. The convertions are partly based on the AvroParquet
+ * Collection of converters of Parquet types (group and primitive types) that
+ * model arrays and maps. The conversions are partly based on the AvroParquet
  * converters that are part of Parquet in order to be able to process these
  * types.
  *
@@ -51,7 +51,7 @@ import org.apache.spark.sql.parquet.CatalystConverter.FieldType
  * </ul>
  */
 
-private[parquet] object CatalystConverter {
+private[sql] object CatalystConverter {
   // The type internally used for fields
   type FieldType = StructField
 
@@ -62,6 +62,10 @@ private[parquet] object CatalystConverter {
   val MAP_KEY_SCHEMA_NAME = "key"
   val MAP_VALUE_SCHEMA_NAME = "value"
   val MAP_SCHEMA_NAME = "map"
+
+  type ArrayScalaType[T] = Array[T]
+  type StructScalaType[T] = Seq[T]
+  type MapScalaType[K, V] = Map[K, V]
 
   protected[parquet] def createConverter(
       field: FieldType,
@@ -325,7 +329,6 @@ private[parquet] class CatalystPrimitiveRowConverter(
 private[parquet] class CatalystPrimitiveConverter(
     parent: CatalystConverter,
     fieldIndex: Int) extends PrimitiveConverter {
-  // TODO: consider refactoring these together with ParquetTypesConverter
   override def addBinary(value: Binary): Unit =
     parent.updateBinary(fieldIndex, value)
 
@@ -404,6 +407,9 @@ private[parquet] class CatalystArrayConverter(
 
   override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
     // fieldIndex is ignored (assumed to be zero but not checked)
+    if(value == null) {
+      throw new IllegalArgumentException("Null values inside Parquet arrays are not supported!")
+    }
     buffer += value
   }
 
@@ -419,7 +425,8 @@ private[parquet] class CatalystArrayConverter(
 
   override def end(): Unit = {
     assert(parent != null)
-    parent.updateField(index, new GenericRow(buffer.toArray))
+    // here we need to make sure to use ArrayScalaType
+    parent.updateField(index, buffer.toArray)
     clearBuffer()
   }
 }
@@ -444,7 +451,8 @@ private[parquet] class CatalystNativeArrayConverter(
 
   type nativeType = elementType.JvmType
 
-  private var buffer: Array[nativeType] = elementType.classTag.newArray(capacity)
+  private var buffer: CatalystConverter.ArrayScalaType[nativeType] =
+    elementType.classTag.newArray(capacity)
 
   private var elements: Int = 0
 
@@ -515,16 +523,18 @@ private[parquet] class CatalystNativeArrayConverter(
 
   override def end(): Unit = {
     assert(parent != null)
+    // here we need to make sure to use ArrayScalaType
     parent.updateField(
       index,
-      new NativeRow[nativeType](buffer.slice(0, elements)))
+      buffer.slice(0, elements))
     clearBuffer()
   }
 
   private def checkGrowBuffer(): Unit = {
     if (elements >= capacity) {
       val newCapacity = 2 * capacity
-      val tmp: Array[nativeType] = elementType.classTag.newArray(newCapacity)
+      val tmp: CatalystConverter.ArrayScalaType[nativeType] =
+        elementType.classTag.newArray(newCapacity)
       Array.copy(buffer, 0, tmp, 0, capacity)
       buffer = tmp
       capacity = newCapacity
@@ -552,8 +562,10 @@ private[parquet] class CatalystStructConverter(
   // TODO: think about reusing the buffer
   override def end(): Unit = {
     assert(!isRootConverter)
-    // TODO: use iterators if possible, avoid Row wrapping!
-    parent.updateField(index, new GenericRow(current.toArray))
+    // here we need to make sure to use StructScalaType
+    // Note: we need to actually make a copy of the array since we
+    // may be in a nested field
+    parent.updateField(index, current.toArray.toSeq)
   }
 }
 
@@ -619,6 +631,7 @@ private[parquet] class CatalystMapConverter(
   }
 
   override def end(): Unit = {
+    // here we need to make sure to use MapScalaType
     parent.updateField(index, map.toMap)
   }
 
@@ -627,6 +640,3 @@ private[parquet] class CatalystMapConverter(
   override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit =
     throw new UnsupportedOperationException
 }
-
-
-
