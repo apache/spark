@@ -19,6 +19,8 @@ package org.apache.spark.broadcast
 
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.reflect.ClassTag
+
 import org.apache.spark._
 
 private[spark] class BroadcastManager(
@@ -56,7 +58,7 @@ private[spark] class BroadcastManager(
 
   private val nextBroadcastId = new AtomicLong(0)
 
-  def newBroadcast[T](value_ : T, isLocal: Boolean) = {
+  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean) = {
     broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
   }
 

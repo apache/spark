@@ -76,6 +76,8 @@ object MimaBuild {
           excludeSparkClass("util.XORShiftRandom") ++
           excludeSparkClass("graphx.EdgeRDD") ++
           excludeSparkClass("graphx.VertexRDD") ++
+          excludeSparkClass("graphx.impl.GraphImpl") ++
+          excludeSparkClass("graphx.impl.RoutingTable") ++
           excludeSparkClass("mllib.recommendation.MFDataGenerator") ++
           excludeSparkClass("mllib.optimization.SquaredGradient") ++
           excludeSparkClass("mllib.regression.RidgeRegressionWithSGD") ++
