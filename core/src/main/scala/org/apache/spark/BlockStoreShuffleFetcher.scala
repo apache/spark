@@ -44,15 +44,12 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
       shuffleId, reduceId, System.currentTimeMillis - startTime))
 
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
-    //track the map outputs we're missing
-    val missingMapOutputs= new ArrayBuffer[Int]()
-    for (((address, size), index) <- statuses.zipWithIndex) {
-      if (address != null) {
-        splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
-      } else {
-        missingMapOutputs += index
-      }
+
+    for (((address, size), index) <- statuses.zipWithIndex if address != null) {
+      splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
     }
+    //track the map outputs we're missing
+    var missingMapOutputs = statuses.zipWithIndex.filter(_._1._1 == null).map(_._2)
 
     val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
       case (address, splits) =>
@@ -81,24 +78,26 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
 
     val blockFetcherItr = blockManager.getMultiple(blocksByAddress, serializer)
     var itr = blockFetcherItr.flatMap(unpackBlock)
-    if (!missingMapOutputs.isEmpty) {
-      logInfo("We're missing outputs of " + missingMapOutputs.size + " map tasks.Wait for them to finish. ---lirui")
-      do {
-        Thread.sleep(8000)
-        logInfo("Trying to get updated map outputs for reduceId " + reduceId + " ---lirui")
-        statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, reduceId)
-        logInfo("Still missing " + statuses.filter(_._1 == null).size + " outputs for reduceId " + reduceId + " ---lirui")
-      } while (statuses.exists(_._1 == null))
+
+    while(!missingMapOutputs.isEmpty){
+      logInfo("Still missing "+missingMapOutputs.size+" outputs for reduceId "+reduceId+" ---lirui")
+      Thread.sleep(8000)
+      logInfo("Trying to update map output statues for reduceId "+reduceId+" ---lirui")
+      statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, reduceId)
       val missingSplitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
-      for (index <- missingMapOutputs) {
+      for (index <- missingMapOutputs if statuses(index)._1 != null) {
         missingSplitsByAddress.getOrElseUpdate(statuses(index)._1, ArrayBuffer()) += ((index, statuses(index)._2))
       }
-      val missingBlocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = missingSplitsByAddress.toSeq.map {
-        case (address, splits) =>
-          (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
+      //we have new outputs ready for this reduce
+      if(!missingSplitsByAddress.isEmpty){
+        val missingBlocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = missingSplitsByAddress.toSeq.map {
+          case (address, splits) =>
+            (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
+        }
+        val missingBlockFetcherItr = blockManager.getMultiple(missingBlocksByAddress, serializer)
+        itr = itr ++ missingBlockFetcherItr.flatMap(unpackBlock)
       }
-      val missingBlockFetcherItr = blockManager.getMultiple(missingBlocksByAddress, serializer)
-      itr = itr ++ missingBlockFetcherItr.flatMap(unpackBlock)
+      missingMapOutputs = statuses.zipWithIndex.filter(_._1._1 == null).map(_._2)
     }
 
     val completionIter = CompletionIterator[T, Iterator[T]](itr, {

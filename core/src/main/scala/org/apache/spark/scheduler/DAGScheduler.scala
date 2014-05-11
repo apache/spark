@@ -121,6 +121,9 @@ class DAGScheduler(
 
   private[scheduler] var eventProcessActor: ActorRef = _
 
+  //whether to enable remove stage barrier
+  val removeStageBarrier = env.conf.getBoolean("spark.schedule.removeStageBarrier", true)
+
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
     // not null before any job is submitted
@@ -847,6 +850,11 @@ class DAGScheduler(
             } else {
               stage.addOutputLoc(smt.partitionId, status)
             }
+            //we need to register map outputs progressively if remove stage barrier is enabled
+            if (removeStageBarrier && stage.shuffleDep.isDefined) {
+              logInfo("Register output progressively: Map task "+smt.partitionId+" ---lirui")
+              mapOutputTracker.registerMapOutput(stage.shuffleDep.get.shuffleId, smt.partitionId, status)
+            }
             if (runningStages.contains(stage) && pendingTasks(stage).isEmpty) {
               markStageAsFinished(stage)
               logInfo("looking for newly runnable stages")
@@ -893,22 +901,24 @@ class DAGScheduler(
               }
             } else {
               //ShuffleMap stage not finished yet. Maybe we can remove the stage barrier here.
-              //TODO: need a better way to get the number of free CPUs
-              if (taskScheduler.isInstanceOf[TaskSchedulerImpl] && taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.isInstanceOf[CoarseGrainedSchedulerBackend]) {
-                val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.asInstanceOf[CoarseGrainedSchedulerBackend]
-                //there are free cores and waiting stages
-                if (backend.freeCoreCount.get() > 0 && waitingStages.size > 0 && stage.shuffleDep.isDefined) {
-                  logInfo("We have " + backend.totalCoreCount.get() + " CPUs. " + pendingTasks(stage).size + " tasks are running/pending. " +
-                    backend.freeCoreCount.get() + " cores are free. " + waitingStages.size + " stages are waiting to be submitted. ---lirui")
-                  //TODO: find a waiting stage that depends on the current "stage"
-                  val preStartedStage = waitingStages.head
-                  val shuffleId = stage.shuffleDep.get.shuffleId
-                  logInfo("Register partial map outputs for shuffleId " + shuffleId + " ---lirui")
-                  mapOutputTracker.registerMapOutputs(shuffleId, stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray)
-                  logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
-                  waitingStages -= preStartedStage
-                  runningStages += preStartedStage
-                  submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage).get)
+              if(removeStageBarrier){
+                //TODO: need a better way to get the number of free CPUs
+                if (taskScheduler.isInstanceOf[TaskSchedulerImpl] && taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.isInstanceOf[CoarseGrainedSchedulerBackend]) {
+                  val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.asInstanceOf[CoarseGrainedSchedulerBackend]
+                  //there are free cores and waiting stages
+                  if (backend.freeCoreCount.get() > 0 && waitingStages.size > 0 && stage.shuffleDep.isDefined) {
+                    logInfo("We have " + backend.totalCoreCount.get() + " CPUs. " + pendingTasks(stage).size + " tasks are running/pending. " +
+                      backend.freeCoreCount.get() + " cores are free. " + waitingStages.size + " stages are waiting to be submitted. ---lirui")
+                    //TODO: find a waiting stage that depends on the current "stage"
+                    val preStartedStage = waitingStages.head
+                    val shuffleId = stage.shuffleDep.get.shuffleId
+                    logInfo("Register partial map outputs for shuffleId " + shuffleId + " ---lirui")
+                    mapOutputTracker.registerMapOutputs(shuffleId, stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray)
+                    logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
+                    waitingStages -= preStartedStage
+                    runningStages += preStartedStage
+                    submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage).get)
+                  }
                 }
               }
             }
