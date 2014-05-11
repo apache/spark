@@ -281,8 +281,7 @@ object SparkEnv extends Logging {
     val jvmInformation = Seq(
       ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
       ("Java Home", Properties.javaHome),
-      ("Scala Version", Properties.versionString),
-      ("Scala Home", Properties.scalaHome)
+      ("Scala Version", Properties.versionString)
     ).sorted
 
     // Spark properties
