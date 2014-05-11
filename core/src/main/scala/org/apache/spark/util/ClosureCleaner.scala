@@ -25,8 +25,7 @@ import scala.collection.mutable.Set
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
-import org.apache.spark.Logging
-import org.apache.spark.SparkException
+import org.apache.spark.{Logging, SparkException}
 
 private[spark] object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it

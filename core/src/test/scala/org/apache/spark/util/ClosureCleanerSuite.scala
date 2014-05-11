@@ -20,8 +20,7 @@ package org.apache.spark.util
 import org.scalatest.FunSuite
 
 import org.apache.spark.LocalSparkContext._
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkContext, SparkException}
 
 class ClosureCleanerSuite extends FunSuite {
   test("closures inside an object") {
@@ -118,15 +117,11 @@ class TestClassWithoutFieldAccess {
 }
 
 object TestObjectWithBogusReturns {
-  def badClosureWithReturn(v: org.apache.spark.rdd.RDD[Int]): Int = {
-     v.map {x => return 1 ; x * 2}
-     1
-  }
-  
   def run(): Int = {
     withSpark(new SparkContext("local", "test")) { sc =>
       val nums = sc.parallelize(Array(1, 2, 3, 4))
-      badClosureWithReturn(nums)
+      nums.map {x => return 1 ; x * 2}
+      1
     }
   }
 }
