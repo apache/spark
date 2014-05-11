@@ -20,7 +20,7 @@ import Keys._
 import Classpaths.publishTask
 import sbtassembly.Plugin._
 import AssemblyKeys._
-import util.Properties
+import scala.util.Properties
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 import sbtunidoc.Plugin._
