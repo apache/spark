@@ -20,7 +20,7 @@ package org.apache.spark.deploy.yarn
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.scheduler.{InputFormatInfo, SplitInfo}
+import org.apache.spark.scheduler.InputFormatInfo
 import org.apache.spark.util.IntParam
 import org.apache.spark.util.MemoryParam
 
@@ -40,9 +40,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var amMemory: Int = 512 // MB
   var amClass: String = "org.apache.spark.deploy.yarn.ApplicationMaster"
   var appName: String = "Spark"
-  // TODO
   var inputFormatInfo: List[InputFormatInfo] = null
-  // TODO(harvey)
   var priority = 0
 
   parseArgs(args.toList)

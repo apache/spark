@@ -917,7 +917,7 @@ class SparkContext(config: SparkConf) extends Logging {
             if (SparkHadoopUtil.get.isYarnMode() &&
                 (master == "yarn-standalone" || master == "yarn-cluster")) {
               // In order for this to work in yarn-cluster mode the user must specify the
-              // --addjars option to the client to upload the file into the distributed cache
+              // --addJars option to the client to upload the file into the distributed cache
               // of the AM to make it show up in the current working directory.
               val fileName = new Path(uri.getPath).getName()
               try {
