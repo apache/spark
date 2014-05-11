@@ -30,17 +30,6 @@ class VertexPartitionSuite extends FunSuite {
     assert(!vp.isDefined(-1))
   }
 
-  test("isActive, numActives, replaceActives") {
-    val vp = VertexPartition(Iterator((0L, 1), (1L, 1)))
-      .filter { (vid, attr) => vid == 0 }
-      .replaceActives(Iterator(0, 2, 0))
-    assert(vp.isActive(0))
-    assert(!vp.isActive(1))
-    assert(vp.isActive(2))
-    assert(!vp.isActive(-1))
-    assert(vp.numActives == Some(2))
-  }
-
   test("map") {
     val vp = VertexPartition(Iterator((0L, 1), (1L, 1))).map { (vid, attr) => 2 }
     assert(vp(0) === 2)
