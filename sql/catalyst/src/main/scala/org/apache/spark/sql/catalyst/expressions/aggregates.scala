@@ -146,7 +146,6 @@ case class MaxFunction(expr: Expression, base: AggregateExpression) extends Aggr
   override def eval(input: Row): Any = currentMax
 }
 
-
 case class Count(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
   override def nullable = false
@@ -166,7 +165,7 @@ case class CountDistinct(expressions: Seq[Expression]) extends AggregateExpressi
   override def references = expressions.flatMap(_.references).toSet
   override def nullable = false
   override def dataType = IntegerType
-  override def toString = s"COUNT(DISTINCT ${expressions.mkString(",")}})"
+  override def toString = s"COUNT(DISTINCT ${expressions.mkString(",")})"
   override def newInstance() = new CountDistinctFunction(expressions, this)
 }
 
