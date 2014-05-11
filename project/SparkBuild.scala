@@ -176,7 +176,7 @@ object SparkBuild extends Build {
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
     testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
-    incOptions := incOptions.value.withNameHashing(true),
+
     // Fork new JVMs for tests and set Java options for those
     fork := true,
     javaOptions in Test += "-Dspark.home=" + sparkHome,
