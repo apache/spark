@@ -21,6 +21,7 @@ import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.{DStream, ForEachDStream}
+import org.apache.spark.util.Utils
 import StreamingContext._
 
 import scala.util.Random
@@ -380,6 +381,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
 
   override def run() {
     val localTestDir = Files.createTempDir()
+    localTestDir.deleteOnExit()
     var fs = testDir.getFileSystem(new Configuration())
     val maxTries = 3
     try {
@@ -421,6 +423,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
       case e: Exception => logWarning("File generating in killing thread", e)
     } finally {
       fs.close()
+      Utils.deleteRecursively(localTestDir)
     }
   }
 }

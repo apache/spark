@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable
 import scala.io.Source
-import scala.util.Try
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -29,6 +28,8 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
+
+import java.io.File
 
 /**
  * Test whether EventLoggingListener logs events properly.
@@ -43,11 +44,17 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     "org.apache.spark.io.LZFCompressionCodec",
     "org.apache.spark.io.SnappyCompressionCodec"
   )
-  private val testDir = Files.createTempDir()
-  private val logDirPath = Utils.getFilePath(testDir, "spark-events")
+  private var testDir: File = _
+  private var logDirPath: Path = _
+
+  before {
+    testDir = Files.createTempDir()
+    testDir.deleteOnExit()
+    logDirPath = Utils.getFilePath(testDir, "spark-events")
+  }
 
   after {
-    Try { fileSystem.delete(logDirPath, true) }
+    Utils.deleteRecursively(testDir)
   }
 
   test("Parse names of special files") {

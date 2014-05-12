@@ -112,6 +112,7 @@ class UtilsSuite extends FunSuite {
 
   test("reading offset bytes of a file") {
     val tmpDir2 = Files.createTempDir()
+    tmpDir2.deleteOnExit()
     val f1Path = tmpDir2 + "/f1"
     val f1 = new FileOutputStream(f1Path)
     f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(Charsets.UTF_8))
