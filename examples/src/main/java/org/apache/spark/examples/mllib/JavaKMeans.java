@@ -19,6 +19,7 @@ package org.apache.spark.examples.mllib;
 
 import java.util.regex.Pattern;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
@@ -48,24 +49,21 @@ public final class JavaKMeans {
   }
 
   public static void main(String[] args) {
-
-    if (args.length < 4) {
+    if (args.length < 3) {
       System.err.println(
-          "Usage: JavaKMeans <master> <input_file> <k> <max_iterations> [<runs>]");
+        "Usage: JavaKMeans <input_file> <k> <max_iterations> [<runs>]");
       System.exit(1);
     }
-
-    String inputFile = args[1];
-    int k = Integer.parseInt(args[2]);
-    int iterations = Integer.parseInt(args[3]);
+    String inputFile = args[0];
+    int k = Integer.parseInt(args[1]);
+    int iterations = Integer.parseInt(args[2]);
     int runs = 1;
 
-    if (args.length >= 5) {
-      runs = Integer.parseInt(args[4]);
+    if (args.length >= 4) {
+      runs = Integer.parseInt(args[3]);
     }
-
-    JavaSparkContext sc = new JavaSparkContext(args[0], "JavaKMeans",
-        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaKMeans.class));
+    SparkConf sparkConf = new SparkConf().setAppName("JavaKMeans");
+    JavaSparkContext sc = new JavaSparkContext(sparkConf);
     JavaRDD<String> lines = sc.textFile(inputFile);
 
     JavaRDD<Vector> points = lines.map(new ParsePoint());
