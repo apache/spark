@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
+
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
@@ -169,6 +171,44 @@ case class CountDistinct(expressions: Seq[Expression]) extends AggregateExpressi
   override def newInstance() = new CountDistinctFunction(expressions, this)
 }
 
+case class ApproxCountDistinctPartition(child: Expression)
+    extends AggregateExpression with trees.UnaryNode[Expression] {
+  override def references = child.references
+  override def nullable = false
+  override def dataType = child.dataType
+  override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
+  override def newInstance() = new ApproxCountDistinctPartitionFunction(child, this)
+}
+
+case class ApproxCountDistinctMerge(child: Expression)
+    extends AggregateExpression with trees.UnaryNode[Expression] {
+  override def references = child.references
+  override def nullable = false
+  override def dataType = IntegerType
+  override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
+  override def newInstance() = new ApproxCountDistinctMergeFunction(child, this)
+}
+
+object ApproxCountDistinct {
+  val RelativeSD = 0.05
+}
+
+case class ApproxCountDistinct(child: Expression)
+    extends PartialAggregate with trees.UnaryNode[Expression] {
+  override def references = child.references
+  override def nullable = false
+  override def dataType = IntegerType
+  override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
+
+  override def asPartial: SplitEvaluation = {
+    val partialCount = Alias(ApproxCountDistinctPartition(child),
+                             "PartialApproxCountDistinct")()
+    SplitEvaluation(ApproxCountDistinctMerge(partialCount.toAttribute), partialCount :: Nil)
+  }
+
+  override def newInstance() = new CountDistinctFunction((child :: Nil), this)
+}
+
 case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
   override def nullable = false
@@ -266,6 +306,34 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
   }
 
   override def eval(input: Row): Any = count
+}
+
+case class ApproxCountDistinctPartitionFunction(expr: Expression, base: AggregateExpression)
+    extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  private val hyperLogLog = new HyperLogLog(ApproxCountDistinct.RelativeSD)
+
+  override def update(input: Row): Unit = {
+    val evaluatedExpr = expr.eval(input)
+    Option(evaluatedExpr).foreach(hyperLogLog.offer(_))
+  }
+
+  override def eval(input: Row): Any = hyperLogLog
+}
+
+case class ApproxCountDistinctMergeFunction(expr: Expression, base: AggregateExpression)
+    extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  private val hyperLogLog = new HyperLogLog(ApproxCountDistinct.RelativeSD)
+
+  override def update(input: Row): Unit = {
+    val evaluatedExpr = expr.eval(input)
+    Option(evaluatedExpr.asInstanceOf[HyperLogLog]).foreach(hyperLogLog.addAll(_))
+  }
+
+  override def eval(input: Row): Any = hyperLogLog.cardinality()
 }
 
 case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
