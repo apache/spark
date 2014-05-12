@@ -241,26 +241,21 @@ private[spark] class Executor(
           // Attempt to exit cleanly by informing the driver of our failure.
           // If anything goes wrong (or this was a fatal exception), we will delegate to
           // the default uncaught exception handler, which will terminate the Executor.
-          try {
-            logError("Exception in task ID " + taskId, t)
+          logError("Exception in task ID " + taskId, t)
 
-            val serviceTime = System.currentTimeMillis() - taskStart
-            val metrics = attemptedTask.flatMap(t => t.metrics)
-            for (m <- metrics) {
-              m.executorRunTime = serviceTime
-              m.jvmGCTime = gcTime - startGCTime
-            }
-            val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
-            execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+          val serviceTime = System.currentTimeMillis() - taskStart
+          val metrics = attemptedTask.flatMap(t => t.metrics)
+          for (m <- metrics) {
+            m.executorRunTime = serviceTime
+            m.jvmGCTime = gcTime - startGCTime
+          }
+          val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
+          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
-            // Don't forcibly exit unless the exception was inherently fatal, to avoid
-            // stopping other tasks unnecessarily.
-            if (Utils.isFatalError(t)) {
-              ExecutorUncaughtExceptionHandler.uncaughtException(t)
-            }
-          } catch {
-            case t2: Throwable =>
-              ExecutorUncaughtExceptionHandler.uncaughtException(t2)
+          // Don't forcibly exit unless the exception was inherently fatal, to avoid
+          // stopping other tasks unnecessarily.
+          if (Utils.isFatalError(t)) {
+            ExecutorUncaughtExceptionHandler.uncaughtException(t)
           }
         }
       } finally {
