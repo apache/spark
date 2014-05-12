@@ -22,11 +22,7 @@
 echoerr() { echo "$@" 1>&2; }
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
-if [ $MESOS = "1" ]; then
-  export MESOS_NATIVE_LIBRARY=/usr/local/lib/libmesos.so
-  export MASTER=zk://kafka01.chi.shopify.com:2181/mesos
-  export SPARK_EXECUTOR_URI=http://pack.chi.shopify.com/packages/Shopify/spark/f2c3b1c8cbbfde10be0db6ac0977232c66c3e63e.tar.gz
-else
+if [ -z "$SPARK_ON_MESOS" ]; then
   if [[ -z "$MASTER" ]]; then
     echoerr "Sparkify: Connecting to chicago spark cluster ..."
     export MASTER=spark://dn05.chi.shopify.com:7077
@@ -65,4 +61,8 @@ else
   if [[ $MASTER == 'local' ]]; then
     export SPARK_LOCAL_IP=127.0.0.1
   fi
+else
+  export MESOS_NATIVE_LIBRARY=/usr/local/lib/libmesos.so
+  export MASTER=zk://kafka01.chi.shopify.com:2181/mesos
+  export SPARK_EXECUTOR_URI=http://pack.chi.shopify.com/packages/Shopify/spark/f2c3b1c8cbbfde10be0db6ac0977232c66c3e63e.tar.gz
 fi
