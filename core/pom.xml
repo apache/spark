@@ -140,6 +140,7 @@
     <dependency>
       <groupId>org.apache.mesos</groupId>
       <artifactId>mesos</artifactId>
+      <classifier>${mesos.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
@@ -322,7 +323,7 @@
         </configuration>
       </plugin>
     </plugins>
-    
+
     <resources>
       <resource>
         <directory>src/main/resources</directory>
