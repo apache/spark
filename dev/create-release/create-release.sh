@@ -52,14 +52,14 @@ if [[ ! "$@" =~ --package-only ]]; then
     -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
     -Dusername=$GIT_USERNAME -Dpassword=$GIT_PASSWORD \
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Pyarn -Phive -Pspark-ganglia-lgpl\
+    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl\
     -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
     --batch-mode release:prepare
 
   mvn -DskipTests \
     -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Pyarn -Phive -Pspark-ganglia-lgpl\
+    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl\
     release:perform
 
   cd ..
