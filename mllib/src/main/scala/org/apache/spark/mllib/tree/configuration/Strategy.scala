@@ -28,6 +28,8 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  * @param algo classification or regression
  * @param impurity criterion used for information gain calculation
  * @param maxDepth maximum depth of the tree
+ * @param numClassesForClassification number of classes for classification. Default value is 2
+ *                                    leads to binary classification
  * @param maxBins maximum number of bins used for splitting features
  * @param quantileCalculationStrategy algorithm for calculating quantiles
  * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
@@ -37,8 +39,6 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                zero-indexed.
  * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
  *                      128 MB.
- * @param numClassesForClassification number of classes for classification. Default value is 2
- *                                    leads to binary classification
  *
  */
 @Experimental
@@ -46,11 +46,11 @@ class Strategy (
     val algo: Algo,
     val impurity: Impurity,
     val maxDepth: Int,
+    val numClassesForClassification: Int = 2,
     val maxBins: Int = 100,
     val quantileCalculationStrategy: QuantileStrategy = Sort,
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-    val maxMemoryInMB: Int = 128,
-    val numClassesForClassification: Int = 2) extends Serializable {
+    val maxMemoryInMB: Int = 128) extends Serializable {
 
   require(numClassesForClassification >= 2)
   val isMultiClassification = numClassesForClassification > 2

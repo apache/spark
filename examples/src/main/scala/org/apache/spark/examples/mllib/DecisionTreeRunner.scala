@@ -49,6 +49,7 @@ object DecisionTreeRunner {
   case class Params(
       input: String = null,
       algo: Algo = Classification,
+      numClasses: Int = 2,
       maxDepth: Int = 5,
       impurity: ImpurityType = Gini,
       maxBins: Int = 100)
@@ -68,6 +69,9 @@ object DecisionTreeRunner {
       opt[Int]("maxDepth")
         .text(s"max depth of the tree, default: ${defaultParams.maxDepth}")
         .action((x, c) => c.copy(maxDepth = x))
+      opt[Int]("numClasses")
+        .text(s"number of classes for classification, default: ${defaultParams.numClasses}")
+        .action((x, c) => c.copy(numClasses = x))
       opt[Int]("maxBins")
         .text(s"max number of bins, default: ${defaultParams.maxBins}")
         .action((x, c) => c.copy(maxBins = x))
@@ -139,12 +143,8 @@ object DecisionTreeRunner {
    */
   private def accuracyScore(
       model: DecisionTreeModel,
-      data: RDD[LabeledPoint],
-      threshold: Double = 0.5): Double = {
-    def predictedValue(features: Vector): Double = {
-      if (model.predict(features) < threshold) 0.0 else 1.0
-    }
-    val correctCount = data.filter(y => predictedValue(y.features) == y.label).count()
+      data: RDD[LabeledPoint]): Double = {
+    val correctCount = data.filter(y => model.predict(y.features) == y.label).count()
     val count = data.count()
     correctCount.toDouble / count
   }

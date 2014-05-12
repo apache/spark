@@ -232,17 +232,41 @@ object DecisionTree extends Serializable with Logging {
    * @return a DecisionTreeModel that can be used for prediction
    */
   def train(
-      input: RDD[LabeledPoint],
-      algo: Algo,
-      impurity: Impurity,
-      maxDepth: Int): DecisionTreeModel = {
+             input: RDD[LabeledPoint],
+             algo: Algo,
+             impurity: Impurity,
+             maxDepth: Int): DecisionTreeModel = {
     val strategy = new Strategy(algo,impurity,maxDepth)
     // Converting from standard instance format to weighted input format for tree training
     val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
     new DecisionTree(strategy).train(weightedInput: RDD[WeightedLabeledPoint])
   }
 
-  // TODO: Add multiclass classification support
+  /**
+   * Method to train a decision tree model where the instances are represented as an RDD of
+   * (label, features) pairs. The method supports binary classification and regression. For the
+   * binary classification, the label for each instance should either be 0 or 1 to denote the two
+   * classes.
+   *
+   * @param input input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as
+   *              training data
+   * @param algo algorithm, classification or regression
+   * @param impurity impurity criterion used for information gain calculation
+   * @param maxDepth maxDepth maximum depth of the tree
+   * @param numClasses number of classes for classification
+   * @return a DecisionTreeModel that can be used for prediction
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int,
+      numClasses: Int): DecisionTreeModel = {
+    val strategy = new Strategy(algo,impurity,maxDepth,numClasses)
+    // Converting from standard instance format to weighted input format for tree training
+    val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
+    new DecisionTree(strategy).train(weightedInput: RDD[WeightedLabeledPoint])
+  }
 
   // TODO: Add sample weight support
 
@@ -258,6 +282,7 @@ object DecisionTree extends Serializable with Logging {
    * @param algo classification or regression
    * @param impurity criterion used for information gain calculation
    * @param maxDepth  maximum depth of the tree
+   * @param numClasses number of classes for classification
    * @param maxBins maximum number of bins used for splitting features
    * @param quantileCalculationStrategy  algorithm for calculating quantiles
    * @param categoricalFeaturesInfo A map storing information about the categorical variables and
@@ -272,11 +297,12 @@ object DecisionTree extends Serializable with Logging {
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
+      numClasses: Int,
       maxBins: Int,
       quantileCalculationStrategy: QuantileStrategy,
       categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeModel = {
-    val strategy = new Strategy(algo, impurity, maxDepth, maxBins, quantileCalculationStrategy,
-      categoricalFeaturesInfo)
+    val strategy = new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
+      quantileCalculationStrategy, categoricalFeaturesInfo)
     // Converting from standard instance format to weighted input format for tree training
     val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
     new DecisionTree(strategy).train(weightedInput: RDD[WeightedLabeledPoint])
@@ -737,10 +763,26 @@ object DecisionTree extends Serializable with Logging {
             }
           }
 
-          //TODO: Make multiclass modification here
-          val predict = (leftCounts(1) + rightCounts(1)) / (leftTotalCount + rightTotalCount)
+          val totalCount = leftTotalCount + rightTotalCount
 
-          new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict)
+          // Sum of count for each label
+          val leftRightCounts: Array[Double]
+            = leftCounts.zip(rightCounts)
+              .map{case (leftCount, rightCount) => leftCount + rightCount}
+
+          def indexOfLargest(array: Seq[Double]): Int = {
+            val result = array.foldLeft(-1,Double.MinValue,0) {
+              case ((maxIndex, maxValue, currentIndex), currentValue) =>
+                if(currentValue > maxValue) (currentIndex,currentValue,currentIndex+1)
+                else (maxIndex,maxValue,currentIndex+1)
+            }
+            if (result._1 < 0) result._1 else 0
+          }
+
+          val predict = indexOfLargest(leftRightCounts)
+          val prob = leftRightCounts(predict) / totalCount
+
+          new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict, prob)
         case Regression =>
           val leftCount = leftNodeAgg(featureIndex)(splitIndex)(0)
           val leftSum = leftNodeAgg(featureIndex)(splitIndex)(1)
@@ -793,8 +835,9 @@ object DecisionTree extends Serializable with Logging {
     /**
      * Extracts left and right split aggregates.
      * @param binData Array[Double] of size 2*numFeatures*numSplits
-     * @return (leftNodeAgg, rightNodeAgg) tuple of type (Array[Double],
-     *         Array[Double]) where each array is of size(numFeature,2*(numSplits-1))
+     * @return (leftNodeAgg, rightNodeAgg) tuple of type (Array[Array[Array[Double\]\]\],
+     *         Array[Array[Array[Double\]\]\]) where each array is of size(numFeature,
+     *         (numBins - 1), numClasses)
      */
     def extractLeftRightNodeAggregates(
         binData: Array[Double]): (Array[Array[Array[Double]]], Array[Array[Array[Double]]]) = {
