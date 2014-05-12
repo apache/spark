@@ -331,8 +331,10 @@ abstract class RDD[T: ClassTag](
       /** Distributes elements evenly across output partitions, starting from a random partition. */
       def distributePartition(index: Int, items: Iterator[T]): Iterator[(Int, T)] = {
         var position = (new Random(index)).nextInt(numPartitions)
-        items.map{ t =>
-          position = position + 1 % numPartitions
+        items.map { t =>
+          // Note that the hash code of the key will just be the key itself. The HashPartitioner 
+          // will mod it with the number of total partitions.
+          position = position + 1
           (position, t)
         }
       }

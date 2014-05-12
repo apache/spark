@@ -219,7 +219,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     def testSplitPartitions(input: Seq[Int], initialPartitions: Int, finalPartitions: Int) {
       val data = sc.parallelize(input, initialPartitions)
       val repartitioned = data.repartition(finalPartitions)
-      assert(repartitioned.partitions.size == finalPartitions)
+      assert(repartitioned.partitions.size === finalPartitions)
       val partitions = repartitioned.glom().collect()
       // assert all elements are present
       assert(repartitioned.collect().sortWith(_ > _).toSeq === input.toSeq.sortWith(_ > _).toSeq)
