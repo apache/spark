@@ -214,7 +214,7 @@ object DecisionTree extends Serializable with Logging {
   */
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
     // Converting from standard instance format to weighted input format for tree training
-    val weightedInput = input.map(x => WeightedLabeledPoint(x.label,x.features))
+    val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
     new DecisionTree(strategy).train(weightedInput: RDD[WeightedLabeledPoint])
   }
 
@@ -238,7 +238,7 @@ object DecisionTree extends Serializable with Logging {
       maxDepth: Int): DecisionTreeModel = {
     val strategy = new Strategy(algo,impurity,maxDepth)
     // Converting from standard instance format to weighted input format for tree training
-    val weightedInput = input.map(x => WeightedLabeledPoint(x.label,x.features))
+    val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
     new DecisionTree(strategy).train(weightedInput: RDD[WeightedLabeledPoint])
   }
 
@@ -278,7 +278,7 @@ object DecisionTree extends Serializable with Logging {
     val strategy = new Strategy(algo, impurity, maxDepth, maxBins, quantileCalculationStrategy,
       categoricalFeaturesInfo)
     // Converting from standard instance format to weighted input format for tree training
-    val weightedInput = input.map(x => WeightedLabeledPoint(x.label,x.features))
+    val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
     new DecisionTree(strategy).train(weightedInput: RDD[WeightedLabeledPoint])
   }
 
