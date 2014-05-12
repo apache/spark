@@ -20,7 +20,7 @@ package org.apache.spark.graphx.impl
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
+import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 
 /**
  * A collection of edges stored in columnar format, along with any vertex attributes referenced. The
@@ -42,12 +42,12 @@ import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
 private[graphx]
 class EdgePartition[
     @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag, VD: ClassTag](
-    @transient val srcIds: Array[VertexId],
-    @transient val dstIds: Array[VertexId],
-    @transient val data: Array[ED],
-    @transient val index: PrimitiveKeyOpenHashMap[VertexId, Int],
-    @transient val vertices: VertexPartition[VD],
-    @transient val activeSet: Option[VertexSet] = None
+    val srcIds: Array[VertexId] = null,
+    val dstIds: Array[VertexId] = null,
+    val data: Array[ED] = null,
+    val index: GraphXPrimitiveKeyOpenHashMap[VertexId, Int] = null,
+    val vertices: VertexPartition[VD] = null,
+    val activeSet: Option[VertexSet] = None
   ) extends Serializable {
 
   /** Return a new `EdgePartition` with the specified edge data. */
