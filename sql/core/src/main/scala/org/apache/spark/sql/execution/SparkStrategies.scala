@@ -34,22 +34,36 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object HashJoin extends Strategy with PredicateHelper {
     var broadcastTables: Seq[String] =
-      sparkContext.conf.get("spark.sql.hints.broadcastTables", "").split(",")
+      sparkContext.conf.get("spark.sql.hints.broadcastTables", "").split(",").toBuffer
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
-      case HashFilteredJoin(Inner, leftKeys, rightKeys, condition,
-          left, PhysicalOperation(_, _, b: BaseRelation)) if broadcastTables.contains(b.tableName)=>
+      case HashFilteredJoin(
+            Inner,
+            leftKeys,
+            rightKeys,
+            condition,
+            left,
+            right @ PhysicalOperation(_, _, b: BaseRelation))
+          if broadcastTables.contains(b.tableName)=>
+
         val hashJoin =
           execution.BroadcastHashJoin(
-            leftKeys, rightKeys, BuildRight, planLater(left), planLater(b))(sparkContext)
+            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))(sparkContext)
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
-      case HashFilteredJoin(Inner, leftKeys, rightKeys, condition,
-          PhysicalOperation(_, _, b: BaseRelation), right) if broadcastTables.contains(b.tableName)=>
+      case HashFilteredJoin(
+             Inner,
+             leftKeys,
+             rightKeys,
+             condition,
+             left @ PhysicalOperation(_, _, b: BaseRelation),
+             right)
+          if broadcastTables.contains(b.tableName) =>
+
         val hashJoin =
           execution.BroadcastHashJoin(
-            leftKeys, rightKeys, BuildLeft, planLater(b), planLater(right))(sparkContext)
+            leftKeys, rightKeys, BuildLeft, planLater(left), planLater(right))(sparkContext)
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
       case HashFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
