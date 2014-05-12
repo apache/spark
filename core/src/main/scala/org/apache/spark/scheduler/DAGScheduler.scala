@@ -854,6 +854,8 @@ class DAGScheduler(
             if (removeStageBarrier && stage.shuffleDep.isDefined) {
               logInfo("Register output progressively: Map task "+smt.partitionId+" ---lirui")
               mapOutputTracker.registerMapOutput(stage.shuffleDep.get.shuffleId, smt.partitionId, status)
+              //need to increment the mapoutputtrackermaster's epoch so that it will clear the cache
+              mapOutputTracker.incrementEpoch()
             }
             if (runningStages.contains(stage) && pendingTasks(stage).isEmpty) {
               markStageAsFinished(stage)
@@ -911,9 +913,10 @@ class DAGScheduler(
                       backend.freeCoreCount.get() + " cores are free. " + waitingStages.size + " stages are waiting to be submitted. ---lirui")
                     //TODO: find a waiting stage that depends on the current "stage"
                     val preStartedStage = waitingStages.head
-                    val shuffleId = stage.shuffleDep.get.shuffleId
-                    logInfo("Register partial map outputs for shuffleId " + shuffleId + " ---lirui")
-                    mapOutputTracker.registerMapOutputs(shuffleId, stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray)
+                    //map outputs should have been registered progressively
+//                    val shuffleId = stage.shuffleDep.get.shuffleId
+//                    logInfo("Register partial map outputs for shuffleId " + shuffleId + " ---lirui")
+//                    mapOutputTracker.registerMapOutputs(shuffleId, stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray)
                     logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
                     waitingStages -= preStartedStage
                     runningStages += preStartedStage

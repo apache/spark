@@ -160,7 +160,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def stop() { }
 
   //check if the map output for a shuffle is partial
-  def partialOutputForShuffle(shuffleId: Int) = {
+  private def partialOutputForShuffle(shuffleId: Int) = {
     if (mapStatuses.get(shuffleId).isDefined) {
       mapStatuses.get(shuffleId).get.exists(_ == null)
     } else {
@@ -170,9 +170,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   //get map statuses for a shuffle
   def getMapStatusesForShuffle(shuffleId: Int, reduceId: Int): Array[MapStatus]={
-    //we remove the previously fetched outputs if it's partial
-    if (partialOutputForShuffle(shuffleId)) {
-      mapStatuses -= shuffleId
+    mapStatuses.synchronized {
+      //we remove the previously fetched outputs if it's partial
+      if (partialOutputForShuffle(shuffleId) && !this.isInstanceOf[MapOutputTrackerMaster]) {
+        logInfo("We've cached partial map output statuses, will clear the cache. ---lirui")
+        mapStatuses -= shuffleId
+      }
     }
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
