@@ -328,11 +328,22 @@ abstract class RDD[T: ClassTag](
   def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[T] = null)
       : RDD[T] = {
     if (shuffle) {
+      /** Distributes elements evenly across output partitions, starting from a random partition. */
+      def distributePartition(index: Int, items: Iterator[T]): Iterator[(Int, T)] = {
+        var position = (new Random(index)).nextInt(numPartitions)
+        items.map { t =>
+          // Note that the hash code of the key will just be the key itself. The HashPartitioner 
+          // will mod it with the number of total partitions.
+          position = position + 1
+          (position, t)
+        }
+      }
+
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[T, Null, (T, Null)](map(x => (x, null)),
+        new ShuffledRDD[Int, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
-        numPartitions).keys
+        numPartitions).values
     } else {
       new CoalescedRDD(this, numPartitions)
     }
