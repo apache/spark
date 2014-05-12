@@ -737,6 +737,7 @@ object DecisionTree extends Serializable with Logging {
               var classIndex = 0
               while (classIndex < numClasses) {
                 rootNodeCounts(classIndex) = leftCounts(classIndex) + rightCounts(classIndex)
+                classIndex += 1
               }
               strategy.impurity.calculate(rootNodeCounts, leftTotalCount + rightTotalCount)
             }
@@ -1054,7 +1055,7 @@ object DecisionTree extends Serializable with Logging {
       val binsForNode: Array[Double] = getBinDataForNode(node)
       logDebug("nodeImpurityIndex = " + nodeImpurityIndex)
       val parentNodeImpurity = parentImpurities(nodeImpurityIndex)
-      logDebug("node impurity = " + parentNodeImpurity)
+      logDebug("parent node impurity = " + parentNodeImpurity)
       bestSplits(node) = binsToBestSplit(binsForNode, parentNodeImpurity)
       node += 1
     }
