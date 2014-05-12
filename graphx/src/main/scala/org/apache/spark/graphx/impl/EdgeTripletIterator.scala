@@ -20,7 +20,7 @@ package org.apache.spark.graphx.impl
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
 
 /**
  * The Iterator type returned when constructing edge triplets. This could be an anonymous class in
