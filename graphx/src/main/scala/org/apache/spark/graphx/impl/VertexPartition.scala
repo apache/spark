@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.util.collection.BitSet
 
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
 
 private[graphx] object VertexPartition {
   /** Construct a `VertexPartition` from the given vertices. */
