@@ -236,7 +236,7 @@ object DecisionTree extends Serializable with Logging {
              algo: Algo,
              impurity: Impurity,
              maxDepth: Int): DecisionTreeModel = {
-    val strategy = new Strategy(algo,impurity,maxDepth)
+    val strategy = new Strategy(algo, impurity, maxDepth)
     // Converting from standard instance format to weighted input format for tree training
     val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
     new DecisionTree(strategy).train(weightedInput: RDD[WeightedLabeledPoint])
@@ -253,7 +253,7 @@ object DecisionTree extends Serializable with Logging {
    * @param algo algorithm, classification or regression
    * @param impurity impurity criterion used for information gain calculation
    * @param maxDepth maxDepth maximum depth of the tree
-   * @param numClasses number of classes for classification
+   * @param numClassesForClassification number of classes for classification. Default value of 2.
    * @return a DecisionTreeModel that can be used for prediction
    */
   def train(
@@ -261,8 +261,8 @@ object DecisionTree extends Serializable with Logging {
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
-      numClasses: Int): DecisionTreeModel = {
-    val strategy = new Strategy(algo,impurity,maxDepth,numClasses)
+      numClassesForClassification: Int): DecisionTreeModel = {
+    val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification)
     // Converting from standard instance format to weighted input format for tree training
     val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
     new DecisionTree(strategy).train(weightedInput: RDD[WeightedLabeledPoint])
@@ -282,7 +282,7 @@ object DecisionTree extends Serializable with Logging {
    * @param algo classification or regression
    * @param impurity criterion used for information gain calculation
    * @param maxDepth  maximum depth of the tree
-   * @param numClasses number of classes for classification
+   * @param numClassesForClassification number of classes for classification. Default value of 2.
    * @param maxBins maximum number of bins used for splitting features
    * @param quantileCalculationStrategy  algorithm for calculating quantiles
    * @param categoricalFeaturesInfo A map storing information about the categorical variables and
@@ -297,11 +297,11 @@ object DecisionTree extends Serializable with Logging {
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
-      numClasses: Int,
+      numClassesForClassification: Int,
       maxBins: Int,
       quantileCalculationStrategy: QuantileStrategy,
       categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeModel = {
-    val strategy = new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
+    val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo)
     // Converting from standard instance format to weighted input format for tree training
     val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
@@ -851,10 +851,8 @@ object DecisionTree extends Serializable with Logging {
           if (strategy.isMultiClassification) {
             var featureIndex = 0
             while (featureIndex < numFeatures){
-              val numCategories = strategy.categoricalFeaturesInfo(featureIndex)
-              val maxSplits = math.pow(2, numCategories) - 1
               var splitIndex = 0
-              while (splitIndex < maxSplits) {
+              while (splitIndex < numBins - 1) {
                 var classIndex = 0
                 while (classIndex < numClasses) {
                   // shift for this featureIndex

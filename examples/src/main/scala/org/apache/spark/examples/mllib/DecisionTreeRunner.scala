@@ -49,7 +49,7 @@ object DecisionTreeRunner {
   case class Params(
       input: String = null,
       algo: Algo = Classification,
-      numClasses: Int = 2,
+      numClassesForClassification: Int = 2,
       maxDepth: Int = 5,
       impurity: ImpurityType = Gini,
       maxBins: Int = 100)
@@ -69,9 +69,10 @@ object DecisionTreeRunner {
       opt[Int]("maxDepth")
         .text(s"max depth of the tree, default: ${defaultParams.maxDepth}")
         .action((x, c) => c.copy(maxDepth = x))
-      opt[Int]("numClasses")
-        .text(s"number of classes for classification, default: ${defaultParams.numClasses}")
-        .action((x, c) => c.copy(numClasses = x))
+      opt[Int]("numClassesForClassification")
+        .text(s"number of classes for classification, "
+          + s"default: ${defaultParams.numClassesForClassification}")
+        .action((x, c) => c.copy(numClassesForClassification = x))
       opt[Int]("maxBins")
         .text(s"max number of bins, default: ${defaultParams.maxBins}")
         .action((x, c) => c.copy(maxBins = x))
@@ -122,7 +123,13 @@ object DecisionTreeRunner {
       case Variance => impurity.Variance
     }
 
-    val strategy = new Strategy(params.algo, impurityCalculator, params.maxDepth, params.maxBins)
+    val strategy
+      = new Strategy(
+            algo = params.algo,
+            impurity = impurityCalculator,
+            maxDepth = params.maxDepth,
+            maxBins = params.maxBins,
+            numClassesForClassification = params.numClassesForClassification)
     val model = DecisionTree.train(training, strategy)
 
     if (params.algo == Classification) {
