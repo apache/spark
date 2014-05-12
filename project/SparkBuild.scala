@@ -572,7 +572,7 @@ object SparkBuild extends Build {
   lazy val flumeSettings = sharedSettings ++ Seq(
     name := "spark-streaming-flume",
     previousArtifact := sparkPreviousArtifact("spark-streaming-flume"),
-    libraryDependencies += "org.apache.flume" % "flume-ng-sdk" % "1.4.0" % excludeAll(excludeIONetty, excludeThrift)
+    libraryDependencies += "org.apache.flume" % "flume-ng-sdk" % "1.4.0" excludeAll(excludeIONetty, excludeThrift)
   )
 
   lazy val zeromqSettings = sharedSettings ++ Seq(
