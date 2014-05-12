@@ -29,7 +29,7 @@ import scala.reflect._
  * Under the hood, it uses our OpenHashSet implementation.
  */
 private[graphx]
-class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
+class GraphXPrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
                               @specialized(Long, Int, Double) V: ClassTag](
     val keySet: OpenHashSet[K], var _values: Array[V])
   extends Iterable[(K, V)]
