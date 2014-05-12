@@ -567,11 +567,21 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   // issues with serialization of Ordering in the test
   ignore("sortByKey with explicit ordering") {
-    val data = sc.parallelize(Seq("Bob|Smith|50", "Jane|Smith|40", "Thomas|Williams|30", "Karen|Williams|60"))
+    val data = sc.parallelize(Seq("Bob|Smith|50",
+                                  "Jane|Smith|40",
+                                  "Thomas|Williams|30",
+                                  "Karen|Williams|60"))
 
-    val ageOrdered = Array("Thomas|Williams|30", "Jane|Smith|40", "Bob|Smith|50", "Karen|Williams|60")
+    val ageOrdered = Array("Thomas|Williams|30",
+                           "Jane|Smith|40",
+                           "Bob|Smith|50",
+                           "Karen|Williams|60")
+
     // last name, then first name
-    val nameOrdered = Array("Bob|Smith|50", "Jane|Smith|40", "Karen|Williams|60", "Thomas|Williams|30")
+    val nameOrdered = Array("Bob|Smith|50",
+                            "Jane|Smith|40",
+                            "Karen|Williams|60",
+                            "Thomas|Williams|30")
 
     def parse(s: String): Person = {
       val split = s.split("\\|")
