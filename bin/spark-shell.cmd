@@ -17,7 +17,6 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-rem Find the path of sbin
-set BIN=%~dp0..\bin\
+set SPARK_HOME=%~dp0..
 
-cmd /V /E /C %BIN%spark-class2.cmd org.apache.spark.repl.Main %*
+cmd /V /E /C %SPARK_HOME%\bin\spark-submit.cmd spark-internal %* --class org.apache.spark.repl.Main
