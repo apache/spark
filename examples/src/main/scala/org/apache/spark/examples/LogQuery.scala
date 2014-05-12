@@ -17,11 +17,13 @@
 
 package org.apache.spark.examples
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 
 /**
  * Executes a roll up-style query against Apache logs.
+ *  
+ * Usage: LogQuery [logFile]
  */
 object LogQuery {
   val exampleApacheLogs = List(
@@ -40,16 +42,12 @@ object LogQuery {
   )
 
   def main(args: Array[String]) {
-    if (args.length == 0) {
-      System.err.println("Usage: LogQuery <master> [logFile]")
-      System.exit(1)
-    }
 
-    val sc = new SparkContext(args(0), "Log Query",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
+    val sparkConf = new SparkConf().setAppName("Log Query")
+    val sc = new SparkContext(sparkConf)
 
     val dataSet =
-      if (args.length == 2) sc.textFile(args(1)) else sc.parallelize(exampleApacheLogs)
+      if (args.length == 1) sc.textFile(args(0)) else sc.parallelize(exampleApacheLogs)
     // scalastyle:off
     val apacheLogRegex =
       """^([\d.]+) (\S+) (\S+) \[([\w\d:/]+\s[+\-]\d{4})\] "(.+?)" (\d{3}) ([\d\-]+) "([^"]+)" "([^"]+)".*""".r

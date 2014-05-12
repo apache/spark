@@ -17,7 +17,7 @@
 
 package org.apache.spark.examples.sql
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SQLContext
 
 // One method for defining the schema of an RDD is to make a case class with the desired column
@@ -26,7 +26,8 @@ case class Record(key: Int, value: String)
 
 object RDDRelation {
   def main(args: Array[String]) {
-    val sc = new SparkContext("local", "RDDRelation")
+    val sparkConf = new SparkConf().setAppName("RDDRelation")
+    val sc = new SparkContext(sparkConf)
     val sqlContext = new SQLContext(sc)
 
     // Importing the SQL context gives access to all the SQL functions and implicit conversions.

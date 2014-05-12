@@ -19,14 +19,16 @@ package org.apache.spark.sql
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
+import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.api.java.JavaRDD
 import java.util.{Map => JMap}
 
@@ -177,6 +179,15 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
 
   /**
+   * Limits the results by the given expressions.
+   * {{{
+   *   schemaRDD.limit(10)
+   * }}}
+   */
+  def limit(limitExpr: Expression): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+
+  /**
    * Performs a grouping followed by an aggregation.
    *
    * {{{
@@ -296,6 +307,13 @@ class SchemaRDD(
    */
   def toSchemaRDD = this
 
+  /**
+   * Returns this RDD as a JavaSchemaRDD.
+   *
+   * @group schema
+   */
+  def toJavaSchemaRDD: JavaSchemaRDD = new JavaSchemaRDD(sqlContext, logicalPlan)
+
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val fieldNames: Seq[String] = this.queryExecution.analyzed.output.map(_.name)
     this.mapPartitions { iter =>
@@ -314,4 +332,60 @@ class SchemaRDD(
       }
     }
   }
+
+  /**
+   * Creates SchemaRDD by applying own schema to derived RDD. Typically used to wrap return value
+   * of base RDD functions that do not change schema.
+   *
+   * @param rdd RDD derived from this one and has same schema
+   *
+   * @group schema
+   */
+  private def applySchema(rdd: RDD[Row]): SchemaRDD = {
+    new SchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(logicalPlan.output, rdd)))
+  }
+
+  // =======================================================================
+  // Base RDD functions that do NOT change schema
+  // =======================================================================
+
+  // Transformations (return a new RDD)
+
+  override def coalesce(numPartitions: Int, shuffle: Boolean = false)
+                       (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.coalesce(numPartitions, shuffle)(ord))
+
+  override def distinct(): SchemaRDD =
+    applySchema(super.distinct())
+
+  override def distinct(numPartitions: Int)
+                       (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.distinct(numPartitions)(ord))
+
+  override def filter(f: Row => Boolean): SchemaRDD =
+    applySchema(super.filter(f))
+
+  override def intersection(other: RDD[Row]): SchemaRDD =
+    applySchema(super.intersection(other))
+
+  override def intersection(other: RDD[Row], partitioner: Partitioner)
+                           (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.intersection(other, partitioner)(ord))
+
+  override def intersection(other: RDD[Row], numPartitions: Int): SchemaRDD =
+    applySchema(super.intersection(other, numPartitions))
+
+  override def repartition(numPartitions: Int)
+                          (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.repartition(numPartitions)(ord))
+
+  override def subtract(other: RDD[Row]): SchemaRDD =
+    applySchema(super.subtract(other))
+
+  override def subtract(other: RDD[Row], numPartitions: Int): SchemaRDD =
+    applySchema(super.subtract(other, numPartitions))
+
+  override def subtract(other: RDD[Row], p: Partitioner)
+                       (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.subtract(other, p)(ord))
 }

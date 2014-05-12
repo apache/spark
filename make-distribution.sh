@@ -40,6 +40,8 @@
 #
 
 set -o pipefail
+set -e
+
 # Figure out where the Spark framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
@@ -189,7 +191,7 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
 
   pushd $TMPD > /dev/null
-  echo "Fetchting tachyon tgz"
+  echo "Fetching tachyon tgz"
   wget "$TACHYON_URL"
 
   tar xf "tachyon-${TACHYON_VERSION}-bin.tar.gz"

@@ -22,6 +22,8 @@ import java.io.{BufferedInputStream, BufferedOutputStream}
 import java.net.{URL, URLConnection, URI}
 import java.util.concurrent.TimeUnit
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{HttpServer, Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
@@ -34,7 +36,8 @@ import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedH
  * (through a HTTP server running at the driver) and stored in the BlockManager of the
  * executor to speed up future accesses.
  */
-private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+private[spark] class HttpBroadcast[T: ClassTag](
+    @transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
   def getValue = value_
@@ -173,7 +176,7 @@ private[spark] object HttpBroadcast extends Logging {
     files += file.getAbsolutePath
   }
 
-  def read[T](id: Long): T = {
+  def read[T: ClassTag](id: Long): T = {
     logDebug("broadcast read server: " +  serverUri + " id: broadcast-" + id)
     val url = serverUri + "/" + BroadcastBlockId(id).name
 
