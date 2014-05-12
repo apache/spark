@@ -25,7 +25,7 @@ import org.apache.spark.Logging
 import org.apache.spark.util.collection.BitSet
 
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
+import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 
 /**
  * An class containing additional operations for subclasses of VertexPartitionBase that provide
@@ -224,7 +224,7 @@ private[graphx] abstract class VertexPartitionBaseOps
    * Construct a new VertexPartition whose index contains only the vertices in the mask.
    */
   def reindex(): Self[VD] = {
-    val hashMap = new PrimitiveKeyOpenHashMap[VertexId, VD]
+    val hashMap = new GraphXPrimitiveKeyOpenHashMap[VertexId, VD]
     val arbitraryMerge = (a: VD, b: VD) => a
     for ((k, v) <- self.iterator) {
       hashMap.setMerge(k, v, arbitraryMerge)
