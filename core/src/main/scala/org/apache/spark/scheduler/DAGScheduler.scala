@@ -907,10 +907,13 @@ class DAGScheduler(
                 //TODO: need a better way to get the number of free CPUs
                 if (taskScheduler.isInstanceOf[TaskSchedulerImpl] && taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.isInstanceOf[CoarseGrainedSchedulerBackend]) {
                   val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.asInstanceOf[CoarseGrainedSchedulerBackend]
-                  //there are free cores and waiting stages
-                  if (backend.freeCoreCount.get() > 0 && waitingStages.size > 0 && stage.shuffleDep.isDefined) {
-                    logInfo("We have " + backend.totalCoreCount.get() + " CPUs. " + pendingTasks(stage).size + " tasks are running/pending. " +
-                      backend.freeCoreCount.get() + " cores are free. " + waitingStages.size + " stages are waiting to be submitted. ---lirui")
+                  //check CPU usage
+                  val totalCores = backend.totalCoreCount.get()
+                  val waitingStageNum = waitingStages.size
+                  val pendingTaskNum = (for(taskSet <- pendingTasks.values) yield taskSet.size).sum
+                  if (pendingTaskNum < totalCores && waitingStageNum > 0 && stage.shuffleDep.isDefined) {
+                    logInfo("We have " + totalCores + " CPUs. " + pendingTaskNum + " tasks are running/pending. " +
+                      waitingStageNum + " stages are waiting to be submitted. ---lirui")
                     //TODO: find a waiting stage that depends on the current "stage"
                     val preStartedStage = waitingStages.head
                     //map outputs should have been registered progressively

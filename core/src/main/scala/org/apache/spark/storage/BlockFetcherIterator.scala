@@ -135,6 +135,7 @@ object BlockFetcherIterator {
             _remoteBytesRead += networkSize
             logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
           }
+          logInfo("Got "+blockMessageArray.length+" remote blocks in "+Utils.getUsedTimeMs(startTime)+" ---lirui")
         }
         case None => {
           logError("Could not get block(s) from " + cmId)

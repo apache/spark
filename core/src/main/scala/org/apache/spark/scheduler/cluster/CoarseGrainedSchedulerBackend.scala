@@ -46,8 +46,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
-  //Also track total free cores
-  var freeCoreCount = new AtomicInteger(0)
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
 
@@ -84,7 +82,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
-          freeCoreCount.addAndGet(cores)
           makeOffers()
         }
 
@@ -93,7 +90,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         if (TaskState.isFinished(state)) {
           if (executorActor.contains(executorId)) {
             freeCores(executorId) += scheduler.CPUS_PER_TASK
-            freeCoreCount.addAndGet(scheduler.CPUS_PER_TASK)
             makeOffers(executorId)
           } else {
             // Ignoring the update since we don't know about the executor.
@@ -145,7 +141,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
         freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
-        freeCoreCount.addAndGet(-scheduler.CPUS_PER_TASK)
         executorActor(task.executorId) ! LaunchTask(task)
       }
     }
@@ -162,7 +157,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         totalCores -= executorId
         freeCores -= executorId
         totalCoreCount.addAndGet(-numCores)
-        freeCoreCount.addAndGet(-numCores)
         scheduler.executorLost(executorId, SlaveLost(reason))
       }
     }
