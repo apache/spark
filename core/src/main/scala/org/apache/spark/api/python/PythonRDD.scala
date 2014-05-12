@@ -401,23 +401,21 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
       val1
     } else {
       // This happens on the master, where we pass the updates to Python through a socket
-      if (val2.size > 0) {
-        val socket = new Socket(serverHost, serverPort)
-        val in = socket.getInputStream
-        val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
-        out.writeInt(val2.size)
-        for (array <- val2) {
-          out.writeInt(array.length)
-          out.write(array)
-        }
-        out.flush()
-        // Wait for a byte from the Python side as an acknowledgement
-        val byteRead = in.read()
-        if (byteRead == -1) {
-          throw new SparkException("EOF reached before Python server acknowledged")
-        }
-        socket.close()
+      val socket = new Socket(serverHost, serverPort)
+      val in = socket.getInputStream
+      val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
+      out.writeInt(val2.size)
+      for (array <- val2) {
+        out.writeInt(array.length)
+        out.write(array)
       }
+      out.flush()
+      // Wait for a byte from the Python side as an acknowledgement
+      val byteRead = in.read()
+      if (byteRead == -1) {
+        throw new SparkException("EOF reached before Python server acknowledged")
+      }
+      socket.close()
       null
     }
   }
