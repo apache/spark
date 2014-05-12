@@ -40,6 +40,7 @@ import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /**
@@ -786,7 +787,7 @@ private[spark] object Utils extends Logging {
     try {
       block
     } catch {
-      case t: Throwable => UncaughtExceptionHandler.uncaughtException(Thread.currentThread, t)
+      case t: Throwable => ExecutorUncaughtExceptionHandler.uncaughtException(t)
     }
   }
 
