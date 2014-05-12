@@ -25,7 +25,6 @@ import tachyon.client.TachyonFile
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.network.netty.ShuffleSender
 import org.apache.spark.util.Utils
 
 
@@ -137,7 +136,7 @@ private[spark] class TachyonBlockManager(
   private def addShutdownHook() {
     tachyonDirs.foreach(tachyonDir => Utils.registerShutdownDeleteDir(tachyonDir))
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark tachyon dirs") {
-      override def run() {
+      override def run(): Unit = Utils.logUncaughtExceptions {
         logDebug("Shutdown hook called")
         tachyonDirs.foreach { tachyonDir =>
           try {
@@ -145,8 +144,8 @@ private[spark] class TachyonBlockManager(
               Utils.deleteRecursively(tachyonDir, client)
             }
           } catch {
-            case t: Throwable =>
-              logError("Exception while deleting tachyon spark dir: " + tachyonDir, t)
+            case e: Exception =>
+              logError("Exception while deleting tachyon spark dir: " + tachyonDir, e)
           }
         }
       }

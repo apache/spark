@@ -31,6 +31,8 @@ import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage._
 import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock}
 
+import scala.reflect.ClassTag
+
 /**
  * A Spark serializer that uses the [[https://code.google.com/p/kryo/ Kryo serialization library]].
  *
@@ -95,7 +97,7 @@ private[spark]
 class KryoSerializationStream(kryo: Kryo, outStream: OutputStream) extends SerializationStream {
   val output = new KryoOutput(outStream)
 
-  def writeObject[T](t: T): SerializationStream = {
+  def writeObject[T: ClassTag](t: T): SerializationStream = {
     kryo.writeClassAndObject(output, t)
     this
   }
@@ -108,7 +110,7 @@ private[spark]
 class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends DeserializationStream {
   val input = new KryoInput(inStream)
 
-  def readObject[T](): T = {
+  def readObject[T: ClassTag](): T = {
     try {
       kryo.readClassAndObject(input).asInstanceOf[T]
     } catch {
@@ -131,18 +133,18 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
   lazy val output = ks.newKryoOutput()
   lazy val input = new KryoInput()
 
-  def serialize[T](t: T): ByteBuffer = {
+  def serialize[T: ClassTag](t: T): ByteBuffer = {
     output.clear()
     kryo.writeClassAndObject(output, t)
     ByteBuffer.wrap(output.toBytes)
   }
 
-  def deserialize[T](bytes: ByteBuffer): T = {
+  def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     input.setBuffer(bytes.array)
     kryo.readClassAndObject(input).asInstanceOf[T]
   }
 
-  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
+  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
     val oldClassLoader = kryo.getClassLoader
     kryo.setClassLoader(loader)
     input.setBuffer(bytes.array)

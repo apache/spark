@@ -24,7 +24,7 @@ import java.util.Collections
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import com.google.protobuf.ByteString
+import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
