@@ -31,6 +31,7 @@ import org.scalatest.FunSuite
 import org.apache.hadoop.io.Text
 
 import org.apache.spark.SparkContext
+import org.apache.spark.util.Utils
 
 /**
  * Tests the correctness of
@@ -67,6 +68,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
   test("Correctness of WholeTextFileRecordReader.") {
 
     val dir = Files.createTempDir()
+    dir.deleteOnExit()
     println(s"Local disk address is ${dir.toString}.")
 
     WholeTextFileRecordReaderSuite.files.foreach { case (filename, contents) =>
@@ -86,7 +88,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
         s"file $filename contents can not match.")
     }
 
-    dir.delete()
+    Utils.deleteRecursively(dir)
   }
 }
 
