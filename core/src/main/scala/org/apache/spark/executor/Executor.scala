@@ -74,28 +74,7 @@ private[spark] class Executor(
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
     // executor process to avoid surprising stalls.
-    Thread.setDefaultUncaughtExceptionHandler(
-      new Thread.UncaughtExceptionHandler {
-        override def uncaughtException(thread: Thread, exception: Throwable) {
-          try {
-            logError("Uncaught exception in thread " + thread, exception)
-
-            // We may have been called from a shutdown hook. If so, we must not call System.exit().
-            // (If we do, we will deadlock.)
-            if (!Utils.inShutdown()) {
-              if (exception.isInstanceOf[OutOfMemoryError]) {
-                System.exit(ExecutorExitCode.OOM)
-              } else {
-                System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
-              }
-            }
-          } catch {
-            case oom: OutOfMemoryError => Runtime.getRuntime.halt(ExecutorExitCode.OOM)
-            case t: Throwable => Runtime.getRuntime.halt(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
-          }
-        }
-      }
-    )
+    Thread.setDefaultUncaughtExceptionHandler(ExecutorUncaughtExceptionHandler)
   }
 
   val executorSource = new ExecutorSource(this, executorId)
@@ -259,6 +238,11 @@ private[spark] class Executor(
         }
 
         case t: Throwable => {
+          // Attempt to exit cleanly by informing the driver of our failure.
+          // If anything goes wrong (or this was a fatal exception), we will delegate to
+          // the default uncaught exception handler, which will terminate the Executor.
+          logError("Exception in task ID " + taskId, t)
+
           val serviceTime = System.currentTimeMillis() - taskStart
           val metrics = attemptedTask.flatMap(t => t.metrics)
           for (m <- metrics) {
@@ -268,10 +252,11 @@ private[spark] class Executor(
           val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
-          // TODO: Should we exit the whole executor here? On the one hand, the failed task may
-          // have left some weird state around depending on when the exception was thrown, but on
-          // the other hand, maybe we could detect that when future tasks fail and exit then.
-          logError("Exception in task ID " + taskId, t)
+          // Don't forcibly exit unless the exception was inherently fatal, to avoid
+          // stopping other tasks unnecessarily.
+          if (Utils.isFatalError(t)) {
+            ExecutorUncaughtExceptionHandler.uncaughtException(t)
+          }
         }
       } finally {
         // TODO: Unregister shuffle memory only for ResultTask
