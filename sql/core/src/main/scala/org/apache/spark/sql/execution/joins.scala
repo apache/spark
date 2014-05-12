@@ -181,7 +181,7 @@ case class BroadcastNestedLoopJoin(
                   // TODO: One bitset per partition instead of per row.
                   val broadcastedRow = broadcastedRelation.value(i)
                     if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
-                      matchedRows += buildRow(streamedRow)
+                      matchedRows += streamedRow
                       matched = true
                   }
                   i += 1
@@ -197,6 +197,8 @@ case class BroadcastNestedLoopJoin(
             val includedBroadcastTuples = new BitSet(broadcastedRelation.value.size)
             val joinedRow = new JoinedRow
 
+            val rightNull = Array.fill(right.output.size)(null)
+
             streamedIter.foreach {
               streamedRow =>
                 var i = 0
@@ -206,7 +208,7 @@ case class BroadcastNestedLoopJoin(
                   // TODO: One bitset per partition instead of per row.
                   val broadcastedRow = broadcastedRelation.value(i)
                   if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
-                    matchedRows += buildRow(streamedRow ++ broadcastedRow)
+                    matchedRows += joinedRow(streamedRow.copy, broadcastedRow)
                     matched = true
                     includedBroadcastTuples += i
                   }
@@ -214,7 +216,7 @@ case class BroadcastNestedLoopJoin(
                 }
 
                 if (!matched && (joinType == LeftOuter || joinType == FullOuter)) {
-                  matchedRows += buildRow(streamedRow ++ Array.fill(right.output.size)(null))
+                  matchedRows += joinedRow(streamedRow.copy, rightNull)
                 }
             }
             Iterator((matchedRows, includedBroadcastTuples))
