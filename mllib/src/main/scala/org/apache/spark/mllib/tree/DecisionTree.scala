@@ -242,6 +242,9 @@ object DecisionTree extends Serializable with Logging {
     new DecisionTree(strategy).train(weightedInput: RDD[WeightedLabeledPoint])
   }
 
+  // TODO: Add multiclass classification support
+
+  // TODO: Add sample weight support
 
   /**
    * Method to train a decision tree model where the instances are represented as an RDD of
@@ -723,8 +726,8 @@ object DecisionTree extends Serializable with Logging {
           val leftImpurity = strategy.impurity.calculate(leftCounts, leftTotalCount)
           val rightImpurity = strategy.impurity.calculate(rightCounts, rightTotalCount)
 
-          val leftWeight = leftTotalCount.toDouble / (leftTotalCount + rightTotalCount)
-          val rightWeight = rightTotalCount.toDouble / (leftTotalCount + rightTotalCount)
+          val leftWeight = leftTotalCount / (leftTotalCount + rightTotalCount)
+          val rightWeight = rightTotalCount / (leftTotalCount + rightTotalCount)
 
           val gain = {
             if (level > 0) {
@@ -734,7 +737,7 @@ object DecisionTree extends Serializable with Logging {
             }
           }
 
-          //TODO: Make modification here
+          //TODO: Make multiclass modification here
           val predict = (leftCounts(1) + rightCounts(1)) / (leftTotalCount + rightTotalCount)
 
           new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict)
