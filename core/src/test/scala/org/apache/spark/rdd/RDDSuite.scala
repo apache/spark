@@ -550,9 +550,9 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val col2 = Array("6|40|B", "5|50|A", "4|60|C")
     val col3 = Array("5|50|A", "6|40|B", "4|60|C")
 
-    assert(data.sortBy(_.split("\\|")(0)).collect === col1)
-    assert(data.sortBy(_.split("\\|")(1)).collect === col2)
-    assert(data.sortBy(_.split("\\|")(2)).collect === col3)
+    assert(data.sortBy(_.split("\\|")(0)).collect() === col1)
+    assert(data.sortBy(_.split("\\|")(1)).collect() === col2)
+    assert(data.sortBy(_.split("\\|")(2)).collect() === col3)
   }
 
   test("sortByKey ascending parameter") {
@@ -561,8 +561,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val asc = Array("4|60|C", "5|50|A", "6|40|B")
     val desc = Array("6|40|B", "5|50|A", "4|60|C")
 
-    assert(data.sortBy(_.split("\\|")(0), true).collect === asc)
-    assert(data.sortBy(_.split("\\|")(0), false).collect === desc)
+    assert(data.sortBy(_.split("\\|")(0), true).collect() === asc)
+    assert(data.sortBy(_.split("\\|")(0), false).collect() === desc)
   }
 
   // issues with serialization of Ordering in the test
@@ -589,8 +589,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val intersection = Array(2, 4, 6, 8, 10)
 
     // intersection is commutative
-    assert(all.intersection(evens).collect.sorted === intersection)
-    assert(evens.intersection(all).collect.sorted === intersection)
+    assert(all.intersection(evens).collect().sorted === intersection)
+    assert(evens.intersection(all).collect().sorted === intersection)
   }
 
   test("intersection strips duplicates in an input") {
@@ -598,8 +598,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val b = sc.parallelize(Seq(1,1,2,3))
     val intersection = Array(1,2,3)
 
-    assert(a.intersection(b).collect.sorted === intersection)
-    assert(b.intersection(a).collect.sorted === intersection)
+    assert(a.intersection(b).collect().sorted === intersection)
+    assert(b.intersection(a).collect().sorted === intersection)
   }
 
   test("zipWithIndex") {
