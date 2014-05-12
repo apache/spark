@@ -96,8 +96,19 @@ class SQLQuerySuite extends QueryTest {
   test("count") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM testData2"),
-      testData2.count()
-    )
+      testData2.count())
+  }
+
+  test("count distinct") {
+    checkAnswer(
+      sql("SELECT COUNT(DISTINCT b) FROM testData2"),
+      2)
+  }
+
+  test("approximate count distinct") {
+    checkAnswer(
+      sql("SELECT APPROXIMATE COUNT(DISTINCT a) FROM testData2"),
+      3)
   }
 
   // No support for primitive nulls yet.
