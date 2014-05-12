@@ -143,8 +143,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       for (task <- tasks.flatten) {
         freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
         val ser = SparkEnv.get.closureSerializer.newInstance()
-        val taskBytes = ser.serialize(task).array()
-        val serializedTask = ser.serialize(taskBytes)
+        val serializedTask = ser.serialize(task)
         if (serializedTask.limit >= akkaFrameSize - 1024) {
           var msg = "Serialized task %s:%d were %d bytes which " +
             "exceeds spark.akka.frameSize (%d bytes)."
