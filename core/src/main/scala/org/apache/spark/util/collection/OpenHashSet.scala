@@ -106,13 +106,12 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    * and rehash all elements.
    */
   def add(k: T) {
-    addWithoutResize(k)
-    rehashIfNeeded(k, grow, move)
+    add(k, grow, move)
   }
 
   /**
-   * Add an element to the set. This one differs from add in that it doesn't trigger rehashing.
-   * The caller is responsible for calling rehashIfNeeded.
+   * Add an element to the set. Use the given allocateFunc and moveFunc to rehash the
+   * set if it is overloaded.
    *
    * Use (retval & POSITION_MASK) to get the actual position, and
    * (retval & NONEXISTENCE_MASK) == 0 for prior existence.
@@ -120,7 +119,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    * @return The position where the key is placed, plus the highest order bit is set if the key
    *         does not exists previously.
    */
-  def addWithoutResize(k: T): Int = {
+  def add(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit): Int = {
     var pos = hashcode(hasher.hash(k)) & _mask
     var i = 1
     while (true) {
@@ -129,6 +128,11 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
         _data(pos) = k
         _bitset.set(pos)
         _size += 1
+        //Rehash the set if it is overloaded
+        if (_size > _growThreshold) {
+          rehash(k, allocateFunc, moveFunc)
+          pos = getPos(k)
+        }
         return pos | NONEXISTENCE_MASK
       } else if (_data(pos) == k) {
         // Found an existing key.
@@ -142,20 +146,6 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     // Never reached here
     assert(INVALID_POS != INVALID_POS)
     INVALID_POS
-  }
-
-  /**
-   * Rehash the set if it is overloaded.
-   * @param k A parameter unused in the function, but to force the Scala compiler to specialize
-   *          this method.
-   * @param allocateFunc Callback invoked when we are allocating a new, larger array.
-   * @param moveFunc Callback invoked when we move the key from one position (in the old data array)
-   *                 to a new position (in the new data array).
-   */
-  def rehashIfNeeded(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
-    if (_size > _growThreshold) {
-      rehash(k, allocateFunc, moveFunc)
-    }
   }
 
   /**

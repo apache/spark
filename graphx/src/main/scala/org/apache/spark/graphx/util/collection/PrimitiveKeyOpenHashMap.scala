@@ -72,23 +72,21 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
 
   /** Set the value for a key */
   def update(k: K, v: V) {
-    val pos = keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
+    val pos = keySet.add(k, grow, move) & OpenHashSet.POSITION_MASK
     _values(pos) = v
-    keySet.rehashIfNeeded(k, grow, move)
     _oldValues = null
   }
 
 
   /** Set the value for a key */
   def setMerge(k: K, v: V, mergeF: (V, V) => V) {
-    val pos = keySet.addWithoutResize(k)
+    val pos = keySet.add(k, grow, move)
     val ind = pos & OpenHashSet.POSITION_MASK
     if ((pos & OpenHashSet.NONEXISTENCE_MASK) != 0) { // if first add
       _values(ind) = v
     } else {
       _values(ind) = mergeF(_values(ind), v)
     }
-    keySet.rehashIfNeeded(k, grow, move)
     _oldValues = null
   }
 
@@ -100,11 +98,10 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
    * @return the newly updated value.
    */
   def changeValue(k: K, defaultValue: => V, mergeValue: (V) => V): V = {
-    val pos = keySet.addWithoutResize(k)
+    val pos = keySet.add(k, grow, move)
     if ((pos & OpenHashSet.NONEXISTENCE_MASK) != 0) {
       val newValue = defaultValue
       _values(pos & OpenHashSet.POSITION_MASK) = newValue
-      keySet.rehashIfNeeded(k, grow, move)
       newValue
     } else {
       _values(pos) = mergeValue(_values(pos))

@@ -73,9 +73,8 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
       haveNullValue = true
       nullValue = v
     } else {
-      val pos = _keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
+      val pos = _keySet.add(k, grow, move) & OpenHashSet.POSITION_MASK
       _values(pos) = v
-      _keySet.rehashIfNeeded(k, grow, move)
       _oldValues = null
     }
   }
@@ -96,11 +95,10 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
       }
       nullValue
     } else {
-      val pos = _keySet.addWithoutResize(k)
+      val pos = _keySet.add(k, grow, move)
       if ((pos & OpenHashSet.NONEXISTENCE_MASK) != 0) {
         val newValue = defaultValue
         _values(pos & OpenHashSet.POSITION_MASK) = newValue
-        _keySet.rehashIfNeeded(k, grow, move)
         newValue
       } else {
         _values(pos) = mergeValue(_values(pos))
