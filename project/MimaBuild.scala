@@ -75,11 +75,11 @@ object MimaBuild {
           excludeSparkClass("rdd.ClassTags") ++
           excludeSparkClass("util.XORShiftRandom") ++
           excludeSparkClass("graphx.EdgeRDD") ++
-          excludeSparkClass("graphx.util.collection.PrimitiveKeyOpenHashMap")
-          excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap")
           excludeSparkClass("graphx.VertexRDD") ++
           excludeSparkClass("graphx.impl.GraphImpl") ++
           excludeSparkClass("graphx.impl.RoutingTable") ++
+          excludeSparkClass("graphx.util.collection.PrimitiveKeyOpenHashMap") ++
+          excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap") ++
           excludeSparkClass("mllib.recommendation.MFDataGenerator") ++
           excludeSparkClass("mllib.optimization.SquaredGradient") ++
           excludeSparkClass("mllib.regression.RidgeRegressionWithSGD") ++
