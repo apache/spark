@@ -19,7 +19,6 @@ conf/spark-env.sh
 conf/streaming-env.sh
 conf/log4j.properties
 conf/spark-defaults.conf
-conf/*.xml
 docs/_site
 docs/api
 target/
