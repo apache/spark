@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
 
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
 
 /** Stores vertex attributes to ship to an edge partition. */
 private[graphx]
