@@ -78,8 +78,8 @@ object PartitionStrategy {
     override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
       val ceilSqrtNumParts: PartitionID = math.ceil(math.sqrt(numParts)).toInt
       val mixingPrime: VertexId = 1125899906842597L
-      val col: PartitionID = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
-      val row: PartitionID = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
+      val col: PartitionID = (math.abs(src * mixingPrime) % ceilSqrtNumParts).toInt
+      val row: PartitionID = (math.abs(dst * mixingPrime) % ceilSqrtNumParts).toInt
       (col * ceilSqrtNumParts + row) % numParts
     }
   }
