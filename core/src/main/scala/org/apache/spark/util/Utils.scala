@@ -29,6 +29,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.Try
+import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -40,7 +41,6 @@ import tachyon.client.{TachyonFile,TachyonFS}
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
-
 
 /**
  * Various utility methods used by Spark.
@@ -586,15 +586,17 @@ private[spark] object Utils extends Logging {
    * Don't follow directories if they are symlinks.
    */
   def deleteRecursively(file: File) {
-    if ((file.isDirectory) && !isSymlink(file)) {
-      for (child <- listFilesSafely(file)) {
-        deleteRecursively(child)
+    if (file != null) {
+      if ((file.isDirectory) && !isSymlink(file)) {
+        for (child <- listFilesSafely(file)) {
+          deleteRecursively(child)
+        }
       }
-    }
-    if (!file.delete()) {
-      // Delete can also fail if the file simply did not exist
-      if (file.exists()) {
-        throw new IOException("Failed to delete: " + file.getAbsolutePath)
+      if (!file.delete()) {
+        // Delete can also fail if the file simply did not exist
+        if (file.exists()) {
+          throw new IOException("Failed to delete: " + file.getAbsolutePath)
+        }
       }
     }
   }
@@ -1125,4 +1127,28 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /** 
+   * Executes the given block, printing and re-throwing any uncaught exceptions.
+   * This is particularly useful for wrapping code that runs in a thread, to ensure
+   * that exceptions are printed, and to avoid having to catch Throwable.
+   */
+  def logUncaughtExceptions[T](f: => T): T = {
+    try {
+      f
+    } catch {
+      case t: Throwable =>
+        logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+        throw t
+    }
+  }
+
+  /** Returns true if the given exception was fatal. See docs for scala.util.control.NonFatal. */
+  def isFatalError(e: Throwable): Boolean = {
+    e match {
+      case NonFatal(_) | _: InterruptedException | _: NotImplementedError | _: ControlThrowable =>
+        false
+      case _ =>
+        true
+    }
+  }
 }
