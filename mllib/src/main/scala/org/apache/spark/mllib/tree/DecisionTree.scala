@@ -394,9 +394,6 @@ object DecisionTree extends Serializable with Logging {
     // shift when more than one group is used at deep tree level
     val groupShift = numNodes * groupIndex
 
-    // shift when more than one group is used at deep tree level
-    val groupShift = numNodes * groupIndex
-
     /** Find the filters used before reaching the current code. */
     def findParentFilters(nodeIndex: Int): List[Filter] = {
       if (level == 0) {
