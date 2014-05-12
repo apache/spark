@@ -94,6 +94,7 @@
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
+    <module>sql/hive</module>
     <module>repl</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -878,13 +879,6 @@
         <module>extras/java8-tests</module>
       </modules>
 
-    </profile>
-
-    <profile>
-      <id>hive</id>
-      <modules>
-        <module>sql/hive</module>
-      </modules>
     </profile>
 
     <!-- A series of build profiles where customizations for particular Hadoop releases can be made -->
