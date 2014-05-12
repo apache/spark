@@ -22,41 +22,47 @@
 echoerr() { echo "$@" 1>&2; }
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
-if [[ -z "$MASTER" ]]; then
-  echoerr "Sparkify: Connecting to chicago spark cluster ..."
-  export MASTER=spark://dn05.chi.shopify.com:7077
+if [ -z "$SPARK_ON_MESOS" ]; then
+  if [[ -z "$MASTER" ]]; then
+    echoerr "Sparkify: Connecting to chicago spark cluster ..."
+    export MASTER=spark://dn05.chi.shopify.com:7077
 
-  # Figure out the local IP to bind spark to for shell <-> master communication
-  vpn_interface=tap0;
-  get_ip_command="ifconfig $vpn_interface 2>&1 | grep 'inet' | awk '{print \$2}'"
-  if ifconfig $vpn_interface > /dev/null 2>&1; then
-    export SPARK_LOCAL_IP=`bash -c "$get_ip_command"`
-  else
-    if [[ -e /Applications/Viscosity.app ]]; then
-      echoerr "WARNING: could not find an VPN interface to connect to the Shopify Spark Cluster! Trying to autoconnect..."
-      osascript -e "
-        tell application \"Viscosity\"
-          connect first connection
-          set total to 0
-          repeat while (first connection's state is not equal to \"Connected\") or total is greater than 15
-            delay 0.5
-            set total to total + 0.5
-          end repeat
-          return \"Connected!\"
-        end tell
-      "
-      export SPARK_LOCAL_IP=`$get_ip_command`
+    # Figure out the local IP to bind spark to for shell <-> master communication
+    vpn_interface=tap0;
+    get_ip_command="ifconfig $vpn_interface 2>&1 | grep 'inet' | awk '{print \$2}'"
+    if ifconfig $vpn_interface > /dev/null 2>&1; then
+      export SPARK_LOCAL_IP=`bash -c "$get_ip_command"`
     else
-      echoerr "ERROR: could not find an VPN interface to connect to the Shopify Spark Cluster! Please connect your VPN client! See https://vault-unicorn.shopify.com/VPN---Servers ."
-      exit 1
+      if [[ -e /Applications/Viscosity.app ]]; then
+        echoerr "WARNING: could not find an VPN interface to connect to the Shopify Spark Cluster! Trying to autoconnect..."
+        osascript -e "
+          tell application \"Viscosity\"
+            connect first connection
+            set total to 0
+            repeat while (first connection's state is not equal to \"Connected\") or total is greater than 15
+              delay 0.5
+              set total to total + 0.5
+            end repeat
+            return \"Connected!\"
+          end tell
+        "
+        export SPARK_LOCAL_IP=`$get_ip_command`
+      else
+        echoerr "ERROR: could not find an VPN interface to connect to the Shopify Spark Cluster! Please connect your VPN client! See https://vault-unicorn.shopify.com/VPN---Servers ."
+        exit 1
+      fi
+    fi
+
+    if which ipython > /dev/null; then
+      export IPYTHON=1
     fi
   fi
 
-  if which ipython > /dev/null; then
-    export IPYTHON=1
+  if [[ $MASTER == 'local' ]]; then
+    export SPARK_LOCAL_IP=127.0.0.1
   fi
-fi
-
-if [[ $MASTER == 'local' ]]; then
-  export SPARK_LOCAL_IP=127.0.0.1
+else
+  export MESOS_NATIVE_LIBRARY=/usr/local/lib/libmesos.so
+  export MASTER=zk://kafka01.chi.shopify.com:2181/mesos
+  export SPARK_EXECUTOR_URI=http://pack.chi.shopify.com/packages/Shopify/spark/f2c3b1c8cbbfde10be0db6ac0977232c66c3e63e.tar.gz
 fi
