@@ -17,7 +17,7 @@
 
 package org.apache.spark.examples.sql.hive
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.LocalHiveContext
 
@@ -25,7 +25,8 @@ object HiveFromSpark {
   case class Record(key: Int, value: String)
 
   def main(args: Array[String]) {
-    val sc = new SparkContext("local", "HiveFromSpark")
+    val sparkConf = new SparkConf().setAppName("HiveFromSpark")
+    val sc = new SparkContext(sparkConf)
 
     // A local hive context creates an instance of the Hive Metastore in process, storing the
     // the warehouse data in the current directory.  This location can be overridden by

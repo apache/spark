@@ -186,7 +186,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLUtils
 
 // Load training data in LIBSVM format.
-val data = MLUtils.loadLibSVMData(sc, "mllib/data/sample_libsvm_data.txt")
+val data = MLUtils.loadLibSVMFile(sc, "mllib/data/sample_libsvm_data.txt")
 
 // Split data into training (60%) and test (40%).
 val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)

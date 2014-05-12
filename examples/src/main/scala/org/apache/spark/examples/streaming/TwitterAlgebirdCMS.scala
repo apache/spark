@@ -19,11 +19,13 @@ package org.apache.spark.examples.streaming
 
 import com.twitter.algebird._
 
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.twitter._
+
 // scalastyle:off
 /**
  * Illustrates the use of the Count-Min Sketch, from Twitter's Algebird library, to compute
@@ -49,12 +51,6 @@ import org.apache.spark.streaming.twitter._
 // scalastyle:on
 object TwitterAlgebirdCMS {
   def main(args: Array[String]) {
-    if (args.length < 1) {
-      System.err.println("Usage: TwitterAlgebirdCMS <master>" +
-        " [filter1] [filter2] ... [filter n]")
-      System.exit(1)
-    }
-
     StreamingExamples.setStreamingLogLevels()
 
     // CMS parameters
@@ -65,10 +61,9 @@ object TwitterAlgebirdCMS {
     // K highest frequency elements to take
     val TOPK = 10
 
-    val (master, filters) = (args.head, args.tail)
-
-    val ssc = new StreamingContext(master, "TwitterAlgebirdCMS", Seconds(10),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
+    val filters = args
+    val sparkConf = new SparkConf().setAppName("TwitterAlgebirdCMS")
+    val ssc = new StreamingContext(sparkConf, Seconds(10))
     val stream = TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_ONLY_SER_2)
 
     val users = stream.map(status => status.getUser.getId)

@@ -17,6 +17,8 @@
 
 package org.apache.spark.broadcast
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{SecurityManager, SparkConf}
 
 /**
@@ -29,7 +31,7 @@ class HttpBroadcastFactory extends BroadcastFactory {
     HttpBroadcast.initialize(isDriver, conf, securityMgr)
   }
 
-  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
+  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long) =
     new HttpBroadcast[T](value_, isLocal, id)
 
   def stop() { HttpBroadcast.stop() }

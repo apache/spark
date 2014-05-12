@@ -891,6 +891,14 @@ class RDD(object):
         >>> from glob import glob
         >>> ''.join(sorted(input(glob(tempFile.name + "/part-0000*"))))
         '0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n'
+
+        Empty lines are tolerated when saving to text files.
+
+        >>> tempFile2 = NamedTemporaryFile(delete=True)
+        >>> tempFile2.close()
+        >>> sc.parallelize(['', 'foo', '', 'bar', '']).saveAsTextFile(tempFile2.name)
+        >>> ''.join(sorted(input(glob(tempFile2.name + "/part-0000*"))))
+        '\\n\\n\\nbar\\nfoo\\n'
         """
         def func(split, iterator):
             for x in iterator:

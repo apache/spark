@@ -17,19 +17,22 @@
 
 package org.apache.spark.examples;
 
-import scala.Tuple2;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.PairFunction;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
 
+import scala.Tuple2;
+
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.PairFunction;
+
 /**
  * Transitive closure on a graph, implemented in Java.
+ * Usage: JavaTC [slices]
  */
 public final class JavaTC {
 
@@ -61,14 +64,9 @@ public final class JavaTC {
   }
 
   public static void main(String[] args) {
-    if (args.length == 0) {
-      System.err.println("Usage: JavaTC <host> [<slices>]");
-      System.exit(1);
-    }
-
-    JavaSparkContext sc = new JavaSparkContext(args[0], "JavaTC",
-        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaTC.class));
-    Integer slices = (args.length > 1) ? Integer.parseInt(args[1]): 2;
+    SparkConf sparkConf = new SparkConf().setAppName("JavaHdfsLR");
+    JavaSparkContext sc = new JavaSparkContext(sparkConf);
+    Integer slices = (args.length > 0) ? Integer.parseInt(args[0]): 2;
     JavaPairRDD<Integer, Integer> tc = sc.parallelizePairs(generateGraph(), slices).cache();
 
     // Linear transitive closure: each round grows paths by one edge,

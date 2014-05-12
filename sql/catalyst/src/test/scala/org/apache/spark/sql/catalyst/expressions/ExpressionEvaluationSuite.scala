@@ -61,7 +61,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   test("3VL Not") {
     notTrueTable.foreach {
       case (v, answer) =>
-        val expr = Not(Literal(v, BooleanType))
+        val expr = ! Literal(v, BooleanType)
         val result = expr.eval(null)
         if (result != answer)
           fail(s"$expr should not evaluate to $result, expected: $answer")    }
@@ -381,6 +381,13 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Add(c1, Literal(null, IntegerType)), null, row)
     checkEvaluation(Add(Literal(null, IntegerType), c2), null, row)
     checkEvaluation(Add(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(-c1, -1, row)
+    checkEvaluation(c1 + c2, 3, row)
+    checkEvaluation(c1 - c2, -1, row)
+    checkEvaluation(c1 * c2, 2, row)
+    checkEvaluation(c1 / c2, 0, row)
+    checkEvaluation(c1 % c2, 1, row)
   }
 
   test("BinaryComparison") {
@@ -395,6 +402,13 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(LessThan(c1, Literal(null, IntegerType)), null, row)
     checkEvaluation(LessThan(Literal(null, IntegerType), c2), null, row)
     checkEvaluation(LessThan(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(c1 < c2, true, row)
+    checkEvaluation(c1 <= c2, true, row)
+    checkEvaluation(c1 > c2, false, row)
+    checkEvaluation(c1 >= c2, false, row)
+    checkEvaluation(c1 === c2, false, row)
+    checkEvaluation(c1 !== c2, true, row)
   }
 }
 

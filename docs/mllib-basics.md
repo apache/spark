@@ -184,7 +184,7 @@ After loading, the feature indices are converted to zero-based.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`MLUtils.loadLibSVMData`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
+[`MLUtils.loadLibSVMFile`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
 examples stored in LIBSVM format.
 
 {% highlight scala %}
@@ -192,12 +192,12 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
-val training: RDD[LabeledPoint] = MLUtils.loadLibSVMData(sc, "mllib/data/sample_libsvm_data.txt")
+val training: RDD[LabeledPoint] = MLUtils.loadLibSVMFile(sc, "mllib/data/sample_libsvm_data.txt")
 {% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
-[`MLUtils.loadLibSVMData`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
+[`MLUtils.loadLibSVMFile`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
 examples stored in LIBSVM format.
 
 {% highlight java %}
@@ -205,7 +205,7 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.rdd.RDDimport;
 
-RDD<LabeledPoint> training = MLUtils.loadLibSVMData(jsc, "mllib/data/sample_libsvm_data.txt");
+RDD<LabeledPoint> training = MLUtils.loadLibSVMFile(jsc, "mllib/data/sample_libsvm_data.txt");
 {% endhighlight %}
 </div>
 </div>
