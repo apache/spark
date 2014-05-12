@@ -148,13 +148,6 @@ class UtilsSuite extends FunSuite {
     assert(Utils.deserializeLongValue(bbuf.array) === testval)
   }
 
-  test("get iterator size") {
-    val empty = Seq[Int]()
-    assert(Utils.getIteratorSize(empty.toIterator) === 0L)
-    val iterator = Iterator.range(0, 5)
-    assert(Utils.getIteratorSize(iterator) === 5L)
-  }
-
   test("findOldFiles") {
     // create some temporary directories and files
     val parent: File = Utils.createTempDir()
