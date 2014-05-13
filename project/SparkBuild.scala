@@ -318,7 +318,6 @@ object SparkBuild extends Build {
   val excludeJruby = ExclusionRule(organization = "org.jruby")
   val excludeThrift = ExclusionRule(organization = "org.apache.thrift")
   val excludeCommonsLang = ExclusionRule(organization = "commons-lang")
-  val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
   val excludeServletApi = ExclusionRule(organization = "javax.servlet", artifact = "servlet-api")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
