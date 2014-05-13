@@ -5,3 +5,4 @@
 # spark.master 	          spark://master:7077
 # spark.eventLog.enabled  true
 # spark.eventLog.dir      hdfs://namenode:8021/directory
+# spark.serializer        org.apache.spark.serializer.KryoSerializer

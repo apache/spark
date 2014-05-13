@@ -105,23 +105,19 @@ HADOOP_CONF_DIR=XX ./bin/spark-submit \
 
 ### Loading Configurations from a File
 
-The `spark-submit` script can load default [Spark configuration values](configuration.html) from
-a properties file and pass them on to your application. By default it will read configuration
-options from `conf/spark-defaults.conf`, in which each line consists of a key and a value separated
-by whitespace. For example,
+The `spark-submit` script can load default [Spark configuration values](configuration.html) from a
+properties file and pass them on to your application. By default it will read configuration options
+from `conf/spark-defaults.conf`. For more detail, see the section on
+[loading default configurations](configuration.html#loading-default-configurations).
 
-    spark.master            spark://5.6.7.8:7077
-    spark.executor.memory   512m
-    spark.eventLog.enabled  true
+Loading default Spark configurations this way can obviate the need for certain flags to
+`spark-submit`. For instance, if the `spark.master` property is set, you can safely omit the
+`--master` flag from `spark-submit`. In general, configuration values explicitly set on a
+`SparkConf` take the highest precedence, then flags passed to `spark-submit`, then values in the
+defaults file.
 
-Any values specified in the file will be passed on to the application. Loading default Spark
-configurations this way can obviate the need for certain flags to `spark-submit`. For instance,
-if `spark.master` property is set, you can safely omit the `--master` flag from `spark-submit`.
-In general, configuration values explicitly set on a `SparkConf` take the highest precedence,
-then flags passed to `spark-submit`, then values in the defaults file.
-
-If you are ever unclear where configuration options are coming from. fine-grained debugging
-information can be printed by running `spark-submit` with the `--verbose` option.
+If you are ever unclear where configuration options are coming from, you can print out fine-grained
+debugging information by running `spark-submit` with the `--verbose` option.
 
 ### Advanced Dependency Management
 When using `spark-submit`, the application jar along with any jars included with the `--jars` option

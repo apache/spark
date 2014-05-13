@@ -178,37 +178,10 @@ The spark-submit script provides the most straightforward way to submit a compil
     application-jar: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
     application-arguments: Arguments passed to the main method of <main-class>
 
-Behind the scenes, this invokes the standalone Client to launch your application, which is also the legacy way to launch your application before Spark 1.0.
-
-    ./bin/spark-class org.apache.spark.deploy.Client launch
-       [client-options] \
-       <master-url> <application-jar> <main-class> \
-       [application-arguments]
-
-    client-options:
-      --memory <count> (amount of memory, in MB, allocated for your driver program)
-      --cores <count> (number of cores allocated for your driver program)
-      --supervise (whether to automatically restart your driver on application or node failure)
-      --verbose (prints increased logging output)
-
-Keep in mind that your driver program will be executed on a remote worker machine. You can control the execution environment in the following ways:
-
- * __Environment variables__: These are captured from the environment within which the client
- is launched and applied when launching the driver program. These environment variables should be
- exported in `conf/spark-env.sh`.
- * __Java options__: You can add java options by setting `SPARK_JAVA_OPTS` in the environment in
- which you launch the submission client. (_Note_: as of Spark 1.0, application specific
- [Spark configuration properties](configuration.html#spark-properties) should be specified through
- `conf/spark-defaults.conf` loaded by `spark-submit`.)
- * __Dependencies__: If your application is launched through `spark-submit`, then the application
- jar is automatically distributed to all worker nodes. Otherwise, you'll need to explicitly add the
- jar through `sc.addJars`.
-
-Once you submit a driver program, it will appear in the cluster management UI at port 8080 and
-be assigned an identifier. If you'd like to prematurely terminate the program, you can do so as
-follows:
-
-    ./bin/spark-class org.apache.spark.deploy.Client kill <driverId>
+If your application is launched through `spark-submit`, then the application jar is automatically
+distributed to all worker nodes. Otherwise, you'll need to explicitly add the jar through
+`sc.addJars`. To control the application's configuration or execution environment, see
+[Spark Configuration](configuration.html).
 
 # Resource Scheduling
 
