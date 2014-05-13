@@ -66,5 +66,5 @@ if [ -z "$SPARK_ON_MESOS" ]; then
 else
   export MESOS_NATIVE_LIBRARY=/usr/local/lib/libmesos.so
   export MASTER=zk://kafka01.chi.shopify.com:2181/mesos
-  export SPARK_EXECUTOR_URI=http://pack.chi.shopify.com/packages/Shopify/spark/latest.tar.gz
+  export SPARK_EXECUTOR_URI=http://pack.chi.shopify.com/packages/Shopify/spark/latest.tgz
 fi
