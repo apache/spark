@@ -34,6 +34,7 @@ private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
+private[spark] case object GetMasterEpoch extends MapOutputTrackerMessage
 
 /** Actor class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster, conf: SparkConf)
@@ -63,6 +64,9 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
       logInfo("MapOutputTrackerActor stopped!")
       sender ! true
       context.stop(self)
+
+    case GetMasterEpoch =>
+      sender ! tracker.getEpoch
   }
 }
 
@@ -144,7 +148,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def updateEpoch(newEpoch: Long) {
     epochLock.synchronized {
       if (newEpoch > epoch) {
-        logInfo("Updating epoch to " + newEpoch + " and clearing cache")
+        logInfo("Updating epoch from "+epoch+" to " + newEpoch + " and clearing cache")
         epoch = newEpoch
         mapStatuses.clear()
       }
@@ -171,10 +175,15 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   //get map statuses for a shuffle
   def getMapStatusesForShuffle(shuffleId: Int, reduceId: Int): Array[MapStatus]={
     mapStatuses.synchronized {
-      //we remove the previously fetched outputs if it's partial
+      //we cached partial map outputs, the master may have updates for us
       if (partialOutputForShuffle(shuffleId) && !this.isInstanceOf[MapOutputTrackerMaster]) {
-        logInfo("We've cached partial map output statuses, will clear the cache. ---lirui")
-        mapStatuses -= shuffleId
+        val masterEpoch = askTracker(GetMasterEpoch).asInstanceOf[Long]
+        //we don't want to clear the local cache too often
+        if (masterEpoch - epoch >= math.min(10, mapStatuses.get(shuffleId).get.filter(_ == null).size)) {
+          logInfo("Master's epoch is " + masterEpoch + ", local epoch is " + epoch + ". Clear local cache. ---lirui")
+          mapStatuses -= shuffleId
+          epoch = masterEpoch
+        }
       }
     }
     val statuses = mapStatuses.get(shuffleId).orNull

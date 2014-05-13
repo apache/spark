@@ -904,14 +904,16 @@ class DAGScheduler(
             } else {
               //ShuffleMap stage not finished yet. Maybe we can remove the stage barrier here.
               if(removeStageBarrier){
-                //TODO: need a better way to get the number of free CPUs
+                //TODO: need a better way to get the number of total CPUs
                 if (taskScheduler.isInstanceOf[TaskSchedulerImpl] && taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.isInstanceOf[CoarseGrainedSchedulerBackend]) {
                   val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.asInstanceOf[CoarseGrainedSchedulerBackend]
                   //check CPU usage
                   val totalCores = backend.totalCoreCount.get()
+                  val pendingTaskNum = (for (taskSet <- pendingTasks.values) yield taskSet.size).sum
+                  val freeCores = totalCores - pendingTaskNum
                   val waitingStageNum = waitingStages.size
-                  val pendingTaskNum = (for(taskSet <- pendingTasks.values) yield taskSet.size).sum
-                  if (pendingTaskNum < totalCores && waitingStageNum > 0 && stage.shuffleDep.isDefined) {
+                  //we pre-start the waiting stage only if there're enough free cores, e.g. 25% is free
+                  if (4 * freeCores >= totalCores && waitingStageNum > 0 && stage.shuffleDep.isDefined) {
                     logInfo("We have " + totalCores + " CPUs. " + pendingTaskNum + " tasks are running/pending. " +
                       waitingStageNum + " stages are waiting to be submitted. ---lirui")
                     //TODO: find a waiting stage that depends on the current "stage"
