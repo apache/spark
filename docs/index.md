@@ -24,26 +24,30 @@ right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/
 
 # Running the Examples and Shell
 
-Spark comes with several sample programs.  Scala, Java and Python examples are in the `examples/src/main` directory.
-To run one of the Java or Scala sample programs, use `./bin/run-example <class> <params>` in the top-level Spark directory
-(the `bin/run-example` script sets up the appropriate paths and launches that program).
-For example, try `./bin/run-example org.apache.spark.examples.SparkPi local`.
-To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try `./bin/pyspark ./examples/src/main/python/pi.py local`.
+Spark comes with several sample programs. Scala, Java and Python examples are in the 
+`examples/src/main` directory. To run one of the Java or Scala sample programs, use 
+`./bin/run-example <class> <params>` in the top-level Spark directory (the `bin/run-example` 
+calls Spark's own [`spark-submit`](cluster-overview.html#launching-applications-with-binspark-submit) tool).
+For example, try
 
-Each example prints usage help when run with no parameters.
+    ./bin/run-example org.apache.spark.examples.SparkPi
 
-Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
-to connect to. This can be a [URL for a distributed cluster](scala-programming-guide.html#master-urls),
-or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
-`local` for testing.
+To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try
 
-Finally, you can run Spark interactively through modified versions of the Scala shell (`./bin/spark-shell`) or
-Python interpreter (`./bin/pyspark`). These are a great way to learn the framework.
+    ./bin/pyspark ./examples/src/main/python/pi.py local
+
+Each example prints usage help when run with no parameters. Example programs will run in Spark's 
+local mode by default. You can set the MASTER environment to 
+[a master URL](scala-programming-guide.html#master-urls) in order to run on a cluster.
+
+Finally, you can run Spark interactively through modified versions of the Scala shell 
+(`./bin/spark-shell`) or Python interpreter (`./bin/pyspark`). These are a great way to learn 
+the framework.
 
 # Launching on a Cluster
 
-The Spark [cluster mode overview](cluster-overview.html) explains the key concepts in running on a cluster.
-Spark can run both by itself, or over several existing cluster managers. It currently provides several
+The Spark [cluster mode overview](cluster-overview.html) explains the key concepts in running on 
+a cluster. Spark can run both by itself, or over several existing cluster managers. It currently provides several
 options for deployment:
 
 * [Amazon EC2](ec2-scripts.html): our EC2 scripts let you launch a cluster in about 5 minutes
