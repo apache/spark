@@ -90,7 +90,7 @@ private[spark] class MesosSchedulerBackend(
       "Spark home is not set; set it through the spark.home system " +
       "property, the SPARK_HOME environment variable or the SparkContext constructor"))
     val environment = Environment.newBuilder()
-    sc.testExecutorEnvs.foreach { case (key, value) =>
+    sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
         .setName(key)
         .setValue(value)
