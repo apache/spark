@@ -122,7 +122,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     val extraLibraryPath = conf.getOption(libraryPathOption).map(p => s"-Djava.library.path=$p")
     val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
 
-    sc.testExecutorEnvs.foreach { case (key, value) =>
+    sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
         .setName(key)
         .setValue(value)

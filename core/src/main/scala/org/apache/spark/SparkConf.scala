@@ -247,7 +247,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           | - ./spark-submit with conf/spark-defaults.conf to set defaults for an application
           | - ./spark-submit with --driver-java-options to set -X options for a driver
           | - spark.executor.extraJavaOptions to set -X options for executors
-          | - SPARK_DAEMON_OPTS to set java options for standalone daemons (i.e. master, worker)
+          | - SPARK_DAEMON_JAVA_OPTS to set java options for standalone daemons (master or worker)
         """.stripMargin
       logError(error)
 

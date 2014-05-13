@@ -54,13 +54,13 @@ For example:
         --executor-memory 2g \
         --executor-cores 1
         lib/spark-examples*.jar \
-        yarn-cluster 5
+        10
 
 The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Viewing Logs" section below for how to see driver and executor logs.
 
 To launch a Spark application in yarn-client mode, do the same, but replace "yarn-cluster" with "yarn-client".  To run spark-shell:
 
-    $ MASTER=yarn-client ./bin/spark-shell
+    $ ./bin/spark-shell --master yarn-client
 
 ## Adding additional jars
 
@@ -70,9 +70,9 @@ In yarn-cluster mode, the driver runs on a different machine than the client, so
         --master yarn-cluster \
         --jars my-other-jar.jar,my-other-other-jar.jar
         my-main-jar.jar
-        yarn-cluster 5
+        app_arg1 app_arg2
 
-# Viewing logs
+# Debugging your Application
 
 In YARN terminology, executors and application masters run inside "containers". YARN has two modes for handling container logs after an application has completed. If log aggregation is turned on (with the yarn.log-aggregation-enable config), container logs are copied to HDFS and deleted on the local machine. These logs can be viewed from anywhere on the cluster with the "yarn logs" command.
 
@@ -81,6 +81,13 @@ In YARN terminology, executors and application masters run inside "containers". 
 will print out the contents of all log files from all containers from the given application.
 
 When log aggregation isn't turned on, logs are retained locally on each machine under YARN_APP_LOGS_DIR, which is usually configured to /tmp/logs or $HADOOP_HOME/logs/userlogs depending on the Hadoop version and installation. Viewing logs for a container requires going to the host that contains them and looking in this directory.  Subdirectories organize log files by application ID and container ID.
+
+To review per-container launch environment, increase yarn.nodemanager.delete.debug-delay-sec to a
+large value (e.g. 36000), and then access the application cache through yarn.nodemanager.local-dirs
+on the nodes on which containers are launched. This directory contains the launch script, jars, and
+all environment variables used for launching each container. This process is useful for debugging
+classpath problems in particular. (Note that enabling this requires admin privileges on cluster
+settings and a restart of all node managers. Thus, this is not applicable to hosted clusters).
 
 # Important notes
 
