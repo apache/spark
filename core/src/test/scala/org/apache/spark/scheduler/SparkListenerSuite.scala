@@ -416,7 +416,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
    * A simple listener that throws an exception on job end.
    */
   private class BadListener extends SparkListener {
-    override def onJobEnd(jobEnd: SparkListenerJobEnd) = { 1 / 0 }
+    override def onJobEnd(jobEnd: SparkListenerJobEnd) = { throw new Exception }
   }
 
 }
