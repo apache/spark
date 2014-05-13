@@ -53,7 +53,7 @@ To install Mesos directly from the upstream project rather than a third party, i
 ## Verification
 
 To verify that the Mesos cluster is ready for Spark, navigate to the Mesos master webui at port
-:5050  Confirm that all expected machines are present in the slaves tab 
+`:5050`  Confirm that all expected machines are present in the slaves tab.
 
 
 # Connecting Spark to Mesos
