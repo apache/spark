@@ -172,7 +172,7 @@ case class CountDistinct(expressions: Seq[Expression]) extends AggregateExpressi
 }
 
 case class ApproxCountDistinctPartition(child: Expression)
-    extends AggregateExpression with trees.UnaryNode[Expression] {
+  extends AggregateExpression with trees.UnaryNode[Expression] {
   override def references = child.references
   override def nullable = false
   override def dataType = child.dataType
@@ -181,7 +181,7 @@ case class ApproxCountDistinctPartition(child: Expression)
 }
 
 case class ApproxCountDistinctMerge(child: Expression)
-    extends AggregateExpression with trees.UnaryNode[Expression] {
+  extends AggregateExpression with trees.UnaryNode[Expression] {
   override def references = child.references
   override def nullable = false
   override def dataType = IntegerType
@@ -194,19 +194,18 @@ object ApproxCountDistinct {
 }
 
 case class ApproxCountDistinct(child: Expression)
-    extends PartialAggregate with trees.UnaryNode[Expression] {
+  extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
   override def nullable = false
   override def dataType = IntegerType
   override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialCount = Alias(ApproxCountDistinctPartition(child),
-                             "PartialApproxCountDistinct")()
+    val partialCount = Alias(ApproxCountDistinctPartition(child), "PartialApproxCountDistinct")()
     SplitEvaluation(ApproxCountDistinctMerge(partialCount.toAttribute), partialCount :: Nil)
   }
 
-  override def newInstance() = new CountDistinctFunction((child :: Nil), this)
+  override def newInstance() = new CountDistinctFunction(child :: Nil, this)
 }
 
 case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -309,28 +308,30 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
 }
 
 case class ApproxCountDistinctPartitionFunction(expr: Expression, base: AggregateExpression)
-    extends AggregateFunction {
+  extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
   private val hyperLogLog = new HyperLogLog(ApproxCountDistinct.RelativeSD)
 
   override def update(input: Row): Unit = {
     val evaluatedExpr = expr.eval(input)
-    Option(evaluatedExpr).foreach(hyperLogLog.offer(_))
+    if (evaluatedExpr != null) {
+      hyperLogLog.offer(evaluatedExpr)
+    }
   }
 
   override def eval(input: Row): Any = hyperLogLog
 }
 
 case class ApproxCountDistinctMergeFunction(expr: Expression, base: AggregateExpression)
-    extends AggregateFunction {
+  extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
   private val hyperLogLog = new HyperLogLog(ApproxCountDistinct.RelativeSD)
 
   override def update(input: Row): Unit = {
     val evaluatedExpr = expr.eval(input)
-    Option(evaluatedExpr.asInstanceOf[HyperLogLog]).foreach(hyperLogLog.addAll(_))
+    hyperLogLog.addAll(evaluatedExpr.asInstanceOf[HyperLogLog])
   }
 
   override def eval(input: Row): Any = hyperLogLog.cardinality()
