@@ -17,7 +17,10 @@
 
 package org.apache.spark
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * Exception for a task getting killed.
  */
-private[spark] class TaskKilledException extends RuntimeException
+@DeveloperApi
+class TaskKilledException extends RuntimeException
