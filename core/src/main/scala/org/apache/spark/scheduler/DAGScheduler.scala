@@ -912,16 +912,11 @@ class DAGScheduler(
                   val pendingTaskNum = (for (taskSet <- pendingTasks.values) yield taskSet.size).sum
                   val freeCores = totalCores - pendingTaskNum
                   val waitingStageNum = waitingStages.size
-                  //we pre-start the waiting stage only if there're enough free cores, e.g. 25% is free
-                  if (4 * freeCores >= totalCores && waitingStageNum > 0 && stage.shuffleDep.isDefined) {
+                  if (freeCores > 0 && waitingStageNum > 0) {
                     logInfo("We have " + totalCores + " CPUs. " + pendingTaskNum + " tasks are running/pending. " +
                       waitingStageNum + " stages are waiting to be submitted. ---lirui")
                     //TODO: find a waiting stage that depends on the current "stage"
                     val preStartedStage = waitingStages.head
-                    //map outputs should have been registered progressively
-//                    val shuffleId = stage.shuffleDep.get.shuffleId
-//                    logInfo("Register partial map outputs for shuffleId " + shuffleId + " ---lirui")
-//                    mapOutputTracker.registerMapOutputs(shuffleId, stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray)
                     logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
                     waitingStages -= preStartedStage
                     runningStages += preStartedStage
