@@ -39,6 +39,10 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                zero-indexed.
  * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
  *                      128 MB.
+ * @param labelWeights A map storing weights applied to each label for handling unbalanced
+ *                     datasets. For example, an entry (n -> k) implies the a weight of k is
+ *                     applied to an instance with label n. It's important to note that labels
+ *                     are zero-index and take values 0, 1, 2, ... , numClasses.
  *
  */
 @Experimental
@@ -50,7 +54,8 @@ class Strategy (
     val maxBins: Int = 100,
     val quantileCalculationStrategy: QuantileStrategy = Sort,
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-    val maxMemoryInMB: Int = 128) extends Serializable {
+    val maxMemoryInMB: Int = 128,
+    val labelWeights: Map[Int, Int] = Map[Int, Int]()) extends Serializable {
 
   require(numClassesForClassification >= 2)
   val isMultiClassification = numClassesForClassification > 2
