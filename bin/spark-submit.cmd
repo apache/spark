@@ -26,31 +26,31 @@ set DRIVER_MEMORY=
 set SPARK_SUBMIT_LIBRARY_PATH=
 set SPARK_SUBMIT_CLASSPATH=
 set SPARK_SUBMIT_OPTS=
-set SPARK_MEM=
+set SPARK_DRIVER_MEMORY=
 
 :loop
-if "%1"=="" goto continue
-  if "%1"=="--deploy-mode" (
+if [%1] == [] goto continue
+  if [%1] == [--deploy-mode] (
     set DEPLOY_MODE=%2
-  ) else if "%1"=="--driver-memory" (
+  ) else if [%1] == [--driver-memory] (
     set DRIVER_MEMORY=%2
-  ) else if "%1"=="--driver-library-path" (
+  ) else if [%1] == [--driver-library-path] (
     set SPARK_SUBMIT_LIBRARY_PATH=%2
-  ) else if "%1"=="--driver-class-path" (
+  ) else if [%1] == [--driver-class-path] (
     set SPARK_SUBMIT_CLASSPATH=%2
-  ) else if "%1"=="--driver-java-options" (
+  ) else if [%1] == [--driver-java-options] (
     set SPARK_SUBMIT_OPTS=%2
   )
   shift
 goto loop
 :continue
 
-if "%DEPLOY_MODE%"=="" (
+if [%DEPLOY_MODE%] == [] (
   set DEPLOY_MODE=client
 )
 
-if not "%DRIVER_MEMORY%"=="" if "%DEPLOY_MODE%"=="client" (
-  set SPARK_MEM=%DRIVER_MEMORY%
+if not [%DRIVER_MEMORY%] == [] if [%DEPLOY_MODE%] == [client] (
+  set SPARK_DRIVER_MEMORY=%DRIVER_MEMORY%
 )
 
 cmd /V /E /C %SPARK_HOME%\bin\spark-class.cmd org.apache.spark.deploy.SparkSubmit %ORIG_ARGS%
