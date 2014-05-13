@@ -98,7 +98,6 @@ The ScalaTest plugin also supports running only a specific test suite as follows
 
     $ mvn -Dhadoop.version=... -DwildcardSuites=org.apache.spark.repl.ReplSuite test
 
-
 ## Continuous Compilation ##
 
 We use the scala-maven-plugin which supports incremental and continuous compilation. E.g.
@@ -128,6 +127,10 @@ Running only java 8 tests and nothing else.
 Java 8 tests are run when -Pjava8-tests profile is enabled, they will run in spite of -DskipTests. 
 For these tests to run your system must have a JDK 8 installation. 
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
+
+## Building for PySpark on YARN ##
+
+PySpark on YARN is only supported if the jar is built with maven. Further, there is a known problem with building this assembly jar on Red Hat based operating systems (see SPARK-1753). If you wish to run PySpark on a YARN cluster with Red Hat installed, we recommend that you build the jar elsewhere, then ship it over to the cluster. We are investigating the exact cause for this.
 
 ## Packaging without Hadoop dependencies for deployment on YARN ##
 
