@@ -83,10 +83,8 @@ Or if you are using a custom-compiled version of Spark, you will need to create 
 the `make-distribution.sh` script included in a Spark source tarball/checkout.
 
 1. Download and build Spark using the instructions [here](index.html)
-2. Create a Spark distribution using `make-distribution.sh`.
-3. Rename the `dist` directory created from `make-distribution.sh` to `spark-{{site.SPARK_VERSION}}`.
-4. Create a `tar` archive: `tar czf spark-{{site.SPARK_VERSION}}.tar.gz spark-{{site.SPARK_VERSION}}`
-5. Upload archive to http/s3/hdfs
+2. Create a Spark distribution using `make-distribution.sh --tgz`.
+3. Upload archive to http/s3/hdfs
 
 
 ## Using a Mesos Master URL
