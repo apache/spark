@@ -51,6 +51,7 @@ class SparkContext(object):
     _active_spark_context = None
     _lock = Lock()
     _python_includes = None # zip and egg files that need to be added to PYTHONPATH
+    _pickle_file_serializer = BatchedSerializer(PickleSerializer(), 1024)
 
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
@@ -260,6 +261,14 @@ class SparkContext(object):
         readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
         jrdd = readRDDFromFile(self._jsc, tempFile.name, numSlices)
         return RDD(jrdd, self, serializer)
+
+    def pickleFile(self, name, minPartitions=None):
+        """
+        Load an RDD previously saved using L{RDD.saveAsPickleFile} method.
+        """
+        minPartitions = minPartitions or self.defaultMinPartitions
+        return RDD(self._jsc.objectFile(name, minPartitions), self,
+                   self._pickle_file_serializer)
 
     def textFile(self, name, minPartitions=None):
         """
