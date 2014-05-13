@@ -51,12 +51,17 @@ class ClosureCleanerSuite extends FunSuite {
     assert(obj.run() === 96) // 4 * (1+2+3+4) + 4 * (1+2+3+4) + 16 * 1
   }
   
-  test("return statements in closures are identified at cleaning time") {
+  test("toplevel return statements in closures are identified at cleaning time") {
     val ex = intercept[SparkException] {
       TestObjectWithBogusReturns.run()
     }
     
     assert(ex.getMessage.contains("Return statements aren't allowed in Spark closures"))
+  }
+
+  test("return statements from named functions nested in closures don't raise exceptions") {
+    val result = TestObjectWithNestedReturns.run()
+    assert(result == 1)
   }
 }
 
@@ -120,12 +125,26 @@ object TestObjectWithBogusReturns {
   def run(): Int = {
     withSpark(new SparkContext("local", "test")) { sc =>
       val nums = sc.parallelize(Array(1, 2, 3, 4))
+      // this return is invalid since it will transfer control outside the closure
       nums.map {x => return 1 ; x * 2}
       1
     }
   }
 }
 
+object TestObjectWithNestedReturns {
+  def run(): Int = {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val nums = sc.parallelize(Array(1, 2, 3, 4))
+      nums.map {x => 
+        // this return is fine since it will not transfer control outside the closure
+        def foo(): Int = { return 5; 1 }
+        foo()
+      }
+      1
+    }
+  }
+}
 
 object TestObjectWithNesting {
   def run(): Int = {
