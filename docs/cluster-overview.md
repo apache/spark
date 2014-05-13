@@ -66,62 +66,76 @@ script as shown here while passing your jar.
 For Python, you can use the `pyFiles` argument of SparkContext
 or its `addPyFile` method to add `.py`, `.zip` or `.egg` files to be distributed.
 
-### Launching Applications with ./bin/spark-submit
+### Launching Applications with Spark submit
 
 Once a user application is bundled, it can be launched using the `spark-submit` script located in
 the bin directory. This script takes care of setting up the classpath with Spark and its
-dependencies, and can support different cluster managers and deploy modes that Spark supports.
-It's usage is
+dependencies, and can support different cluster managers and deploy modes that Spark supports:
 
-    ./bin/spark-submit --class path.to.your.Class [options] <app jar> [app options]
+    ./bin/spark-submit \
+      --class <main-class>
+      --master <master-url> \
+      --deploy-mode <deploy-mode> \
+      ... // other options
+      <application-jar>
+      [application-arguments]
 
-When calling `spark-submit`, `[app options]` will be passed along to your application's
-main class. To enumerate all options available to `spark-submit` run it with 
-the `--help` flag. Here are a few examples of common options:
+    main-class: The entry point for your application (e.g. org.apache.spark.examples.SparkPi)
+    master-url: The URL of the master node (e.g. spark://23.195.26.187:7077)
+    deploy-mode: Whether to deploy this application within the cluster or from an external client (e.g. client)
+    application-jar: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
+    application-arguments: Space delimited arguments passed to the main method of <main-class>, if any
+
+To enumerate all options available to `spark-submit` run it with the `--help` flag. Here are a few
+examples of common options:
 
 {% highlight bash %}
 # Run application locally
 ./bin/spark-submit \
-  --class my.main.ClassName
+  --class org.apache.spark.examples.SparkPi
   --master local[8] \
-  my-app.jar
+  /path/to/examples.jar \
+  100
 
 # Run on a Spark standalone cluster
 ./bin/spark-submit \
-  --class my.main.ClassName
-  --master spark://mycluster:7077 \
+  --class org.apache.spark.examples.SparkPi
+  --master spark://207.184.161.138:7077 \
   --executor-memory 20G \
   --total-executor-cores 100 \
-  my-app.jar
+  /path/to/examples.jar \
+  1000
 
 # Run on a YARN cluster
-HADOOP_CONF_DIR=XX /bin/spark-submit \
-  --class my.main.ClassName
+HADOOP_CONF_DIR=XX ./bin/spark-submit \
+  --class org.apache.spark.examples.SparkPi
   --master yarn-cluster \  # can also be `yarn-client` for client mode
   --executor-memory 20G \
   --num-executors 50 \
-  my-app.jar
+  /path/to/examples.jar \
+  1000
 {% endhighlight %}
 
 ### Loading Configurations from a File
 
-The `spark-submit` script can load default `SparkConf` values from a properties file and pass them
-onto your application. By default it will read configuration options from
-`conf/spark-defaults.conf`. Any values specified in the file will be passed on to the
-application when run. They can obviate the need for certain flags to `spark-submit`: for
-instance, if `spark.master` property is set, you can safely omit the
-`--master` flag from `spark-submit`. In general, configuration values explicitly set on a
-`SparkConf` take the highest precedence, then flags passed to `spark-submit`, then values
-in the defaults file.
+The `spark-submit` script can load default [Spark configuration values](configuration.html) from a
+properties file and pass them on to your application. By default it will read configuration options
+from `conf/spark-defaults.conf`. For more detail, see the section on
+[loading default configurations](configuration.html#loading-default-configurations).
 
-If you are ever unclear where configuration options are coming from. fine-grained debugging
-information can be printed by adding the `--verbose` option to `./spark-submit`.
+Loading default Spark configurations this way can obviate the need for certain flags to
+`spark-submit`. For instance, if the `spark.master` property is set, you can safely omit the
+`--master` flag from `spark-submit`. In general, configuration values explicitly set on a
+`SparkConf` take the highest precedence, then flags passed to `spark-submit`, then values in the
+defaults file.
+
+If you are ever unclear where configuration options are coming from, you can print out fine-grained
+debugging information by running `spark-submit` with the `--verbose` option.
 
 ### Advanced Dependency Management
-When using `./bin/spark-submit` the app jar along with any jars included with the `--jars` option
-will be automatically transferred to the cluster. `--jars` can also be used to distribute .egg and .zip
-libraries for Python to executors. Spark uses the following URL scheme to allow different
-strategies for disseminating jars:
+When using `spark-submit`, the application jar along with any jars included with the `--jars` option
+will be automatically transferred to the cluster. Spark uses the following URL scheme to allow
+different strategies for disseminating jars:
 
 - **file:** - Absolute paths and `file:/` URIs are served by the driver's HTTP file server, and
   every executor pulls the file from the driver HTTP server.
@@ -134,6 +148,9 @@ Note that JARs and files are copied to the working directory for each SparkConte
 This can use up a significant amount of space over time and will need to be cleaned up. With YARN, cleanup
 is handled automatically, and with Spark standalone, automatic cleanup can be configured with the
 `spark.worker.cleanup.appDataTtl` property.
+
+For python, the equivalent `--py-files` option can be used to distribute .egg and .zip libraries
+to executors.
 
 # Monitoring
 
