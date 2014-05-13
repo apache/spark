@@ -37,8 +37,8 @@ private[spark] class Pool(
   extends Schedulable
   with Logging {
 
-  var schedulableQueue = new LinkedBlockingQueue[Schedulable]
-  var schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
+  val schedulableQueue = new LinkedBlockingQueue[Schedulable]
+  val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
   var weight = initWeight
   var minShare = initMinShare
   var runningTasks = 0
