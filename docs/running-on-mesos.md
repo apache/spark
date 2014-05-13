@@ -42,8 +42,10 @@ but Mesos can be run without ZooKeeper using a single master as well.
 
 To install Mesos directly from the upstream project rather than a third party, install from source.
 
-1. Download the Mesos distribution from a [mirror](http://www.apache.org/dyn/closer.cgi/mesos/{{site.MESOS_VERSION}}/)
-2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and installing Mesos
+1. Download the Mesos distribution from a
+   [mirror](http://www.apache.org/dyn/closer.cgi/mesos/{{site.MESOS_VERSION}}/)
+2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and
+   installing Mesos
 
 **Note:** If you want to run Mesos without installing it into the default paths on your system
 (e.g., if you lack administrative privileges to install it), you should also pass the
@@ -137,15 +139,17 @@ machine, and dynamically schedule its own "mini-tasks" within it. The benefit is
 overhead, but at the cost of reserving the Mesos resources for the complete duration of the
 application.
 
-To run in coarse-grained mode, set the `spark.mesos.coarse` property in your [SparkConf](configuration.html#spark-properties):
+To run in coarse-grained mode, set the `spark.mesos.coarse` property in your
+[SparkConf](configuration.html#spark-properties):
 
 {% highlight scala %}
 conf.set("spark.mesos.coarse", "true")
 {% endhighlight %}
 
-In addition, for coarse-grained mode, you can control the maximum number of resources Spark will acquire. By default,
-it will acquire *all* cores in the cluster (that get offered by Mesos), which only makes sense if you run just one
-application at a time. You can cap the maximum number of cores using `conf.set("spark.cores.max", "10")` (for example).
+In addition, for coarse-grained mode, you can control the maximum number of resources Spark will
+acquire. By default, it will acquire *all* cores in the cluster (that get offered by Mesos), which
+only makes sense if you run just one application at a time. You can cap the maximum number of cores
+using `conf.set("spark.cores.max", "10")` (for example).
 
 
 # Running Alongside Hadoop
