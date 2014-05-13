@@ -28,7 +28,6 @@ title: <a href="mllib-guide.html">MLlib</a> - Optimization
 ## Mathematical description
 
 ### Gradient descent
-
 The simplest method to solve optimization problems of the form `$\min_{\wv \in\R^d} \; f(\wv)$`
 is [gradient descent](http://en.wikipedia.org/wiki/Gradient_descent).
 Such first-order optimization methods (including gradient descent and stochastic variants
@@ -128,10 +127,19 @@ is sampled, i.e. `$|S|=$ miniBatchFraction $\cdot n = 1$`, then the algorithm is
 standard SGD. In that case, the step direction depends from the uniformly random sampling of the
 point.
 
-
+### Limited-memory BFGS (L-BFGS)
+[L-BFGS](http://en.wikipedia.org/wiki/Limited-memory_BFGS) is an optimization 
+algorithm in the family of quasi-Newton methods to solve the optimization problems of the form 
+`$\min_{\wv \in\R^d} \; f(\wv)$`. The L-BFGS method approximates the objective function locally as a 
+quadratic without evaluating the second partial derivatives of the objective function to construct the 
+Hessian matrix. The Hessian matrix is approximated by previous gradient evaluations, so there is no 
+vertical scalability issue (the number of training features) when computing the Hessian matrix 
+explicitly in Newton's method. As a result, L-BFGS often achieves rapider convergence compared with 
+other first-order optimization. 
 
 ## Implementation in MLlib
 
+### Gradient descent and stochastic gradient descent
 Gradient descent methods including stochastic subgradient descent (SGD) as
 included as a low-level primitive in `MLlib`, upon which various ML algorithms 
 are developed, see the 
@@ -142,12 +150,12 @@ The SGD method
 [GradientDescent.runMiniBatchSGD](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 has the following parameters:
 
-* `gradient` is a class that computes the stochastic gradient of the function
+* `Gradient` is a class that computes the stochastic gradient of the function
 being optimized, i.e., with respect to a single training example, at the
 current parameter value. MLlib includes gradient classes for common loss
 functions, e.g., hinge, logistic, least-squares.  The gradient class takes as
 input a training example, its label, and the current parameter value. 
-* `updater` is a class that performs the actual gradient descent step, i.e. 
+* `Updater` is a class that performs the actual gradient descent step, i.e. 
 updating the weights in each iteration, for a given gradient of the loss part.
 The updater is also responsible to perform the update from the regularization 
 part. MLlib includes updaters for cases without regularization, as well as
@@ -163,3 +171,107 @@ each iteration, to compute the gradient direction.
 Available algorithms for gradient descent:
 
 * [GradientDescent.runMiniBatchSGD](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+
+### L-BFGS
+L-BFGS is currently only a low-level optimization primitive in `MLlib`. If you want to use L-BFGS in various 
+ML algorithms such as Linear Regression, and Logistic Regression, you have to pass the gradient of objective
+function, and updater into optimizer yourself instead of using the training APIs like 
+[LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
+See the example below. It will be addressed in the next release. 
+
+The L1 regularization by using 
+[L1Updater](api/mllib/index.html#org.apache.spark.mllib.optimization.L1Updater) will not work since the 
+soft-thresholding logic in L1Updater is designed for gradient descent. See the developer's note.
+
+The L-BFGS method
+[LBFGS.runLBFGS](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS)
+has the following parameters:
+
+* `Gradient` is a class that computes the gradient of the objective function
+being optimized, i.e., with respect to a single training example, at the
+current parameter value. MLlib includes gradient classes for common loss
+functions, e.g., hinge, logistic, least-squares.  The gradient class takes as
+input a training example, its label, and the current parameter value. 
+* `Updater` is a class that computes the gradient and loss of objective function 
+of the regularization part for L-BFGS. MLlib includes updaters for cases without 
+regularization, as well as L2 regularizer. 
+* `numCorrections` is the number of corrections used in the L-BFGS update. 10 is 
+recommended.
+* `maxNumIterations` is the maximal number of iterations that L-BFGS can be run.
+* `regParam` is the regularization parameter when using regularization.
+
+The `return` is a tuple containing two elements. The first element is a column matrix
+containing weights for every feature, and the second element is an array containing 
+the loss computed for every iteration.
+
+Here is an example to train binary logistic regression with L2 regularization using
+L-BFGS optimizer. 
+{% highlight scala %}
+import org.apache.spark.SparkContext
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.classification.LogisticRegressionModel
+
+val data = MLUtils.loadLibSVMFile(sc, "mllib/data/sample_libsvm_data.txt")
+val numFeatures = data.take(1)(0).features.size
+
+// Split data into training (60%) and test (40%).
+val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
+
+// Append 1 into the training data as intercept.
+val training = splits(0).map(x => (x.label, MLUtils.appendBias(x.features))).cache()
+
+val test = splits(1)
+
+// Run training algorithm to build the model
+val numCorrections = 10
+val convergenceTol = 1e-4
+val maxNumIterations = 20
+val regParam = 0.1
+val initialWeightsWithIntercept = Vectors.dense(new Array[Double](numFeatures + 1))
+
+val (weightsWithIntercept, loss) = LBFGS.runLBFGS(
+  training,
+  new LogisticGradient(),
+  new SquaredL2Updater(),
+  numCorrections,
+  convergenceTol,
+  maxNumIterations,
+  regParam,
+  initialWeightsWithIntercept)
+
+val model = new LogisticRegressionModel(
+  Vectors.dense(weightsWithIntercept.toArray.slice(0, weightsWithIntercept.size - 1)),
+  weightsWithIntercept(weightsWithIntercept.size - 1))
+
+// Clear the default threshold.
+model.clearThreshold()
+
+// Compute raw scores on the test set.
+val scoreAndLabels = test.map { point =>
+  val score = model.predict(point.features)
+  (score, point.label)
+}
+
+// Get evaluation metrics.
+val metrics = new BinaryClassificationMetrics(scoreAndLabels)
+val auROC = metrics.areaUnderROC()
+
+println("Loss of each step in training process")
+loss.foreach(println)
+println("Area under ROC = " + auROC)
+{% endhighlight %}
+
+#### Developer's note
+Since the Hessian is constructed approximately from previous gradient evaluations, 
+the objective function can not be changed during the optimization process. 
+As a result, Stochastic L-BFGS will not work naively by just using miniBatch; 
+therefore, we don't provide this until we have better understanding.
+
+* `Updater` is a class originally designed for gradient decent which computes 
+the actual gradient descent step. However, we're able to take the gradient and 
+loss of objective function of regularization for L-BFGS by ignoring the part of logic
+only for gradient decent such as adaptive step size stuff. We will refactorize
+this into regularizer to replace updater to separate the logic between 
+regularization and step update later. 
