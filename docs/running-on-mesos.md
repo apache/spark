@@ -102,7 +102,7 @@ The driver also needs some configuration in `spark-env.sh` to interact properly 
    instructions above. On Mac OS X, the library is called `libmesos.dylib` instead of
    `libmesos.so`.
  * `export SPARK_EXECUTOR_URI=<path to spark-{{site.SPARK_VERSION}}.tar.gz uploaded above>`.
-2. Also set `spark.executor.uri` to spark-{{site.SPARK_VERSION}}.tar.gz
+2. Also set `spark.executor.uri` to <path to spark-{{site.SPARK_VERSION}}.tar.gz>
 
 Now when starting a Spark application against the cluster, pass a `mesos://`
 or `zk://` URL as the master when creating a `SparkContext`. For example:
@@ -115,11 +115,10 @@ val conf = new SparkConf()
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
-To set `spark.executor.uri` for use in a Spark shell, set it through the
-`SPARK_JAVA_OPTS` environment variable:
+When running a shell the `spark.executor.uri` parameter is inherited from `SPARK_EXECUTOR_URI`, so
+it does not need to be redundantly passed in as a system property.
 
 {% highlight shell %}
-export SPARK_JAVA_OPTS="-Dspark.executor.uri=hdfs:///path/to/spark-{{site.SPARK_VERSION}}.tar.gz"
 ./bin/spark-shell --master mesos://host:5050
 {% endhighlight %}
 
