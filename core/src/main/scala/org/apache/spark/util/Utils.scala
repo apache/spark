@@ -1142,13 +1142,6 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /**
-   * Execute the given block and log any uncaught exception.
-   */
-  def catchAndLogExceptions(f: => Unit): Unit = {
-    Try(logUncaughtExceptions[Unit](f))
-  }
-
   /** Returns true if the given exception was fatal. See docs for scala.util.control.NonFatal. */
   def isFatalError(e: Throwable): Boolean = {
     e match {

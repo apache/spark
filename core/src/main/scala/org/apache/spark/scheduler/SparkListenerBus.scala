@@ -20,12 +20,13 @@ package org.apache.spark.scheduler
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.Logging
 import org.apache.spark.util.Utils
 
 /**
  * A SparkListenerEvent bus that relays events to its listeners
  */
-private[spark] trait SparkListenerBus {
+private[spark] trait SparkListenerBus extends Logging {
 
   // SparkListeners attached to this event bus
   protected val sparkListeners = new ArrayBuffer[SparkListener]
@@ -76,7 +77,12 @@ private[spark] trait SparkListenerBus {
    */
   private def foreachListener(f: SparkListener => Unit): Unit = {
     sparkListeners.foreach { listener =>
-      Utils.catchAndLogExceptions(f(listener))
+      try {
+        f(listener)
+      } catch {
+        case e: Exception =>
+          logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
+      }
     }
   }
 
