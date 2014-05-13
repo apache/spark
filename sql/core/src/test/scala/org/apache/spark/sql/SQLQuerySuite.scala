@@ -111,6 +111,12 @@ class SQLQuerySuite extends QueryTest {
       3)
   }
 
+  test("approximate count distinct with user provided standard deviation") {
+    checkAnswer(
+      sql("SELECT APPROXIMATE(0.04) COUNT(DISTINCT a) FROM testData2"),
+      3)
+  }
+
   // No support for primitive nulls yet.
   ignore("null count") {
     checkAnswer(
