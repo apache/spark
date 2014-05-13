@@ -35,8 +35,8 @@ One of those is Mesosphere.  To install Mesos using the binary releases provided
 1. Download Mesos installation package from [downloads page](http://mesosphere.io/downloads/)
 2. Follow their instructions for installation and configuration
 
-The Mesosphere installation documents suggest setting up Zookeeper to handle Mesos master failover,
-but Mesos can be run without Zookeeper using a single master as well.
+The Mesosphere installation documents suggest setting up ZooKeeper to handle Mesos master failover,
+but Mesos can be run without ZooKeeper using a single master as well.
 
 ## From source
 
@@ -89,17 +89,21 @@ the `make-distribution.sh` script included in a Spark source tarball/checkout.
 
 ## Using a Mesos Master URL
 
-1. Edit `spark-env.sh` in the Spark `conf` directory and add the following lines:
-   * `export MESOS_NATIVE_LIBRARY=<path to libmesos.so>`. This path is typically
-     `<prefix>/lib/libmesos.so` where the prefix is `/usr/local` by default. See Mesos installation
-     instructions above. Also, on Mac OS X, the library is called `libmesos.dylib` instead of
-     `libmesos.so`.
-   * `export SPARK_EXECUTOR_URI=<path to spark-{{site.SPARK_VERSION}}.tar.gz uploaded above>`.
-   * `export MASTER=mesos://HOST:PORT` where HOST:PORT is the host and port (default: 5050) of your
-     Mesos master (or `zk://...` if using Mesos with ZooKeeper).
-2. To run a Spark application against the cluster, when you create your `SparkContext`, pass the
-   string `mesos://HOST:PORT` as the master URL. In addition, the
-   `spark.executor.uri` property must be set. For example:
+The Master URLs for Mesos are in the form `mesos://host:5050` for a single-master Mesos
+cluster, or `zk://host:2181` for a multi-master Mesos cluster using ZooKeeper.
+
+The driver also needs some configuration in `spark-env.sh` to interact properly with Mesos:
+
+1. In `spark.env.sh` set some environment variables:
+ * `export MESOS_NATIVE_LIBRARY=<path to libmesos.so>`. This path is typically
+   `<prefix>/lib/libmesos.so` where the prefix is `/usr/local` by default. See Mesos installation
+   instructions above. On Mac OS X, the library is called `libmesos.dylib` instead of
+   `libmesos.so`.
+ * `export SPARK_EXECUTOR_URI=<path to spark-{{site.SPARK_VERSION}}.tar.gz uploaded above>`.
+2. Also set `spark.executor.uri` to spark-{{site.SPARK_VERSION}}.tar.gz
+
+Now when starting a Spark application against the cluster, pass a `mesos://`
+or `zk://` URL as the master when creating a `SparkContext`. For example:
 
 {% highlight scala %}
 val conf = new SparkConf()
@@ -109,8 +113,13 @@ val conf = new SparkConf()
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
-To set `spark.executor.uri` for use in a Spark shell, set
-SPARK_JAVA_OPTS="-Dspark.executor.uri=hdfs:///path/to/spark-{{site.SPARK_VERSION}}.tar.gz"
+To set `spark.executor.uri` for use in a Spark shell, set it through the
+`SPARK_JAVA_OPTS` environment variable:
+
+{% highlight shell %}
+export SPARK_JAVA_OPTS="-Dspark.executor.uri=hdfs:///path/to/spark-{{site.SPARK_VERSION}}.tar.gz"
+./bin/spark-shell --master mesos://host:5050
+{% endhighlight %}
 
 
 # Mesos Run Modes
