@@ -112,7 +112,7 @@ private[spark] object HttpBroadcast extends Logging {
   private var securityManager: SecurityManager = null
 
   // TODO: This shouldn't be a global variable so that multiple SparkContexts can coexist
-  private val files = new TimeStampedHashSet[String]
+  private val files = new TimeStampedHashSet[File]
   private val httpReadTimeout = TimeUnit.MILLISECONDS.convert(5, TimeUnit.MINUTES).toInt
   private var compressionCodec: CompressionCodec = null
   private var cleaner: MetadataCleaner = null
@@ -173,7 +173,7 @@ private[spark] object HttpBroadcast extends Logging {
     val serOut = ser.serializeStream(out)
     serOut.writeObject(value)
     serOut.close()
-    files += file.getAbsolutePath
+    files += file
   }
 
   def read[T: ClassTag](id: Long): T = {
@@ -216,7 +216,7 @@ private[spark] object HttpBroadcast extends Logging {
     SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
     if (removeFromDriver) {
       val file = getFile(id)
-      files.remove(file.toString)
+      files.remove(file)
       deleteBroadcastFile(file)
     }
   }
@@ -232,7 +232,7 @@ private[spark] object HttpBroadcast extends Logging {
       val (file, time) = (entry.getKey, entry.getValue)
       if (time < cleanupTime) {
         iterator.remove()
-        deleteBroadcastFile(new File(file.toString))
+        deleteBroadcastFile(file)
       }
     }
   }
