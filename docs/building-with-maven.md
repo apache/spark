@@ -129,6 +129,13 @@ Java 8 tests are run when -Pjava8-tests profile is enabled, they will run in spi
 For these tests to run your system must have a JDK 8 installation. 
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
 
+## Building for PySpark on YARN ##
+
+PySpark on YARN is only supported if the jar is built with maven. Further, there is a known problem
+with building this assembly jar on Red Hat based operating systems (see SPARK-1753). If you wish to
+run PySpark on a YARN cluster with Red Hat installed, we recommend that you build the jar elsewhere,
+then ship it over to the cluster. We are investigating the exact cause for this.
+
 ## Packaging without Hadoop dependencies for deployment on YARN ##
 
 The assembly jar produced by "mvn package" will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The "hadoop-provided" profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself. 

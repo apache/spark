@@ -18,7 +18,9 @@ you can download a package for any version of Hadoop.
 ## Basics
 
 Spark's interactive shell provides a simple way to learn the API, as well as a powerful tool to analyze datasets interactively.
-Start the shell by running `./bin/spark-shell` in the Spark directory.
+Start the shell by running the following in the Spark directory.
+
+    ./bin/spark-shell
 
 Spark's primary abstraction is a distributed collection of items called a Resilient Distributed Dataset (RDD). RDDs can be created from Hadoop InputFormats (such as HDFS files) or by transforming other RDDs. Let's make a new RDD from the text of the README file in the Spark source directory:
 
