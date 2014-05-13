@@ -70,37 +70,50 @@ or its `addPyFile` method to add `.py`, `.zip` or `.egg` files to be distributed
 
 Once a user application is bundled, it can be launched using the `spark-submit` script located in
 the bin directory. This script takes care of setting up the classpath with Spark and its
-dependencies, and can support different cluster managers and deploy modes that Spark supports.
-It's usage is
+dependencies, and can support different cluster managers and deploy modes that Spark supports:
 
-    ./bin/spark-submit --class path.to.your.Class [options] <app jar> [app options]
+    ./bin/spark-submit \
+      --class <main-class>
+      --master <master-url> \
+      --deploy-mode <deploy-mode> \
+      ... // other options
+      <application-jar>
+      [application-arguments]
 
-When calling `spark-submit`, `[app options]` will be passed along to your application's
-main class. To enumerate all options available to `spark-submit` run it with 
-the `--help` flag. Here are a few examples of common options:
+    main-class: The entry point for your application (e.g. org.apache.spark.examples.SparkPi)
+    master-url: The URL of the master node (e.g. spark://23.195.26.187:7077)
+    deploy-mode: Whether to deploy this application within the cluster or from an external client (e.g. client)
+    application-jar: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
+    application-arguments: Space delimited arguments passed to the main method of <main-class>, if any
+
+To enumerate all options available to `spark-submit` run it with the `--help` flag. Here are a few
+examples of common options:
 
 {% highlight bash %}
 # Run application locally
 ./bin/spark-submit \
-  --class my.main.ClassName
+  --class org.apache.spark.examples.SparkPi
   --master local[8] \
-  my-app.jar
+  /path/to/examples.jar \
+  100
 
 # Run on a Spark standalone cluster
 ./bin/spark-submit \
-  --class my.main.ClassName
-  --master spark://mycluster:7077 \
+  --class org.apache.spark.examples.SparkPi
+  --master spark://207.184.161.138:7077 \
   --executor-memory 20G \
   --total-executor-cores 100 \
-  my-app.jar
+  /path/to/examples.jar \
+  1000
 
 # Run on a YARN cluster
 HADOOP_CONF_DIR=XX ./bin/spark-submit \
-  --class my.main.ClassName
+  --class org.apache.spark.examples.SparkPi
   --master yarn-cluster \  # can also be `yarn-client` for client mode
   --executor-memory 20G \
   --num-executors 50 \
-  my-app.jar
+  /path/to/examples.jar \
+  1000
 {% endhighlight %}
 
 ### Loading Configurations from a File

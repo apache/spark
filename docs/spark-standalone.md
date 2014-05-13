@@ -160,27 +160,16 @@ You can also pass an option `--cores <numCores>` to control the number of cores 
 
 # Launching Compiled Spark Applications
 
-Spark supports two deploy modes. Spark applications may run with the driver inside the client process or entirely inside the cluster.
+Spark supports two deploy modes: applications may run with the driver inside the client process or
+entirely inside the cluster. The
+[Spark submit script](cluster-overview.html#launching-applications-with-spark-submit) provides the
+most straightforward way to submit a compiled Spark application to the cluster in either deploy
+mode.
 
-The spark-submit script provides the most straightforward way to submit a compiled Spark application to the cluster in either deploy mode. For more detail, see the [cluster mode overview](cluster-overview.html).
-
-    ./bin/spark-submit \
-      --class <main-class>
-      --master <master-url> \
-      --deploy-mode <deploy-mode> \
-      ... // other options
-      <application-jar>
-      [application-arguments]
-
-    main-class: The entry point for your application (e.g. org.apache.spark.examples.SparkPi)
-    master-url: The URL of the master node (e.g. spark://23.195.26.187:7077)
-    deploy-mode: Whether to deploy this application within the cluster or from an external client (e.g. client)
-    application-jar: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
-    application-arguments: Arguments passed to the main method of <main-class>
-
-If your application is launched through `spark-submit`, then the application jar is automatically
-distributed to all worker nodes. Otherwise, you'll need to explicitly add the jar through
-`sc.addJars`. To control the application's configuration or execution environment, see
+If your application is launched through Spark submit, then the application jar is automatically
+distributed to all worker nodes. For any additional jars that your application depends on, you
+should specify them through the `--jars` flag using comma as a delimiter (e.g. `--jars jar1,jar2`).
+To control the application's configuration or execution environment, see
 [Spark Configuration](configuration.html).
 
 # Resource Scheduling
