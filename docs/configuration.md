@@ -18,9 +18,9 @@ Spark provides three locations to configure the system:
 Spark properties control most application settings and are configured separately for each
 application. The preferred way is to set them through
 [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) and passing it as an argument to your
-SparkContext. SparkConf lets you configure most of the common properties to initialize a cluster
-(e.g., master URL and application name), as well as arbitrary key-value pairs through the `set()`
-method. For example, we could initialize an application as follows:
+SparkContext. SparkConf allows you to configure most of the common properties to initialize a
+cluster (e.g. master URL and application name), as well as arbitrary key-value pairs through the
+`set()` method. For example, we could initialize an application as follows:
 
 {% highlight scala %}
 val conf = new SparkConf
@@ -45,7 +45,7 @@ key and a value separated by whitespace. For example,
 
 Any values specified in the file will be passed on to the application, and merged with those
 specified through SparkConf. If the same configuration property exists in both `spark-defaults.conf`
-and SparkConf, then the latter will take precedence as it is most application-specific.
+and SparkConf, then the latter will take precedence as it is the most application-specific.
 
 ## All Configuration Properties
 
@@ -203,7 +203,7 @@ Apart from these, the following properties are also available, and may be useful
     Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
     standard javax servlet Filter. Parameters to each filter can also be specified by setting a
     java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
-    (e.g.-Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
+    (e.g. -Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
   </td>
 </tr>
 <tr>
