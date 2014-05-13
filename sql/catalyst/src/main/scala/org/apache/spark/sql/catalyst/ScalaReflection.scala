@@ -41,6 +41,9 @@ object ScalaReflection {
 
   /** Returns a catalyst DataType for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): DataType = tpe match {
+    case t if t <:< typeOf[Option[_]] =>
+      val TypeRef(_, _, Seq(optType)) = t
+      schemaFor(optType)
     case t if t <:< typeOf[Product] =>
       val params = t.member("<init>": TermName).asMethod.paramss
       StructType(
@@ -59,9 +62,6 @@ object ScalaReflection {
     case t if t <:< typeOf[String] => StringType
     case t if t <:< typeOf[Timestamp] => TimestampType
     case t if t <:< typeOf[BigDecimal] => DecimalType
-    case t if t <:< typeOf[Option[_]] =>
-      val TypeRef(_, _, Seq(optType)) = t
-      schemaFor(optType)
     case t if t <:< typeOf[java.lang.Integer] => IntegerType
     case t if t <:< typeOf[java.lang.Long] => LongType
     case t if t <:< typeOf[java.lang.Double] => DoubleType
