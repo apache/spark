@@ -17,19 +17,21 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.{ArrayBuffer, HashSet}
+
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.mock.EasyMockSugar
 
 import org.apache.spark._
-import scala.collection.mutable.ArrayBuffer
 
 class FakeSchedulerBackend extends SchedulerBackend {
 
   def start() {}
   def stop() {}
-  def reviveOffers() {}
-  def defaultParallelism() = 1
+  def reviveOffers() {
 
+  }
+  def defaultParallelism() = 1
 }
 
 class TaskSchedulerImplSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
@@ -40,6 +42,112 @@ class TaskSchedulerImplSuite extends FunSuite with BeforeAndAfter with EasyMockS
   before {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     taskScheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
+  }
+
+  test("ClusterSchedulerBackend is started and stopped properly") {
+    taskScheduler = new TaskSchedulerImpl(sc)
+    val mockSchedulerBackend = mock[SchedulerBackend]
+    taskScheduler.initialize(mockSchedulerBackend)
+    expecting {
+      mockSchedulerBackend.start()
+      mockSchedulerBackend.stop()
+    }
+    whenExecuting(mockSchedulerBackend) {
+      taskScheduler.start()
+      taskScheduler.stop()
+    }
+  }
+
+  test("speculative execution task is started and stopped properly") {
+    sc.conf.set("spark.speculation", "true")
+    taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.backend = new FakeSchedulerBackend
+    taskScheduler.start()
+    assert(taskScheduler.speculativeExecTask != null)
+    taskScheduler.stop()
+    assert(taskScheduler.speculativeExecTask.isCancelled === true)
+  }
+
+  test("tasks are successfully submitted and reviveOffer is called") {
+    taskScheduler = new TaskSchedulerImpl(sc)
+    val mockSchedulerBackend = mock[SchedulerBackend]
+    taskScheduler.initialize(mockSchedulerBackend)
+    val taskSet1 = FakeTask.createTaskSet(1, 0, 0)
+    expecting {
+      mockSchedulerBackend.reviveOffers()
+    }
+    whenExecuting(mockSchedulerBackend) {
+      taskScheduler.submitTasks(taskSet1)
+    }
+    assert(taskScheduler.activeTaskSets(taskSet1.id) != null)
+  }
+
+  test("running tasks are cancelled and the involved stage is aborted when calling cancelTasks") {
+    taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.setDAGScheduler(sc.dagScheduler)
+    val taskSet1 = FakeTask.createTaskSet(1, 0, 0)
+    val tm =  new TaskSetManager(taskScheduler, taskSet1, 1)
+    val mockSchedulerBackend = mock[SchedulerBackend]
+    taskScheduler.initialize(mockSchedulerBackend)
+    tm.runningTasksSet += 0
+    taskScheduler.activeTaskSets += taskSet1.id -> tm
+    taskScheduler.schedulableBuilder.addTaskSetManager(tm, tm.taskSet.properties)
+    val dummyTaskId = taskScheduler.newTaskId()
+    taskScheduler.taskIdToExecutorId += dummyTaskId -> "exec1"
+    expecting {
+      mockSchedulerBackend.killTask(dummyTaskId, "exec1", false)
+    }
+    whenExecuting(mockSchedulerBackend) {
+      taskScheduler.cancelTasks(0, false)
+    }
+  }
+
+  test("the data structures are updated properly when the task state is updated") {
+    val taskSet1 = FakeTask.createTaskSet(1, 0, 0)
+    val tm = new TaskSetManager(taskScheduler, taskSet1, 1)
+    taskScheduler.schedulableBuilder.addTaskSetManager(tm, tm.taskSet.properties)
+    tm.taskInfos += 0.toLong -> new TaskInfo(0, 0, 0, 0, "exec1", "host1", TaskLocality.ANY, false)
+    taskScheduler.activeExecutorIds += "exec1"
+    taskScheduler.executorIdToHost += "exec1" -> "host1"
+    taskScheduler.executorsByHost += "host1" -> HashSet[String]("exec1")
+    taskScheduler.taskIdToExecutorId += 0.toLong -> "exec1"
+    taskScheduler.taskIdToTaskSetId += 0.toLong -> taskSet1.id
+    taskScheduler.activeTaskSets += taskSet1.id -> tm
+    assert(taskScheduler.activeExecutorIds.contains("exec1") === true)
+    assert(taskScheduler.executorIdToHost.contains("exec1") === true)
+    assert(taskScheduler.executorsByHost.contains("host1") === true)
+    assert(taskScheduler.taskIdToTaskSetId.contains(0) === true)
+    taskScheduler.statusUpdate(0, TaskState.LOST, null)
+    assert(taskScheduler.activeExecutorIds.contains("exec1") === false)
+    assert(taskScheduler.executorIdToHost.contains("exec1") === false)
+    assert(taskScheduler.executorsByHost.contains("host1") === false)
+    assert(taskScheduler.taskIdToTaskSetId.contains(0) === false)
+  }
+
+  test("task result is correctly enqueued according to the updated state") {
+    taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.setDAGScheduler(sc.dagScheduler)
+    val taskSet1 = FakeTask.createTaskSet(2, 0, 0)
+    val tm = new TaskSetManager(taskScheduler, taskSet1, 1)
+    tm.taskInfos += 0.toLong -> new TaskInfo(0, 0, 0, 0, "exec1", "host1", TaskLocality.ANY, false)
+    tm.taskInfos += 1.toLong -> new TaskInfo(0, 1, 0, 0, "exec1", "host1", TaskLocality.ANY, false)
+    taskScheduler.activeExecutorIds += "exec1"
+    taskScheduler.executorIdToHost += "exec1" -> "host1"
+    taskScheduler.executorsByHost += "host1" -> HashSet[String]("exec1")
+    taskScheduler.taskIdToExecutorId += 0.toLong -> "exec1"
+    taskScheduler.taskIdToExecutorId += 1.toLong -> "exec1"
+    taskScheduler.taskIdToTaskSetId += 0.toLong -> taskSet1.id
+    taskScheduler.taskIdToTaskSetId += 1.toLong -> taskSet1.id
+    taskScheduler.activeTaskSets += taskSet1.id -> tm
+    taskScheduler.taskResultGetter = mock[TaskResultGetter]
+    expecting {
+      taskScheduler.taskResultGetter.enqueueFailedTask(tm, 0, TaskState.FAILED, null)
+      taskScheduler.taskResultGetter.enqueueSuccessfulTask(tm, 1, null)
+    }
+    whenExecuting(taskScheduler.taskResultGetter) {
+      taskScheduler.statusUpdate(0, TaskState.FAILED, null)
+      taskScheduler.statusUpdate(1, TaskState.FINISHED, null)
+    }
   }
 
   test("Scheduler does not always schedule tasks on the same workers") {
