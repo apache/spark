@@ -20,6 +20,8 @@ package org.apache.spark.scheduler
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.util.Utils
+
 /**
  * A SparkListenerEvent bus that relays events to its listeners
  */
@@ -34,38 +36,48 @@ private[spark] trait SparkListenerBus {
   }
 
   /**
-   * Post an event to all attached listeners. This does nothing if the event is
-   * SparkListenerShutdown.
+   * Post an event to all attached listeners.
+   * This does nothing if the event is SparkListenerShutdown.
    */
   def postToAll(event: SparkListenerEvent) {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
-        sparkListeners.foreach(_.onStageSubmitted(stageSubmitted))
+        foreachListener(_.onStageSubmitted(stageSubmitted))
       case stageCompleted: SparkListenerStageCompleted =>
-        sparkListeners.foreach(_.onStageCompleted(stageCompleted))
+        foreachListener(_.onStageCompleted(stageCompleted))
       case jobStart: SparkListenerJobStart =>
-        sparkListeners.foreach(_.onJobStart(jobStart))
+        foreachListener(_.onJobStart(jobStart))
       case jobEnd: SparkListenerJobEnd =>
-        sparkListeners.foreach(_.onJobEnd(jobEnd))
+        foreachListener(_.onJobEnd(jobEnd))
       case taskStart: SparkListenerTaskStart =>
-        sparkListeners.foreach(_.onTaskStart(taskStart))
+        foreachListener(_.onTaskStart(taskStart))
       case taskGettingResult: SparkListenerTaskGettingResult =>
-        sparkListeners.foreach(_.onTaskGettingResult(taskGettingResult))
+        foreachListener(_.onTaskGettingResult(taskGettingResult))
       case taskEnd: SparkListenerTaskEnd =>
-        sparkListeners.foreach(_.onTaskEnd(taskEnd))
+        foreachListener(_.onTaskEnd(taskEnd))
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
-        sparkListeners.foreach(_.onEnvironmentUpdate(environmentUpdate))
+        foreachListener(_.onEnvironmentUpdate(environmentUpdate))
       case blockManagerAdded: SparkListenerBlockManagerAdded =>
-        sparkListeners.foreach(_.onBlockManagerAdded(blockManagerAdded))
+        foreachListener(_.onBlockManagerAdded(blockManagerAdded))
       case blockManagerRemoved: SparkListenerBlockManagerRemoved =>
-        sparkListeners.foreach(_.onBlockManagerRemoved(blockManagerRemoved))
+        foreachListener(_.onBlockManagerRemoved(blockManagerRemoved))
       case unpersistRDD: SparkListenerUnpersistRDD =>
-        sparkListeners.foreach(_.onUnpersistRDD(unpersistRDD))
+        foreachListener(_.onUnpersistRDD(unpersistRDD))
       case applicationStart: SparkListenerApplicationStart =>
-        sparkListeners.foreach(_.onApplicationStart(applicationStart))
+        foreachListener(_.onApplicationStart(applicationStart))
       case applicationEnd: SparkListenerApplicationEnd =>
-        sparkListeners.foreach(_.onApplicationEnd(applicationEnd))
+        foreachListener(_.onApplicationEnd(applicationEnd))
       case SparkListenerShutdown =>
     }
   }
+
+  /**
+   * Apply the given function to all attached listeners, catching and logging any exception.
+   */
+  private def foreachListener(f: SparkListener => Unit): Unit = {
+    sparkListeners.foreach { listener =>
+      Utils.catchAndLogExceptions(f(listener))
+    }
+  }
+
 }

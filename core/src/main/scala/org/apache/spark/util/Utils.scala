@@ -1128,7 +1128,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** 
-   * Executes the given block, printing and re-throwing any uncaught exceptions.
+   * Execute the given block, logging and re-throwing any uncaught exception.
    * This is particularly useful for wrapping code that runs in a thread, to ensure
    * that exceptions are printed, and to avoid having to catch Throwable.
    */
@@ -1140,6 +1140,13 @@ private[spark] object Utils extends Logging {
         logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
         throw t
     }
+  }
+
+  /**
+   * Execute the given block and log any uncaught exception.
+   */
+  def catchAndLogExceptions(f: => Unit): Unit = {
+    Try(logUncaughtExceptions[Unit](f))
   }
 
   /** Returns true if the given exception was fatal. See docs for scala.util.control.NonFatal. */
