@@ -136,6 +136,27 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void sample() {
+    List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    JavaRDD<Integer> rdd = sc.parallelize(ints);
+    JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 11);
+    Assert.assertEquals(3, sample20.count()); // expected 2 but of course result varies randomly a bit
+    JavaRDD<Integer> sample20NoReplacement = rdd.sample(false, 0.2, 11);
+    Assert.assertEquals(2, sample20NoReplacement.count());
+  }
+
+  @Test
+  public void randomSplit() {
+    List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    JavaRDD<Integer> rdd = sc.parallelize(ints);
+    JavaRDD<Integer>[] splits = rdd.randomSplit(new double[] { 0.4, 0.6, 1.0 }, 11);
+    Assert.assertEquals(3, splits.length);
+    Assert.assertEquals(2, splits[0].count());
+    Assert.assertEquals(3, splits[1].count());
+    Assert.assertEquals(5, splits[2].count());
+  }
+
+  @Test
   public void sortByKey() {
     List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
     pairs.add(new Tuple2<Integer, Integer>(0, 4));
