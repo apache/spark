@@ -1093,9 +1093,9 @@ object DecisionTree extends Serializable with Logging {
      */
     if (strategy.categoricalFeaturesInfo.size > 0) {
       val maxCategoriesForFeatures = strategy.categoricalFeaturesInfo.maxBy(_._2)._2
-      require(numBins >= maxCategoriesForFeatures)
+      require(numBins > maxCategoriesForFeatures)
       if (strategy.isMultiClassification) {
-        require(numBins > math.pow(2, maxCategoriesForFeatures.toInt) - 1)
+        require(numBins > math.pow(2, maxCategoriesForFeatures.toInt - 1) - 1)
       }
     }
 
