@@ -24,20 +24,27 @@ right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/
 
 # Running the Examples and Shell
 
-Spark comes with several sample programs.  Scala, Java and Python examples are in the `examples/src/main` directory.
-To run one of the Java or Scala sample programs, use `bin/run-example <class> [params]` in the top-level Spark directory. For example,
+Spark comes with several sample programs.  Scala, Java and Python examples are in the
+`examples/src/main` directory. To run one of the Java or Scala sample programs, use
+`bin/run-example <class> [params]` in the top-level Spark directory. (Behind the scenes, this
+invokes the more general
+[Spark submit script](cluster-overview.html#launching-applications-with-spark-submit) for
+launching applications). For example,
 
     ./bin/run-example SparkPi 10
 
-You can also run Spark interactively through modified versions of the Scala shell. This is a great way to learn the framework.
+You can also run Spark interactively through modified versions of the Scala shell. This is a
+great way to learn the framework.
 
     ./bin/spark-shell --master local[2]
 
-The `--master` option specifies the [master URL for a distributed cluster](scala-programming-guide.html#master-urls),
-or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
+The `--master` option specifies the
+[master URL for a distributed cluster](scala-programming-guide.html#master-urls), or `local` to run
+locally with one thread, or `local[N]` to run locally with N threads. You should start by using
 `local` for testing. For a full list of options, run Spark shell with the `--help` option.
 
-If Scala is not your cup of tea, you can also try out Spark using the python interface with `bin/pyspark <program> [params]`. For example,
+Spark also provides a Python interface. To run an example Spark application written in Python, use
+`bin/pyspark <program> [params]`. For example,
 
     ./bin/pyspark examples/src/main/python/pi.py local[2] 10
 
