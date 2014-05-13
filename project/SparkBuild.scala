@@ -317,6 +317,9 @@ object SparkBuild extends Build {
   val excludeFastutil = ExclusionRule(organization = "it.unimi.dsi")
   val excludeJruby = ExclusionRule(organization = "org.jruby")
   val excludeThrift = ExclusionRule(organization = "org.apache.thrift")
+  val excludeCommonsLang = ExclusionRule(organization = "commons-lang")
+  val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
+  val excludeServletApi = ExclusionRule(organization = "javax.servlet", artifact = "servlet-api")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
@@ -490,7 +493,7 @@ object SparkBuild extends Build {
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
       "org.apache.hive" % "hive-metastore" % hiveVersion,
-      "org.apache.hive" % "hive-exec"      % hiveVersion,
+      "org.apache.hive" % "hive-exec"      % hiveVersion excludeAll(excludeCommonsLang, excludeCommonsLogging),
       "org.apache.hive" % "hive-serde"     % hiveVersion
     ),
     // Multiple queries rely on the TestHive singleton.  See comments there for more details.
@@ -563,10 +566,10 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
       "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-server-web-proxy" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm)
+      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
+      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
+      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
+      "org.apache.hadoop" % "hadoop-yarn-server-web-proxy" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging, excludeServletApi)
     )
   )
 
