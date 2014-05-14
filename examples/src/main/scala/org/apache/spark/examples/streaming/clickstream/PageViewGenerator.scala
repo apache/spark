@@ -40,11 +40,13 @@ object PageView extends Serializable {
 /** Generates streaming events to simulate page views on a website.
   *
   * This should be used in tandem with PageViewStream.scala. Example:
-  * $ ./bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10
-  * $ ./bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444
   *
-  * When running this, you may want to set the root logging level to ERROR in
-  * conf/log4j.properties to reduce the verbosity of the output.
+  * To run the generator
+  * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
+  * To process the generated stream
+  * `$ bin/run-example \
+  *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
+  *
   */
 // scalastyle:on
 object PageViewGenerator {

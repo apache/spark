@@ -31,8 +31,8 @@ import org.apache.spark.streaming.StreamingContext._
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
  * and then run the example
- *    `$ ./bin/spark-submit examples.jar
- *    --class org.apache.spark.examples.streaming.StatefulNetworkWordCount localhost 9999`
+ *    `$ bin/run-example
+ *      org.apache.spark.examples.streaming.StatefulNetworkWordCount localhost 9999`
  */
 object StatefulNetworkWordCount {
   def main(args: Array[String]) {
@@ -51,7 +51,7 @@ object StatefulNetworkWordCount {
       Some(currentCount + previousCount)
     }
 
-    val sparkConf = new SparkConf().setAppName("NetworkWordCumulativeCountUpdateStateByKey")
+    val sparkConf = new SparkConf().setAppName("StatefulNetworkWordCount")
     // Create the context with a 1 second batch size
     val ssc = new StreamingContext(sparkConf, Seconds(1))
     ssc.checkpoint(".")
