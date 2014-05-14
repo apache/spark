@@ -141,7 +141,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     // Launch tasks returned by a set of resource offers
     def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
-        freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
         val ser = SparkEnv.get.closureSerializer.newInstance()
         val serializedTask = ser.serialize(task)
         if (serializedTask.limit >= akkaFrameSize - 1024) {
@@ -152,6 +151,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           logError(msg, exception)
           throw exception
         }
+        freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
         executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))
       }
     }
