@@ -147,9 +147,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           var msg = "Serialized task %s:%d were %d bytes which " +
             "exceeds spark.akka.frameSize (%d bytes)."
           msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize)
-          val exception = new SparkException(msg)
-          logError(msg, exception)
-          throw exception
+          scheduler.error(msg)
+          // TODO: Need to throw an exception?
+          throw new SparkException(msg)
         }
         freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
         executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))
