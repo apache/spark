@@ -144,8 +144,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         val ser = SparkEnv.get.closureSerializer.newInstance()
         val serializedTask = ser.serialize(task)
         if (serializedTask.limit >= akkaFrameSize - 1024) {
-          var msg = "Serialized task %s:%d were %d bytes which " +
-            "exceeds spark.akka.frameSize (%d bytes)."
+          var msg = "Serialized task %s:%d was %d bytes which " +
+            "exceeds spark.akka.frameSize (%d bytes)." +
+            "Consider using broadcast variables for large values"
           msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize)
           scheduler.error(msg)
           // TODO: Need to throw an exception?
