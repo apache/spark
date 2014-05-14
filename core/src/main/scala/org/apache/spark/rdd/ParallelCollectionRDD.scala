@@ -117,6 +117,15 @@ private object ParallelCollectionRDD {
     if (numSlices < 1) {
       throw new IllegalArgumentException("Positive number of slices required")
     }
+    // Sequences need to be sliced at same positions for operations
+    // like RDD.zip() to behave as expected
+    def positions(length: Long, numSlices: Int): Seq[(Int, Int)] = {
+      (0 until numSlices).map(i => {
+        val start = ((i * length) / numSlices).toInt
+        val end = (((i + 1) * length) / numSlices).toInt
+        (start, end)
+      })
+    }
     seq match {
       case r: Range.Inclusive => {
         val sign = if (r.step < 0) {
@@ -128,18 +137,17 @@ private object ParallelCollectionRDD {
           r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
       }
       case r: Range => {
-        (0 until numSlices).map(i => {
-          val start = ((i * r.length.toLong) / numSlices).toInt
-          val end = (((i + 1) * r.length.toLong) / numSlices).toInt
-          new Range(r.start + start * r.step, r.start + end * r.step, r.step)
+        positions(r.length, numSlices).map({
+          case (start, end) =>
+            new Range(r.start + start * r.step, r.start + end * r.step, r.step)
         }).asInstanceOf[Seq[Seq[T]]]
       }
       case nr: NumericRange[_] => {
         // For ranges of Long, Double, BigInteger, etc
         val slices = new ArrayBuffer[Seq[T]](numSlices)
-        val sliceSize = (nr.size + numSlices - 1) / numSlices // Round up to catch everything
         var r = nr
-        for (i <- 0 until numSlices) {
+        for ((start, end) <- positions(nr.length, numSlices)) {
+          val sliceSize = end - start
           slices += r.take(sliceSize).asInstanceOf[Seq[T]]
           r = r.drop(sliceSize)
         }
@@ -147,10 +155,9 @@ private object ParallelCollectionRDD {
       }
       case _ => {
         val array = seq.toArray // To prevent O(n^2) operations for List etc
-        (0 until numSlices).map(i => {
-          val start = ((i * array.length.toLong) / numSlices).toInt
-          val end = (((i + 1) * array.length.toLong) / numSlices).toInt
-          array.slice(start, end).toSeq
+        positions(array.length, numSlices).map({
+          case (start, end) =>
+            array.slice(start, end).toSeq
         })
       }
     }
