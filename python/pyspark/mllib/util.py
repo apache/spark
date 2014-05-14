@@ -170,7 +170,7 @@ class MLUtils:
 
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
-        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, 1.23), (2, 4.56)])), \
+        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, -1.23), (2, 4.56e-7)])), \
                         LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
@@ -179,7 +179,7 @@ class MLUtils:
         >>> type(loaded[0]) == LabeledPoint
         True
         >>> print examples[0]
-        (1.1,(3,[0,2],[1.23,4.56]))
+        (1.1,(3,[0,2],[-1.23,4.56e-07]))
         >>> type(examples[1]) == LabeledPoint
         True
         >>> print examples[1]
