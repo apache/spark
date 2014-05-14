@@ -206,8 +206,8 @@ private[spark] object EventLoggingListener extends Logging {
         applicationComplete = filePaths.exists { path => isApplicationCompleteFile(path.getName) }
       )
     } catch {
-      case t: Throwable =>
-        logError("Exception in parsing logging info from directory %s".format(logDir), t)
+      case e: Exception =>
+        logError("Exception in parsing logging info from directory %s".format(logDir), e)
       EventLoggingInfo.empty
     }
   }

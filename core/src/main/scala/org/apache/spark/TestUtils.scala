@@ -43,6 +43,7 @@ private[spark] object TestUtils {
    */
   def createJarWithClasses(classNames: Seq[String], value: String = ""): URL = {
     val tempDir = Files.createTempDir()
+    tempDir.deleteOnExit()
     val files = for (name <- classNames) yield createCompiledClass(name, tempDir, value)
     val jarFile = new File(tempDir, "testJar-%s.jar".format(System.currentTimeMillis()))
     createJar(files, jarFile)
