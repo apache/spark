@@ -28,7 +28,7 @@ class SQLContext:
     register L{SchemaRDD}s as tables, execute sql over tables, cache tables, and read parquet files.
     """
 
-    def __init__(self, sparkContext):
+    def __init__(self, sparkContext, sqlContext = None):
         """
         Create a new SQLContext.
 
@@ -58,10 +58,13 @@ class SQLContext:
         self._jvm = self._sc._jvm
         self._pythonToJavaMap = self._jvm.PythonRDD.pythonToJavaMap
 
+        if sqlContext:
+            self._scala_SQLContext = sqlContext
+
     @property
     def _ssql_ctx(self):
         """
-        Accessor for the JVM SparkSQL context.  Subclasses can overrite this property to provide
+        Accessor for the JVM SparkSQL context.  Subclasses can override this property to provide
         their own JVM Contexts.
         """
         if not hasattr(self, '_scala_SQLContext'):
