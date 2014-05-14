@@ -65,7 +65,7 @@ class SVMModel private[mllib] (
       intercept: Double) = {
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
     threshold match {
-      case Some(t) => if (margin < 0) 0.0 else 1.0
+      case Some(t) => if (margin < t) 0.0 else 1.0
       case None => margin
     }
   }
