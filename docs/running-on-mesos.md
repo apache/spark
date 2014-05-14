@@ -164,3 +164,24 @@ either Hadoop or Spark, as opposed to having them share resources via the Linux 
 node. Please refer to [Hadoop on Mesos](https://github.com/mesos/hadoop).
 
 In either case, HDFS runs separately from Hadoop MapReduce, without being scheduled through Mesos.
+
+
+# Troubleshooting and Debugging
+
+A few places to look during debugging:
+
+- Mesos master on port `:5050`
+  - Slaves should appear in the slaves tab
+  - Spark applications should appear in the frameworks tab
+  - Tasks should appear in the details of a framework
+  - Check the stdout and stderr of the sandbox of failed tasks
+- Mesos logs
+  - Master and slave logs are both in `/var/log/mesos` by default
+
+And common pitfalls:
+
+- Spark assembly not reachable/accessible
+  - Slaves need to be able to download the distribution
+- Firewall blocking communications
+  - Check for messages about failed connections
+  - Temporarily disable firewalls for debugging and then poke appropriate holes
