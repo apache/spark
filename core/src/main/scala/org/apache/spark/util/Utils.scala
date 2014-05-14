@@ -1128,7 +1128,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** 
-   * Executes the given block, printing and re-throwing any uncaught exceptions.
+   * Execute the given block, logging and re-throwing any uncaught exception.
    * This is particularly useful for wrapping code that runs in a thread, to ensure
    * that exceptions are printed, and to avoid having to catch Throwable.
    */
