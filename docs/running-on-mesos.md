@@ -12,6 +12,20 @@ The advantages of deploying Spark with Mesos include:
   [frameworks](https://mesos.apache.org/documentation/latest/mesos-frameworks/)
 - scalable partitioning between multiple instances of Spark
 
+# How it works
+
+In a standalone cluster deployment, the cluster manager in the below diagram is a Spark master
+instance.  When using Mesos, the Mesos master replaces the Spark master as the cluster manager.
+
+<p style="text-align: center;">
+  <img src="img/cluster-overview.png" title="Spark cluster components" alt="Spark cluster components" />
+</p>
+
+Now when a driver creates a job and starts issuing tasks for scheduling, Mesos determines what
+machines handle what tasks.  Because it takes into account other frameworks when scheduling these
+many short-lived tasks, multiple frameworks can coexist on the same cluster without resorting to a
+static partitioning of resources.
+
 To get started, follow the steps below to install Mesos and deploy Spark jobs via Mesos.
 
 
