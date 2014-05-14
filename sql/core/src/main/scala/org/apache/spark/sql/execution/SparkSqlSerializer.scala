@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Serializer, Kryo}
 
@@ -44,6 +45,8 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
     kryo.register(classOf[scala.collection.Map[_,_]], new MapSerializer)
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericRow])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericMutableRow])
+    kryo.register(classOf[com.clearspring.analytics.stream.cardinality.HyperLogLog],
+                  new HyperLogLogSerializer)
     kryo.register(classOf[scala.collection.mutable.ArrayBuffer[_]])
     kryo.register(classOf[scala.math.BigDecimal], new BigDecimalSerializer)
     kryo.setReferences(false)
@@ -78,6 +81,20 @@ private[sql] class BigDecimalSerializer extends Serializer[BigDecimal] {
 
   def read(kryo: Kryo, input: Input, tpe: Class[BigDecimal]): BigDecimal = {
     BigDecimal(input.readString())
+  }
+}
+
+private[sql] class HyperLogLogSerializer extends Serializer[HyperLogLog] {
+  def write(kryo: Kryo, output: Output, hyperLogLog: HyperLogLog) {
+    val bytes = hyperLogLog.getBytes()
+    output.writeInt(bytes.length)
+    output.writeBytes(bytes)
+  }
+
+  def read(kryo: Kryo, input: Input, tpe: Class[HyperLogLog]): HyperLogLog = {
+    val length = input.readInt()
+    val bytes = input.readBytes(length)
+    HyperLogLog.Builder.build(bytes)
   }
 }
 
