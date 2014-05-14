@@ -19,7 +19,10 @@ import numpy as np
 
 from pyspark.mllib.linalg import Vectors, SparseVector
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib._common import _convert_vector
+from pyspark.mllib._common import _convert_vector, _deserialize_labeled_point
+from pyspark.rdd import RDD
+from pyspark.serializers import NoOpSerializer
+
 
 class MLUtils:
     """
@@ -182,7 +185,11 @@ class MLUtils:
         >>> print examples[1]
         (0.0,[1.01,2.02,3.03])
         """
-        return sc.textFile(path, minPartitions).map(LabeledPoint.parse)
+        minPartitions = minPartitions or min(sc.defaultParallelism, 2)
+        jSerialized = sc._jvm.PythonMLLibAPI().loadLabeledPoints(sc._jsc, path, minPartitions)
+        serialized = RDD(jSerialized, sc, NoOpSerializer())
+        return serialized.map(lambda bytes: _deserialize_labeled_point(bytearray(bytes)))
+
 
 def _test():
     import doctest

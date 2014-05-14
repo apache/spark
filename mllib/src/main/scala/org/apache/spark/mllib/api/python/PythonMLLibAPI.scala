@@ -20,14 +20,14 @@ package org.apache.spark.mllib.api.python
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkException
 
 /**
  * :: DeveloperApi ::
@@ -190,6 +190,12 @@ class PythonMLLibAPI extends Serializable {
     val label = labelBytes.asDoubleBuffer().get(0)
     LabeledPoint(label, deserializeDoubleVector(bytes, 9))
   }
+
+  def loadLabeledPoints(
+      jsc: JavaSparkContext,
+      path: String,
+      minPartitions: Int): JavaRDD[Array[Byte]] =
+    MLUtils.loadLabeledPoints(jsc.sc, path, minPartitions).map(serializeLabeledPoint).toJavaRDD()
 
   private def trainRegressionModel(
       trainFunc: (RDD[LabeledPoint], Vector) => GeneralizedLinearModel,
