@@ -588,8 +588,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
 
     import scala.reflect.classTag
-    assert(data.sortBy(parse, true, 2)(AgeOrdering, classTag[Person]) === ageOrdered)
-    assert(data.sortBy(parse, true, 2)(NameOrdering, classTag[Person]) === nameOrdered)
+    assert(data.sortBy(parse, true, 2)(AgeOrdering, classTag[Person]).collect() === ageOrdered)
+    assert(data.sortBy(parse, true, 2)(NameOrdering, classTag[Person]).collect() === nameOrdered)
   }
 
   test("intersection") {
