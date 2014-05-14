@@ -23,13 +23,13 @@ import org.apache.spark.SparkContext._
 import java.nio.ByteBuffer
 
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfter, FunSuite}
+
 class CoarseGrainedSchedulerBackendSuite extends FunSuite with
-BeforeAndAfter with BeforeAndAfterAll {
+  BeforeAndAfter with BeforeAndAfterAll {
 
   override def beforeAll {
     System.setProperty("spark.akka.frameSize", "1")
     System.setProperty("spark.default.parallelism", "1")
-
   }
 
   override def afterAll {
