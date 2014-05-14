@@ -30,14 +30,13 @@ import org.apache.spark.util.IntParam
  *  an Avro server on at the request host:port address and listen for requests.
  *  Your Flume AvroSink should be pointed to this address.
  *
- *  To run this example,
- *
- *  $ `bin/run-example <host> <port> `
- *
- *  where
+ *  Usage: FlumeEventCount <host> <port>
  *    <host> is the host the Flume receiver will be started on - a receiver
  *           creates a server and listens for flume events.
  *    <port> is the port the Flume receiver will listen on.
+ *
+ *  To run this example:
+ *    `$ bin/run-example org.apache.spark.examples.streaming.FlumeEventCount <host> <port> `
  */
 object FlumeEventCount {
   def main(args: Array[String]) {
