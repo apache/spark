@@ -48,23 +48,6 @@ class LabeledPoint(object):
         return "(" + ",".join((str(self.label), Vectors.stringify(self.features))) + ")"
 
 
-    @staticmethod
-    def parse(s):
-        """
-        Parses a string resulted from str() to a LabeledPoint.
-
-        >>> print LabeledPoint.parse("(1.0,[0.0,1.0])")
-        (1.0,[0.0,1.0])
-        >>> print LabeledPoint.parse("(1.0,(2,[1],[1.0]))")
-        (1.0,(2,[1],[1.0]))
-        """
-        return LabeledPoint._parse_structured(eval(s))
-
-
-    @staticmethod
-    def _parse_structured(data):
-        return LabeledPoint(data[0], Vectors._parse_structured(data[1]))
-
 class LinearModel(object):
     """A linear model that has a vector of coefficients and an intercept."""
     def __init__(self, weights, intercept):
