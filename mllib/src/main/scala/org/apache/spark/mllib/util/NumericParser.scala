@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.util
 
+import java.util.StringTokenizer
+
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import org.apache.spark.SparkException
@@ -36,19 +38,12 @@ import NumericTokenizer._
  *  - tuple: a list of numbers, arrays, or tuples stored as `(...)`
  *
  * @param s input string
- * @param start start index
- * @param end end index
  */
-private[mllib] class NumericTokenizer(s: String, start: Int, end: Int) {
+private[mllib] class NumericTokenizer(s: String) {
 
-  /**
-   * Creates a tokenizer for the entire input string.
-   */
-  def this(s: String) = this(s, 0, s.length)
-
-  private var cur = start
   private var allowComma = false
   private var _value = Double.NaN
+  private val stringTokenizer = new StringTokenizer(s, "()[],", true)
 
   /**
    * Returns the most recent parsed number.
@@ -62,42 +57,24 @@ private[mllib] class NumericTokenizer(s: String, start: Int, end: Int) {
    *  - [[org.apache.spark.mllib.util.NumericTokenizer#END]].
    */
   def next(): Int = {
-    if (cur < end) {
-      val c = s.charAt(cur)
-      if (c == '(' || c == '[') {
+    if (stringTokenizer.hasMoreTokens()) {
+      val token = stringTokenizer.nextToken()
+      if (token == "(" || token == "[") {
         allowComma = false
-        cur += 1
-        c
-      } else if (c == ')' || c == ']') {
+        token.charAt(0)
+      } else if (token == ")" || token == "]") {
         allowComma = true
-        cur += 1
-        c
-      } else if (c == ',') {
+        token.charAt(0)
+      } else if (token == ",") {
         if (allowComma) {
-          cur += 1
           allowComma = false
           next()
         } else {
-          throw new SparkException(s"Found a ',' at a wrong location: $cur.")
+          throw new SparkException("Found a ',' at a wrong position.")
         }
       } else {
         // expecting a number
-        var inNumber = true
-        val beginAt = cur
-        while (cur < end && inNumber) {
-          val d = s.charAt(cur)
-          if (d == ')' || d == ']' || d == ',') {
-            inNumber = false
-          } else {
-            cur += 1
-          }
-        }
-        try {
-          _value = java.lang.Double.parseDouble(s.substring(beginAt, cur))
-        } catch {
-          case e: Throwable =>
-            throw new SparkException("Error parsing a number", e)
-        }
+        _value = java.lang.Double.parseDouble(token)
         allowComma = true
         NUMBER
       }
@@ -126,7 +103,7 @@ private[mllib] object NumericParser {
     } else if (token == END) {
       null
     } else {
-      throw new SparkException(s"Cannot recgonize token type: $token.")
+      throw new SparkException(s"Cannot recognize token type: $token.")
     }
   }
 
