@@ -35,9 +35,9 @@ import org.apache.spark.SparkConf
  *   <numThreads> is the number of threads the kafka consumer should use
  *
  * Example:
- *    `./bin/spark-submit examples.jar \
- *    --class org.apache.spark.examples.streaming.KafkaWordCount local[2] zoo01,zoo02,zoo03 \
- *    my-consumer-group topic1,topic2 1`
+ *    `$ bin/run-example \
+ *      org.apache.spark.examples.streaming.KafkaWordCount zoo01,zoo02,zoo03 \
+ *      my-consumer-group topic1,topic2 1`
  */
 object KafkaWordCount {
   def main(args: Array[String]) {
