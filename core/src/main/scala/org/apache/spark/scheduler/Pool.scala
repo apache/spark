@@ -17,9 +17,9 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
@@ -37,7 +37,7 @@ private[spark] class Pool(
   extends Schedulable
   with Logging {
 
-  val schedulableQueue = new LinkedBlockingQueue[Schedulable]
+  val schedulableQueue = new ConcurrentLinkedQueue[Schedulable]
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
   var weight = initWeight
   var minShare = initMinShare
@@ -59,7 +59,8 @@ private[spark] class Pool(
   }
 
   override def addSchedulable(schedulable: Schedulable) {
-    schedulableQueue.offer(schedulable)
+    require(schedulable != null)
+    schedulableQueue.add(schedulable)
     schedulableNameToSchedulable.put(schedulable.name, schedulable)
     schedulable.parent = this
   }
@@ -73,7 +74,7 @@ private[spark] class Pool(
     if (schedulableNameToSchedulable.containsKey(schedulableName)) {
       return schedulableNameToSchedulable.get(schedulableName)
     }
-    for (schedulable <- schedulableQueue.asScala) {
+    for (schedulable <- schedulableQueue) {
       val sched = schedulable.getSchedulableByName(schedulableName)
       if (sched != null) {
         return sched
@@ -83,12 +84,12 @@ private[spark] class Pool(
   }
 
   override def executorLost(executorId: String, host: String) {
-    schedulableQueue.asScala.foreach(_.executorLost(executorId, host))
+    schedulableQueue.foreach(_.executorLost(executorId, host))
   }
 
   override def checkSpeculatableTasks(): Boolean = {
     var shouldRevive = false
-    for (schedulable <- schedulableQueue.asScala) {
+    for (schedulable <- schedulableQueue) {
       shouldRevive |= schedulable.checkSpeculatableTasks()
     }
     shouldRevive
@@ -97,7 +98,7 @@ private[spark] class Pool(
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
     var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
     val sortedSchedulableQueue =
-      schedulableQueue.asScala.toArray.sortWith(taskSetSchedulingAlgorithm.comparator)
+      schedulableQueue.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
     for (schedulable <- sortedSchedulableQueue) {
       sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue
     }

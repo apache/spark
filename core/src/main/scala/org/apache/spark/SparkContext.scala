@@ -840,10 +840,10 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * :: DeveloperApi ::
    * Return pools for fair scheduler
-   * TODO(xiajunluan): We should take nested pools into account
    */
   @DeveloperApi
   def getAllPools: Array[Schedulable] = {
+    // TODO(xiajunluan): We should take nested pools into account
     taskScheduler.rootPool.schedulableQueue.asScala.toArray
   }
 
