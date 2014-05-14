@@ -27,6 +27,7 @@ import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkException
 
 /**
  * :: DeveloperApi ::
@@ -41,7 +42,7 @@ class PythonMLLibAPI extends Serializable {
   private val DENSE_MATRIX_MAGIC: Byte = 3
   private val LABELED_POINT_MAGIC: Byte = 4
 
-  private def deserializeDoubleVector(bytes: Array[Byte], offset: Int = 0): Vector = {
+  private[python] def deserializeDoubleVector(bytes: Array[Byte], offset: Int = 0): Vector = {
     require(bytes.length - offset >= 5, "Byte array too short")
     val magic = bytes(offset)
     if (magic == DENSE_VECTOR_MAGIC) {
@@ -116,7 +117,7 @@ class PythonMLLibAPI extends Serializable {
     bytes
   }
 
-  private def serializeDoubleVector(vector: Vector): Array[Byte] = vector match {
+  private[python] def serializeDoubleVector(vector: Vector): Array[Byte] = vector match {
     case s: SparseVector =>
       serializeSparseVector(s)
     case _ =>
@@ -167,7 +168,18 @@ class PythonMLLibAPI extends Serializable {
     bytes
   }
 
-  private def deserializeLabeledPoint(bytes: Array[Byte]): LabeledPoint = {
+  private[python] def serializeLabeledPoint(p: LabeledPoint): Array[Byte] = {
+    val fb = serializeDoubleVector(p.features)
+    val bytes = new Array[Byte](1 + 8 + fb.length)
+    val bb = ByteBuffer.wrap(bytes)
+    bb.order(ByteOrder.nativeOrder())
+    bb.put(LABELED_POINT_MAGIC)
+    bb.putDouble(p.label)
+    bb.put(fb)
+    bytes
+  }
+
+  private[python] def deserializeLabeledPoint(bytes: Array[Byte]): LabeledPoint = {
     require(bytes.length >= 9, "Byte array too short")
     val magic = bytes(0)
     if (magic != LABELED_POINT_MAGIC) {
