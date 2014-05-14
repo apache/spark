@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming;
 
-import org.apache.spark.streaming.api.java.*;
 import scala.Tuple2;
 
 import org.junit.Assert;
@@ -37,6 +36,8 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.storage.StorageLevel;
+import org.apache.spark.streaming.api.java.*;
+import org.apache.spark.util.Utils;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -1606,6 +1607,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(8,7));
 
     File tempDir = Files.createTempDir();
+    tempDir.deleteOnExit();
     ssc.checkpoint(tempDir.getAbsolutePath());
 
     JavaDStream<String> stream = JavaCheckpointTestUtils.attachTestInputStream(ssc, inputData, 1);
@@ -1627,6 +1629,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     // will be re-processed after recovery
     List<List<Integer>> finalResult = JavaCheckpointTestUtils.runStreams(ssc, 2, 3);
     assertOrderInvariantEquals(expectedFinal, finalResult.subList(1, 3));
+    Utils.deleteRecursively(tempDir);
   }
 
 

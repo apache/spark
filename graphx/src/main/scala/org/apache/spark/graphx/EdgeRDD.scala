@@ -20,16 +20,19 @@ package org.apache.spark.graphx
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.{OneToOneDependency, Partition, Partitioner, TaskContext}
-import org.apache.spark.graphx.impl.EdgePartition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
+import org.apache.spark.graphx.impl.EdgePartition
+
 /**
- * `EdgeRDD[ED]` extends `RDD[Edge[ED]]` by storing the edges in columnar format on each partition
- * for performance.
+ * `EdgeRDD[ED, VD]` extends `RDD[Edge[ED]]` by storing the edges in columnar format on each
+ * partition for performance. It may additionally store the vertex attributes associated with each
+ * edge to provide the triplet view. Shipping of the vertex attributes is managed by
+ * `impl.ReplicatedVertexView`.
  */
-class EdgeRDD[@specialized ED: ClassTag](
-    val partitionsRDD: RDD[(PartitionID, EdgePartition[ED])])
+class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
+    val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])])
   extends RDD[Edge[ED]](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
   partitionsRDD.setName("EdgeRDD")
@@ -45,8 +48,12 @@ class EdgeRDD[@specialized ED: ClassTag](
     partitionsRDD.partitioner.orElse(Some(Partitioner.defaultPartitioner(partitionsRDD)))
 
   override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
-    val p = firstParent[(PartitionID, EdgePartition[ED])].iterator(part, context)
-    p.next._2.iterator.map(_.copy())
+    val p = firstParent[(PartitionID, EdgePartition[ED, VD])].iterator(part, context)
+    if (p.hasNext) {
+      p.next._2.iterator.map(_.copy())
+    } else {
+      Iterator.empty
+    }
   }
 
   override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect()
@@ -61,11 +68,15 @@ class EdgeRDD[@specialized ED: ClassTag](
     this
   }
 
-  private[graphx] def mapEdgePartitions[ED2: ClassTag](
-      f: (PartitionID, EdgePartition[ED]) => EdgePartition[ED2]): EdgeRDD[ED2] = {
-    new EdgeRDD[ED2](partitionsRDD.mapPartitions({ iter =>
-      val (pid, ep) = iter.next()
-      Iterator(Tuple2(pid, f(pid, ep)))
+  private[graphx] def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag](
+      f: (PartitionID, EdgePartition[ED, VD]) => EdgePartition[ED2, VD2]): EdgeRDD[ED2, VD2] = {
+    new EdgeRDD[ED2, VD2](partitionsRDD.mapPartitions({ iter =>
+      if (iter.hasNext) {
+        val (pid, ep) = iter.next()
+        Iterator(Tuple2(pid, f(pid, ep)))
+      } else {
+        Iterator.empty
+      }
     }, preservesPartitioning = true))
   }
 
@@ -76,7 +87,7 @@ class EdgeRDD[@specialized ED: ClassTag](
    * @param f the function from an edge to a new edge value
    * @return a new EdgeRDD containing the new edge values
    */
-  def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): EdgeRDD[ED2] =
+  def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): EdgeRDD[ED2, VD] =
     mapEdgePartitions((pid, part) => part.map(f))
 
   /**
@@ -84,7 +95,14 @@ class EdgeRDD[@specialized ED: ClassTag](
    *
    * @return a new EdgeRDD containing all the edges reversed
    */
-  def reverse: EdgeRDD[ED] = mapEdgePartitions((pid, part) => part.reverse)
+  def reverse: EdgeRDD[ED, VD] = mapEdgePartitions((pid, part) => part.reverse)
+
+  /** Removes all edges but those matching `epred` and where both vertices match `vpred`. */
+  def filter(
+      epred: EdgeTriplet[VD, ED] => Boolean,
+      vpred: (VertexId, VD) => Boolean): EdgeRDD[ED, VD] = {
+    mapEdgePartitions((pid, part) => part.filter(epred, vpred))
+  }
 
   /**
    * Inner joins this EdgeRDD with another EdgeRDD, assuming both are partitioned using the same
@@ -96,19 +114,15 @@ class EdgeRDD[@specialized ED: ClassTag](
    *         with values supplied by `f`
    */
   def innerJoin[ED2: ClassTag, ED3: ClassTag]
-      (other: EdgeRDD[ED2])
-      (f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3] = {
+      (other: EdgeRDD[ED2, _])
+      (f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3, VD] = {
     val ed2Tag = classTag[ED2]
     val ed3Tag = classTag[ED3]
-    new EdgeRDD[ED3](partitionsRDD.zipPartitions(other.partitionsRDD, true) {
+    new EdgeRDD[ED3, VD](partitionsRDD.zipPartitions(other.partitionsRDD, true) {
       (thisIter, otherIter) =>
         val (pid, thisEPart) = thisIter.next()
         val (_, otherEPart) = otherIter.next()
         Iterator(Tuple2(pid, thisEPart.innerJoin(otherEPart)(f)(ed2Tag, ed3Tag)))
     })
-  }
-
-  private[graphx] def collectVertexIds(): RDD[VertexId] = {
-    partitionsRDD.flatMap { case (_, p) => Array.concat(p.srcIds, p.dstIds) }
   }
 }

@@ -70,7 +70,7 @@ Once you've set up this file, you can launch or stop your cluster with the follo
 - `sbin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
 - `sbin/start-all.sh` - Starts both a master and a number of slaves as described above.
 - `sbin/stop-master.sh` - Stops the master that was started via the `bin/start-master.sh` script.
-- `sbin/stop-slaves.sh` - Stops the slave instances that were started via `bin/start-slaves.sh`.
+- `sbin/stop-slaves.sh` - Stops all slave instances on the machines specified in the `conf/slaves` file.
 - `sbin/stop-all.sh` - Stops both the master and the slaves as described above.
 
 Note that these scripts must be executed on the machine you want to run the Spark master on, not your local machine.
@@ -92,12 +92,8 @@ You can optionally configure the cluster further by setting environment variable
     <td>Port for the master web UI (default: 8080).</td>
   </tr>
   <tr>
-    <td><code>SPARK_WORKER_PORT</code></td>
-    <td>Start the Spark worker on a specific port (default: random).</td>
-  </tr>
-  <tr>
-    <td><code>SPARK_WORKER_DIR</code></td>
-    <td>Directory to run applications in, which will include both logs and scratch space (default: SPARK_HOME/work).</td>
+    <td><code>SPARK_MASTER_OPTS</code></td>
+    <td>Configuration properties that apply only to the master in the form "-Dx=y" (default: none).</td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_CORES</code></td>
@@ -106,6 +102,10 @@ You can optionally configure the cluster further by setting environment variable
   <tr>
     <td><code>SPARK_WORKER_MEMORY</code></td>
     <td>Total amount of memory to allow Spark applications to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GB); note that each application's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property.</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_WORKER_PORT</code></td>
+    <td>Start the Spark worker on a specific port (default: random).</td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_WEBUI_PORT</code></td>
@@ -121,12 +121,24 @@ You can optionally configure the cluster further by setting environment variable
     </td>
   </tr>
   <tr>
+    <td><code>SPARK_WORKER_DIR</code></td>
+    <td>Directory to run applications in, which will include both logs and scratch space (default: SPARK_HOME/work).</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_WORKER_OPTS</code></td>
+    <td>Configuration properties that apply only to the worker in the form "-Dx=y" (default: none).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
     <td>Memory to allocate to the Spark master and worker daemons themselves (default: 512m).</td>
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_JAVA_OPTS</code></td>
-    <td>JVM options for the Spark master and worker daemons themselves (default: none).</td>
+    <td>JVM options for the Spark master and worker daemons themselves in the form "-Dx=y" (default: none).</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_PUBLIC_DNS</code></td>
+    <td>The public DNS name of the Spark master and workers (default: none).</td>
   </tr>
 </table>
 
@@ -148,38 +160,17 @@ You can also pass an option `--cores <numCores>` to control the number of cores 
 
 # Launching Compiled Spark Applications
 
-Spark supports two deploy modes. Spark applications may run with the driver inside the client process or entirely inside the cluster.
+Spark supports two deploy modes: applications may run with the driver inside the client process or
+entirely inside the cluster. The
+[Spark submit script](cluster-overview.html#launching-applications-with-spark-submit) provides the
+most straightforward way to submit a compiled Spark application to the cluster in either deploy
+mode.
 
-The spark-submit script described in the [cluster mode overview](cluster-overview.html) provides the most straightforward way to submit a compiled Spark application to the cluster in either deploy mode. For info on the lower-level invocations used to launch an app inside the cluster, read ahead.
-
-## Launching Applications Inside the Cluster
-
-    ./bin/spark-class org.apache.spark.deploy.Client launch
-       [client-options] \
-       <cluster-url> <application-jar-url> <main-class> \
-       [application-options]
-
-    cluster-url: The URL of the master node.
-    application-jar-url: Path to a bundled jar including your application and all dependencies. Currently, the URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes. 
-    main-class: The entry point for your application.
-
-    Client Options:
-      --memory <count> (amount of memory, in MB, allocated for your driver program)
-      --cores <count> (number of cores allocated for your driver program)
-      --supervise (whether to automatically restart your driver on application or node failure)
-      --verbose (prints increased logging output)
-
-Keep in mind that your driver program will be executed on a remote worker machine. You can control the execution environment in the following ways:
-
- * _Environment variables_: These will be captured from the environment in which you launch the client and applied when launching the driver program.
- * _Java options_: You can add java options by setting `SPARK_JAVA_OPTS` in the environment in which you launch the submission client.
- * _Dependencies_: You'll still need to call `sc.addJar` inside of your program to make your bundled application jar visible on all worker nodes.
-
-Once you submit a driver program, it will appear in the cluster management UI at port 8080 and
-be assigned an identifier. If you'd like to prematurely terminate the program, you can do so using
-the same client:
-
-    ./bin/spark-class org.apache.spark.deploy.Client kill <driverId>
+If your application is launched through Spark submit, then the application jar is automatically
+distributed to all worker nodes. For any additional jars that your application depends on, you
+should specify them through the `--jars` flag using comma as a delimiter (e.g. `--jars jar1,jar2`).
+To control the application's configuration or execution environment, see
+[Spark Configuration](configuration.html).
 
 # Resource Scheduling
 
@@ -203,7 +194,7 @@ default for applications that don't set `spark.cores.max` to something less than
 Do this by adding the following to `conf/spark-env.sh`:
 
 {% highlight bash %}
-export SPARK_JAVA_OPTS="-Dspark.deploy.defaultCores=<value>"
+export SPARK_MASTER_OPTS="-Dspark.deploy.defaultCores=<value>"
 {% endhighlight %}
 
 This is useful on shared clusters where users might not have configured a maximum number of cores

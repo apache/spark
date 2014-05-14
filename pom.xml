@@ -113,7 +113,8 @@
 
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
-    <mesos.version>0.13.0</mesos.version>
+    <mesos.version>0.18.1</mesos.version>
+    <mesos.classifier>shaded-protobuf</mesos.classifier>
     <akka.group>org.spark-project.akka</akka.group>
     <akka.version>2.2.3-shaded-protobuf</akka.version>
     <slf4j.version>1.7.5</slf4j.version>
@@ -123,7 +124,7 @@
     <yarn.version>${hadoop.version}</yarn.version>
     <hbase.version>0.94.6</hbase.version>
     <hive.version>0.12.0</hive.version>
-    <parquet.version>1.3.2</parquet.version>
+    <parquet.version>1.4.3</parquet.version>
     <jblas.version>1.2.3</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <chill.version>0.3.6</chill.version>
@@ -324,45 +325,21 @@
         <groupId>${akka.group}</groupId>
         <artifactId>akka-actor_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
         <artifactId>akka-remote_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
         <artifactId>akka-slf4j_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
         <artifactId>akka-testkit_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>colt</groupId>
@@ -373,6 +350,13 @@
         <groupId>org.apache.mesos</groupId>
         <artifactId>mesos</artifactId>
         <version>${mesos.version}</version>
+        <classifier>${mesos.classifier}</classifier>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>commons-net</groupId>
@@ -512,22 +496,16 @@
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-ipc</artifactId>
         <version>${avro.version}</version>
         <exclusions>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>org.mortbay.jetty</groupId>
             <artifactId>jetty</artifactId>
@@ -552,12 +530,24 @@
         <version>${avro.version}</version>
         <exclusions>
           <exclusion>
-            <groupId>org.jboss.netty</groupId>
+            <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>jetty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>jetty-util</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -591,6 +581,10 @@
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -614,6 +608,10 @@
             <groupId>javax.servlet</groupId>
             <artifactId>servlet-api</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -632,6 +630,14 @@
           <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -655,6 +661,10 @@
           <exclusion>
             <groupId>javax.servlet</groupId>
             <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -819,6 +829,21 @@
               </goals>
             </execution>
           </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-clean-plugin</artifactId>
+          <version>2.5</version>
+          <configuration>
+            <filesets>
+              <fileset>
+                <directory>work</directory>
+              </fileset>
+              <fileset>
+                <directory>checkpoint</directory>
+              </fileset>
+            </filesets>
+          </configuration>
         </plugin>
       </plugins>
     </pluginManagement>

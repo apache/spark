@@ -158,7 +158,11 @@ object Vectors {
           new DenseVector(v.toArray)  // Can't use underlying array directly, so make a new one
         }
       case v: BSV[Double] =>
-        new SparseVector(v.length, v.index, v.data)
+        if (v.index.length == v.used) {
+          new SparseVector(v.length, v.index, v.data)
+        } else {
+          new SparseVector(v.length, v.index.slice(0, v.used), v.data.slice(0, v.used))
+        }
       case v: BV[_] =>
         sys.error("Unsupported Breeze vector type: " + v.getClass.getName)
     }

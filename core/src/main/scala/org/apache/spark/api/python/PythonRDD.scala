@@ -94,6 +94,7 @@ private[spark] class PythonRDD[T: ClassTag](
               val obj = new Array[Byte](length)
               stream.readFully(obj)
               obj
+            case 0 => Array.empty[Byte]
             case SpecialLengths.TIMING_DATA =>
               // Timing data from worker
               val bootTime = stream.readLong()
@@ -123,7 +124,7 @@ private[spark] class PythonRDD[T: ClassTag](
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
-              Array.empty[Byte]
+              null
           }
         } catch {
 
@@ -143,7 +144,7 @@ private[spark] class PythonRDD[T: ClassTag](
 
       var _nextObj = read()
 
-      def hasNext = _nextObj.length != 0
+      def hasNext = _nextObj != null
     }
     new InterruptibleIterator(context, stdoutIterator)
   }
@@ -170,7 +171,7 @@ private[spark] class PythonRDD[T: ClassTag](
       this.interrupt()
     }
 
-    override def run() {
+    override def run(): Unit = Utils.logUncaughtExceptions {
       try {
         SparkEnv.set(env)
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
@@ -179,17 +180,17 @@ private[spark] class PythonRDD[T: ClassTag](
         dataOut.writeInt(split.index)
         // sparkFilesDir
         PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
+        // Python includes (*.zip and *.egg files)
+        dataOut.writeInt(pythonIncludes.length)
+        for (include <- pythonIncludes) {
+          PythonRDD.writeUTF(include, dataOut)
+        }
         // Broadcast variables
         dataOut.writeInt(broadcastVars.length)
         for (broadcast <- broadcastVars) {
           dataOut.writeLong(broadcast.id)
           dataOut.writeInt(broadcast.value.length)
           dataOut.write(broadcast.value)
-        }
-        // Python includes (*.zip and *.egg files)
-        dataOut.writeInt(pythonIncludes.length)
-        for (include <- pythonIncludes) {
-          PythonRDD.writeUTF(include, dataOut)
         }
         dataOut.flush()
         // Serialized command:
@@ -281,7 +282,6 @@ private[spark] object PythonRDD {
       }
     } catch {
       case eof: EOFException => {}
-      case e: Throwable => throw e
     }
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
