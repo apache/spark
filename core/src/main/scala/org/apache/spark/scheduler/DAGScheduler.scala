@@ -40,6 +40,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
 import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import scala.collection.mutable
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -123,6 +124,8 @@ class DAGScheduler(
 
   //whether to enable remove stage barrier
   val removeStageBarrier = env.conf.getBoolean("spark.schedule.removeStageBarrier", true)
+  //whether there's pre-started stages depending on this stage
+  val dependantStagePreStarted = new mutable.HashSet[Stage]()
 
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
@@ -851,13 +854,14 @@ class DAGScheduler(
               stage.addOutputLoc(smt.partitionId, status)
             }
             //we need to register map outputs progressively if remove stage barrier is enabled
-            if (removeStageBarrier && stage.shuffleDep.isDefined) {
+            if (removeStageBarrier && dependantStagePreStarted.contains(stage) && stage.shuffleDep.isDefined) {
               logInfo("Register output progressively: Map task "+smt.partitionId+" ---lirui")
               mapOutputTracker.registerMapOutput(stage.shuffleDep.get.shuffleId, smt.partitionId, status)
               //need to increment the mapoutputtrackermaster's epoch so that it will clear the cache
               mapOutputTracker.incrementEpoch()
             }
             if (runningStages.contains(stage) && pendingTasks(stage).isEmpty) {
+              dependantStagePreStarted -= stage
               markStageAsFinished(stage)
               logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
@@ -912,14 +916,17 @@ class DAGScheduler(
                   val pendingTaskNum = (for (taskSet <- pendingTasks.values) yield taskSet.size).sum
                   val freeCores = totalCores - pendingTaskNum
                   val waitingStageNum = waitingStages.size
-                  if (freeCores > 0 && waitingStageNum > 0) {
+                  if (freeCores > 0 && waitingStageNum > 0 && stage.shuffleDep.isDefined) {
                     logInfo("We have " + totalCores + " CPUs. " + pendingTaskNum + " tasks are running/pending. " +
                       waitingStageNum + " stages are waiting to be submitted. ---lirui")
                     //TODO: find a waiting stage that depends on the current "stage"
                     val preStartedStage = waitingStages.head
                     logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
+                    //register map output finished so far
+                    mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId, stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray, true)
                     waitingStages -= preStartedStage
                     runningStages += preStartedStage
+                    dependantStagePreStarted += stage
                     submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage).get)
                   }
                 }

@@ -192,7 +192,7 @@ object BlockFetcherIterator {
           }
         }
       }
-      logInfo("Getting " + _numBlocksToFetch + " non-empty blocks out of " +
+      logDebug("Getting " + _numBlocksToFetch + " non-empty blocks out of " +
         totalBlocks + " blocks")
       remoteRequests
     }
@@ -221,11 +221,17 @@ object BlockFetcherIterator {
       // Add the remote requests into our queue in a random order
       fetchRequests ++= Utils.randomize(remoteRequests)
 
+      //how many remote blocks we're fetching during initialization
+      var initialRemoteBlocks = 0
+
       // Send out initial requests for blocks, up to our maxBytesInFlight
       while (!fetchRequests.isEmpty &&
         (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
+        initialRemoteBlocks += fetchRequests.front.blocks.size
         sendRequest(fetchRequests.dequeue())
       }
+
+      logInfo("Fetching "+initialRemoteBlocks+" out of "+remoteBlocksToFetch.size+" remote blocks for initialization. ---lirui")
 
       val numFetches = remoteRequests.size - fetchRequests.size
       logInfo("Started " + numFetches + " remote fetches in" + Utils.getUsedTimeMs(startTime))

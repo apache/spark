@@ -173,19 +173,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   //get map statuses for a shuffle
-  def getMapStatusesForShuffle(shuffleId: Int, reduceId: Int): Array[MapStatus]={
-    mapStatuses.synchronized {
-      //we cached partial map outputs, the master may have updates for us
-      if (partialOutputForShuffle(shuffleId) && !this.isInstanceOf[MapOutputTrackerMaster]) {
-        val masterEpoch = askTracker(GetMasterEpoch).asInstanceOf[Long]
-        //we don't want to clear the local cache too often
-        if (masterEpoch - epoch >= math.min(10, mapStatuses.get(shuffleId).get.filter(_ == null).size)) {
-          logInfo("Master's epoch is " + masterEpoch + ", local epoch is " + epoch + ". Clear local cache. ---lirui")
-          mapStatuses -= shuffleId
-          epoch = masterEpoch
-        }
-      }
-    }
+  private def getMapStatusesForShuffle(shuffleId: Int, reduceId: Int): Array[MapStatus]={
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
@@ -236,6 +224,24 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       }
     } else {
       statuses
+    }
+  }
+
+  //update partial map outputs for a shuffle
+  def updateMapStatusesForShuffle(shuffleId: Int){
+    mapStatuses.synchronized {
+      //we cached partial map outputs, the master may have updates for us
+      if (partialOutputForShuffle(shuffleId) && !this.isInstanceOf[MapOutputTrackerMaster]) {
+        val masterEpoch = askTracker(GetMasterEpoch).asInstanceOf[Long]
+        //we don't want to clear the local cache too often
+        if (masterEpoch - epoch >= math.min(10, mapStatuses.get(shuffleId).get.filter(_ == null).size)) {
+          logInfo("Master's epoch is " + masterEpoch + ", local epoch is " + epoch + ". Clear local cache. ---lirui")
+          mapStatuses -= shuffleId
+          epoch = masterEpoch
+        }
+      } else {
+        logInfo("The map output is not partial. ---lirui")
+      }
     }
   }
 }

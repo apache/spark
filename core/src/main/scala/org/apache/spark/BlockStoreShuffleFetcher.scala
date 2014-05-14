@@ -37,9 +37,10 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
 
     logDebug("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
     val blockManager = SparkEnv.get.blockManager
+    val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
     val startTime = System.currentTimeMillis
-    var statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, reduceId)
+    var statuses = mapOutputTracker.getServerStatuses(shuffleId, reduceId)
     logDebug("Fetching map output location for shuffle %d, reduce %d took %d ms".format(
       shuffleId, reduceId, System.currentTimeMillis - startTime))
 
@@ -87,7 +88,8 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
         ". Sleep " + sleepInterval + "s. ---lirui")
       Thread.sleep((sleepInterval * 1000).toLong)
       logInfo("Trying to update map output statues for reduceId "+reduceId+" ---lirui")
-      statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, reduceId)
+      mapOutputTracker.updateMapStatusesForShuffle(shuffleId)
+      statuses = mapOutputTracker.getServerStatuses(shuffleId, reduceId)
       val missingSplitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
       for (index <- missingMapOutputs if statuses(index)._1 != null) {
         missingSplitsByAddress.getOrElseUpdate(statuses(index)._1, ArrayBuffer()) += ((index, statuses(index)._2))
@@ -100,6 +102,8 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
         }
         val missingBlockFetcherItr = blockManager.getMultiple(missingBlocksByAddress, serializer)
         itr = itr ++ missingBlockFetcherItr.flatMap(unpackBlock)
+      } else {
+        logInfo("No updates in the previous interval "+sleepInterval+"s, sleep longer. ---lirui")
       }
       missingMapOutputs = statuses.zipWithIndex.filter(_._1._1 == null).map(_._2)
       val fillingUpSpeed = (oldMissingNum - missingMapOutputs.size).toFloat / sleepInterval
