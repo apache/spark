@@ -16,8 +16,8 @@
  */
 
 import sbt._
-import sbt.Classpaths.publishTask
-import sbt.Keys._
+import Keys._
+import Classpaths.publishTask
 import sbtassembly.Plugin._
 import AssemblyKeys._
 import scala.util.Properties
@@ -27,6 +27,7 @@ import sbtunidoc.Plugin._
 import UnidocKeys._
 
 import scala.collection.JavaConversions._
+import java.lang.Boolean
 
 // For Sonatype publishing
 // import com.jsuereth.pgp.sbtplugin.PgpKeys._
@@ -48,6 +49,8 @@ object SparkBuild extends Build {
 
   val DEFAULT_HIVE = false
 
+  val DEFAULT_GANGLIA = false
+
   // HBase version; set as appropriate.
   val HBASE_VERSION = "0.94.6"
 
@@ -55,81 +58,77 @@ object SparkBuild extends Build {
   val SCALAC_JVM_VERSION = "jvm-1.6"
   val JAVAC_JVM_VERSION = "1.6"
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects: _*)
+  lazy val root = project in file(".") settings (rootSettings: _*) aggregate(allProjects: _*)
 
-  lazy val core = Project("core", file("core"), settings = coreSettings)
+  lazy val core = project settings (coreSettings: _*)
 
-  lazy val repl = Project("repl", file("repl"), settings = replSettings)
-    .dependsOn(core, graphx, bagel, mllib, sql)
+  lazy val repl = project settings (replSettings: _*) dependsOn(core, graphx, bagel, mllib, sql)
 
-  lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
+  lazy val tools = project settings (toolsSettings: _*) dependsOn(core, streaming)
 
-  lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn(core)
+  lazy val bagel = project settings (bagelSettings: _*) dependsOn core
 
-  lazy val graphx = Project("graphx", file("graphx"), settings = graphxSettings) dependsOn(core)
+  lazy val graphx = project settings (graphxSettings: _*) dependsOn core
 
-  lazy val catalyst = Project("catalyst", file("sql/catalyst"), settings = catalystSettings) dependsOn(core)
+  lazy val catalyst = project in file("sql/catalyst") settings (catalystSettings: _*) dependsOn core
 
-  lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core, catalyst)
+  lazy val sql = project in file("sql/core") settings (sqlCoreSettings: _*) dependsOn(core, catalyst)
 
-  lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql)
+  lazy val hive = project in file("sql/hive") settings (hiveSettings: _*) dependsOn sql
 
   lazy val maybeHive: Seq[ClasspathDependency] = if (isHiveEnabled) Seq(hive) else Seq()
   lazy val maybeHiveRef: Seq[ProjectReference] = if (isHiveEnabled) Seq(hive) else Seq()
 
-  lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
+  lazy val streaming = project settings (streamingSettings: _*) dependsOn core
 
-  lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
+  lazy val mllib = project settings (mllibSettings: _*) dependsOn core
 
-  lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
-    .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeHive: _*) dependsOn(maybeGanglia: _*)
-
-  lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
+  lazy val assemblyProj = Project(
+    id = "assembly",
+    base = file("assembly")
+  ) settings (assemblyProjSettings: _*) dependsOn(
+    core, graphx, bagel, mllib, streaming, repl, sql
+  ) dependsOn(maybeYarn: _*) dependsOn(maybeHive: _*) dependsOn(maybeGanglia: _*)
 
   // A configuration to set an alternative publishLocalConfiguration
-  lazy val MavenCompile = config("m2r") extend(Compile)
+  lazy val MavenCompile = config("m2r") extend Compile
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
-  val sparkHome = System.getProperty("user.dir")
+  lazy val sparkHome = sys.props("user.dir")
 
-  // Allows build configuration to be set through environment variables
-  lazy val hadoopVersion = Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
-  lazy val isNewHadoop = Properties.envOrNone("SPARK_IS_NEW_HADOOP") match {
-    case None => {
-      val isNewHadoopVersion = "^2\\.[2-9]+".r.findFirstIn(hadoopVersion).isDefined
-      (isNewHadoopVersion|| DEFAULT_IS_NEW_HADOOP)
-    }
-    case Some(v) => v.toBoolean
-  }
+  lazy val hadoopVersion = sys.env.getOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
+  lazy val isNewHadoop = sys.env.get("SPARK_IS_NEW_HADOOP").map(_.toBoolean) getOrElse ("^2\\.[2-9]+".r.findFirstIn(hadoopVersion).isDefined || DEFAULT_IS_NEW_HADOOP)
 
-  lazy val isYarnEnabled = Properties.envOrNone("SPARK_YARN") match {
-    case None => DEFAULT_YARN
-    case Some(v) => v.toBoolean
-  }
+  lazy val isYarnEnabled = sys.env.get("SPARK_YARN").map(_.toBoolean) getOrElse DEFAULT_YARN
+
   lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client"
-  val maybeAvro = if (hadoopVersion.startsWith("0.23.")) Seq("org.apache.avro" % "avro" % "1.7.4") else Seq()
+  lazy val maybeAvro = if (hadoopVersion.startsWith("0.23.")) Seq("org.apache.avro" % "avro" % "1.7.4") else Seq()
 
-  lazy val isHiveEnabled = Properties.envOrNone("SPARK_HIVE") match {
-    case None => DEFAULT_HIVE
-    case Some(v) => v.toBoolean
-  }
+  lazy val isHiveEnabled = sys.env.get("SPARK_HIVE").map(_.toBoolean) getOrElse DEFAULT_HIVE
 
-  // Include Ganglia integration if the user has enabled Ganglia
   // This is isolated from the normal build due to LGPL-licensed code in the library
-  lazy val isGangliaEnabled = Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined
-  lazy val gangliaProj = Project("spark-ganglia-lgpl", file("extras/spark-ganglia-lgpl"), settings = gangliaSettings).dependsOn(core)
+  lazy val isGangliaEnabled = sys.env.get("SPARK_GANGLIA_LGPL").map(_.toBoolean) getOrElse DEFAULT_GANGLIA
+  lazy val gangliaProj = Project(
+    id = "spark-ganglia-lgpl",
+    base = file("extras/spark-ganglia-lgpl")
+  ) settings (gangliaSettings: _*) dependsOn core
   val maybeGanglia: Seq[ClasspathDependency] = if (isGangliaEnabled) Seq(gangliaProj) else Seq()
   val maybeGangliaRef: Seq[ProjectReference] = if (isGangliaEnabled) Seq(gangliaProj) else Seq()
 
   // Include the Java 8 project if the JVM version is 8+
-  lazy val javaVersion = System.getProperty("java.specification.version")
-  lazy val isJava8Enabled = javaVersion.toDouble >= "1.8".toDouble
-  val maybeJava8Tests = if (isJava8Enabled) Seq[ProjectReference](java8Tests) else Seq[ProjectReference]()
-  lazy val java8Tests = Project("java8-tests", file("extras/java8-tests"), settings = java8TestsSettings).
-    dependsOn(core) dependsOn(streaming % "compile->compile;test->test")
+  lazy val javaVersion = sys.props("java.specification.version")
+  lazy val isJava8Enabled = javaVersion >= "1.8"
+  lazy val java8Tests = Project(
+    id = "java8-tests",
+    base = file("extras/java8-tests")
+  ) settings (java8TestsSettings: _*) dependsOn core dependsOn(streaming % "compile->compile;test->test")
+  val maybeJava8Tests: Seq[ProjectReference] = if (isJava8Enabled) Seq(java8Tests) else Seq()
 
   // Include the YARN project if the user has enabled YARN
-  lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
-  lazy val yarn = Project("yarn", file("yarn/stable"), settings = yarnSettings) dependsOn(core)
+  lazy val yarn = project in file("yarn/stable") settings (yarnSettings: _*) dependsOn core
+  lazy val yarnAlpha = Project(
+    id = "yarn-alpha",
+    base = file("yarn/alpha")
+  ) settings (yarnAlphaSettings: _*) dependsOn core
 
   lazy val maybeYarn: Seq[ClasspathDependency] = if (isYarnEnabled) Seq(if (isNewHadoop) yarn else yarnAlpha) else Seq()
   lazy val maybeYarnRef: Seq[ProjectReference] = if (isYarnEnabled) Seq(if (isNewHadoop) yarn else yarnAlpha) else Seq()
@@ -149,11 +148,10 @@ object SparkBuild extends Build {
   lazy val externalMqtt = Project("external-mqtt", file("external/mqtt"), settings = mqttSettings)
     .dependsOn(streaming % "compile->compile;test->test")
 
-  lazy val allExternal = Seq[ClasspathDependency](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
-  lazy val allExternalRefs = Seq[ProjectReference](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
+  lazy val allExternal: Seq[ClasspathDependency] = Seq(externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
+  lazy val allExternalRefs: Seq[ProjectReference] = Seq(externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
 
-  lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
-    .dependsOn(core, mllib, graphx, bagel, streaming, hive) dependsOn(allExternal: _*)
+  lazy val examples = project settings (examplesSettings: _*) dependsOn(core, mllib, graphx, bagel, streaming, hive) dependsOn(allExternal: _*)
 
   // Everything except assembly, hive, tools, java8Tests and examples belong to packageProjects
   lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, catalyst, sql) ++ maybeYarnRef ++ maybeHiveRef ++ maybeGangliaRef
@@ -177,11 +175,11 @@ object SparkBuild extends Build {
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
     testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
     incOptions := incOptions.value.withNameHashing(true),
-    // Fork new JVMs for tests and set Java options for those
     fork := true,
-    javaOptions in Test += "-Dspark.home=" + sparkHome,
-    javaOptions in Test += "-Dspark.testing=1",
-    javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
+    javaOptions in Test ++= Seq(
+      "-Dspark.home=" + sparkHome,
+      "-Dspark.testing=1",
+      "-Dsun.io.serialization.extendedDebugInfo=true"),
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark").map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g".split(" ").toSeq,
     javaOptions += "-Xmx3g",
@@ -199,10 +197,8 @@ object SparkBuild extends Build {
       ).mkString(":"),
       "-doc-title", "Spark " + SPARK_VERSION_SHORT + " ScalaDoc"
     ),
-
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
-
     resolvers ++= Seq(
       // HTTPS is unavailable for Maven Central
       "Maven Repository"     at "http://repo.maven.apache.org/maven2",
@@ -210,17 +206,9 @@ object SparkBuild extends Build {
       "JBoss Repository"     at "https://repository.jboss.org/nexus/content/repositories/releases/",
       "MQTT Repository"      at "https://repo.eclipse.org/content/repositories/paho-releases/",
       "Cloudera Repository"  at "http://repository.cloudera.com/artifactory/cloudera-repos/",
-      // For Sonatype publishing
-      // "sonatype-snapshots"   at "https://oss.sonatype.org/content/repositories/snapshots",
-      // "sonatype-staging"     at "https://oss.sonatype.org/service/local/staging/deploy/maven2/",
-      // also check the local Maven repository ~/.m2
       Resolver.mavenLocal
     ),
-
     publishMavenStyle := true,
-
-    // useGpg in Global := true,
-
     pomExtra := (
       <parent>
         <groupId>org.apache</groupId>
@@ -254,38 +242,26 @@ object SparkBuild extends Build {
         <url>https://issues.apache.org/jira/browse/SPARK</url>
       </issueManagement>
     ),
-
-    /*
-    publishTo <<= version { (v: String) =>
-      val nexus = "https://oss.sonatype.org/"
-      if (v.trim.endsWith("SNAPSHOT"))
-        Some("sonatype-snapshots" at nexus + "content/repositories/snapshots")
-      else
-        Some("sonatype-staging"  at nexus + "service/local/staging/deploy/maven2")
-    },
-
-    */
-
     libraryDependencies ++= Seq(
-        "io.netty"          % "netty-all"      % "4.0.17.Final",
-        "org.eclipse.jetty" % "jetty-server"   % jettyVersion,
-        "org.eclipse.jetty" % "jetty-util"     % jettyVersion,
-        "org.eclipse.jetty" % "jetty-plus"     % jettyVersion,
-        "org.eclipse.jetty" % "jetty-security" % jettyVersion,
+        "io.netty"          % "netty-all"       % "4.0.17.Final",
+        "org.eclipse.jetty" % "jetty-server"    % jettyVersion,
+        "org.eclipse.jetty" % "jetty-util"      % jettyVersion,
+        "org.eclipse.jetty" % "jetty-plus"      % jettyVersion,
+        "org.eclipse.jetty" % "jetty-security"  % jettyVersion,
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
         "com.novocode"      % "junit-interface" % "0.10"   % "test",
         "org.easymock"      % "easymock"        % "3.1"    % "test",
         "org.mockito"       % "mockito-all"     % "1.8.5"  % "test"
     ),
-
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     parallelExecution := true,
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
       const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) },
-
-    otherResolvers := Seq(Resolver.file("dotM2", file(Path.userHome + "/.m2/repository"))),
+    otherResolvers := Seq(
+      Resolver.file("dotM2", file(Path.userHome + "/.m2/repository"))
+    ),
     publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
       (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
     },
@@ -298,7 +274,7 @@ object SparkBuild extends Build {
   val chillVersion = "0.3.6"
   val codahaleMetricsVersion = "3.0.0"
   val jblasVersion = "1.2.3"
-  val jets3tVersion = if ("^2\\.[3-9]+".r.findFirstIn(hadoopVersion).isDefined) "0.9.0" else "0.7.1"
+  val jets3tVersion = "^2\\.[3-9]+".r.findFirstIn(hadoopVersion).fold("0.7.1")(_ => "0.9.0")
   val jettyVersion = "8.1.14.v20131031"
   val hiveVersion = "0.12.0"
   val parquetVersion = "1.4.3"
@@ -325,7 +301,7 @@ object SparkBuild extends Build {
     Some(organization % fullId % version) // the artifact to compare binary compatibility with
   }
 
-  def coreSettings = sharedSettings ++ Seq(
+  lazy val coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
     libraryDependencies ++= Seq(
         "com.google.guava"           % "guava"            % "14.0.1",
@@ -342,11 +318,11 @@ object SparkBuild extends Build {
         "org.spark-project.akka"    %% "akka-remote"      % akkaVersion,
         "org.spark-project.akka"    %% "akka-slf4j"       % akkaVersion,
         "org.spark-project.akka"    %% "akka-testkit"     % akkaVersion % "test",
-        "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
+        "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll excludeScalap,
         "colt"                       % "colt"             % "1.2.0",
         "org.apache.mesos"           % "mesos"            % "0.18.1" classifier("shaded-protobuf") exclude("com.google.protobuf", "protobuf-java"),
         "commons-net"                % "commons-net"      % "2.2",
-        "net.java.dev.jets3t"        % "jets3t"           % jets3tVersion excludeAll(excludeCommonsLogging),
+        "net.java.dev.jets3t"        % "jets3t"           % jets3tVersion excludeAll excludeCommonsLogging,
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
         "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm),
         "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeJBossNetty),
@@ -354,31 +330,24 @@ object SparkBuild extends Build {
         "com.codahale.metrics"       % "metrics-jvm"      % codahaleMetricsVersion,
         "com.codahale.metrics"       % "metrics-json"     % codahaleMetricsVersion,
         "com.codahale.metrics"       % "metrics-graphite" % codahaleMetricsVersion,
-        "com.twitter"               %% "chill"            % chillVersion excludeAll(excludeAsm),
-        "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
+        "com.twitter"               %% "chill"            % chillVersion excludeAll excludeAsm,
+        "com.twitter"                % "chill-java"       % chillVersion excludeAll excludeAsm,
         "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
-        "com.clearspring.analytics"  % "stream"           % "2.5.1" excludeAll(excludeFastutil),
+        "com.clearspring.analytics"  % "stream"           % "2.5.1" excludeAll excludeFastutil,
         "org.spark-project"          % "pyrolite"         % "2.0.1",
         "net.sf.py4j"                % "py4j"             % "0.8.1"
       ),
     libraryDependencies ++= maybeAvro
   )
 
-  // Create a colon-separate package list adding "org.apache.spark" in front of all of them,
-  // for easier specification of JavaDoc package groups
-  def packageList(names: String*): String = {
-    names.map(s => "org.apache.spark." + s).mkString(":")
-  }
+  def packageList(names: String*) = names.map("org.apache.spark." + _).mkString(":")
 
-  def rootSettings = sharedSettings ++ scalaJavaUnidocSettings ++ Seq(
+  lazy val rootSettings = sharedSettings ++ scalaJavaUnidocSettings ++ Seq(
     publish := {},
-
     unidocProjectFilter in (ScalaUnidoc, unidoc) :=
       inAnyProject -- inProjects(repl, examples, tools, catalyst, yarn, yarnAlpha),
     unidocProjectFilter in (JavaUnidoc, unidoc) :=
       inAnyProject -- inProjects(repl, examples, bagel, graphx, catalyst, tools, yarn, yarnAlpha),
-
-    // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
       (unidocAllSources in (JavaUnidoc, unidoc)).value
         .map(_.filterNot(_.getName.contains("$")))
@@ -389,8 +358,6 @@ object SparkBuild extends Build {
         .map(_.filterNot(_.getCanonicalPath.contains("python")))
         .map(_.filterNot(_.getCanonicalPath.contains("collection")))
     },
-
-    // Javadoc options: create a window title, and group key packages on index page
     javacOptions in doc := Seq(
       "-windowtitle", "Spark " + SPARK_VERSION_SHORT + " JavaDoc",
       "-public",
@@ -410,21 +377,22 @@ object SparkBuild extends Build {
     )
   )
 
-  def replSettings = sharedSettings ++ Seq(
+  lazy val replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v),
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v),
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v)
+    libraryDependencies ++= Seq(
+      "org.scala-lang"  % "scala-compiler" % scalaVersion.value,
+      "org.scala-lang"  % "jline"          % scalaVersion.value,
+      "org.scala-lang"  % "scala-reflect"  % scalaVersion.value
+    )
   )
 
-  def examplesSettings = sharedSettings ++ Seq(
+  lazy val examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
-    jarName in assembly <<= version map {
-      v => "spark-examples-" + v + "-hadoop" + hadoopVersion + ".jar" },
+    jarName in assembly := s"spark-examples-${version.value}-hadoop$hadoopVersion.jar",
     libraryDependencies ++= Seq(
-      "com.twitter"          %% "algebird-core"   % "0.1.11",
-      "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeIONetty, excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging, excludeJruby),
-      "org.apache.cassandra" % "cassandra-all" % "1.2.6"
+      "com.twitter"          %% "algebird-core" % "0.1.11",
+      "org.apache.hbase"      % "hbase"         % HBASE_VERSION excludeAll(excludeIONetty, excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging, excludeJruby),
+      "org.apache.cassandra"  % "cassandra-all" % "1.2.6"
         exclude("com.google.guava", "guava")
         exclude("com.googlecode.concurrentlinkedhashmap", "concurrentlinkedhashmap-lru")
         exclude("com.ning","compress-lzf")
@@ -436,47 +404,47 @@ object SparkBuild extends Build {
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
-  def toolsSettings = sharedSettings ++ Seq(
+  lazy val toolsSettings = sharedSettings ++ Seq(
     name := "spark-tools",
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
+    libraryDependencies ++= Seq(
+      "org.scala-lang"  % "scala-compiler" % scalaVersion.value,
+      "org.scala-lang"  % "scala-reflect"  % scalaVersion.value
+    )
   ) ++ assemblySettings ++ extraAssemblySettings
 
-  def graphxSettings = sharedSettings ++ Seq(
+  lazy val graphxSettings = sharedSettings ++ Seq(
     name := "spark-graphx",
     previousArtifact := sparkPreviousArtifact("spark-graphx"),
-    libraryDependencies ++= Seq(
-      "org.jblas" % "jblas" % jblasVersion
-    )
+    libraryDependencies += "org.jblas" % "jblas" % jblasVersion
   )
 
-  def bagelSettings = sharedSettings ++ Seq(
+  lazy val bagelSettings = sharedSettings ++ Seq(
     name := "spark-bagel",
     previousArtifact := sparkPreviousArtifact("spark-bagel")
   )
 
-  def mllibSettings = sharedSettings ++ Seq(
+  lazy val mllibSettings = sharedSettings ++ Seq(
     name := "spark-mllib",
     previousArtifact := sparkPreviousArtifact("spark-mllib"),
     libraryDependencies ++= Seq(
-      "org.jblas" % "jblas" % jblasVersion,
+      "org.jblas"     % "jblas"  % jblasVersion,
       "org.scalanlp" %% "breeze" % "0.7"
     )
   )
 
-  def catalystSettings = sharedSettings ++ Seq(
+  lazy val catalystSettings = sharedSettings ++ Seq(
     name := "catalyst",
     // The mechanics of rewriting expression ids to compare trees in some test cases makes
     // assumptions about the the expression ids being contiguous.  Running tests in parallel breaks
     // this non-deterministically.  TODO: FIX THIS.
     parallelExecution in Test := false,
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "1.9.1" % "test",
-      "com.typesafe" %% "scalalogging-slf4j" % "1.0.1"
+      "org.scalatest" %% "scalatest"          % "1.9.1" % "test",
+      "com.typesafe"  %% "scalalogging-slf4j" % "1.0.1"
     )
   )
 
-  def sqlCoreSettings = sharedSettings ++ Seq(
+  lazy val sqlCoreSettings = sharedSettings ++ Seq(
     name := "spark-sql",
     libraryDependencies ++= Seq(
       "com.twitter" % "parquet-column" % parquetVersion,
@@ -486,7 +454,7 @@ object SparkBuild extends Build {
 
   // Since we don't include hive in the main assembly this project also acts as an alternative
   // assembly jar.
-  def hiveSettings = sharedSettings ++ Seq(
+  lazy val hiveSettings = sharedSettings ++ Seq(
     name := "spark-hive",
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
@@ -517,40 +485,30 @@ object SparkBuild extends Build {
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
   )
 
-  def streamingSettings = sharedSettings ++ Seq(
+  lazy val streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
     previousArtifact := sparkPreviousArtifact("spark-streaming")
   )
 
-  def yarnCommonSettings = sharedSettings ++ Seq(
-    unmanagedSourceDirectories in Compile <++= baseDirectory { base =>
-      Seq(
-         base / "../common/src/main/scala"
-      )
-    },
-
-    unmanagedSourceDirectories in Test <++= baseDirectory { base =>
-      Seq(
-         base / "../common/src/test/scala"
-      )
-    }
-
+  lazy val yarnCommonSettings = sharedSettings ++ Seq(
+    unmanagedSourceDirectories in Compile ++= Seq(baseDirectory.value / "../common/src/main/scala"),
+    unmanagedSourceDirectories in Test ++= Seq(baseDirectory.value / "../common/src/test/scala")
   ) ++ extraYarnSettings
 
-  def yarnAlphaSettings = yarnCommonSettings ++ Seq(
+  lazy val yarnAlphaSettings = yarnCommonSettings ++ Seq(
     name := "spark-yarn-alpha"
   )
 
-  def yarnSettings = yarnCommonSettings ++ Seq(
+  lazy val yarnSettings = yarnCommonSettings ++ Seq(
     name := "spark-yarn"
   )
 
-  def gangliaSettings = sharedSettings ++ Seq(
+  lazy val gangliaSettings = sharedSettings ++ Seq(
     name := "spark-ganglia-lgpl",
     libraryDependencies += "com.codahale.metrics" % "metrics-ganglia" % "3.0.0"
   )
 
-  def java8TestsSettings = sharedSettings ++ Seq(
+  lazy val java8TestsSettings = sharedSettings ++ Seq(
     name := "java8-tests",
     javacOptions := Seq("-target", "1.8", "-source", "1.8"),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a")
@@ -558,9 +516,9 @@ object SparkBuild extends Build {
 
   // Conditionally include the YARN dependencies because some tools look at all sub-projects and will complain
   // if we refer to nonexistent dependencies (e.g. hadoop-yarn-api from a Hadoop version without YARN).
-  def extraYarnSettings = if(isYarnEnabled) yarnEnabledSettings else Seq()
+  lazy val extraYarnSettings = if(isYarnEnabled) yarnEnabledSettings else Seq()
 
-  def yarnEnabledSettings = Seq(
+  lazy val yarnEnabledSettings = Seq(
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
       "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
@@ -571,14 +529,16 @@ object SparkBuild extends Build {
     )
   )
 
-  def assemblyProjSettings = sharedSettings ++ Seq(
+  lazy val assembleDeps = taskKey[Unit]("Build assembly of dependencies and packages Spark projects")
+
+  lazy val assemblyProjSettings = sharedSettings ++ Seq(
     name := "spark-assembly",
     assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
-    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
-    jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" }
+    jarName in assembly := s"spark-assembly-${version.value}-hadoop$hadoopVersion.jar",
+    jarName in packageDependency := s"spark-assembly-${version.value}-hadoop$hadoopVersion-deps.jar"
   ) ++ assemblySettings ++ extraAssemblySettings
 
-  def extraAssemblySettings() = Seq(
+  lazy val extraAssemblySettings = Seq(
     test in assembly := {},
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
@@ -591,20 +551,18 @@ object SparkBuild extends Build {
     }
   )
 
-  def twitterSettings() = sharedSettings ++ Seq(
+  lazy val twitterSettings = sharedSettings ++ Seq(
     name := "spark-streaming-twitter",
     previousArtifact := sparkPreviousArtifact("spark-streaming-twitter"),
-    libraryDependencies ++= Seq(
-      "org.twitter4j" % "twitter4j-stream" % "3.0.3"
-    )
+    libraryDependencies += "org.twitter4j" % "twitter4j-stream" % "3.0.3"
   )
 
-  def kafkaSettings() = sharedSettings ++ Seq(
+  lazy val kafkaSettings = sharedSettings ++ Seq(
     name := "spark-streaming-kafka",
     previousArtifact := sparkPreviousArtifact("spark-streaming-kafka"),
     libraryDependencies ++= Seq(
-      "com.github.sgroschupf"    % "zkclient"   % "0.1",
-      "org.apache.kafka"        %% "kafka"      % "0.8.0"
+      "com.github.sgroschupf"  % "zkclient" % "0.1",
+      "org.apache.kafka"      %% "kafka"    % "0.8.0"
         exclude("com.sun.jdmk", "jmxtools")
         exclude("com.sun.jmx", "jmxri")
         exclude("net.sf.jopt-simple", "jopt-simple")
@@ -612,25 +570,21 @@ object SparkBuild extends Build {
     )
   )
 
-  def flumeSettings() = sharedSettings ++ Seq(
+  lazy val flumeSettings = sharedSettings ++ Seq(
     name := "spark-streaming-flume",
     previousArtifact := sparkPreviousArtifact("spark-streaming-flume"),
-    libraryDependencies ++= Seq(
-      "org.apache.flume" % "flume-ng-sdk" % "1.4.0" % "compile" excludeAll(excludeIONetty, excludeThrift)
-    )
+    libraryDependencies += "org.apache.flume" % "flume-ng-sdk" % "1.4.0" excludeAll(excludeIONetty, excludeThrift)
   )
 
-  def zeromqSettings() = sharedSettings ++ Seq(
+  lazy val zeromqSettings = sharedSettings ++ Seq(
     name := "spark-streaming-zeromq",
     previousArtifact := sparkPreviousArtifact("spark-streaming-zeromq"),
-    libraryDependencies ++= Seq(
-      "org.spark-project.akka" %% "akka-zeromq" % akkaVersion
-    )
+    libraryDependencies += "org.spark-project.akka" %% "akka-zeromq" % akkaVersion
   )
 
-  def mqttSettings() = streamingSettings ++ Seq(
+  lazy val mqttSettings = streamingSettings ++ Seq(
     name := "spark-streaming-mqtt",
     previousArtifact := sparkPreviousArtifact("spark-streaming-mqtt"),
-    libraryDependencies ++= Seq("org.eclipse.paho" % "mqtt-client" % "0.4.0")
+    libraryDependencies += "org.eclipse.paho" % "mqtt-client" % "0.4.0"
   )
 }
