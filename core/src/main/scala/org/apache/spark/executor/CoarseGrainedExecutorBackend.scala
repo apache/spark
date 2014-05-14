@@ -68,7 +68,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         System.exit(1)
       } else {
         val ser = SparkEnv.get.closureSerializer.newInstance()
-        val taskDesc =ser.deserialize[TaskDescription](data.value)
+        val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
         executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
       }
