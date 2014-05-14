@@ -204,8 +204,9 @@ class BoundaryPartitioner[K : Ordering : ClassTag, V](
     * 3 partitions, 500 keys / partition and if rdd has 700 keys, 1 partition will be entirely
     * empty.
      */
-    if(counts(currPartition) >= keysPerPartition)
+    if(counts(currPartition) >= keysPerPartition) {
       currPartition = (currPartition + 1) % numPartitions
+    }
     partition
   }
 
