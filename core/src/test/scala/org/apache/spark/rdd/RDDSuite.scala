@@ -565,8 +565,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(data.sortBy(_.split("\\|")(0), false).collect() === desc)
   }
 
-  // issues with serialization of Ordering in the test
-  ignore("sortByKey with explicit ordering") {
+  test("sortByKey with explicit ordering") {
     val data = sc.parallelize(Seq("Bob|Smith|50",
                                   "Jane|Smith|40",
                                   "Thomas|Williams|30",
@@ -583,14 +582,14 @@ class RDDSuite extends FunSuite with SharedSparkContext {
                             "Karen|Williams|60",
                             "Thomas|Williams|30")
 
-    def parse(s: String): Person = {
+    val parse = (s: String) => {
       val split = s.split("\\|")
       Person(split(0), split(1), split(2).toInt)
     }
 
     import scala.reflect.classTag
-    assert(data.sortBy(parse, false, 2)(AgeOrdering, classTag[Person]) === ageOrdered)
-    assert(data.sortBy(parse, false, 2)(NameOrdering, classTag[Person]) === nameOrdered)
+    assert(data.sortBy(parse, true, 2)(AgeOrdering, classTag[Person]) === ageOrdered)
+    assert(data.sortBy(parse, true, 2)(NameOrdering, classTag[Person]) === nameOrdered)
   }
 
   test("intersection") {
