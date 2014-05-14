@@ -26,7 +26,6 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -39,8 +38,8 @@ private[spark] class Executor(
     slaveHostname: String,
     properties: Seq[(String, String)],
     isLocal: Boolean = false)
-  extends Logging
-{
+  extends Logging {
+
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
@@ -63,9 +62,10 @@ private[spark] class Executor(
   // If we are in yarn mode, systems can have different disk layouts so we must set it
   // to what Yarn on this system said was available. This will be used later when SparkEnv
   // created.
-  if (java.lang.Boolean.valueOf(
-      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))) {
-    conf.set("spark.local.dir", getYarnLocalDirs())
+  val sparkYarnMode = java.lang.Boolean.valueOf(
+    System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
+  if (sparkYarnMode && !isLocal) {
+    conf.set("spark.local.dir", getYarnLocalDirs)
   } else if (sys.env.contains("SPARK_LOCAL_DIRS")) {
     conf.set("spark.local.dir", sys.env("SPARK_LOCAL_DIRS"))
   }
@@ -121,7 +121,7 @@ private[spark] class Executor(
   }
 
   /** Get the Yarn approved local directories. */
-  private def getYarnLocalDirs(): String = {
+  private def getYarnLocalDirs: String = {
     // Hadoop 0.23 and 2.x have different Environment variable names for the
     // local dirs, so lets check both. We assume one of the 2 is set.
     // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
