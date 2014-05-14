@@ -29,7 +29,7 @@ import org.apache.spark.SparkException
  */
 case class LabeledPoint(label: Double, features: Vector) {
   override def toString: String = {
-    Seq(label, features).mkString("(", ",", ")")
+    "(%s,%s)".format(label, features)
   }
 }
 
