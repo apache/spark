@@ -49,7 +49,7 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
       // For now, pool information is only accessible in live UIs
-      val pools = if (live) sc.getAllPools else Array[Schedulable]()
+      val pools = if (live) sc.getAllPools else Seq[Schedulable]()
       val poolTable = new PoolTable(pools, parent)
 
       val summary: NodeSeq =

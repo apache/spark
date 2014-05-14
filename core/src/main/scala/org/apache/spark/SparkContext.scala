@@ -25,9 +25,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -842,9 +842,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * Return pools for fair scheduler
    */
   @DeveloperApi
-  def getAllPools: Array[Schedulable] = {
+  def getAllPools: Seq[Schedulable] = {
     // TODO(xiajunluan): We should take nested pools into account
-    taskScheduler.rootPool.schedulableQueue.asScala.toArray
+    taskScheduler.rootPool.schedulableQueue.toSeq
   }
 
   /**
