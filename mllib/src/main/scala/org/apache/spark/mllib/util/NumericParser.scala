@@ -43,7 +43,7 @@ private[mllib] object NumericParser {
         parseArray(tokenizer)
       } else {
         // expecting a number
-        java.lang.Double.parseDouble(token)
+        parseDouble(token)
       }
     } else {
       throw new SparkException(s"Cannot find any token from the input string.")
@@ -67,7 +67,7 @@ private[mllib] object NumericParser {
         }
       } else {
         // expecting a number
-        values.append(java.lang.Double.parseDouble(token))
+        values.append(parseDouble(token))
         allowComma = true
       }
     }
@@ -100,13 +100,22 @@ private[mllib] object NumericParser {
         parsing = false
       } else {
         // expecting a number
-        items.append(java.lang.Double.parseDouble(token))
+        items.append(parseDouble(token))
         allowComma = true
       }
     }
     if (parsing) {
-      throw new SparkException(s"A tuple must with ')'.")
+      throw new SparkException(s"A tuple must end with ')'.")
     }
     items.toSeq
+  }
+
+  private def parseDouble(s: String): Double = {
+    try {
+      java.lang.Double.parseDouble(s)
+    } catch {
+      case e: Throwable =>
+        throw new SparkException(s"Cannot parse a double from: $s", e)
+    }
   }
 }
