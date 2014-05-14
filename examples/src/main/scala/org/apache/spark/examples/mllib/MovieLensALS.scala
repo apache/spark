@@ -40,13 +40,6 @@ import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
  */
 object MovieLensALS {
 
-  class ALSRegistrator extends KryoRegistrator {
-    override def registerClasses(kryo: Kryo) {
-      kryo.register(classOf[Rating])
-      kryo.register(classOf[mutable.BitSet])
-    }
-  }
-
   case class Params(
       input: String = null,
       kryo: Boolean = false,
@@ -108,8 +101,7 @@ object MovieLensALS {
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
     if (params.kryo) {
-      conf.set("spark.serializer", classOf[KryoSerializer].getName)
-        .set("spark.kryo.registrator", classOf[ALSRegistrator].getName)
+      conf.registerKryoClasses(Seq(classOf[mutable.BitSet], classOf[Rating]))
         .set("spark.kryoserializer.buffer.mb", "8")
     }
     val sc = new SparkContext(conf)

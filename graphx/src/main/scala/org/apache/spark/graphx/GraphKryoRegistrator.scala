@@ -30,8 +30,10 @@ import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * Registers GraphX classes with Kryo for improved performance.
+ *
+ * This is deprecated in favor of using `GraphXUtils.registerKryoClasses(conf)`
  */
-class GraphKryoRegistrator extends KryoRegistrator {
+@deprecated class GraphKryoRegistrator extends KryoRegistrator {
 
   def registerClasses(kryo: Kryo) {
     kryo.register(classOf[Edge[Object]])

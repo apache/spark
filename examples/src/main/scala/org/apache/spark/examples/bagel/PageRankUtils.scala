@@ -99,13 +99,6 @@ class PRMessage() extends Message[String] with Serializable {
   }
 }
 
-class PRKryoRegistrator extends KryoRegistrator {
-  def registerClasses(kryo: Kryo) {
-    kryo.register(classOf[PRVertex])
-    kryo.register(classOf[PRMessage])
-  }
-}
-
 class CustomPartitioner(partitions: Int) extends Partitioner {
   def numPartitions = partitions
 

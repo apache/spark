@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import org.scalatest.FunSuite
+import org.apache.spark.serializer.KryoSerializer
 
 class SparkConfSuite extends FunSuite with LocalSparkContext {
   test("loading from system properties") {
@@ -133,4 +134,38 @@ class SparkConfSuite extends FunSuite with LocalSparkContext {
       System.clearProperty("spark.test.a.b.c")
     }
   }
+
+  test("register kryo classes through registerKryoClasses") {
+    val conf = new SparkConf()
+    class Class1 {}
+    class Class2 {}
+    class Class3 {}
+
+    conf.registerKryoClasses(Seq(classOf[Class1], classOf[Class2]))
+    assert(conf.get("spark.kryo.classesToRegister") ==
+      classOf[Class1].getName + "," + classOf[Class2].getName)
+
+    conf.registerKryoClasses(Seq(classOf[Class3]))
+    assert(conf.get("spark.kryo.classesToRegister") ==
+      classOf[Class1].getName + "," + classOf[Class2].getName + "," + classOf[Class3].getName)
+
+    conf.registerKryoClasses(Seq(classOf[Class2]))
+    assert(conf.get("spark.kryo.classesToRegister") ==
+      classOf[Class1].getName + "," + classOf[Class2].getName + "," + classOf[Class3].getName)
+
+    // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
+    // blow up.
+    new KryoSerializer(conf)
+  }
+
+  test("register kryo classes through conf") {
+    val conf = new SparkConf()
+    conf.set("spark.kryo.classesToRegister", "java.lang.StringBuffer")
+    conf.set("spark.serializer", classOf[KryoSerializer].getName)
+
+    // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
+    // blow up.
+    new KryoSerializer(conf)
+  }
+
 }
