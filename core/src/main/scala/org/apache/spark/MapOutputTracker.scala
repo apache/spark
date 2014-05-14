@@ -230,17 +230,14 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   //update partial map outputs for a shuffle
   def updateMapStatusesForShuffle(shuffleId: Int){
     mapStatuses.synchronized {
-      //we cached partial map outputs, the master may have updates for us
-      if (partialOutputForShuffle(shuffleId) && !this.isInstanceOf[MapOutputTrackerMaster]) {
+      //we may have cached partial map outputs, the master may have updates for us
+      if (mapStatuses.get(shuffleId).isDefined) {
         val masterEpoch = askTracker(GetMasterEpoch).asInstanceOf[Long]
-        //we don't want to clear the local cache too often
-        if (masterEpoch - epoch >= math.min(10, mapStatuses.get(shuffleId).get.filter(_ == null).size)) {
+        if (masterEpoch > epoch) {
           logInfo("Master's epoch is " + masterEpoch + ", local epoch is " + epoch + ". Clear local cache. ---lirui")
           mapStatuses -= shuffleId
           epoch = masterEpoch
         }
-      } else {
-        logInfo("The map output is not partial. ---lirui")
       }
     }
   }

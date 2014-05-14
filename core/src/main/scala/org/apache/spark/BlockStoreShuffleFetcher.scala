@@ -87,7 +87,7 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
       logInfo("Still missing " + oldMissingNum + " outputs for reduceId " + reduceId +
         ". Sleep " + sleepInterval + "s. ---lirui")
       Thread.sleep((sleepInterval * 1000).toLong)
-      logInfo("Trying to update map output statues for reduceId "+reduceId+" ---lirui")
+      logInfo("Trying to update map output statuses for reduceId "+reduceId+" ---lirui")
       mapOutputTracker.updateMapStatusesForShuffle(shuffleId)
       statuses = mapOutputTracker.getServerStatuses(shuffleId, reduceId)
       val missingSplitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
@@ -107,7 +107,7 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
       }
       missingMapOutputs = statuses.zipWithIndex.filter(_._1._1 == null).map(_._2)
       val fillingUpSpeed = (oldMissingNum - missingMapOutputs.size).toFloat / sleepInterval
-      sleepInterval = if (fillingUpSpeed > 0.01) math.max(10.toFloat, missingMapOutputs.size.toFloat / 5) / fillingUpSpeed else sleepInterval * 2
+      sleepInterval = if (fillingUpSpeed > 0.01) math.max(10.toFloat, missingMapOutputs.size.toFloat / 2) / fillingUpSpeed else sleepInterval * 4
     }
 
     val completionIter = CompletionIterator[T, Iterator[T]](itr, {
