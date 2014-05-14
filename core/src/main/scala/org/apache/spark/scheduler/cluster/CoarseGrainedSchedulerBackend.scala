@@ -149,7 +149,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize)
           scheduler.error(msg)
           // TODO: Need to throw an exception?
-          throw new SparkException(msg)
+          // throw new SparkException(msg)
         }
         freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
         executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))
