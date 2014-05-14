@@ -70,7 +70,7 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
     new EdgePartition(srcIds, dstIds, data, index, vertices)
   }
 
-  /** If every edge add to edges in Edge.lexicographicOrdering, we don't need to sort edgeArray.*/
+  /** If every edge add to edges in Edge.lexicographicOrdering, we don't need to sort edgeArray. */
   def toEdgePartitionWithoutSort: EdgePartition[ED, VD] = {
     val edgeArray = edges.trim().array
     val srcIds = edgeArray.map(edge => edge.srcId)
