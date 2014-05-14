@@ -164,6 +164,6 @@ some example applications.
 PySpark also includes several sample programs in the [`examples/src/main/python` folder](https://github.com/apache/spark/tree/master/examples/src/main/python).
 You can run them by passing the files to `pyspark`; e.g.:
 
-    ./bin/spark-submit examples/src/main/python/wordcount.py
+    ./bin/spark-submit examples/src/main/python/wordcount.py local[2] README.md
 
 Each program prints usage help when run without arguments.

@@ -17,15 +17,17 @@
 
 package org.apache.spark
 
+import scala.language.implicitConversions
+
 import java.io._
 import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Properties, UUID}
 import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
+import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
-import scala.collection.mutable.{ArrayBuffer, HashMap}
-import scala.language.implicitConversions
+import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -50,7 +52,6 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
 
 /**
- * :: DeveloperApi ::
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
@@ -58,7 +59,6 @@ import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerTy
  *   this config overrides the default configs as well as system properties.
  */
 
-@DeveloperApi
 class SparkContext(config: SparkConf) extends Logging {
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
@@ -276,19 +276,18 @@ class SparkContext(config: SparkConf) extends Logging {
     .getOrElse(512)
 
   // Environment variables to pass to our executors.
-  // NOTE: This should only be used for test related settings.
-  private[spark] val testExecutorEnvs = HashMap[String, String]()
+  private[spark] val executorEnvs = HashMap[String, String]()
 
   // Convert java options to env vars as a work around
   // since we can't set env vars directly in sbt.
   for { (envKey, propKey) <- Seq(("SPARK_TESTING", "spark.testing"))
     value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
-    testExecutorEnvs(envKey) = value
+    executorEnvs(envKey) = value
   }
   // The Mesos scheduler backend relies on this environment variable to set executor memory.
   // TODO: Set this only in the Mesos scheduler.
-  testExecutorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
-  testExecutorEnvs ++= conf.getExecutorEnv
+  executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
+  executorEnvs ++= conf.getExecutorEnv
 
   // Set SPARK_USER for user who is running SparkContext.
   val sparkUser = Option {
@@ -296,7 +295,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }.getOrElse {
     SparkContext.SPARK_UNKNOWN_USER
   }
-  testExecutorEnvs("SPARK_USER") = sparkUser
+  executorEnvs("SPARK_USER") = sparkUser
 
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
@@ -839,18 +838,22 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   *  Return pools for fair scheduler
-   *  TODO(xiajunluan): We should take nested pools into account
+   * :: DeveloperApi ::
+   * Return pools for fair scheduler
    */
-  def getAllPools: ArrayBuffer[Schedulable] = {
-    taskScheduler.rootPool.schedulableQueue
+  @DeveloperApi
+  def getAllPools: Seq[Schedulable] = {
+    // TODO(xiajunluan): We should take nested pools into account
+    taskScheduler.rootPool.schedulableQueue.toSeq
   }
 
   /**
+   * :: DeveloperApi ::
    * Return the pool associated with the given name, if one exists
    */
+  @DeveloperApi
   def getPoolForName(pool: String): Option[Schedulable] = {
-    taskScheduler.rootPool.schedulableNameToSchedulable.get(pool)
+    Option(taskScheduler.rootPool.schedulableNameToSchedulable.get(pool))
   }
 
   /**
@@ -1494,8 +1497,8 @@ object SparkContext extends Logging {
         } catch {
           // TODO: Enumerate the exact reasons why it can fail
           // But irrespective of it, it means we cannot proceed !
-          case th: Throwable => {
-            throw new SparkException("YARN mode not available ?", th)
+          case e: Exception => {
+            throw new SparkException("YARN mode not available ?", e)
           }
         }
         val backend = new CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
@@ -1510,8 +1513,8 @@ object SparkContext extends Logging {
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
 
         } catch {
-          case th: Throwable => {
-            throw new SparkException("YARN mode not available ?", th)
+          case e: Exception => {
+            throw new SparkException("YARN mode not available ?", e)
           }
         }
 
@@ -1521,8 +1524,8 @@ object SparkContext extends Logging {
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {
-          case th: Throwable => {
-            throw new SparkException("YARN mode not available ?", th)
+          case e: Exception => {
+            throw new SparkException("YARN mode not available ?", e)
           }
         }
 

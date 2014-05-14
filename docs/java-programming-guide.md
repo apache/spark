@@ -215,7 +215,4 @@ Spark includes several sample programs using the Java API in
 [`examples/src/main/java`](https://github.com/apache/spark/tree/master/examples/src/main/java/org/apache/spark/examples).  You can run them by passing the class name to the
 `bin/run-example` script included in Spark; for example:
 
-    ./bin/run-example org.apache.spark.examples.JavaWordCount
-
-Each example program prints usage help when run
-without any arguments.
+    ./bin/run-example JavaWordCount README.md

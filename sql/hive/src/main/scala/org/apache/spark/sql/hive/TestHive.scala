@@ -99,6 +99,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
+  hiveFilesTemp.deleteOnExit()
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
