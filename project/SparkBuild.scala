@@ -489,9 +489,9 @@ object SparkBuild extends Build {
     name := "spark-hive",
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
-      "org.apache.hive" % "hive-metastore" % hiveVersion,
-      "org.apache.hive" % "hive-exec"      % hiveVersion,
-      "org.apache.hive" % "hive-serde"     % hiveVersion
+      "org.spark-project.hive" % "hive-metastore" % hiveVersion,
+      "org.spark-project.hive" % "hive-exec"      % hiveVersion,
+      "org.spark-project.hive" % "hive-serde"     % hiveVersion
     ),
     // Multiple queries rely on the TestHive singleton.  See comments there for more details.
     parallelExecution in Test := false,
