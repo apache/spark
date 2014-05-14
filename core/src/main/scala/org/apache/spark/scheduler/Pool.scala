@@ -70,7 +70,7 @@ private[spark] class Pool(
   }
 
   override def getSchedulableByName(schedulableName: String): Schedulable = {
-    if (schedulableNameToSchedulable.contains(schedulableName)) {
+    if (schedulableNameToSchedulable.containsKey(schedulableName)) {
       return schedulableNameToSchedulable.get(schedulableName)
     }
     for (schedulable <- schedulableQueue.asScala) {
