@@ -21,9 +21,11 @@ import scala.collection.mutable
 
 import akka.actor.ActorRef
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
-private[spark] class WorkerInfo(
+@DeveloperApi
+class WorkerInfo(
     val id: String,
     val host: String,
     val port: Int,

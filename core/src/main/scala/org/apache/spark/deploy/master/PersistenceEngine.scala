@@ -17,6 +17,10 @@
 
 package org.apache.spark.deploy.master
 
+import org.apache.spark.annotation.DeveloperApi
+
+import scala.reflect.ClassTag
+
 /**
  * Allows Master to persist any state that is necessary in order to recover from a failure.
  * The following semantics are required:
@@ -26,35 +30,58 @@ package org.apache.spark.deploy.master
  * we might not have yet deleted apps or workers that finished (so their liveness must be verified
  * during recovery).
  */
-private[spark] trait PersistenceEngine {
-  def addApplication(app: ApplicationInfo)
+@DeveloperApi
+trait PersistenceEngine {
 
-  def removeApplication(app: ApplicationInfo)
+  def persist(name: String, obj: Object)
 
-  def addWorker(worker: WorkerInfo)
+  def unpersist(name: String)
 
-  def removeWorker(worker: WorkerInfo)
+  def read[T: ClassTag](name: String): Seq[T]
 
-  def addDriver(driver: DriverInfo)
+  def addApplication(app: ApplicationInfo): Unit = {
+    persist("app_" + app.id, app)
+  }
 
-  def removeDriver(driver: DriverInfo)
+  def removeApplication(app: ApplicationInfo): Unit = {
+    unpersist("app_" + app.id)
+  }
+
+  def addWorker(worker: WorkerInfo): Unit = {
+    persist("worker_" + worker.id, worker)
+  }
+
+  def removeWorker(worker: WorkerInfo): Unit = {
+    unpersist("worker_" + worker.id)
+  }
+
+  def addDriver(driver: DriverInfo): Unit = {
+    persist("driver_" + driver.id, driver)
+  }
+
+  def removeDriver(driver: DriverInfo): Unit = {
+    unpersist("driver_" + driver.id)
+  }
 
   /**
    * Returns the persisted data sorted by their respective ids (which implies that they're
    * sorted by time of creation).
    */
-  def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo])
+  def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
+    (read[ApplicationInfo]("app_"), read[DriverInfo]("driver_"), read[WorkerInfo]("worker_"))
+  }
 
   def close() {}
 }
 
 private[spark] class BlackHolePersistenceEngine extends PersistenceEngine {
-  override def addApplication(app: ApplicationInfo) {}
-  override def removeApplication(app: ApplicationInfo) {}
-  override def addWorker(worker: WorkerInfo) {}
-  override def removeWorker(worker: WorkerInfo) {}
-  override def addDriver(driver: DriverInfo) {}
-  override def removeDriver(driver: DriverInfo) {}
+
+  override def persist(name: String, obj: Object): Unit = {}
 
   override def readPersistedData() = (Nil, Nil, Nil)
+
+  override def unpersist(name: String): Unit = {}
+
+  override def read[T: ClassTag](name: String): Seq[T] = Nil
+
 }

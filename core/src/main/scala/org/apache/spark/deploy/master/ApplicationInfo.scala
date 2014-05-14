@@ -24,9 +24,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import akka.actor.ActorRef
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
 
-private[spark] class ApplicationInfo(
+@DeveloperApi
+class ApplicationInfo(
     val startTime: Long,
     val id: String,
     val desc: ApplicationDescription,
