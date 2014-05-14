@@ -152,8 +152,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           // TODO: Need to throw an exception?
           // throw new SparkException(msg)
         }
-        freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
-        executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))
+        else {
+          freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
+          executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))
+        }
       }
     }
 
