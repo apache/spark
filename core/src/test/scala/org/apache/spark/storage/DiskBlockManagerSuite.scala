@@ -52,7 +52,7 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
     rootDir0.deleteOnExit()
     rootDir1 = Files.createTempDir()
     rootDir1.deleteOnExit()
-    rootDirs = rootDir0.getName + "," + rootDir1.getName
+    rootDirs = rootDir0.getAbsolutePath + "," + rootDir1.getAbsolutePath
     println("Created root dirs: " + rootDirs)
   }
 
