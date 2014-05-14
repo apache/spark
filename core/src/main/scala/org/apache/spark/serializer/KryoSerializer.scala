@@ -39,12 +39,12 @@ class KryoSerializer(conf: SparkConf)
   with Logging
   with Serializable {
 
-  private val bufferSizeMb = conf.getInt("spark.kryoserializer.buffer.mb", 2)
-  private val maxBufferSizeMb = conf.getInt("spark.kryoserializer.buffer.max.mb", bufferSizeMb)
+  private val bufferSize = conf.getInt("spark.kryoserializer.buffer.mb", 2) * 1024 * 1024
+  private val maxBufferSize = conf.getInt("spark.kryoserializer.buffer.max.mb", 16) * 1024 * 1024
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrator = conf.getOption("spark.kryo.registrator")
 
-  def newKryoOutput() = new KryoOutput(bufferSizeMb * 1024 * 1024, maxBufferSizeMb * 1024 * 1024)
+  def newKryoOutput() = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator

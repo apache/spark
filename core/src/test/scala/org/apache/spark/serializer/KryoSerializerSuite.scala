@@ -206,6 +206,7 @@ class KryoSerializerResizableOutputSuite extends FunSuite {
     val conf = new SparkConf(false)
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.kryoserializer.buffer.mb", "1")
+    conf.set("spark.kryoserializer.buffer.max.mb", "1")
     val sc = new SparkContext("local", "test", conf)
     intercept[SparkException](sc.parallelize(x).collect)
     LocalSparkContext.stop(sc)
