@@ -40,6 +40,7 @@ import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /**
@@ -778,6 +779,18 @@ private[spark] object Utils extends Logging {
       throw new SparkException("Process " + command + " exited with code " + exitCode)
     }
     output.toString
+  }
+
+  /**
+   * Execute a block of code that evaluates to Unit, forwarding any uncaught exceptions to the
+   * default UncaughtExceptionHandler
+   */
+  def tryOrExit(block: => Unit) {
+    try {
+      block
+    } catch {
+      case t: Throwable => ExecutorUncaughtExceptionHandler.uncaughtException(t)
+    }
   }
 
   /**
