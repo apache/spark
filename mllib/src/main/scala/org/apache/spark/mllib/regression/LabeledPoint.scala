@@ -19,6 +19,7 @@ package org.apache.spark.mllib.regression
 
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.NumericParser
+import org.apache.spark.SparkException
 
 /**
  * Class that represents the features and labels of a data point.
@@ -43,7 +44,7 @@ object LabeledPoint {
         case Seq(label: Double, numeric: Any) =>
           LabeledPoint(label, Vectors.parseNumeric(numeric))
         case other =>
-          sys.error(s"Cannot parse $other.")
+          throw new SparkException(s"Cannot parse $other.")
       }
     } else { // dense format used before v1.0
       val parts = s.split(',')

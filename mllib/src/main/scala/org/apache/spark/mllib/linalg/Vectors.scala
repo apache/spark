@@ -26,6 +26,7 @@ import scala.collection.JavaConverters._
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.mllib.util.NumericParser
+import org.apache.spark.SparkException
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
@@ -141,7 +142,7 @@ object Vectors {
       case Seq(size: Double, indices: Array[Double], values: Array[Double]) =>
         Vectors.sparse(size.toInt, indices.map(_.toInt), values)
       case other =>
-        sys.error(s"Cannot parse $other.")
+       throw new SparkException(s"Cannot parse $other.")
     }
   }
 

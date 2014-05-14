@@ -21,6 +21,8 @@ import scala.collection.mutable.ListBuffer
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkException
+
 class NumericParserSuite extends FunSuite {
 
   test("tokenizer") {
@@ -42,7 +44,7 @@ class NumericParserSuite extends FunSuite {
 
     val malformatted = Seq("a", "[1,,]", "0.123.4", "1 2", "3+4")
     malformatted.foreach { s =>
-      intercept[RuntimeException] {
+      intercept[SparkException] {
         val tokenizer = new NumericTokenizer(s)
         while (tokenizer.next() != NumericTokenizer.END) {
           // do nothing

@@ -19,6 +19,8 @@ package org.apache.spark.mllib.util
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
+import org.apache.spark.SparkException
+
 private[mllib] object NumericTokenizer {
   val NUMBER = -1
   val END = -2
@@ -61,39 +63,43 @@ private[mllib] class NumericTokenizer(s: String, start: Int, end: Int) {
    */
   def next(): Int = {
     if (cur < end) {
-      val c = s(cur)
-      c match {
-        case '(' | '[' =>
+      val c = s.charAt(cur)
+      if (c == '(' || c == '[') {
+        allowComma = false
+        cur += 1
+        c
+      } else if (c == ')' || c == ']') {
+        allowComma = true
+        cur += 1
+        c
+      } else if (c == ',') {
+        if (allowComma) {
+          cur += 1
           allowComma = false
-          cur += 1
-          c
-        case ')' | ']' =>
-          allowComma = true
-          cur += 1
-          c
-        case ',' =>
-          if (allowComma) {
-            cur += 1
-            allowComma = false
-            next()
+          next()
+        } else {
+          throw new SparkException(s"Found a ',' at a wrong location: $cur.")
+        }
+      } else {
+        // expecting a number
+        var inNumber = true
+        val beginAt = cur
+        while (cur < end && inNumber) {
+          val d = s.charAt(cur)
+          if (d == ')' || d == ']' || d == ',') {
+            inNumber = false
           } else {
-            sys.error("Found a ',' at a wrong location.")
+            cur += 1
           }
-        case other => // expecting a number
-          var inNumber = true
-          val sb = new StringBuilder()
-          while (cur < end && inNumber) {
-            val d = s(cur)
-            if (d == ')' || d == ']' || d == ',') {
-              inNumber = false
-            } else {
-              sb.append(d)
-              cur += 1
-            }
-          }
-          _value = sb.toString().toDouble
-          allowComma = true
-          NUMBER
+        }
+        try {
+          _value = java.lang.Double.parseDouble(s.substring(beginAt, cur))
+        } catch {
+          case e: Throwable =>
+            throw new SparkException("Error parsing a number", e)
+        }
+        allowComma = true
+        NUMBER
       }
     } else {
       END
@@ -110,15 +116,17 @@ private[mllib] object NumericParser {
   def parse(s: String): Any = parse(new NumericTokenizer(s))
 
   private def parse(tokenizer: NumericTokenizer): Any = {
-    tokenizer.next() match {
-      case '(' =>
-        parseTuple(tokenizer)
-      case '[' =>
-        parseArray(tokenizer)
-      case NUMBER =>
-        tokenizer.value
-      case END =>
-        null
+    val token = tokenizer.next()
+    if (token == NUMBER) {
+      tokenizer.value
+    } else if (token == '(') {
+      parseTuple(tokenizer)
+    } else if (token == '[') {
+      parseArray(tokenizer)
+    } else if (token == END) {
+      null
+    } else {
+      throw new SparkException(s"Cannot recgonize token type: $token.")
     }
   }
 
@@ -129,7 +137,9 @@ private[mllib] object NumericParser {
       values.append(tokenizer.value)
       token = tokenizer.next()
     }
-    require(token == ']')
+    if (token != ']') {
+      throw new SparkException(s"An array must end with ] but got $token.")
+    }
     values.toArray
   }
 
@@ -137,17 +147,20 @@ private[mllib] object NumericParser {
     val items = ListBuffer.empty[Any]
     var token = tokenizer.next()
     while (token != ')' && token != END) {
-      token match {
-        case '(' =>
-          items.append(parseTuple(tokenizer))
-        case '[' =>
-          items.append(parseArray(tokenizer))
-        case NUMBER =>
-          items.append(tokenizer.value)
+      if (token == NUMBER) {
+        items.append(tokenizer.value)
+      } else if (token == '(') {
+        items.append(parseTuple(tokenizer))
+      } else if (token == '[') {
+        items.append(parseArray(tokenizer))
+      } else {
+        throw new SparkException(s"Cannot recognize token type: $token.")
       }
       token = tokenizer.next()
     }
-    require(token == ')')
+    if (token != ')') {
+      throw new SparkException(s"A tuple must end with ) but got $token.")
+    }
     items.toSeq
   }
 }

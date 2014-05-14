@@ -19,6 +19,8 @@ package org.apache.spark.mllib.linalg
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkException
+
 class VectorsSuite extends FunSuite {
 
   val arr = Array(0.1, 0.0, 0.3, 0.4)
@@ -105,7 +107,7 @@ class VectorsSuite extends FunSuite {
     val vectors = Seq(
       Vectors.dense(Array.empty[Double]),
       Vectors.dense(1.0),
-      Vectors.dense(1.0, 0.0, -2.0),
+      Vectors.dense(1.0E6, 0.0, -2.0e-7),
       Vectors.sparse(0, Array.empty[Int], Array.empty[Double]),
       Vectors.sparse(1, Array(0), Array(1.0)),
       Vectors.sparse(3, Array(0, 2), Array(1.0, -2.0)))
@@ -115,9 +117,9 @@ class VectorsSuite extends FunSuite {
       assert(v === v1)
     }
 
-    val malformatted = Seq("1", "[1,,]", "[1,2", "(1,[1,2])", "(1,[1],[2.0,1.0])")
+    val malformatted = Seq("1", "[1,,]", "[1,2b]", "(1,[1,2])", "([1],[2.0,1.0])")
     malformatted.foreach { s =>
-      intercept[RuntimeException] {
+      intercept[SparkException] {
         Vectors.parse(s)
         println(s"Didn't detect malformatted string $s.")
       }
