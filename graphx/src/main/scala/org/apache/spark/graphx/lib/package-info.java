@@ -16,6 +16,6 @@
  */
 
 /**
- * Internal support for MLLib Python API.
+ * Various analytics functions for graphs.
  */
 package org.apache.spark.graphx.lib;
