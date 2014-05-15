@@ -183,6 +183,7 @@ object SparkBuild extends Build {
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark").map { case (k,v) => s"-D$k=$v" }.toSeq,
+    javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g".split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
@@ -491,9 +492,9 @@ object SparkBuild extends Build {
     name := "spark-hive",
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
-      "org.apache.hive" % "hive-metastore" % hiveVersion,
-      "org.apache.hive" % "hive-exec"      % hiveVersion excludeAll(excludeCommonsLang, excludeCommonsLogging),
-      "org.apache.hive" % "hive-serde"     % hiveVersion
+      "org.spark-project.hive" % "hive-metastore" % hiveVersion,
+      "org.spark-project.hive" % "hive-exec"      % hiveVersion excludeAll(excludeCommonsLang, excludeCommonsLogging),
+      "org.spark-project.hive" % "hive-serde"     % hiveVersion
     ),
     // Multiple queries rely on the TestHive singleton.  See comments there for more details.
     parallelExecution in Test := false,

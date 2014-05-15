@@ -156,7 +156,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 
 * `ConsoleSink`: Logs metrics information to the console.
 * `CSVSink`: Exports metrics data to CSV files at regular intervals.
-* `JmxSink`: Registers metrics for viewing in a JXM console.
+* `JmxSink`: Registers metrics for viewing in a JMX console.
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
 * `GraphiteSink`: Sends metrics to a Graphite node.
 
