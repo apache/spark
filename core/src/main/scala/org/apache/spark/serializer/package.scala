@@ -18,6 +18,8 @@
 package org.apache.spark
 
 /**
- * Plugin your own serializer or use one of these provided serializers.
+ * Pluggable serializers for RDD and shuffle data.
+ *
+ * @see [[org.apache.spark.serializer.Serializer]]
  */
 package object serializer

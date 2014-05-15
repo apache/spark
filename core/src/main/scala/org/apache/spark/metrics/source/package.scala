@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming
+package org.apache.spark.metrics
 
 /**
- * Various implementations of DStream's.
- * @see [[org.apache.spark.streaming.dstream.DStream]]
+ * Sources used in Spark's metrics system.
  */
-package object dstream
+package object source

@@ -18,6 +18,8 @@
 package org.apache.spark.api.java
 
 /**
- * Interfaces comprising functions used by Spark's Java API.
+ * Set of interfaces to represent functions in Spark's Java API. Users create implementations of
+ * these interfaces to pass functions to various Java API methods for Spark. Please visit Spark's
+ * Java programming guide for more details.
  */
 package object function 

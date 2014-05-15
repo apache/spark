@@ -16,8 +16,8 @@
  */
 
 /**
- * Spark annotations to mark an API experimental or intended only for advanced usages by Developers.
+ * Spark annotations to mark an API experimental or intended only for advanced usages by developers.
  * This package consist of these annotations, which are used project wide and are reflected in
- * scala and java docs.
+ * Scala and Java docs.
  */
 package org.apache.spark.annotation;

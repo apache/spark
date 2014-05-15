@@ -18,6 +18,6 @@
 package org.apache.spark
 
 /**
- * Provides implementation's of various RDDs.
+ * Provides several RDD implementations. See [[org.apache.spark.rdd.RDD]].
  */
 package object rdd

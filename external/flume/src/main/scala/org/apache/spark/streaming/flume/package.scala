@@ -18,6 +18,6 @@
 package org.apache.spark.streaming
 
 /**
- * Spark streaming receiver for flume.
+ * Spark streaming receiver for Flume.
  */
 package object flume

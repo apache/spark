@@ -16,6 +16,6 @@
  */
 
 /**
- * Spark io can benefit from various type of compressions mechanisms present here.
+ * IO codecs used for compression.
  */
 package org.apache.spark.io;

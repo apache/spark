@@ -16,6 +16,6 @@
  */
 
 /**
- * Comprises of spark bagel which is a spark implementation of pregel.
+ * Bagel: An implementation of Pregel in Spark. THIS IS DEPRECATED - use Spark's GraphX library.
  */
 package org.apache.spark.bagel;

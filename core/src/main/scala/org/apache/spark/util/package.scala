@@ -18,6 +18,6 @@
 package org.apache.spark
 
 /**
- * Spark utilities
+ * Spark utilities.
  */
 package object util

@@ -18,6 +18,7 @@
 package org.apache.spark
 
 /**
- * API's mainly intended for developers of executor backends for spark.
+ * Executor components used with various cluster managers.
+ * See [[org.apache.spark.executor.Executor]].
  */
 package object executor

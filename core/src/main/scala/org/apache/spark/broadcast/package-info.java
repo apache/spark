@@ -16,6 +16,6 @@
  */
 
 /**
- * Spark's broadcast variables, used to broadcast small set of data to all nodes.
+ * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
  */
 package org.apache.spark.broadcast;

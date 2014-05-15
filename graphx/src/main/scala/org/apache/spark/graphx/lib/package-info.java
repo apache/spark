@@ -16,6 +16,6 @@
  */
 
 /**
- * Comprises of various analytics that can be done with spark's graphx library.
+ * Internal support for MLLib Python API.
  */
 package org.apache.spark.graphx.lib;

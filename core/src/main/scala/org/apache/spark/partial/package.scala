@@ -18,9 +18,11 @@
 package org.apache.spark
 
 /**
- * Spark supports getting results with approximate result. This provides convenient api and also
- * implementation for approximate calculation.
+ * :: Experimental ::
+ *
+ * Support for approximate results. This provides convenient api and also implementation for
+ * approximate calculation.
  *
  * @see [[org.apache.spark.rdd.RDD.countApprox]]
  */
-package object partial 
+package object partial

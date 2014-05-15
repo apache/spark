@@ -16,6 +16,6 @@
  */
 
 /**
- * Spark supports multiple resource manager and some of the require there own executor backend.
+ * Package for executor components used with various cluster managers.
  */
 package org.apache.spark.executor;

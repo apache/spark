@@ -16,6 +16,6 @@
  */
 
 /**
- * Plugin your own serializer or use one of these provided serializers.
+ * Pluggable serializers for RDD and shuffle data.
  */
 package org.apache.spark.serializer;

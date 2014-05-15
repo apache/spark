@@ -18,6 +18,6 @@
 package org.apache.spark.metrics
 
 /**
- * Various sinks for metrics for Spark.
+ * Sinks used in Spark's metrics system.
  */
 package object sink 

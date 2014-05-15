@@ -16,6 +16,6 @@
  */
 
 /**
- * Utilities of random number generators
+ * Utilities for random number generation.
  */
 package org.apache.spark.util.random;

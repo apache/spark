@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.api
 
 /**
- * Mllib uses python API [[org.apache.spark.mllib.api.python.PythonMLLibAPI]]
+ * Internal support for MLLib Python API.
+ *
+ * @see [[org.apache.spark.mllib.api.python.PythonMLLibAPI]]
  */
 package object python

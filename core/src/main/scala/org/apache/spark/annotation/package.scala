@@ -18,8 +18,8 @@
 package org.apache.spark
 
 /**
- * Spark annotations to mark an API experimental/Alpha or intended only for advanced usages by
- * Developers. This package consist of these annotations, which are used project wide and are
- * reflected in scala and java docs.
+ * Spark annotations to mark an API experimental or intended only for advanced usages by developers.
+ * This package consist of these annotations, which are used project wide and are reflected in
+ * Scala and Java docs.
  */
 package object annotation

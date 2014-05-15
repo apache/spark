@@ -16,9 +16,8 @@
  */
 
 /**
- * Set of interfaces used as Spark's functions for java API. Users create implementations of these
- * interfaces to pass functions to various Java API methods for spark. Users may not create
- * implementations of these interfaces in case they are using java 8's lambda expressions. Please
- * visit Spark's java programming guide for more details.
+ * Set of interfaces to represent functions in Spark's Java API. Users create implementations of
+ * these interfaces to pass functions to various Java API methods for Spark. Please visit Spark's
+ * Java programming guide for more details.
  */
 package org.apache.spark.api.java.function;
