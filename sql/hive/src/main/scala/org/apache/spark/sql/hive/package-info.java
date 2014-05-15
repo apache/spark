@@ -15,11 +15,4 @@
  * limitations under the License.
  */
 
-package org.apache.spark
-
-/**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
- */
-package object broadcast {
-  // For package docs only
-}
+package org.apache.spark.sql.hive;

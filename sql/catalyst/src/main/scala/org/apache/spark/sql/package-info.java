@@ -15,11 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
-
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Allows the execution of relational queries, including those expressed in SQL using Spark.
  */
-package object broadcast {
-  // For package docs only
-}
+package org.apache.spark.sql;
