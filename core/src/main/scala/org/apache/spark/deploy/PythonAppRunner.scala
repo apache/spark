@@ -23,15 +23,14 @@ import scala.collection.JavaConversions._
 import org.apache.spark.api.python.{PythonUtils, RedirectThread}
 
 /**
- * A main class used by spark-submit to launch Python applications. It executes python as a
- * subprocess and then has it connect back to the JVM to access system properties, etc.
+ * Main class used by spark-submit to launch Python applications. It executes python as a
+ * sub-process and then has it connect back to the JVM to access system properties, etc.
  */
-object PythonRunner {
+object PythonAppRunner {
   def main(args: Array[String]) {
     val primaryResource = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
-
     val pythonExec = sys.env.get("PYSPARK_PYTHON").getOrElse("python") // TODO: get this from conf
 
     // Launch a Py4J gateway server for the process to connect to; this will let it see our
@@ -42,7 +41,7 @@ object PythonRunner {
     // Build up a PYTHONPATH that includes the Spark assembly JAR (where this class is), the
     // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
     val pathElements = new ArrayBuffer[String]
-    pathElements ++= pyFiles.split(",")
+    pathElements ++= Option(pyFiles).getOrElse("").split(",")
     pathElements += PythonUtils.sparkPythonPath
     pathElements += sys.env.getOrElse("PYTHONPATH", "")
     val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)

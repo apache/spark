@@ -1166,4 +1166,17 @@ private[spark] object Utils extends Logging {
         true
     }
   }
+
+
+  /**
+   * Merge a sequence of comma-separated file lists into a single comma-separated string.
+   * The provided strings may be null or empty to indicate no files.
+   */
+  def mergeFileLists(lists: String*): String = {
+    lists
+      .filter(_ != null)
+      .filter(_ != "")
+      .flatMap(_.split(","))
+      .mkString(",")
+  }
 }
