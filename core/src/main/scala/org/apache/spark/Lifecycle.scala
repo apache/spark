@@ -21,7 +21,7 @@ trait Lifecycle extends Service {
 
   import Service.State._
 
-  private var state_ = Uninitialized
+  protected var state_ = Uninitialized
 
   def conf: SparkConf
 

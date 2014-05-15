@@ -32,12 +32,13 @@ private[spark] class SparkDeploySchedulerBackend(
   with Logging {
 
   var client: AppClient = null
+  var stopping = false
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
 
   val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
 
-  override protected def doStart() {
-    super.doStart()
+  override def start() {
+    super.start()
 
     // The endpoint for executors to talk to us
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
@@ -63,8 +64,9 @@ private[spark] class SparkDeploySchedulerBackend(
     client.start()
   }
 
-  override protected def doStop() {
-    super.doStop()
+  override def stop() {
+    stopping = true
+    super.stop()
     client.stop()
     if (shutdownCallback != null) {
       shutdownCallback(this)
@@ -76,13 +78,13 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   override def disconnected() {
-    if (!stopped) {
+    if (!stopping) {
       logWarning("Disconnected from Spark cluster! Waiting for reconnection...")
     }
   }
 
   override def dead(reason: String) {
-    if (!stopped) {
+    if (!stopping) {
       logError("Application has been killed. Reason: " + reason)
       scheduler.error(reason)
     }
