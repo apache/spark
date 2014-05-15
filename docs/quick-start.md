@@ -122,7 +122,7 @@ One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can i
 
 {% highlight scala %}
 scala> val wordCounts = textFile.flatMap(line => line.split(" ")).map(word => (word, 1)).reduceByKey((a, b) => a + b)
-wordCounts: spark.RDD[(java.lang.String, Int)] = spark.ShuffledAggregatedRDD@71f027b8
+wordCounts: spark.RDD[(String, Int)] = spark.ShuffledAggregatedRDD@71f027b8
 {% endhighlight %}
 
 Here, we combined the [`flatMap`](scala-programming-guide.html#transformations), [`map`](scala-programming-guide.html#transformations) and [`reduceByKey`](scala-programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (String, Int) pairs. To collect the word counts in our shell, we can use the [`collect`](scala-programming-guide.html#actions) action:
@@ -430,7 +430,6 @@ We can run this application using the `bin/spark-submit` script:
 {% highlight python %}
 # Use spark-submit to run your application
 $ YOUR_SPARK_HOME/bin/spark-submit \
-  --class "SimpleApp" \
   --master local[4] \
   SimpleApp.py
 ...
