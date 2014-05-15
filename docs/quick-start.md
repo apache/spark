@@ -136,7 +136,7 @@ res6: Array[(String, Int)] = Array((means,1), (under,2), (this,3), (Because,1), 
 <div data-lang="python" markdown="1">
 
 {% highlight python %}
->>> textFile.map(lambda line: len(line.split())).reduce((a, b) => if (a > b) a else b)
+>>> textFile.map(lambda line: len(line.split())).reduce(lambda a, b: a if (a > b) else b)
 15
 {% endhighlight %}
 
