@@ -50,6 +50,13 @@ class SQLQuerySuite extends QueryTest {
       Seq((1,3),(2,3),(3,3)))
   }
 
+  test("aggregates with nulls") {
+    checkAnswer(
+      sql("SELECT MIN(a), MAX(a), AVG(a), SUM(a), COUNT(a) FROM nullInts"),
+      (1, 3, 2, 6, 3) :: Nil
+    )
+  }
+
   test("select *") {
     checkAnswer(
       sql("SELECT * FROM testData"),
@@ -89,8 +96,25 @@ class SQLQuerySuite extends QueryTest {
   test("count") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM testData2"),
-      testData2.count()
-    )
+      testData2.count())
+  }
+
+  test("count distinct") {
+    checkAnswer(
+      sql("SELECT COUNT(DISTINCT b) FROM testData2"),
+      2)
+  }
+
+  test("approximate count distinct") {
+    checkAnswer(
+      sql("SELECT APPROXIMATE COUNT(DISTINCT a) FROM testData2"),
+      3)
+  }
+
+  test("approximate count distinct with user provided standard deviation") {
+    checkAnswer(
+      sql("SELECT APPROXIMATE(0.04) COUNT(DISTINCT a) FROM testData2"),
+      3)
   }
 
   // No support for primitive nulls yet.

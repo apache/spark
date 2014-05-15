@@ -55,7 +55,7 @@ classes.  RDD methods like `map` are overloaded by specialized `PairFunction`
 and `DoubleFunction` classes, allowing them to return RDDs of the appropriate
 types.  Common methods like `filter` and `sample` are implemented by
 each specialized RDD class, so filtering a `PairRDD` returns a new `PairRDD`,
-etc (this acheives the "same-result-type" principle used by the [Scala collections
+etc (this achieves the "same-result-type" principle used by the [Scala collections
 framework](http://docs.scala-lang.org/overviews/core/architecture-of-scala-collections.html)).
 
 ## Function Interfaces
@@ -102,7 +102,7 @@ the following changes:
   `Function` classes will need to use `implements` rather than `extends`.
 * Certain transformation functions now have multiple versions depending
   on the return type. In Spark core, the map functions (`map`, `flatMap`, and
-  `mapPartitons`) have type-specific versions, e.g. 
+  `mapPartitions`) have type-specific versions, e.g.
   [`mapToPair`](api/java/org/apache/spark/api/java/JavaRDDLike.html#mapToPair(org.apache.spark.api.java.function.PairFunction))
   and [`mapToDouble`](api/java/org/apache/spark/api/java/JavaRDDLike.html#mapToDouble(org.apache.spark.api.java.function.DoubleFunction)).
   Spark Streaming also uses the same approach, e.g. [`transformToPair`](api/java/org/apache/spark/streaming/api/java/JavaDStreamLike.html#transformToPair(org.apache.spark.api.java.function.Function)).
@@ -115,11 +115,11 @@ As an example, we will implement word count using the Java API.
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.*;
 
-JavaSparkContext sc = new JavaSparkContext(...);
-JavaRDD<String> lines = ctx.textFile("hdfs://...");
+JavaSparkContext jsc = new JavaSparkContext(...);
+JavaRDD<String> lines = jsc.textFile("hdfs://...");
 JavaRDD<String> words = lines.flatMap(
   new FlatMapFunction<String, String>() {
-    public Iterable<String> call(String s) {
+    @Override public Iterable<String> call(String s) {
       return Arrays.asList(s.split(" "));
     }
   }
@@ -140,10 +140,10 @@ Here, the `FlatMapFunction` was created inline; another option is to subclass
 
 {% highlight java %}
 class Split extends FlatMapFunction<String, String> {
-  public Iterable<String> call(String s) {
+  @Override public Iterable<String> call(String s) {
     return Arrays.asList(s.split(" "));
   }
-);
+}
 JavaRDD<String> words = lines.flatMap(new Split());
 {% endhighlight %}
 
@@ -162,8 +162,8 @@ Continuing with the word count example, we map each word to a `(word, 1)` pair:
 import scala.Tuple2;
 JavaPairRDD<String, Integer> ones = words.mapToPair(
   new PairFunction<String, String, Integer>() {
-    public Tuple2<String, Integer> call(String s) {
-      return new Tuple2(s, 1);
+    @Override public Tuple2<String, Integer> call(String s) {
+      return new Tuple2<String, Integer>(s, 1);
     }
   }
 );
@@ -178,7 +178,7 @@ occurrences of each word:
 {% highlight java %}
 JavaPairRDD<String, Integer> counts = ones.reduceByKey(
   new Function2<Integer, Integer, Integer>() {
-    public Integer call(Integer i1, Integer i2) {
+    @Override public Integer call(Integer i1, Integer i2) {
       return i1 + i2;
     }
   }
@@ -215,7 +215,4 @@ Spark includes several sample programs using the Java API in
 [`examples/src/main/java`](https://github.com/apache/spark/tree/master/examples/src/main/java/org/apache/spark/examples).  You can run them by passing the class name to the
 `bin/run-example` script included in Spark; for example:
 
-    ./bin/run-example org.apache.spark.examples.JavaWordCount
-
-Each example program prints usage help when run
-without any arguments.
+    ./bin/run-example JavaWordCount README.md

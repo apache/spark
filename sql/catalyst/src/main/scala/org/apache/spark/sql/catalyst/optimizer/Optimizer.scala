@@ -25,12 +25,13 @@ import org.apache.spark.sql.catalyst.types._
 
 object Optimizer extends RuleExecutor[LogicalPlan] {
   val batches =
-    Batch("ConstantFolding", Once,
+    Batch("ConstantFolding", FixedPoint(100),
+      NullPropagation,
       ConstantFolding,
       BooleanSimplification,
       SimplifyFilters,
       SimplifyCasts) ::
-    Batch("Filter Pushdown", Once,
+    Batch("Filter Pushdown", FixedPoint(100),
       CombineFilters,
       PushPredicateThroughProject,
       PushPredicateThroughInnerJoin,
@@ -48,17 +49,19 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
  */
 object ColumnPruning extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Eliminate attributes that are not needed to calculate the specified aggregates.
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
-      // Project away references that are not needed to calculate the required aggregates.
       a.copy(child = Project(a.references.toSeq, child))
 
+    // Eliminate unneeded attributes from either side of a Join.
     case Project(projectList, Join(left, right, joinType, condition)) =>
       // Collect the list of off references required either above or to evaluate the condition.
       val allReferences: Set[Attribute] =
         projectList.flatMap(_.references).toSet ++ condition.map(_.references).getOrElse(Set.empty)
-      /** Applies a projection when the child is producing unnecessary attributes */
+
+      /** Applies a projection only when the child is producing unnecessary attributes */
       def prunedChild(c: LogicalPlan) =
-        if ((allReferences.filter(c.outputSet.contains) -- c.outputSet).nonEmpty) {
+        if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
           Project(allReferences.filter(c.outputSet.contains).toSeq, c)
         } else {
           c
@@ -66,6 +69,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Project(projectList, Join(prunedChild(left), prunedChild(right), joinType, condition))
 
+    // Combine adjacent Projects.
     case Project(projectList1, Project(projectList2, child)) =>
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
@@ -82,6 +86,75 @@ object ColumnPruning extends Rule[LogicalPlan] {
       }).asInstanceOf[Seq[NamedExpression]]
 
       Project(substitutedProjection, child)
+
+    // Eliminate no-op Projects
+    case Project(projectList, child) if(child.output == projectList) => child
+  }
+}
+
+/**
+ * Replaces [[catalyst.expressions.Expression Expressions]] that can be statically evaluated with
+ * equivalent [[catalyst.expressions.Literal Literal]] values. This rule is more specific with 
+ * Null value propagation from bottom to top of the expression tree.
+ */
+object NullPropagation extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case e @ Count(Literal(null, _)) => Literal(0, e.dataType)
+      case e @ Sum(Literal(c, _)) if c == 0 => Literal(0, e.dataType)
+      case e @ Average(Literal(c, _)) if c == 0 => Literal(0.0, e.dataType)
+      case e @ IsNull(c) if c.nullable == false => Literal(false, BooleanType)
+      case e @ IsNotNull(c) if c.nullable == false => Literal(true, BooleanType)
+      case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
+      case e @ GetItem(_, Literal(null, _)) => Literal(null, e.dataType)
+      case e @ GetField(Literal(null, _), _) => Literal(null, e.dataType)
+      case e @ Coalesce(children) => {
+        val newChildren = children.filter(c => c match {
+          case Literal(null, _) => false
+          case _ => true
+        })
+        if (newChildren.length == 0) {
+          Literal(null, e.dataType)
+        } else if (newChildren.length == 1) {
+          newChildren(0)
+        } else {
+          Coalesce(newChildren)
+        }
+      }
+      case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue
+      case e @ In(Literal(v, _), list) if (list.exists(c => c match {
+          case Literal(candidate, _) if candidate == v => true
+          case _ => false
+        })) => Literal(true, BooleanType)
+      case e: UnaryMinus => e.child match {
+        case Literal(null, _) => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: Cast => e.child match {
+        case Literal(null, _) => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: Not => e.child match {
+        case Literal(null, _) => Literal(null, e.dataType)
+        case _ => e
+      }
+      // Put exceptional cases above if any
+      case e: BinaryArithmetic => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: BinaryComparison => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: StringRegexExpression => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
+    }
   }
 }
 

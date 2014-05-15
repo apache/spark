@@ -93,6 +93,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val AND = Keyword("AND")
   protected val AS = Keyword("AS")
   protected val ASC = Keyword("ASC")
+  protected val APPROXIMATE = Keyword("APPROXIMATE")
   protected val AVG = Keyword("AVG")
   protected val BY = Keyword("BY")
   protected val CAST = Keyword("CAST")
@@ -114,6 +115,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val JOIN = Keyword("JOIN")
   protected val LEFT = Keyword("LEFT")
   protected val LIMIT = Keyword("LIMIT")
+  protected val MAX = Keyword("MAX")
+  protected val MIN = Keyword("MIN")
   protected val NOT = Keyword("NOT")
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
@@ -316,8 +319,16 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     COUNT ~> "(" ~ "*" <~ ")" ^^ { case _ => Count(Literal(1)) } |
     COUNT ~> "(" ~ expression <~ ")" ^^ { case dist ~ exp => Count(exp) } |
     COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => CountDistinct(exp :: Nil) } |
+    APPROXIMATE ~> COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ {
+      case exp => ApproxCountDistinct(exp)
+    } |
+    APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^ {
+      case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble)
+    } |
     FIRST ~> "(" ~> expression <~ ")" ^^ { case exp => First(exp) } |
     AVG ~> "(" ~> expression <~ ")" ^^ { case exp => Average(exp) } |
+    MIN ~> "(" ~> expression <~ ")" ^^ { case exp => Min(exp) } |
+    MAX ~> "(" ~> expression <~ ")" ^^ { case exp => Max(exp) } |
     IF ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case c ~ "," ~ t ~ "," ~ f => If(c,t,f)
     } |

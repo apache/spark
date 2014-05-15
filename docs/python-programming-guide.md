@@ -45,7 +45,7 @@ errors = logData.filter(is_error)
 
 PySpark will automatically ship these functions to executors, along with any objects that they reference.
 Instances of classes will be serialized and shipped to executors by PySpark, but classes themselves cannot be automatically distributed to executors.
-The [Standalone Use](#standalone-use) section describes how to ship code dependencies to executors.
+The [Standalone Use](#standalone-programs) section describes how to ship code dependencies to executors.
 
 In addition, PySpark fully supports interactive use---simply run `./bin/pyspark` to launch an interactive shell.
 
@@ -121,7 +121,7 @@ IPython also works on a cluster or on multiple cores if you set the `MASTER` env
 # Standalone Programs
 
 PySpark can also be used from standalone Python scripts by creating a SparkContext in your script and running the script using `bin/spark-submit`.
-The Quick Start guide includes a [complete example](quick-start.html#a-standalone-app-in-python) of a standalone Python application.
+The Quick Start guide includes a [complete example](quick-start.html#standalone-applications) of a standalone Python application.
 
 Code dependencies can be deployed by passing .zip or .egg files in the `--py-files` option of `spark-submit`:
 
@@ -164,6 +164,6 @@ some example applications.
 PySpark also includes several sample programs in the [`examples/src/main/python` folder](https://github.com/apache/spark/tree/master/examples/src/main/python).
 You can run them by passing the files to `pyspark`; e.g.:
 
-    ./bin/spark-submit examples/src/main/python/wordcount.py
+    ./bin/spark-submit examples/src/main/python/wordcount.py local[2] README.md
 
 Each program prints usage help when run without arguments.

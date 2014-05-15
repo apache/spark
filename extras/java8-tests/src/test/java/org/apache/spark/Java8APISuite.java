@@ -39,6 +39,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
+import org.apache.spark.util.Utils;
 
 /**
  * Most of these tests replicate org.apache.spark.JavaAPISuite using java 8
@@ -249,6 +250,7 @@ public class Java8APISuite implements Serializable {
   @Test
   public void sequenceFile() {
     File tempDir = Files.createTempDir();
+    tempDir.deleteOnExit();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -265,6 +267,7 @@ public class Java8APISuite implements Serializable {
     JavaPairRDD<Integer, String> readRDD = sc.sequenceFile(outputDir, IntWritable.class, Text.class)
       .mapToPair(pair -> new Tuple2<Integer, String>(pair._1().get(), pair._2().toString()));
     Assert.assertEquals(pairs, readRDD.collect());
+    Utils.deleteRecursively(tempDir);
   }
 
   @Test
