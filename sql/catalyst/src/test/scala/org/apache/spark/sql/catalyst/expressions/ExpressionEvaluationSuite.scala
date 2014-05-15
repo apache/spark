@@ -364,6 +364,19 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     checkEvaluation(GetField(BoundReference(2, AttributeReference("c", typeS)()), "a"), "aa", row)
     checkEvaluation(GetField(Literal(null, typeS), "a"), null, row)
+
+    val typeS_notNullable = StructType(
+      StructField("a", StringType, nullable = false)
+        :: StructField("b", StringType, nullable = false) :: Nil
+    )
+
+    assert(GetField(BoundReference(2,
+      AttributeReference("c", typeS)()), "a").nullable === true)
+    assert(GetField(BoundReference(2,
+      AttributeReference("c", typeS_notNullable, nullable = false)()), "a").nullable === false)
+
+    assert(GetField(Literal(null, typeS), "a").nullable === true)
+    assert(GetField(Literal(null, typeS_notNullable), "a").nullable === true)
   }
 
   test("arithmetic") {
