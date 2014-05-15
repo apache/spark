@@ -37,7 +37,7 @@ trait Lifecycle extends Service {
 
   def initialize(): Unit = synchronized {
     if (!uninitialized) {
-      throw new SparkException(s"Can't move to started state when $state_")
+      throw new SparkException(s"Can't move to Initialized state when $state_")
     }
     doInitialize
     state_ = Initialized
@@ -54,7 +54,7 @@ trait Lifecycle extends Service {
 
   override def stop(): Unit = synchronized {
     if (!started) {
-      throw new SparkException(s"Can't move to started state when $state_")
+      throw new SparkException(s"Can't move to Stopped state when $state_")
     }
     doStop
     state_ = Stopped

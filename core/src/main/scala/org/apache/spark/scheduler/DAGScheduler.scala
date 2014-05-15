@@ -136,6 +136,8 @@ class DAGScheduler(
     initializeEventProcessActor()
   }
 
+  start()
+
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
     eventProcessActor ! BeginEvent(task, taskInfo)
