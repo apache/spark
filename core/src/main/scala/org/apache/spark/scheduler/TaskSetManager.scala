@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
+import java.lang.Thread
 import java.util.Arrays
 
 import scala.collection.mutable.ArrayBuffer
@@ -584,6 +585,7 @@ private[spark] class TaskSetManager(
           taskSet.id, index, maxTaskFailures))
         abort("Task %s:%d failed %d times, most recent failure: %s\nDriver stacktrace:".format(
           taskSet.id, index, maxTaskFailures, failureReason))
+        Thread.dumpStack()
         return
       }
     }
