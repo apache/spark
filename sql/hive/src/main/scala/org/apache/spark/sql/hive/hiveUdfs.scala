@@ -320,6 +320,9 @@ private[hive] trait HiveInspectors {
     case BinaryType => PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector
     case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
     case DecimalType => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
+    case StructType(fields) =>
+      ObjectInspectorFactory.getStandardStructObjectInspector(
+        fields.map(f => f.name), fields.map(f => toInspector(f.dataType)))
   }
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
