@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import org.apache.spark.{SparkConf, SparkException, SparkContext}
 import org.apache.spark.util.{SerializableBuffer, AkkaUtils}
 import org.apache.spark.SparkContext._
-import java.nio.ByteBuffer
 
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfter, FunSuite}
 
@@ -41,7 +40,7 @@ class CoarseGrainedSchedulerBackendSuite extends FunSuite with
     val conf = new SparkConf
     val sc = new SparkContext("local-cluster[2 , 1 , 512]", "test", conf)
     val frameSize = AkkaUtils.maxFrameSizeBytes(sc.conf)
-    val buffer = new SerializableBuffer(ByteBuffer.allocate(2 * frameSize))
+    val buffer = new SerializableBuffer(java.nio.ByteBuffer.allocate(2 * frameSize))
     val larger = sc.parallelize(Seq(buffer))
     val thrown = intercept[SparkException] {
       larger.collect()
