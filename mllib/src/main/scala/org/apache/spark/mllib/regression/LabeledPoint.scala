@@ -39,7 +39,7 @@ object LabeledPoint {
    * an [[org.apache.spark.mllib.regression.LabeledPoint]].
    */
   def parse(s: String): LabeledPoint = {
-    if (s.startsWith("(") || s.startsWith(")")) {
+    if (s.startsWith("(")) {
       NumericParser.parse(s) match {
         case Seq(label: Double, numeric: Any) =>
           LabeledPoint(label, Vectors.parseNumeric(numeric))
@@ -48,8 +48,8 @@ object LabeledPoint {
       }
     } else { // dense format used before v1.0
       val parts = s.split(',')
-      val label = parts(0).toDouble
-      val features = Vectors.dense(parts(1).trim().split(' ').map(_.toDouble))
+      val label = java.lang.Double.parseDouble(parts(0))
+      val features = Vectors.dense(parts(1).trim().split(' ').map(java.lang.Double.parseDouble))
       LabeledPoint(label, features)
     }
   }

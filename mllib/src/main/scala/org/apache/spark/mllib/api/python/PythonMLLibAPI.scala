@@ -191,6 +191,13 @@ class PythonMLLibAPI extends Serializable {
     LabeledPoint(label, deserializeDoubleVector(bytes, 9))
   }
 
+  /**
+   * Loads and serializes labeled points saved with `RDD#saveAsTextFile`.
+   * @param jsc Java SparkContext
+   * @param path file or directory path in any Hadoop-supported file system URI
+   * @param minPartitions min number of partitions
+   * @return serialized labeled points stored in a JavaRDD of byte array
+   */
   def loadLabeledPoints(
       jsc: JavaSparkContext,
       path: String,
