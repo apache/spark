@@ -54,11 +54,27 @@ if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
 
   ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar 2>/dev/null)
 else
-  # Else use spark-assembly jar from either RELEASE or assembly directory
   if [ -f "$FWDIR/RELEASE" ]; then
-    ASSEMBLY_JAR=$(ls "$FWDIR"/lib/spark-assembly*hadoop*.jar 2>/dev/null)
+    CLASSPATH="$CLASSPATH:$FWDIR/share/spark/core/*:$FWDIR/share/spark/core/lib/*"
+    if [ -d "$FWDIR/share/spark/hive" ]; then
+      CLASSPATH="$CLASSPATH:$FWDIR/share/spark/hive/*:$FWDIR/share/spark/hive/lib/*"
+    fi
+    if [ -d "$FWDIR/share/spark/examples" ]; then
+      CLASSPATH="$CLASSPATH:$FWDIR/share/spark/examples/*:$FWDIR/share/spark/examples/lib/*"
+    fi
   else
-    ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*.jar 2>/dev/null)
+    SPARK_DIST=`echo "$FWDIR"/assembly/target/*spark-dist`
+    if [ -d "$SPARK_DIST" ]; then
+      CLASSPATH="$CLASSPATH:$SPARK_DIST/share/spark/core/*:$SPARK_DIST/share/spark/core/lib/*"
+    fi
+    if [ -d "$FWDIR"/sql/hive/target/*spark-hive-dist/ ]; then
+      HVIE_DIST=`echo "$FWDIR"/sql/hive/target/*spark-hive-dist`
+      CLASSPATH="$CLASSPATH:$HVIE_DIST/share/spark/hive/*:$HVIE_DIST/share/spark/hive/lib/*"
+    fi
+    ASSEMBLY_JAR=`echo "$ASSEMBLY_DIR"/spark-assembly*hadoop*.jar`
+    if [ -f "$ASSEMBLY_JAR" ]; then
+     CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
+    fi
   fi
 fi
 
