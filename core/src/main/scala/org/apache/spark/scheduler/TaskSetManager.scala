@@ -569,7 +569,7 @@ private[spark] class TaskSetManager(
         logWarning(failureReason)
 
       case _ =>
-        failureReason = "TID %s on host %s failed for unknown reason".format(tid, info.host)
+        failureReason = "TID %s on host %s failed for unknown reason: %s".format(tid, info.host, reason.toString())
     }
     // always add to failed executors
     failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
