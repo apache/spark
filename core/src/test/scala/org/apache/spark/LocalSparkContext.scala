@@ -17,8 +17,7 @@
 
 package org.apache.spark
 
-import org.jboss.netty.logging.InternalLoggerFactory
-import org.jboss.netty.logging.Slf4JLoggerFactory
+import _root_.io.netty.util.internal.logging.{Slf4JLoggerFactory, InternalLoggerFactory}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.Suite

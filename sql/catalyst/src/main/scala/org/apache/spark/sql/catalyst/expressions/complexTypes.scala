@@ -28,6 +28,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   val children = child :: ordinal :: Nil
   /** `Null` is returned for invalid ordinals. */
   override def nullable = true
+  override def foldable = child.foldable && ordinal.foldable
   override def references = children.flatMap(_.references).toSet
   def dataType = child.dataType match {
     case ArrayType(dt) => dt
@@ -40,23 +41,27 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   override def toString = s"$child[$ordinal]"
 
   override def eval(input: Row): Any = {
-    if (child.dataType.isInstanceOf[ArrayType]) {
-      val baseValue = child.eval(input).asInstanceOf[Seq[_]]
-      val o = ordinal.eval(input).asInstanceOf[Int]
-      if (baseValue == null) {
-        null
-      } else if (o >= baseValue.size || o < 0) {
-        null
-      } else {
-        baseValue(o)
-      }
+    val value = child.eval(input)
+    if (value == null) {
+      null
     } else {
-      val baseValue = child.eval(input).asInstanceOf[Map[Any, _]]
       val key = ordinal.eval(input)
-      if (baseValue == null) {
+      if (key == null) {
         null
       } else {
-        baseValue.get(key).orNull
+        if (child.dataType.isInstanceOf[ArrayType]) {
+          val baseValue = value.asInstanceOf[Seq[_]]
+          val o = key.asInstanceOf[Int]
+          if (o >= baseValue.size || o < 0) {
+            null
+          } else {
+            baseValue(o)
+          }
+        } else {
+          val baseValue = value.asInstanceOf[Map[Any, _]]
+          val key = ordinal.eval(input)
+          baseValue.get(key).orNull
+        }
       }
     }
   }
@@ -69,7 +74,8 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
   type EvaluatedType = Any
 
   def dataType = field.dataType
-  def nullable = field.nullable
+  override def nullable = field.nullable
+  override def foldable = child.foldable
 
   protected def structType = child.dataType match {
     case s: StructType => s

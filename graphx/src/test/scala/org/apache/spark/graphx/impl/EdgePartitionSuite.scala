@@ -22,14 +22,23 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkConf
+import org.apache.spark.serializer.KryoSerializer
+
 import org.apache.spark.graphx._
 
 class EdgePartitionSuite extends FunSuite {
 
+  def makeEdgePartition[A: ClassTag](xs: Iterable[(Int, Int, A)]): EdgePartition[A, Int] = {
+    val builder = new EdgePartitionBuilder[A, Int]
+    for ((src, dst, attr) <- xs) { builder.add(src: VertexId, dst: VertexId, attr) }
+    builder.toEdgePartition
+  }
+
   test("reverse") {
     val edges = List(Edge(0, 1, 0), Edge(1, 2, 0), Edge(2, 0, 0))
     val reversedEdges = List(Edge(0, 2, 0), Edge(1, 0, 0), Edge(2, 1, 0))
-    val builder = new EdgePartitionBuilder[Int]
+    val builder = new EdgePartitionBuilder[Int, Nothing]
     for (e <- edges) {
       builder.add(e.srcId, e.dstId, e.attr)
     }
@@ -40,7 +49,7 @@ class EdgePartitionSuite extends FunSuite {
 
   test("map") {
     val edges = List(Edge(0, 1, 0), Edge(1, 2, 0), Edge(2, 0, 0))
-    val builder = new EdgePartitionBuilder[Int]
+    val builder = new EdgePartitionBuilder[Int, Nothing]
     for (e <- edges) {
       builder.add(e.srcId, e.dstId, e.attr)
     }
@@ -49,11 +58,22 @@ class EdgePartitionSuite extends FunSuite {
       edges.map(e => e.copy(attr = e.srcId + e.dstId)))
   }
 
+  test("filter") {
+    val edges = List(Edge(0, 1, 0), Edge(0, 2, 0), Edge(2, 0, 0))
+    val builder = new EdgePartitionBuilder[Int, Int]
+    for (e <- edges) {
+      builder.add(e.srcId, e.dstId, e.attr)
+    }
+    val edgePartition = builder.toEdgePartition
+    val filtered = edgePartition.filter(et => et.srcId == 0, (vid, attr) => vid == 0 || vid == 1)
+    assert(filtered.tripletIterator().toList.map(et => (et.srcId, et.dstId)) === List((0L, 1L)))
+  }
+
   test("groupEdges") {
     val edges = List(
       Edge(0, 1, 1), Edge(1, 2, 2), Edge(2, 0, 4), Edge(0, 1, 8), Edge(1, 2, 16), Edge(2, 0, 32))
     val groupedEdges = List(Edge(0, 1, 9), Edge(1, 2, 18), Edge(2, 0, 36))
-    val builder = new EdgePartitionBuilder[Int]
+    val builder = new EdgePartitionBuilder[Int, Nothing]
     for (e <- edges) {
       builder.add(e.srcId, e.dstId, e.attr)
     }
@@ -61,11 +81,19 @@ class EdgePartitionSuite extends FunSuite {
     assert(edgePartition.groupEdges(_ + _).iterator.map(_.copy()).toList === groupedEdges)
   }
 
+  test("upgradeIterator") {
+    val edges = List((0, 1, 0), (1, 0, 0))
+    val verts = List((0L, 1), (1L, 2))
+    val part = makeEdgePartition(edges).updateVertices(verts.iterator)
+    assert(part.upgradeIterator(part.iterator).map(_.toTuple).toList ===
+      part.tripletIterator().toList.map(_.toTuple))
+  }
+
   test("indexIterator") {
     val edgesFrom0 = List(Edge(0, 1, 0))
     val edgesFrom1 = List(Edge(1, 0, 0), Edge(1, 2, 0))
     val sortedEdges = edgesFrom0 ++ edgesFrom1
-    val builder = new EdgePartitionBuilder[Int]
+    val builder = new EdgePartitionBuilder[Int, Nothing]
     for (e <- Random.shuffle(sortedEdges)) {
       builder.add(e.srcId, e.dstId, e.attr)
     }
@@ -77,11 +105,6 @@ class EdgePartitionSuite extends FunSuite {
   }
 
   test("innerJoin") {
-    def makeEdgePartition[A: ClassTag](xs: Iterable[(Int, Int, A)]): EdgePartition[A] = {
-      val builder = new EdgePartitionBuilder[A]
-      for ((src, dst, attr) <- xs) { builder.add(src: VertexId, dst: VertexId, attr) }
-      builder.toEdgePartition
-    }
     val aList = List((0, 1, 0), (1, 0, 0), (1, 2, 0), (5, 4, 0), (5, 5, 0))
     val bList = List((0, 1, 0), (1, 0, 0), (1, 1, 0), (3, 4, 0), (5, 5, 0))
     val a = makeEdgePartition(aList)
@@ -89,5 +112,30 @@ class EdgePartitionSuite extends FunSuite {
 
     assert(a.innerJoin(b) { (src, dst, a, b) => a }.iterator.map(_.copy()).toList ===
       List(Edge(0, 1, 0), Edge(1, 0, 0), Edge(5, 5, 0)))
+  }
+
+  test("isActive, numActives, replaceActives") {
+    val ep = new EdgePartitionBuilder[Nothing, Nothing].toEdgePartition
+      .withActiveSet(Iterator(0L, 2L, 0L))
+    assert(ep.isActive(0))
+    assert(!ep.isActive(1))
+    assert(ep.isActive(2))
+    assert(!ep.isActive(-1))
+    assert(ep.numActives == Some(2))
+  }
+
+  test("Kryo serialization") {
+    val aList = List((0, 1, 0), (1, 0, 0), (1, 2, 0), (5, 4, 0), (5, 5, 0))
+    val a: EdgePartition[Int, Int] = makeEdgePartition(aList)
+    val conf = new SparkConf()
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
+    val s = new KryoSerializer(conf).newInstance()
+    val aSer: EdgePartition[Int, Int] = s.deserialize(s.serialize(a))
+    assert(aSer.srcIds.toList === a.srcIds.toList)
+    assert(aSer.dstIds.toList === a.dstIds.toList)
+    assert(aSer.data.toList === a.data.toList)
+    assert(aSer.index != null)
+    assert(aSer.vertices.iterator.toSet === a.vertices.iterator.toSet)
   }
 }

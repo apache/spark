@@ -18,9 +18,12 @@
 package org.apache.spark.examples;
 
 
+
 import scala.Tuple2;
 
 import com.google.common.collect.Iterables;
+
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -54,20 +57,20 @@ public final class JavaPageRank {
   }
 
   public static void main(String[] args) throws Exception {
-    if (args.length < 3) {
-      System.err.println("Usage: JavaPageRank <master> <file> <number_of_iterations>");
+    if (args.length < 2) {
+      System.err.println("Usage: JavaPageRank <file> <number_of_iterations>");
       System.exit(1);
     }
 
-    JavaSparkContext ctx = new JavaSparkContext(args[0], "JavaPageRank",
-      System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaPageRank.class));
+    SparkConf sparkConf = new SparkConf().setAppName("JavaPageRank");
+    JavaSparkContext ctx = new JavaSparkContext(sparkConf);
 
     // Loads in input file. It should be in format of:
     //     URL         neighbor URL
     //     URL         neighbor URL
     //     URL         neighbor URL
     //     ...
-    JavaRDD<String> lines = ctx.textFile(args[1], 1);
+    JavaRDD<String> lines = ctx.textFile(args[0], 1);
 
     // Loads all URLs from input file and initialize their neighbors.
     JavaPairRDD<String, Iterable<String>> links = lines.mapToPair(new PairFunction<String, String, String>() {
@@ -87,7 +90,7 @@ public final class JavaPageRank {
     });
 
     // Calculates and updates URL ranks continuously using PageRank algorithm.
-    for (int current = 0; current < Integer.parseInt(args[2]); current++) {
+    for (int current = 0; current < Integer.parseInt(args[1]); current++) {
       // Calculates URL contributions to the rank of other URLs.
       JavaPairRDD<String, Double> contribs = links.join(ranks).values()
         .flatMapToPair(new PairFlatMapFunction<Tuple2<Iterable<String>, Double>, String, Double>() {

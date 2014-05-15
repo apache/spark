@@ -23,6 +23,8 @@ import com.twitter.algebird.HyperLogLog._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.twitter._
+import org.apache.spark.SparkConf
+
 // scalastyle:off
 /**
  * Illustrates the use of the HyperLogLog algorithm, from Twitter's Algebird library, to compute
@@ -42,20 +44,14 @@ import org.apache.spark.streaming.twitter._
 // scalastyle:on
 object TwitterAlgebirdHLL {
   def main(args: Array[String]) {
-    if (args.length < 1) {
-      System.err.println("Usage: TwitterAlgebirdHLL <master>" +
-        " [filter1] [filter2] ... [filter n]")
-      System.exit(1)
-    }
 
     StreamingExamples.setStreamingLogLevels()
 
     /** Bit size parameter for HyperLogLog, trades off accuracy vs size */
     val BIT_SIZE = 12
-    val (master, filters) = (args.head, args.tail)
-
-    val ssc = new StreamingContext(master, "TwitterAlgebirdHLL", Seconds(5),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
+    val filters = args
+    val sparkConf = new SparkConf().setAppName("TwitterAlgebirdHLL")
+    val ssc = new StreamingContext(sparkConf, Seconds(5))
     val stream = TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_ONLY_SER)
 
     val users = stream.map(status => status.getUser.getId)

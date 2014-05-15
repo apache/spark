@@ -54,7 +54,7 @@ private[spark] class SparkDeploySchedulerBackend(
     }
 
     val command = Command(
-      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.testExecutorEnvs,
+      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
       classPathEntries, libraryPathEntries, extraJavaOpts)
     val sparkHome = sc.getSparkHome()
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,

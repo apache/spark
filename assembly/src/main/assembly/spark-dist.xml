@@ -38,6 +38,15 @@
     </fileSet>
     <fileSet>
       <directory>
+        ${project.parent.basedir}/ec2/
+      </directory>
+      <outputDirectory>/ec2</outputDirectory>
+      <includes>
+        <include>**/*</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <directory>
         ${project.parent.basedir}/bin/
       </directory>
       <outputDirectory>/bin</outputDirectory>

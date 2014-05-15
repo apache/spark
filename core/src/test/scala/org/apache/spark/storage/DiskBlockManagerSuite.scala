@@ -23,18 +23,16 @@ import scala.collection.mutable
 import scala.language.reflectiveCalls
 
 import com.google.common.io.Files
-import org.scalatest.{BeforeAndAfterEach, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.util.Utils
 
-class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
+class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
   private val testConf = new SparkConf(false)
-  val rootDir0 = Files.createTempDir()
-  rootDir0.deleteOnExit()
-  val rootDir1 = Files.createTempDir()
-  rootDir1.deleteOnExit()
-  val rootDirs = rootDir0.getName + "," + rootDir1.getName
-  println("Created root dirs: " + rootDirs)
+  private var rootDir0: File = _
+  private var rootDir1: File = _
+  private var rootDirs: String = _
 
   // This suite focuses primarily on consolidation features,
   // so we coerce consolidation if not already enabled.
@@ -47,6 +45,22 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
   }
 
   var diskBlockManager: DiskBlockManager = _
+
+  override def beforeAll() {
+    super.beforeAll()
+    rootDir0 = Files.createTempDir()
+    rootDir0.deleteOnExit()
+    rootDir1 = Files.createTempDir()
+    rootDir1.deleteOnExit()
+    rootDirs = rootDir0.getAbsolutePath + "," + rootDir1.getAbsolutePath
+    println("Created root dirs: " + rootDirs)
+  }
+
+  override def afterAll() {
+    super.afterAll()
+    Utils.deleteRecursively(rootDir0)
+    Utils.deleteRecursively(rootDir1)
+  }
 
   override def beforeEach() {
     diskBlockManager = new DiskBlockManager(shuffleBlockManager, rootDirs)

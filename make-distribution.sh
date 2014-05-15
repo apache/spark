@@ -40,6 +40,8 @@
 #
 
 set -o pipefail
+set -e
+
 # Figure out where the Spark framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
@@ -168,8 +170,21 @@ echo "Spark $VERSION built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE
 # Copy jars
 cp -r  $FWDIR/assembly/target/*spark-dist/* "$DISTDIR/"
 cp -r  $FWDIR/examples/target/*spark-examples-dist/* "$DISTDIR/"
+
+# Copy example sources (needed for python and SQL)
+mkdir -p "$DISTDIR//share/spark/examples/src/main"
+cp -r $FWDIR/examples/src/main "$DISTDIR//share/spark/examples/src/main" 
+
 if [ "$SPARK_HIVE" == "true" ]; then
   cp -r  $FWDIR/sql/hive/target/*spark-hive-dist/* "$DISTDIR/"
+fi
+
+# Copy license and ASF files
+cp "$FWDIR/LICENSE" "$DISTDIR"
+cp "$FWDIR/NOTICE" "$DISTDIR"
+
+if [ -e $FWDIR/CHANGES.txt ]; then
+  cp "$FWDIR/CHANGES.txt" "$DISTDIR"
 fi
 
 # Download and copy in tachyon, if requested
@@ -180,7 +195,7 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
 
   pushd $TMPD > /dev/null
-  echo "Fetchting tachyon tgz"
+  echo "Fetching tachyon tgz"
   wget "$TACHYON_URL"
 
   tar xf "tachyon-${TACHYON_VERSION}-bin.tar.gz"
