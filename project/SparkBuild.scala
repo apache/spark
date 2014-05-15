@@ -55,7 +55,7 @@ object SparkBuild extends Build {
   val SCALAC_JVM_VERSION = "jvm-1.6"
   val JAVAC_JVM_VERSION = "1.6"
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects: _*)
+  lazy val root = Project("spark", file("."), settings = rootSettings) aggregate(allProjects: _*)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
@@ -267,16 +267,16 @@ object SparkBuild extends Build {
     */
 
     libraryDependencies ++= Seq(
-        "io.netty"          % "netty-all"      % "4.0.17.Final",
-        "org.eclipse.jetty" % "jetty-server"   % jettyVersion,
-        "org.eclipse.jetty" % "jetty-util"     % jettyVersion,
-        "org.eclipse.jetty" % "jetty-plus"     % jettyVersion,
-        "org.eclipse.jetty" % "jetty-security" % jettyVersion,
-        "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
-        "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
-        "com.novocode"      % "junit-interface" % "0.10"   % "test",
-        "org.easymock"      % "easymock"        % "3.1"    % "test",
-        "org.mockito"       % "mockito-all"     % "1.8.5"  % "test"
+        "io.netty"          % "netty-all"         % "4.0.17.Final",
+        "org.eclipse.jetty" % "jetty-server"      % jettyVersion,
+        "org.eclipse.jetty" % "jetty-util"        % jettyVersion,
+        "org.eclipse.jetty" % "jetty-plus"        % jettyVersion,
+        "org.eclipse.jetty" % "jetty-security"    % jettyVersion,
+        "org.scalatest"    %% "scalatest"         % "1.9.1"  % "test",
+        "org.scalacheck"   %% "scalacheck"        % "1.10.0" % "test",
+        "com.novocode"      % "junit-interface"   % "0.10"   % "test",
+        "org.easymock"      % "easymock"          % "3.1"    % "test",
+        "org.mockito"       % "mockito-all"       % "1.8.5"  % "test"
     ),
 
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),

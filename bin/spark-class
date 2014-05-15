@@ -110,8 +110,8 @@ export JAVA_OPTS
 
 if [ ! -f "$FWDIR/RELEASE" ]; then
   # Exit if the user hasn't compiled Spark
-  num_jars=$(ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/ | grep "spark-assembly.*hadoop.*.jar" | wc -l)
-  jars_list=$(ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/ | grep "spark-assembly.*hadoop.*.jar")
+  num_jars=$(ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/ | grep -E "spark-assembly.*hadoop.*.jar$" | wc -l)
+  jars_list=$(ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/ | grep -E "spark-assembly.*hadoop.*.jar$")
   if [ "$num_jars" -eq "0" ]; then
     echo "Failed to find Spark assembly in $FWDIR/assembly/target/scala-$SCALA_VERSION/" >&2
     echo "You need to build Spark before running this program." >&2
