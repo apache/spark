@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.metrics
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Sources used in Spark's metrics system.
  */
-package object broadcast {
-  // For package docs only
-}
+package object source

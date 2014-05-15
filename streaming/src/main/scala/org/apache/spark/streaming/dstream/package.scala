@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.streaming
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Various implementations of DStream's.
+ * @see [[org.apache.spark.streaming.dstream.DStream]]
  */
-package object broadcast {
-  // For package docs only
-}
+package object dstream

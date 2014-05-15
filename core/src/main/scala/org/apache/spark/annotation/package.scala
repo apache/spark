@@ -18,8 +18,8 @@
 package org.apache.spark
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Spark annotations to mark an API experimental or intended only for advanced usages by developers.
+ * This package consist of these annotations, which are used project wide and are reflected in
+ * Scala and Java docs.
  */
-package object broadcast {
-  // For package docs only
-}
+package object annotation

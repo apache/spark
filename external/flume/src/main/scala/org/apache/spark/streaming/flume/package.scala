@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.streaming
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Spark streaming receiver for Flume.
  */
-package object broadcast {
-  // For package docs only
-}
+package object flume

@@ -68,7 +68,7 @@ object SparkSubmit {
 
   /**
    * @return a tuple containing the arguments for the child, a list of classpath
-   *         entries for the child, a list of system propertes, a list of env vars
+   *         entries for the child, a list of system properties, a list of env vars
    *         and the main class for the child
    */
   private[spark] def createLaunchEnv(args: SparkSubmitArguments)

@@ -18,8 +18,7 @@
 package org.apache.spark
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Executor components used with various cluster managers.
+ * See [[org.apache.spark.executor.Executor]].
  */
-package object broadcast {
-  // For package docs only
-}
+package object executor

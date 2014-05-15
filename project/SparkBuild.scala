@@ -183,6 +183,7 @@ object SparkBuild extends Build {
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark").map { case (k,v) => s"-D$k=$v" }.toSeq,
+    javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g".split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
@@ -317,6 +318,8 @@ object SparkBuild extends Build {
   val excludeFastutil = ExclusionRule(organization = "it.unimi.dsi")
   val excludeJruby = ExclusionRule(organization = "org.jruby")
   val excludeThrift = ExclusionRule(organization = "org.apache.thrift")
+  val excludeCommonsLang = ExclusionRule(organization = "commons-lang")
+  val excludeServletApi = ExclusionRule(organization = "javax.servlet", artifact = "servlet-api")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
@@ -490,7 +493,7 @@ object SparkBuild extends Build {
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
       "org.spark-project.hive" % "hive-metastore" % hiveVersion,
-      "org.spark-project.hive" % "hive-exec"      % hiveVersion,
+      "org.spark-project.hive" % "hive-exec"      % hiveVersion excludeAll(excludeCommonsLang, excludeCommonsLogging),
       "org.spark-project.hive" % "hive-serde"     % hiveVersion
     ),
     // Multiple queries rely on the TestHive singleton.  See comments there for more details.
@@ -563,10 +566,10 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
       "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-server-web-proxy" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm)
+      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
+      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
+      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
+      "org.apache.hadoop" % "hadoop-yarn-server-web-proxy" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging, excludeServletApi)
     )
   )
 
