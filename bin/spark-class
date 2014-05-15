@@ -27,6 +27,8 @@ SCALA_VERSION=2.10
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
+. $FWDIR/bin/sh-funcs.sh
+
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
@@ -93,7 +95,7 @@ else
   if [ `command -v java` ]; then
     RUNNER="java"
   else
-    echo "JAVA_HOME is not set" >&2
+    echo "JAVA_HOME is not set and no 'java' executable could be found." >&2
     exit 1
   fi
 fi
@@ -110,32 +112,23 @@ export JAVA_OPTS
 
 if [ ! -f "$FWDIR/RELEASE" ]; then
   # Exit if the user hasn't compiled Spark
-  num_jars=$(ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/ | grep "spark-assembly.*hadoop.*.jar" | wc -l)
-  jars_list=$(ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/ | grep "spark-assembly.*hadoop.*.jar")
-  if [ "$num_jars" -eq "0" ]; then
-    echo "Failed to find Spark assembly in $FWDIR/assembly/target/scala-$SCALA_VERSION/" >&2
-    echo "You need to build Spark before running this program." >&2
-    exit 1
-  fi
-  if [ "$num_jars" -gt "1" ]; then
-    echo "Found multiple Spark assembly jars in $FWDIR/assembly/target/scala-$SCALA_VERSION:" >&2
-    echo "$jars_list"
-    echo "Please remove all but one jar."
-    exit 1
-  fi
+  jars_pat="$FWDIR/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*.jar"
+  errmsg="You need to build Spark before running this program."
+  need_one_glob "$jars_pat" "$errmsg"
+  jarfile=$_RET  # We don't seem to actually use this value anywhere
 fi
 
+
+# Use the JAR from the Maven build
+# TODO: this also needs to become an assembly!
 TOOLS_DIR="$FWDIR"/tools
-SPARK_TOOLS_JAR=""
-if [ -e "$TOOLS_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar ]; then
-  # Use the JAR from the SBT build
-  export SPARK_TOOLS_JAR=`ls "$TOOLS_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar`
+one_glob "$TOOLS_DIR/target/spark-tools*[0-9Tg].jar"
+SPARK_TOOLS_JAR="$_RET"
+if [[ -z $SPARK_TOOLS_JAR ]]; then
+  one_glob "$TOOLS_DIR/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar"
+  SPARK_TOOLS_JAR="$_RET"
 fi
-if [ -e "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar ]; then
-  # Use the JAR from the Maven build
-  # TODO: this also needs to become an assembly!
-  export SPARK_TOOLS_JAR=`ls "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar`
-fi
+export SPARK_TOOLS_JAR
 
 # Compute classpath using external script
 classpath_output=$($FWDIR/bin/compute-classpath.sh)
