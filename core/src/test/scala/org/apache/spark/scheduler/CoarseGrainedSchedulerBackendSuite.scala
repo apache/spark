@@ -19,25 +19,15 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.{SparkConf, SparkException, SparkContext}
 import org.apache.spark.util.{SerializableBuffer, AkkaUtils}
-import org.apache.spark.SparkContext._
 
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfter, FunSuite}
+import org.scalatest.FunSuite
 
-class CoarseGrainedSchedulerBackendSuite extends FunSuite with
-  BeforeAndAfter with BeforeAndAfterAll {
+class CoarseGrainedSchedulerBackendSuite extends FunSuite {
 
-  override def beforeAll {
-    System.setProperty("spark.akka.frameSize", "1")
-    System.setProperty("spark.default.parallelism", "1")
-  }
-
-  override def afterAll {
-    System.clearProperty("spark.akka.frameSize")
-    System.clearProperty("spark.default.parallelism")
-  }
-
-  test("serialized task larger than Akka frame size") {
+  test("serialized task larger than akka frame size") {
     val conf = new SparkConf
+    conf.set("spark.akka.frameSize","1")
+    conf.set("spark.default.parallelism","1")
     val sc = new SparkContext("local-cluster[2 , 1 , 512]", "test", conf)
     val frameSize = AkkaUtils.maxFrameSizeBytes(sc.conf)
     val buffer = new SerializableBuffer(java.nio.ByteBuffer.allocate(2 * frameSize))
