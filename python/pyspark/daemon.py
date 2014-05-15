@@ -16,9 +16,11 @@
 #
 
 import os
+import re
+import sys
 import signal
 import socket
-import sys
+import resource
 import traceback
 import multiprocessing
 from ctypes import c_bool
@@ -48,6 +50,23 @@ def compute_real_exit_code(exit_code):
     return exit_code
   else:
     return 1
+
+
+UNITS = {
+    'k': 1024,
+    'm': 1024 * 1024,
+    'g': 1024 * 1024 * 1024,
+}
+
+
+def calculate_worker_mem(max_usage):
+    max_usage = max_usage.lower()
+    match = re.match("(\d+)([mgk])", max_usage)
+    if match is None:
+        return int(max_usage)
+    amount, unit = match.groups()
+    multiplier = UNITS.get(unit)
+    return int(amount) * multiplier
 
 
 def worker(listen_sock):
@@ -124,6 +143,13 @@ def worker(listen_sock):
                 infile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
                 outfile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
                 exit_code = 0
+                # Shopify added memory limit
+
+                soft_limit = calculate_worker_mem(os.getenv('PYSPARK_MAX_HEAP', '3g'))
+                print "Limiting Python worker to {} bytes of memory usage".format(soft_limit)
+
+                resource.setrlimit(resource.RLIMIT_AS, (soft_limit, -1))
+
                 try:
                     worker_main(infile, outfile)
                 except SystemExit as exc:
