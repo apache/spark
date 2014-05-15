@@ -57,13 +57,14 @@ if [ -n "$IPYTHON_OPTS" ]; then
 fi
 
 # If a python file is provided, directly run spark-submit
-if [[ ! "$#" = "0" ]]; then
-  exec $SPARK_HOME/bin/spark-submit "$@"
+if [[ "$1" =~ \.py$ ]]; then
+  exec $FWDIR/bin/spark-submit "$@"
 else
   # Only use ipython if no command line arguments were provided [SPARK-1134]
   if [[ "$IPYTHON" = "1" ]]; then
-    exec ipython $IPYTHON_OPTS $SPARK_HOME/python/pyspark/repl.py "$@"
+    subcommand="%run $FWDIR/python/pyspark/repl.py $@"
+    exec ipython $IPYTHON_OPTS -c "$subcommand"
   else
-    exec "$PYSPARK_PYTHON" $SPARK_HOME/python/pyspark/repl.py "$@"
+    exec "$PYSPARK_PYTHON" $FWDIR/python/pyspark/repl.py "$@"
   fi
 fi

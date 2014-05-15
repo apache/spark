@@ -9,8 +9,10 @@ import time
 from pyspark.java_gateway import ignoreInterrupt
 
 # Launch spark submit process
+sparkHome = os.getcwd()
+sparkSubmit = sparkHome + "/bin/spark-submit"
 submitArgs = sys.argv[1:]
-command = ["bin/spark-submit", "pyspark-shell"] + submitArgs
+command = [sparkSubmit, "pyspark-shell"] + submitArgs
 process = subprocess.Popen(command, stdout=sys.stdout, preexec_fn=ignoreInterrupt)
 
 try:
