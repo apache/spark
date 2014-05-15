@@ -52,9 +52,7 @@ try:
 
     # Set up Spark environment for python
     os.environ["PYSPARK_GATEWAY_PORT"] = py4jPort
-    _pythonstartup = os.environ.get('PYTHONSTARTUP')
-    if _pythonstartup and os.path.isfile(_pythonstartup):
-        execfile(_pythonstartup)
+    execfile(sparkHome + "/python/pyspark/shell.py")
 
     # Start the REPL
     code.interact(local=locals())

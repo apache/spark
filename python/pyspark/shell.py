@@ -17,8 +17,6 @@
 
 """
 An interactive shell.
-
-This file is designed to be launched as a PYTHONSTARTUP script.
 """
 
 import sys
@@ -26,7 +24,6 @@ if sys.version_info[0] != 2:
     print("Error: Default Python used is Python%s" % sys.version_info.major)
     print("\tSet env variable PYSPARK_PYTHON to Python2 binary and re-run it.")
     sys.exit(1)
-
 
 import os
 import platform
@@ -57,9 +54,3 @@ print("SparkContext available as sc.")
 
 if add_files != None:
     print("Adding files: [%s]" % ", ".join(add_files))
-
-# The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
-# which allows us to execute the user's PYTHONSTARTUP file:
-_pythonstartup = os.environ.get('OLD_PYTHONSTARTUP')
-if _pythonstartup and os.path.isfile(_pythonstartup):
-    execfile(_pythonstartup)
