@@ -196,6 +196,10 @@ The following tables list the transformations and actions currently supported (s
 <tr>
   <td> <b>groupByKey</b>([<i>numTasks</i>]) </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Seq[V]) pairs. <br />
+<b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or 
+  average) over each key, using `reduceByKey` or `combineByKey` will yield much better 
+  performance.
+<br />
 <b>Note:</b> By default, if the RDD already has a partitioner, the task number is decided by the partition number of the partitioner, or else relies on the value of <code>spark.default.parallelism</code> if the property is set , otherwise depends on the partition number of the RDD. You can pass an optional <code>numTasks</code> argument to set a different number of tasks.
   </td>
 </tr>
