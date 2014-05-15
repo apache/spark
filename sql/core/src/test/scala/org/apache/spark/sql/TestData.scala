@@ -74,6 +74,16 @@ object TestData {
       ArrayData(Seq(2,3,4), Seq(Seq(2,3,4))) :: Nil)
   arrayData.registerAsTable("arrayData")
 
+  case class MapData(data: Map[Int, String])
+  val mapData =
+    TestSQLContext.sparkContext.parallelize(
+      MapData(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
+      MapData(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
+      MapData(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
+      MapData(Map(1 -> "a4", 2 -> "b4")) ::
+      MapData(Map(1 -> "a5")) :: Nil)
+  mapData.registerAsTable("mapData")
+
   case class StringData(s: String)
   val repeatedData =
     TestSQLContext.sparkContext.parallelize(List.fill(2)(StringData("test")))
