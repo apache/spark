@@ -169,11 +169,6 @@ Here, we combined the [`flatMap`](scala-programming-guide.html#transformations),
 [(u'and', 9), (u'A', 1), (u'webpage', 1), (u'README', 1), (u'Note', 1), (u'"local"', 1), (u'variable', 1), ...]
 {% endhighlight %}
 
-It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
-that these same functions can be used on very large data sets, even when they are striped across
-tens or hundreds of nodes. You can also do this interactively by connecting `bin/spark-shell` to
-a cluster, as described in the [programming guide](scala-programming-guide.html#initializing-spark).
-
 </div>
 </div>
 
@@ -193,6 +188,11 @@ res8: Long = 15
 scala> linesWithSpark.count()
 res9: Long = 15
 {% endhighlight %}
+
+It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
+that these same functions can be used on very large data sets, even when they are striped across
+tens or hundreds of nodes. You can also do this interactively by connecting `bin/spark-shell` to
+a cluster, as described in the [programming guide](scala-programming-guide.html#initializing-spark).
 
 </div>
 <div data-lang="python" markdown="1">
