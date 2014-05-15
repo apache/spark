@@ -440,7 +440,7 @@ object RowMatrix {
     val n = v.size
     v match {
       case dv: DenseVector =>
-        blas.dspr("U", n, 1.0, dv.values, 1, U)
+        blas.dspr("U", n, alpha, dv.values, 1, U)
       case sv: SparseVector =>
         val indices = sv.indices
         val values = sv.values
