@@ -57,10 +57,9 @@ private[spark] class SparkUI(
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
 
-  initialize()
 
   /** Initialize all components of the server. */
-  def initialize() {
+  override def doInitialize() {
     listenerBus.addListener(storageStatusListener)
     val jobProgressTab = new JobProgressTab(this)
     attachTab(jobProgressTab)
@@ -87,8 +86,8 @@ private[spark] class SparkUI(
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
-  override def stop() {
-    super.stop()
+  override protected def doStop() {
+    super.doStop()
     logInfo("Stopped Spark web UI at %s".format(appUIAddress))
   }
 

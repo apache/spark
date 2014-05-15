@@ -29,7 +29,7 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
+import org.apache.spark._
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.util.Utils
 
@@ -42,7 +42,7 @@ private[spark] class MesosSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     master: String)
-  extends SchedulerBackend
+  extends SchedulerBackend with Lifecycle
   with MScheduler
   with Logging {
 
@@ -62,8 +62,9 @@ private[spark] class MesosSchedulerBackend(
 
   var classLoader: ClassLoader = null
 
-  override def start() {
-    synchronized {
+  override def conf = scheduler.conf
+
+  override protected def doStart() {
       classLoader = Thread.currentThread.getContextClassLoader
 
       new Thread("MesosSchedulerBackend driver") {
@@ -82,7 +83,6 @@ private[spark] class MesosSchedulerBackend(
       }.start()
 
       waitForRegister()
-    }
   }
 
   def createExecutorInfo(execId: String): ExecutorInfo = {
@@ -296,7 +296,7 @@ private[spark] class MesosSchedulerBackend(
     }
   }
 
-  override def stop() {
+  override protected def doStop() {
     if (driver != null) {
       driver.stop()
     }

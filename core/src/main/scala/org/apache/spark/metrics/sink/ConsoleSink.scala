@@ -50,11 +50,13 @@ private[spark] class ConsoleSink(val property: Properties, val registry: MetricR
       .convertRatesTo(TimeUnit.SECONDS)
       .build()
 
-  override def start() {
+  def conf = securityMgr.sparkConf
+
+  override protected def doStart() {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop() {
+  override protected def doStop() {
     reporter.stop()
   }
 }

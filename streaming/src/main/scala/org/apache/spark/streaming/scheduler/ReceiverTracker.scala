@@ -21,7 +21,7 @@ import scala.collection.mutable.{HashMap, SynchronizedMap, SynchronizedQueue}
 import scala.language.existentials
 
 import akka.actor._
-import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.{Lifecycle, Logging, SparkEnv, SparkException}
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.{StreamingContext, Time}
@@ -59,7 +59,7 @@ private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, err
  * has been called because it needs the final set of input streams at the time of instantiation.
  */
 private[streaming]
-class ReceiverTracker(ssc: StreamingContext) extends Logging {
+class ReceiverTracker(ssc: StreamingContext) extends Logging with Lifecycle {
 
   val receiverInputStreams = ssc.graph.getReceiverInputStreams()
   val receiverInputStreamMap = Map(receiverInputStreams.map(x => (x.id, x)): _*)
@@ -75,8 +75,10 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
   var actor: ActorRef = null
   var currentTime: Time = null
 
+  override def conf = ssc.conf
+
   /** Start the actor and receiver execution thread. */
-  def start() = synchronized {
+  override protected def doStart() = {
     if (actor != null) {
       throw new SparkException("ReceiverTracker already started")
     }
@@ -90,7 +92,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
   }
 
   /** Stop the receiver execution thread. */
-  def stop() = synchronized {
+  override protected def doStop() = {
     if (!receiverInputStreams.isEmpty && actor != null) {
       // First, stop the receivers
       receiverExecutor.stop()
@@ -197,7 +199,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
   }
 
   /** This thread class runs all the receivers on the cluster.  */
-  class ReceiverLauncher {
+  class ReceiverLauncher extends Lifecycle {
     @transient val env = ssc.env
     @transient val thread  = new Thread() {
       override def run() {
@@ -210,11 +212,13 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
       }
     }
 
-    def start() {
+    override def conf = ssc.conf
+
+    override protected def doStart() {
       thread.start()
     }
 
-    def stop() {
+    override protected def doStop() {
       // Send the stop signal to all the receivers
       stopReceivers()
 

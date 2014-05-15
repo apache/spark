@@ -39,10 +39,10 @@ class WorkerWebUI(
 
   val timeout = AkkaUtils.askTimeout(worker.conf)
 
-  initialize()
+  def conf = worker.conf
 
   /** Initialize all components of the server. */
-  def initialize() {
+  override def doInitialize() {
     val logPage = new LogPage(this)
     attachPage(logPage)
     attachPage(new WorkerPage(this))

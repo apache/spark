@@ -85,8 +85,8 @@ private[spark] class CoarseMesosSchedulerBackend(
     id
   }
 
-  override def start() {
-    super.start()
+  override protected def doStart() {
+    super.doStart()
 
     synchronized {
       new Thread("CoarseMesosSchedulerBackend driver") {
@@ -274,8 +274,8 @@ private[spark] class CoarseMesosSchedulerBackend(
     scheduler.error(message)
   }
 
-  override def stop() {
-    super.stop()
+  override protected def doStop() {
+    super.doStop()
     if (driver != null) {
       driver.stop()
     }

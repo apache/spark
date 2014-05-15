@@ -74,11 +74,13 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
       .prefixedWith(prefix)
       .build(graphite)
 
-  override def start() {
+  def conf = securityMgr.sparkConf
+
+  override protected def doStart() {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop() {
+  override protected def doStop() {
     reporter.stop()
   }
 }

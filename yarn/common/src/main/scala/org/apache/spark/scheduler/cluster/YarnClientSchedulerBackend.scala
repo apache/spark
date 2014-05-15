@@ -42,8 +42,8 @@ private[spark] class YarnClientSchedulerBackend(
     }
   }
 
-  override def start() {
-    super.start()
+  override protected def doStart() {
+    super.doStart()
 
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
@@ -110,8 +110,8 @@ private[spark] class YarnClientSchedulerBackend(
     }
   }
 
-  override def stop() {
-    super.stop()
+  override protected def doStop() {
+    super.doStop()
     client.stop()
     logInfo("Stoped")
   }

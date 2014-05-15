@@ -132,7 +132,7 @@ private[spark] class TaskSchedulerImpl(
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
 
-  override def start() {
+  override protected def doStart() {
     backend.start()
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
@@ -350,7 +350,7 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def stop() {
+  override protected def doStop() {
     if (backend != null) {
       backend.stop()
     }

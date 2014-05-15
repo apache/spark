@@ -55,7 +55,7 @@ class StreamingContext private[streaming] (
     sc_ : SparkContext,
     cp_ : Checkpoint,
     batchDur_ : Duration
-  ) extends Logging {
+  ) extends Logging with Lifecycle {
 
   /**
    * Create a StreamingContext using an existing SparkContext.
@@ -116,7 +116,7 @@ class StreamingContext private[streaming] (
     }
   }
 
-  private[streaming] val conf = sc.conf
+  def conf = sc.conf
 
   private[streaming] val env = SparkEnv.get
 
@@ -157,15 +157,6 @@ class StreamingContext private[streaming] (
   /** Register streaming source to metrics system */
   private val streamingSource = new StreamingSource(this)
   SparkEnv.get.metricsSystem.registerSource(streamingSource)
-
-  /** Enumeration to identify current state of the StreamingContext */
-  private[streaming] object StreamingContextState extends Enumeration {
-    type CheckpointState = Value
-    val Initialized, Started, Stopped = Value
-  }
-
-  import StreamingContextState._
-  private[streaming] var state = Initialized
 
   /**
    * Return the associated Spark context
@@ -425,18 +416,18 @@ class StreamingContext private[streaming] (
   /**
    * Start the execution of the streams.
    */
-  def start(): Unit = synchronized {
+  override def start() {
     // Throw exception if the context has already been started once
     // or if a stopped context is being started again
-    if (state == Started) {
-      throw new SparkException("StreamingContext has already been started")
-    }
-    if (state == Stopped) {
+    if (stopped) {
       throw new SparkException("StreamingContext has already been stopped")
     }
+    super.start()
+  }
+
+  override protected def doStart() {
     validate()
     scheduler.start()
-    state = Started
   }
 
   /**
@@ -456,13 +447,16 @@ class StreamingContext private[streaming] (
     waiter.waitForStopOrError(timeout)
   }
 
+  override def stop() {
+    stop(true)
+  }
   /**
    * Stop the execution of the streams immediately (does not wait for all received data
    * to be processed).
    * @param stopSparkContext Stop the associated SparkContext or not
    *
    */
-  def stop(stopSparkContext: Boolean = true): Unit = synchronized {
+  def stop(stopSparkContext: Boolean): Unit = synchronized {
     stop(stopSparkContext, false)
   }
 
@@ -476,11 +470,11 @@ class StreamingContext private[streaming] (
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
     // Warn (but not fail) if context is stopped twice,
     // or context is stopped before starting
-    if (state == Initialized) {
+    if (uninitialized || initialized) {
       logWarning("StreamingContext has not been started yet")
       return
     }
-    if (state == Stopped) {
+    if (stopped) {
       logWarning("StreamingContext has already been stopped")
       return
     } // no need to throw an exception as its okay to stop twice
@@ -488,8 +482,9 @@ class StreamingContext private[streaming] (
     logInfo("StreamingContext stopped successfully")
     waiter.notifyStop()
     if (stopSparkContext) sc.stop()
-    state = Stopped
+    super.stop()
   }
+  override protected def doStop() { }
 }
 
 /**

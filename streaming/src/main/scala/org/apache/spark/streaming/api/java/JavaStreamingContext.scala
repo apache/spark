@@ -27,7 +27,7 @@ import java.util.{List => JList, Map => JMap}
 import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{Lifecycle, SparkConf, SparkContext}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import org.apache.spark.rdd.RDD
@@ -49,7 +49,7 @@ import org.apache.spark.streaming.receiver.Receiver
  * respectively. `context.awaitTransformation()` allows the current thread to wait for the
  * termination of a context by `stop()` or by an exception.
  */
-class JavaStreamingContext(val ssc: StreamingContext) {
+class JavaStreamingContext(val ssc: StreamingContext) extends Lifecycle {
 
   /**
    * Create a StreamingContext.
@@ -147,6 +147,8 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /** The underlying SparkContext */
   val sparkContext = new JavaSparkContext(ssc.sc)
+
+  override def conf = sparkContext.conf
 
   /**
    * Create an input stream from network source hostname:port. Data is received using
@@ -497,7 +499,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   /**
    * Start the execution of the streams.
    */
-  def start(): Unit = {
+  override protected def doStart(): Unit = {
     ssc.start()
   }
 
@@ -521,15 +523,17 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   /**
    * Stop the execution of the streams. Will stop the associated JavaSparkContext as well.
    */
-  def stop(): Unit = {
-    ssc.stop()
+  override def stop(): Unit = {
+    stop(true)
   }
 
   /**
    * Stop the execution of the streams.
    * @param stopSparkContext Stop the associated SparkContext or not
    */
-  def stop(stopSparkContext: Boolean) = ssc.stop(stopSparkContext)
+  def stop(stopSparkContext: Boolean): Unit = {
+    stop(stopSparkContext,false)
+  }
 
   /**
    * Stop the execution of the streams.
@@ -538,8 +542,13 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    *                       received data to be completed
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean) = {
-    ssc.stop(stopSparkContext, stopGracefully)
+    if (ssc.started) {
+      ssc.stop(stopSparkContext, stopGracefully)
+      super.stop()
+    }
   }
+
+  override protected def doStop() { }
 }
 
 /**

@@ -27,11 +27,13 @@ private[spark] class JmxSink(val property: Properties, val registry: MetricRegis
 
   val reporter: JmxReporter = JmxReporter.forRegistry(registry).build()
 
-  override def start() {
+  def conf = securityMgr.sparkConf
+
+  override protected def doStart() {
     reporter.start()
   }
 
-  override def stop() {
+  override protected def doStop() {
     reporter.stop()
   }
 

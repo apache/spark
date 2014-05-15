@@ -59,11 +59,13 @@ private[spark] class CsvSink(val property: Properties, val registry: MetricRegis
       .convertRatesTo(TimeUnit.SECONDS)
       .build(new File(pollDir))
 
-  override def start() {
+  def conf = securityMgr.sparkConf
+
+  override protected def doStart() {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop() {
+  override protected def doStop() {
     reporter.stop()
   }
 }

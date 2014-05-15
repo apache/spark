@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
 class HistoryServer(
     val baseLogDir: String,
     securityManager: SecurityManager,
-    conf: SparkConf)
+    val conf: SparkConf)
   extends WebUI(securityManager, HistoryServer.WEB_UI_PORT, conf) with Logging {
 
   import HistoryServer._
@@ -58,8 +58,6 @@ class HistoryServer(
 
   // Number of completed applications found in this directory
   private var numCompletedApplications = 0
-
-  @volatile private var stopped = false
 
   /**
    * A background thread that periodically checks for event log updates on disk.
@@ -88,15 +86,13 @@ class HistoryServer(
   // A mapping of application ID to its history information, which includes the rendered UI
   val appIdToInfo = mutable.HashMap[String, ApplicationHistoryInfo]()
 
-  initialize()
-
   /**
    * Initialize the history server.
    *
    * This starts a background thread that periodically synchronizes information displayed on
    * this UI with the event logs in the provided base directory.
    */
-  def initialize() {
+  override def doInitialize() {
     attachPage(new HistoryPage(this))
     attachHandler(createStaticHandler(STATIC_RESOURCE_DIR, "/static"))
   }
@@ -196,9 +192,8 @@ class HistoryServer(
   }
 
   /** Stop the server and close the file system. */
-  override def stop() {
-    super.stop()
-    stopped = true
+  override protected def doStop() {
+    super.doStop()
     fileSystem.close()
   }
 
