@@ -267,7 +267,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
    * each key, using [[PairRDDFunctions.reduceByKey]] or [[PairRDDFunctions.combineByKey]]
-   * will provide much better performance,
+   * will provide much better performance.
    */
   def groupByKey(partitioner: Partitioner): RDD[(K, Iterable[V])] = {
     // groupByKey shouldn't use map side combine because map side combine does not
@@ -287,7 +287,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
    * each key, using [[PairRDDFunctions.reduceByKey]] or [[PairRDDFunctions.combineByKey]]
-   * will provide much better performance,
+   * will provide much better performance.
    */
   def groupByKey(numPartitions: Int): RDD[(K, Iterable[V])] = {
     groupByKey(new HashPartitioner(numPartitions))
