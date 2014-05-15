@@ -56,6 +56,10 @@
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>commons-lang</groupId>
+          <artifactId>commons-lang</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -74,6 +78,10 @@
         <exclusion>
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>commons-lang</groupId>
+          <artifactId>commons-lang</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
