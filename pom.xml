@@ -129,7 +129,7 @@
     <jetty.version>8.1.14.v20131031</jetty.version>
     <chill.version>0.3.6</chill.version>
     <codahale.metrics.version>3.0.0</codahale.metrics.version>
-    <avro.version>1.7.4</avro.version>
+    <avro.version>1.7.6</avro.version>
     <jets3t.version>0.7.1</jets3t.version>
 
     <PermGen>64m</PermGen>
