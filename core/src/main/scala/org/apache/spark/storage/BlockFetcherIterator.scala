@@ -19,13 +19,11 @@ package org.apache.spark.storage
 
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashSet
-import scala.collection.mutable.Queue
+import scala.collection.mutable.{HashMap, ArrayBuffer, HashSet, Queue}
 
 import io.netty.buffer.ByteBuf
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.{MapOutputTracker, Logging, SparkException}
 import org.apache.spark.network.BufferMessage
 import org.apache.spark.network.ConnectionManagerId
 import org.apache.spark.network.netty.ShuffleCopier
@@ -351,4 +349,87 @@ object BlockFetcherIterator {
     }
   }
   // End of NettyBlockFetcherIterator
+
+  class PartialBlockFetcherIterator(
+      private val blockManager: BlockManager,
+      private var statuses: Array[(BlockManagerId, Long)],
+      private val mapOutputTracker: MapOutputTracker,
+      serializer: Serializer,
+      shuffleId: Int,
+      reduceId: Int)
+    extends BlockFetcherIterator {
+    private val iterators=new ArrayBuffer[BlockFetcherIterator]()
+
+    //track the map outputs we've delegated
+    private val delegatedStatuses = new HashSet[Int]()
+
+    //check if the map output is partial
+    private def isPartial = statuses.exists(_._1 == null)
+
+    //get the updated map output
+    private def updateStatuses() {
+      logInfo("Trying to update map statuses for reduceId "+reduceId+" ---lirui")
+      statuses = mapOutputTracker.getServerStatuses(shuffleId, reduceId)
+    }
+
+    private def readyStatuses = (0 until statuses.size).filter(statuses(_)._1 != null)
+
+    //check if there's new map outputs ready to collect
+    private def newStatusesReady = readyStatuses.exists(!delegatedStatuses.contains(_))
+
+    private def getIterator() = {
+      if (isPartial) {
+        logInfo("Still missing "+statuses.filter(_._1==null).size+" map outputs for reduceId "+reduceId+" ---lirui")
+        updateStatuses()
+      }
+      val maxTrialCount = 8
+      var trialCount = 0
+      while (!newStatusesReady && trialCount < maxTrialCount) {
+        logInfo("Waiting for new map outputs for reduceId " + reduceId + " ---lirui")
+        Thread.sleep(5000)
+        updateStatuses()
+        trialCount += 1
+      }
+      if (trialCount >= maxTrialCount) {
+        throw new SparkException("Failed to get new iterator: no update in last " + trialCount + " trials.")
+      }
+      val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
+      for (index <- readyStatuses if !delegatedStatuses.contains(index)) {
+        splitsByAddress.getOrElseUpdate(statuses(index)._1, ArrayBuffer()) += ((index, statuses(index)._2))
+        delegatedStatuses += index
+      }
+      val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
+        case (address, splits) =>
+          (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
+      }
+      logInfo("Delegating " + blocksByAddress.map(_._2.size).sum + " blocks to a new iterator. ---lirui")
+      blockManager.getMultiple(blocksByAddress, serializer)
+    }
+
+    override def initialize(){
+      iterators += getIterator()
+    }
+
+    override def hasNext: Boolean = iterators.exists(_.hasNext) || delegatedStatuses.size < statuses.size
+
+    override def next(): (BlockId, Option[Iterator[Any]]) = {
+      //firstly try to get a block from the iterators we've created
+      for (itr <- iterators if itr.hasNext) {
+        return itr.next()
+      }
+      //TODO: need to take care of empty blocks here
+      iterators += getIterator()
+      next()
+    }
+
+    override def totalBlocks = iterators.map(_.totalBlocks).sum
+
+    override def numLocalBlocks = iterators.map(_.numLocalBlocks).sum
+
+    override def numRemoteBlocks = iterators.map(_.numRemoteBlocks).sum
+
+    override def fetchWaitTime = iterators.map(_.fetchWaitTime).sum
+
+    override def remoteBytesRead = iterators.map(_.remoteBytesRead).sum
+  }
 }

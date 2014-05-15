@@ -538,6 +538,17 @@ private[spark] class BlockManager(
     iter
   }
 
+  def getPartial(
+      statuses: Array[(BlockManagerId, Long)],
+      mapOutputTracker: MapOutputTracker,
+      serializer: Serializer,
+      shuffleId: Int,
+      reduceId: Int) = {
+    val iter = new BlockFetcherIterator.PartialBlockFetcherIterator(this, statuses, mapOutputTracker, serializer, shuffleId, reduceId)
+    iter.initialize()
+    iter
+  }
+
   def put(
       blockId: BlockId,
       values: Iterator[Any],
