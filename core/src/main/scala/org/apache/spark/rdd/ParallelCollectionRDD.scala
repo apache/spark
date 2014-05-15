@@ -119,7 +119,7 @@ private object ParallelCollectionRDD {
     }
     // Sequences need to be sliced at same positions for operations
     // like RDD.zip() to behave as expected
-    def positions(length: Long, numSlices: Int): Seq[(Int, Int)] = {
+    def positions(length: Long, numSlices: Int) = {
       (0 until numSlices).map(i => {
         val start = ((i * length) / numSlices).toInt
         val end = (((i + 1) * length) / numSlices).toInt
