@@ -18,8 +18,7 @@
 package org.apache.spark
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Spark's scheduling components. This includes the [[org.apache.spark.scheduler.DAGScheduler]] and
+ * lower level [[org.apache.spark.scheduler.TaskScheduler]].
  */
-package object broadcast {
-  // For package docs only
-}
+package object scheduler

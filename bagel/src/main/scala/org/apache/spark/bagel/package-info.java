@@ -15,11 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
-
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Bagel: An implementation of Pregel in Spark. THIS IS DEPRECATED - use Spark's GraphX library.
  */
-package object broadcast {
-  // For package docs only
-}
+package org.apache.spark.bagel;

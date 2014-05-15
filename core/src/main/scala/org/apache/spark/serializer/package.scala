@@ -18,8 +18,8 @@
 package org.apache.spark
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Pluggable serializers for RDD and shuffle data.
+ *
+ * @see [[org.apache.spark.serializer.Serializer]]
  */
-package object broadcast {
-  // For package docs only
-}
+package object serializer

@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.streaming.api
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Spark streaming's Java API.
  */
-package object broadcast {
-  // For package docs only
-}
+package object java

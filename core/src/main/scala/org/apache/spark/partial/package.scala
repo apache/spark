@@ -18,8 +18,11 @@
 package org.apache.spark
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * :: Experimental ::
+ *
+ * Support for approximate results. This provides convenient api and also implementation for
+ * approximate calculation.
+ *
+ * @see [[org.apache.spark.rdd.RDD.countApprox]]
  */
-package object broadcast {
-  // For package docs only
-}
+package object partial

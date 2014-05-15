@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.graphx
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Collections of utilities used by graphx.
  */
-package object broadcast {
-  // For package docs only
-}
+package object util

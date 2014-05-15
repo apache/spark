@@ -18,8 +18,6 @@
 package org.apache.spark
 
 /**
- * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
+ * Provides several RDD implementations. See [[org.apache.spark.rdd.RDD]].
  */
-package object broadcast {
-  // For package docs only
-}
+package object rdd
