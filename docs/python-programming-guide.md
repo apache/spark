@@ -121,7 +121,7 @@ IPython also works on a cluster or on multiple cores if you set the `MASTER` env
 # Standalone Programs
 
 PySpark can also be used from standalone Python scripts by creating a SparkContext in your script and running the script using `bin/spark-submit`.
-The Quick Start guide includes a [complete example](quick-start.html#a-standalone-app-in-python) of a standalone Python application.
+The Quick Start guide includes a [complete example](quick-start.html#standalone-applications) of a standalone Python application.
 
 Code dependencies can be deployed by passing .zip or .egg files in the `--py-files` option of `spark-submit`:
 
