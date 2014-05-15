@@ -24,6 +24,10 @@ from threading import Thread
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 
 
+# Handler to avoid sending ctrl-c / SIGINT to the Java gateway
+def ignoreInterrupt():
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
 def launch_gateway():
     SPARK_HOME = os.environ["SPARK_HOME"]
 
@@ -38,10 +42,7 @@ def launch_gateway():
         command = [os.path.join(SPARK_HOME, script), "py4j.GatewayServer",
                    "--die-on-broken-pipe", "0"]
         if not on_windows:
-            # Don't send ctrl-c / SIGINT to the Java gateway:
-            def preexec_func():
-                signal.signal(signal.SIGINT, signal.SIG_IGN)
-            proc = Popen(command, stdout=PIPE, stdin=PIPE, preexec_fn=preexec_func)
+            proc = Popen(command, stdout=PIPE, stdin=PIPE, preexec_fn=ignoreInterrupt)
         else:
             # preexec_fn not supported on Windows
             proc = Popen(command, stdout=PIPE, stdin=PIPE)

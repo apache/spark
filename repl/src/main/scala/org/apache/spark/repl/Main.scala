@@ -17,8 +17,6 @@
 
 package org.apache.spark.repl
 
-import scala.collection.mutable.Set
-
 object Main {
   private var _interp: SparkILoop = _
 

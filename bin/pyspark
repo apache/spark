@@ -56,9 +56,14 @@ if [ -n "$IPYTHON_OPTS" ]; then
   IPYTHON=1
 fi
 
-# Only use ipython if no command line arguments were provided [SPARK-1134]
-if [[ "$IPYTHON" = "1" && $# = 0 ]] ; then
-  exec ipython $IPYTHON_OPTS
+# If a python file is provided, directly run spark-submit
+if [[ ! "$#" = "0" ]]; then
+  exec $SPARK_HOME/bin/spark-submit "$@"
 else
-  exec "$PYSPARK_PYTHON" "$@"
+  # Only use ipython if no command line arguments were provided [SPARK-1134]
+  if [[ "$IPYTHON" = "1" ]]; then
+    exec ipython $IPYTHON_OPTS $SPARK_HOME/python/pyspark/repl.py "$@"
+  else
+    exec "$PYSPARK_PYTHON" $SPARK_HOME/python/pyspark/repl.py "$@"
+  fi
 fi

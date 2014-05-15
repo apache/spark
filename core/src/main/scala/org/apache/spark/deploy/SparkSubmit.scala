@@ -41,10 +41,10 @@ object SparkSubmit {
   private var clusterManager: Int = LOCAL
 
   /**
-   * A special jar name that indicates the class being run is inside of Spark itself,
-   * and therefore no user jar is needed.
+   * Special primary resource names that represent shells rather than application jars.
    */
-  private val RESERVED_JAR_NAME = "spark-internal"
+  private val SPARK_SHELL = "spark-shell"
+  private val PYSPARK_SHELL = "pyspark-shell"
 
   def main(args: Array[String]) {
     val appArgs = new SparkSubmitArguments(args)
@@ -71,8 +71,8 @@ object SparkSubmit {
    *         entries for the child, a list of system propertes, a list of env vars
    *         and the main class for the child
    */
-  private[spark] def createLaunchEnv(args: SparkSubmitArguments): (ArrayBuffer[String],
-      ArrayBuffer[String], Map[String, String], String) = {
+  private[spark] def createLaunchEnv(args: SparkSubmitArguments)
+      : (ArrayBuffer[String], ArrayBuffer[String], Map[String, String], String) = {
     if (args.master.startsWith("local")) {
       clusterManager = LOCAL
     } else if (args.master.startsWith("yarn")) {
@@ -121,24 +121,30 @@ object SparkSubmit {
       printErrorAndExit("Cannot currently run driver on the cluster in Mesos")
     }
 
-    // If we're running a Python app, set the Java class to run to be our PythonRunner, add
-    // Python files to deployment list, and pass the main file and Python path to PythonRunner
+    // If we're running a python app, set the main class to our specific python runner
     if (isPython) {
       if (deployOnCluster) {
         printErrorAndExit("Cannot currently run Python driver programs on cluster")
       }
-      args.mainClass = "org.apache.spark.deploy.PythonRunner"
-      args.files = mergeFileLists(args.files, args.pyFiles, args.primaryResource)
-      val pyFiles = Option(args.pyFiles).getOrElse("")
-      args.childArgs = ArrayBuffer(args.primaryResource, pyFiles) ++ args.childArgs
-      args.primaryResource = RESERVED_JAR_NAME
-      sysProps("spark.submit.pyFiles") = pyFiles
+      if (args.primaryResource == PYSPARK_SHELL) {
+        args.mainClass = "org.apache.spark.deploy.PythonShellRunner"
+      } else {
+        // If a python file is provided, add it to the child arguments and list of files to deploy.
+        // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
+        args.mainClass = "org.apache.spark.deploy.PythonAppRunner"
+        args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
+        args.files = Utils.mergeFileLists(args.primaryResource, args.files)
+      }
+      Option(args.pyFiles).foreach { pyFiles =>
+        args.files = Utils.mergeFileLists(args.files, args.pyFiles)
+        sysProps("spark.submit.pyFiles") = pyFiles
+      }
     }
 
     // If we're deploying into YARN, use yarn.Client as a wrapper around the user class
     if (!deployOnCluster) {
       childMainClass = args.mainClass
-      if (args.primaryResource != RESERVED_JAR_NAME) {
+      if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
       }
     } else if (clusterManager == YARN) {
@@ -219,7 +225,7 @@ object SparkSubmit {
     // For python files, the primary resource is already distributed as a regular file
     if (!isYarnCluster && !isPython) {
       var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
-      if (args.primaryResource != RESERVED_JAR_NAME) {
+      if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
       }
       sysProps.put("spark.jars", jars.mkString(","))
@@ -293,8 +299,8 @@ object SparkSubmit {
   }
 
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
-    val localJarFile = new File(new URI(localJar).getPath())
-    if (!localJarFile.exists()) {
+    val localJarFile = new File(new URI(localJar).getPath)
+    if (!localJarFile.exists) {
       printWarning(s"Jar $localJar does not exist, skipping.")
     }
 
@@ -303,14 +309,24 @@ object SparkSubmit {
   }
 
   /**
-   * Merge a sequence of comma-separated file lists, some of which may be null to indicate
-   * no files, into a single comma-separated string.
+   * Return whether the given primary resource represents a user jar.
    */
-  private[spark] def mergeFileLists(lists: String*): String = {
-    val merged = lists.filter(_ != null)
-                      .flatMap(_.split(","))
-                      .mkString(",")
-    if (merged == "") null else merged
+  private def isUserJar(primaryResource: String): Boolean = {
+    !isShell(primaryResource) && !isPython(primaryResource)
+  }
+
+  /**
+   * Return whether the given primary resource represents a shell.
+   */
+  private def isShell(primaryResource: String): Boolean = {
+    primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL
+  }
+
+  /**
+   * Return whether the given primary resource requires running python.
+   */
+  private[spark] def isPython(primaryResource: String): Boolean = {
+    primaryResource.endsWith(".py") || primaryResource == PYSPARK_SHELL
   }
 }
 
