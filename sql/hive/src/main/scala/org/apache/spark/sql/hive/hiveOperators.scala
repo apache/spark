@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.types.{BooleanType, DataType}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive._
 import org.apache.spark.{TaskContext, SparkException}
+import org.apache.spark.util.MutablePair
 
 /* Implicits */
 import scala.collection.JavaConversions._
@@ -190,27 +191,34 @@ case class HiveTableScan(
         Iterator.empty
       } else {
         val mutableRow = new GenericMutableRow(attributes.length)
+        val mutablePair = new MutablePair[Any, Array[String]]()
         val buffered = iterator.buffered
+
+        // NOTE (lian): Critical path of Hive table scan, unnecessary FP style code and pattern
+        // matching are avoided intentionally.
         val rowsAndPartitionKeys = buffered.head match {
-          case Array(_, _) =>
-            buffered.map { case Array(deserializedRow, partitionKeys: Array[String]) =>
-              (deserializedRow, partitionKeys)
+          // With partition keys
+          case _: Array[Any] =>
+            buffered.map { case array: Array[Any] =>
+              val deserializedRow = array(0)
+              val partitionKeys = array(1).asInstanceOf[Array[String]]
+              mutablePair.update(deserializedRow, partitionKeys)
             }
 
+          // Without partition keys
           case _ =>
-            buffered.map {
-              (_, Array.empty[String])
+            val emptyPartitionKeys = Array.empty[String]
+            buffered.map { deserializedRow =>
+              mutablePair.update(deserializedRow, emptyPartitionKeys)
             }
         }
 
-        rowsAndPartitionKeys.map { case (deserializedRow, partitionKeys) =>
+        rowsAndPartitionKeys.map { pair =>
           var i = 0
-
           while (i < attributes.length) {
-            mutableRow(i) = attributeFunctions(i)(deserializedRow, partitionKeys)
+            mutableRow(i) = attributeFunctions(i)(pair._1, pair._2)
             i += 1
           }
-
           mutableRow: Row
         }
       }
