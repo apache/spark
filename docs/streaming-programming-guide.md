@@ -522,8 +522,8 @@ common ones are as follows.
   <td> <b>reduceByKey</b>(<i>func</i>, [<i>numTasks</i>]) </td>
   <td> When called on a DStream of (K, V) pairs, return a new DStream of (K, V) pairs where the
   values for each key are aggregated using the given reduce function. <b>Note:</b> By default,
-  this uses Spark's default number of parallel tasks (local mode is 2, while cluster mode is
-  decided by the config property <code>spark.default.parallelism</code>) to do the grouping. 
+  this uses Spark's default number of parallel tasks (2 for local mode, and in cluster mode the number
+  is determined by the config property <code>spark.default.parallelism</code>) to do the grouping.
   You can pass an optional <code>numTasks</code> argument to set a different number of tasks.</td>
 </tr>
 <tr>
@@ -743,8 +743,8 @@ said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
   <td> When called on a DStream of (K, V) pairs, returns a new DStream of (K, V)
   pairs where the values for each key are aggregated using the given reduce function <i>func</i>
   over batches in a sliding window. <b>Note:</b> By default, this uses Spark's default number of
-  parallel tasks (local mode is 2, while cluster mode is decided by the config property 
-  <code>spark.default.parallelism</code>) to do the grouping. You can pass an optional 
+  parallel tasks (2 for local mode, and in cluster mode the number is determined by the config
+  property <code>spark.default.parallelism</code>) to do the grouping. You can pass an optional
   <code>numTasks</code> argument to set a different number of tasks.
   </td>
 </tr>
@@ -959,7 +959,7 @@ Cluster resources maybe under-utilized if the number of parallel tasks used in a
 computation is not high enough. For example, for distributed reduce operations like `reduceByKey`
 and `reduceByKeyAndWindow`, the default number of parallel tasks is decided by the [config property]
 (configuration.html#spark-properties) `spark.default.parallelism`. You can pass the level of
-parallelism as an argument (see the [`PairDStreamFunctions`]
+parallelism as an argument (see [`PairDStreamFunctions`]
 (api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
 documentation), or set the [config property](configuration.html#spark-properties)
 `spark.default.parallelism` to change the default.
