@@ -19,11 +19,12 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
+import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
+
 import org.apache.spark.sql.Logging
+import org.apache.spark.sql.catalyst.planning.SortedOperation
 import org.apache.spark.sql.catalyst.plans.logical.{ExplainCommand, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.Sort
-import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -131,14 +132,8 @@ abstract class HiveComparisonTest
     val orderedAnswer = hiveQuery.logical match {
       // Clean out non-deterministic time schema info.
       case _: NativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
-      case _: ExplainCommand => answer
-      case _ =>
-        // TODO: Really we only care about the final total ordering here...
-        val isOrdered = hiveQuery.executedPlan.collect {
-          case s @ Sort(_, global, _) if global => s
-        }.nonEmpty
-        // If the query results aren't sorted, then sort them to ensure deterministic answers.
-        if (!isOrdered) answer.sorted else answer
+      case _: ExplainCommand | SortedOperation(_) => answer
+      case _ => answer.sorted
     }
     orderedAnswer.map(cleanPaths)
   }
@@ -161,7 +156,7 @@ abstract class HiveComparisonTest
     "minFileSize"
   )
   protected def nonDeterministicLine(line: String) =
-    nonDeterministicLineIndicators.map(line contains _).reduceLeft(_||_)
+    nonDeterministicLineIndicators.exists(line contains _)
 
   /**
    * Removes non-deterministic paths from `str` so cached answers will compare correctly.
