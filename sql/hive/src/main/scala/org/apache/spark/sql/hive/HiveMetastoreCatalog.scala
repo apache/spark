@@ -183,7 +183,8 @@ object HiveMetastoreTypes extends RegexParsers {
     "string" ^^^ StringType |
     "float" ^^^ FloatType |
     "int" ^^^ IntegerType |
-    "tinyint" ^^^ ShortType |
+    "tinyint" ^^^ ByteType |
+    "smallint" ^^^ ShortType |
     "double" ^^^ DoubleType |
     "bigint" ^^^ LongType |
     "binary" ^^^ BinaryType |
@@ -227,7 +228,8 @@ object HiveMetastoreTypes extends RegexParsers {
     case StringType => "string"
     case FloatType => "float"
     case IntegerType => "int"
-    case ShortType =>"tinyint"
+    case ByteType => "tinyint"
+    case ShortType => "smallint"
     case DoubleType => "double"
     case LongType => "bigint"
     case BinaryType => "binary"
