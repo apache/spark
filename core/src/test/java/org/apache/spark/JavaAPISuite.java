@@ -642,8 +642,8 @@ public class JavaAPISuite implements Serializable {
     ds.close();
 
     HashMap<String, String> container = new HashMap<String, String>();
-    container.put(tempDirName+"/part-00000", new Text(content1).toString());
-    container.put(tempDirName+"/part-00001", new Text(content2).toString());
+    container.put("file:" + tempDirName+"/part-00000", new Text(content1).toString());
+    container.put("file:" + tempDirName+"/part-00001", new Text(content2).toString());
 
     JavaPairRDD<String, String> readRDD = sc.wholeTextFiles(tempDirName, 3);
     List<Tuple2<String, String>> result = readRDD.collect();
