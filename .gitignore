@@ -49,3 +49,10 @@ unit-tests.log
 /lib/
 rat-results.txt
 scalastyle.txt
+conf/*.conf
+
+# For Hive
+metastore_db/
+metastore/
+warehouse/
+TempStatsStore/

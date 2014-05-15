@@ -71,6 +71,12 @@ class DslQuerySuite extends QueryTest {
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
   }
 
+  test("limit") {
+    checkAnswer(
+      testData.limit(10),
+      testData.take(10).toSeq)
+  }
+
   test("average") {
     checkAnswer(
       testData2.groupBy()(Average('a)),

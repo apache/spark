@@ -46,11 +46,12 @@ private[spark] class BlockManager(
     val master: BlockManagerMaster,
     val defaultSerializer: Serializer,
     maxMemory: Long,
-    val conf: SparkConf,
+    val _conf: SparkConf,
     securityManager: SecurityManager,
     mapOutputTracker: MapOutputTracker)
   extends Logging {
 
+  def conf = _conf
   val shuffleBlockManager = new ShuffleBlockManager(this)
   val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
     conf.get("spark.local.dir",  System.getProperty("java.io.tmpdir")))
@@ -154,7 +155,7 @@ private[spark] class BlockManager(
     BlockManagerWorker.startBlockManagerWorker(this)
     if (!BlockManager.getDisableHeartBeatsForTesting(conf)) {
       heartBeatTask = actorSystem.scheduler.schedule(0.seconds, heartBeatFrequency.milliseconds) {
-        heartBeat()
+        Utils.tryOrExit { heartBeat() }
       }
     }
   }

@@ -17,26 +17,13 @@
 # limitations under the License.
 #
 
-cygwin=false
-case "`uname`" in
-    CYGWIN*) cygwin=true;;
-esac
-
 SCALA_VERSION=2.10
 
-# Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
-
-# Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
 . $FWDIR/bin/load-spark-env.sh
 . $FWDIR/bin/sh-funcs.sh
-
-if [ -z "$1" ]; then
-  echo "Usage: run-example <example-class> [<args>]" >&2
-  exit 1
-fi
 
 # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
 # to avoid the -sources and -doc packages that are built by publish-local.
@@ -49,48 +36,31 @@ if [[ -z $SPARK_EXAMPLES_JAR ]]; then
   fi
   if [[ -z $SPARK_EXAMPLES_JAR ]]; then
     jars_pat="$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.jar"
-    errmsg="You need to build Spark with sbt/sbt assembly before running this program"
+    errmsg="You need to build Spark before running this program"
     need_one_glob "$jars_pat" "$errmsg"
     export SPARK_EXAMPLES_JAR=$_RET
   fi
 fi
 
+EXAMPLE_MASTER=${MASTER:-"local[*]"}
 
-# Since the examples JAR ideally shouldn't include spark-core (that dependency should be
-# "provided"), also add our standard Spark classpath, built using compute-classpath.sh.
-CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
-CLASSPATH="$SPARK_EXAMPLES_JAR:$CLASSPATH"
-
-if $cygwin; then
-    CLASSPATH=`cygpath -wp $CLASSPATH`
-    export SPARK_EXAMPLES_JAR=`cygpath -w $SPARK_EXAMPLES_JAR`
-fi
-
-# Find java binary
-if [ -n "${JAVA_HOME}" ]; then
-  RUNNER="${JAVA_HOME}/bin/java"
-else
-  if [ `command -v java` ]; then
-    RUNNER="java"
-  else
-    echo "JAVA_HOME is not set" >&2
-    exit 1
-  fi
-fi
-
-# Set JAVA_OPTS to be able to load native libraries and to set heap size
-JAVA_OPTS="$SPARK_JAVA_OPTS"
-# Load extra JAVA_OPTS from conf/java-opts, if it exists
-if [ -e "$FWDIR/conf/java-opts" ] ; then
-  JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"
-fi
-export JAVA_OPTS
-
-if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
-  echo -n "Spark Command: "
-  echo "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
-  echo "========================================"
+if [ -n "$1" ]; then
+  EXAMPLE_CLASS="$1"
+  shift
+else 
+  echo "usage: ./bin/run-example <example-class> [example-args]" 
+  echo "  - set MASTER=XX to use a specific master"
+  echo "  - can use abbreviated example class name (e.g. SparkPi, mllib.MovieLensALS)"
   echo
+  exit -1
 fi
 
-exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
+if [[ ! $EXAMPLE_CLASS == org.apache.spark.examples* ]]; then
+  EXAMPLE_CLASS="org.apache.spark.examples.$EXAMPLE_CLASS"
+fi
+
+./bin/spark-submit \
+  --master $EXAMPLE_MASTER \
+  --class $EXAMPLE_CLASS \
+  $SPARK_EXAMPLES_JAR \
+  "$@"

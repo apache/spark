@@ -31,7 +31,7 @@ if [ ! -f "$FWDIR/RELEASE" ]; then
   ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*.jar >& /dev/null
   if [[ $? != 0 ]]; then
     echo "Failed to find Spark assembly in $FWDIR/assembly/target" >&2
-    echo "You need to build Spark with sbt/sbt assembly before running this program" >&2
+    echo "You need to build Spark before running this program" >&2
     exit 1
   fi
 fi
@@ -46,6 +46,7 @@ export PYSPARK_PYTHON
 
 # Add the PySpark classes to the Python path:
 export PYTHONPATH=$SPARK_HOME/python/:$PYTHONPATH
+export PYTHONPATH=$SPARK_HOME/python/lib/py4j-0.8.1-src.zip:$PYTHONPATH
 
 # Load the PySpark shell.py script when ./pyspark is used interactively:
 export OLD_PYTHONSTARTUP=$PYTHONSTARTUP

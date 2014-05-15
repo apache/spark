@@ -54,7 +54,7 @@ private[spark] class SparkDeploySchedulerBackend(
     }
 
     val command = Command(
-      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.testExecutorEnvs,
+      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
       classPathEntries, libraryPathEntries, extraJavaOpts)
     val sparkHome = sc.getSparkHome()
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
@@ -83,10 +83,10 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  override def dead() {
+  override def dead(reason: String) {
     if (!stopping) {
-      logError("Spark cluster looks dead, giving up.")
-      scheduler.error("Spark cluster looks down")
+      logError("Application has been killed. Reason: " + reason)
+      scheduler.error(reason)
     }
   }
 

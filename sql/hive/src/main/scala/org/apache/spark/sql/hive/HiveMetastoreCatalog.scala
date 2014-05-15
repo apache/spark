@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.Deserializer
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, Catalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -130,7 +131,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         castChildOutput(p, table, child)
 
       case p @ logical.InsertIntoTable(SparkLogicalPlan(InMemoryColumnarTableScan(
-        _, HiveTableScan(_, table, _))), _, child, _) =>
+        _, HiveTableScan(_, table, _), _)), _, child, _) =>
         castChildOutput(p, table, child)
     }
 
@@ -172,7 +173,12 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   override def unregisterAllTables() = {}
 }
 
-private[hive] object HiveMetastoreTypes extends RegexParsers {
+/**
+ * :: DeveloperApi ::
+ * Provides conversions between Spark SQL data types and Hive Metastore types.
+ */
+@DeveloperApi
+object HiveMetastoreTypes extends RegexParsers {
   protected lazy val primitiveType: Parser[DataType] =
     "string" ^^^ StringType |
     "float" ^^^ FloatType |

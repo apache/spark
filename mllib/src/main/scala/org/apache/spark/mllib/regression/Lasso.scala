@@ -17,10 +17,9 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
 /**
@@ -29,7 +28,7 @@ import org.apache.spark.rdd.RDD
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class LassoModel(
+class LassoModel private[mllib] (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
@@ -66,20 +65,11 @@ class LassoWithSGD private (
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
-  // We don't want to penalize the intercept, so set this to false.
-  super.setIntercept(false)
-
   /**
    * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
    * regParam: 1.0, miniBatchFraction: 1.0}.
    */
   def this() = this(1.0, 100, 1.0, 1.0)
-
-  override def setIntercept(addIntercept: Boolean): this.type = {
-    // TODO: Support adding intercept.
-    if (addIntercept) throw new UnsupportedOperationException("Adding intercept is not supported.")
-    this
-  }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
     new LassoModel(weights, intercept)
@@ -172,20 +162,5 @@ object LassoWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int): LassoModel = {
     train(input, numIterations, 1.0, 1.0, 1.0)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length != 5) {
-      println("Usage: Lasso <master> <input_dir> <step_size> <regularization_parameter> <niters>")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "Lasso")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = LassoWithSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
-
-    println("Weights: " + model.weights)
-    println("Intercept: " + model.intercept)
-
-    sc.stop()
   }
 }

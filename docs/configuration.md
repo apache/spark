@@ -5,9 +5,9 @@ title: Spark Configuration
 
 Spark provides three locations to configure the system:
 
-* [Spark properties](#spark-properties) control most application parameters and can be set by passing
-  a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object to SparkContext, or through Java
-  system properties.
+* [Spark properties](#spark-properties) control most application parameters and can be set by
+  passing a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object to SparkContext,
+  or through the `conf/spark-defaults.conf` properties file.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
 * [Logging](#configuring-logging) can be configured through `log4j.properties`.
@@ -15,25 +15,41 @@ Spark provides three locations to configure the system:
 
 # Spark Properties
 
-Spark properties control most application settings and are configured separately for each application.
-The preferred way to set them is by passing a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf)
-class to your SparkContext constructor.
-Alternatively, Spark will also load them from Java system properties, for compatibility with old versions
-of Spark.
-
-SparkConf lets you configure most of the common properties to initialize a cluster (e.g., master URL and
-application name), as well as arbitrary key-value pairs through the `set()` method. For example, we could
-initialize an application as follows:
+Spark properties control most application settings and are configured separately for each
+application. The preferred way is to set them through
+[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) and passing it as an argument to your
+SparkContext. SparkConf allows you to configure most of the common properties to initialize a
+cluster (e.g. master URL and application name), as well as arbitrary key-value pairs through the
+`set()` method. For example, we could initialize an application as follows:
 
 {% highlight scala %}
-val conf = new SparkConf()
+val conf = new SparkConf
              .setMaster("local")
-             .setAppName("My application")
+             .setAppName("CountingSheep")
              .set("spark.executor.memory", "1g")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
-Most of the properties control internal settings that have reasonable default values. However,
+## Loading Default Configurations
+
+In the case of `spark-shell`, a SparkContext has already been created for you, so you cannot control
+the configuration properties through SparkConf. However, you can still set configuration properties
+through a default configuration file. By default, `spark-shell` (and more generally `spark-submit`)
+will read configuration options from `conf/spark-defaults.conf`, in which each line consists of a
+key and a value separated by whitespace. For example,
+
+    spark.master            spark://5.6.7.8:7077
+    spark.executor.memory   512m
+    spark.eventLog.enabled  true
+    spark.serializer        org.apache.spark.serializer.KryoSerializer
+
+Any values specified in the file will be passed on to the application, and merged with those
+specified through SparkConf. If the same configuration property exists in both `spark-defaults.conf`
+and SparkConf, then the latter will take precedence as it is the most application-specific.
+
+## All Configuration Properties
+
+Most of the properties that control internal settings have reasonable default values. However,
 there are at least five properties that you will commonly want to control:
 
 <table class="table">
@@ -101,9 +117,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.default.parallelism</td>
   <td>
     <ul>
+      <li>Local mode: number of cores on the local machine</li>
       <li>Mesos fine grained mode: 8</li>
-      <li>Local mode: core number of the local machine</li>
-      <li>Others: total core number of all executor nodes or 2, whichever is larger</li>
+      <li>Others: total number of cores on all executor nodes or 2, whichever is larger</li>
     </ul>
   </td>
   <td>
@@ -129,6 +145,15 @@ Apart from these, the following properties are also available, and may be useful
     all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
     begin to spill to disk. If spills are often, consider increasing this value at the expense of
     <code>spark.storage.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td>spark.storage.memoryMapThreshold</td>
+  <td>8192</td>
+  <td>
+    Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
+    This prevents Spark from memory mapping very small blocks. In general, memory
+    mapping has high overhead for blocks close to or below the page size of the operating system.
   </td>
 </tr>
 <tr>
@@ -178,7 +203,7 @@ Apart from these, the following properties are also available, and may be useful
     Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
     standard javax servlet Filter. Parameters to each filter can also be specified by setting a
     java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
-    (e.g.-Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
+    (e.g. -Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
   </td>
 </tr>
 <tr>
@@ -280,8 +305,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.closure.serializer</td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
-    Serializer class to use for closures. Generally Java is fine unless your distributed functions
-    (e.g. map functions) reference large objects in the driver program.
+    Serializer class to use for closures. Currently only the Java serializer is supported.
   </td>
 </tr>
 <tr>
@@ -310,7 +334,7 @@ Apart from these, the following properties are also available, and may be useful
     When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
     objects to prevent writing redundant data, however that stops garbage collection of those
     objects. By calling 'reset' you flush that info from the serializer, and allow old
-    objects to be collected. To turn off this periodic reset set it to a value of <= 0.
+    objects to be collected. To turn off this periodic reset set it to a value &lt;= 0.
     By default it will reset the serializer every 10,000 objects.
   </td>
 </tr>
@@ -454,7 +478,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(infinite)</td>
   <td>
     Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
-    Periodic cleanups will ensure that metadata older than this duration will be forgetten. This is
+    Periodic cleanups will ensure that metadata older than this duration will be forgotten. This is
     useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
     applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
   </td>
@@ -463,8 +487,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.streaming.blockInterval</td>
   <td>200</td>
   <td>
-    Duration (milliseconds) of how long to batch new objects coming from network receivers used
-    in Spark Streaming.
+    Interval (milliseconds) at which data received by Spark Streaming receivers is coalesced
+    into blocks of data before storing them in Spark.
   </td>
 </tr>
 <tr>
@@ -688,7 +712,9 @@ Apart from these, the following properties are also available, and may be useful
 ## Viewing Spark Properties
 
 The application web UI at `http://<driver>:4040` lists Spark properties in the "Environment" tab.
-This is a useful place to check to make sure that your properties have been set correctly.
+This is a useful place to check to make sure that your properties have been set correctly. Note
+that only values explicitly specified through either `spark-defaults.conf` or SparkConf will
+appear. For all other configuration properties, you can assume the default value is used.
 
 # Environment Variables
 
@@ -706,8 +732,8 @@ The following variables can be set in `spark-env.sh`:
 * `PYSPARK_PYTHON`, the Python binary to use for PySpark
 * `SPARK_LOCAL_IP`, to configure which IP address of the machine to bind to.
 * `SPARK_PUBLIC_DNS`, the hostname your Spark program will advertise to other machines.
-* Options for the Spark [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores
-  to use on each machine and maximum memory.
+* Options for the Spark [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts),
+  such as number of cores to use on each machine and maximum memory.
 
 Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
 compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.

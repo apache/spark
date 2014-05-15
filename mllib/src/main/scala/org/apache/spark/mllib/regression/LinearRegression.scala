@@ -17,11 +17,9 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
-import org.apache.spark.mllib.util.MLUtils
 
 /**
  * Regression model trained using LinearRegression.
@@ -29,7 +27,7 @@ import org.apache.spark.mllib.util.MLUtils
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class LinearRegressionModel(
+class LinearRegressionModel private[mllib] (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {
@@ -155,19 +153,5 @@ object LinearRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int): LinearRegressionModel = {
     train(input, numIterations, 1.0, 1.0)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length != 5) {
-      println("Usage: LinearRegression <master> <input_dir> <step_size> <niters>")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "LinearRegression")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = LinearRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
-    println("Weights: " + model.weights)
-    println("Intercept: " + model.intercept)
-
-    sc.stop()
   }
 }

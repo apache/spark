@@ -537,8 +537,8 @@ class RDD(object):
         """
         Return an RDD created by piping elements to a forked external process.
 
-        >>> sc.parallelize([1, 2, 3]).pipe('cat').collect()
-        ['1', '2', '3']
+        >>> sc.parallelize(['1', '2', '', '3']).pipe('cat').collect()
+        ['1', '2', '', '3']
         """
         def func(iterator):
             pipe = Popen(shlex.split(command), env=env, stdin=PIPE, stdout=PIPE)
@@ -547,7 +547,7 @@ class RDD(object):
                     out.write(str(obj).rstrip('\n') + '\n')
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()
-            return (x.rstrip('\n') for x in pipe.stdout)
+            return (x.rstrip('\n') for x in iter(pipe.stdout.readline, ''))
         return self.mapPartitions(func)
 
     def foreach(self, f):
@@ -891,6 +891,14 @@ class RDD(object):
         >>> from glob import glob
         >>> ''.join(sorted(input(glob(tempFile.name + "/part-0000*"))))
         '0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n'
+
+        Empty lines are tolerated when saving to text files.
+
+        >>> tempFile2 = NamedTemporaryFile(delete=True)
+        >>> tempFile2.close()
+        >>> sc.parallelize(['', 'foo', '', 'bar', '']).saveAsTextFile(tempFile2.name)
+        >>> ''.join(sorted(input(glob(tempFile2.name + "/part-0000*"))))
+        '\\n\\n\\nbar\\nfoo\\n'
         """
         def func(split, iterator):
             for x in iterator:
@@ -1143,6 +1151,10 @@ class RDD(object):
         """
         Group the values for each key in the RDD into a single sequence.
         Hash-partitions the resulting RDD with into numPartitions partitions.
+
+        Note: If you are grouping in order to perform an aggregation (such as a
+        sum or average) over each key, using reduceByKey will provide much better
+        performance.
 
         >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> map((lambda (x,y): (x, list(y))), sorted(x.groupByKey().collect()))

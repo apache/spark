@@ -18,7 +18,7 @@
 #
 
 export SPARK_HOME="$(cd `dirname $0`/..; pwd)"
-ORIG_ARGS=$@
+ORIG_ARGS=("$@")
 
 while (($#)); do
   if [ "$1" = "--deploy-mode" ]; then
@@ -26,18 +26,20 @@ while (($#)); do
   elif [ "$1" = "--driver-memory" ]; then
     DRIVER_MEMORY=$2
   elif [ "$1" = "--driver-library-path" ]; then
-    export _SPARK_LIBRARY_PATH=$2
+    export SPARK_SUBMIT_LIBRARY_PATH=$2
   elif [ "$1" = "--driver-class-path" ]; then
-    export SPARK_CLASSPATH="$SPARK_CLASSPATH:$2"
+    export SPARK_SUBMIT_CLASSPATH=$2
   elif [ "$1" = "--driver-java-options" ]; then
-    export SPARK_JAVA_OPTS="$SPARK_JAVA_OPTS $2"
+    export SPARK_SUBMIT_OPTS=$2
   fi
   shift
 done
 
-if [ ! -z $DRIVER_MEMORY ] && [ ! -z $DEPLOY_MODE ] && [ $DEPLOY_MODE = "client" ]; then
-  export SPARK_MEM=$DRIVER_MEMORY
+DEPLOY_MODE=${DEPLOY_MODE:-"client"}
+
+if [ -n "$DRIVER_MEMORY" ] && [ $DEPLOY_MODE == "client" ]; then
+  export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
 fi
 
-$SPARK_HOME/bin/spark-class org.apache.spark.deploy.SparkSubmit $ORIG_ARGS
+$SPARK_HOME/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"
 
