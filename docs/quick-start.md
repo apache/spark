@@ -38,10 +38,10 @@ textFile: spark.RDD[String] = spark.MappedRDD@2ee9b6e3
 RDDs have _[actions](scala-programming-guide.html#actions)_, which return values, and _[transformations](scala-programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
 
 {% highlight scala %}
-scala> textFile.count() # Number of items in this RDD
+scala> textFile.count() // Number of items in this RDD
 res0: Long = 126
 
-scala> textFile.first() # First item in this RDD
+scala> textFile.first() // First item in this RDD
 res1: String = # Apache Spark
 {% endhighlight %}
 
@@ -73,10 +73,10 @@ Spark's primary abstraction is a distributed collection of items called a Resili
 RDDs have _[actions](scala-programming-guide.html#actions)_, which return values, and _[transformations](scala-programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
 
 {% highlight python %}
->>> textFile.count() // Number of items in this RDD
+>>> textFile.count() # Number of items in this RDD
 126
 
->>> textFile.first() // First item in this RDD
+>>> textFile.first() # First item in this RDD
 u'# Apache Spark'
 {% endhighlight %}
 
