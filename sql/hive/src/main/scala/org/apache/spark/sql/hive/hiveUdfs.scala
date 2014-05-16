@@ -267,7 +267,7 @@ private[hive] case class HiveGenericUdf(name: String, children: Seq[Expression])
   override def eval(input: Row): Any = {
     returnInspector // Make sure initialized.
     var i = 0
-    while(i < children.length) {
+    while (i < children.length) {
       val idx = i
       deferedObjects(i).asInstanceOf[DeferredObjectAdapter].set(() => {children(idx).eval(input)})
       i += 1
