@@ -128,7 +128,7 @@ object SparkSubmit {
       }
       if (args.primaryResource == PYSPARK_SHELL) {
         args.mainClass = "py4j.GatewayServer"
-        args.childArgs ++= ArrayBuffer("--die-on-broken-pipe", "0")
+        args.childArgs = ArrayBuffer("--die-on-broken-pipe", "0")
       } else {
         // If a python file is provided, add it to the child arguments and list of files to deploy.
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]

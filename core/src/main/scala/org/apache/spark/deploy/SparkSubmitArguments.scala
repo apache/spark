@@ -302,7 +302,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               parse(tail)
           }
         } else {
-          childArgs += value
+          if (!value.isEmpty) {
+            childArgs += value
+          }
           parse(tail)
         }
 
