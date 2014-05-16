@@ -36,6 +36,7 @@ def launch_gateway():
         on_windows = platform.system() == "Windows"
         script = "./bin/spark-submit.cmd" if on_windows else "./bin/spark-submit"
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS")
+        submit_args = submit_args if submit_args is not None else ""
         submit_args = shlex.split(submit_args)
         command = [os.path.join(SPARK_HOME, script), "pyspark-shell"] + submit_args
         if not on_windows:
