@@ -870,6 +870,17 @@ private[hive] object HiveQl {
       IsNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("IN", Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
+    case Token("TOK_FUNCTION",
+           Token("between", Nil) ::
+           Token("KW_FALSE", Nil) ::
+           target ::
+           minValue ::
+           maxValue :: Nil) =>
+
+      val targetExpression = nodeToExpr(target)
+      And(
+        GreaterThanOrEqual(targetExpression, nodeToExpr(minValue)),
+        LessThanOrEqual(targetExpression, nodeToExpr(maxValue)))
 
     /* Boolean Logic */
     case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
