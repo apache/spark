@@ -382,16 +382,16 @@ object BlockFetcherIterator {
         logInfo("Still missing "+statuses.filter(_._1==null).size+" map outputs for reduceId "+reduceId+" ---lirui")
         updateStatuses()
       }
-      val maxTrialCount = 8
       var trialCount = 0
-      while (!newStatusesReady && trialCount < maxTrialCount) {
+      while (!newStatusesReady) {
+        if (!isPartial && delegatedStatuses.size >= statuses.size) {
+          //shouldn't get here, could be due to empty blocks though
+          throw new SparkException("No more blocks to fetch for reduceId " + reduceId)
+        }
         logInfo("Waiting for new map outputs for reduceId " + reduceId + " ---lirui")
-        Thread.sleep(5000)
+        Thread.sleep(5000 + 2000 * trialCount)
         updateStatuses()
         trialCount += 1
-      }
-      if (trialCount >= maxTrialCount) {
-        throw new SparkException("Failed to get new iterator: no update in last " + trialCount + " trials.")
       }
       val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
       for (index <- readyStatuses if !delegatedStatuses.contains(index)) {
