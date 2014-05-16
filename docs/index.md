@@ -46,9 +46,10 @@ locally with one thread, or `local[N]` to run locally with N threads. You should
 Spark also provides a Python interface. To run an example Spark application written in Python, use
 `bin/pyspark <program> [params]`. For example,
 
-    ./bin/pyspark examples/src/main/python/pi.py local[2] 10
+    ./bin/pyspark examples/src/main/python/pi.py 10
 
 or simply `bin/pyspark` without any arguments to run Spark interactively in a python interpreter.
+As in Spark shell, you can also pass in the `--master` option to configure your master URL.
 
 # Launching on a Cluster
 
