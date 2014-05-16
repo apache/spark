@@ -25,7 +25,7 @@ export SPARK_HOME="$FWDIR"
 
 SCALA_VERSION=2.10
 
-if [[ "$@" == *--help* ]]; then
+if [[ "$@" = *--help ]] || [[ "$@" = *--h ]]; then
   echo "Usage: ./bin/pyspark [options]"
   ./bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   exit 0
@@ -79,8 +79,8 @@ export PYSPARK_SUBMIT_ARGS
 
 # If a python file is provided, directly run spark-submit.
 if [[ "$1" =~ \.py$ ]]; then
-  echo -e "\nWARNING: Running python applications through ./bin/pyspark is deprecated as of Spark 1.0."
-  echo -e "Use ./bin/spark-submit <python file>\n"
+  echo -e "\nWARNING: Running python applications through ./bin/pyspark is deprecated as of Spark 1.0." 1>&2
+  echo -e "Use ./bin/spark-submit <python file>\n" 1>&2
   exec $FWDIR/bin/spark-submit "$@"
 else
   # Only use ipython if no command line arguments were provided [SPARK-1134]
