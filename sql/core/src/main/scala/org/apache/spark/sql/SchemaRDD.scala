@@ -1,26 +1,28 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
+import java.util.{Map => JMap}
+
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.catalyst.analysis._
@@ -28,9 +30,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
-import org.apache.spark.api.java.JavaRDD
-import java.util.{Map => JMap}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
 
 /**
  * :: AlphaComponent ::
@@ -97,10 +100,37 @@ import java.util.{Map => JMap}
 @AlphaComponent
 class SchemaRDD(
     @transient val sqlContext: SQLContext,
-    @transient protected[spark] val logicalPlan: LogicalPlan)
+    @transient baseLogicalPlan: LogicalPlan)
   extends RDD[Row](sqlContext.sparkContext, Nil) with SchemaRDDLike {
 
+  @transient
+  protected var persistedInMemory = false
+
+  @transient
+  protected lazy val asInMemoryTable: InMemoryColumnarTableScan =
+    EliminateAnalysisOperators(baseLogicalPlan) match {
+      case SparkLogicalPlan(inMem: InMemoryColumnarTableScan) =>
+        persistedInMemory = true
+        inMem
+
+      case _ =>
+        val useCompression = sqlContext.sparkContext.conf.getBoolean(
+          "spark.sql.inMemoryColumnarStorage.compressed", false)
+
+        InMemoryColumnarTableScan(
+          baseLogicalPlan.output,
+          sqlContext.executePlan(baseLogicalPlan).executedPlan,
+          useCompression)
+    }
+
   def baseSchemaRDD = this
+
+  def logicalPlan = if (persistedInMemory) SparkLogicalPlan(asInMemoryTable) else baseLogicalPlan
+
+  private def refreshDependencies() {
+    clearDependencies()
+    dependencies
+  }
 
   // =========================================================================================
   // RDD functions: Copy the internal row representation so we present immutable data to users.
@@ -114,6 +144,30 @@ class SchemaRDD(
   override protected def getDependencies: Seq[Dependency[_]] =
     List(new OneToOneDependency(queryExecution.toRdd))
 
+  override def persist(newLevel: StorageLevel) = {
+    if (newLevel.useMemory) {
+      // Persists the in-memory columnar buffers RDD instead of the SchemaRDD itself
+      persistedInMemory = true
+      asInMemoryTable.cachedColumnBuffers.persist(newLevel)
+      refreshDependencies()
+    } else {
+      super.persist(newLevel)
+    }
+
+    this
+  }
+
+  override def unpersist(blocking: Boolean) = {
+    if (persistedInMemory) {
+      persistedInMemory = false
+      asInMemoryTable.cachedColumnBuffers.unpersist(blocking)
+      refreshDependencies()
+    } else {
+      super.unpersist(blocking)
+    }
+
+    this
+  }
 
   // =======================================================================
   // Query DSL
@@ -324,8 +378,8 @@ class SchemaRDD(
         // Ideally we should be able to pickle an object directly into a Python collection so we
         // don't have to create an ArrayList every time.
         val arr: java.util.ArrayList[Any] = new java.util.ArrayList
-        row.zip(fieldNames).foreach { case (obj, name) =>
-          map.put(name, obj)
+        row.zip(fieldNames).foreach { case (obj, fieldName) =>
+          map.put(fieldName, obj)
         }
         arr.add(map)
         pickle.dumps(arr)

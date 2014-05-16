@@ -25,13 +25,14 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.{Subquery, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
@@ -161,29 +162,32 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Caches the specified table in-memory. */
   def cacheTable(tableName: String): Unit = {
-    val currentTable = catalog.lookupRelation(None, tableName)
-    val useCompression =
-      sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
-    val asInMemoryRelation =
-      InMemoryColumnarTableScan(
-        currentTable.output, executePlan(currentTable).executedPlan, useCompression)
+    persistTable(tableName, StorageLevel.MEMORY_ONLY)
+  }
 
-    catalog.registerTable(None, tableName, SparkLogicalPlan(asInMemoryRelation))
+  def persistTable(tableName: String, newLevel: StorageLevel): Unit = {
+    table(tableName).persist(newLevel).registerAsTable(tableName)
   }
 
   /** Removes the specified table from the in-memory cache. */
   def uncacheTable(tableName: String): Unit = {
-    EliminateAnalysisOperators(catalog.lookupRelation(None, tableName)) match {
-      // This is kind of a hack to make sure that if this was just an RDD registered as a table,
-      // we reregister the RDD as a table.
-      case SparkLogicalPlan(inMem @ InMemoryColumnarTableScan(_, e: ExistingRdd, _)) =>
-        inMem.cachedColumnBuffers.unpersist()
+    unpersistTable(tableName)
+  }
+
+  def unpersistTable(tableName: String, blocking: Boolean = true): Unit = {
+    val schemaRdd = table(tableName)
+    schemaRdd.unpersist(blocking)
+
+    EliminateAnalysisOperators(schemaRdd.logicalPlan) match {
+      case SparkLogicalPlan(InMemoryColumnarTableScan(_, e: ExistingRdd, _)) =>
         catalog.unregisterTable(None, tableName)
         catalog.registerTable(None, tableName, SparkLogicalPlan(e))
-      case SparkLogicalPlan(inMem: InMemoryColumnarTableScan) =>
-        inMem.cachedColumnBuffers.unpersist()
+
+      case SparkLogicalPlan(_: InMemoryColumnarTableScan) =>
         catalog.unregisterTable(None, tableName)
-      case plan => throw new IllegalArgumentException(s"Table $tableName is not cached: $plan")
+
+      case plan =>
+        throw new IllegalArgumentException(s"Table $tableName is not cached: $plan")
     }
   }
 
@@ -292,7 +296,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * TODO: We only support primitive types, add support for nested types.
    */
   private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
-    val schema = rdd.first.map { case (fieldName, obj) =>
+    val schema = rdd.first().map { case (fieldName, obj) =>
       val dataType = obj.getClass match {
         case c: Class[_] if c == classOf[java.lang.String] => StringType
         case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
