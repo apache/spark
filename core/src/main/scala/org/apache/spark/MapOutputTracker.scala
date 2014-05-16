@@ -163,15 +163,6 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   /** Stop the tracker. */
   def stop() { }
 
-  //check if the map output for a shuffle is partial
-  private def partialOutputForShuffle(shuffleId: Int) = {
-    if (mapStatuses.get(shuffleId).isDefined) {
-      mapStatuses.get(shuffleId).get.exists(_ == null)
-    } else {
-      false
-    }
-  }
-
   //get map statuses for a shuffle
   private def getMapStatusesForShuffle(shuffleId: Int, reduceId: Int): Array[MapStatus]={
     updateMapStatusesForShuffle(shuffleId)

@@ -852,13 +852,13 @@ class DAGScheduler(
               logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
             } else {
               stage.addOutputLoc(smt.partitionId, status)
-            }
-            //we need to register map outputs progressively if remove stage barrier is enabled
-            if (removeStageBarrier && dependantStagePreStarted.contains(stage) && stage.shuffleDep.isDefined) {
-              logInfo("Register output progressively: Map task "+smt.partitionId+" ---lirui")
-              mapOutputTracker.registerMapOutput(stage.shuffleDep.get.shuffleId, smt.partitionId, status)
-              //need to increment the mapoutputtrackermaster's epoch so that it will clear the cache
-              mapOutputTracker.incrementEpoch()
+              //we need to register map outputs progressively if remove stage barrier is enabled
+              if (removeStageBarrier && dependantStagePreStarted.contains(stage) && stage.shuffleDep.isDefined) {
+                logInfo("Register output progressively: Map task "+smt.partitionId+" ---lirui")
+                mapOutputTracker.registerMapOutput(stage.shuffleDep.get.shuffleId, smt.partitionId, status)
+                //need to increment the mapoutputtrackermaster's epoch so that it will clear the cache
+                mapOutputTracker.incrementEpoch()
+              }
             }
             if (runningStages.contains(stage) && pendingTasks(stage).isEmpty) {
               dependantStagePreStarted -= stage

@@ -377,8 +377,8 @@ object BlockFetcherIterator {
     //check if there's new map outputs ready to collect
     private def newStatusesReady = readyStatuses.exists(!delegatedStatuses.contains(_))
 
-    private def getIterator() = {
-      if (isPartial) {
+    private def getIterator(initial: Boolean = false) = {
+      if (isPartial && !initial) {
         logInfo("Still missing "+statuses.filter(_._1==null).size+" map outputs for reduceId "+reduceId+" ---lirui")
         updateStatuses()
       }
@@ -402,15 +402,15 @@ object BlockFetcherIterator {
         case (address, splits) =>
           (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
       }
-      logInfo("Delegating " + blocksByAddress.map(_._2.size).sum + " blocks to a new iterator. ---lirui")
+      logInfo("Delegating " + blocksByAddress.map(_._2.size).sum + " blocks to a new iterator for reduceId "+reduceId+" ---lirui")
       blockManager.getMultiple(blocksByAddress, serializer)
     }
 
     override def initialize(){
-      iterators += getIterator()
+      iterators += getIterator(true)
     }
 
-    override def hasNext: Boolean = iterators.exists(_.hasNext) || delegatedStatuses.size < statuses.size
+    override def hasNext: Boolean = delegatedStatuses.size < statuses.size || iterators.exists(_.hasNext)
 
     override def next(): (BlockId, Option[Iterator[Any]]) = {
       //firstly try to get a block from the iterators we've created
