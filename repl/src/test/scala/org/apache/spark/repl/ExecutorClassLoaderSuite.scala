@@ -18,7 +18,7 @@
 package org.apache.spark.repl
 
 import java.io.File
-import java.net.URLClassLoader
+import java.net.{URL, URLClassLoader}
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
@@ -26,19 +26,33 @@ import org.scalatest.FunSuite
 import com.google.common.io.Files
 
 import org.apache.spark.TestUtils
+import org.apache.spark.util.Utils
 
 class ExecutorClassLoaderSuite extends FunSuite with BeforeAndAfterAll {
 
   val childClassNames = List("ReplFakeClass1", "ReplFakeClass2")
   val parentClassNames = List("ReplFakeClass1", "ReplFakeClass2", "ReplFakeClass3")
-  val tempDir1 = Files.createTempDir()
-  val tempDir2 = Files.createTempDir()
-  val url1 = "file://" + tempDir1
-  val urls2 = List(tempDir2.toURI.toURL).toArray
+  var tempDir1: File = _
+  var tempDir2: File = _
+  var url1: String = _
+  var urls2: Array[URL] = _
 
   override def beforeAll() {
+    super.beforeAll()
+    tempDir1 = Files.createTempDir()
+    tempDir1.deleteOnExit()
+    tempDir2 = Files.createTempDir()
+    tempDir2.deleteOnExit()
+    url1 = "file://" + tempDir1
+    urls2 = List(tempDir2.toURI.toURL).toArray
     childClassNames.foreach(TestUtils.createCompiledClass(_, tempDir1, "1"))
     parentClassNames.foreach(TestUtils.createCompiledClass(_, tempDir2, "2"))
+  }
+
+  override def afterAll() {
+    super.afterAll()
+    Utils.deleteRecursively(tempDir1)
+    Utils.deleteRecursively(tempDir2)
   }
 
   test("child first") {

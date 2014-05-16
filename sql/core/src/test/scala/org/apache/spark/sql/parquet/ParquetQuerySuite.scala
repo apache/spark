@@ -42,7 +42,25 @@ import org.apache.spark.sql.test.TestSQLContext._
 
 case class TestRDDEntry(key: Int, value: String)
 
+<<<<<<< HEAD
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
+=======
+case class NullReflectData(
+    intField: java.lang.Integer,
+    longField: java.lang.Long,
+    floatField: java.lang.Float,
+    doubleField: java.lang.Double,
+    booleanField: java.lang.Boolean)
+
+case class OptionalReflectData(
+    intField: Option[Int],
+    longField: Option[Long],
+    floatField: Option[Float],
+    doubleField: Option[Double],
+    booleanField: Option[Boolean])
+
+class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
+>>>>>>> a20fea98811d98958567780815fcf0d4fb4e28d4
   import TestData._
   TestData // Load test data tables.
 
@@ -194,6 +212,36 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     // let's restore the original test data
     Utils.deleteRecursively(ParquetTestData.testDir)
     ParquetTestData.writeFile()
+  }
+
+  test("save and load case class RDD with nulls as parquet") {
+    val data = NullReflectData(null, null, null, null, null)
+    val rdd = sparkContext.parallelize(data :: Nil)
+
+    val file = getTempFilePath("parquet")
+    val path = file.toString
+    rdd.saveAsParquetFile(path)
+    val readFile = parquetFile(path)
+
+    val rdd_saved = readFile.collect()
+    assert(rdd_saved(0) === Seq.fill(5)(null))
+    Utils.deleteRecursively(file)
+    assert(true)
+  }
+
+  test("save and load case class RDD with Nones as parquet") {
+    val data = OptionalReflectData(null, null, null, null, null)
+    val rdd = sparkContext.parallelize(data :: Nil)
+
+    val file = getTempFilePath("parquet")
+    val path = file.toString
+    rdd.saveAsParquetFile(path)
+    val readFile = parquetFile(path)
+
+    val rdd_saved = readFile.collect()
+    assert(rdd_saved(0) === Seq.fill(5)(null))
+    Utils.deleteRecursively(file)
+    assert(true)
   }
 }
 
