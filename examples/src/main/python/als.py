@@ -49,7 +49,7 @@ if __name__ == "__main__":
     """
         Usage: als [M] [U] [F] [iterations] [slices]"
     """
-    sc = SparkContext(appName="PythonALS", pyFiles=[realpath(__file__)])
+    sc = SparkContext(appName="PythonALS")
     M = int(sys.argv[1]) if len(sys.argv) > 1 else 100
     U = int(sys.argv[2]) if len(sys.argv) > 2 else 500
     F = int(sys.argv[3]) if len(sys.argv) > 3 else 10

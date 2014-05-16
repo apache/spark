@@ -50,7 +50,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         print >> sys.stderr, "Usage: logistic_regression <file> <iterations>"
         exit(-1)
-    sc = SparkContext(appName="PythonLR", pyFiles=[realpath(__file__)])
+    sc = SparkContext(appName="PythonLR")
     points = sc.textFile(sys.argv[1]).mapPartitions(readPointBatch).cache()
     iterations = int(sys.argv[2])
 
