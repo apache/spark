@@ -17,25 +17,25 @@
 
 package org.apache.spark.sql.parquet
 
-import java.io.File
-
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.mapreduce.Job
 
 import parquet.hadoop.ParquetFileWriter
-import parquet.schema.MessageTypeParser
 import parquet.hadoop.util.ContextUtil
+import parquet.schema.MessageTypeParser
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.getTempFilePath
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.TestData
+import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.Equals
+import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.catalyst.types.{StringType, IntegerType, DataType}
-import org.apache.spark.sql.{parquet, SchemaRDD}
 
 // Implicits
 import org.apache.spark.sql.test.TestSQLContext._
@@ -64,12 +64,16 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     ParquetTestData.writeFile()
+    ParquetTestData.writeFilterFile()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
     testRDD.registerAsTable("testsource")
+    parquetFile(ParquetTestData.testFilterDir.toString)
+      .registerAsTable("testfiltersource")
   }
 
   override def afterAll() {
     Utils.deleteRecursively(ParquetTestData.testDir)
+    Utils.deleteRecursively(ParquetTestData.testFilterDir)
     // here we should also unregister the table??
   }
 
@@ -120,7 +124,7 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
     val scanner = new ParquetTableScan(
       ParquetTestData.testData.output,
       ParquetTestData.testData,
-      None)(TestSQLContext.sparkContext)
+      Seq())(TestSQLContext.sparkContext)
     val projected = scanner.pruneColumns(ParquetTypesConverter
       .convertToAttributes(MessageTypeParser
       .parseMessageType(ParquetTestData.subTestSchema)))
@@ -196,7 +200,6 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
     assert(true)
   }
 
-
   test("insert (appending) to same table via Scala API") {
     sql("INSERT INTO testsource SELECT * FROM testsource").collect()
     val double_rdd = sql("SELECT * FROM testsource").collect()
@@ -238,6 +241,122 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
     assert(rdd_saved(0) === Seq.fill(5)(null))
     Utils.deleteRecursively(file)
     assert(true)
+  }
+
+  test("create RecordFilter for simple predicates") {
+    val attribute1 = new AttributeReference("first", IntegerType, false)()
+    val predicate1 = new Equals(attribute1, new Literal(1, IntegerType))
+    val filter1 = ParquetFilters.createFilter(predicate1)
+    assert(filter1.isDefined)
+    assert(filter1.get.predicate == predicate1, "predicates do not match")
+    assert(filter1.get.isInstanceOf[ComparisonFilter])
+    val cmpFilter1 = filter1.get.asInstanceOf[ComparisonFilter]
+    assert(cmpFilter1.columnName == "first", "column name incorrect")
+
+    val predicate2 = new LessThan(attribute1, new Literal(4, IntegerType))
+    val filter2 = ParquetFilters.createFilter(predicate2)
+    assert(filter2.isDefined)
+    assert(filter2.get.predicate == predicate2, "predicates do not match")
+    assert(filter2.get.isInstanceOf[ComparisonFilter])
+    val cmpFilter2 = filter2.get.asInstanceOf[ComparisonFilter]
+    assert(cmpFilter2.columnName == "first", "column name incorrect")
+
+    val predicate3 = new And(predicate1, predicate2)
+    val filter3 = ParquetFilters.createFilter(predicate3)
+    assert(filter3.isDefined)
+    assert(filter3.get.predicate == predicate3, "predicates do not match")
+    assert(filter3.get.isInstanceOf[AndFilter])
+
+    val predicate4 = new Or(predicate1, predicate2)
+    val filter4 = ParquetFilters.createFilter(predicate4)
+    assert(filter4.isDefined)
+    assert(filter4.get.predicate == predicate4, "predicates do not match")
+    assert(filter4.get.isInstanceOf[OrFilter])
+
+    val attribute2 = new AttributeReference("second", IntegerType, false)()
+    val predicate5 = new GreaterThan(attribute1, attribute2)
+    val badfilter = ParquetFilters.createFilter(predicate5)
+    assert(badfilter.isDefined === false)
+  }
+
+  test("test filter by predicate pushdown") {
+    for(myval <- Seq("myint", "mylong", "mydouble", "myfloat")) {
+      println(s"testing field $myval")
+      val query1 = sql(s"SELECT * FROM testfiltersource WHERE $myval < 150 AND $myval >= 100")
+      assert(
+        query1.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+        "Top operator should be ParquetTableScan after pushdown")
+      val result1 = query1.collect()
+      assert(result1.size === 50)
+      assert(result1(0)(1) === 100)
+      assert(result1(49)(1) === 149)
+      val query2 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 150 AND $myval <= 200")
+      assert(
+        query2.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+        "Top operator should be ParquetTableScan after pushdown")
+      val result2 = query2.collect()
+      assert(result2.size === 50)
+      if (myval == "myint" || myval == "mylong") {
+        assert(result2(0)(1) === 151)
+        assert(result2(49)(1) === 200)
+      } else {
+        assert(result2(0)(1) === 150)
+        assert(result2(49)(1) === 199)
+      }
+    }
+    for(myval <- Seq("myint", "mylong")) {
+      val query3 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 190 OR $myval < 10")
+      assert(
+        query3.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+        "Top operator should be ParquetTableScan after pushdown")
+      val result3 = query3.collect()
+      assert(result3.size === 20)
+      assert(result3(0)(1) === 0)
+      assert(result3(9)(1) === 9)
+      assert(result3(10)(1) === 191)
+      assert(result3(19)(1) === 200)
+    }
+    for(myval <- Seq("mydouble", "myfloat")) {
+      val result4 =
+        if (myval == "mydouble") {
+          val query4 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 190.5 OR $myval < 10.0")
+          assert(
+            query4.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+            "Top operator should be ParquetTableScan after pushdown")
+          query4.collect()
+        } else {
+          // CASTs are problematic. Here myfloat will be casted to a double and it seems there is
+          // currently no way to specify float constants in SqlParser?
+          sql(s"SELECT * FROM testfiltersource WHERE $myval > 190.5 OR $myval < 10").collect()
+        }
+      assert(result4.size === 20)
+      assert(result4(0)(1) === 0)
+      assert(result4(9)(1) === 9)
+      assert(result4(10)(1) === 191)
+      assert(result4(19)(1) === 200)
+    }
+    val query5 = sql(s"SELECT * FROM testfiltersource WHERE myboolean = true AND myint < 40")
+    assert(
+      query5.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val booleanResult = query5.collect()
+    assert(booleanResult.size === 10)
+    for(i <- 0 until 10) {
+      if (!booleanResult(i).getBoolean(0)) {
+        fail(s"Boolean value in result row $i not true")
+      }
+      if (booleanResult(i).getInt(1) != i * 4) {
+        fail(s"Int value in result row $i should be ${4*i}")
+      }
+    }
+    val query6 = sql("SELECT * FROM testfiltersource WHERE mystring = \"100\"")
+    assert(
+      query6.queryExecution.executedPlan(0)(0).isInstanceOf[ParquetTableScan],
+      "Top operator should be ParquetTableScan after pushdown")
+    val stringResult = query6.collect()
+    assert(stringResult.size === 1)
+    assert(stringResult(0).getString(2) == "100", "stringvalue incorrect")
+    assert(stringResult(0).getInt(1) === 100)
   }
 }
 

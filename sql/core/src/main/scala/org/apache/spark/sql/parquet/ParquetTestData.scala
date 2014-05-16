@@ -19,14 +19,33 @@ package org.apache.spark.sql.parquet
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.Job
 
+import parquet.example.data.{GroupWriter, Group}
+import parquet.example.data.simple.SimpleGroup
 import parquet.hadoop.ParquetWriter
-import parquet.hadoop.util.ContextUtil
+import parquet.hadoop.api.WriteSupport
+import parquet.hadoop.api.WriteSupport.WriteContext
+import parquet.io.api.RecordConsumer
 import parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.util.Utils
+
+// Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
+// with an empty configuration (it is after all not intended to be used in this way?)
+// and members are private so we need to make our own in order to pass the schema
+// to the writer.
+private class TestGroupWriteSupport(schema: MessageType) extends WriteSupport[Group] {
+  var groupWriter: GroupWriter = null
+  override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
+    groupWriter = new GroupWriter(recordConsumer, schema)
+  }
+  override def init(configuration: Configuration): WriteContext = {
+    new WriteContext(schema, new java.util.HashMap[String, String]())
+  }
+  override def write(record: Group) {
+    groupWriter.write(record)
+  }
+}
 
 private[sql] object ParquetTestData {
 
@@ -43,7 +62,7 @@ private[sql] object ParquetTestData {
   // field names for test assertion error messages
   val testSchemaFieldNames = Seq(
     "myboolean:Boolean",
-    "mtint:Int",
+    "myint:Int",
     "mystring:String",
     "mylong:Long",
     "myfloat:Float",
@@ -58,6 +77,18 @@ private[sql] object ParquetTestData {
       |}
     """.stripMargin
 
+  val testFilterSchema =
+    """
+      |message myrecord {
+      |required boolean myboolean;
+      |required int32 myint;
+      |required binary mystring;
+      |required int64 mylong;
+      |required float myfloat;
+      |required double mydouble;
+      |}
+    """.stripMargin
+
   // field names for test assertion error messages
   val subTestSchemaFieldNames = Seq(
     "myboolean:Boolean",
@@ -65,36 +96,57 @@ private[sql] object ParquetTestData {
   )
 
   val testDir = Utils.createTempDir()
+  val testFilterDir = Utils.createTempDir()
 
   lazy val testData = new ParquetRelation(testDir.toURI.toString)
 
   def writeFile() = {
     testDir.delete
     val path: Path = new Path(new Path(testDir.toURI), new Path("part-r-0.parquet"))
-    val job = new Job()
-    val configuration: Configuration = ContextUtil.getConfiguration(job)
     val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)
+    val writeSupport = new TestGroupWriteSupport(schema)
+    val writer = new ParquetWriter[Group](path, writeSupport)
 
-    val writeSupport = new RowWriteSupport()
-    writeSupport.setSchema(schema, configuration)
-    val writer = new ParquetWriter(path, writeSupport)
     for(i <- 0 until 15) {
-      val data = new Array[Any](6)
+      val record = new SimpleGroup(schema)
       if (i % 3 == 0) {
-        data.update(0, true)
+        record.add(0, true)
       } else {
-        data.update(0, false)
+        record.add(0, false)
       }
       if (i % 5 == 0) {
-        data.update(1, 5)
-      } else {
-        data.update(1, null) // optional
+        record.add(1, 5)
       }
-      data.update(2, "abc")
-      data.update(3, i.toLong << 33)
-      data.update(4, 2.5F)
-      data.update(5, 4.5D)
-      writer.write(new GenericRow(data.toArray))
+      record.add(2, "abc")
+      record.add(3, i.toLong << 33)
+      record.add(4, 2.5F)
+      record.add(5, 4.5D)
+      writer.write(record)
+    }
+    writer.close()
+  }
+
+  def writeFilterFile(records: Int = 200) = {
+    // for microbenchmark use: records = 300000000
+    testFilterDir.delete
+    val path: Path = new Path(new Path(testFilterDir.toURI), new Path("part-r-0.parquet"))
+    val schema: MessageType = MessageTypeParser.parseMessageType(testFilterSchema)
+    val writeSupport = new TestGroupWriteSupport(schema)
+    val writer = new ParquetWriter[Group](path, writeSupport)
+
+    for(i <- 0 to records) {
+      val record = new SimpleGroup(schema)
+      if (i % 4 == 0) {
+        record.add(0, true)
+      } else {
+        record.add(0, false)
+      }
+      record.add(1, i)
+      record.add(2, i.toString)
+      record.add(3, i.toLong)
+      record.add(4, i.toFloat + 0.5f)
+      record.add(5, i.toDouble + 0.5d)
+      writer.write(record)
     }
     writer.close()
   }
