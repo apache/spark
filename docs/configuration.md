@@ -390,10 +390,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.worker.cleanup.enabled</td>
-  <td>true</td>
+  <td>false</td>
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
-    mode, as YARN works differently.
+    mode, as YARN works differently. Applications directories are cleaned up regardless of whether
+    the application is still running.
   </td>
 </tr>
 <tr>
