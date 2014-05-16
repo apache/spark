@@ -39,16 +39,22 @@ sink(stderr())
 # read function dependencies
 depsLen <- readInt(inputCon)
 if (depsLen > 0) {
-  execFunctionDeps <- readRawLen(inputCon, depsLen)
-
-  # load the dependencies into current environment
-  depsFileName <- tempfile(pattern="spark-exec", fileext=".deps")
-  depsFile <- file(depsFileName, open="wb")
-  writeBin(execFunctionDeps, depsFile, endian="big")
-  close(depsFile)
-
-  load(depsFileName)
-  unlink(depsFileName)
+	execFunctionDeps <- readRawLen(inputCon, depsLen)
+}
+# Include packages as required
+packageNames <- unserialize(readRaw(inputCon))
+for (pkg in packageNames) {
+	suppressPackageStartupMessages(require(as.character(pkg), character.only=TRUE))
+}
+if (depsLen > 0) {
+	# load the dependencies into current environment
+	depsFileName <- tempfile(pattern="spark-exec", fileext=".deps")
+	depsFile <- file(depsFileName, open="wb")
+	writeBin(execFunctionDeps, depsFile, endian="big")
+	close(depsFile)
+	
+	load(depsFileName)
+	unlink(depsFileName)
 }
 
 # Include packages as required
