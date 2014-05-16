@@ -51,14 +51,20 @@ export PYTHONPATH=$SPARK_HOME/python/lib/py4j-0.8.1-src.zip:$PYTHONPATH
 # Load the PySpark shell.py script when ./pyspark is used interactively:
 export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
 export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
+export PYSPARK_SUBMIT_ARGS="$@"
 
 if [ -n "$IPYTHON_OPTS" ]; then
   IPYTHON=1
 fi
 
-# Only use ipython if no command line arguments were provided [SPARK-1134]
-if [[ "$IPYTHON" = "1" && $# = 0 ]] ; then
-  exec ipython $IPYTHON_OPTS
+# If a python file is provided, directly run spark-submit
+if [[ "$1" =~ \.py$ ]]; then
+  exec $FWDIR/bin/spark-submit $PYSPARK_SUBMIT_ARGS
 else
-  exec "$PYSPARK_PYTHON" "$@"
+  # Only use ipython if no command line arguments were provided [SPARK-1134]
+  if [[ "$IPYTHON" = "1" ]]; then
+    exec ipython $IPYTHON_OPTS
+  else
+    exec "$PYSPARK_PYTHON"
+  fi
 fi

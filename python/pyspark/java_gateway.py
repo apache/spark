@@ -34,9 +34,13 @@ def launch_gateway():
         # Launch the Py4j gateway using Spark's run command so that we pick up the
         # proper classpath and settings from spark-env.sh
         on_windows = platform.system() == "Windows"
-        script = "./bin/spark-class.cmd" if on_windows else "./bin/spark-class"
-        command = [os.path.join(SPARK_HOME, script), "py4j.GatewayServer",
-                   "--die-on-broken-pipe", "0"]
+        script = "./bin/spark-submit.cmd" if on_windows else "./bin/spark-submit"
+        submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS")
+        if submit_args is not None:
+          submit_args = submit_args.split(" ")
+        else:
+          submit_args = []
+        command = [os.path.join(SPARK_HOME, script), "pyspark-shell"] + submit_args
         if not on_windows:
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
