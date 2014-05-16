@@ -1008,7 +1008,6 @@
         <hadoop.version>1.0.3-mapr-3.0.3</hadoop.version>
         <yarn.version>2.3.0-mapr-4.0.0-beta</yarn.version>
         <hbase.version>0.94.17-mapr-1403</hbase.version>
-        <hbase.version>0.94.17-mapr-1403</hbase.version>
         <zookeeper.version>3.4.5-mapr-1401</zookeeper.version>
       </properties>
     </profile>
