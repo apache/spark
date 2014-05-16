@@ -134,10 +134,10 @@ object SparkSubmit {
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
         args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
-        args.files = Utils.mergeFileLists(args.files, args.primaryResource)
+        args.files = mergeFileLists(args.files, args.primaryResource)
       }
       val pyFiles = Option(args.pyFiles).getOrElse("")
-      args.files = Utils.mergeFileLists(args.files, pyFiles)
+      args.files = mergeFileLists(args.files, pyFiles)
       sysProps("spark.submit.pyFiles") = pyFiles
     }
 
@@ -300,7 +300,7 @@ object SparkSubmit {
 
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
     val localJarFile = new File(new URI(localJar).getPath)
-    if (!localJarFile.exists) {
+    if (!localJarFile.exists()) {
       printWarning(s"Jar $localJar does not exist, skipping.")
     }
 
@@ -327,6 +327,18 @@ object SparkSubmit {
    */
   private[spark] def isPython(primaryResource: String): Boolean = {
     primaryResource.endsWith(".py") || primaryResource == PYSPARK_SHELL
+  }
+
+  /**
+   * Merge a sequence of comma-separated file lists, some of which may be null to indicate
+   * no files, into a single comma-separated string.
+   */
+  private[spark] def mergeFileLists(lists: String*): String = {
+    lists
+      .filter(_ != null)
+      .filter(_ != "")
+      .flatMap(_.split(","))
+      .mkString(",")
   }
 }
 
