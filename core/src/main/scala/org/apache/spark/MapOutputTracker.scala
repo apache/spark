@@ -165,7 +165,6 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   //get map statuses for a shuffle
   private def getMapStatusesForShuffle(shuffleId: Int, reduceId: Int): Array[MapStatus]={
-    updateMapStatusesForShuffle(shuffleId)
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
@@ -220,7 +219,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   //update partial map outputs for a shuffle
-  private def updateMapStatusesForShuffle(shuffleId: Int){
+  def updateMapStatusesForShuffle(shuffleId: Int){
     mapStatuses.synchronized {
       //we may have cached partial map outputs, the master may have updates for us
       if (mapStatuses.get(shuffleId).isDefined) {

@@ -227,6 +227,7 @@ private[spark] class TaskSchedulerImpl(
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
     }
+    logInfo("After sorting, the first TaskSet is (StageID:"+sortedTaskSets.head.stageId+", Priority:"+sortedTaskSets.head.priority+") ---lirui")
 
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
