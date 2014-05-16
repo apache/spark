@@ -3,16 +3,15 @@ layout: global
 title: Running Spark on Mesos
 ---
 
-# Why Mesos
-
 Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache.org/).
 
 The advantages of deploying Spark with Mesos include:
+
 - dynamic partitioning between Spark and other
   [frameworks](https://mesos.apache.org/documentation/latest/mesos-frameworks/)
 - scalable partitioning between multiple instances of Spark
 
-# How it works
+# How it Works
 
 In a standalone cluster deployment, the cluster manager in the below diagram is a Spark master
 instance.  When using Mesos, the Mesos master replaces the Spark master as the cluster manager.
@@ -37,11 +36,25 @@ require any special patches of Mesos.
 If you already have a Mesos cluster running, you can skip this Mesos installation step.
 
 Otherwise, installing Mesos for Spark is no different than installing Mesos for use by other
-frameworks.  You can install Mesos using either prebuilt packages or by compiling from source.
+frameworks.  You can install Mesos using either from source or using prebuilt packages.
 
-## Prebuilt packages
+## From Source
 
-The Apache Mesos project only publishes source package releases, no binary releases.  But other
+To install Apache Mesos from source, follow these steps:
+
+1. Download a Mesos release from a
+   [mirror](http://www.apache.org/dyn/closer.cgi/mesos/{{site.MESOS_VERSION}}/)
+2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and
+   installing Mesos
+
+**Note:** If you want to run Mesos without installing it into the default paths on your system
+(e.g., if you lack administrative privileges to install it), pass the
+`--prefix` option to `configure` to tell it where to install. For example, pass
+`--prefix=/home/me/mesos`. By default the prefix is `/usr/local`.
+
+## Third-Party Packages
+
+The Apache Mesos project only publishes source releases, not binary packages.  But other
 third party projects publish binary releases that may be helpful in setting Mesos up.
 
 One of those is Mesosphere.  To install Mesos using the binary releases provided by Mesosphere:
@@ -52,20 +65,6 @@ One of those is Mesosphere.  To install Mesos using the binary releases provided
 The Mesosphere installation documents suggest setting up ZooKeeper to handle Mesos master failover,
 but Mesos can be run without ZooKeeper using a single master as well.
 
-## From source
-
-To install Mesos directly from the upstream project rather than a third party, install from source.
-
-1. Download the Mesos distribution from a
-   [mirror](http://www.apache.org/dyn/closer.cgi/mesos/{{site.MESOS_VERSION}}/)
-2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and
-   installing Mesos
-
-**Note:** If you want to run Mesos without installing it into the default paths on your system
-(e.g., if you lack administrative privileges to install it), you should also pass the
-`--prefix` option to `configure` to tell it where to install. For example, pass
-`--prefix=/home/user/mesos`. By default the prefix is `/usr/local`.
-
 ## Verification
 
 To verify that the Mesos cluster is ready for Spark, navigate to the Mesos master webui at port
@@ -74,32 +73,30 @@ To verify that the Mesos cluster is ready for Spark, navigate to the Mesos maste
 
 # Connecting Spark to Mesos
 
-To use Mesos from Spark, you need a Spark distribution available in a place accessible by Mesos, and
+To use Mesos from Spark, you need a Spark binary package available in a place accessible by Mesos, and
 a Spark driver program configured to connect to Mesos.
 
-## Uploading Spark Distribution
+## Uploading Spark Package
 
-When Mesos runs a task on a Mesos slave for the first time, that slave must have a distribution of
-Spark available for running the Spark Mesos executor backend.  A distribution of Spark is just a
-compiled binary version of Spark.
+When Mesos runs a task on a Mesos slave for the first time, that slave must have a Spark binary
+package for running the Spark Mesos executor backend.
+The Spark package can be hosted at any Hadoop-accessible URI, including HTTP via `http://`,
+[Amazon Simple Storage Service](http://aws.amazon.com/s3) via `s3n://`, or HDFS via `hdfs://`.
 
-The Spark distribution can be hosted at any Hadoop URI, including HTTP via `http://`, [Amazon Simple
-Storage Service](http://aws.amazon.com/s3) via `s3://`, or HDFS via `hdfs:///`.
+To use a precompiled package:
 
-To use a precompiled distribution:
-
-1. Download a Spark distribution from the Spark [download page](https://spark.apache.org/downloads.html)  
+1. Download a Spark binary package from the Spark [download page](https://spark.apache.org/downloads.html)
 2. Upload to hdfs/http/s3
 
 To host on HDFS, use the Hadoop fs put command: `hadoop fs -put spark-{{site.SPARK_VERSION}}.tar.gz
 /path/to/spark-{{site.SPARK_VERSION}}.tar.gz`
 
 
-Or if you are using a custom-compiled version of Spark, you will need to create a distribution using
+Or if you are using a custom-compiled version of Spark, you will need to create a package using
 the `make-distribution.sh` script included in a Spark source tarball/checkout.
 
 1. Download and build Spark using the instructions [here](index.html)
-2. Create a Spark distribution using `make-distribution.sh --tgz`.
+2. Create a binary package using `make-distribution.sh --tgz`.
 3. Upload archive to http/s3/hdfs
 
 
@@ -115,8 +112,8 @@ The driver also needs some configuration in `spark-env.sh` to interact properly 
    `<prefix>/lib/libmesos.so` where the prefix is `/usr/local` by default. See Mesos installation
    instructions above. On Mac OS X, the library is called `libmesos.dylib` instead of
    `libmesos.so`.
- * `export SPARK_EXECUTOR_URI=<path to spark-{{site.SPARK_VERSION}}.tar.gz uploaded above>`.
-2. Also set `spark.executor.uri` to <path to spark-{{site.SPARK_VERSION}}.tar.gz>
+ * `export SPARK_EXECUTOR_URI=<URL of spark-{{site.SPARK_VERSION}}.tar.gz uploaded above>`.
+2. Also set `spark.executor.uri` to `<URL of spark-{{site.SPARK_VERSION}}.tar.gz>`.
 
 Now when starting a Spark application against the cluster, pass a `mesos://`
 or `zk://` URL as the master when creating a `SparkContext`. For example:
@@ -129,7 +126,7 @@ val conf = new SparkConf()
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
-When running a shell the `spark.executor.uri` parameter is inherited from `SPARK_EXECUTOR_URI`, so
+When running a shell, the `spark.executor.uri` parameter is inherited from `SPARK_EXECUTOR_URI`, so
 it does not need to be redundantly passed in as a system property.
 
 {% highlight bash %}
@@ -168,7 +165,7 @@ using `conf.set("spark.cores.max", "10")` (for example).
 # Running Alongside Hadoop
 
 You can run Spark and Mesos alongside your existing Hadoop cluster by just launching them as a
-separate service on the machines. To access Hadoop data from Spark, a full hdfs:// URL is required
+separate service on the machines. To access Hadoop data from Spark, a full `hdfs://` URL is required
 (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode web
 UI).
 
@@ -195,7 +192,7 @@ A few places to look during debugging:
 And common pitfalls:
 
 - Spark assembly not reachable/accessible
-  - Slaves need to be able to download the distribution
+  - Slaves must be able to download the Spark binary package from the `http://`, `hdfs://` or `s3n://` URL you gave
 - Firewall blocking communications
   - Check for messages about failed connections
   - Temporarily disable firewalls for debugging and then poke appropriate holes
