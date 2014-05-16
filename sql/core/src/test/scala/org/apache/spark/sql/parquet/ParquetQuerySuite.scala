@@ -42,9 +42,6 @@ import org.apache.spark.sql.test.TestSQLContext._
 
 case class TestRDDEntry(key: Int, value: String)
 
-<<<<<<< HEAD
-class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
-=======
 case class NullReflectData(
     intField: java.lang.Integer,
     longField: java.lang.Long,
@@ -59,8 +56,7 @@ case class OptionalReflectData(
     doubleField: Option[Double],
     booleanField: Option[Boolean])
 
-class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
->>>>>>> a20fea98811d98958567780815fcf0d4fb4e28d4
+class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   import TestData._
   TestData // Load test data tables.
 
