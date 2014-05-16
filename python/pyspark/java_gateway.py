@@ -18,6 +18,7 @@
 import os
 import sys
 import signal
+import shlex
 import platform
 from subprocess import Popen, PIPE
 from threading import Thread
@@ -35,7 +36,7 @@ def launch_gateway():
         on_windows = platform.system() == "Windows"
         script = "./bin/spark-submit.cmd" if on_windows else "./bin/spark-submit"
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS")
-        submit_args = split_preserve_quotes(submit_args)
+        submit_args = shlex.split(submit_args)
         command = [os.path.join(SPARK_HOME, script), "pyspark-shell"] + submit_args
         if not on_windows:
             # Don't send ctrl-c / SIGINT to the Java gateway:
@@ -76,30 +77,3 @@ def launch_gateway():
     java_import(gateway.jvm, "scala.Tuple2")
 
     return gateway
-
-def split_preserve_quotes(args):
-    """
-    Given a string of space-delimited arguments with quotes,
-    split it into a list while preserving the quote boundaries.
-    """
-    if args is None:
-        return []
-    split_list = []
-    quoted_string = ""
-    wait_for_quote = False
-    for arg in args.split(" "):
-        if not wait_for_quote:
-            if arg.startswith("\""):
-                wait_for_quote = True
-                quoted_string = arg
-            else:
-                split_list.append(arg)
-        else:
-            quoted_string += " " + arg
-            if quoted_string.endswith("\""):
-                # Strip quotes
-                quoted_string = quoted_string[1:-1]
-                split_list.append(quoted_string)
-                quoted_string = ""
-                wait_for_quote = False
-    return split_list
