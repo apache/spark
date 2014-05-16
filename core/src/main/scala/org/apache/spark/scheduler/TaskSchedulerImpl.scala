@@ -105,7 +105,7 @@ private[spark] class TaskSchedulerImpl(
     SchedulingMode.withName(schedulingModeConf.toUpperCase)
   } catch {
     case e: java.util.NoSuchElementException =>
-      throw new SparkException(s"Urecognized spark.scheduler.mode: $schedulingModeConf")
+      throw new SparkException(s"Unrecognized spark.scheduler.mode: $schedulingModeConf")
   }
 
   // This is a var so that we can reset it for testing purposes.
