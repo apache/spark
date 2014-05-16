@@ -233,6 +233,11 @@ private[hive] object HiveQl {
       }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
+      case e: NotImplementedError => sys.error(
+        s"""
+          |Unsupported language features in query: $sql
+          |${dumpTree(getAst(sql))}
+        """.stripMargin)
     }
   }
 
