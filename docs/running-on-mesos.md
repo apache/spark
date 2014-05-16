@@ -39,19 +39,6 @@ If you already have a Mesos cluster running, you can skip this Mesos installatio
 Otherwise, installing Mesos for Spark is no different than installing Mesos for use by other
 frameworks.  You can install Mesos using either prebuilt packages or by compiling from source.
 
-## Prebuilt packages
-
-The Apache Mesos project only publishes source package releases, no binary releases.  But other
-third party projects publish binary releases that may be helpful in setting Mesos up.
-
-One of those is Mesosphere.  To install Mesos using the binary releases provided by Mesosphere:
-
-1. Download Mesos installation package from [downloads page](http://mesosphere.io/downloads/)
-2. Follow their instructions for installation and configuration
-
-The Mesosphere installation documents suggest setting up ZooKeeper to handle Mesos master failover,
-but Mesos can be run without ZooKeeper using a single master as well.
-
 ## From source
 
 To install Mesos directly from the upstream project rather than a third party, install from source.
@@ -65,6 +52,21 @@ To install Mesos directly from the upstream project rather than a third party, i
 (e.g., if you lack administrative privileges to install it), you should also pass the
 `--prefix` option to `configure` to tell it where to install. For example, pass
 `--prefix=/home/user/mesos`. By default the prefix is `/usr/local`.
+
+
+## Prebuilt packages
+
+The Apache Mesos project only publishes source package releases, no binary releases.  But other
+third party projects publish binary releases that may be helpful in setting Mesos up.
+
+One of those is Mesosphere.  To install Mesos using the binary releases provided by Mesosphere:
+
+1. Download Mesos installation package from [downloads page](http://mesosphere.io/downloads/)
+2. Follow their instructions for installation and configuration
+
+The Mesosphere installation documents suggest setting up ZooKeeper to handle Mesos master failover,
+but Mesos can be run without ZooKeeper using a single master as well.
+
 
 ## Verification
 
