@@ -24,6 +24,10 @@ import org.apache.spark.sql.hive.test.TestHive._
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  createQueryTest("between",
+    "SELECT * FROM src WHERE key between 1 and 2"
+  )
+
   test("Query expressed in SQL") {
     assert(sql("SELECT 1").collect() === Array(Seq(1)))
   }
