@@ -140,12 +140,35 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         InsertIntoParquetTable(relation, planLater(child), overwrite=true)(sparkContext) :: Nil
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child), overwrite)(sparkContext) :: Nil
-      case PhysicalOperation(projectList, filters, relation: ParquetRelation) =>
-        // TODO: Should be pushing down filters as well.
+      case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) => {
+        val remainingFilters =
+          if (sparkContext.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
+            filters.filter {
+              // Note: filters cannot be pushed down to Parquet if they contain more complex
+              // expressions than simple "Attribute cmp Literal" comparisons. Here we remove
+              // all filters that have been pushed down. Note that a predicate such as
+              // "(A AND B) OR C" can result in "A OR C" being pushed down.
+              filter =>
+                val recordFilter = ParquetFilters.createFilter(filter)
+                if (!recordFilter.isDefined) {
+                  // First case: the pushdown did not result in any record filter.
+                  true
+                } else {
+                  // Second case: a record filter was created; here we are conservative in
+                  // the sense that even if "A" was pushed and we check for "A AND B" we
+                  // still want to keep "A AND B" in the higher-level filter, not just "B".
+                  !ParquetFilters.findExpression(recordFilter.get, filter).isDefined
+                }
+            }
+          } else {
+            filters
+          }
         pruneFilterProject(
           projectList,
-          filters,
-          ParquetTableScan(_, relation, None)(sparkContext)) :: Nil
+          remainingFilters,
+          ParquetTableScan(_, relation, filters)(sparkContext)) :: Nil
+      }
+
       case _ => Nil
     }
   }
