@@ -36,7 +36,7 @@ require any special patches of Mesos.
 If you already have a Mesos cluster running, you can skip this Mesos installation step.
 
 Otherwise, installing Mesos for Spark is no different than installing Mesos for use by other
-frameworks.  You can install Mesos using either from source or using prebuilt packages.
+frameworks.  You can install Mesos either from source or using prebuilt packages.
 
 ## From Source
 
