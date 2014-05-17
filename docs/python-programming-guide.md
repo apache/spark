@@ -60,13 +60,9 @@ By default, PySpark requires `python` to be available on the system `PATH` and u
 
 All of PySpark's library dependencies, including [Py4J](http://py4j.sourceforge.net/), are bundled with PySpark and automatically imported.
 
-Standalone PySpark applications should be run using the `bin/spark-submit` script, which automatically
-configures the Java and Python environment for running Spark.
-
-
 # Interactive Use
 
-The `bin/pyspark` script launches a Python interpreter that is configured to run PySpark applications. To use `pyspark` interactively, first build Spark, then launch it directly from the command line without any options:
+The `bin/pyspark` script launches a Python interpreter that is configured to run PySpark applications. To use `pyspark` interactively, first build Spark, then launch it directly from the command line:
 
 {% highlight bash %}
 $ sbt/sbt assembly
@@ -83,20 +79,24 @@ The Python shell can be used explore data interactively and is a simple way to l
 {% endhighlight %}
 
 By default, the `bin/pyspark` shell creates SparkContext that runs applications locally on all of
-your machine's logical cores.
-To connect to a non-local cluster, or to specify a number of cores, set the `MASTER` environment variable.
-For example, to use the `bin/pyspark` shell with a [standalone Spark cluster](spark-standalone.html):
+your machine's logical cores. To connect to a non-local cluster, or to specify a number of cores,
+set the `--master` flag. For example, to use the `bin/pyspark` shell with a
+[standalone Spark cluster](spark-standalone.html):
 
 {% highlight bash %}
-$ MASTER=spark://IP:PORT ./bin/pyspark
+$ ./bin/pyspark --master spark://1.2.3.4:7077
 {% endhighlight %}
 
 Or, to use exactly four cores on the local machine:
 
 {% highlight bash %}
-$ MASTER=local[4] ./bin/pyspark
+$ ./bin/pyspark --master local[4]
 {% endhighlight %}
 
+Under the hood `bin/pyspark` is a wrapper around the
+[Spark submit script](cluster-overview.html#launching-applications-with-spark-submit), so these
+two scripts share the same list of options. For a complete list of options, run `bin/pyspark` with
+the `--help` option.
 
 ## IPython
 
@@ -115,13 +115,14 @@ the [IPython Notebook](http://ipython.org/notebook.html) with PyLab graphing sup
 $ IPYTHON_OPTS="notebook --pylab inline" ./bin/pyspark
 {% endhighlight %}
 
-IPython also works on a cluster or on multiple cores if you set the `MASTER` environment variable.
+IPython also works on a cluster or on multiple cores if you set the `--master` flag.
 
 
 # Standalone Programs
 
-PySpark can also be used from standalone Python scripts by creating a SparkContext in your script and running the script using `bin/spark-submit`.
-The Quick Start guide includes a [complete example](quick-start.html#standalone-applications) of a standalone Python application.
+PySpark can also be used from standalone Python scripts by creating a SparkContext in your script
+and running the script using `bin/spark-submit`. The Quick Start guide includes a
+[complete example](quick-start.html#standalone-applications) of a standalone Python application.
 
 Code dependencies can be deployed by passing .zip or .egg files in the `--py-files` option of `spark-submit`:
 
@@ -138,6 +139,7 @@ You can set [configuration properties](configuration.html#spark-properties) by p
 {% highlight python %}
 from pyspark import SparkConf, SparkContext
 conf = (SparkConf()
+         .setMaster("local")
          .setAppName("My app")
          .set("spark.executor.memory", "1g"))
 sc = SparkContext(conf = conf)
@@ -164,6 +166,6 @@ some example applications.
 PySpark also includes several sample programs in the [`examples/src/main/python` folder](https://github.com/apache/spark/tree/master/examples/src/main/python).
 You can run them by passing the files to `pyspark`; e.g.:
 
-    ./bin/spark-submit examples/src/main/python/wordcount.py local[2] README.md
+    ./bin/spark-submit examples/src/main/python/wordcount.py README.md
 
-Each program prints usage help when run without arguments.
+Each program prints usage help when run without the sufficient arguments.

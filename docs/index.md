@@ -43,12 +43,15 @@ The `--master` option specifies the
 locally with one thread, or `local[N]` to run locally with N threads. You should start by using
 `local` for testing. For a full list of options, run Spark shell with the `--help` option.
 
-Spark also provides a Python interface. To run an example Spark application written in Python, use
-`bin/pyspark <program> [params]`. For example,
+Spark also provides a Python interface. To run Spark interactively in a Python interpreter, use
+`bin/pyspark`. As in Spark shell, you can also pass in the `--master` option to configure your
+master URL.
 
-    ./bin/pyspark examples/src/main/python/pi.py local[2] 10
+    ./bin/pyspark --master local[2]
 
-or simply `bin/pyspark` without any arguments to run Spark interactively in a python interpreter.
+Example applications are also provided in Python. For example,
+
+    ./bin/spark-submit examples/src/main/python/pi.py 10
 
 # Launching on a Cluster
 
