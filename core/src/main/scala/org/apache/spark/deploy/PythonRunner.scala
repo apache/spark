@@ -42,7 +42,7 @@ object PythonRunner {
     // Build up a PYTHONPATH that includes the Spark assembly JAR (where this class is), the
     // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
     val pathElements = new ArrayBuffer[String]
-    pathElements ++= pyFiles.split(",")
+    pathElements ++= Option(pyFiles).getOrElse("").split(",")
     pathElements += PythonUtils.sparkPythonPath
     pathElements += sys.env.getOrElse("PYTHONPATH", "")
     val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)

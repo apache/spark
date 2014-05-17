@@ -298,11 +298,13 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
             case v =>
               primaryResource = v
               inSparkOpts = false
-              isPython = v.endsWith(".py")
+              isPython = SparkSubmit.isPython(v)
               parse(tail)
           }
         } else {
-          childArgs += value
+          if (!value.isEmpty) {
+            childArgs += value
+          }
           parse(tail)
         }
 
