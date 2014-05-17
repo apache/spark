@@ -28,7 +28,7 @@ esac
 # Enter posix mode for bash
 set -o posix
 
-if [[ "$@" = *--help ]] || [[ "$@" = *--h ]]; then
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   echo "Usage: ./bin/spark-shell [options]"
   ./bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   exit 0

@@ -334,11 +334,10 @@ object SparkSubmit {
    * no files, into a single comma-separated string.
    */
   private[spark] def mergeFileLists(lists: String*): String = {
-    lists
-      .filter(_ != null)
-      .filter(_ != "")
-      .flatMap(_.split(","))
-      .mkString(",")
+    val merged = lists.filter(_ != null)
+                      .flatMap(_.split(","))
+                      .mkString(",")
+    if (merged == "") null else merged
   }
 }
 
