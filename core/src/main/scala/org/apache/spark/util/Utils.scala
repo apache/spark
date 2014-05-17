@@ -1101,7 +1101,7 @@ private[spark] object Utils extends Logging {
    * Strip the directory from a path name
    */
   def stripDirectory(path: String): String = {
-    path.split(File.separator).last
+    new File(path).getName
   }
 
   /**
