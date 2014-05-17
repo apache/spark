@@ -63,16 +63,15 @@ if [ -n "$IPYTHON_OPTS" ]; then
   IPYTHON=1
 fi
 
-# Build up arguments list manually to preserve quotes. We export Spark submit arguments as an
-# environment variable because shell.py must run as a PYTHONSTARTUP script, which does not take
-# in arguments. This is required mainly for IPython notebooks.
+# Build up arguments list manually to preserve quotes and backslashes.
+# We export Spark submit arguments as an environment variable because shell.py must run as a
+# PYTHONSTARTUP script, which does not take in arguments. This is required for IPython notebooks.
 
 PYSPARK_SUBMIT_ARGS=""
 whitespace="[[:space:]]"
 for i in "$@"; do
-  if [[ $i =~ $whitespace ]]; then
-    i=\"$i\"
-  fi
+  if [[ $i =~ \" ]]; then i=$(echo $i | sed 's/\"/\\\"/g'); fi
+  if [[ $i =~ $whitespace ]]; then i=\"$i\"; fi
   PYSPARK_SUBMIT_ARGS="$PYSPARK_SUBMIT_ARGS $i"
 done
 export PYSPARK_SUBMIT_ARGS
