@@ -156,9 +156,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
               case e: Exception => logError("Exception in error callback", e)
             }
           }
-          // scheduler.error(msg)
-          // TODO: Need to throw an exception?
-          // throw new SparkException(msg)
         }
         else {
           freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
