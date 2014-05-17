@@ -568,10 +568,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * For each key k in `this` or `other1` or `other2` or `other3`, return a resulting RDD that contains a
-   * tuple with the list of values for that key in `this`, `other1`, `other2` and `other3`.
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
    */
-  def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)], partitioner: Partitioner)
+  def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)],
+                          other3: RDD[(K, W3)], partitioner: Partitioner)
   : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
       throw new SparkException("Default partitioner cannot partition array keys.")
@@ -618,8 +620,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * For each key k in `this` or `other1` or `other2` or `other3`, return a resulting RDD that contains a
-   * tuple with the list of values for that key in `this`, `other1`, `other2` and `other3`.
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
    */
   def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)])
   : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
@@ -661,10 +664,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * For each key k in `this` or `other1` or `other2` or `other3`, return a resulting RDD that contains a
-   * tuple with the list of values for that key in `this`, `other1`, `other2` and `other3`.
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
    */
-  def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)], numPartitions: Int)
+  def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)],
+                          other3: RDD[(K, W3)], numPartitions: Int)
   : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
     cogroup(other1, other2, other3, new HashPartitioner(numPartitions))
   }
