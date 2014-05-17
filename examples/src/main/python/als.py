@@ -47,7 +47,7 @@ def update(i, vec, mat, ratings):
 
 if __name__ == "__main__":
     """
-        Usage: als [M] [U] [F] [iterations] [slices]"
+    Usage: als [M] [U] [F] [iterations] [slices]"
     """
     sc = SparkContext(appName="PythonALS")
     M = int(sys.argv[1]) if len(sys.argv) > 1 else 100
