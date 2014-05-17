@@ -572,9 +572,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * return a resulting RDD that contains a tuple with the list of values
    * for that key in `this`, `other1`, `other2` and `other3`.
    */
-  def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)],
-                          other3: RDD[(K, W3)], partitioner: Partitioner)
-  : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+  def cogroup[W1, W2, W3](other1: RDD[(K, W1)],
+      other2: RDD[(K, W2)],
+      other3: RDD[(K, W3)],
+      partitioner: Partitioner)
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
@@ -625,7 +627,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * for that key in `this`, `other1`, `other2` and `other3`.
    */
   def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)])
-  : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
     cogroup(other1, other2, other3, defaultPartitioner(self, other1, other2, other3))
   }
 
@@ -668,9 +670,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * return a resulting RDD that contains a tuple with the list of values
    * for that key in `this`, `other1`, `other2` and `other3`.
    */
-  def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)],
-                          other3: RDD[(K, W3)], numPartitions: Int)
-  : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+  def cogroup[W1, W2, W3](other1: RDD[(K, W1)],
+      other2: RDD[(K, W2)],
+      other3: RDD[(K, W3)],
+      numPartitions: Int)
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
     cogroup(other1, other2, other3, new HashPartitioner(numPartitions))
   }
 
@@ -687,7 +691,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   /** Alias for cogroup. */
   def groupWith[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)])
-  : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
     cogroup(other1, other2, other3, defaultPartitioner(self, other1, other2, other3))
   }
 
