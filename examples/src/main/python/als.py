@@ -46,15 +46,15 @@ def update(i, vec, mat, ratings):
     return np.linalg.solve(XtX, Xty)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print >> sys.stderr, "Usage: als <master> <M> <U> <F> <iters> <slices>"
-        exit(-1)
-    sc = SparkContext(sys.argv[1], "PythonALS", pyFiles=[realpath(__file__)])
-    M = int(sys.argv[2]) if len(sys.argv) > 2 else 100
-    U = int(sys.argv[3]) if len(sys.argv) > 3 else 500
-    F = int(sys.argv[4]) if len(sys.argv) > 4 else 10
-    ITERATIONS = int(sys.argv[5]) if len(sys.argv) > 5 else 5
-    slices = int(sys.argv[6]) if len(sys.argv) > 6 else 2
+    """
+    Usage: als [M] [U] [F] [iterations] [slices]"
+    """
+    sc = SparkContext(appName="PythonALS")
+    M = int(sys.argv[1]) if len(sys.argv) > 1 else 100
+    U = int(sys.argv[2]) if len(sys.argv) > 2 else 500
+    F = int(sys.argv[3]) if len(sys.argv) > 3 else 10
+    ITERATIONS = int(sys.argv[4]) if len(sys.argv) > 4 else 5
+    slices = int(sys.argv[5]) if len(sys.argv) > 5 else 2
 
     print "Running ALS with M=%d, U=%d, F=%d, iters=%d, slices=%d\n" % \
             (M, U, F, ITERATIONS, slices)
