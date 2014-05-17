@@ -238,10 +238,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
     // Check for legacy configs
     sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
-      val error =
+      val warning =
         s"""
           |SPARK_JAVA_OPTS was detected (set to '$value').
-          |This has undefined behavior when running on a cluster and is deprecated in Spark 1.0+.
+          |This is deprecated in Spark 1.0+.
           |
           |Please instead use:
           | - ./spark-submit with conf/spark-defaults.conf to set defaults for an application
@@ -249,7 +249,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           | - spark.executor.extraJavaOptions to set -X options for executors
           | - SPARK_DAEMON_JAVA_OPTS to set java options for standalone daemons (master or worker)
         """.stripMargin
-      logError(error)
+      logWarning(warning)
 
       for (key <- Seq(executorOptsKey, driverOptsKey)) {
         if (getOption(key).isDefined) {
@@ -262,16 +262,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
 
     sys.env.get("SPARK_CLASSPATH").foreach { value =>
-      val error =
+      val warning =
         s"""
           |SPARK_CLASSPATH was detected (set to '$value').
-          | This has undefined behavior when running on a cluster and is deprecated in Spark 1.0+.
+          |This is deprecated in Spark 1.0+.
           |
           |Please instead use:
           | - ./spark-submit with --driver-class-path to augment the driver classpath
           | - spark.executor.extraClassPath to augment the executor classpath
         """.stripMargin
-      logError(error)
+      logWarning(warning)
 
       for (key <- Seq(executorClasspathKey, driverClassPathKey)) {
         if (getOption(key).isDefined) {
