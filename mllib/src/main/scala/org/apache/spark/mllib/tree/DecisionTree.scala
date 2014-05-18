@@ -549,7 +549,9 @@ object DecisionTree extends Serializable with Logging {
        * Sequential search helper method to find bin for categorical feature in multiclass
        * classification. Dummy value of 0 used since it is not used in future calculation
        */
-      def sequentialBinSearchForCategoricalFeatureInBinaryClassification(): Int = 0
+      def sequentialBinSearchForCategoricalFeatureInBinaryClassification(): Int = {
+        labeledPoint.features(featureIndex).toInt
+      }
 
       /**
        * Sequential search helper method to find bin for categorical feature.
@@ -662,7 +664,7 @@ object DecisionTree extends Serializable with Logging {
             label.toInt match {
               case n: Int =>
                 val isFeatureContinuous = strategy.categoricalFeaturesInfo.get(featureIndex).isEmpty
-                if (isFeatureContinuous && strategy.isMultiClassification) {
+                if (!isFeatureContinuous && strategy.isMultiClassification) {
                   // Find all matching bins and increment their values
                   val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
                   val numCategoricalBins = math.pow(2.0, featureCategories - 1).toInt - 1
