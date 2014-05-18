@@ -28,14 +28,14 @@ esac
 # Enter posix mode for bash
 set -o posix
 
-if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  echo "Usage: ./bin/spark-shell [options]"
-  ./bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
-  exit 0
-fi
-
 ## Global script variables
 FWDIR="$(cd `dirname $0`/..; pwd)"
+
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+  echo "Usage: ./bin/spark-shell [options]"
+  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exit 0
+fi
 
 function main(){
     if $cygwin; then
