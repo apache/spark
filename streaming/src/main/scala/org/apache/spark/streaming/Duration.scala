@@ -46,9 +46,9 @@ case class Duration (private val millis: Long) {
 
   def isZero: Boolean = (this.millis == 0)
 
-  override def toString: String = (millis.toString + " ms")
+  override def toString: String = millis.toString
 
-  def toFormattedString: String = millis.toString
+  def toFormattedString: String =  (millis.toString + " ms")
 
   def milliseconds: Long = millis
 
