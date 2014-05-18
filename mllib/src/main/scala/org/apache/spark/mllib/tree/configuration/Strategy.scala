@@ -58,6 +58,6 @@ class Strategy (
     val labelWeights: Map[Int, Int] = Map[Int, Int]()) extends Serializable {
 
   require(numClassesForClassification >= 2)
-  val isMultiClassification = numClassesForClassification > 2
+  val isMulticlassClassification = numClassesForClassification > 2
 
 }
