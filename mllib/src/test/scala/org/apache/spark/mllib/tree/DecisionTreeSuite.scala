@@ -35,7 +35,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Gini, 3, 100)
+    val strategy = new Strategy(Classification, Gini, 3, 2, 100)
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
     assert(splits.length === 2)
     assert(bins.length === 2)
@@ -51,6 +51,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Classification,
       Gini,
       maxDepth = 3,
+      numClassesForClassification = 2,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
@@ -130,6 +131,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Classification,
       Gini,
       maxDepth = 3,
+      numClassesForClassification = 2,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
@@ -237,7 +239,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(List(3.0, 2.0, 0.0).toSeq == l.toSeq)
   }
 
-  test("split and bin calculations for categorical variables wiht multiclass classification") {
+  test("split and bin calculations for categorical variables with multiclass classification") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -245,12 +247,12 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Classification,
       Gini,
       maxDepth = 3,
+      numClassesForClassification = 100,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 2, 1-> 2),
-      numClassesForClassification = 3)
+      categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
 
-    // Expecting 2^3 - 1 = 7 bins/splits
+    // Expecting 2^2 - 1 = 3 bins/splits
     assert(splits(0)(0).feature === 0)
     assert(splits(0)(0).threshold === Double.MinValue)
     assert(splits(0)(0).featureType === Categorical)
@@ -287,6 +289,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(1)(2).categories.contains(1.0))
 
     assert(splits(0)(3) === null)
+    assert(splits(1)(3) === null)
 
 
     // Check bins.
@@ -329,22 +332,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   }
 
-  test("split and bin calculations for categorical variables with no sample for one category " +
-    "for multiclass classification") {
-    val arr = DecisionTreeSuite.generateCategoricalDataPoints()
-    assert(arr.length === 1000)
-    val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(
-      Classification,
-      Gini,
-      maxDepth = 3,
-      maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 3, 1-> 3),
-      numClassesForClassification = 3)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
-
-  }
-
   test("classification stump with all categorical variables") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
@@ -352,6 +339,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val strategy = new Strategy(
       Classification,
       Gini,
+      numClassesForClassification = 2,
       maxDepth = 3,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
@@ -367,8 +355,9 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val stats = bestSplits(0)._2
     assert(stats.gain > 0)
-    assert(stats.predict > 0.4)
-    assert(stats.predict < 0.5)
+    assert(stats.predict === 0)
+    assert(stats.prob > 0.5)
+    assert(stats.prob < 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -403,7 +392,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Gini, 3, 100)
+    val strategy = new Strategy(Classification, Gini, 3, 2, 100)
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
     assert(splits.length === 2)
     assert(splits(0).length === 99)
@@ -426,7 +415,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Gini, 3, 100)
+    val strategy = new Strategy(Classification, Gini, 3, 2, 100)
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
     assert(splits.length === 2)
     assert(splits(0).length === 99)
@@ -450,7 +439,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Entropy, 3, 100)
+    val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
     assert(splits.length === 2)
     assert(splits(0).length === 99)
@@ -474,7 +463,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Entropy, 3, 100)
+    val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
     assert(splits.length === 2)
     assert(splits(0).length === 99)
@@ -498,7 +487,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Entropy, 3, 100)
+    val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
     assert(splits.length === 2)
     assert(splits(0).length === 99)

@@ -42,8 +42,11 @@ object Entropy extends Impurity {
     var impurity = 0.0
     var classIndex = 0
     while (classIndex < numClasses) {
-      val freq = counts(classIndex) / totalCount
-      impurity -= freq * log2(freq)
+      val classCount = counts(classIndex)
+      if (classCount != 0) {
+        val freq = classCount / totalCount
+        impurity -= freq * log2(freq)
+      }
       classIndex += 1
     }
     impurity
