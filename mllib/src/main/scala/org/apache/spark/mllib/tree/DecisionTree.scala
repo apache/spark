@@ -584,8 +584,7 @@ object DecisionTree extends Serializable with Logging {
         val binIndex = {
           if (strategy.isMultiClassification) {
             sequentialBinSearchForCategoricalFeatureInBinaryClassification()
-          }
-          else {
+          } else {
             sequentialBinSearchForCategoricalFeatureInMultiClassClassification()
           }
         }
@@ -601,7 +600,7 @@ object DecisionTree extends Serializable with Logging {
      * For l nodes, k features the storage is as follows:
      * label, b_11, b_12, .. , b_1k, b_21, b_22, .. , b_2k, b_l1, b_l2, .. , b_lk,
      * where b_ij is an integer between 0 and numBins - 1 for regressions and binary
-     * classification and an invalid value for categorical feature in  multiclass classification.
+     * classification and the categorical feature value in  multiclass classification.
      * Invalid sample is denoted by noting bin for feature 1 as -1.
      */
     def findBinsForLevel(labeledPoint: WeightedLabeledPoint): Array[Double] = {
