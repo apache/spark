@@ -941,6 +941,7 @@ object DecisionTree extends Serializable with Logging {
                 while (classIndex < numClasses) {
                   rightNodeAgg(featureIndex)(splitIndex)(classIndex)
                     = totalNodeAgg(classIndex) - leftNodeAgg(featureIndex)(splitIndex)(classIndex)
+                  classIndex += 1
                 }
                 splitIndex += 1
               }
