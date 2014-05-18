@@ -926,15 +926,21 @@ object DecisionTree extends Serializable with Logging {
             while (featureIndex < numFeatures){
               var splitIndex = 0
               while (splitIndex < numBins - 1) {
+                val totalNodeAgg = Array.ofDim[Double](numClasses)
                 var classIndex = 0
                 while (classIndex < numClasses) {
                   // shift for this featureIndex
                   val shift = numClasses * featureIndex * numBins
-                  leftNodeAgg(featureIndex)(splitIndex)(classIndex)
-                    = binData(shift + classIndex)
-                  rightNodeAgg(featureIndex)(splitIndex)(classIndex)
-                    = binData(shift + numClasses + classIndex)
+                  val binValue = binData(shift + classIndex)
+                  leftNodeAgg(featureIndex)(splitIndex)(classIndex) = binValue
+                  totalNodeAgg(classIndex) = binValue
                   classIndex += 1
+                }
+                // Calculate rightNodeAgg
+                classIndex = 0
+                while (classIndex < numClasses) {
+                  rightNodeAgg(featureIndex)(splitIndex)(classIndex)
+                    = totalNodeAgg(classIndex) - leftNodeAgg(featureIndex)(splitIndex)(classIndex)
                 }
                 splitIndex += 1
               }
