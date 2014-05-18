@@ -635,9 +635,9 @@ object SparkBuild extends Build {
       previousArtifact := sparkPreviousArtifact("spark-streaming-flume-sink"),
       libraryDependencies ++= Seq(
         "org.apache.flume" % "flume-ng-sdk" % "1.4.0" % "compile"
-          excludeAll(excludeJBossNetty, excludeThrift),
+          excludeAll(excludeIONetty, excludeThrift),
         "org.apache.flume" % "flume-ng-core" % "1.4.0" % "compile"
-          excludeAll(excludeJBossNetty, excludeThrift)
+          excludeAll(excludeIONetty, excludeThrift)
       )
     ) ++ sbtavro.SbtAvro.avroSettings
   }
