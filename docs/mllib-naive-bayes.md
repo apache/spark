@@ -59,11 +59,11 @@ val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test
 
 <div data-lang="java" markdown="1">
 
-[NaiveBayes](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
+[NaiveBayes](api/java/org/apache/spark/mllib/classification/NaiveBayes.html) implements
 multinomial naive Bayes. It takes a Scala RDD of
-[LabeledPoint](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an
+[LabeledPoint](api/java/org/apache/spark/mllib/regression/LabeledPoint.html) and an
 optionally smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
+[NaiveBayesModel](api/java/org/apache/spark/mllib/classification/NaiveBayesModel.html), which
 can be used for evaluation and prediction.
 
 {% highlight java %}
