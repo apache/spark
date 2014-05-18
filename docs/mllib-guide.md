@@ -27,8 +27,9 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)
 
-MLlib is currently a *beta* component under active development.
-The APIs may change in the future releases, and we will provide migration guide between releases.
+MLlib is a new component under active development.
+The APIs marked `Experimental`/`DeveloperApi` may change in the future releases, 
+and we will provide migration guide between releases.
 
 ## Dependencies
 
