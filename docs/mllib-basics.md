@@ -333,7 +333,7 @@ which could be faster if the rows are sparse.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-`RowMatrix#computeColumnSummaryStatistics` returns an instance of
+[`RowMatrix#computeColumnSummaryStatistics`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) returns an instance of
 [`MultivariateStatisticalSummary`](api/scala/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary),
 which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
 total count.
@@ -353,6 +353,31 @@ println(summary.numNonzeros) // number of nonzeros in each column
 
 // Compute the covariance matrix.
 val cov: Matrix = mat.computeCovariance()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+[`RowMatrix#computeColumnSummaryStatistics`](api/java/org/apache/spark/mllib/linalg/distributed/RowMatrix.html#computeColumnSummaryStatistics()) returns an instance of
+[`MultivariateStatisticalSummary`](api/java/org/apache/spark/mllib/stat/MultivariateStatisticalSummary.html),
+which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
+total count.
+
+{% highlight java %}
+import org.apache.spark.mllib.linalg.Matrix;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+import org.apache.spark.mllib.stat.MultivariateStatisticalSummary;
+
+RowMatrix mat = ... // a RowMatrix
+
+// Compute column summary statistics.
+MultivariateStatisticalSummary summary = mat.computeColumnSummaryStatistics();
+System.out.println(summary.mean()); // a dense vector containing the mean value for each column
+System.out.println(summary.variance()); // column-wise variance
+System.out.println(summary.numNonzeros()); // number of nonzeros in each column
+
+// Compute the covariance matrix.
+Matrix cov = mat.computeCovariance();
 {% endhighlight %}
 </div>
 </div>
@@ -467,7 +492,7 @@ import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
 
 JavaRDD<MatrixEntry> entries = ... // a JavaRDD of matrix entries
 // Create a CoordinateMatrix from a JavaRDD<MatrixEntry>.
-CoordinateMatrix mat = new CoordinateMatrix(entries);
+CoordinateMatrix mat = new CoordinateMatrix(entries.rdd());
 
 // Get its size.
 long m = mat.numRows();
