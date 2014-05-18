@@ -31,7 +31,7 @@ if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
 rem Build up classpath
 set CLASSPATH=%FWDIR%conf
 if exist "%FWDIR%RELEASE" (
-  for %%d in ("%FWDIR%jars\spark-assembly*.jar") do (
+  for %%d in ("%FWDIR%lib\spark-assembly*.jar") do (
     set ASSEMBLY_JAR=%%d
   )
 ) else (
@@ -41,6 +41,21 @@ if exist "%FWDIR%RELEASE" (
 )
 
 set CLASSPATH=%CLASSPATH%;%ASSEMBLY_JAR%
+
+rem When Hive support is needed, Datanucleus jars must be included on the classpath.
+rem Datanucleus jars do not work if only included in the uber jar as plugin.xml metadata is lost.
+rem Both sbt and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is
+rem built with Hive, so look for them there.
+if exist "%FWDIR%RELEASE" (
+  set datanucleus_dir=%FWDIR%\lib
+) else (
+  set datanucleus_dir=%FWDIR%\lib_managed\jars
+)
+set "datanucleus_jars="
+for %%d in ("%datanucleus_dir%\datanucleus-*.jar") do (
+  set datanucleus_jars=!datanucleus_jars!;%%d
+)
+set CLASSPATH=%CLASSPATH%;%datanucleus_jars%
 
 set SPARK_CLASSES=%FWDIR%core\target\scala-%SCALA_VERSION%\classes
 set SPARK_CLASSES=%SPARK_CLASSES%;%FWDIR%repl\target\scala-%SCALA_VERSION%\classes
