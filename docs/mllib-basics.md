@@ -53,11 +53,11 @@ Scala imports `scala.collection.immutable.Vector` by default, so you have to imp
 <div data-lang="java" markdown="1">
 
 The base class of local vectors is
-[`Vector`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector), and we provide two
-implementations: [`DenseVector`](api/scala/index.html#org.apache.spark.mllib.linalg.DenseVector) and
-[`SparseVector`](api/scala/index.html#org.apache.spark.mllib.linalg.SparseVector).  We recommend
+[`Vector`](api/java/org/apache/spark/mllib/linalg/Vector.html), and we provide two
+implementations: [`DenseVector`](api/java/org/apache/spark/mllib/linalg/DenseVector.html) and
+[`SparseVector`](api/java/org/apache/spark/mllib/linalg/SparseVector.html).  We recommend
 using the factory methods implemented in
-[`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) to create local vectors.
+[`Vectors`](api/java/org/apache/spark/mllib/linalg/Vector.html) to create local vectors.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Vector;
@@ -134,7 +134,7 @@ val neg = LabeledPoint(0.0, Vectors.sparse(3, Array(0, 2), Array(1.0, 3.0)))
 <div data-lang="java" markdown="1">
 
 A labeled point is represented by
-[`LabeledPoint`](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint).
+[`LabeledPoint`](api/java/org/apache/spark/mllib/regression/LabeledPoint.html).
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Vectors;
@@ -197,7 +197,7 @@ val training: RDD[LabeledPoint] = MLUtils.loadLibSVMFile(sc, "mllib/data/sample_
 </div>
 
 <div data-lang="java" markdown="1">
-[`MLUtils.loadLibSVMFile`](api/scala/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
+[`MLUtils.loadLibSVMFile`](api/java/org/apache/spark/mllib/util/MLUtils.html) reads training
 examples stored in LIBSVM format.
 
 {% highlight java %}
@@ -244,10 +244,10 @@ val dm: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
 <div data-lang="java" markdown="1">
 
 The base class of local matrices is
-[`Matrix`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrix), and we provide one
-implementation: [`DenseMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.DenseMatrix).
+[`Matrix`](api/java/org/apache/spark/mllib/linalg/Matrix.html), and we provide one
+implementation: [`DenseMatrix`](api/java/org/apache/spark/mllib/linalg/DenseMatrix.html).
 Sparse matrix will be added in the next release.  We recommend using the factory methods implemented
-in [`Matrices`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices) to create local
+in [`Matrices`](api/java/org/apache/spark/mllib/linalg/Matrices.html) to create local
 matrices.
 
 {% highlight java %}
@@ -303,7 +303,7 @@ val n = mat.numCols()
 
 <div data-lang="java" markdown="1">
 
-A [`RowMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) can be
+A [`RowMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/RowMatrix.html) can be
 created from a `JavaRDD<Vector>` instance.  Then we can compute its column summary statistics.
 
 {% highlight java %}
@@ -391,9 +391,9 @@ val rowMat: RowMatrix = mat.toRowMatrix()
 <div data-lang="java" markdown="1">
 
 An
-[`IndexedRowMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix)
+[`IndexedRowMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/IndexedRowMatrix.html)
 can be created from an `JavaRDD<IndexedRow>` instance, where
-[`IndexedRow`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRow) is a
+[`IndexedRow`](api/java/org/apache/spark/mllib/linalg/distributed/IndexedRow.html) is a
 wrapper over `(long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
 its row indices.
 
@@ -453,13 +453,13 @@ val indexedRowMatrix = mat.toIndexedRowMatrix()
 <div data-lang="java" markdown="1">
 
 A
-[`CoordinateMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.CoordinateMatrix)
+[`CoordinateMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/CoordinateMatrix.html)
 can be created from a `JavaRDD<MatrixEntry>` instance, where
-[`MatrixEntry`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.MatrixEntry) is a
+[`MatrixEntry`](api/java/org/apache/spark/mllib/linalg/distributed/MatrixEntry.html) is a
 wrapper over `(long, long, double)`.  A `CoordinateMatrix` can be converted to a `IndexedRowMatrix`
 with sparse rows by calling `toIndexedRowMatrix`.
 
-{% highlight scala %}
+{% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
 import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
