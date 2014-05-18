@@ -168,16 +168,3 @@ object Unions {
     case other => other :: Nil
   }
 }
-
-/**
- * A pattern that matches (some) sorted operations and returns corresponding sorting orders.
- * Currently operations matched by this pattern are guaranteed to be sorted, but not all sorted
- * operations are matched by this pattern.
- */
-object SortedOperation {
-  // TODO (lian) detect more sorted operations
-  def unapply(plan: LogicalPlan): Option[Seq[SortOrder]] = plan match {
-    case FilteredOperation(_, Sort(order, _)) => Some(order)
-    case _ => None
-  }
-}

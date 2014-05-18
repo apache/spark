@@ -22,8 +22,8 @@ import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
 import org.apache.spark.sql.Logging
-import org.apache.spark.sql.catalyst.planning.SortedOperation
-import org.apache.spark.sql.catalyst.plans.logical.{ExplainCommand, NativeCommand}
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -129,10 +129,18 @@ abstract class HiveComparisonTest
   protected def prepareAnswer(
     hiveQuery: TestHive.type#HiveQLQueryExecution,
     answer: Seq[String]): Seq[String] = {
+
+    def isSorted(plan: LogicalPlan): Boolean = plan match {
+      case _: Join | _: Aggregate | _: BaseRelation | _: Generate | _: Sample | _: Distinct => false
+      case PhysicalOperation(_, _, Sort(_, _)) => true
+      case _ => plan.children.iterator.map(isSorted).exists(_ == true)
+    }
+
     val orderedAnswer = hiveQuery.logical match {
       // Clean out non-deterministic time schema info.
       case _: NativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
-      case _: ExplainCommand | SortedOperation(_) => answer
+      case _: ExplainCommand => answer
+      case plan if isSorted(plan) => answer
       case _ => answer.sorted
     }
     orderedAnswer.map(cleanPaths)
