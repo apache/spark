@@ -233,7 +233,7 @@ val modelL1 = svmAlg.run(training)
 {% endhighlight %}
 
 Similarly, you can use replace `SVMWithSGD` by
-[`LogisticRegressionWithSGD`](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
+[`LogisticRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
 
 </div>
 
@@ -328,8 +328,8 @@ println("training Mean Squared Error = " + MSE)
 {% endhighlight %}
 
 Similarly you can use
-[`RidgeRegressionWithSGD`](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
-and [`LassoWithSGD`](api/mllib/index.html#org.apache.spark.mllib.regression.LassoWithSGD).
+[`RidgeRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
+and [`LassoWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD).
 
 </div>
 
@@ -380,11 +380,11 @@ all three possible regularizations (none, L1 or L2).
 
 Algorithms are all implemented in Scala:
 
-* [SVMWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
-* [LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD)
-* [LinearRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
-* [RidgeRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
-* [LassoWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
+* [SVMWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
+* [LogisticRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD)
+* [LinearRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
+* [RidgeRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
+* [LassoWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
 
 Python calls the Scala implementation via
-[PythonMLLibAPI](api/mllib/index.html#org.apache.spark.mllib.api.python.PythonMLLibAPI).
+[PythonMLLibAPI](api/scala/index.html#org.apache.spark.mllib.api.python.PythonMLLibAPI).

@@ -48,7 +48,7 @@ user for an item.
 
 <div data-lang="scala" markdown="1">
 In the following example we load rating data. Each row consists of a user, a product and a rating.
-We use the default [ALS.train()](api/mllib/index.html#org.apache.spark.mllib.recommendation.ALS$) 
+We use the default [ALS.train()](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS$) 
 method which assumes ratings are explicit. We evaluate the
 recommendation model by measuring the Mean Squared Error of rating prediction.
 

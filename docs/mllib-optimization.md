@@ -170,17 +170,17 @@ each iteration, to compute the gradient direction.
 
 Available algorithms for gradient descent:
 
-* [GradientDescent.runMiniBatchSGD](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+* [GradientDescent.runMiniBatchSGD](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 
 ### L-BFGS
 L-BFGS is currently only a low-level optimization primitive in `MLlib`. If you want to use L-BFGS in various 
 ML algorithms such as Linear Regression, and Logistic Regression, you have to pass the gradient of objective
 function, and updater into optimizer yourself instead of using the training APIs like 
-[LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
+[LogisticRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
 See the example below. It will be addressed in the next release. 
 
 The L1 regularization by using 
-[L1Updater](api/mllib/index.html#org.apache.spark.mllib.optimization.L1Updater) will not work since the 
+[L1Updater](api/scala/index.html#org.apache.spark.mllib.optimization.L1Updater) will not work since the 
 soft-thresholding logic in L1Updater is designed for gradient descent. See the developer's note.
 
 The L-BFGS method

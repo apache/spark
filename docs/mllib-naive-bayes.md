@@ -27,11 +27,11 @@ sparsity. Since the training data is only used once, it is not necessary to cach
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[NaiveBayes](api/mllib/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
+[NaiveBayes](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
 multinomial naive Bayes. It takes an RDD of
-[LabeledPoint](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an optional
+[LabeledPoint](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an optional
 smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/mllib/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
+[NaiveBayesModel](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
 can be used for evaluation and prediction.
 
 {% highlight scala %}
@@ -59,11 +59,11 @@ val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test
 
 <div data-lang="java" markdown="1">
 
-[NaiveBayes](api/mllib/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
+[NaiveBayes](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
 multinomial naive Bayes. It takes a Scala RDD of
-[LabeledPoint](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an
+[LabeledPoint](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an
 optionally smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/mllib/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
+[NaiveBayesModel](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
 can be used for evaluation and prediction.
 
 {% highlight java %}
