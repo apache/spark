@@ -102,11 +102,11 @@ double accuracy = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Do
 
 <div data-lang="python" markdown="1">
 
-[NaiveBayes](api/pyspark/pyspark.mllib.classification.NaiveBayes-class.html) implements multinomial
+[NaiveBayes](api/python/pyspark.mllib.classification.NaiveBayes-class.html) implements multinomial
 naive Bayes. It takes an RDD of
-[LabeledPoint](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html) and an optionally
+[LabeledPoint](api/python/pyspark.mllib.regression.LabeledPoint-class.html) and an optionally
 smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/pyspark/pyspark.mllib.classification.NaiveBayesModel-class.html), which can be
+[NaiveBayesModel](api/python/pyspark.mllib.classification.NaiveBayesModel-class.html), which can be
 used for evaluation and prediction.
 
 <!-- TODO: Make Python's example consistent with Scala's and Java's. -->

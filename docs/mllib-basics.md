@@ -78,13 +78,13 @@ MLlib recognizes the following types as dense vectors:
 
 and the following as sparse vectors:
 
-* MLlib's [`SparseVector`](api/pyspark/pyspark.mllib.linalg.SparseVector-class.html).
+* MLlib's [`SparseVector`](api/python/pyspark.mllib.linalg.SparseVector-class.html).
 * SciPy's
   [`csc_matrix`](http://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html#scipy.sparse.csc_matrix)
   with a single column
 
 We recommend using NumPy arrays over lists for efficiency, and using the factory methods implemented
-in [`Vectors`](api/pyspark/pyspark.mllib.linalg.Vectors-class.html) to create sparse vectors.
+in [`Vectors`](api/python/pyspark.mllib.linalg.Vectors-class.html) to create sparse vectors.
 
 {% highlight python %}
 import numpy as np
@@ -151,7 +151,7 @@ LabeledPoint neg = new LabeledPoint(1.0, Vectors.sparse(3, new int[] {0, 2}, new
 <div data-lang="python" markdown="1">
 
 A labeled point is represented by
-[`LabeledPoint`](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html).
+[`LabeledPoint`](api/python/pyspark.mllib.regression.LabeledPoint-class.html).
 
 {% highlight python %}
 from pyspark.mllib.linalg import SparseVector
