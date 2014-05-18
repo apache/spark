@@ -282,6 +282,15 @@ and distributed matrices.  Converting a distributed matrix to a different format
 global shuffle, which is quite expensive.  We implemented three types of distributed matrices in
 this release and will add more types in the future.
 
+The basic type is called `RowMatrix`. A `RowMatrix` is a row-oriented distributed
+matrix without meaningful row indices, e.g., a collection of feature vectors.
+It is backed by an RDD of its rows, where each row is a local vector.
+We assume that the number of columns is not huge for a `RowMatrix`.
+An `IndexedRowMatrix` is similar to a `RowMatrix` but with row indices,
+which can be used for identifying rows and joins.
+A `CoordinateMatrix` is a distributed matrix stored in [coordinate list (COO)](https://en.wikipedia.org/wiki/Sparse_matrix) format,
+backed by an RDD of its entries.
+
 ***Note***
 
 The underlying RDDs of a distributed matrix must be deterministic, because we cache the matrix size.
