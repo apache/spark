@@ -23,7 +23,6 @@ import sbt.Keys._
 import sbt.Task
 import sbtassembly.Plugin._
 import AssemblyKeys._
-import sbtavro.SbtAvro._
 import scala.Some
 import scala.util.Properties
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}

@@ -22,7 +22,6 @@ import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingCon
 import org.apache.spark.storage.StorageLevel
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import org.apache.spark.streaming.util.ManualClock
-import java.nio.charset.Charset
 import org.apache.flume.channel.MemoryChannel
 import org.apache.flume.Context
 import org.apache.flume.conf.Configurables
@@ -39,7 +38,7 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
     val flumeStream: ReceiverInputDStream[SparkPollingEvent] =
-      FlumeUtils.createPollingStream(ssc, "localhost", testPort, 100, 5,
+      FlumeUtils.createPollingStream(ssc, "localhost", testPort, 100, 1,
         StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[SparkPollingEvent]]
       with SynchronizedBuffer[Seq[SparkPollingEvent]]
@@ -63,15 +62,17 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
     ssc.start()
 
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    val input = Seq(1, 2, 3, 4, 5)
+    var t = 0
     for (i <- 0 until 5) {
       val tx = channel.getTransaction
       tx.begin()
-      for (j <- 0 until input.size) {
+      for (j <- 0 until 5) {
         channel.put(EventBuilder.withBody(
-          (String.valueOf(i) + input(j)).getBytes("utf-8"),
-          Map[String, String]("test-" + input(j).toString -> "header")))
+          String.valueOf(t).getBytes("utf-8"),
+          Map[String, String]("test-" + t.toString -> "header")))
+        t += 1
       }
+
       tx.commit()
       tx.close()
       Thread.sleep(500) // Allow some time for the events to reach
@@ -86,19 +87,30 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
     assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
     logInfo("Stopping context")
     ssc.stop()
+    sink.stop()
+    channel.stop()
 
-    val decoder = Charset.forName("UTF-8").newDecoder()
-
-    assert(outputBuffer.size === 5)
+    val flattenedBuffer = outputBuffer.flatten
+    assert(flattenedBuffer.size === 25)
     var counter = 0
-    for (i <- 0 until outputBuffer.size;
-         j <- 0 until outputBuffer(i).size) {
-      counter += 1
-      val eventToVerify = outputBuffer(i)(j).event
-      val str = decoder.decode(eventToVerify.getBody)
-      assert(str.toString === (String.valueOf(i) + input(j)))
-      assert(eventToVerify.getHeaders.get("test-" + input(j).toString) === "header")
+    for (i <- 0 until 25) {
+      val eventToVerify = EventBuilder.withBody(
+        String.valueOf(i).getBytes("utf-8"),
+        Map[String, String]("test-" + i.toString -> "header"))
+      var found = false
+      var j = 0
+      while (j < flattenedBuffer.size && !found) {
+        val strToCompare = new String(flattenedBuffer(j).event.getBody.array(), "utf-8")
+        if (new String(eventToVerify.getBody, "utf-8") == strToCompare &&
+          eventToVerify.getHeaders.get("test-" + i.toString)
+            .equals(flattenedBuffer(j).event.getHeaders.get("test-" + i.toString))) {
+          found = true
+          counter += 1
+        }
+        j += 1
+      }
     }
+    assert (counter === 25)
   }
 
 }

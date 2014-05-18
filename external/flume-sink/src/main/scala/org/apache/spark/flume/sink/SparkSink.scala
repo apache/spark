@@ -30,9 +30,8 @@ import java.util.concurrent._
 import java.util
 import org.apache.flume.conf.{ConfigurationException, Configurable}
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-import org.apache.avro.ipc.{NettyTransceiver, NettyServer}
+import org.apache.avro.ipc.NettyServer
 import org.apache.avro.ipc.specific.SpecificResponder
-import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import java.net.InetSocketAddress
 
 class SparkSink() extends AbstractSink with Configurable {
@@ -75,12 +74,10 @@ class SparkSink() extends AbstractSink with Configurable {
 
     val responder = new SpecificResponder(classOf[SparkFlumeProtocol], new AvroCallbackHandler())
 
-    serverOpt = Option(new NettyServer(responder, new InetSocketAddress(hostname, port),
-      new NioServerSocketChannelFactory(
-        Executors.newCachedThreadPool(new ThreadFactoryBuilder().setNameFormat(
-          "Spark Sink  " + classOf[NettyTransceiver].getSimpleName + " Boss-%d").build),
-        Executors.newFixedThreadPool(maxThreads, new ThreadFactoryBuilder().setNameFormat(
-          "Spark Sink " + classOf[NettyTransceiver].getSimpleName + "  I/O Worker-%d").build))))
+    // Using the constructor that takes specific thread-pools requires bringing in netty
+    // dependencies which are being excluded in the build. In practice,
+    // Netty dependencies are already available on the JVM as Flume would have pulled them in.
+    serverOpt = Option(new NettyServer(responder, new InetSocketAddress(hostname, port)))
 
     serverOpt.map(server => server.start())
     lock.lock()
@@ -93,10 +90,14 @@ class SparkSink() extends AbstractSink with Configurable {
   }
 
   override def stop() {
+    transactionExecutorOpt.map(executor => executor.shutdownNow())
+    serverOpt.map(server => {
+      server.close()
+      server.join()
+    })
     lock.lock()
     try {
       running = false
-      transactionExecutorOpt.map(executor => executor.shutdownNow())
       blockingCondition.signalAll()
     } finally {
       lock.unlock()
@@ -131,23 +132,28 @@ class SparkSink() extends AbstractSink with Configurable {
     Status.BACKOFF
   }
 
+
+  // Object representing an empty batch returned by the txn processor due to some error.
+  case object ErrorEventBatch extends EventBatch
+
   private class AvroCallbackHandler() extends SparkFlumeProtocol {
 
     override def getEventBatch(n: Int): EventBatch = {
       val processor = processorFactory.get.checkOut(n)
       transactionExecutorOpt.map(executor => executor.submit(processor))
       // Wait until a batch is available - can be null if some error was thrown
-      val eventBatch = Option(processor.eventQueue.take())
-      if (eventBatch.isDefined) {
-        val eventsToBeSent = eventBatch.get
-        processorMap.put(eventsToBeSent.getSequenceNumber, processor)
-        if (LOG.isDebugEnabled) {
-          LOG.debug("Sent " + eventsToBeSent.getEventBatch.size() +
-            " events with sequence number: " + eventsToBeSent.getSequenceNumber)
+      val eventBatch = processor.eventQueue.take()
+      eventBatch match {
+        case ErrorEventBatch => throw new FlumeException("Something went wrong. No events" +
+          " retrieved from channel.")
+        case events => {
+          processorMap.put(events.getSequenceNumber, processor)
+          if (LOG.isDebugEnabled) {
+            LOG.debug("Sent " + events.getEventBatch.size() +
+              " events with sequence number: " + events.getSequenceNumber)
+          }
+          events
         }
-        eventsToBeSent
-      } else {
-        throw new FlumeException("Error while trying to retrieve events from the channel.")
       }
     }
 
@@ -211,17 +217,38 @@ class SparkSink() extends AbstractSink with Configurable {
         val events = eventBatch.getEventBatch
         events.clear()
         val loop = new Breaks
+        var gotEventsInThisTxn = false
         loop.breakable {
-          for (i <- 0 until maxBatchSize) {
+          var i = 0
+          // Using for here causes the maxBatchSize change to be ineffective as the Range gets
+          // pregenerated
+          while (i < maxBatchSize) {
+            i += 1
             val eventOpt = Option(getChannel.take())
-
             eventOpt.map(event => {
               events.add(new SparkSinkEvent(toCharSequenceMap(event
                 .getHeaders),
                 ByteBuffer.wrap(event.getBody)))
+              gotEventsInThisTxn = true
             })
             if (eventOpt.isEmpty) {
-              loop.break()
+              if (!gotEventsInThisTxn) {
+                // To avoid sending empty batches, we wait till events are available backing off
+                // between attempts to get events. Each attempt to get an event though causes one
+                // iteration to be lost. To ensure that we still send back maxBatchSize number of
+                // events, we cheat and increase the maxBatchSize by 1 to account for the lost
+                // iteration. Even throwing an exception is expensive as Avro will serialize it
+                // and send it over the wire, which is useless. Before incrementing though,
+                // ensure that we are not anywhere near INT_MAX.
+                if (maxBatchSize >= Int.MaxValue / 2) {
+                  // Random sanity check
+                  throw new RuntimeException("Safety exception - polled too many times, no events!")
+                }
+                maxBatchSize += 1
+                Thread.sleep(500)
+              } else {
+                loop.break()
+              }
             }
           }
         }
@@ -283,7 +310,7 @@ class SparkSink() extends AbstractSink with Configurable {
           null // No point rethrowing the exception
       } finally {
         // Must *always* release the caller thread
-        eventQueue.put(null)
+        eventQueue.put(ErrorEventBatch)
         // In the case of success coming after the timeout, but before resetting the seq number
         // remove the event from the map and then clear the value
         resultQueue.clear()
