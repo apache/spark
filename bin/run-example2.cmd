@@ -30,7 +30,7 @@ if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
 
 rem Test that an argument was given
 if not "x%1"=="x" goto arg_given
-  echo Usage: run-example ^<example-class^> [^<example-args^>]
+  echo Usage: run-example ^<example-class^> [example-args]
   echo   - set MASTER=XX to use a specific master
   echo   - can use abbreviated example class name (e.g. SparkPi, mllib.LinearRegression)
   goto exit

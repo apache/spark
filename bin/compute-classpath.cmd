@@ -20,6 +20,13 @@ rem
 rem This script computes Spark's classpath and prints it to stdout; it's used by both the "run"
 rem script and the ExecutorRunner in standalone cluster mode.
 
+rem If we're called from spark-class2.cmd, it already set enabledelayedexpansion and setting
+rem it here would stop us from affecting its copy of the CLASSPATH variable; otherwise we
+rem need to set it here because we use !classpath! below.
+if "%DONT_PRINT_CLASSPATH%"=="1" goto skip_delayed_expansion
+setlocal enabledelayedexpansion
+:skip_delayed_expansion
+
 set SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
@@ -47,9 +54,9 @@ rem Datanucleus jars do not work if only included in the uber jar as plugin.xml 
 rem Both sbt and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is
 rem built with Hive, so look for them there.
 if exist "%FWDIR%RELEASE" (
-  set datanucleus_dir=%FWDIR%\lib
+  set datanucleus_dir=%FWDIR%lib
 ) else (
-  set datanucleus_dir=%FWDIR%\lib_managed\jars
+  set datanucleus_dir=%FWDIR%lib_managed\jars
 )
 set "datanucleus_jars="
 for %%d in ("%datanucleus_dir%\datanucleus-*.jar") do (
