@@ -1,6 +1,7 @@
 ---
 layout: global
-title: <a href="mllib-guide.html">MLlib</a> - Naive Bayes
+title: Naive Bayes - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Naive Bayes
 ---
 
 Naive Bayes is a simple multiclass classification algorithm with the assumption of independence
@@ -27,11 +28,11 @@ sparsity. Since the training data is only used once, it is not necessary to cach
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[NaiveBayes](api/mllib/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
+[NaiveBayes](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
 multinomial naive Bayes. It takes an RDD of
-[LabeledPoint](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an optional
+[LabeledPoint](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an optional
 smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/mllib/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
+[NaiveBayesModel](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
 can be used for evaluation and prediction.
 
 {% highlight scala %}
@@ -59,11 +60,11 @@ val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test
 
 <div data-lang="java" markdown="1">
 
-[NaiveBayes](api/mllib/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
+[NaiveBayes](api/java/org/apache/spark/mllib/classification/NaiveBayes.html) implements
 multinomial naive Bayes. It takes a Scala RDD of
-[LabeledPoint](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an
+[LabeledPoint](api/java/org/apache/spark/mllib/regression/LabeledPoint.html) and an
 optionally smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/mllib/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
+[NaiveBayesModel](api/java/org/apache/spark/mllib/classification/NaiveBayesModel.html), which
 can be used for evaluation and prediction.
 
 {% highlight java %}
@@ -102,11 +103,11 @@ double accuracy = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Do
 
 <div data-lang="python" markdown="1">
 
-[NaiveBayes](api/pyspark/pyspark.mllib.classification.NaiveBayes-class.html) implements multinomial
+[NaiveBayes](api/python/pyspark.mllib.classification.NaiveBayes-class.html) implements multinomial
 naive Bayes. It takes an RDD of
-[LabeledPoint](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html) and an optionally
+[LabeledPoint](api/python/pyspark.mllib.regression.LabeledPoint-class.html) and an optionally
 smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/pyspark/pyspark.mllib.classification.NaiveBayesModel-class.html), which can be
+[NaiveBayesModel](api/python/pyspark.mllib.classification.NaiveBayesModel-class.html), which can be
 used for evaluation and prediction.
 
 <!-- TODO: Make Python's example consistent with Scala's and Java's. -->

@@ -114,7 +114,11 @@
         </div>
 
         <div class="container" id="content">
-          <h1 class="title">{{ page.title }}</h1>
+          {% if page.displayTitle %}
+            <h1 class="title">{{ page.displayTitle }}</h1>
+          {% else %}
+            <h1 class="title">{{ page.title }}</h1>
+          {% endif %}
 
           {{ content }}
 
