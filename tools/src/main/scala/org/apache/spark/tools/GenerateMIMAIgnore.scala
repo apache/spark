@@ -23,6 +23,7 @@ import java.util.jar.JarFile
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.reflect.runtime.universe.runtimeMirror
+import scala.reflect.runtime.{universe => unv}
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
@@ -70,8 +71,22 @@ object GenerateMIMAIgnore {
       }
     }
 
+    def isDeveloperApi(className: String) = {
+      try {
+        val clazz = mirror.classSymbol(Class.forName(className, false, classLoader))
+
+        clazz.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
+      } catch {
+        case _: Throwable => {
+          println("Error determining Annotations: " + className)
+          false
+        }
+      }
+    }
+
     for (className <- classes) {
       val directlyPrivateSpark = isPackagePrivate(className)
+      val developerApi = isDeveloperApi(className)
 
       /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
@@ -83,7 +98,8 @@ object GenerateMIMAIgnore {
           false
         }
       }
-      if (directlyPrivateSpark || indirectlyPrivateSpark) privateClasses += className
+      if (directlyPrivateSpark || indirectlyPrivateSpark || developerApi) privateClasses +=
+        className
     }
     privateClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet
   }
@@ -98,10 +114,10 @@ object GenerateMIMAIgnore {
   private def shouldExclude(name: String) = {
     // Heuristic to remove JVM classes that do not correspond to user-facing classes in Scala
     name.contains("anon") ||
-    name.endsWith("$class") ||
-    name.contains("$sp") ||
-    name.contains("hive") ||
-    name.contains("Hive")
+      name.endsWith("$class") ||
+      name.contains("$sp") ||
+      name.contains("hive") ||
+      name.contains("Hive")
   }
 
   /**
@@ -127,7 +143,7 @@ object GenerateMIMAIgnore {
     val jar = new JarFile(new File(jarPath))
     val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))
     val classes = for (entry <- enums if entry.endsWith(".class"))
-      yield Class.forName(entry.replace('/', '.').stripSuffix(".class"), false, classLoader)
+    yield Class.forName(entry.replace('/', '.').stripSuffix(".class"), false, classLoader)
     classes
   }
 }
