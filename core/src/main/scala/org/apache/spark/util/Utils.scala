@@ -862,6 +862,52 @@ private[spark] object Utils extends Logging {
     Source.fromBytes(buff).mkString
   }
 
+  def offsetBytes(files: Seq[File], startIndex: Long, endIndex: Long): String = {
+    val fileLengths = files.map { _.length }
+    val fileToLength = files.zip(fileLengths).toMap
+    logDebug("Log files: \n" + fileToLength.mkString("\n"))
+
+    val stringBuffer = new StringBuffer((endIndex - startIndex).toInt)
+    var sum = 0L
+    for (file <- files) {
+      val startIndexOfFile = sum
+      val endIndexOfFile = sum + fileToLength(file)
+      logDebug(s"Processing file $file, " +
+        s"with start index = $startIndexOfFile, end index = $endIndex")
+
+      /*
+                                      ____________
+       range 1:                      |            |
+                                     |   case A   |
+
+       files:   |==== file 1 ====|====== file 2 ======|===== file 3 =====|
+
+                    |   case B  .       case C       .    case D    |
+       range 2:     |___________.____________________.______________|
+       */
+
+      if (startIndex <= startIndexOfFile  && endIndex >= endIndexOfFile) {
+        // Case C: read the whole file
+        stringBuffer.append(offsetBytes(file.getAbsolutePath, 0, fileToLength(file)))
+      } else if (startIndex > startIndexOfFile && startIndex < endIndexOfFile) {
+        // Case A and B: read from startIndex to min(endIndex, endIndexOfFile)
+        val effectiveStartIndex = startIndex - startIndexOfFile
+        val effectiveEndIndex = math.min(endIndex - startIndexOfFile, fileToLength(file))
+        stringBuffer.append(Utils.offsetBytes(
+          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+      } else if (endIndex > startIndexOfFile && endIndex < endIndexOfFile) {
+        // Case D: read from startIndex to min(endIndex, endIndexOfFile)
+        val effectiveStartIndex = math.max(startIndex - startIndexOfFile, 0)
+        val effectiveEndIndex = endIndex - startIndexOfFile
+        stringBuffer.append(Utils.offsetBytes(
+          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+      }
+      sum += fileToLength(file)
+      logDebug(s"After processing file $file, string built is ${stringBuffer.toString}}")
+    }
+    stringBuffer.toString
+  }
+
   /**
    * Clone an object using a Spark serializer.
    */
