@@ -23,6 +23,8 @@ import java.util.jar.JarFile
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.reflect.runtime.universe.runtimeMirror
+import scala.reflect.runtime.{universe => unv}
+import scala.reflect._
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
@@ -68,10 +70,29 @@ object GenerateMIMAIgnore {
           false
         }
       }
-    }
-
+    }  
+	
+    def classesAnnotationCheck(className: String) = {
+	
+      try {
+        /* Couldn't figure out if it's possible to determine a-priori whether a given symbol
+           has specified annotation. */
+		   
+	val classSymbol=mirror.classSymbol(Class.forName(className, false, classLoader))
+        val annotList=annotationsOfClass(classSymbol)
+	
+	isAnnotationExistClassLevel(annotList)
+      } catch {
+        case _: Throwable => {
+          println("Error determining visibility: " + className)
+          false
+        }
+      }
+    }  
+	
     for (className <- classes) {
       val directlyPrivateSpark = isPackagePrivate(className)
+	val annotationCheck = classesAnnotationCheck(className)
 
       /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
@@ -83,7 +104,8 @@ object GenerateMIMAIgnore {
           false
         }
       }
-      if (directlyPrivateSpark || indirectlyPrivateSpark) privateClasses += className
+	
+      if (directlyPrivateSpark || indirectlyPrivateSpark || annotationCheck) privateClasses += className
     }
     privateClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet
   }
@@ -94,6 +116,19 @@ object GenerateMIMAIgnore {
     println("Created : .mima-excludes in current directory.")
   }
 
+  private def annotationsOfClass(classSymbol  : unv.ClassSymbol ) ={
+ 	classSymbol.annotations
+  }  
+
+  private def annotationsOfClassMembers(classType: unv.Type) = {
+    classType.members.foldLeft(Nil: List[unv.type#Annotation]) {
+      (xs, x) => x.annotations ::: xs
+    }
+  }
+
+  private def isAnnotationExistClassLevel(annotList: List[unv.Annotation]): Boolean = {
+    annotList.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
+  }
 
   private def shouldExclude(name: String) = {
     // Heuristic to remove JVM classes that do not correspond to user-facing classes in Scala
