@@ -123,7 +123,8 @@ abstract class RDD[T: ClassTag](
     a parallel operation as the partitioner is marked as transient */
   def getPartitioner: Option[Partitioner] = {
     partitioner match {
-      case null => throw new SparkException("Actions on RDDs inside of another RDD operation are not supported")
+      case null => throw new SparkException("Actions on RDDs inside of another RDD operation are " +
+          "not supported")
       case _ => partitioner
     }
   }
@@ -131,7 +132,8 @@ abstract class RDD[T: ClassTag](
   /** The SparkContext that created this RDD. */
   def sparkContext: SparkContext = {
     sc match {
-      case null => throw new SparkException("Actions on RDDs inside of another RDD operation are not supported")
+      case null => throw new SparkException("Actions on RDDs inside of another RDD operation are " +
+          "not supported")
       case _ => sc
     }
   }
@@ -701,7 +703,8 @@ abstract class RDD[T: ClassTag](
   def zipPartitions[B: ClassTag, C: ClassTag, D: ClassTag, V: ClassTag]
       (rdd2: RDD[B], rdd3: RDD[C], rdd4: RDD[D], preservesPartitioning: Boolean)
       (f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V]): RDD[V] =
-    new ZippedPartitionsRDD4(sc, sparkContext.clean(f), this, rdd2, rdd3, rdd4, preservesPartitioning)
+    new ZippedPartitionsRDD4(sc, sparkContext.clean(f), this, rdd2, rdd3, rdd4,
+      preservesPartitioning)
 
   def zipPartitions[B: ClassTag, C: ClassTag, D: ClassTag, V: ClassTag]
       (rdd2: RDD[B], rdd3: RDD[C], rdd4: RDD[D])
@@ -740,7 +743,8 @@ abstract class RDD[T: ClassTag](
    */
   def toLocalIterator: Iterator[T] = {
     def collectPartition(p: Int): Array[T] = {
-      sparkContext.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p), allowLocal = false).head
+      sparkContext.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p),
+        allowLocal = false).head
     }
     (0 until partitions.length).iterator.flatMap(i => collectPartition(i))
   }
@@ -1001,7 +1005,8 @@ abstract class RDD[T: ClassTag](
 
       val left = num - buf.size
       val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
-      val res = sparkContext.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p, allowLocal = true)
+      val res = sparkContext.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p,
+        allowLocal = true)
 
       res.foreach(buf ++= _.take(num - buf.size))
       partsScanned += numPartsToTry
