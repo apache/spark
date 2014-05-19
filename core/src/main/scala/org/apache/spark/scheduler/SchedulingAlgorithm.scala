@@ -34,7 +34,7 @@ private[spark] class FIFOSchedulingAlgorithm extends SchedulingAlgorithm {
     if (res == 0) {
       val stageId1 = s1.stageId
       val stageId2 = s2.stageId
-      res = math.signum(stageId1 - stageId2)
+      res = math.signum(stageId2 - stageId1)
     }
     if (res < 0) {
       true
