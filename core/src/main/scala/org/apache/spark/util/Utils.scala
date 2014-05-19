@@ -40,6 +40,7 @@ import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /**
@@ -781,6 +782,18 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Execute a block of code that evaluates to Unit, forwarding any uncaught exceptions to the
+   * default UncaughtExceptionHandler
+   */
+  def tryOrExit(block: => Unit) {
+    try {
+      block
+    } catch {
+      case t: Throwable => ExecutorUncaughtExceptionHandler.uncaughtException(t)
+    }
+  }
+
+  /**
    * A regular expression to match classes of the "core" Spark API that we want to skip when
    * finding the call site of a method.
    */
@@ -1088,7 +1101,7 @@ private[spark] object Utils extends Logging {
    * Strip the directory from a path name
    */
   def stripDirectory(path: String): String = {
-    path.split(File.separator).last
+    new File(path).getName
   }
 
   /**
@@ -1136,6 +1149,8 @@ private[spark] object Utils extends Logging {
     try {
       f
     } catch {
+      case ct: ControlThrowable =>
+        throw ct
       case t: Throwable =>
         logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
         throw t

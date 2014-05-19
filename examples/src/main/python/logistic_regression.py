@@ -47,12 +47,12 @@ def readPointBatch(iterator):
     return [matrix]
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print >> sys.stderr, "Usage: logistic_regression <master> <file> <iters>"
+    if len(sys.argv) != 3:
+        print >> sys.stderr, "Usage: logistic_regression <file> <iterations>"
         exit(-1)
-    sc = SparkContext(sys.argv[1], "PythonLR", pyFiles=[realpath(__file__)])
-    points = sc.textFile(sys.argv[2]).mapPartitions(readPointBatch).cache()
-    iterations = int(sys.argv[3])
+    sc = SparkContext(appName="PythonLR")
+    points = sc.textFile(sys.argv[1]).mapPartitions(readPointBatch).cache()
+    iterations = int(sys.argv[2])
 
     # Initialize w to a random value
     w = 2 * np.random.ranf(size=D) - 1

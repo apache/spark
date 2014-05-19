@@ -44,18 +44,22 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
+      <groupId>org.spark-project.hive</groupId>
       <artifactId>hive-metastore</artifactId>
       <version>${hive.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
+      <groupId>org.spark-project.hive</groupId>
       <artifactId>hive-exec</artifactId>
       <version>${hive.version}</version>
       <exclusions>
         <exclusion>
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>commons-lang</groupId>
+          <artifactId>commons-lang</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -64,7 +68,7 @@
       <artifactId>jackson-mapper-asl</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
+      <groupId>org.spark-project.hive</groupId>
       <artifactId>hive-serde</artifactId>
       <version>${hive.version}</version>
       <exclusions>
@@ -75,6 +79,10 @@
         <exclusion>
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>commons-lang</groupId>
+          <artifactId>commons-lang</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
