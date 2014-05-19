@@ -22,7 +22,7 @@ rem script and the ExecutorRunner in standalone cluster mode.
 
 rem If we're called from spark-class2.cmd, it already set enabledelayedexpansion and setting
 rem it here would stop us from affecting its copy of the CLASSPATH variable; otherwise we
-rem need to set it here because we use !classpath! below.
+rem need to set it here because we use !datanucleus_jars! below.
 if "%DONT_PRINT_CLASSPATH%"=="1" goto skip_delayed_expansion
 setlocal enabledelayedexpansion
 :skip_delayed_expansion
