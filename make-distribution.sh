@@ -140,6 +140,7 @@ if [[ "$SPARK_HADOOP_VERSION" =~ ^0\.23\. ]]; then BUILD_COMMAND="$BUILD_COMMAND
 if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.2\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.2"; fi
 if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.3\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.3"; fi
 if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.4\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.4"; fi
+if [[ "$SPARK_HADOOP_VERSION" =~ ^1\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-1"; fi
 if [[ "$SPARK_HIVE" == "true" ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phive"; fi
 if [[ "$SPARK_YARN" == "true" ]]; then
   # For hadoop versions 0.23.x to 2.1.x, use the yarn-alpha profile
