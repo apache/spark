@@ -1147,7 +1147,7 @@ private[spark] object Utils extends Logging {
    * Strip the directory from a path name
    */
   def stripDirectory(path: String): String = {
-    path.split(File.separator).last
+    new File(path).getName
   }
 
   /**
@@ -1195,6 +1195,8 @@ private[spark] object Utils extends Logging {
     try {
       f
     } catch {
+      case ct: ControlThrowable =>
+        throw ct
       case t: Throwable =>
         logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
         throw t
