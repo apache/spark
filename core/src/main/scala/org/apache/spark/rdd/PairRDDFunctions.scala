@@ -87,7 +87,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       }
     }
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    if (self.partitioner == Some(partitioner)) {
+    if (self.getPartitioner == Some(partitioner)) {
       self.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
@@ -300,7 +300,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     if (keyClass.isArray && partitioner.isInstanceOf[HashPartitioner]) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
-    if (self.partitioner == Some(partitioner)) {
+    if (self.getPartitioner == Some(partitioner)) {
       self
     } else {
       new ShuffledRDD[K, V, (K, V)](self, partitioner)
@@ -553,7 +553,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * RDD will be <= us.
    */
   def subtractByKey[W: ClassTag](other: RDD[(K, W)]): RDD[(K, V)] =
-    subtractByKey(other, self.partitioner.getOrElse(new HashPartitioner(self.partitions.size)))
+    subtractByKey(other, self.getPartitioner.getOrElse(new HashPartitioner(self.partitions.size)))
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
   def subtractByKey[W: ClassTag](other: RDD[(K, W)], numPartitions: Int): RDD[(K, V)] =
@@ -568,7 +568,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * RDD has a known partitioner by only searching the partition that the key maps to.
    */
   def lookup(key: K): Seq[V] = {
-    self.partitioner match {
+    self.getPartitioner match {
       case Some(p) =>
         val index = p.getPartition(key)
         def process(it: Iterator[(K, V)]): Seq[V] = {

@@ -496,7 +496,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("takeSample") {
     val data = sc.parallelize(1 to 100, 2)
-    
+
     for (num <- List(5, 20, 100)) {
       val sample = data.takeSample(withReplacement=false, num=num)
       assert(sample.size === num)        // Got exactly num elements
@@ -758,4 +758,26 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       mutableDependencies += dep
     }
   }
+
+  test("RDD operations inside of another RDD operation should fail with a SparkException") {
+    val rdd1 = sc.makeRDD(List(1, 2))
+    val rdd2 = sc.makeRDD(List((1, 2)))
+
+    intercept[SparkException] {
+      rdd1.map(rdd2.lookup(_)).collect()
+    }
+
+    intercept[SparkException] {
+      rdd1.map(x => rdd1.map(y => x * y)).collect()
+    }
+
+    intercept[SparkException] {
+      rdd1.map(x => rdd1.count()).collect()
+    }
+
+    intercept[SparkException] {
+      rdd1.map(x => rdd2.count()).collect()
+    }
+  }
+
 }
