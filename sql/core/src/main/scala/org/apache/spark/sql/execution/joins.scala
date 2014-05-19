@@ -214,18 +214,14 @@ case class BroadcastNestedLoopJoin(
     if (joinType == RightOuter || joinType == FullOuter) {
       val includedBroadcastTuples = streamedPlusMatches.map(_._2)
       val allIncludedBroadcastTuples =
-        if (includedBroadcastTuples.count == 0) {
-          new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
-        } else {
-          streamedPlusMatches.map(_._2).reduce(_ ++ _)
-        }
+        includedBroadcastTuples.fold(
+          new scala.collection.mutable.BitSet(broadcastedRelation.value.size))(_ ++ _)
 
       val rightOuterMatches: Seq[Row] =
-        broadcastedRelation.value.zipWithIndex.filter {
-          case (row, i) => !allIncludedBroadcastTuples.contains(i)
-        }.map {
-          // TODO: Use projection.
-          case (row, _) => buildRow(Vector.fill(left.output.size)(null) ++ row)
+        broadcastedRelation.value.zipWithIndex.collect {
+          case (row, i) if !allIncludedBroadcastTuples.contains(i) =>
+            // TODO: Use projection.
+            buildRow(Vector.fill(left.output.size)(null) ++ row)
         }
 
       // TODO: Breaks lineage.
