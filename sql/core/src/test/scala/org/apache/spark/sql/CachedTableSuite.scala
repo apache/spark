@@ -21,6 +21,7 @@ import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution.SparkLogicalPlan
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
 
 class CachedTableSuite extends QueryTest {
   TestData // Load test tables.
@@ -69,5 +70,36 @@ class CachedTableSuite extends QueryTest {
     TestSQLContext.cacheTable("testData")
     TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key")
     TestSQLContext.uncacheTable("testData")
+  }
+
+  test("cacheTable() should be idempotent") {
+    TestSQLContext.cacheTable("testData")
+    TestSQLContext.cacheTable("testData")
+    EliminateAnalysisOperators(TestSQLContext.table("testData").logicalPlan) match {
+      case SparkLogicalPlan(InMemoryColumnarTableScan(_: InMemoryColumnarTableScan, _, _)) =>
+        fail("In-memory table shouldn't be cached again")
+
+      case SparkLogicalPlan(_: InMemoryColumnarTableScan) =>
+
+      case _ =>
+        fail("Table was not cached")
+    }
+  }
+
+  test("SchemaRDD.cache() should be idempotent") {
+    val schemaRdd = TestSQLContext.table("testData")
+
+    schemaRdd.cache().registerAsTable("cachedTestData")
+    schemaRdd.cache().registerAsTable("cachedTestData")
+
+    EliminateAnalysisOperators(TestSQLContext.table("cachedTestData").logicalPlan) match {
+      case SparkLogicalPlan(InMemoryColumnarTableScan(_: InMemoryColumnarTableScan, _, _)) =>
+        fail("Multiple copy of in-memory table ")
+
+      case SparkLogicalPlan(_: InMemoryColumnarTableScan) =>
+
+      case _ =>
+        fail("Table was not cached")
+    }
   }
 }

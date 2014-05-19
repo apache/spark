@@ -18,8 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.execution.SparkLogicalPlan
 
 /**
  * Contains functions that are shared between all SchemaRDD types (i.e., Scala, Java)
@@ -27,7 +29,30 @@ import org.apache.spark.sql.catalyst.plans.logical._
 private[sql] trait SchemaRDDLike {
   @transient val sqlContext: SQLContext
 
-  protected[spark] def logicalPlan: LogicalPlan
+  protected def baseLogicalPlan: LogicalPlan
+
+  @transient
+  protected var persistedInMemory = false
+
+  @transient
+  protected lazy val asInMemoryTable: InMemoryColumnarTableScan =
+    EliminateAnalysisOperators(baseLogicalPlan) match {
+      case SparkLogicalPlan(inMem: InMemoryColumnarTableScan) =>
+        persistedInMemory = true
+        inMem
+
+      case _ =>
+        val useCompression = sqlContext.sparkContext.conf.getBoolean(
+          "spark.sql.inMemoryColumnarStorage.compressed", false)
+
+        InMemoryColumnarTableScan(
+          baseLogicalPlan.output,
+          sqlContext.executePlan(baseLogicalPlan).executedPlan,
+          useCompression)
+    }
+
+  protected[spark] def logicalPlan =
+    if (persistedInMemory) SparkLogicalPlan(asInMemoryTable) else baseLogicalPlan
 
   private[sql] def baseSchemaRDD: SchemaRDD
 

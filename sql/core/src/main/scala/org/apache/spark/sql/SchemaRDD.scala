@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
@@ -100,32 +99,10 @@ import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner,
 @AlphaComponent
 class SchemaRDD(
     @transient val sqlContext: SQLContext,
-    @transient baseLogicalPlan: LogicalPlan)
+    @transient protected val baseLogicalPlan: LogicalPlan)
   extends RDD[Row](sqlContext.sparkContext, Nil) with SchemaRDDLike {
 
-  @transient
-  protected var persistedInMemory = false
-
-  @transient
-  protected lazy val asInMemoryTable: InMemoryColumnarTableScan =
-    EliminateAnalysisOperators(baseLogicalPlan) match {
-      case SparkLogicalPlan(inMem: InMemoryColumnarTableScan) =>
-        persistedInMemory = true
-        inMem
-
-      case _ =>
-        val useCompression = sqlContext.sparkContext.conf.getBoolean(
-          "spark.sql.inMemoryColumnarStorage.compressed", false)
-
-        InMemoryColumnarTableScan(
-          baseLogicalPlan.output,
-          sqlContext.executePlan(baseLogicalPlan).executedPlan,
-          useCompression)
-    }
-
   def baseSchemaRDD = this
-
-  def logicalPlan = if (persistedInMemory) SparkLogicalPlan(asInMemoryTable) else baseLogicalPlan
 
   private def refreshDependencies() {
     clearDependencies()
