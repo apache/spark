@@ -27,7 +27,7 @@ SCALA_VERSION=2.10
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   echo "Usage: ./bin/pyspark [options]"
-  ./bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   exit 0
 fi
 
