@@ -632,7 +632,6 @@ object SparkBuild extends Build {
   def flumeSinkSettings() = {
     sharedSettings ++ Seq(
       name := "spark-streaming-flume-sink",
-      previousArtifact := sparkPreviousArtifact("spark-streaming-flume-sink"),
       libraryDependencies ++= Seq(
         "org.apache.flume" % "flume-ng-sdk" % "1.4.0" % "compile"
           excludeAll(excludeIONetty, excludeThrift),
