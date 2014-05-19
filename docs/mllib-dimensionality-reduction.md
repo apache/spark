@@ -1,6 +1,7 @@
 ---
 layout: global
-title: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
+title: Dimensionality Reduction - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
 ---
 
 * Table of contents
