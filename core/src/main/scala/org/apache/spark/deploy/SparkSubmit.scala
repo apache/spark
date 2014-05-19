@@ -299,7 +299,7 @@ object SparkSubmit {
   }
 
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
-    val localJarFile = new File(new URI(localJar).getPath)
+    val localJarFile = new File(localJar)
     if (!localJarFile.exists()) {
       printWarning(s"Jar $localJar does not exist, skipping.")
     }

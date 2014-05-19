@@ -17,6 +17,8 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
+setlocal enabledelayedexpansion
+
 set SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
