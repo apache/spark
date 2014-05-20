@@ -37,7 +37,8 @@ Because HDFS is not protocol-compatible across versions, if you want to read fro
   </thead>
   <tbody>
     <tr><td>0.23.x</td><td>hadoop-0.23</td></tr>
-    <tr><td>1.x to 2.1.x</td><td>(none)</td></tr>
+    <tr><td>1.x</td><td>hadoop-1</td></tr>
+    <tr><td>2.0.x to 2.1.x</td><td>(none)</td></tr>
     <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
     <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
     <tr><td>2.4.x</td><td>hadoop-2.4</td></tr>

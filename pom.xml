@@ -952,6 +952,18 @@
     <!-- A series of build profiles where customizations for particular Hadoop releases can be made -->
 
     <profile>
+      <id>hadoop-1</id>
+      <!-- SPARK-1875: NoClassDefFoundError: StringUtils when building against Hadoop 1 -->
+      <dependencies>
+        <dependency>
+          <groupId>commons-lang</groupId>
+          <artifactId>commons-lang</artifactId>
+          <version>2.4</version>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <profile>
       <id>hadoop-0.23</id>
       <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
       <dependencies>
