@@ -4,8 +4,6 @@ resolvers += Resolver.url("artifactory", url("http://scalasbt.artifactoryonline.
 
 resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
 
-resolvers += "sbt-plugins" at "http://repo.scala-sbt.org/scalasbt/sbt-plugin-releases"
-
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.10.2")
 
 addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "2.2.0")
