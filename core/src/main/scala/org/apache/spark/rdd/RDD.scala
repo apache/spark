@@ -422,6 +422,37 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Randomly splits this RDD using exact stratified sampling with proportional allocation.
+   * Strata are defined by the given stratifier function.
+   * Strata are indexed with integers 0,1,....
+   * The max stratum index determines the length of the returned array.
+   *
+   * @param stratifier Given an RDD element, return an Int indicating the stratum for the element.
+   * @param fraction Fraction of samples to keep.
+   * @param withReplacement Sample with replacement.
+   * @param seed random seed
+   *
+   * @return stratified samples, as maps with key=stratum, value=Array[data type]
+   */
+  def stratifiedSample[K: ClassTag](
+      stratifier: (T) => K,
+      fraction: Double,
+      withReplacement: Boolean = false,
+      seed: Long = Utils.random.nextLong) : Map[K,Array[T]] = {
+    require(fraction >= 0.0, "Invalid fraction value: " + fraction)
+
+    val stratifiedData = this.map(x => (stratifier(x),x)).groupByKey()
+    val strataCounts = stratifiedData.map(x => (x._1, x._2.size))
+    strataCounts.collectAsMap().map { x =>
+      (
+        x._1,
+        this.filter(y => stratifier(y) == x._1)
+          .takeSample(withReplacement, math.ceil(x._2 * fraction).intValue)
+      )
+    }
+  }
+
+  /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
    */
