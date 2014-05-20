@@ -40,7 +40,7 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, SerializableHyperLogLog, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
@@ -1095,6 +1095,17 @@ abstract class RDD[T: ClassTag](
   /** A private method for tests, to look at the contents of each partition */
   private[spark] def collectPartitions(): Array[Array[T]] = {
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
+  }
+
+  def cachePoint(): CachePointRDD[T] = {
+    val cachePointRDD = new CachePointRDD[T](sc, this.partitions.length)
+    val func = (ctx: TaskContext, iterator: Iterator[T]) => {
+      val key = RDDBlockId(cachePointRDD.id, ctx.partitionId)
+      SparkEnv.get.blockManager.put(key, iterator, StorageLevel.MEMORY_AND_DISK, true)
+      Nil
+    }
+    sc.runJob(this, func)
+    cachePointRDD
   }
 
   /**
