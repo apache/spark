@@ -47,7 +47,7 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
     preservesPartitioning: Boolean = false)
   extends RDD[V](sc, rdds.map(x => new OneToOneDependency(x))) {
 
-  override val partitioner =
+  @transient override val partitioner =
     if (preservesPartitioning) firstParent[Any].partitioner else None
 
   override def getPartitions: Array[Partition] = {

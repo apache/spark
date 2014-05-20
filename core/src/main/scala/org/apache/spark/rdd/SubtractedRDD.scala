@@ -51,7 +51,7 @@ import org.apache.spark.serializer.Serializer
 private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     @transient var rdd1: RDD[_ <: Product2[K, V]],
     @transient var rdd2: RDD[_ <: Product2[K, W]],
-    part: Partitioner)
+    @transient part: Partitioner)
   extends RDD[(K, V)](rdd1.context, Nil) {
 
   private var serializer: Serializer = null
@@ -89,7 +89,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     array
   }
 
-  override val partitioner = Some(part)
+  @transient override val partitioner = Some(part)
 
   override def compute(p: Partition, context: TaskContext): Iterator[(K, V)] = {
     val partition = p.asInstanceOf[CoGroupPartition]

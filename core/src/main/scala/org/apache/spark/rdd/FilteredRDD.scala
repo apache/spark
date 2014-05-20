@@ -28,7 +28,7 @@ private[spark] class FilteredRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  override val partitioner = prev.partitioner    // Since filter cannot change a partition's keys
+  @transient override val partitioner = prev.partitioner    // Since filter cannot change a partition's keys
 
   override def compute(split: Partition, context: TaskContext) =
     firstParent[T].iterator(split, context).filter(f)

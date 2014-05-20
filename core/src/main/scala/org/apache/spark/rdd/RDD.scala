@@ -112,7 +112,7 @@ abstract class RDD[T: ClassTag](
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
   /** Optionally overridden by subclasses to specify how they are partitioned. */
-  @transient val partitioner: Option[Partitioner] = None
+  def partitioner: Option[Partitioner] = getPartitioner
 
   // =======================================================================
   // Methods and fields available on all RDDs
@@ -126,7 +126,7 @@ abstract class RDD[T: ClassTag](
     partitioner match {
       case null => throw new SparkException("Actions on RDDs inside of another RDD operation are " +
           "not supported")
-      case _ => partitioner
+      case _ => partitioner_
     }
   }
 
@@ -195,6 +195,8 @@ abstract class RDD[T: ClassTag](
   // be overwritten when we're checkpointed
   private var dependencies_ : Seq[Dependency[_]] = null
   @transient private var partitions_ : Array[Partition] = null
+  @transient val partitioner_ : Option[Partitioner] = None
+
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
   private def checkpointRDD: Option[RDD[T]] = checkpointData.flatMap(_.checkpointRDD)

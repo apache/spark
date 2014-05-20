@@ -83,7 +83,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
   override def getDependencies: Seq[Dependency[_]] = {
     rdds.map { rdd: RDD[_ <: Product2[K, _]] =>
-      if (rdd.getPartitioner == Some(part)) {
+      if (rdd.partitioner == Some(part)) {
         logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
@@ -110,7 +110,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     array
   }
 
-  override val partitioner: Some[Partitioner] = Some(part)
+  @transient override val partitioner: Some[Partitioner] = Some(part)
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, CoGroupCombiner)] = {
     val sparkConf = SparkEnv.get.conf
