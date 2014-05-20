@@ -57,7 +57,7 @@ class JdbcRDDSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
       () => { DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb") },
       "SELECT DATA FROM FOO WHERE ? <= ID AND ID <= ?",
       1, 100, 3,
-      (r: ResultSet) => { r.getInt(1) } ).cache
+      (r: ResultSet) => { r.getInt(1) } ).cache()
 
     assert(rdd.count === 100)
     assert(rdd.reduce(_+_) === 10100)
