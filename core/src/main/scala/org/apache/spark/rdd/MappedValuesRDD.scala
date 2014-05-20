@@ -25,7 +25,7 @@ class MappedValuesRDD[K, V, U](prev: RDD[_ <: Product2[K, V]], f: V => U)
 
   override def getPartitions = firstParent[Product2[K, U]].partitions
 
-  override val partitioner = firstParent[Product2[K, U]].partitioner
+  override val getPartitioner = firstParent[Product2[K, U]].partitioner
 
   override def compute(split: Partition, context: TaskContext): Iterator[(K, U)] = {
     firstParent[Product2[K, V]].iterator(split, context).map { case Product2(k ,v) => (k, f(v)) }
