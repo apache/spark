@@ -3,6 +3,361 @@ Spark Change Log
 
 Release 1.0.0
 
+  [Spark 1877] ClassNotFoundException when loading RDD with serialized objects
+  Tathagata Das <tathagata.das1565@gmail.com>, Ghidireac <bogdang@u448a5b0a73d45358d94a.ant.amazon.com>
+  2014-05-19 22:36:24 -0700
+  Commit: 6cbe2a3, github.com/apache/spark/pull/835
+
+  [SPARK-1874][MLLIB] Clean up MLlib sample data
+  Xiangrui Meng <meng@databricks.com>
+  2014-05-19 21:29:33 -0700
+  Commit: 1c6c8b5, github.com/apache/spark/pull/833
+
+  SPARK-1689: Spark application should die when removed by Master
+  Aaron Davidson <aaron@databricks.com>
+  2014-05-19 20:55:26 -0700
+  Commit: 78b6e6f, github.com/apache/spark/pull/832
+
+  [SPARK-1875]NoClassDefFoundError: StringUtils when building with hadoop 1.x and hive
+  witgo <witgo@qq.com>
+  2014-05-19 19:40:29 -0700
+  Commit: 875c54f, github.com/apache/spark/pull/824
+
+  SPARK-1879. Increase MaxPermSize since some of our builds have many classes
+  Matei Zaharia <matei@databricks.com>
+  2014-05-19 18:42:28 -0700
+  Commit: 00563e1, github.com/apache/spark/pull/823
+
+  SPARK-1878: Fix the incorrect initialization order
+  zsxwing <zsxwing@gmail.com>
+  2014-05-19 16:41:31 -0700
+  Commit: 901102c, github.com/apache/spark/pull/822
+
+  [SPARK-1876] Windows fixes to deal with latest distribution layout changes
+  Matei Zaharia <matei@databricks.com>
+  2014-05-19 15:02:35 -0700
+  Commit: 111c121, github.com/apache/spark/pull/819
+
+  [WIP][SPARK-1871][MLLIB] Improve MLlib guide for v1.0
+  Xiangrui Meng <meng@databricks.com>
+  2014-05-18 17:00:57 -0700
+  Commit: ecab8a2, github.com/apache/spark/pull/816
+
+  SPARK-1873: Add README.md file when making distributions
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-18 16:51:53 -0700
+  Commit: 8e8b351, github.com/apache/spark/pull/818
+
+  Fix spark-submit path in spark-shell & pyspark
+  Neville Li <neville@spotify.com>
+  2014-05-18 13:31:23 -0700
+  Commit: e06e4b0, github.com/apache/spark/pull/812
+
+  Make deprecation warning less severe
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-16 22:58:47 -0700
+  Commit: 3b3d7c8, github.com/apache/spark/pull/810
+
+  [SPARK-1824] Remove <master> from Python examples
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-16 22:36:23 -0700
+  Commit: 03b4242, github.com/apache/spark/pull/802
+
+  [SPARK-1808] Route bin/pyspark through Spark submit
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-16 22:34:38 -0700
+  Commit: 318739a, github.com/apache/spark/pull/799
+
+  Version bump of spark-ec2 scripts
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-16 21:42:14 -0700
+  Commit: 9cd12f3, github.com/apache/spark/pull/809
+
+  SPARK-1864 Look in spark conf instead of system properties when propagating configuration to executors.
+  Michael Armbrust <michael@databricks.com>
+  2014-05-16 20:25:10 -0700
+  Commit: a16a19f, github.com/apache/spark/pull/808
+
+  Tweaks to Mesos docs
+  Matei Zaharia <matei@databricks.com>
+  2014-05-16 17:35:05 -0700
+  Commit: 2ba6711, github.com/apache/spark/pull/806
+
+  [SQL] Implement between in hql
+  Michael Armbrust <michael@databricks.com>
+  2014-05-16 11:47:00 -0700
+  Commit: 386b31c, github.com/apache/spark/pull/804
+
+  bugfix: overflow of graphx Edge compare function
+  Zhen Peng <zhenpeng01@baidu.com>
+  2014-05-16 11:37:18 -0700
+  Commit: ff47cdc, github.com/apache/spark/pull/769
+
+  SPARK-1862: Support for MapR in the Maven build.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-15 23:31:43 -0700
+  Commit: eec4dd8, github.com/apache/spark/pull/803
+
+  [Spark-1461] Deferred Expression Evaluation (short-circuit evaluation)
+  Cheng Hao <hao.cheng@intel.com>
+  2014-05-15 22:12:34 -0700
+  Commit: eac4ee8, github.com/apache/spark/pull/446
+
+  SPARK-1860: Do not cleanup application work/ directories by default
+  Aaron Davidson <aaron@databricks.com>
+  2014-05-15 21:37:58 -0700
+  Commit: 5441471, github.com/apache/spark/pull/800
+
+  Typos in Spark
+  Huajian Mao <huajianmao@gmail.com>
+  2014-05-15 18:20:16 -0700
+  Commit: a2742d8, github.com/apache/spark/pull/798
+
+  Fixes a misplaced comment.
+  Prashant Sharma <prashant.s@imaginea.com>
+  2014-05-15 16:58:37 -0700
+  Commit: 2e418f5, github.com/apache/spark/pull/788
+
+  [SQL] Fix tiny/small ints from HiveMetastore.
+  Michael Armbrust <michael@databricks.com>
+  2014-05-15 16:50:42 -0700
+  Commit: ffa9c49, github.com/apache/spark/pull/797
+
+  SPARK-1803 Replaced colon in filenames with a dash
+  Stevo Slavić <sslavic@gmail.com>, Stevo Slavic <sslavic@gmail.com>
+  2014-05-15 16:44:14 -0700
+  Commit: 22f261a, github.com/apache/spark/pull/739
+
+  SPARK-1851. Upgrade Avro dependency to 1.7.6 so Spark can read Avro file...
+  Sandy Ryza <sandy@cloudera.com>
+  2014-05-15 16:35:39 -0700
+  Commit: 3587057, github.com/apache/spark/pull/795
+
+  [SPARK-1741][MLLIB] add predict(JavaRDD) to RegressionModel, ClassificationModel, and KMeans
+  Xiangrui Meng <meng@databricks.com>
+  2014-05-15 11:59:59 -0700
+  Commit: bc9a96e, github.com/apache/spark/pull/670
+
+  [SPARK-1819] [SQL] Fix GetField.nullable.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-05-15 11:21:33 -0700
+  Commit: f9eeddc, github.com/apache/spark/pull/757
+
+  [SPARK-1845] [SQL] Use AllScalaRegistrar for SparkSqlSerializer to register serializers of ...
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-05-15 11:20:21 -0700
+  Commit: 7515367, github.com/apache/spark/pull/790
+
+  SPARK-1846 Ignore logs directory in RAT checks
+  Andrew Ash <andrew@andrewash.com>
+  2014-05-15 11:05:39 -0700
+  Commit: aa5f989, github.com/apache/spark/pull/793
+
+  HOTFIX: Don't build Javadoc in Maven when creating releases.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-14 23:48:03 -0700
+  Commit: 88f1da3
+
+  fix different versions of commons-lang dependency and apache/spark#746 addendum
+  witgo <witgo@qq.com>
+  2014-05-14 22:26:26 -0700
+  Commit: 31b853c, github.com/apache/spark/pull/754
+
+  Package docs
+  Prashant Sharma <prashant.s@imaginea.com>, Patrick Wendell <pwendell@gmail.com>
+  2014-05-14 22:24:41 -0700
+  Commit: c02d614, github.com/apache/spark/pull/785
+
+  Documentation: Encourage use of reduceByKey instead of groupByKey.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-14 22:24:04 -0700
+  Commit: f2faa37, github.com/apache/spark/pull/784
+
+  Add language tabs and Python version to interactive part of quick-start
+  Matei Zaharia <matei@databricks.com>
+  2014-05-14 21:45:20 -0700
+  Commit: 976784b, github.com/apache/spark/pull/782
+
+  [SPARK-1840] SparkListenerBus prints out scary error message when terminated normally
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-05-14 21:13:41 -0700
+  Commit: ba87123, github.com/apache/spark/pull/783
+
+  default task number misleading in several places
+  Chen Chao <crazyjvm@gmail.com>
+  2014-05-14 18:20:20 -0700
+  Commit: 9f0f2ec, github.com/apache/spark/pull/766
+
+  [SPARK-1826] fix the head notation of package object dsl
+  wangfei <scnbwf@yeah.net>
+  2014-05-14 17:59:11 -0700
+  Commit: fdf9717, github.com/apache/spark/pull/765
+
+  [Typo] propertes -> properties
+  andrewor14 <andrewor14@gmail.com>
+  2014-05-14 17:54:53 -0700
+  Commit: 5ca3096, github.com/apache/spark/pull/780
+
+  [SPARK-1696][MLLIB] use alpha in dense dspr
+  Xiangrui Meng <meng@databricks.com>
+  2014-05-14 17:18:30 -0700
+  Commit: d6f1a75, github.com/apache/spark/pull/778
+
+  [FIX] do not load defaults when testing SparkConf in pyspark
+  Xiangrui Meng <meng@databricks.com>
+  2014-05-14 14:57:17 -0700
+  Commit: 31faec7, github.com/apache/spark/pull/775
+
+  SPARK-1833 - Have an empty SparkContext constructor.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-14 12:53:30 -0700
+  Commit: 8e13ab2, github.com/apache/spark/pull/774
+
+  SPARK-1829 Sub-second durations shouldn't round to "0 s"
+  Andrew Ash <andrew@andrewash.com>
+  2014-05-14 12:01:14 -0700
+  Commit: 530bdf7, github.com/apache/spark/pull/768
+
+  Fix: sbt test throw an java.lang.OutOfMemoryError: PermGen space
+  witgo <witgo@qq.com>
+  2014-05-14 11:19:26 -0700
+  Commit: 379f733, github.com/apache/spark/pull/773
+
+  Adding back hive support
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-14 10:21:27 -0700
+  Commit: e8ca397
+
+  [SPARK-1620] Handle uncaught exceptions in function run by Akka scheduler
+  Mark Hamstra <markhamstra@gmail.com>
+  2014-05-14 10:07:25 -0700
+  Commit: 9ff9078, github.com/apache/spark/pull/622
+
+  SPARK-1828: Created forked version of hive-exec that doesn't bundle other dependencies
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-14 09:51:01 -0700
+  Commit: 34f6fa9, github.com/apache/spark/pull/767
+
+  SPARK-1818 Freshen Mesos documentation
+  Andrew Ash <andrew@andrewash.com>
+  2014-05-14 09:45:33 -0700
+  Commit: fc6b652, github.com/apache/spark/pull/756
+
+  SPARK-1827. LICENSE and NOTICE files need a refresh to contain transitive dependency info
+  Sean Owen <sowen@cloudera.com>
+  2014-05-14 09:38:33 -0700
+  Commit: 7083282, github.com/apache/spark/pull/770
+
+  Fixed streaming examples docs to use run-example instead of spark-submit
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-05-14 04:17:32 -0700
+  Commit: c7571d8, github.com/apache/spark/pull/722
+
+  [SPARK-1769] Executor loss causes NPE race condition
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-14 00:54:33 -0700
+  Commit: 69ec314, github.com/apache/spark/pull/762
+
+  Fix dep exclusion: avro-ipc, not avro, depends on netty.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2014-05-14 00:37:57 -0700
+  Commit: b3d9878, github.com/apache/spark/pull/763
+
+  SPARK-1801. expose InterruptibleIterator and TaskKilledException in deve...
+  Koert Kuipers <koert@tresata.com>
+  2014-05-14 00:10:12 -0700
+  Commit: 7da80a3, github.com/apache/spark/pull/764
+
+  [SQL] Improve column pruning.
+  Michael Armbrust <michael@databricks.com>
+  2014-05-13 23:27:22 -0700
+  Commit: f66f766, github.com/apache/spark/pull/729
+
+  Revert "[SPARK-1784] Add a new partitioner to allow specifying # of keys per partition"
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-13 23:25:19 -0700
+  Commit: 721194b
+
+  Implement ApproximateCountDistinct for SparkSql
+  larvaboy <larvaboy@gmail.com>
+  2014-05-13 21:26:08 -0700
+  Commit: 92b0ec9, github.com/apache/spark/pull/737
+
+  [SPARK-1784] Add a new partitioner to allow specifying # of keys per partition
+  Syed Hashmi <shashmi@cloudera.com>
+  2014-05-13 21:24:23 -0700
+  Commit: 66fe479, github.com/apache/spark/pull/721
+
+  [SQL] Make it possible to create Java/Python SQLContexts from an existing Scala SQLContext.
+  Michael Armbrust <michael@databricks.com>
+  2014-05-13 21:23:51 -0700
+  Commit: 618b3e6, github.com/apache/spark/pull/761
+
+  [SPARK-1527] change rootDir*.getName to rootDir*.getAbsolutePath
+  Ye Xianjin <advancedxy@gmail.com>
+  2014-05-13 19:03:51 -0700
+  Commit: ef5e9d7, github.com/apache/spark/pull/436
+
+  [SPARK-1816] LiveListenerBus dies if a listener throws an exception
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-13 18:32:32 -0700
+  Commit: 3892ec5, github.com/apache/spark/pull/759
+
+  SPARK-1791 - SVM implementation does not use threshold parameter
+  Andrew Tulloch <andrew@tullo.ch>
+  2014-05-13 17:31:27 -0700
+  Commit: d6994f4, github.com/apache/spark/pull/725
+
+  BUILD: Add more content to make-distribution.sh.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-12 23:02:54 -0700
+  Commit: 716462c
+
+  Adding CHANGES.txt file and removing YARN support for now
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-12 20:21:23 -0700
+  Commit: fa2d4d8
+
+  SPARK-1815. SparkContext should not be marked DeveloperApi
+  Sandy Ryza <sandy@cloudera.com>
+  2014-05-12 20:08:30 -0700
+  Commit: 31d54c0, github.com/apache/spark/pull/753
+
+  [SPARK-1753 / 1773 / 1814] Update outdated docs for spark-submit, YARN, standalone etc.
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-12 19:44:14 -0700
+  Commit: b9e41f4, github.com/apache/spark/pull/701
+
+  [SPARK-1780] Non-existent SPARK_DAEMON_OPTS is lurking around
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-12 19:42:35 -0700
+  Commit: 5ef24a0, github.com/apache/spark/pull/751
+
+  SPARK-1757 Failing test for saving null primitives with .saveAsParquetFile()
+  Andrew Ash <andrew@andrewash.com>, Michael Armbrust <michael@databricks.com>
+  2014-05-12 19:23:39 -0700
+  Commit: b52ac0e, github.com/apache/spark/pull/690
+
+  Modify a typo in monitoring.md
+  Kousuke Saruta <sarutak@oss.nttdata.co.jp>
+  2014-05-12 19:21:06 -0700
+  Commit: 89b56d7, github.com/apache/spark/pull/698
+
+  L-BFGS Documentation
+  DB Tsai <dbtsai@alpinenow.com>
+  2014-05-12 19:20:24 -0700
+  Commit: bad4c9d, github.com/apache/spark/pull/702
+
+  Typo: resond -> respond
+  Andrew Ash <andrew@andrewash.com>
+  2014-05-12 18:46:28 -0700
+  Commit: 1fbebca, github.com/apache/spark/pull/743
+
+  [SQL] Make Hive Metastore conversion functions publicly visible.
+  Michael Armbrust <michael@databricks.com>
+  2014-05-12 18:40:30 -0700
+  Commit: 24cc933, github.com/apache/spark/pull/750
+
   [SPARK-1736] Spark submit for Windows
   Andrew Or <andrewor14@gmail.com>
   2014-05-12 17:39:40 -0700
