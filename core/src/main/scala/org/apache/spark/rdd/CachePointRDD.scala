@@ -41,11 +41,4 @@ private[spark] class CachePointRDD[T: ClassTag](sc: SparkContext, numPartitions:
       }
     }
   }
-
-  override def persist(newLevel: StorageLevel): this.type = {
-    this
-  }
-
-  override def checkpoint() {
-  }
 }

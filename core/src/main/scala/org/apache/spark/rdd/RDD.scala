@@ -1113,6 +1113,7 @@ abstract class RDD[T: ClassTag](
       Nil
     }
     sc.runJob(this, func)
+    cachePointRDD.persist(level)
     cachePointRDD
   }
 
