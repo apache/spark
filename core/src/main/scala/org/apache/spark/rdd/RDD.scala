@@ -423,9 +423,11 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Randomly splits this RDD using exact stratified sampling with proportional allocation.
-   * Strata are defined by the given stratifier function.
-   * Strata are indexed with integers 0,1,....
-   * The max stratum index determines the length of the returned array.
+   * Strata are defined by the given stratifier function, which returns keys indexing strata.
+   *
+   * This method can be useful, e.g., for sampling from a labeled dataset.
+   * If the stratifier defines strata by the labels of examples,
+   * then the sampled dataset will maintain the same label balance ratio.
    *
    * @param stratifier Given an RDD element, return an Int indicating the stratum for the element.
    * @param fraction Fraction of samples to keep.
