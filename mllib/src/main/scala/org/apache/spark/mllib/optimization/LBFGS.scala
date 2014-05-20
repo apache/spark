@@ -36,13 +36,13 @@ import org.apache.spark.mllib.rdd.RDDFunctions._
  * @param updater Updater to be used to update weights after every iteration.
  */
 @DeveloperApi
-class LBFGS(private var gradient: Gradient, private var updater: Updater)
+class LBFGS(protected var gradient: Gradient, protected var updater: Updater)
   extends Optimizer with Logging {
 
-  private var numCorrections = 10
-  private var convergenceTol = 1E-4
-  private var maxNumIterations = 100
-  private var regParam = 0.0
+  protected var numCorrections = 10
+  protected var convergenceTol = 1E-4
+  protected var maxNumIterations = 100
+  protected var regParam = 0.0
 
   /**
    * Set the number of corrections used in the LBFGS update. Default 10.
@@ -185,7 +185,7 @@ object LBFGS extends Logging {
    * CostFun implements Breeze's DiffFunction[T], which returns the loss and gradient
    * at a particular point (weights). It's used in Breeze's convex optimization routines.
    */
-  private class CostFun(
+  class CostFun(
     data: RDD[(Double, Vector)],
     gradient: Gradient,
     updater: Updater,
