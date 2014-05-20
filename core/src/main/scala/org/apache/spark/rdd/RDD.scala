@@ -1097,11 +1097,19 @@ abstract class RDD[T: ClassTag](
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
   }
 
-  def cachePoint(): CachePointRDD[T] = {
+  /** Persist this RDD with the default storage level (`MEMORY_ONLY`) and
+   *  all references to its parent RDDs will be removed.
+   */
+  def cachePoint(): CachePointRDD[T] = cachePoint(StorageLevel.MEMORY_ONLY)
+
+  /** Persist this RDD with the storage level (`level`) and
+   *  all references to its parent RDDs will be removed.
+   */
+  def cachePoint(level: StorageLevel): CachePointRDD[T] = {
     val cachePointRDD = new CachePointRDD[T](sc, this.partitions.length)
     val func = (ctx: TaskContext, iterator: Iterator[T]) => {
       val key = RDDBlockId(cachePointRDD.id, ctx.partitionId)
-      SparkEnv.get.blockManager.put(key, iterator, StorageLevel.MEMORY_AND_DISK, true)
+      SparkEnv.get.blockManager.put(key, iterator, level, true)
       Nil
     }
     sc.runJob(this, func)

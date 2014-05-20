@@ -36,6 +36,16 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): JavaRDD[T] = wrapRDD(rdd.cache())
 
+  /** Persist this RDD with the default storage level (`MEMORY_ONLY`) and
+   *  all references to its parent RDDs will be removed.
+   */
+  def cachePoint(): JavaRDD[T] = wrapRDD(rdd.cachePoint())
+
+  /** Persist this RDD with the storage level (`level`) and
+   *  all references to its parent RDDs will be removed.
+   */
+  def cachePoint(level: StorageLevel): JavaRDD[T] = wrapRDD(rdd.cachePoint(level))
+
   /**
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. This can only be used to assign a new storage level if the RDD does not

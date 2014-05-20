@@ -21,6 +21,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
+import org.apache.spark.storage.StorageLevel
 
 class CachePointRDDSuite extends FunSuite with LocalSparkContext {
 
@@ -38,7 +39,7 @@ class CachePointRDDSuite extends FunSuite with LocalSparkContext {
   test("local cluster SparkContext") {
     sc = new SparkContext("local-cluster[2 , 1 , 512]", "test")
     val rdd = sc.parallelize(Seq(1, 2, 3, 4))
-    val cachePointRDD = rdd.cachePoint()
+    val cachePointRDD = rdd.cachePoint(StorageLevel.DISK_ONLY)
     assert(cachePointRDD.dependencies.size === 0)
     assert(cachePointRDD.collect() === rdd.collect())
   }
