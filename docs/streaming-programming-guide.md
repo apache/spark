@@ -82,8 +82,8 @@ import org.apache.spark.streaming.api._
 val ssc = new StreamingContext("local", "NetworkWordCount", Seconds(1))
 {% endhighlight %}
 
-Using this context, we can create a DStream that represents streaming data from TCP 
-source hostname (`localhost`) and port (`9999`).
+Using this context, we can create a DStream that represents streaming data from a TCP 
+source hostname, e.g. `localhost`, and port, e.g. `9999`.
 
 {% highlight scala %}
 // Create a DStream that will connect to serverIP:serverPort, like localhost:9999
@@ -194,7 +194,8 @@ JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
       return i1 + i2;
     }
   });
-wordCounts.print();     // Print a few of the counts to the console
+// Print the first ten elements of each RDD generated in this DStream to the console
+wordCounts.print()
 {% endhighlight %}
 
 The `words` DStream is further mapped (one-to-one transformation) to a DStream of `(word,
