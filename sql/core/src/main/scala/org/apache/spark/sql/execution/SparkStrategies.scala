@@ -28,6 +28,22 @@ import org.apache.spark.sql.parquet._
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
+  object LeftSemiJoin extends Strategy with PredicateHelper {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // Find leftsemi joins where at least some predicates can be evaluated by matching hash keys
+      // using the HashFilteredJoin pattern.
+      case HashFilteredJoin(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
+        val semiJoin =
+          execution.LeftSemiJoinHash(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
+        condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
+      // no predicate can be evaluated by matching hash keys
+      case logical.Join(left, right, LeftSemi, condition) =>
+        execution.LeftSemiJoinBNL(
+          planLater(left), planLater(right), LeftSemi, condition)(sparkContext) :: Nil
+      case _ => Nil
+    }
+  }
+
   object HashJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Find inner joins where at least some predicates can be evaluated by matching hash keys

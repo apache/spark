@@ -144,6 +144,150 @@ case class HashJoin(
  * :: DeveloperApi ::
  */
 @DeveloperApi
+case class LeftSemiJoinHash(
+                     leftKeys: Seq[Expression],
+                     rightKeys: Seq[Expression],
+                     buildSide: BuildSide,
+                     left: SparkPlan,
+                     right: SparkPlan) extends BinaryNode {
+
+  override def outputPartitioning: Partitioning = left.outputPartitioning
+
+  override def requiredChildDistribution =
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+
+  val (buildPlan, streamedPlan) = buildSide match {
+    case BuildLeft => (left, right)
+    case BuildRight => (right, left)
+  }
+
+  val (buildKeys, streamedKeys) = buildSide match {
+    case BuildLeft => (leftKeys, rightKeys)
+    case BuildRight => (rightKeys, leftKeys)
+  }
+
+  def output = left.output
+
+  @transient lazy val buildSideKeyGenerator = new Projection(buildKeys, buildPlan.output)
+  @transient lazy val streamSideKeyGenerator =
+    () => new MutableProjection(streamedKeys, streamedPlan.output)
+
+  def execute() = {
+
+    buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
+    // TODO: Use Spark's HashMap implementation.
+      val hashTable = new java.util.HashMap[Row, ArrayBuffer[Row]]()
+      var currentRow: Row = null
+
+      // Create a mapping of buildKeys -> rows
+      while (buildIter.hasNext) {
+        currentRow = buildIter.next()
+        val rowKey = buildSideKeyGenerator(currentRow)
+        if(!rowKey.anyNull) {
+          val existingMatchList = hashTable.get(rowKey)
+          val matchList = if (existingMatchList == null) {
+            val newMatchList = new ArrayBuffer[Row]()
+            hashTable.put(rowKey, newMatchList)
+            newMatchList
+          } else {
+            existingMatchList
+          }
+          matchList += currentRow.copy()
+        }
+      }
+
+      new Iterator[Row] {
+        private[this] var currentStreamedRow: Row = _
+        private[this] var currentHashMatched: Boolean = false
+
+        private[this] val joinKeys = streamSideKeyGenerator()
+
+        override final def hasNext: Boolean =
+          streamIter.hasNext && fetchNext()
+
+        override final def next() = {
+          currentStreamedRow
+        }
+
+        /**
+         * Searches the streamed iterator for the next row that has at least one match in hashtable.
+         *
+         * @return true if the search is successful, and false the streamed iterator runs out of
+         *         tuples.
+         */
+        private final def fetchNext(): Boolean = {
+          currentHashMatched = false
+          while (!currentHashMatched && streamIter.hasNext) {
+            currentStreamedRow = streamIter.next()
+            if (!joinKeys(currentStreamedRow).anyNull) {
+              currentHashMatched = true
+            }
+          }
+          currentHashMatched
+        }
+      }
+    }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class LeftSemiJoinBNL(
+    streamed: SparkPlan, broadcast: SparkPlan, joinType: JoinType, condition: Option[Expression])
+    (@transient sc: SparkContext)
+  extends BinaryNode {
+  // TODO: Override requiredChildDistribution.
+
+  override def outputPartitioning: Partitioning = streamed.outputPartitioning
+
+  override def otherCopyArgs = sc :: Nil
+
+  def output = left.output
+
+  /** The Streamed Relation */
+  def left = streamed
+  /** The Broadcast relation */
+  def right = broadcast
+
+  @transient lazy val boundCondition =
+    InterpretedPredicate(
+      condition
+        .map(c => BindReferences.bindReference(c, left.output ++ right.output))
+        .getOrElse(Literal(true)))
+
+
+  def execute() = {
+    val broadcastedRelation = sc.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+
+    val streamedPlusMatches = streamed.execute().mapPartitions { streamedIter =>
+      val joinedRow = new JoinedRow
+
+      streamedIter.filter(streamedRow => {
+        var i = 0
+        var matched = false
+
+        while (i < broadcastedRelation.value.size && !matched) {
+          // TODO: One bitset per partition instead of per row.
+          val broadcastedRow = broadcastedRelation.value(i)
+          if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
+            matched = true
+          }
+          i += 1
+        }
+        matched
+      }).map(streamedRow => (streamedRow, null))
+    }
+
+    streamedPlusMatches.map(_._1)
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   def output = left.output ++ right.output
 
