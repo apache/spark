@@ -33,11 +33,13 @@ private[spark] class CachePointRDD[T: ClassTag](sc: SparkContext, numPartitions:
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     val key = RDDBlockId(this.id, split.index)
     SparkEnv.get.blockManager.get(key) match {
-      case Some(values) =>
+      case Some(values) => {
         new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
+      }
+      case None => {
+        throw new SparkException("Failed to get " + key)
+      }
 
-      case None =>
-        new InterruptibleIterator(context, Iterator[T]())
     }
   }
 

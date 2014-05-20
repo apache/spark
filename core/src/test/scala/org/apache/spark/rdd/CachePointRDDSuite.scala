@@ -25,10 +25,14 @@ import org.apache.spark.SparkContext._
 class CachePointRDDSuite extends FunSuite with LocalSparkContext {
 
   test("local SparkContext") {
-    sc= new SparkContext("local", "test")
+    sc = new SparkContext("local", "test")
     val rdd = sc.parallelize(Seq(1, 2, 3, 4))
     val cachePointRDD = rdd.cachePoint()
     assert(cachePointRDD.collect() === rdd.collect())
+    val errorCachePointRDD = new CachePointRDD[Int](sc, 4)
+    intercept[SparkException] {
+      errorCachePointRDD.count()
+    }
   }
 
   test("local cluster SparkContext") {
