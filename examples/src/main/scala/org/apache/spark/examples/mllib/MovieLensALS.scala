@@ -29,6 +29,12 @@ import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
+ * Run with
+ * {{{
+ * bin/run-example org.apache.spark.examples.mllib.MovieLensALS
+ * }}}
+ * A synthetic dataset in MovieLens format can be found at `data/mllib/sample_movielens_data.txt`.
+ * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object MovieLensALS {
 
@@ -70,6 +76,15 @@ object MovieLensALS {
         .required()
         .text("input paths to a MovieLens dataset of ratings")
         .action((x, c) => c.copy(input = x))
+      note(
+        """
+          |For example, the following command runs this app on a synthetic dataset:
+          |
+          | bin/spark-submit --class org.apache.spark.examples.mllib.MovieLensALS \
+          |  examples/target/scala-*/spark-examples-*.jar \
+          |  --rank 5 --numIterations 20 --lambda 1.0 --kryo \
+          |  data/mllib/sample_movielens_data.txt
+        """.stripMargin)
     }
 
     parser.parse(args, defaultParams).map { params =>
