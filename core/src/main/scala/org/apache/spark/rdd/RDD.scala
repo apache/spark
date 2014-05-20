@@ -1167,7 +1167,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
-  def context = sc
+  def context = sparkContext
 
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
   @transient private var doCheckpointCalled = false
