@@ -119,9 +119,10 @@ abstract class RDD[T: ClassTag](
   // =======================================================================
 
   /** Accessor method which throws a runtime exception if null. This lets us have
-    a clearer error method when attempting to perform operations on an RDD inside of
-    a parallel operation as the partitioner is marked as transient */
-  def getPartitioner: Option[Partitioner] = {
+   * a clearer error method when attempting to perform operations on an RDD inside of
+   * a parallel operation as the partitioner is marked as transient.
+   */
+  protected def getPartitioner: Option[Partitioner] = {
     partitioner match {
       case null => throw new SparkException("Actions on RDDs inside of another RDD operation are " +
           "not supported")
