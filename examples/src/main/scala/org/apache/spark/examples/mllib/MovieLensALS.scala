@@ -29,7 +29,12 @@ import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
+ * Run with
+ * {{{
+ * bin/run-example org.apache.spark.examples.mllib.MovieLensALS
+ * }}}
  * A synthetic dataset in MovieLens format can be found at `data/mllib/sample_movielens_data.txt`.
+ * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object MovieLensALS {
 
