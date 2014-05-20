@@ -28,8 +28,9 @@ import org.apache.spark.mllib.optimization.{SimpleUpdater, SquaredL2Updater, L1U
 /**
  * An example app for linear regression. Run with
  * {{{
- * ./bin/run-example org.apache.spark.examples.mllib.LinearRegression
+ * bin/run-example org.apache.spark.examples.mllib.LinearRegression
  * }}}
+ * A synthetic dataset can be found at `data/mllib/sample_linear_regression_data.txt`.
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object LinearRegression extends App {
@@ -68,6 +69,14 @@ object LinearRegression extends App {
       .required()
       .text("input paths to labeled examples in LIBSVM format")
       .action((x, c) => c.copy(input = x))
+    note(
+      """
+        |For example, the following command runs this app on a synthetic dataset:
+        |
+        | bin/spark-submit --class org.apache.spark.examples.mllib.LinearRegression \
+        |  examples/target/scala-*/spark-examples-*.jar \
+        |  data/mllib/sample_linear_regression_data.txt
+      """.stripMargin)
   }
 
   parser.parse(args, defaultParams).map { params =>

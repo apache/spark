@@ -318,7 +318,6 @@ object SparkBuild extends Build {
   val excludeFastutil = ExclusionRule(organization = "it.unimi.dsi")
   val excludeJruby = ExclusionRule(organization = "org.jruby")
   val excludeThrift = ExclusionRule(organization = "org.apache.thrift")
-  val excludeCommonsLang = ExclusionRule(organization = "commons-lang")
   val excludeServletApi = ExclusionRule(organization = "javax.servlet", artifact = "servlet-api")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
@@ -493,7 +492,7 @@ object SparkBuild extends Build {
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
       "org.spark-project.hive" % "hive-metastore" % hiveVersion,
-      "org.spark-project.hive" % "hive-exec"      % hiveVersion excludeAll(excludeCommonsLang, excludeCommonsLogging),
+      "org.spark-project.hive" % "hive-exec"      % hiveVersion excludeAll(excludeCommonsLogging),
       "org.spark-project.hive" % "hive-serde"     % hiveVersion
     ),
     // Multiple queries rely on the TestHive singleton.  See comments there for more details.
