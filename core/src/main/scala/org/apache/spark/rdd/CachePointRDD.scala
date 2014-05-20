@@ -23,7 +23,8 @@ import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
 private[spark] class CachePointRDDPartition(val index: Int) extends Partition {}
 
-private[spark] class CachePointRDD[T: ClassTag](sc: SparkContext, numPartitions: Int) extends RDD[T](sc, Nil) {
+private[spark] class CachePointRDD[T: ClassTag](sc: SparkContext, numPartitions: Int)
+  extends RDD[T](sc, Nil) {
 
   override def getPartitions: Array[Partition] = {
     Array.tabulate(numPartitions)(i => new CachePointRDDPartition(i))
