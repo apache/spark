@@ -39,7 +39,6 @@ private[spark] class CachePointRDD[T: ClassTag](sc: SparkContext, numPartitions:
       case None => {
         throw new SparkException("Failed to get " + key)
       }
-
     }
   }
 
