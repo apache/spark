@@ -30,6 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util.{AkkaUtils, Utils}
+import java.net.{URLClassLoader, URL}
 
 /**
  * Spark executor used with Mesos and the standalone scheduler.
@@ -291,15 +292,37 @@ private[spark] class Executor(
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
    */
-  private def createClassLoader(): ExecutorURLClassLoader = {
-    val loader = this.getClass.getClassLoader
+  private def createClassLoader(): URLClassLoader = {
+    val loader = this.getClass.getClassLoader.asInstanceOf[URLClassLoader]
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
     val urls = currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }.toArray
-    new ExecutorURLClassLoader(urls, loader)
+
+    if(urls != null) urls.foreach(url => addURL(url, loader))
+
+    loader
+  }
+
+  /**
+   * Add URL to classLoader through the protected method `addURL` in the URLClassLoader.
+   * Calling the `addURL` protected method is achieved by reflection.
+   */
+  private def addURL(url: URL, loader: URLClassLoader) {
+    try {
+      val method = classOf[URLClassLoader].getDeclaredMethod("addURL", classOf[URL])
+      method.setAccessible(true)
+      method.invoke(loader, url)
+    }
+    catch {
+      case th: Throwable => {
+        val msg = "Could not add URL " + url + " to class loader"
+        logError(msg)
+        throw new SparkException(msg, th)
+      }
+    }
   }
 
   /**
@@ -347,7 +370,7 @@ private[spark] class Executor(
         val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
         if (!urlClassLoader.getURLs.contains(url)) {
           logInfo("Adding " + url + " to class loader")
-          urlClassLoader.addURL(url)
+          addURL(url, urlClassLoader)
         }
       }
     }
