@@ -274,6 +274,10 @@ class SchemaRDD(
       seed: Long) =
     new SchemaRDD(sqlContext, Sample(fraction, withReplacement, seed, logicalPlan))
 
+  override def count(): Long = {
+    groupBy()(Count(Literal(1))).collect().head.getLong(0)
+  }
+
   /**
    * :: Experimental ::
    * Applies the given Generator, or table generating function, to this relation.
