@@ -241,7 +241,7 @@ trait ClientBase extends Logging {
         }
       }
     }
-    conf.set(ClientBase.CONF_SPARK_YARN_SECONDARY_JARS, cachedJarLinks.mkString(","))
+    sparkConf.set(ClientBase.CONF_SPARK_YARN_SECONDARY_JARS, cachedJarLinks.mkString(","))
 
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
     localResources
@@ -485,7 +485,7 @@ object ClientBase {
 
     extraClassPath.foreach(addClasspathEntry)
 
-    val localSecondaryJarLinks = conf.getStrings(CONF_SPARK_YARN_SECONDARY_JARS)
+    val localSecondaryJarLinks = sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",")
     // Normally the users app.jar is last in case conflicts with spark jars
     if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
       addPwdClasspathEntry(APP_JAR)
