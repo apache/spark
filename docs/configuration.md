@@ -23,7 +23,7 @@ cluster (e.g. master URL and application name), as well as arbitrary key-value p
 `set()` method. For example, we could initialize an application as follows:
 
 {% highlight scala %}
-val conf = new SparkConf
+val conf = new SparkConf()
              .setMaster("local")
              .setAppName("CountingSheep")
              .set("spark.executor.memory", "1g")

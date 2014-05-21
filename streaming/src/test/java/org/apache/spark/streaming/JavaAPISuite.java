@@ -55,6 +55,10 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       equalIterator(a.iterator(), b.iterator());
   }
 
+  @Test
+  public void testInitialization() {
+    Assert.assertNotNull(ssc.sc());
+  }
 
   @SuppressWarnings("unchecked")
   @Test
