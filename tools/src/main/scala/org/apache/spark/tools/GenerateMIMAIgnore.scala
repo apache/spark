@@ -81,7 +81,7 @@ object GenerateMIMAIgnore {
 	isAnnotationExistClassLevel(annotList)
      } catch {
         case _: Throwable => {
-          println("Error determining visibility: " + className)
+          println("Error determining Annotations: " + className)
           false
         }
       }
