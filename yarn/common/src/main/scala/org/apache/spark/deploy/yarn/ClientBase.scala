@@ -220,10 +220,11 @@ trait ClientBase extends Logging {
       }
     }
 
+    var cachedJarLinks = ListBuffer.empty[String]
     val fileLists = List( (args.addJars, LocalResourceType.FILE, true),
       (args.files, LocalResourceType.FILE, false),
       (args.archives, LocalResourceType.ARCHIVE, false) )
-    fileLists.foreach { case (flist, resType, appMasterOnly) =>
+    fileLists.foreach { case (flist, resType, addToClasspath) =>
       if (flist != null && !flist.isEmpty()) {
         flist.split(',').foreach { case file: String =>
           val localURI = new URI(file.trim())
@@ -232,11 +233,15 @@ trait ClientBase extends Logging {
             val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
             val destPath = copyRemoteFile(dst, localPath, replication)
             distCacheMgr.addResource(fs, conf, destPath, localResources, resType,
-              linkname, statCache, appMasterOnly)
+              linkname, statCache)
+            if (addToClasspath) {
+              cachedJarLinks += linkname
+            }
           }
         }
       }
     }
+    conf.set(ClientBase.CONF_SPARK_YARN_SECONDARY_JARS, cachedJarLinks.mkString(","))
 
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
     localResources
@@ -379,6 +384,7 @@ object ClientBase {
   val LOG4J_PROP: String = "log4j.properties"
   val LOG4J_CONF_ENV_KEY: String = "SPARK_LOG4J_CONF"
   val LOCAL_SCHEME = "local"
+  val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
 
   def getSparkJar = sys.env.get("SPARK_JAR").getOrElse(SparkContext.jarOfClass(this.getClass).head)
 
@@ -479,34 +485,20 @@ object ClientBase {
 
     extraClassPath.foreach(addClasspathEntry)
 
-    addClasspathEntry(Environment.PWD.$())
+    val localSecondaryJarLinks = conf.getStrings(CONF_SPARK_YARN_SECONDARY_JARS)
     // Normally the users app.jar is last in case conflicts with spark jars
     if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
       addPwdClasspathEntry(APP_JAR)
+      localSecondaryJarLinks.foreach(addPwdClasspathEntry)
       addPwdClasspathEntry(SPARK_JAR)
       ClientBase.populateHadoopClasspath(conf, env)
     } else {
       addPwdClasspathEntry(SPARK_JAR)
       ClientBase.populateHadoopClasspath(conf, env)
       addPwdClasspathEntry(APP_JAR)
+      localSecondaryJarLinks.foreach(addPwdClasspathEntry)
     }
     addPwdClasspathEntry("*")
-  }
-
-  /**
-   * Adds the user jars which have local: URIs (or alternate names, such as APP_JAR) explicitly
-   * to the classpath.
-   */
-  private def addUserClasspath(args: ClientArguments, env: HashMap[String, String]) = {
-    if (args != null) {
-      addClasspathEntry(args.userJar, APP_JAR, env)
-    }
-
-    if (args != null && args.addJars != null) {
-      args.addJars.split(",").foreach { case file: String =>
-        addClasspathEntry(file, null, env)
-      }
-    }
   }
 
   /**
