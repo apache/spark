@@ -31,6 +31,7 @@ private[spark] class MetadataCleaner(
   extends Logging
 {
   val name = cleanerType.toString
+  var scheduled = false
 
   private val delaySeconds = MetadataCleaner.getDelaySeconds(conf, cleanerType)
   private val periodSeconds = math.max(10, delaySeconds / 10)
@@ -52,6 +53,7 @@ private[spark] class MetadataCleaner(
     logDebug(
       "Starting metadata cleaner for " + name + " with delay of " + delaySeconds + " seconds " +
       "and period of " + periodSeconds + " secs")
+    scheduled = true
     timer.schedule(task, periodSeconds * 1000, periodSeconds * 1000)
   }
 

@@ -1100,12 +1100,17 @@ abstract class RDD[T: ClassTag](
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`) and
    *  all references to its parent RDDs will be removed.
    */
-  def cachePoint(): CachePointRDD[T] = cachePoint(StorageLevel.MEMORY_ONLY)
+  def cachePoint(): RDD[T] = cachePoint(StorageLevel.MEMORY_ONLY)
 
   /** Persist this RDD with the storage level (`level`) and
    *  all references to its parent RDDs will be removed.
    */
-  def cachePoint(level: StorageLevel): CachePointRDD[T] = {
+  def cachePoint(level: StorageLevel): RDD[T] = {
+    if (sc.env.blockManager.blockCleaner.scheduled) {
+      val msg = "Periodically clean up block open,does not support cachePoint"
+      logWarning(msg)
+      return persist(level)
+    }
     val cachePointRDD = new CachePointRDD[T](sc, this.partitions.length)
     val func = (ctx: TaskContext, iterator: Iterator[T]) => {
       val key = RDDBlockId(cachePointRDD.id, ctx.partitionId)

@@ -44,4 +44,12 @@ class CachePointRDDSuite extends FunSuite with LocalSparkContext {
     assert(cachePointRDD.collect() === rdd.collect())
   }
 
+  test("periodically clean up block open") {
+    val conf = new SparkConf()
+    conf.set("spark.cleaner.ttl", "1800")
+    sc = new SparkContext("local-cluster[2 , 1 , 512]", "test", conf)
+    val rdd = sc.parallelize(Seq(1, 2, 3, 4)).filter(t => t < 3)
+    val cachePointRDD = rdd.cachePoint()
+    assert(cachePointRDD.dependencies.size === 1)
+  }
 }
