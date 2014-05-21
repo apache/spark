@@ -73,16 +73,13 @@ object GenerateMIMAIgnore {
     }  
 	
     def classesAnnotationCheck(className: String) = {
-	
-      try {
-        /* Couldn't figure out if it's possible to determine a-priori whether a given symbol
-           has specified annotation. */
-		   
-	val classSymbol=mirror.classSymbol(Class.forName(className, false, classLoader))
-        val annotList=annotationsOfClass(classSymbol)
+	try {
+	val annotList=mirror
+		.classSymbol(Class.forName(className, false, classLoader))
+		.annotations
 	
 	isAnnotationExistClassLevel(annotList)
-      } catch {
+     } catch {
         case _: Throwable => {
           println("Error determining visibility: " + className)
           false
@@ -114,16 +111,6 @@ object GenerateMIMAIgnore {
     scala.tools.nsc.io.File(".mima-excludes").
       writeAll(classesPrivateWithin("org.apache.spark").mkString("\n"))
     println("Created : .mima-excludes in current directory.")
-  }
-
-  private def annotationsOfClass(classSymbol  : unv.ClassSymbol ) ={
- 	classSymbol.annotations
-  }  
-
-  private def annotationsOfClassMembers(classType: unv.Type) = {
-    classType.members.foldLeft(Nil: List[unv.type#Annotation]) {
-      (xs, x) => x.annotations ::: xs
-    }
   }
 
   private def isAnnotationExistClassLevel(annotList: List[unv.Annotation]): Boolean = {
