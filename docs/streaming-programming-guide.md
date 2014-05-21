@@ -304,23 +304,23 @@ need to know to write your streaming applications.
 
 ## Linking
 
-To write your own Spark Streaming program, you will have to add the following dependency to your
- sbt or Maven project:
+To write your own Spark Streaming program, declare the following dependency in your Maven project's
+`pom.xml`:
 
-    groupId = org.apache.spark
-    artifactId = spark-streaming_{{site.SCALA_BINARY_VERSION}}
-    version = {{site.SPARK_VERSION}}
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming_{{site.SCALA_BINARY_VERSION}}</artifactId>
+      <version>{{site.SPARK_VERSION}}</version>
+    </dependency>
 
-For sbt, in `build.sbt` use the following:
+or in `build.sbt` in a sbt project:
 
     libraryDependencies += "org.apache.spark" %% "spark-streaming" % "{{site.SPARK_VERSION}}"
 
 For ingesting data from sources like Kafka and Flume that are not present in the Spark
-Streaming core
- API, you will have to add the corresponding
+Streaming core API, you will have to add the corresponding
 artifact `spark-streaming-xyz_{{site.SCALA_BINARY_VERSION}}` to the dependencies. For example,
 some of the common ones are as follows.
-
 
 <table class="table">
 <tr><th>Source</th><th>Artifact</th></tr>
@@ -364,10 +364,10 @@ new JavaStreamingContext(master, appName, batchDuration, [sparkHome], [jars])
 </div>
 
 The `master` parameter is a standard [Spark cluster URL](scala-programming-guide.html#master-urls)
-and can be `local` for local testing. The `appName` is a name of your program,
-which will be shown on your cluster's web UI. The `batchDuration` is the size of the batches,
-as explained earlier. Finally, the last two parameters are needed to deploy your code to a cluster
- if running in distributed mode, as described in the
+and can be `local[*]` for local testing (which detects the number of cores in the local system).
+The `appName` is a name of your program, which will be shown on your cluster's web UI.
+The `batchDuration` is the size of the batches, as explained earlier. Finally, the last two parameters 
+are needed to deploy your code to a cluster if running in distributed mode, as described in the
  [Spark programming guide](scala-programming-guide.html#deploying-code-on-a-cluster).
  Additionally, the underlying `SparkContext` can be accessed with
 `ssc.sparkContext`.
@@ -582,7 +582,7 @@ This is applied on a DStream containing words (say, the `pairs` DStream containi
 1)` pairs in the [earlier example](#a-quick-example)).
 
 {% highlight scala %}
-val runningCounts = pairs updateStateByKey updateFunction
+val runningCounts = pairs.updateStateByKey(updateFunction)
 {% endhighlight %}
 
 </div>
