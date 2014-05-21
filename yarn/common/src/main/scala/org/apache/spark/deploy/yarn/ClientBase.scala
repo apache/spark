@@ -379,8 +379,8 @@ trait ClientBase extends Logging {
 }
 
 object ClientBase {
-  val SPARK_JAR: String = "spark.jar"
-  val APP_JAR: String = "app.jar"
+  val SPARK_JAR: String = "__spark__.jar"
+  val APP_JAR: String = "__app__.jar"
   val LOG4J_PROP: String = "log4j.properties"
   val LOG4J_CONF_ENV_KEY: String = "SPARK_LOG4J_CONF"
   val LOCAL_SCHEME = "local"
@@ -499,37 +499,9 @@ object ClientBase {
       addPwdClasspathEntry(APP_JAR)
       cachedSecondaryJarLinks.foreach(addPwdClasspathEntry)
     }
+    // Append all class files and jar files under the working directory to the classpath.
+    addClasspathEntry(Environment.PWD.$())
     addPwdClasspathEntry("*")
-  }
-
-  /**
-   * Adds the given path to the classpath, handling "local:" URIs correctly.
-   *
-   * If an alternate name for the file is given, and it's not a "local:" file, the alternate
-   * name will be added to the classpath (relative to the job's work directory).
-   *
-   * If not a "local:" file and no alternate name, the environment is not modified.
-   *
-   * @param path      Path to add to classpath (optional).
-   * @param fileName  Alternate name for the file (optional).
-   * @param env       Map holding the environment variables.
-   */
-  private def addClasspathEntry(path: String, fileName: String,
-      env: HashMap[String, String]) : Unit = {
-    if (path != null) {
-      scala.util.control.Exception.ignoring(classOf[URISyntaxException]) {
-        val localPath = getLocalPath(path)
-        if (localPath != null) {
-          YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, localPath,
-            File.pathSeparator)
-          return
-        }
-      }
-    }
-    if (fileName != null) {
-      YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name,
-        Environment.PWD.$() + Path.SEPARATOR + fileName, File.pathSeparator);
-    }
   }
 
   /**
