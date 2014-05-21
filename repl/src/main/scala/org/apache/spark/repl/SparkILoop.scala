@@ -962,11 +962,10 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   private def getMaster(): String = {
     val master = this.master match {
       case Some(m) => m
-      case None => {
+      case None =>
         val envMaster = sys.env.get("MASTER")
         val propMaster = sys.props.get("spark.master")
-        envMaster.orElse(propMaster).getOrElse("local[*]")
-      }
+        propMaster.orElse(envMaster).getOrElse("local[*]")
     }
     master
   }
