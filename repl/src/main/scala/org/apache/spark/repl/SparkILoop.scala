@@ -993,7 +993,11 @@ object SparkILoop {
   implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
   private def echo(msg: String) = Console println msg
 
-  def getAddedJars: Array[String] = Option(System.getenv("ADD_JARS")).map(_.split(',')).getOrElse(new Array[String](0))
+  def getAddedJars: Array[String] = {
+    val envJars = sys.env.get("ADD_JARS")
+    val propJars = sys.props.get("spark.jars")
+    propJars.orElse(envJars).map(_.split(',')).getOrElse(Array.empty)
+  }
 
   // Designed primarily for use by test code: take a String with a
   // bunch of code, and prints out a transcript of what it would look
