@@ -44,7 +44,7 @@ import org.apache.spark.{Logging, SparkConf, SparkContext}
  * Client submits an application to the YARN ResourceManager.
  *
  * Depending on the deployment mode this will launch one of two application master classes:
- * 1. In standalone mode, it will launch an [[org.apache.spark.deploy.yarn.ApplicationMaster]]
+ * 1. In cluster mode, it will launch an [[org.apache.spark.deploy.yarn.ApplicationMaster]]
  *      which launches a driver program inside of the cluster.
  * 2. In client mode, it will launch an [[org.apache.spark.deploy.yarn.ExecutorLauncher]] to
  *      request executors on behalf of a driver running outside of the cluster.
