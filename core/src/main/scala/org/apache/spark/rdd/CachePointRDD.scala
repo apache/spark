@@ -41,4 +41,8 @@ private[spark] class CachePointRDD[T: ClassTag](sc: SparkContext, numPartitions:
       }
     }
   }
+
+  override def cachePoint(level: StorageLevel): CachePointRDD[T] = {
+    this
+  }
 }
