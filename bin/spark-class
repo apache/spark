@@ -24,7 +24,7 @@ esac
 
 SCALA_VERSION=2.10
 
-# Figure out where the Scala framework is installed
+# Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 # Export this as SPARK_HOME
