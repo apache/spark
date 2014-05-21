@@ -220,7 +220,7 @@ trait ClientBase extends Logging {
       }
     }
 
-    var cachedJarLinks = ListBuffer.empty[String]
+    var cachedSecondaryJarLinks = ListBuffer.empty[String]
     val fileLists = List( (args.addJars, LocalResourceType.FILE, true),
       (args.files, LocalResourceType.FILE, false),
       (args.archives, LocalResourceType.ARCHIVE, false) )
@@ -235,13 +235,13 @@ trait ClientBase extends Logging {
             distCacheMgr.addResource(fs, conf, destPath, localResources, resType,
               linkname, statCache)
             if (addToClasspath) {
-              cachedJarLinks += linkname
+              cachedSecondaryJarLinks += linkname
             }
           }
         }
       }
     }
-    sparkConf.set(ClientBase.CONF_SPARK_YARN_SECONDARY_JARS, cachedJarLinks.mkString(","))
+    sparkConf.set(ClientBase.CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
 
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
     localResources
@@ -485,18 +485,19 @@ object ClientBase {
 
     extraClassPath.foreach(addClasspathEntry)
 
-    val localSecondaryJarLinks = sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",")
+    val cachedSecondaryJarLinks =
+      sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",")
     // Normally the users app.jar is last in case conflicts with spark jars
     if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
       addPwdClasspathEntry(APP_JAR)
-      localSecondaryJarLinks.foreach(addPwdClasspathEntry)
+      cachedSecondaryJarLinks.foreach(addPwdClasspathEntry)
       addPwdClasspathEntry(SPARK_JAR)
       ClientBase.populateHadoopClasspath(conf, env)
     } else {
       addPwdClasspathEntry(SPARK_JAR)
       ClientBase.populateHadoopClasspath(conf, env)
       addPwdClasspathEntry(APP_JAR)
-      localSecondaryJarLinks.foreach(addPwdClasspathEntry)
+      cachedSecondaryJarLinks.foreach(addPwdClasspathEntry)
     }
     addPwdClasspathEntry("*")
   }
