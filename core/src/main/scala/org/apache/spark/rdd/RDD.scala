@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
+import org.apache.commons.math.distribution.HypergeometricDistributionImpl
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.NullWritable
@@ -424,14 +425,29 @@ abstract class RDD[T: ClassTag](
   /**
    * Randomly splits this RDD using exact stratified sampling with proportional allocation.
    * Strata are defined by the given stratifier function, which returns keys indexing strata.
+   * For each stratum, this method selects all samples of size ceil(fraction * n_stratum)
+   * with equal probability.
    *
    * This method can be useful, e.g., for sampling from a labeled dataset.
    * If the stratifier defines strata by the labels of examples,
    * then the sampled dataset will maintain the same label balance ratio.
    *
+   * Implementation details:
+   *  - Sampling is done separately for each stratum.
+   *    Here, all counts are w.r.t. a fixed stratum.
+   *  - Let:
+   *     - N = total number of elements in all partitions
+   *     - N_partition = number of elements in a given partition
+   *  - This method uses 2-tiered sampling:
+   *     - Tier 1 (on driver): Select the sample sizes {n_partition} for each partition.
+   *        - Without replacement, this uses a multivariate hypergeometric distribution.
+   *     - Tier 2 (in parallel): Select a sample of size n_partition.
+   *
+   * Note: Sampling is done WITHOUT REPLACEMENT.
+   *       To implement sampling with replacement, tier 1 should use a multinomial distribution.
+   *
    * @param stratifier Given an RDD element, return an Int indicating the stratum for the element.
-   * @param fraction Fraction of samples to keep.
-   * @param withReplacement Sample with replacement.
+   * @param fraction Fraction of samples to keep, in [0,1].
    * @param seed random seed
    *
    * @return stratified samples, as maps with key=stratum, value=Array[data type]
@@ -439,19 +455,128 @@ abstract class RDD[T: ClassTag](
   def stratifiedSample[K: ClassTag](
       stratifier: (T) => K,
       fraction: Double,
-      withReplacement: Boolean = false,
-      seed: Long = Utils.random.nextLong) : Map[K,Array[T]] = {
-    require(fraction >= 0.0, "Invalid fraction value: " + fraction)
+      seed: Long = Utils.random.nextLong) : RDD[T] = {
+    require(fraction >= 0.0 && fraction <= 1.0, "Invalid fraction value: " + fraction)
 
-    val stratifiedData = this.map(x => (stratifier(x),x)).groupByKey()
-    val strataCounts = stratifiedData.map(x => (x._1, x._2.size))
-    strataCounts.collectAsMap().map { x =>
-      (
-        x._1,
-        this.filter(y => stratifier(y) == x._1)
-          .takeSample(withReplacement, math.ceil(x._2 * fraction).intValue)
-      )
+    val stratifiedData = this.keyBy(stratifier)
+
+    // Get count for each partition and stratum as Map: partition -> Map: stratum -> count
+    val partStrataCounts = stratifiedData.countByKeyPartitioned()
+
+    // Get list of partition indices
+    val partitionIndices = stratifiedData.partitions.map(_.index).toSet.toArray
+    val numPartitions = partitionIndices.size
+    if (numPartitions == 0) {
+      return sc.emptyRDD
     }
+
+    // Get total count for each stratum as Map: stratum -> count
+    val strataTotals = new OpenHashMap[K, Long]
+    partStrataCounts.foreach {
+      case (part, partCounts) => {
+        partCounts.foreach {
+          case (stratum, cnt) => strataTotals.changeValue(stratum, cnt, _ + cnt)
+        }
+      }
+    }
+    if (strataTotals.size == 0) {
+      return sc.emptyRDD
+    }
+    val strata = strataTotals.map(_._1)
+    val maxStratumSize = strataTotals.map(_._2).reduce(math.max(_,_))
+    assert(
+      maxStratumSize < Int.MaxValue,
+      "stratifiedSample only supports RDDs with fewer than Int.MaxValue elements per stratum.")
+
+    // Compute number of samples to take from each partition.
+
+    // Map: stratum -> running totals of counts (ordered by partitionIndices)
+    // (used for sampling)
+    val strataRunningCounts = new OpenHashMap[K, Array[Int]]
+    strataTotals.foreach {
+      case (stratum,v) => {
+        strataRunningCounts(stratum) = new Array[Int](numPartitions)
+        for (i <- (0 to (numPartitions-1))) {
+          if (partStrataCounts(partitionIndices(i)).contains(stratum)) {
+            strataRunningCounts(stratum)(i) = partStrataCounts(partitionIndices(i))(stratum).toInt
+          } else {
+            strataRunningCounts(stratum)(i) = 0
+          }
+        }
+        strataRunningCounts(stratum).scanRight(0)(_+_)
+      }
+    }
+
+    // Map: partition -> stratum -> sample size
+    val strataSampleSizes = new OpenHashMap[Int, OpenHashMap[K, Int]]
+    partitionIndices.foreach { part => strataSampleSizes(part) = new OpenHashMap[K, Int] }
+    val rand = new Random(seed)
+    for (stratum <- strata) {
+      // We use a series of hypergeometric distributions
+      // to simulate a multivariate hypergeometric distribution.
+      var samplesRemaining = math.ceil(strataTotals(stratum) * fraction).toInt
+      for (i <- (0 to (numPartitions-2))) {
+        val part = partitionIndices(i)
+        val partCount = strataRunningCounts(stratum)(i)
+        val otherCount = strataRunningCounts(stratum)(i+1)
+        // For this stratum, partition i,
+        // sample from a hypergeometric distribution with balance (partCount, otherCount).
+        // Since sample() is not implemented in our Java distribution,
+        // we compute samples by searching over the CDF.
+        // TO DO: Find partSampleSize via binary search.
+        val hyperDist =
+          new HypergeometricDistributionImpl(partCount + otherCount, partCount, samplesRemaining)
+        val r = rand.nextDouble()
+        val maxPartSampleSize = math.min(samplesRemaining, partCount)
+        val partSampleSizeOption =
+          (0 to maxPartSampleSize).find(n => hyperDist.cumulativeProbability(n) >= r)
+        val partSampleSize = if (partSampleSizeOption.isEmpty) maxPartSampleSize else partSampleSizeOption.get
+        strataSampleSizes(part)(stratum) = partSampleSize
+        samplesRemaining -= partSampleSize
+      }
+      strataSampleSizes(partitionIndices.last)(stratum) = samplesRemaining
+    }
+
+    // Random seeds for each partition.
+    val partitionSeeds = partitionIndices.map( x => (x, rand.nextLong()) ).toMap
+
+    // Take strataSampleSizes(partition)(stratum) samples from each (partition, stratum).
+    def samplingFunctor(partition: Int, iter: Iterator[(K,T)]): Iterator[T] = {
+      val strata = strataSampleSizes(partition).map(_._1)
+      val partRandom = new Random(partitionSeeds(partition))
+      // Pre-select indices to sample for each stratum.
+      val strataSampleIndices = new OpenHashMap[K, mutable.HashSet[Int]]
+      strata.foreach {
+        stratum => {
+          strataSampleIndices.update(stratum, new mutable.HashSet[Int])
+          val partStratumTotal = {
+            if (partStrataCounts(partition).contains(stratum)) {
+              partStrataCounts(partition)(stratum)
+            } else {
+              0
+            }
+          }
+          val sampleSize = strataSampleSizes(partition)(stratum)
+          val sampleIndices =
+            Utils.randomizeInPlace((0 to (partStratumTotal.toInt - 1)).toArray, partRandom)
+              .take(sampleSize)
+          sampleIndices.foreach { ind => strataSampleIndices(stratum).add(ind) }
+        }
+      }
+      // Indices over all elements, per stratum.  Matched with strataSampleIndices.
+      val strataElemIndices = new OpenHashMap[K, Int]
+      strata.foreach { stratum => strataElemIndices.update(stratum, 0) }
+      // Sample elements.
+      val sampledElements = iter.filter {
+        case (stratum, x) => {
+          val i = strataElemIndices(stratum)
+          strataElemIndices.changeValue(stratum, 0, _+1)
+          strataSampleIndices(stratum).contains(i)
+        }
+      }
+      sampledElements.map(_._2)
+    }
+    stratifiedData.mapPartitionsWithIndex(samplingFunctor)
   }
 
   /**
@@ -924,6 +1049,56 @@ abstract class RDD[T: ClassTag](
     // Convert to a Scala mutable map
     val mutableResult = scala.collection.mutable.Map[T,Long]()
     myResult.foreach { case (k, v) => mutableResult.put(k, v) }
+    mutableResult
+  }
+
+  /**
+   * Count the unique values in each partition of this RDD.
+   * Returns a Map from partition indices to Maps of values to counts.
+   * The final combine step happens locally on the master,
+   * equivalent to running a single reduce task.
+   */
+  def countByValuePartitioned()(implicit ord: Ordering[T] = null): Map[Int, Map[T, Long]] = {
+    if (elementClassTag.runtimeClass.isArray) {
+      throw new SparkException("countByValuePartitioned() does not support arrays")
+    }
+    // TODO: This should perhaps be distributed by default.
+    def countPartition(index: Int, iter: Iterator[T]): Iterator[OpenHashMap[Int, OpenHashMap[T, Long]]] = {
+      val map = new OpenHashMap[T, Long]
+      iter.foreach {
+        t => map.changeValue(t, 1L, _ + 1L)
+      }
+      val resultMap = new OpenHashMap[Int, OpenHashMap[T, Long]]
+      resultMap(index) = map
+      Iterator(resultMap)
+    }
+    // TODO: This is used in countByValue as well,
+    //       so perhaps it should become a utility function elsewhere.
+    def mergeMaps(m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]): OpenHashMap[T,Long] = {
+      m2.foreach { case (key, value) =>
+        m1.changeValue(key, value, _ + value)
+      }
+      m1
+    }
+    def mergeMapMaps(
+        m1: OpenHashMap[Int, OpenHashMap[T, Long]],
+        m2: OpenHashMap[Int, OpenHashMap[T, Long]]): OpenHashMap[Int, OpenHashMap[T, Long]] = {
+      m2.foreach { case (key, value2) =>
+        m1.changeValue(key, value2, value1 => mergeMaps(value1, value2))
+      }
+      m1
+    }
+    val myResult = mapPartitionsWithIndex(countPartition).reduce(mergeMapMaps)
+    // Convert to a Scala mutable map
+    val mutableResult =
+      scala.collection.mutable.Map[Int, scala.collection.mutable.Map[T, Long]]()
+    myResult.foreach {
+      case (k, v) => {
+        val mutableResultSub = scala.collection.mutable.Map[T, Long]()
+        v.foreach { case (k2, v2) => mutableResultSub.put(k2, v2) }
+        mutableResult.put(k, mutableResultSub)
+      }
+    }
     mutableResult
   }
 

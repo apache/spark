@@ -203,6 +203,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def countByKey(): Map[K, Long] = self.map(_._1).countByValue()
 
   /**
+   * Count the number of elements for each key in each partition.
+   * Return the result to the master as a Map from partition indices to Maps of keys to counts.
+   */
+  def countByKeyPartitioned(): Map[Int, Map[K, Long]] = self.map(_._1).countByValuePartitioned()
+
+  /**
    * :: Experimental ::
    * Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.

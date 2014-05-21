@@ -573,61 +573,34 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val stratifier = (x: Int) => { x % numStrata }
     val strata = 0 to (numStrata-1)
     val data = sc.parallelize(1 to 100, 2)
+    val strataTotals = data.keyBy(stratifier).countByKey()
 
     for (fraction <- List(.1, .2, 1)) {
-      val sample = data.stratifiedSample(stratifier, fraction, withReplacement=false)
-      var cnt = 0
+      val sample = data.stratifiedSample(stratifier, fraction)
+      assert(sample.collect.toSet.size === sample.count) // Elements are distinct
+      assert(sample.collect.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      val stratSampleTotals = sample.keyBy(stratifier).countByKey()
       for (stratum <- strata) {
-        cnt += sample(stratum).size
-        assert(sample(stratum).toSet.size === sample(stratum).size) // Elements are distinct
-        assert(sample(stratum).forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
-        assert(sample(stratum).forall(x => stratum == stratifier(x)), "elements not in correct stratum")
+        assert(math.abs(stratSampleTotals(stratum) - strataTotals(stratum) * fraction) <= 1) // Proportional sampling
       }
-      assert(math.abs(cnt - data.count * fraction) <= numStrata) // Proportional sampling
     }
     for (seed <- 1 to 5) {
       val fraction = .2
-      val sample = data.stratifiedSample(stratifier, fraction, withReplacement=false, seed)
-      var cnt = 0
+      val sample = data.stratifiedSample(stratifier, fraction, seed)
+      assert(sample.collect.toSet.size === sample.count) // Elements are distinct
+      assert(sample.collect.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      val stratSampleTotals = sample.keyBy(stratifier).countByKey()
       for (stratum <- strata) {
-        cnt += sample(stratum).size
-        assert(sample(stratum).toSet.size === sample(stratum).size) // Elements are distinct
-        assert(sample(stratum).forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
-        assert(sample(stratum).forall(x => stratum == stratifier(x)), "elements not in correct stratum")
+        assert(math.abs(stratSampleTotals(stratum) - strataTotals(stratum) * fraction) <= 1) // Proportional sampling
       }
-      assert(math.abs(cnt - data.count * fraction) <= numStrata) // Proportional sampling
-    }
-    for (seed <- 1 to 5) {
-      val fraction = 2
-      val sample = data.stratifiedSample(stratifier, fraction, withReplacement=false, seed)
-      var cnt = 0
-      for (stratum <- strata) {
-        cnt += sample(stratum).size
-        assert(sample(stratum).toSet.size === sample(stratum).size) // Elements are distinct
-        assert(sample(stratum).forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
-        assert(sample(stratum).forall(x => stratum == stratifier(x)), "elements not in correct stratum")
-      }
-      assert(math.abs(cnt - data.count) <= numStrata) // Proportional sampling
-    }
-    for (seed <- 1 to 5) {
-      val fraction = .2
-      val sample = data.stratifiedSample(stratifier, fraction, withReplacement=true, seed)
-      var cnt = 0
-      for (stratum <- strata) {
-        cnt += sample(stratum).size
-        assert(sample(stratum).forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
-        assert(sample(stratum).forall(x => stratum == stratifier(x)), "elements not in correct stratum")
-      }
-      assert(math.abs(cnt - data.count * fraction) <= numStrata) // Proportional sampling
     }
   }
 
   test("stratifiedSample from an empty rdd") {
     val stratifier = (x: Int) => { x % 2 }
     val emptySet = sc.parallelize(Seq.empty[Int], 2)
-    val sampleMap = emptySet.stratifiedSample(stratifier, .2)
-    //assert(sampleMap.size == 1)
-    assert(sampleMap.isEmpty, "sampleMap should be empty but is not")
+    val sample = emptySet.stratifiedSample(stratifier, .2)
+    assert(sample.count == 0, "sampleMap should be empty but is not")
   }
 
   test("runJob on an invalid partition") {
