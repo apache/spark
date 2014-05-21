@@ -1,5 +1,29 @@
 #!/usr/bin/python
- 
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Creates CHANGES.txt from git history.
+#
+# Usage:
+#   First set the new release version and old CHANGES.txt version in this file.
+#   Make sure you have SPARK_HOME set.
+#   $  python generate-changelist.py
+
+
 import os
 import sys
 import subprocess
@@ -90,7 +114,6 @@ for h in hashes:
     authors = [committer]
     if "Author:" in body:
       authors = [line.split(":")[1].strip() for line in body_lines if "Author:" in line]
-    print authors
     
     # Generate GitHub PR URL for easy access if possible
     github_url = ""
