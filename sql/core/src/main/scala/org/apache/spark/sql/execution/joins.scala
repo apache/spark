@@ -235,7 +235,7 @@ case class LeftSemiJoinHash(
  */
 @DeveloperApi
 case class LeftSemiJoinBNL(
-    streamed: SparkPlan, broadcast: SparkPlan, joinType: JoinType, condition: Option[Expression])
+    streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression])
     (@transient sc: SparkContext)
   extends BinaryNode {
   // TODO: Override requiredChildDistribution.

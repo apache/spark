@@ -33,13 +33,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // Find leftsemi joins where at least some predicates can be evaluated by matching hash keys
       // using the HashFilteredJoin pattern.
       case HashFilteredJoin(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
-        val semiJoin =
-          execution.LeftSemiJoinHash(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
+        val semiJoin = execution.LeftSemiJoinHash(
+          leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
       // no predicate can be evaluated by matching hash keys
       case logical.Join(left, right, LeftSemi, condition) =>
         execution.LeftSemiJoinBNL(
-          planLater(left), planLater(right), LeftSemi, condition)(sparkContext) :: Nil
+          planLater(left), planLater(right), condition)(sparkContext) :: Nil
       case _ => Nil
     }
   }
