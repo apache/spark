@@ -790,7 +790,8 @@ Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can config
 # Configuring Ports for Network Security
 
 Spark makes heavy use of the network, and some environments have strict requirements for using tight
-firewall settings.  Below are the primary ports that Spark uses for its communication.
+firewall settings.  Below are the primary ports that Spark uses for its communication and how to
+configure those ports.
 
 <table class="table">
   <tr>
