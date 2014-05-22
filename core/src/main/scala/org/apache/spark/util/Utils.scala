@@ -1172,7 +1172,7 @@ private[spark] object Utils extends Logging {
     if (path.contains(":")) {
       new URI(path)
     } else {
-      val (body, fragment) = path.split('#') match {
+      val (body, fragment) = path.split("#") match {
         case Array(b, f) => (b, f)
         case Array(b) => (b, null)
       }
