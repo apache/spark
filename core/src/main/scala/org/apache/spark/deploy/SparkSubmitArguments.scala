@@ -326,8 +326,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |  --class CLASS_NAME          Your application's main class (for Java / Scala apps).
         |  --name NAME                 A name of your application.
         |  --jars JARS                 Comma-separated list of local jars to include on the driver
-        |                              and executor classpaths. Doesn't work for drivers in
-        |                              standalone mode with "cluster" deploy mode.
+        |                              and executor classpaths.
         |  --py-files PY_FILES         Comma-separated list of .zip or .egg files to place on the
         |                              PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
