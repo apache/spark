@@ -3,15 +3,10 @@ layout: global
 title: Spark Configuration
 ---
 
-Spark provides three locations to configure the system:
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
-* [Spark properties](#spark-properties) control most application parameters and can be set by
-  passing a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object to SparkContext,
-  or through the `conf/spark-defaults.conf` properties file.
-* [Environment variables](#environment-variables) can be used to set per-machine settings, such as
-  the IP address, through the `conf/spark-env.sh` script on each node.
-* [Logging](#configuring-logging) can be configured through `log4j.properties`.
-
+Spark provides several locations to configure the system:
 
 # Spark Properties
 
