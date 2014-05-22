@@ -805,7 +805,7 @@ firewall settings.  Below are the primary ports that Spark uses for its communic
   <!-- Web UIs -->
   <tr>
     <td>Browser</td>
-    <td>Master</td>
+    <td>Standalone Cluster Master</td>
     <td>8080</td>
     <td>Web UI</td>
     <td><code>spark.history.ui.port</code></td>
@@ -831,7 +831,7 @@ firewall settings.  Below are the primary ports that Spark uses for its communic
   <!-- Cluster interactions -->
   <tr>
     <td>Application</td>
-    <td>Master</td>
+    <td>Standalone Cluster Master</td>
     <td>7077</td>
     <td>Submit job to cluster</td>
     <td><code>spark.driver.port</code></td>
@@ -839,7 +839,7 @@ firewall settings.  Below are the primary ports that Spark uses for its communic
   </tr>
   <tr>
     <td>Worker</td>
-    <td>Master</td>
+    <td>Standalone Cluster Master</td>
     <td>7077</td>
     <td>Join cluster</td>
     <td><code>spark.driver.port</code></td>
