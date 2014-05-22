@@ -791,3 +791,83 @@ you might compute `SPARK_LOCAL_IP` by looking up the IP of a specific network in
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
 `log4j.properties` file in the `conf` directory. One way to start is to copy the existing
 `log4j.properties.template` located there.
+
+# Configuring ports for network security
+
+Spark makes heavy use of the network, and some environments have strict requirements for using tight
+firewall settings.  Below are the primary ports that Spark uses for its communication.
+
+<table class="table">
+  <tr>
+    <th>From</th><th>To</th><th>Port</th><th>Purpose</th><th>Configuration
+    Setting</th><th>Notes</th>
+  </tr>
+  <!-- Web UIs -->
+  <tr>
+    <td>Browser</td>
+    <td>Master</td>
+    <td>8080</td>
+    <td>Web UI</td>
+    <td><code>spark.history.ui.port</code></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>Worker</td>
+    <td>8081</td>
+    <td>Web UI</td>
+    <td><code>spark.ui.port</code></td>
+    <td>Note: this is the same configuration setting as the webui on the driver</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>Driver</td>
+    <td>4040</td>
+    <td>Web UI</td>
+    <td><code>spark.ui.port</code></td>
+    <td>Note: this is the same configuration setting as the webui on the worker</td>
+  </tr>
+
+  <!-- Cluster interactions -->
+  <tr>
+    <td>Application</td>
+    <td>Master</td>
+    <td>7077</td>
+    <td>Submit job to cluster</td>
+    <td><code>spark.driver.port</code></td>
+    <td>Uses Akka.  Set to "0" to choose a port randomly</td>
+  </tr>
+  <tr>
+    <td>Worker</td>
+    <td>Master</td>
+    <td>7077</td>
+    <td>Join cluster</td>
+    <td><code>spark.driver.port</code></td>
+    <td>Uses Akka.  Set to "0" to choose a port randomly</td>
+  </tr>
+  <tr>
+    <td>Application</td>
+    <td>Worker</td>
+    <td>(random)</td>
+    <td>Join cluster</td>
+    <td><code>SPARK_WORKER_PORT</code> (standalone cluster)</td>
+    <td>Uses Akka</td>
+  </tr>
+
+  <!-- Other misc stuff -->
+  <tr>
+    <td>Driver and other Workers</td>
+    <td>Worker</td>
+    <td>(random)</td>
+    <td>
+      <ul>
+        <li>File server for file and jars</li>
+        <li>Http Broadcast</li>
+        <li>Class file server (Spark Shell only)</li>
+      </ul>
+    </td>
+    <td>None</td>
+    <td>Uses Jetty.  Each of these services starts on a random port that cannot be configured</td>
+  </tr>
+
+</table>
