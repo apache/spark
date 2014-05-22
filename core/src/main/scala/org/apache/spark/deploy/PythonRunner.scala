@@ -42,7 +42,7 @@ object PythonRunner {
         pythonFileUri.getPath
       case _ =>
         throw new IllegalArgumentException(
-          "Launching Python applications through spark-submit is currently only supported" +
+          "Launching Python applications through spark-submit is currently only supported " +
             s"for local files: $pythonFileUri")
     }
 
