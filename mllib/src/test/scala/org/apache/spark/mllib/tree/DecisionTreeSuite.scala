@@ -561,10 +561,10 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplits.length === 1)
     val bestSplit = bestSplits(0)._1
 
-    //assert(bestSplit.feature === 1)
-    //assert(bestSplit.featureType == Continuous)
-    //assert(bestSplit.threshold > 1000)
-    println(bestSplit)
+    assert(bestSplit.feature === 1)
+    assert(bestSplit.featureType === Continuous)
+    assert(bestSplit.threshold > 1980)
+    assert(bestSplit.threshold < 2020)
 
   }
 
@@ -639,9 +639,9 @@ object DecisionTreeSuite {
     val arr = new Array[WeightedLabeledPoint](3000)
     for (i <- 0 until 3000) {
       if (i < 2000) {
-        arr(i) = new WeightedLabeledPoint(2.0, Vectors.dense(2.0, 100))
+        arr(i) = new WeightedLabeledPoint(2.0, Vectors.dense(2.0, i))
       } else {
-        arr(i) = new WeightedLabeledPoint(1.0, Vectors.dense(2.0, 3000))
+        arr(i) = new WeightedLabeledPoint(1.0, Vectors.dense(2.0, i))
       }
     }
     arr
