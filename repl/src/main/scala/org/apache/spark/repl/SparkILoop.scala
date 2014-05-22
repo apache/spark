@@ -998,7 +998,7 @@ object SparkILoop {
     val propJars = sys.props.get("spark.jars").flatMap { p =>
       if (p == "") None else Some(p)
     }
-    propJars.orElse(envJars).map(_.split(',')).getOrElse(Array.empty)
+    propJars.orElse(envJars).map(_.split(",")).getOrElse(Array.empty)
   }
 
   // Designed primarily for use by test code: take a String with a
