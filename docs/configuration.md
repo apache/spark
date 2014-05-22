@@ -792,7 +792,7 @@ Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can config
 `log4j.properties` file in the `conf` directory. One way to start is to copy the existing
 `log4j.properties.template` located there.
 
-# Configuring ports for network security
+# Configuring Ports for Network Security
 
 Spark makes heavy use of the network, and some environments have strict requirements for using tight
 firewall settings.  Below are the primary ports that Spark uses for its communication.
