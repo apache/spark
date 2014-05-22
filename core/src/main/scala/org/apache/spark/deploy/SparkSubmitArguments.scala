@@ -263,19 +263,19 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         parse(tail)
 
       case ("--files") :: value :: tail =>
-        files = SparkSubmitArguments.resolveURIs(value)
+        files = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--py-files") :: value :: tail =>
-        pyFiles = SparkSubmitArguments.resolveURIs(value)
+        pyFiles = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--archives") :: value :: tail =>
-        archives = SparkSubmitArguments.resolveURIs(value)
+        archives = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--jars") :: value :: tail =>
-        jars = SparkSubmitArguments.resolveURIs(value)
+        jars = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--help" | "-h") :: tail =>
@@ -380,14 +380,5 @@ object SparkSubmitArguments {
         throw new SparkException(message, e)
     }
     properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
-  }
-
-  /** Resolves comma separated paths. */
-  private def resolveURIs(paths: String): String = {
-    if (paths == null || paths.trim.isEmpty) {
-      ""
-    } else {
-      paths.split(",").map(Utils.resolveURI).mkString(",")
-    }
   }
 }

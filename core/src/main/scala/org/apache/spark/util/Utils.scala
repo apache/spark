@@ -1184,4 +1184,13 @@ private[spark] object Utils extends Logging {
       }
     }
   }
+
+  /** Resolves a comma-separated list of paths. */
+  def resolveURIs(paths: String): String = {
+    if (paths == null || paths.trim.isEmpty) {
+      ""
+    } else {
+      paths.split(",").map(Utils.resolveURI).mkString(",")
+    }
+  }
 }
