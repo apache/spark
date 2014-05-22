@@ -296,7 +296,12 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               val errMessage = s"Unrecognized option '$value'."
               SparkSubmit.printErrorAndExit(errMessage)
             case v =>
-              primaryResource = Utils.resolveURI(v).toString
+              primaryResource =
+                if (!SparkSubmit.isShell(v)) {
+                  Utils.resolveURI(v).toString
+                } else {
+                  v
+                }
               inSparkOpts = false
               isPython = SparkSubmit.isPython(v)
               parse(tail)

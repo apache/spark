@@ -323,7 +323,7 @@ object SparkSubmit {
   /**
    * Return whether the given primary resource represents a shell.
    */
-  private def isShell(primaryResource: String): Boolean = {
+  private[spark] def isShell(primaryResource: String): Boolean = {
     primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL
   }
 
