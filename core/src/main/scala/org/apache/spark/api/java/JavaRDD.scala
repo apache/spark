@@ -36,7 +36,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): JavaRDD[T] = wrapRDD(rdd.cache())
 
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`) and
+  /** Persist this RDD with the default storage level (`MEMORY_AND_DISK_2`) and
    *  all references to its parent RDDs will be removed.
    */
   def cachePoint(): JavaRDD[T] = wrapRDD(rdd.cachePoint())
