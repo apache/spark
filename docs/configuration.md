@@ -799,7 +799,7 @@ firewall settings.  Below are the primary ports that Spark uses for its communic
 
 <table class="table">
   <tr>
-    <th>From</th><th>To</th><th>Port</th><th>Purpose</th><th>Configuration
+    <th>From</th><th>To</th><th>Default Port</th><th>Purpose</th><th>Configuration
     Setting</th><th>Notes</th>
   </tr>
   <!-- Web UIs -->
