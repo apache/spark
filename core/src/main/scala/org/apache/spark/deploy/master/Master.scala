@@ -31,6 +31,7 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState,
@@ -686,22 +687,12 @@ private[spark] class Master(
    */
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
-    val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
-    val eventLogDir = app.desc.eventLogDir.getOrElse {
-      // Event logging is not enabled for this application
-      app.desc.appUiUrl = notFoundBasePath
-      return false
-    }
-    val fileSystem = Utils.getHadoopFileSystem(eventLogDir,
-      SparkHadoopUtil.get.newConfiguration(conf))
-    val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
-    val eventLogPaths = eventLogInfo.logPaths
-    val compressionCodec = eventLogInfo.compressionCodec
-
-    if (eventLogPaths.isEmpty) {
+    val eventLogFile = app.desc.eventLogFile.getOrElse { return false }
+    val eventLogInfo = EventLoggingListener.parseLoggingInfo(new Path(eventLogFile))
+    if (eventLogInfo == null) {
       // Event logging is enabled for this application, but no event logs are found
       val title = s"Application history not found (${app.id})"
-      var msg = s"No event logs found for application $appName in $eventLogDir."
+      var msg = s"No event logs found for application $appName in $eventLogFile."
       logWarning(msg)
       msg += " Did you specify the correct logging directory?"
       msg = URLEncoder.encode(msg, "UTF-8")
@@ -710,14 +701,15 @@ private[spark] class Master(
     }
 
     try {
-      val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
-      val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)",
-        HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
+      val compressionCodec = eventLogInfo.compressionCodec
+      val fileSystem = Utils.getHadoopFileSystem(eventLogFile)
+      val replayBus = new ReplayListenerBus(eventLogInfo.path, fileSystem, compressionCodec)
+      val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
       replayBus.replay()
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
       // Application UI is successfully rebuilt, so link the Master UI to it
-      app.desc.appUiUrl = ui.getBasePath
+      app.desc.appUiUrl = ui.basePath
       true
     } catch {
       case e: Exception =>

@@ -25,10 +25,8 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.{Logging, SparkConf, SparkContext, SPARK_VERSION}
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.SPARK_VERSION
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 import java.io.File
@@ -36,11 +34,11 @@ import java.io.File
 /**
  * Test whether EventLoggingListener logs events properly.
  *
- * This tests whether EventLoggingListener actually creates special files while logging events,
- * whether the parsing of these special files is correct, and whether the logged events can be
- * read and deserialized into actual SparkListenerEvents.
+ * This tests whether EventLoggingListener actually log files with expected name patterns while
+ * logging events, whether the parsing of the file names is correct, and whether the logged events
+ * can be read and deserialized into actual SparkListenerEvents.
  */
-class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
+class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Logging {
   private val fileSystem = Utils.getHadoopFileSystem("/",
     SparkHadoopUtil.get.newConfiguration(new SparkConf()))
   private val allCompressionCodecs = Seq[String](
@@ -48,29 +46,29 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     "org.apache.spark.io.SnappyCompressionCodec"
   )
   private var testDir: File = _
-  private var logDirPath: Path = _
+  private var testDirPath: Path = _
 
   before {
     testDir = Files.createTempDir()
     testDir.deleteOnExit()
-    logDirPath = Utils.getFilePath(testDir, "spark-events")
+    testDirPath = new Path(testDir.getAbsolutePath())
   }
 
   after {
     Utils.deleteRecursively(testDir)
   }
 
-  test("Parse names of special files") {
+  test("Parse names of log files") {
     testParsingFileName()
   }
 
-  test("Verify special files exist") {
-    testSpecialFilesExist()
+  test("Verify log file exist") {
+    testLogFileExists()
   }
 
-  test("Verify special files exist with compression") {
+  test("Verify log file names contain compression codec info") {
     allCompressionCodecs.foreach { codec =>
-      testSpecialFilesExist(compressionCodec = Some(codec))
+      testLogFileExists(compressionCodec = Some(codec))
     }
   }
 
@@ -112,79 +110,59 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
   import EventLoggingListenerSuite._
 
   /**
-   * Test whether names of special files are correctly identified and parsed.
+   * Test whether names of log files are correctly identified and parsed.
    */
   private def testParsingFileName() {
-    val logPrefix = EventLoggingListener.LOG_PREFIX
-    val sparkVersionPrefix = EventLoggingListener.SPARK_VERSION_PREFIX
-    val compressionCodecPrefix = EventLoggingListener.COMPRESSION_CODEC_PREFIX
-    val applicationComplete = EventLoggingListener.APPLICATION_COMPLETE
-    assert(EventLoggingListener.isEventLogFile(logPrefix + "0"))
-    assert(EventLoggingListener.isEventLogFile(logPrefix + "100"))
-    assert(EventLoggingListener.isEventLogFile(logPrefix + "ANYTHING"))
-    assert(EventLoggingListener.isSparkVersionFile(sparkVersionPrefix + "0.9.1"))
-    assert(EventLoggingListener.isSparkVersionFile(sparkVersionPrefix + "1.0.0"))
-    assert(EventLoggingListener.isSparkVersionFile(sparkVersionPrefix + "ANYTHING"))
-    assert(EventLoggingListener.isApplicationCompleteFile(applicationComplete))
-    allCompressionCodecs.foreach { codec =>
-      assert(EventLoggingListener.isCompressionCodecFile(compressionCodecPrefix + codec))
-    }
+    var tests = List(
+      // Log file name, Spark version, Compression codec, in progress
+      ("app1-1234-1.0.inprogress", "1.0", None, true),
+      ("app2-1234-0.9.1", "0.9.1", None, false),
+      ("app3-1234-0.9-org.apache.spark.io.LZFCompressionCodec", "0.9",
+        Some(classOf[LZFCompressionCodec]), false),
+      ("app-123456-1234-0.8-org.apache.spark.io.SnappyCompressionCodec.inprogress", "0.8",
+        Some(classOf[SnappyCompressionCodec]), true)
+      )
 
-    // Negatives
-    assert(!EventLoggingListener.isEventLogFile("The greatest man of all mankind"))
-    assert(!EventLoggingListener.isSparkVersionFile("Will never falter in the face of death!"))
-    assert(!EventLoggingListener.isCompressionCodecFile("Unless he chooses to leave behind"))
-    assert(!EventLoggingListener.isApplicationCompleteFile("The very treasure he calls Macbeth"))
+    tests.foreach({ case (fname, version, codec, inProgress) =>
+      logWarning(s"Testing: $fname")
+      val info = EventLoggingListener.parseLoggingInfo(new Path(fname))
+      assert(info != null)
+      assert(version === info.sparkVersion)
+      assert(!inProgress === info.applicationComplete)
 
-    // Verify that parsing is correct
-    assert(EventLoggingListener.parseSparkVersion(sparkVersionPrefix + "1.0.0") === "1.0.0")
-    allCompressionCodecs.foreach { codec =>
-      assert(EventLoggingListener.parseCompressionCodec(compressionCodecPrefix + codec) === codec)
-    }
+      val actualCodec = if (!info.compressionCodec.isEmpty) {
+          info.compressionCodec.get.getClass()
+        } else null
+      assert(codec.getOrElse(null) === actualCodec)
+      })
+
+    var invalid = List("app1", "app1-1.0", "app1-1234", "app1-abc-1.0",
+      "app1-1234-1.0-org.invalid.compression.Codec",
+      "app1-1234-1.0.not_in_progress")
+
+    invalid.foreach(fname => assert(EventLoggingListener.parseLoggingInfo(new Path(fname)) == null))
   }
 
   /**
-   * Test whether the special files produced by EventLoggingListener exist.
-   *
-   * There should be exactly one event log and one spark version file throughout the entire
-   * execution. If a compression codec is specified, then the compression codec file should
-   * also exist. Only after the application has completed does the test expect the application
-   * completed file to be present.
+   * Test whether the log file produced by EventLoggingListener exists and matches the expected
+   * name pattern.
    */
-  private def testSpecialFilesExist(compressionCodec: Option[String] = None) {
-
-    def assertFilesExist(logFiles: Array[FileStatus], loggerStopped: Boolean) {
-      val numCompressionCodecFiles = if (compressionCodec.isDefined) 1 else 0
-      val numApplicationCompleteFiles = if (loggerStopped) 1 else 0
-      assert(logFiles.size === 2 + numCompressionCodecFiles + numApplicationCompleteFiles)
-      assert(eventLogsExist(logFiles))
-      assert(sparkVersionExists(logFiles))
-      assert(compressionCodecExists(logFiles) === compressionCodec.isDefined)
-      assert(applicationCompleteExists(logFiles) === loggerStopped)
-      assertSparkVersionIsValid(logFiles)
-      compressionCodec.foreach { codec =>
-        assertCompressionCodecIsValid(logFiles, codec)
-      }
-    }
-
+  private def testLogFileExists(compressionCodec: Option[String] = None) {
     // Verify logging directory exists
-    val conf = getLoggingConf(logDirPath, compressionCodec)
+    val conf = getLoggingConf(testDirPath, compressionCodec)
     val eventLogger = new EventLoggingListener("test", conf)
     eventLogger.start()
-    val logPath = new Path(eventLogger.logDir)
+
+    val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
     assert(fileSystem.exists(logPath))
-    val logDir = fileSystem.getFileStatus(logPath)
-    assert(logDir.isDir)
+    val logStatus = fileSystem.getFileStatus(logPath)
+    assert(logStatus.isFile)
+    assert(EventLoggingListener.LOG_FILE_NAME_REGEX.pattern.matcher(
+      logPath.getName()).matches())
 
-    // Verify special files are as expected before stop()
-    var logFiles = fileSystem.listStatus(logPath)
-    assert(logFiles != null)
-    assertFilesExist(logFiles, loggerStopped = false)
-
-    // Verify special files are as expected after stop()
+    // Verify log is renamed after stop()
     eventLogger.stop()
-    logFiles = fileSystem.listStatus(logPath)
-    assertFilesExist(logFiles, loggerStopped = true)
+    assert(fileSystem.getFileStatus(new Path(eventLogger.logPath)).isFile())
   }
 
   /**
@@ -196,7 +174,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
   private def testParsingLogInfo(compressionCodec: Option[String] = None) {
 
     def assertInfoCorrect(info: EventLoggingInfo, loggerStopped: Boolean) {
-      assert(info.logPaths.size > 0)
+      assert(info != null)
       assert(info.sparkVersion === SPARK_VERSION)
       assert(info.compressionCodec.isDefined === compressionCodec.isDefined)
       info.compressionCodec.foreach { codec =>
@@ -208,15 +186,16 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     }
 
     // Verify that all information is correctly parsed before stop()
-    val conf = getLoggingConf(logDirPath, compressionCodec)
+    val conf = getLoggingConf(testDirPath, compressionCodec)
     val eventLogger = new EventLoggingListener("test", conf)
     eventLogger.start()
-    var eventLoggingInfo = EventLoggingListener.parseLoggingInfo(eventLogger.logDir, fileSystem)
+    var eventLoggingInfo = EventLoggingListener.parseLoggingInfo(
+      new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS))
     assertInfoCorrect(eventLoggingInfo, loggerStopped = false)
 
     // Verify that all information is correctly parsed after stop()
     eventLogger.stop()
-    eventLoggingInfo = EventLoggingListener.parseLoggingInfo(eventLogger.logDir, fileSystem)
+    eventLoggingInfo = EventLoggingListener.parseLoggingInfo(new Path(eventLogger.logPath))
     assertInfoCorrect(eventLoggingInfo, loggerStopped = true)
   }
 
@@ -227,7 +206,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    * exactly these two events are logged in the expected file.
    */
   private def testEventLogging(compressionCodec: Option[String] = None) {
-    val conf = getLoggingConf(logDirPath, compressionCodec)
+    val conf = getLoggingConf(testDirPath, compressionCodec)
     val eventLogger = new EventLoggingListener("test", conf)
     val listenerBus = new LiveListenerBus
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
@@ -240,17 +219,17 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
     listenerBus.addListener(eventLogger)
     listenerBus.postToAll(applicationStart)
     listenerBus.postToAll(applicationEnd)
+    eventLogger.stop()
 
     // Verify file contains exactly the two events logged
-    val eventLoggingInfo = EventLoggingListener.parseLoggingInfo(eventLogger.logDir, fileSystem)
-    assert(eventLoggingInfo.logPaths.size > 0)
-    val lines = readFileLines(eventLoggingInfo.logPaths.head, eventLoggingInfo.compressionCodec)
+    val eventLoggingInfo = EventLoggingListener.parseLoggingInfo(new Path(eventLogger.logPath))
+    assert(eventLoggingInfo != null)
+    val lines = readFileLines(eventLoggingInfo.path, eventLoggingInfo.compressionCodec)
     assert(lines.size === 2)
     assert(lines(0).contains("SparkListenerApplicationStart"))
     assert(lines(1).contains("SparkListenerApplicationEnd"))
     assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === applicationStart)
     assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationEnd)
-    eventLogger.stop()
   }
 
   /**
@@ -258,12 +237,12 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    * This runs a simple Spark job and asserts that the expected events are logged when expected.
    */
   private def testApplicationEventLogging(compressionCodec: Option[String] = None) {
-    val conf = getLoggingConf(logDirPath, compressionCodec)
+    val conf = getLoggingConf(testDirPath, compressionCodec)
     val sc = new SparkContext("local", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
-    val expectedLogDir = logDirPath.toString
-    assert(eventLogger.logDir.contains(expectedLogDir))
+    val expectedLogDir = testDir.getAbsolutePath()
+    assert(eventLogger.logPath.startsWith(expectedLogDir + "/"))
 
     // Begin listening for events that trigger asserts
     val eventExistenceListener = new EventExistenceListener(eventLogger)
@@ -279,11 +258,15 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
   /**
    * Assert that all of the specified events are logged by the given EventLoggingListener.
+   *
+   * This is done while the application is still running, so the log file contains the
+   * IN_PROGRESS suffix.
    */
   private def assertEventsExist(eventLogger: EventLoggingListener, events: Seq[String]) {
-    val eventLoggingInfo = EventLoggingListener.parseLoggingInfo(eventLogger.logDir, fileSystem)
-    assert(eventLoggingInfo.logPaths.size > 0)
-    val lines = readFileLines(eventLoggingInfo.logPaths.head, eventLoggingInfo.compressionCodec)
+    val eventLoggingInfo = EventLoggingListener.parseLoggingInfo(
+      new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS))
+    assert(eventLoggingInfo != null)
+    val lines = readFileLines(eventLoggingInfo.path, eventLoggingInfo.compressionCodec)
     val eventSet = mutable.Set(events: _*)
     lines.foreach { line =>
       eventSet.foreach { event =>
@@ -356,39 +339,6 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
       assert(jobEnded, "JobEnd callback not invoked!")
       assert(appEnded, "ApplicationEnd callback not invoked!")
     }
-  }
-
-
-  /* -------------------------------------------------------- *
-   * Helper methods for validating state of the special files *
-   * -------------------------------------------------------- */
-
-  private def eventLogsExist(logFiles: Array[FileStatus]): Boolean = {
-    logFiles.map(_.getPath.getName).exists(EventLoggingListener.isEventLogFile)
-  }
-
-  private def sparkVersionExists(logFiles: Array[FileStatus]): Boolean = {
-    logFiles.map(_.getPath.getName).exists(EventLoggingListener.isSparkVersionFile)
-  }
-
-  private def compressionCodecExists(logFiles: Array[FileStatus]): Boolean = {
-    logFiles.map(_.getPath.getName).exists(EventLoggingListener.isCompressionCodecFile)
-  }
-
-  private def applicationCompleteExists(logFiles: Array[FileStatus]): Boolean = {
-    logFiles.map(_.getPath.getName).exists(EventLoggingListener.isApplicationCompleteFile)
-  }
-
-  private def assertSparkVersionIsValid(logFiles: Array[FileStatus]) {
-    val file = logFiles.map(_.getPath.getName).find(EventLoggingListener.isSparkVersionFile)
-    assert(file.isDefined)
-    assert(EventLoggingListener.parseSparkVersion(file.get) === SPARK_VERSION)
-  }
-
-  private def assertCompressionCodecIsValid(logFiles: Array[FileStatus], compressionCodec: String) {
-    val file = logFiles.map(_.getPath.getName).find(EventLoggingListener.isCompressionCodecFile)
-    assert(file.isDefined)
-    assert(EventLoggingListener.parseCompressionCodec(file.get) === compressionCodec)
   }
 
 }

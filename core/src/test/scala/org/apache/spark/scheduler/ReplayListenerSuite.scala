@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.io.{File, PrintWriter}
 
 import com.google.common.io.Files
+import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -89,7 +90,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
     writer.close()
-    val replayer = new ReplayListenerBus(Seq(logFilePath), fileSystem, codec)
+    val replayer = new ReplayListenerBus(logFilePath, fileSystem, codec)
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath, codecName)
     val eventMonster = new EventMonster(conf)
     replayer.addListener(eventMonster)
@@ -108,6 +109,8 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    */
   private def testApplicationReplay(codecName: Option[String] = None) {
     val logDirPath = Utils.getFilePath(testDir, "test-replay")
+    fileSystem.mkdirs(logDirPath)
+
     val conf = EventLoggingListenerSuite.getLoggingConf(logDirPath, codecName)
     val sc = new SparkContext("local-cluster[2,1,512]", "Test replay", conf)
 
@@ -122,16 +125,11 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     val codec = codecName.map(getCompressionCodec)
     val applications = fileSystem.listStatus(logDirPath)
     assert(applications != null && applications.size > 0)
-    val eventLogDir = applications.sortBy(_.getAccessTime).last
-    assert(eventLogDir.isDir)
-    val logFiles = fileSystem.listStatus(eventLogDir.getPath)
-    assert(logFiles != null && logFiles.size > 0)
-    val logFile = logFiles.find(_.getPath.getName.startsWith("EVENT_LOG_"))
-    assert(logFile.isDefined)
-    val logFilePath = logFile.get.getPath
+    val eventLog = applications.sortBy(_.getAccessTime).last
+    assert(eventLog.isFile)
 
     // Replay events
-    val replayer = new ReplayListenerBus(Seq(logFilePath), fileSystem, codec)
+    val replayer = new ReplayListenerBus(eventLog.getPath(), fileSystem, codec)
     val eventMonster = new EventMonster(conf)
     replayer.addListener(eventMonster)
     replayer.replay()
@@ -156,7 +154,9 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    * log the events.
    */
   private class EventMonster(conf: SparkConf) extends EventLoggingListener("test", conf) {
-    logger.close()
+
+    override def start() { }
+
   }
 
   private def getCompressionCodec(codecName: String) = {

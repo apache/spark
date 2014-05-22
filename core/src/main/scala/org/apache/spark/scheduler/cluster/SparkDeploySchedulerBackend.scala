@@ -70,7 +70,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
     val eventLogDir = sc.eventLogger.map(_.logDir)
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      appUIAddress, eventLogDir)
+      sparkHome, sc.ui.appUIAddress, eventLogDir)
 
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
