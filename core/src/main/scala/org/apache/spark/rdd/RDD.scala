@@ -1097,7 +1097,7 @@ abstract class RDD[T: ClassTag](
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
   }
 
-  /** Persist this RDD with the default storage level (`MEMORY_ONLY`) and
+  /** Persist this RDD with the default storage level (`MEMORY_AND_DISK_2`) and
    *  all references to its parent RDDs will be removed.
    */
   def cachePoint(): RDD[T] = cachePoint(StorageLevel.MEMORY_AND_DISK_2)
