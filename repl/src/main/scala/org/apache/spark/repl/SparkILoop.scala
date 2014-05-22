@@ -995,7 +995,9 @@ object SparkILoop {
 
   def getAddedJars: Array[String] = {
     val envJars = sys.env.get("ADD_JARS")
-    val propJars = sys.props.get("spark.jars")
+    val propJars = sys.props.get("spark.jars").flatMap { p =>
+      if (p == "") None else Some(p)
+    }
     propJars.orElse(envJars).map(_.split(',')).getOrElse(Array.empty)
   }
 

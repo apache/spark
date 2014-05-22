@@ -228,9 +228,7 @@ object SparkSubmit {
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
       }
-      if (jars.nonEmpty) {
-        sysProps.put("spark.jars", jars.mkString(","))
-      }
+      sysProps.put("spark.jars", jars.mkString(","))
     }
 
     // Standalone cluster specific configurations
