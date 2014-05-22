@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
@@ -39,6 +40,10 @@ class KMeansModel private[mllib] (val clusterCenters: Array[Vector]) extends Ser
     val centersWithNorm = clusterCentersWithNorm
     points.map(p => KMeans.findClosest(centersWithNorm, new BreezeVectorWithNorm(p))._1)
   }
+
+  /** Maps given points to their cluster indices. */
+  def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
+    predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
   /**
    * Return the K-means cost (sum of squared distances of points to their nearest center) for this

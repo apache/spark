@@ -27,8 +27,9 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)
 
-MLlib is currently a *beta* component under active development.
-The APIs may change in the future releases, and we will provide migration guide between releases.
+MLlib is a new component under active development.
+The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 
+and we will provide migration guide between releases.
 
 ## Dependencies
 
@@ -61,9 +62,9 @@ take advantage of sparsity in both storage and computation.
 <div data-lang="scala" markdown="1">
 
 We used to represent a feature vector by `Array[Double]`, which is replaced by
-[`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used
+[`Vector`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used
 to accept `RDD[Array[Double]]` now take
-`RDD[Vector]`. [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint)
+`RDD[Vector]`. [`LabeledPoint`](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint)
 is now a wrapper of `(Double, Vector)` instead of `(Double, Array[Double])`. Converting
 `Array[Double]` to `Vector` is straightforward:
 
@@ -74,7 +75,7 @@ val array: Array[Double] = ... // a double array
 val vector: Vector = Vectors.dense(array) // a dense vector
 {% endhighlight %}
 
-[`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
+[`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
 
 *Note*. Scala imports `scala.collection.immutable.Vector` by default, so you have to import `org.apache.spark.mllib.linalg.Vector` explicitly to use MLlib's `Vector`.
 
@@ -83,9 +84,9 @@ val vector: Vector = Vectors.dense(array) // a dense vector
 <div data-lang="java" markdown="1">
 
 We used to represent a feature vector by `double[]`, which is replaced by
-[`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used
+[`Vector`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used
 to accept `RDD<double[]>` now take
-`RDD<Vector>`. [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint)
+`RDD<Vector>`. [`LabeledPoint`](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint)
 is now a wrapper of `(double, Vector)` instead of `(double, double[])`. Converting `double[]` to
 `Vector` is straightforward:
 
@@ -97,7 +98,7 @@ double[] array = ... // a double array
 Vector vector = Vectors.dense(array); // a dense vector
 {% endhighlight %}
 
-[`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to
+[`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to
 create sparse vectors.
 
 </div>
@@ -106,7 +107,7 @@ create sparse vectors.
 
 We used to represent a labeled feature vector in a NumPy array, where the first entry corresponds to
 the label and the rest are features.  This representation is replaced by class
-[`LabeledPoint`](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html), which takes both
+[`LabeledPoint`](api/python/pyspark.mllib.regression.LabeledPoint-class.html), which takes both
 dense and sparse feature vectors.
 
 {% highlight python %}

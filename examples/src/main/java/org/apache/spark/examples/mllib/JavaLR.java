@@ -19,6 +19,7 @@ package org.apache.spark.examples.mllib;
 
 import java.util.regex.Pattern;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
@@ -51,17 +52,16 @@ public final class JavaLR {
   }
 
   public static void main(String[] args) {
-    if (args.length != 4) {
-      System.err.println("Usage: JavaLR <master> <input_dir> <step_size> <niters>");
+    if (args.length != 3) {
+      System.err.println("Usage: JavaLR <input_dir> <step_size> <niters>");
       System.exit(1);
     }
-
-    JavaSparkContext sc = new JavaSparkContext(args[0], "JavaLR",
-        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaLR.class));
-    JavaRDD<String> lines = sc.textFile(args[1]);
+    SparkConf sparkConf = new SparkConf().setAppName("JavaLR");
+    JavaSparkContext sc = new JavaSparkContext(sparkConf);
+    JavaRDD<String> lines = sc.textFile(args[0]);
     JavaRDD<LabeledPoint> points = lines.map(new ParsePoint()).cache();
-    double stepSize = Double.parseDouble(args[2]);
-    int iterations = Integer.parseInt(args[3]);
+    double stepSize = Double.parseDouble(args[1]);
+    int iterations = Integer.parseInt(args[2]);
 
     // Another way to configure LogisticRegression
     //
@@ -73,7 +73,7 @@ public final class JavaLR {
     // LogisticRegressionModel model = lr.train(points.rdd());
 
     LogisticRegressionModel model = LogisticRegressionWithSGD.train(points.rdd(),
-        iterations, stepSize);
+      iterations, stepSize);
 
     System.out.print("Final w: " + model.weights());
 

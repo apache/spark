@@ -171,17 +171,31 @@ echo "Spark $VERSION built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE
 cp $FWDIR/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
 cp $FWDIR/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 
+# Copy example sources (needed for python and SQL)
+mkdir -p "$DISTDIR/examples/src/main"
+cp -r $FWDIR/examples/src/main "$DISTDIR/examples/src/" 
+
 if [ "$SPARK_HIVE" == "true" ]; then
   cp $FWDIR/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
+fi
+
+# Copy license and ASF files
+cp "$FWDIR/LICENSE" "$DISTDIR"
+cp "$FWDIR/NOTICE" "$DISTDIR"
+
+if [ -e $FWDIR/CHANGES.txt ]; then
+  cp "$FWDIR/CHANGES.txt" "$DISTDIR"
 fi
 
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$FWDIR"/conf/*.template "$DISTDIR"/conf
 cp "$FWDIR"/conf/slaves "$DISTDIR"/conf
+cp "$FWDIR/README.md" "$DISTDIR"
 cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/python" "$DISTDIR"
 cp -r "$FWDIR/sbin" "$DISTDIR"
+cp -r "$FWDIR/ec2" "$DISTDIR"
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
@@ -191,7 +205,7 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
 
   pushd $TMPD > /dev/null
-  echo "Fetchting tachyon tgz"
+  echo "Fetching tachyon tgz"
   wget "$TACHYON_URL"
 
   tar xf "tachyon-${TACHYON_VERSION}-bin.tar.gz"

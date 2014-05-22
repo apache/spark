@@ -23,6 +23,7 @@ import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * Classes that represent cleaning tasks.
@@ -110,7 +111,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /** Keep cleaning RDD, shuffle, and broadcast state. */
-  private def keepCleaning() {
+  private def keepCleaning(): Unit = Utils.logUncaughtExceptions {
     while (!stopped) {
       try {
         val reference = Option(referenceQueue.remove(ContextCleaner.REF_QUEUE_POLL_TIMEOUT))
@@ -128,7 +129,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
           }
         }
       } catch {
-        case t: Throwable => logError("Error in cleaning thread", t)
+        case e: Exception => logError("Error in cleaning thread", e)
       }
     }
   }
@@ -141,7 +142,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
       listeners.foreach(_.rddCleaned(rddId))
       logInfo("Cleaned RDD " + rddId)
     } catch {
-      case t: Throwable => logError("Error cleaning RDD " + rddId, t)
+      case e: Exception => logError("Error cleaning RDD " + rddId, e)
     }
   }
 
@@ -154,7 +155,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
       listeners.foreach(_.shuffleCleaned(shuffleId))
       logInfo("Cleaned shuffle " + shuffleId)
     } catch {
-      case t: Throwable => logError("Error cleaning shuffle " + shuffleId, t)
+      case e: Exception => logError("Error cleaning shuffle " + shuffleId, e)
     }
   }
 
@@ -166,7 +167,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
       listeners.foreach(_.broadcastCleaned(broadcastId))
       logInfo("Cleaned broadcast " + broadcastId)
     } catch {
-      case t: Throwable => logError("Error cleaning broadcast " + broadcastId, t)
+      case e: Exception => logError("Error cleaning broadcast " + broadcastId, e)
     }
   }
 

@@ -1,6 +1,7 @@
 ---
 layout: global
-title: <a href="mllib-guide.html">MLlib</a> - Decision Tree
+title: Decision Tree - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Decision Tree
 ---
 
 * Table of contents
@@ -93,17 +94,14 @@ The recursive tree construction is stopped at a node when one of the two conditi
 1. The node depth is equal to the `maxDepth` training parameter
 2. No split candidate leads to an information gain at the node.
 
+### Max memory requirements
+
+For faster processing, the decision tree algorithm performs simultaneous histogram computations for all nodes at each level of the tree. This could lead to high memory requirements at deeper levels of the tree leading to memory overflow errors. To alleviate this problem, a 'maxMemoryInMB' training parameter is provided which specifies the maximum amount of memory at the workers (twice as much at the master) to be allocated to the histogram computation. The default value is conservatively chosen to be 128 MB to allow the decision algorithm to work in most scenarios. Once the memory requirements for a level-wise computation crosses the `maxMemoryInMB` threshold, the node training tasks at each subsequent level is split into smaller tasks.
+
 ### Practical limitations
 
-1. The tree implementation stores an `Array[Double]` of size *O(#features \* #splits \* 2^maxDepth)*
-   in memory for aggregating histograms over partitions. The current implementation might not scale
-   to very deep trees since the memory requirement grows exponentially with tree depth.
-2. The implemented algorithm reads both sparse and dense data. However, it is not optimized for
-   sparse input.
-3. Python is not supported in this release.
- 
-We are planning to solve these problems in the near future. Please drop us a line if you encounter
-any issues.
+1. The implemented algorithm reads both sparse and dense data. However, it is not optimized for sparse input.
+2. Python is not supported in this release.
 
 ## Examples
 

@@ -69,6 +69,36 @@ class DslQuerySuite extends QueryTest {
     checkAnswer(
       testData2.orderBy('a.desc, 'b.asc),
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
+
+    checkAnswer(
+      arrayData.orderBy(GetItem('data, 0).asc),
+      arrayData.collect().sortBy(_.data(0)).toSeq)
+
+    checkAnswer(
+      arrayData.orderBy(GetItem('data, 0).desc),
+      arrayData.collect().sortBy(_.data(0)).reverse.toSeq)
+
+    checkAnswer(
+      mapData.orderBy(GetItem('data, 1).asc),
+      mapData.collect().sortBy(_.data(1)).toSeq)
+
+    checkAnswer(
+      mapData.orderBy(GetItem('data, 1).desc),
+      mapData.collect().sortBy(_.data(1)).reverse.toSeq)
+  }
+
+  test("limit") {
+    checkAnswer(
+      testData.limit(10),
+      testData.take(10).toSeq)
+
+    checkAnswer(
+      arrayData.limit(1),
+      arrayData.take(1).toSeq)
+
+    checkAnswer(
+      mapData.limit(1),
+      mapData.take(1).toSeq)
   }
 
   test("average") {

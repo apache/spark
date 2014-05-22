@@ -35,8 +35,10 @@ while (($#)); do
   shift
 done
 
-if [ ! -z $DRIVER_MEMORY ] && [ ! -z $DEPLOY_MODE ] && [ $DEPLOY_MODE = "client" ]; then
-  export SPARK_MEM=$DRIVER_MEMORY
+DEPLOY_MODE=${DEPLOY_MODE:-"client"}
+
+if [ -n "$DRIVER_MEMORY" ] && [ $DEPLOY_MODE == "client" ]; then
+  export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
 fi
 
 $SPARK_HOME/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"

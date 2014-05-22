@@ -19,8 +19,12 @@ package org.apache.spark.sql.execution
 
 import java.nio.ByteBuffer
 
+import scala.reflect.ClassTag
+
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Serializer, Kryo}
+import com.twitter.chill.AllScalaRegistrar
 
 import org.apache.spark.{SparkEnv, SparkConf}
 import org.apache.spark.serializer.KryoSerializer
@@ -32,20 +36,14 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
     val kryo = new Kryo()
     kryo.setRegistrationRequired(false)
     kryo.register(classOf[MutablePair[_, _]])
-    kryo.register(classOf[Array[Any]])
-    // This is kinda hacky...
-    kryo.register(classOf[scala.collection.immutable.Map$Map1], new MapSerializer)
-    kryo.register(classOf[scala.collection.immutable.Map$Map2], new MapSerializer)
-    kryo.register(classOf[scala.collection.immutable.Map$Map3], new MapSerializer)
-    kryo.register(classOf[scala.collection.immutable.Map$Map4], new MapSerializer)
-    kryo.register(classOf[scala.collection.immutable.Map[_,_]], new MapSerializer)
-    kryo.register(classOf[scala.collection.Map[_,_]], new MapSerializer)
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericRow])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericMutableRow])
-    kryo.register(classOf[scala.collection.mutable.ArrayBuffer[_]])
+    kryo.register(classOf[com.clearspring.analytics.stream.cardinality.HyperLogLog],
+                  new HyperLogLogSerializer)
     kryo.register(classOf[scala.math.BigDecimal], new BigDecimalSerializer)
     kryo.setReferences(false)
     kryo.setClassLoader(Utils.getSparkClassLoader)
+    new AllScalaRegistrar().apply(kryo)
     kryo
   }
 }
@@ -59,11 +57,11 @@ private[sql] object SparkSqlSerializer {
     new KryoSerializer(sparkConf)
   }
 
-  def serialize[T](o: T): Array[Byte] = {
+  def serialize[T: ClassTag](o: T): Array[Byte] = {
     ser.newInstance().serialize(o).array()
   }
 
-  def deserialize[T](bytes: Array[Byte]): T  = {
+  def deserialize[T: ClassTag](bytes: Array[Byte]): T  = {
     ser.newInstance().deserialize[T](ByteBuffer.wrap(bytes))
   }
 }
@@ -79,19 +77,16 @@ private[sql] class BigDecimalSerializer extends Serializer[BigDecimal] {
   }
 }
 
-/**
- * Maps do not have a no arg constructor and so cannot be serialized by default. So, we serialize
- * them as `Array[(k,v)]`.
- */
-private[sql] class MapSerializer extends Serializer[Map[_,_]] {
-  def write(kryo: Kryo, output: Output, map: Map[_,_]) {
-    kryo.writeObject(output, map.flatMap(e => Seq(e._1, e._2)).toArray)
+private[sql] class HyperLogLogSerializer extends Serializer[HyperLogLog] {
+  def write(kryo: Kryo, output: Output, hyperLogLog: HyperLogLog) {
+    val bytes = hyperLogLog.getBytes()
+    output.writeInt(bytes.length)
+    output.writeBytes(bytes)
   }
 
-  def read(kryo: Kryo, input: Input, tpe: Class[Map[_,_]]): Map[_,_] = {
-    kryo.readObject(input, classOf[Array[Any]])
-      .sliding(2,2)
-      .map { case Array(k,v) => (k,v) }
-      .toMap
+  def read(kryo: Kryo, input: Input, tpe: Class[HyperLogLog]): HyperLogLog = {
+    val length = input.readInt()
+    val bytes = input.readBytes(length)
+    HyperLogLog.Builder.build(bytes)
   }
 }

@@ -46,15 +46,16 @@ private[spark] class SparkDeploySchedulerBackend(
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
     val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{WORKER_URL}}")
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
-    val classPathEntries = sys.props.get("spark.executor.extraClassPath").toSeq.flatMap { cp =>
+    val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
       cp.split(java.io.File.pathSeparator)
     }
-    val libraryPathEntries = sys.props.get("spark.executor.extraLibraryPath").toSeq.flatMap { cp =>
-      cp.split(java.io.File.pathSeparator)
-    }
+    val libraryPathEntries =
+      sc.conf.getOption("spark.executor.extraLibraryPath").toSeq.flatMap { cp =>
+        cp.split(java.io.File.pathSeparator)
+      }
 
     val command = Command(
-      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.testExecutorEnvs,
+      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
       classPathEntries, libraryPathEntries, extraJavaOpts)
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))
@@ -86,6 +87,8 @@ private[spark] class SparkDeploySchedulerBackend(
     if (!stopping) {
       logError("Application has been killed. Reason: " + reason)
       scheduler.error(reason)
+      // Ensure the application terminates, as we can no longer run jobs.
+      sc.stop()
     }
   }
 

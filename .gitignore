@@ -51,6 +51,7 @@ unit-tests.log
 rat-results.txt
 scalastyle.txt
 conf/spark-defaults.conf.bak
+conf/*.conf
 
 # For Hive
 metastore_db/

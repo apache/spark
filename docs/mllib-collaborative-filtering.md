@@ -1,6 +1,7 @@
 ---
 layout: global
-title: <a href="mllib-guide.html">MLlib</a> - Collaborative Filtering 
+title: Collaborative Filtering - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Collaborative Filtering 
 ---
 
 * Table of contents
@@ -48,7 +49,7 @@ user for an item.
 
 <div data-lang="scala" markdown="1">
 In the following example we load rating data. Each row consists of a user, a product and a rating.
-We use the default [ALS.train()](api/mllib/index.html#org.apache.spark.mllib.recommendation.ALS$) 
+We use the default [ALS.train()](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS$) 
 method which assumes ratings are explicit. We evaluate the
 recommendation model by measuring the Mean Squared Error of rating prediction.
 
@@ -58,9 +59,9 @@ import org.apache.spark.mllib.recommendation.Rating
 
 // Load and parse the data
 val data = sc.textFile("mllib/data/als/test.data")
-val ratings = data.map(_.split(',') match {
-    case Array(user, item, rate) =>  Rating(user.toInt, item.toInt, rate.toDouble)
-})
+val ratings = data.map(_.split(',') match { case Array(user, item, rate) =>
+    Rating(user.toInt, item.toInt, rate.toDouble)
+  })
 
 // Build the recommendation model using ALS
 val rank = 10
@@ -68,15 +69,19 @@ val numIterations = 20
 val model = ALS.train(ratings, rank, numIterations, 0.01)
 
 // Evaluate the model on rating data
-val usersProducts = ratings.map{ case Rating(user, product, rate)  => (user, product)}
-val predictions = model.predict(usersProducts).map{
-    case Rating(user, product, rate) => ((user, product), rate)
+val usersProducts = ratings.map { case Rating(user, product, rate) =>
+  (user, product)
 }
-val ratesAndPreds = ratings.map{
-    case Rating(user, product, rate) => ((user, product), rate)
+val predictions = 
+  model.predict(usersProducts).map { case Rating(user, product, rate) => 
+    ((user, product), rate)
+  }
+val ratesAndPreds = ratings.map { case Rating(user, product, rate) => 
+  ((user, product), rate)
 }.join(predictions)
-val MSE = ratesAndPreds.map{
-    case ((user, product), (r1, r2)) =>  math.pow((r1- r2), 2)
+val MSE = ratesAndPreds.map { case ((user, product), (r1, r2)) => 
+  val err = (r1 - r2)
+  err * err
 }.mean()
 println("Mean Squared Error = " + MSE)
 {% endhighlight %}

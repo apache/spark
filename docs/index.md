@@ -24,21 +24,34 @@ right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/
 
 # Running the Examples and Shell
 
-Spark comes with several sample programs.  Scala, Java and Python examples are in the `examples/src/main` directory.
-To run one of the Java or Scala sample programs, use `./bin/run-example <class> <params>` in the top-level Spark directory
-(the `bin/run-example` script sets up the appropriate paths and launches that program).
-For example, try `./bin/run-example org.apache.spark.examples.SparkPi local`.
-To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try `./bin/pyspark ./examples/src/main/python/pi.py local`.
+Spark comes with several sample programs.  Scala, Java and Python examples are in the
+`examples/src/main` directory. To run one of the Java or Scala sample programs, use
+`bin/run-example <class> [params]` in the top-level Spark directory. (Behind the scenes, this
+invokes the more general
+[Spark submit script](cluster-overview.html#launching-applications-with-spark-submit) for
+launching applications). For example,
 
-Each example prints usage help when run with no parameters.
+    ./bin/run-example SparkPi 10
 
-Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
-to connect to. This can be a [URL for a distributed cluster](scala-programming-guide.html#master-urls),
-or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
-`local` for testing.
+You can also run Spark interactively through modified versions of the Scala shell. This is a
+great way to learn the framework.
 
-Finally, you can run Spark interactively through modified versions of the Scala shell (`./bin/spark-shell`) or
-Python interpreter (`./bin/pyspark`). These are a great way to learn the framework.
+    ./bin/spark-shell --master local[2]
+
+The `--master` option specifies the
+[master URL for a distributed cluster](scala-programming-guide.html#master-urls), or `local` to run
+locally with one thread, or `local[N]` to run locally with N threads. You should start by using
+`local` for testing. For a full list of options, run Spark shell with the `--help` option.
+
+Spark also provides a Python interface. To run Spark interactively in a Python interpreter, use
+`bin/pyspark`. As in Spark shell, you can also pass in the `--master` option to configure your
+master URL.
+
+    ./bin/pyspark --master local[2]
+
+Example applications are also provided in Python. For example,
+
+    ./bin/spark-submit examples/src/main/python/pi.py 10
 
 # Launching on a Cluster
 

@@ -179,6 +179,15 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
 
   /**
+   * Limits the results by the given expressions.
+   * {{{
+   *   schemaRDD.limit(10)
+   * }}}
+   */
+  def limit(limitExpr: Expression): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+
+  /**
    * Performs a grouping followed by an aggregation.
    *
    * {{{
