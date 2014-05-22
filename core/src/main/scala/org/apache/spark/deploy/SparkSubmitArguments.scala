@@ -263,19 +263,19 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         parse(tail)
 
       case ("--files") :: value :: tail =>
-        files = value
+        files = SparkSubmitArguments.resolveURIs(value)
         parse(tail)
 
       case ("--py-files") :: value :: tail =>
-        pyFiles = value
+        pyFiles = SparkSubmitArguments.resolveURIs(value)
         parse(tail)
 
       case ("--archives") :: value :: tail =>
-        archives = value
+        archives = SparkSubmitArguments.resolveURIs(value)
         parse(tail)
 
       case ("--jars") :: value :: tail =>
-        jars = value
+        jars = SparkSubmitArguments.resolveURIs(value)
         parse(tail)
 
       case ("--help" | "-h") :: tail =>
@@ -296,7 +296,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               val errMessage = s"Unrecognized option '$value'."
               SparkSubmit.printErrorAndExit(errMessage)
             case v =>
-              primaryResource = v
+              primaryResource = Utils.resolveURI(v).toString
               inSparkOpts = false
               isPython = SparkSubmit.isPython(v)
               parse(tail)
@@ -376,5 +376,14 @@ object SparkSubmitArguments {
         throw new SparkException(message, e)
     }
     properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
+  }
+
+  /** Resolves comma separated paths. */
+  private def resolveURIs(paths: String): String = {
+    if (paths == null || paths.trim.isEmpty) {
+      ""
+    } else {
+      paths.split(",").map(Utils.resolveURI).mkString(",")
+    }
   }
 }

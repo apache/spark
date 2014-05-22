@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy
 
+import java.net.URI
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
@@ -28,11 +30,21 @@ import org.apache.spark.api.python.{PythonUtils, RedirectThread}
  */
 object PythonRunner {
   def main(args: Array[String]) {
-    val primaryResource = args(0)
+    val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
-
     val pythonExec = sys.env.get("PYSPARK_PYTHON").getOrElse("python") // TODO: get this from conf
+
+    // Verify that the given python file is a local
+    val pythonFileUri = new URI(pythonFile)
+    val pythonFilePath = pythonFileUri.getScheme match {
+      case "file" | "local" | null =>
+        pythonFileUri.getPath
+      case _ =>
+        throw new IllegalArgumentException(
+          "Launching Python applications through spark-submit is currently only supported" +
+            s"for local files: $pythonFileUri")
+    }
 
     // Launch a Py4J gateway server for the process to connect to; this will let it see our
     // Java system properties and such
@@ -48,7 +60,7 @@ object PythonRunner {
     val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)
 
     // Launch Python process
-    val builder = new ProcessBuilder(Seq(pythonExec, "-u", primaryResource) ++ otherArgs)
+    val builder = new ProcessBuilder(Seq(pythonExec, "-u", pythonFilePath) ++ otherArgs)
     val env = builder.environment()
     env.put("PYTHONPATH", pythonPath)
     env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)

@@ -19,7 +19,7 @@ package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
 import java.lang.reflect.InvocationTargetException
-import java.net.{URI, URL}
+import java.net.URL
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
@@ -299,13 +299,18 @@ object SparkSubmit {
   }
 
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
-    val localJarFile = new File(localJar)
-    if (!localJarFile.exists()) {
-      printWarning(s"Jar $localJar does not exist, skipping.")
+    val uri = Utils.resolveURI(localJar)
+    val scheme = uri.getScheme
+    if (scheme == "file" || scheme == "local") {
+      val file = new File(uri.getPath)
+      if (file.exists()) {
+        loader.addURL(file.toURI.toURL)
+      } else {
+        printWarning(s"Local jar $file does not exist, skipping.")
+      }
+    } else {
+      printWarning(s"Skip remote jar $uri.")
     }
-
-    val url = localJarFile.getAbsoluteFile.toURI.toURL
-    loader.addURL(url)
   }
 
   /**

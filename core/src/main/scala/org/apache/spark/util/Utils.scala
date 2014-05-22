@@ -1166,4 +1166,22 @@ private[spark] object Utils extends Logging {
         true
     }
   }
+
+  /** Returns the URI of the input path. If a relative path is given, assume it is local. */
+  def resolveURI(path: String): URI = {
+    if (path.contains(":")) {
+      new URI(path)
+    } else {
+      val (body, fragment) = path.split('#') match {
+        case Array(b, f) => (b, f)
+        case Array(b) => (b, null)
+      }
+      val uri = new File(body).toURI
+      if (fragment == null) {
+        uri
+      } else {
+        new URI(uri.getScheme, uri.getPath, fragment)
+      }
+    }
+  }
 }
