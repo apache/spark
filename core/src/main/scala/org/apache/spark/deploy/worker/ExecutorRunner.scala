@@ -61,17 +61,18 @@ private[spark] class ExecutorRunner(
     // Shutdown hook that kills actors on shutdown.
     shutdownHook = new Thread() {
       override def run() {
-        killProcess()
+        killProcess(None)
       }
     }
     Runtime.getRuntime.addShutdownHook(shutdownHook)
   }
 
-  private def killProcess() {
+  private def killProcess(message: Option[String]) {
     if (process != null) {
       logInfo("Killing process!")
       process.destroy()
-      process.waitFor()
+      val exitCode = process.waitFor()
+      worker ! ExecutorStateChanged(appId, execId, state, message, Some(exitCode))
     }
   }
 
@@ -82,7 +83,6 @@ private[spark] class ExecutorRunner(
       workerThread.interrupt()
       workerThread = null
       state = ExecutorState.KILLED
-      worker ! ExecutorStateChanged(appId, execId, state, None, None)
       Runtime.getRuntime.removeShutdownHook(shutdownHook)
     }
   }
@@ -148,14 +148,13 @@ private[spark] class ExecutorRunner(
     } catch {
       case interrupted: InterruptedException => {
         logInfo("Runner thread for executor " + fullId + " interrupted")
-        killProcess()
+        state = ExecutorState.KILLED
+        killProcess(None)
       }
       case e: Exception => {
         logError("Error running executor", e)
-        killProcess()
         state = ExecutorState.FAILED
-        val message = e.getClass + ": " + e.getMessage
-        worker ! ExecutorStateChanged(appId, execId, state, Some(message), None)
+        killProcess(Some(e.getClass + ":" + e.getMessage))
       }
     }
   }
