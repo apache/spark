@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
-import org.apache.commons.math.distribution.HypergeometricDistributionImpl
+
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.NullWritable
@@ -447,7 +447,7 @@ abstract class RDD[T: ClassTag](
    *       To implement sampling with replacement, tier 1 should use a multinomial distribution.
    *
    * @param stratifier Given an RDD element, return an Int indicating the stratum for the element.
-   * @param fraction Fraction of samples to keep, in [0,1].
+   * @param fraction Fraction of samples to keep, in [0, 1].
    * @param seed random seed
    *
    * @return stratified samples, as maps with key=stratum, value=Array[data type]
@@ -483,7 +483,7 @@ abstract class RDD[T: ClassTag](
       return sc.emptyRDD
     }
     val strata = strataTotals.map(_._1)
-    val maxStratumSize = strataTotals.map(_._2).reduce(math.max(_,_))
+    val maxStratumSize = strataTotals.map(_._2).reduce(math.max(_, _))
     assert(
       maxStratumSize < Int.MaxValue,
       "stratifiedSample only supports RDDs with fewer than Int.MaxValue elements per stratum.")
@@ -496,14 +496,14 @@ abstract class RDD[T: ClassTag](
     strataTotals.foreach {
       case (stratum,v) => {
         strataRunningCounts(stratum) = new Array[Int](numPartitions)
-        for (i <- (0 to (numPartitions-1))) {
+        for (i <- (0 to (numPartitions - 1))) {
           if (partStrataCounts(partitionIndices(i)).contains(stratum)) {
             strataRunningCounts(stratum)(i) = partStrataCounts(partitionIndices(i))(stratum).toInt
           } else {
             strataRunningCounts(stratum)(i) = 0
           }
         }
-        strataRunningCounts(stratum).scanRight(0)(_+_)
+        strataRunningCounts(stratum).scanRight(0)(_ + _)
       }
     }
 
@@ -515,23 +515,18 @@ abstract class RDD[T: ClassTag](
       // We use a series of hypergeometric distributions
       // to simulate a multivariate hypergeometric distribution.
       var samplesRemaining = math.ceil(strataTotals(stratum) * fraction).toInt
-      for (i <- (0 to (numPartitions-2))) {
-        val part = partitionIndices(i)
+      for (i <- (0 to (numPartitions - 2))) {
         val partCount = strataRunningCounts(stratum)(i)
-        val otherCount = strataRunningCounts(stratum)(i+1)
+        val otherCount = strataRunningCounts(stratum)(i + 1)
         // For this stratum, partition i,
         // sample from a hypergeometric distribution with balance (partCount, otherCount).
-        // Since sample() is not implemented in our Java distribution,
-        // we compute samples by searching over the CDF.
-        // TO DO: Find partSampleSize via binary search.
         val hyperDist =
-          new HypergeometricDistributionImpl(partCount + otherCount, partCount, samplesRemaining)
-        val r = rand.nextDouble()
-        val maxPartSampleSize = math.min(samplesRemaining, partCount)
-        val partSampleSizeOption =
-          (0 to maxPartSampleSize).find(n => hyperDist.cumulativeProbability(n) >= r)
-        val partSampleSize = if (partSampleSizeOption.isEmpty) maxPartSampleSize else partSampleSizeOption.get
-        strataSampleSizes(part)(stratum) = partSampleSize
+          new org.apache.commons.math3.distribution.HypergeometricDistribution(
+            partCount + otherCount,
+            partCount,
+            samplesRemaining)
+        val partSampleSize = hyperDist.sample()
+        strataSampleSizes(partitionIndices(i))(stratum) = partSampleSize
         samplesRemaining -= partSampleSize
       }
       strataSampleSizes(partitionIndices.last)(stratum) = samplesRemaining
@@ -541,40 +536,43 @@ abstract class RDD[T: ClassTag](
     val partitionSeeds = partitionIndices.map( x => (x, rand.nextLong()) ).toMap
 
     // Take strataSampleSizes(partition)(stratum) samples from each (partition, stratum).
-    def samplingFunctor(partition: Int, iter: Iterator[(K,T)]): Iterator[T] = {
+    def samplingFunctor(partition: Int, iter: Iterator[(K, T)]): Iterator[T] = {
       val strata = strataSampleSizes(partition).map(_._1)
       val partRandom = new Random(partitionSeeds(partition))
-      // Pre-select indices to sample for each stratum.
-      val strataSampleIndices = new OpenHashMap[K, mutable.HashSet[Int]]
+      // Initialize counts of elements to select:
+      //  We will take strataSamplesRemaining(stratum) samples
+      //  out of strataTotalRemaining(stratum) remaining elements in the iterator.
+      val strataSamplesRemaining = new OpenHashMap[K, Int]
+      val strataTotalRemaining = new OpenHashMap[K, Int]
       strata.foreach {
         stratum => {
-          strataSampleIndices.update(stratum, new mutable.HashSet[Int])
-          val partStratumTotal = {
-            if (partStrataCounts(partition).contains(stratum)) {
-              partStrataCounts(partition)(stratum)
+          strataSamplesRemaining.update(stratum, strataSampleSizes(partition)(stratum))
+          if (partStrataCounts(partition).contains(stratum)) {
+            strataTotalRemaining.update(stratum, partStrataCounts(partition)(stratum).toInt)
+          } else {
+            strataTotalRemaining.update(stratum, 0)
+          }
+        }
+      }
+      // Use selection-rejection procedure which makes 1 pass through elements.
+      // See, e.g., Sec 4.4.4 of "Sampling Algorithms" by Yves Tille.
+      iter.filter {
+        case (stratum, x) => {
+          if (strataSamplesRemaining(stratum) == 0) {
+            false
+          } else {
+            // Note: strataTotalRemaining(stratum) is known to be > 0 here.
+            val p = strataSamplesRemaining(stratum) / (strataTotalRemaining(stratum) + 0.0)
+            strataTotalRemaining(stratum) -= 1
+            if (partRandom.nextDouble() <= p) {
+              strataSamplesRemaining(stratum) -= 1
+              true
             } else {
-              0
+              false
             }
           }
-          val sampleSize = strataSampleSizes(partition)(stratum)
-          val sampleIndices =
-            Utils.randomizeInPlace((0 to (partStratumTotal.toInt - 1)).toArray, partRandom)
-              .take(sampleSize)
-          sampleIndices.foreach { ind => strataSampleIndices(stratum).add(ind) }
         }
-      }
-      // Indices over all elements, per stratum.  Matched with strataSampleIndices.
-      val strataElemIndices = new OpenHashMap[K, Int]
-      strata.foreach { stratum => strataElemIndices.update(stratum, 0) }
-      // Sample elements.
-      val sampledElements = iter.filter {
-        case (stratum, x) => {
-          val i = strataElemIndices(stratum)
-          strataElemIndices.changeValue(stratum, 0, _+1)
-          strataSampleIndices(stratum).contains(i)
-        }
-      }
-      sampledElements.map(_._2)
+      }.map(_._2)
     }
     stratifiedData.mapPartitionsWithIndex(samplingFunctor)
   }
@@ -1063,7 +1061,9 @@ abstract class RDD[T: ClassTag](
       throw new SparkException("countByValuePartitioned() does not support arrays")
     }
     // TODO: This should perhaps be distributed by default.
-    def countPartition(index: Int, iter: Iterator[T]): Iterator[OpenHashMap[Int, OpenHashMap[T, Long]]] = {
+    def countPartition(
+        index: Int,
+        iter: Iterator[T]): Iterator[OpenHashMap[Int, OpenHashMap[T, Long]]] = {
       val map = new OpenHashMap[T, Long]
       iter.foreach {
         t => map.changeValue(t, 1L, _ + 1L)
@@ -1074,7 +1074,7 @@ abstract class RDD[T: ClassTag](
     }
     // TODO: This is used in countByValue as well,
     //       so perhaps it should become a utility function elsewhere.
-    def mergeMaps(m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]): OpenHashMap[T,Long] = {
+    def mergeMaps(m1: OpenHashMap[T, Long], m2: OpenHashMap[T, Long]): OpenHashMap[T, Long] = {
       m2.foreach { case (key, value) =>
         m1.changeValue(key, value, _ + value)
       }

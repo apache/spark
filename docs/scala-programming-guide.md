@@ -256,8 +256,8 @@ A complete list of transformations is available in the [RDD API doc](api/scala/i
   <td> Return an array with a random sample of <i>num</i> elements of the dataset, with or without replacement, using the given random number generator seed. </td>
 </tr>
 <tr>
-  <td> <b>stratifiedSample</b>(<i>stratifier</i>, <i>fraction</i>, <i>withReplacement</i>, <i>seed</i>) </td>
-  <td> Return a map from stratum identifiers to arrays of stratified samples of the dataset.  Strata are defined by the given <i>stratifier</i>, and each subsample has exactly <i>fraction</i> of the data points.  Sampling may be done with or without replacement, using the given random number generator seed. </td>
+  <td> <b>stratifiedSample</b>(<i>stratifier</i>, <i>fraction</i>, <i>seed</i>) </td>
+  <td> Return a subsample of the dataset using exact stratified sampling with proportional allocation.  Strata are defined by the given <i>stratifier</i>, and the subsample has exactly <i>fraction</i> of each stratum's data points. </td>
 </tr>
 <tr>
   <td> <b>saveAsTextFile</b>(<i>path</i>) </td>
