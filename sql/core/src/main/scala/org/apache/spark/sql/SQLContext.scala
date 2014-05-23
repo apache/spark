@@ -206,17 +206,24 @@ class SQLContext(@transient val sparkContext: SparkContext)
      * final desired output requires complex expressions to be evaluated or when columns can be
      * further eliminated out after filtering has been done.
      *
+     * The `prunePushedDownFilter` is used to remove those filters that can be removed by the filter
+     * pushdown optimization.
+     *
      * The required attributes for both filtering and expression evaluation are passed to the
      * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
      */
     def pruneFilterProject(
         projectList: Seq[NamedExpression],
         filterPredicates: Seq[Expression],
+        prunePushedDownFilter: Option[Expression => Boolean],
         scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
 
       val projectSet = projectList.flatMap(_.references).toSet
       val filterSet = filterPredicates.flatMap(_.references).toSet
-      val filterCondition = filterPredicates.reduceLeftOption(And)
+      val filterCondition = prunePushedDownFilter
+        .map(filterPredicates.filter)
+        .getOrElse(filterPredicates)
+        .reduceLeftOption(And)
 
       // Right now we still use a projection even if the only evaluation is applying an alias
       // to a column.  Since this is a no-op, it could be avoided. However, using this

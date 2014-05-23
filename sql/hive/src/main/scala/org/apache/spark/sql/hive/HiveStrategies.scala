@@ -69,6 +69,7 @@ private[hive] trait HiveStrategies {
         pruneFilterProject(
           projectList,
           otherPredicates,
+          None,
           HiveTableScan(_, relation, pruningPredicates.reduceLeftOption(And))(hiveContext)) :: Nil
       case _ =>
         Nil
