@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
 import org.apache.spark.api.python.{PythonUtils, RedirectThread}
+import org.apache.spark.util.Utils
 
 /**
  * A main class used by spark-submit to launch Python applications. It executes python as a
@@ -39,7 +40,14 @@ object PythonRunner {
     val pythonFileUri = new URI(pythonFile)
     val pythonFilePath = pythonFileUri.getScheme match {
       case "file" | "local" | null =>
-        pythonFileUri.getPath
+        val path = pythonFileUri.getPath
+        if (Utils.isWindows) {
+          // In Windows, the drive should not be prefixed with "/"
+          // For instance, python does not understand "/C:/path/to/sheep.py"
+          path.stripPrefix("/")
+        } else {
+          path
+        }
       case _ =>
         throw new IllegalArgumentException(
           "Launching Python applications through spark-submit is currently only supported " +
