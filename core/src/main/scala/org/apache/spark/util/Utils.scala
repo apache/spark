@@ -1175,13 +1175,13 @@ private[spark] object Utils extends Logging {
    */
   def resolveURI(path: String, testWindows: Boolean = false): URI = {
 
-    // On Windows, file names cannot contain backslashes and colons,
-    // and each drive contains only a single alphabet character
     val windows = isWindows || testWindows
-    val sanitizedPath = if (windows) path.replace("\\", "/") else path
+    // In Windows, the file separator is a backslash, but this is inconsistent with the URI format
+    val formattedPath = if (windows) path.replace("\\", "/") else path
+    // Each Windows drive contains only a single alphabet character
     val windowsDrive = "([a-zA-Z])".r
 
-    val uri = new URI(sanitizedPath)
+    val uri = new URI(formattedPath)
     uri.getScheme match {
       case windowsDrive(d) if windows =>
         new URI("file:/" + uri.toString.stripPrefix("/"))
