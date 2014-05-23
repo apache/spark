@@ -171,18 +171,23 @@ class UtilsSuite extends FunSuite {
   }
 
   test("resolveURI") {
-    def assertResolves(before: String, after: String): Unit = {
+    def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
       assume(before.split(",").length == 1)
-      assert(Utils.resolveURI(before) === new URI(after))
-      assert(Utils.resolveURI(after) === new URI(after))
-      assert(new URI(Utils.resolveURIs(before)) === new URI(after))
-      assert(new URI(Utils.resolveURIs(after)) === new URI(after))
+      assert(Utils.resolveURI(before, testWindows) === new URI(after))
+      assert(Utils.resolveURI(after, testWindows) === new URI(after))
+      assert(new URI(Utils.resolveURIs(before, testWindows)) === new URI(after))
+      assert(new URI(Utils.resolveURIs(after, testWindows)) === new URI(after))
     }
     val cwd = System.getProperty("user.dir")
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
     assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
     assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
+    assertResolves("C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
 
     // Test resolving comma-delimited paths
     assert(Utils.resolveURIs("jar1,jar2") === s"file:$cwd/jar1,file:$cwd/jar2")
@@ -190,5 +195,7 @@ class UtilsSuite extends FunSuite {
     assert(Utils.resolveURIs("hdfs:jar1,file:jar2,jar3") === s"hdfs:jar1,file:jar2,file:$cwd/jar3")
     assert(Utils.resolveURIs("hdfs:jar1,file:jar2,jar3,jar4#jar5") ===
       s"hdfs:jar1,file:jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
+    assert(Utils.resolveURIs("hdfs:jar1,file:jar2,jar3,C:\\pi.py#py.pi", testWindows = true) ===
+      s"hdfs:jar1,file:jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi")
   }
 }

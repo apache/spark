@@ -300,16 +300,16 @@ object SparkSubmit {
 
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
     val uri = Utils.resolveURI(localJar)
-    val scheme = uri.getScheme
-    if (scheme == "file" || scheme == "local") {
-      val file = new File(uri.getPath)
-      if (file.exists()) {
-        loader.addURL(file.toURI.toURL)
-      } else {
-        printWarning(s"Local jar $file does not exist, skipping.")
-      }
-    } else {
-      printWarning(s"Skip remote jar $uri.")
+    uri.getScheme match {
+      case "file" | "local" =>
+        val file = new File(uri.getPath)
+        if (file.exists()) {
+          loader.addURL(file.toURI.toURL)
+        } else {
+          printWarning(s"Local jar $file does not exist, skipping.")
+        }
+      case _ =>
+        printWarning(s"Skip remote jar $uri.")
     }
   }
 

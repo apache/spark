@@ -1167,30 +1167,34 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /** Returns the URI of the input path. If a relative path is given, assume it is local. */
-  def resolveURI(path: String): URI = {
-    if (path.contains(":")) {
-      new URI(path)
-    } else {
-      val (body, fragment) = path.split("#") match {
-        case Array(b, f) => (b, f)
-        case Array(b) => (b, null)
-      }
-      val uri = new File(body).toURI
-      if (fragment == null) {
+  /** Return the URI of the input path. If a relative path is given, assume it is local. */
+  def resolveURI(path: String, testWindows: Boolean = false): URI = {
+
+    // On Windows, file names cannot contain backslashes and colons,
+    // and each drive contains only a single alphabet character
+    val windows = isWindows || testWindows
+    val sanitizedPath = if (windows) path.replace("\\", "/") else path
+    val windowsDrive = "([a-zA-Z])".r
+
+    val uri = new URI(sanitizedPath)
+    uri.getScheme match {
+      case windowsDrive(d) if windows =>
+        new URI("file:/" + uri.toString.stripPrefix("/"))
+      case null =>
+        val fragment = uri.getFragment
+        val part = new File(uri.getPath).toURI
+        new URI(part.getScheme, part.getPath, fragment)
+      case _ =>
         uri
-      } else {
-        new URI(uri.getScheme, uri.getPath, fragment)
-      }
     }
   }
 
   /** Resolves a comma-separated list of paths. */
-  def resolveURIs(paths: String): String = {
+  def resolveURIs(paths: String, testWindows: Boolean = false): String = {
     if (paths == null || paths.trim.isEmpty) {
       ""
     } else {
-      paths.split(",").map(Utils.resolveURI).mkString(",")
+      paths.split(",").map { p => Utils.resolveURI(p, testWindows) }.mkString(",")
     }
   }
 }
