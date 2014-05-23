@@ -183,6 +183,7 @@ object SparkBuild extends Build {
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark").map { case (k,v) => s"-D$k=$v" }.toSeq,
+    javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g".split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
@@ -317,6 +318,7 @@ object SparkBuild extends Build {
   val excludeFastutil = ExclusionRule(organization = "it.unimi.dsi")
   val excludeJruby = ExclusionRule(organization = "org.jruby")
   val excludeThrift = ExclusionRule(organization = "org.apache.thrift")
+  val excludeServletApi = ExclusionRule(organization = "javax.servlet", artifact = "servlet-api")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
@@ -343,7 +345,7 @@ object SparkBuild extends Build {
         "org.spark-project.akka"    %% "akka-testkit"     % akkaVersion % "test",
         "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
         "colt"                       % "colt"             % "1.2.0",
-        "org.apache.mesos"           % "mesos"            % "0.13.0",
+        "org.apache.mesos"           % "mesos"            % "0.18.1" classifier("shaded-protobuf") exclude("com.google.protobuf", "protobuf-java"),
         "commons-net"                % "commons-net"      % "2.2",
         "net.java.dev.jets3t"        % "jets3t"           % jets3tVersion excludeAll(excludeCommonsLogging),
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
@@ -489,9 +491,9 @@ object SparkBuild extends Build {
     name := "spark-hive",
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
-      "org.apache.hive" % "hive-metastore" % hiveVersion,
-      "org.apache.hive" % "hive-exec"      % hiveVersion,
-      "org.apache.hive" % "hive-serde"     % hiveVersion
+      "org.spark-project.hive" % "hive-metastore" % hiveVersion,
+      "org.spark-project.hive" % "hive-exec"      % hiveVersion excludeAll(excludeCommonsLogging),
+      "org.spark-project.hive" % "hive-serde"     % hiveVersion
     ),
     // Multiple queries rely on the TestHive singleton.  See comments there for more details.
     parallelExecution in Test := false,
@@ -563,10 +565,10 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
       "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm),
-      "org.apache.hadoop" % "hadoop-yarn-server-web-proxy" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm)
+      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
+      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
+      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
+      "org.apache.hadoop" % "hadoop-yarn-server-web-proxy" % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging, excludeServletApi)
     )
   )
 

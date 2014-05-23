@@ -56,7 +56,7 @@ The `master` parameter is a string specifying a [Spark, Mesos or YARN cluster UR
 to connect to, or a special "local" string to run in local mode, as described below. `appName` is
 a name for your application, which will be shown in the cluster web UI. It's also possible to set
 these variables [using a configuration file](cluster-overview.html#loading-configurations-from-a-file)
-which avoids hard-coding the master name in your application.
+which avoids hard-coding the master url in your application.
 
 In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
@@ -73,6 +73,11 @@ Or, to also add `code.jar` to its classpath, use:
 {% highlight bash %}
 $ ./bin/spark-shell --master local[4] --jars code.jar
 {% endhighlight %}
+
+For a complete list of options, run Spark shell with the `--help` option. Behind the scenes,
+Spark shell invokes the more general [Spark submit script](cluster-overview.html#launching-applications-with-spark-submit)
+used for launching applications, and passes on all of its parameters. As a result, these two scripts
+share the same parameters.
 
 ### Master URLs
 
@@ -98,7 +103,7 @@ cluster mode. The cluster location will be inferred based on the local Hadoop co
 </td></tr>
 </table>
 
-If no master URL is specified, the spark shell defaults to "local[*]".
+If no master URL is specified, the spark shell defaults to `local[*]`.
 
 # Resilient Distributed Datasets (RDDs)
 
@@ -191,6 +196,10 @@ The following tables list the transformations and actions currently supported (s
 <tr>
   <td> <b>groupByKey</b>([<i>numTasks</i>]) </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Seq[V]) pairs. <br />
+<b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or 
+  average) over each key, using `reduceByKey` or `combineByKey` will yield much better 
+  performance.
+<br />
 <b>Note:</b> By default, if the RDD already has a partitioner, the task number is decided by the partition number of the partitioner, or else relies on the value of <code>spark.default.parallelism</code> if the property is set , otherwise depends on the partition number of the RDD. You can pass an optional <code>numTasks</code> argument to set a different number of tasks.
   </td>
 </tr>
@@ -432,9 +441,7 @@ res2: Int = 10
 You can see some [example Spark programs](http://spark.apache.org/examples.html) on the Spark website.
 In addition, Spark includes several samples in `examples/src/main/scala`. Some of them have both Spark versions and local (non-parallel) versions, allowing you to see what had to be changed to make the program run on a cluster. You can run them using by passing the class name to the `bin/run-example` script included in Spark; for example:
 
-    ./bin/run-example org.apache.spark.examples.SparkPi
-
-Each example program prints usage help when run without any arguments.
+    ./bin/run-example SparkPi
 
 For help on optimizing your program, the [configuration](configuration.html) and
 [tuning](tuning.html) guides provide information on best practices. They are especially important for

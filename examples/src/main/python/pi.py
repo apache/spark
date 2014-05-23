@@ -23,11 +23,11 @@ from pyspark import SparkContext
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        print >> sys.stderr, "Usage: pi <master> [<slices>]"
-        exit(-1)
-    sc = SparkContext(sys.argv[1], "PythonPi")
-    slices = int(sys.argv[2]) if len(sys.argv) > 2 else 2
+    """
+        Usage: pi [slices]
+    """
+    sc = SparkContext(appName="PythonPi")
+    slices = int(sys.argv[1]) if len(sys.argv) > 1 else 2
     n = 100000 * slices
     def f(_):
         x = random() * 2 - 1

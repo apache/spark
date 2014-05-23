@@ -98,13 +98,19 @@ case class And(left: Expression, right: Expression) extends BinaryPredicate {
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    val r = right.eval(input)
-    if (l == false || r == false) {
-      false
-    } else if (l == null || r == null ) {
-      null
+    if (l == false) {
+       false
     } else {
-      true
+      val r = right.eval(input)
+      if (r == false) {
+        false
+      } else {
+        if (l != null && r != null) {
+          true
+        } else {
+          null
+        }
+      }
     }
   }
 }
@@ -114,13 +120,19 @@ case class Or(left: Expression, right: Expression) extends BinaryPredicate {
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    val r = right.eval(input)
-    if (l == true || r == true) {
+    if (l == true) {
       true
-    } else if (l == null || r == null) {
-      null
     } else {
-      false
+      val r = right.eval(input)
+      if (r == true) {
+        true
+      } else {
+        if (l != null && r != null) {
+          false
+        } else {
+          null
+        }
+      }
     }
   }
 }
@@ -133,8 +145,12 @@ case class Equals(left: Expression, right: Expression) extends BinaryComparison 
   def symbol = "="
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    val r = right.eval(input)
-    if (l == null || r == null) null else l == r
+    if (l == null) {
+      null
+    } else {
+      val r = right.eval(input)
+      if (r == null) null else l == r
+    }
   }
 }
 
@@ -162,7 +178,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     extends Expression {
 
   def children = predicate :: trueValue :: falseValue :: Nil
-  def nullable = trueValue.nullable || falseValue.nullable
+  override def nullable = trueValue.nullable || falseValue.nullable
   def references = children.flatMap(_.references).toSet
   override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
   def dataType = {
@@ -175,8 +191,9 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   }
 
   type EvaluatedType = Any
+
   override def eval(input: Row): Any = {
-    if (predicate.eval(input).asInstanceOf[Boolean]) {
+    if (true == predicate.eval(input)) {
       trueValue.eval(input)
     } else {
       falseValue.eval(input)
