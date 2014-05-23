@@ -76,8 +76,8 @@ bins if the condition is not satisfied.
 
 **Categorical features**
 
-For `$M$` categorical features, one could come up with `$2^M-1$` split candidates. However, for
-binary classification, the number of split candidates can be reduced to `$M-1$` by ordering the
+For `$M$` categorical features, one could come up with `$2^(M-1)-1$` split candidates. For
+binary classification, we can reduce the number of split candidates to `$M-1$` by ordering the
 categorical feature values by the proportion of labels falling in one of the two classes (see
 Section 9.2.4 in
 [Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
@@ -85,7 +85,7 @@ details). For example, for a binary classification problem with one categorical 
 categories A, B and C with corresponding proportion of label 1 as 0.2, 0.6 and 0.4, the categorical
 features are ordered as A followed by C followed B or A, B, C. The two split candidates are A \| C, B
 and A , B \| C where \| denotes the split.
-
+<!--  -->
 ### Stopping rule
 
 The recursive tree construction is stopped at a node when one of the two conditions is met:

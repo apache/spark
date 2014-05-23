@@ -59,5 +59,7 @@ class Strategy (
 
   require(numClassesForClassification >= 2)
   val isMulticlassClassification = numClassesForClassification > 2
+  val isMulticlassWithCategoricalFeatures
+    = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
 
 }

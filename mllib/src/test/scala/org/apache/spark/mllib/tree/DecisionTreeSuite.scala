@@ -570,7 +570,22 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
 
   test("stump with continuous + categorical variables for multiclass classification") {
-    assert(true==true)
+    val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
+    val input = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+      numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 3))
+    assert(strategy.isMulticlassClassification)
+    val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
+    val bestSplits = DecisionTree.findBestSplits(input, new Array(31), strategy, 0,
+      Array[List[Filter]](), splits, bins, 10)
+
+    assert(bestSplits.length === 1)
+    val bestSplit = bestSplits(0)._1
+
+    assert(bestSplit.feature === 1)
+    assert(bestSplit.featureType === Continuous)
+    assert(bestSplit.threshold > 1980)
+    assert(bestSplit.threshold < 2020)
   }
 
 }
