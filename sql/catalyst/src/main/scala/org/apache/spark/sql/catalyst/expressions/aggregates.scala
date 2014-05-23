@@ -298,8 +298,8 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
   var count: Int = _
 
   override def update(input: Row): Unit = {
-    val evaluatedExpr = expr.map(_.eval(input))
-    if (evaluatedExpr.map(_ != null).reduceLeft(_ || _)) {
+    val evaluatedExpr = expr.eval(input)
+    if (evaluatedExpr != null) {
       count += 1
     }
   }
