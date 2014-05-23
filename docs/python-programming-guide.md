@@ -145,6 +145,7 @@ sc = SparkContext(conf = conf)
 its `--master` argument. However, it currently requires the Python driver program to run on the local
 machine, not the cluster (i.e. the `--deploy-mode` parameter cannot be `cluster`).
 
+
 # SequenceFile and Hadoop InputFormats
 
 In addition to reading text files, PySpark supports reading Hadoop SequenceFile and arbitrary InputFormats.
