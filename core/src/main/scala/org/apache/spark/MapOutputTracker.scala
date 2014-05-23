@@ -154,6 +154,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         logInfo("Updating epoch from "+epoch+" to " + newEpoch + " and clearing cache")
         epoch = newEpoch
         mapStatuses.clear()
+        partialForShuffle.clear()
       }
     }
   }

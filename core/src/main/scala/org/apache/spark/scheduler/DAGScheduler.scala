@@ -919,17 +919,20 @@ class DAGScheduler(
                   if (freeCores > 0 && waitingStageNum > 0 && stage.shuffleDep.isDefined) {
                     logInfo("We have " + totalCores + " CPUs. " + pendingTaskNum + " tasks are running/pending. " +
                       waitingStageNum + " stages are waiting to be submitted. ---lirui")
-                    //TODO: find a waiting stage that depends on the current "stage"
-                    val preStartedStage = waitingStages.head
-                    logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
-                    //register map output finished so far
-                    mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
-                      stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-                      changeEpoch = true, isPartial = true)
-                    waitingStages -= preStartedStage
-                    runningStages += preStartedStage
-                    dependantStagePreStarted += stage
-                    submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage).get)
+                    val preStartableStage = getPreStartableStage(stage)
+                    if (preStartableStage.isDefined) {
+                      val preStartedStage = preStartableStage.get
+                      logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
+                      //register map output finished so far
+                      mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
+                        stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+                        changeEpoch = true, isPartial = true)
+                      waitingStages -= preStartedStage
+                      runningStages += preStartedStage
+                      //inform parent stages that the depending stage has been pre-started
+                      dependantStagePreStarted ++= getMissingParentStages(preStartedStage)
+                      submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage).get)
+                    }
                   }
                 }
               }
@@ -1180,6 +1183,19 @@ class DAGScheduler(
     logInfo("Stopping DAGScheduler")
     dagSchedulerActorSupervisor ! PoisonPill
     taskScheduler.stop()
+  }
+
+  //select a waiting stage to pre-start
+  private def getPreStartableStage(stage: Stage): Option[Stage] = {
+    //select a stage not ready to run
+    for (waitingStage <- waitingStages) {
+      val missingParents = getMissingParentStages(waitingStage)
+      if (missingParents != Nil && missingParents.contains(stage) &&
+        missingParents.forall(parent => !(waitingStages.contains(parent) || failedStages.contains(parent)))) {
+        return Some(waitingStage)
+      }
+    }
+    None
   }
 }
 
