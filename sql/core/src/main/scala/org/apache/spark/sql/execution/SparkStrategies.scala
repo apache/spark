@@ -143,6 +143,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) => {
         val prunePushedDownFilter =
           if (sparkContext.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
+            // Note: filters cannot be pushed down to Parquet if they contain more complex
+            // expressions than simple "Attribute cmp Literal" comparisons. Here we remove
+            // all filters that have been pushed down. Note that a predicate such as
+            // "(A AND B) OR C" can result in "A OR C" being pushed down.
             Some((filter: Expression) => {
               val recordFilter = ParquetFilters.createFilter(filter)
               if (!recordFilter.isDefined) {
