@@ -21,20 +21,55 @@ import org.apache.spark.sql.{SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.parquet._
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
+  /**
+   * Uses the HashFilteredJoin pattern to find joins where at least some of the predicates can be
+   * evaluated by matching hash keys.
+   */
   object HashJoin extends Strategy with PredicateHelper {
+    var broadcastTables: Seq[String] =
+      sparkContext.conf.get("spark.sql.hints.broadcastTables", "").split(",").toBuffer
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      // Find inner joins where at least some predicates can be evaluated by matching hash keys
-      // using the HashFilteredJoin pattern.
+
+      case HashFilteredJoin(
+            Inner,
+            leftKeys,
+            rightKeys,
+            condition,
+            left,
+            right @ PhysicalOperation(_, _, b: BaseRelation))
+          if broadcastTables.contains(b.tableName)=>
+
+        val hashJoin =
+          execution.BroadcastHashJoin(
+            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))(sparkContext)
+        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+
+      case HashFilteredJoin(
+             Inner,
+             leftKeys,
+             rightKeys,
+             condition,
+             left @ PhysicalOperation(_, _, b: BaseRelation),
+             right)
+          if broadcastTables.contains(b.tableName) =>
+
+        val hashJoin =
+          execution.BroadcastHashJoin(
+            leftKeys, rightKeys, BuildLeft, planLater(left), planLater(right))(sparkContext)
+        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+
       case HashFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
         val hashJoin =
-          execution.HashJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
+          execution.ShuffledHashJoin(
+            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
       case _ => Nil
     }
