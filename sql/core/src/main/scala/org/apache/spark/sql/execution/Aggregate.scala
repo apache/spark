@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.{SparkConf, Aggregator, SparkContext}
+import org.apache.spark.{Logging, SparkConf, Aggregator, SparkContext}
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -42,7 +42,7 @@ case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
     child: SparkPlan)(@transient sc: SparkContext)
-  extends UnaryNode with NoBind {
+  extends UnaryNode with NoBind with Logging {
 
   override def requiredChildDistribution =
     if (partial) {
@@ -160,11 +160,23 @@ case class Aggregate(
         // TODO: Can't use "Array[AggregateFunction]" directly, due to lack of
         // "concat(AggregateFunction, AggregateFunction)". Should add
         // AggregateFunction.update(agg: AggregateFunction) in the future.
-        def createCombiner(row: Row) = ArrayBuffer[Row](row)
-        def mergeValue(buffer: ArrayBuffer[Row], row: Row) = buffer += row
-        def mergeCombiners(buf1: ArrayBuffer[Row], buf2: ArrayBuffer[Row]) =
-          buf1 ++= buf2
-        val aggregator = new Aggregator[Row, Row, ArrayBuffer[Row]](
+        def createCombiner(row: Row) = mergeValue(newAggregateBuffer(), row)
+        def mergeValue(buffer: Array[AggregateFunction], row: Row) = {
+          for (i <- 0 to buffer.length - 1) {
+            buffer(i).update(row)
+          }
+          buffer
+        }
+        def mergeCombiners(buf1: Array[AggregateFunction], buf2: Array[AggregateFunction]) = {
+          if (buf1.length != buf2.length) {
+            throw new TreeNodeException(this, s"Unequal aggregate buffer length ${buf1.length} != ${buf2.length}")
+          }
+          for (i <- 0 to buf1.length - 1) {
+            buf1(i).merge(buf2(i))
+          }
+          buf1
+        }
+        val aggregator = new Aggregator[Row, Row, Array[AggregateFunction]](
           createCombiner, mergeValue, mergeCombiners, new SparkSqlSerializer(new SparkConf(false)))
 
         val aggIter = aggregator.combineValuesByKey(
@@ -173,9 +185,9 @@ case class Aggregate(
 
             override final def next(): (Row, Row) = {
               val row = iter.next()
-              // TODO: copy() here for suppressing reference problems. Please investigate
+              // TODO: copy() here for suppressing reference problems. Please clearly address
               // the root-cause and remove copy() here.
-              (groupingProjection(row).copy(), row.copy())
+              (groupingProjection(row).copy(), row)
             }
           },
           null
@@ -193,17 +205,8 @@ case class Aggregate(
             val group = entry._1
             val data = entry._2
 
-            val buf = newAggregateBuffer()
-
             for (i <- 0 to data.length - 1) {
-              val tmp = data(i)
-              for (j <- 0 to buf.length - 1) {
-                buf(j).update(tmp)
-              }
-            }
-
-            for (i <- 0 to buf.length - 1) {
-              aggregateResults(i) = buf(i).eval(EmptyRow)
+              aggregateResults(i) = data(i).eval(EmptyRow)
             }
             resultProjection(joinedRow(aggregateResults, group))
           }
