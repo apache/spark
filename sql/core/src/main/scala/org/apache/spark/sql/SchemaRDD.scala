@@ -274,6 +274,11 @@ class SchemaRDD(
       seed: Long) =
     new SchemaRDD(sqlContext, Sample(fraction, withReplacement, seed, logicalPlan))
 
+  /**
+   * :: Experimental ::
+   * Overriding base RDD implementation to leverage query optimizer
+   */
+  @Experimental
   override def count(): Long = {
     groupBy()(Count(Literal(1))).collect().head.getLong(0)
   }
