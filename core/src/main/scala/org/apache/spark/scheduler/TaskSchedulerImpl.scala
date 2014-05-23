@@ -31,6 +31,7 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.util.Utils
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -104,7 +105,7 @@ private[spark] class TaskSchedulerImpl(
     SchedulingMode.withName(schedulingModeConf.toUpperCase)
   } catch {
     case e: java.util.NoSuchElementException =>
-      throw new SparkException(s"Urecognized spark.scheduler.mode: $schedulingModeConf")
+      throw new SparkException(s"Unrecognized spark.scheduler.mode: $schedulingModeConf")
   }
 
   // This is a var so that we can reset it for testing purposes.
@@ -139,7 +140,7 @@ private[spark] class TaskSchedulerImpl(
       import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
             SPECULATION_INTERVAL milliseconds) {
-        checkSpeculatableTasks()
+        Utils.tryOrExit { checkSpeculatableTasks() }
       }
     }
   }
@@ -170,7 +171,7 @@ private[spark] class TaskSchedulerImpl(
     backend.reviveOffers()
   }
 
-  override def cancelTasks(stageId: Int): Unit = synchronized {
+  override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
     activeTaskSets.find(_._2.stageId == stageId).foreach { case (_, tsm) =>
       // There are two possible cases here:
@@ -181,7 +182,7 @@ private[spark] class TaskSchedulerImpl(
       //    simply abort the stage.
       tsm.runningTasksSet.foreach { tid =>
         val execId = taskIdToExecutorId(tid)
-        backend.killTask(tid, execId)
+        backend.killTask(tid, execId, interruptThread)
       }
       tsm.abort("Stage %s cancelled".format(stageId))
       logInfo("Stage %d was cancelled".format(stageId))
@@ -222,7 +223,7 @@ private[spark] class TaskSchedulerImpl(
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
-    val sortedTaskSets = rootPool.getSortedTaskSetQueue()
+    val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
@@ -356,6 +357,7 @@ private[spark] class TaskSchedulerImpl(
     if (taskResultGetter != null) {
       taskResultGetter.stop()
     }
+    starvationTimer.cancel()
 
     // sleeping for an arbitrary 1 seconds to ensure that messages are sent out.
     Thread.sleep(1000L)

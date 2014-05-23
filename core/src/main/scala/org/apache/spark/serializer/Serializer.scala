@@ -20,6 +20,8 @@ package org.apache.spark.serializer
 import java.io.{ByteArrayOutputStream, EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
@@ -59,17 +61,17 @@ object Serializer {
  */
 @DeveloperApi
 trait SerializerInstance {
-  def serialize[T](t: T): ByteBuffer
+  def serialize[T: ClassTag](t: T): ByteBuffer
 
-  def deserialize[T](bytes: ByteBuffer): T
+  def deserialize[T: ClassTag](bytes: ByteBuffer): T
 
-  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T
+  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T
 
   def serializeStream(s: OutputStream): SerializationStream
 
   def deserializeStream(s: InputStream): DeserializationStream
 
-  def serializeMany[T](iterator: Iterator[T]): ByteBuffer = {
+  def serializeMany[T: ClassTag](iterator: Iterator[T]): ByteBuffer = {
     // Default implementation uses serializeStream
     val stream = new ByteArrayOutputStream()
     serializeStream(stream).writeAll(iterator)
@@ -85,18 +87,17 @@ trait SerializerInstance {
   }
 }
 
-
 /**
  * :: DeveloperApi ::
  * A stream for writing serialized objects.
  */
 @DeveloperApi
 trait SerializationStream {
-  def writeObject[T](t: T): SerializationStream
+  def writeObject[T: ClassTag](t: T): SerializationStream
   def flush(): Unit
   def close(): Unit
 
-  def writeAll[T](iter: Iterator[T]): SerializationStream = {
+  def writeAll[T: ClassTag](iter: Iterator[T]): SerializationStream = {
     while (iter.hasNext) {
       writeObject(iter.next())
     }
@@ -111,7 +112,7 @@ trait SerializationStream {
  */
 @DeveloperApi
 trait DeserializationStream {
-  def readObject[T](): T
+  def readObject[T: ClassTag](): T
   def close(): Unit
 
   /**

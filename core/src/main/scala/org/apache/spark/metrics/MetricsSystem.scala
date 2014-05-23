@@ -129,17 +129,19 @@ private[spark] class MetricsSystem private (val instance: String,
 
     sinkConfigs.foreach { kv =>
       val classPath = kv._2.getProperty("class")
-      try {
-        val sink = Class.forName(classPath)
-          .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-          .newInstance(kv._2, registry, securityMgr)
-        if (kv._1 == "servlet") {
-           metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
-        } else {
-          sinks += sink.asInstanceOf[Sink]
+      if (null != classPath) {
+        try {
+          val sink = Class.forName(classPath)
+            .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+            .newInstance(kv._2, registry, securityMgr)
+          if (kv._1 == "servlet") {
+            metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
+          } else {
+            sinks += sink.asInstanceOf[Sink]
+          }
+        } catch {
+          case e: Exception => logError("Sink class " + classPath + " cannot be instantialized", e)
         }
-      } catch {
-        case e: Exception => logError("Sink class " + classPath + " cannot be instantialized", e)
       }
     }
   }

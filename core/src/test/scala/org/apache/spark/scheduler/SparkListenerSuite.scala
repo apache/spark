@@ -29,7 +29,8 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.executor.TaskMetrics
 
 class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
-    with BeforeAndAfter with BeforeAndAfterAll {
+  with BeforeAndAfter with BeforeAndAfterAll {
+
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
@@ -37,7 +38,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     sc = new SparkContext("local", "SparkListenerSuite")
   }
 
-  override def afterAll {
+  override def afterAll() {
     System.clearProperty("spark.akka.frameSize")
   }
 
@@ -50,9 +51,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
     assert(counter.count === 0)
 
-    // Starting listener bus should flush all buffered events (asynchronously, hence the sleep)
+    // Starting listener bus should flush all buffered events
     bus.start()
-    Thread.sleep(1000)
+    assert(bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(counter.count === 5)
 
     // After listener bus has stopped, posting events should not increment counter
@@ -177,6 +178,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     listener.stageInfos.clear()
 
     rdd3.count()
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be {2} // Shuffle map stage + result stage
     val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 2).get
     stageInfo3.rddInfos.size should be {2} // ShuffledRDD, MapPartitionsRDD
@@ -329,16 +331,47 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     }
   }
 
-  def checkNonZeroAvg(m: Traversable[Long], msg: String) {
+  test("SparkListener moves on if a listener throws an exception") {
+    val badListener = new BadListener
+    val jobCounter1 = new BasicJobCounter
+    val jobCounter2 = new BasicJobCounter
+    val bus = new LiveListenerBus
+
+    // Propagate events to bad listener first
+    bus.addListener(badListener)
+    bus.addListener(jobCounter1)
+    bus.addListener(jobCounter2)
+    bus.start()
+
+    // Post events to all listeners, and wait until the queue is drained
+    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
+    assert(bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+
+    // The exception should be caught, and the event should be propagated to other listeners
+    assert(bus.listenerThreadIsAlive)
+    assert(jobCounter1.count === 5)
+    assert(jobCounter2.count === 5)
+  }
+
+  /**
+   * Assert that the given list of numbers has an average that is greater than zero.
+   */
+  private def checkNonZeroAvg(m: Traversable[Long], msg: String) {
     assert(m.sum / m.size.toDouble > 0.0, msg)
   }
 
-  class BasicJobCounter extends SparkListener {
+  /**
+   * A simple listener that counts the number of jobs observed.
+   */
+  private class BasicJobCounter extends SparkListener {
     var count = 0
     override def onJobEnd(job: SparkListenerJobEnd) = count += 1
   }
 
-  class SaveStageAndTaskInfo extends SparkListener {
+  /**
+   * A simple listener that saves all task infos and task metrics.
+   */
+  private class SaveStageAndTaskInfo extends SparkListener {
     val stageInfos = mutable.Map[StageInfo, Seq[(TaskInfo, TaskMetrics)]]()
     var taskInfoMetrics = mutable.Buffer[(TaskInfo, TaskMetrics)]()
 
@@ -356,7 +389,10 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     }
   }
 
-  class SaveTaskEvents extends SparkListener {
+  /**
+   * A simple listener that saves the task indices for all task events.
+   */
+  private class SaveTaskEvents extends SparkListener {
     val startedTasks = new mutable.HashSet[Int]()
     val startedGettingResultTasks = new mutable.HashSet[Int]()
     val endedTasks = new mutable.HashSet[Int]()
@@ -375,4 +411,12 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       startedGettingResultTasks += taskGettingResult.taskInfo.index
     }
   }
+
+  /**
+   * A simple listener that throws an exception on job end.
+   */
+  private class BadListener extends SparkListener {
+    override def onJobEnd(jobEnd: SparkListenerJobEnd) = { throw new Exception }
+  }
+
 }

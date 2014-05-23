@@ -18,7 +18,7 @@
 package org.apache.spark.api.java
 
 import java.util.{Comparator, List => JList, Iterator => JIterator}
-import java.lang.{Iterable => JIterable}
+import java.lang.{Iterable => JIterable, Long => JLong}
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -34,6 +34,7 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def wrapRDD(rdd: RDD[T]): This
@@ -74,11 +75,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
    */
-  def mapPartitionsWithIndex[R: ClassTag](
+  def mapPartitionsWithIndex[R](
       f: JFunction2[java.lang.Integer, java.util.Iterator[T], java.util.Iterator[R]],
       preservesPartitioning: Boolean = false): JavaRDD[R] =
     new JavaRDD(rdd.mapPartitionsWithIndex(((a,b) => f(a,asJavaIterator(b))),
-        preservesPartitioning))
+        preservesPartitioning)(fakeClassTag))(fakeClassTag)
 
   /**
    * Return a new RDD by applying a function to all elements of this RDD.
@@ -263,6 +264,26 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
       rdd.zipPartitions(other.rdd)(fn)(other.classTag, fakeClassTag[V]))(fakeClassTag[V])
   }
 
+  /**
+   * Zips this RDD with generated unique Long ids. Items in the kth partition will get ids k, n+k,
+   * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
+   * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
+   */
+  def zipWithUniqueId(): JavaPairRDD[T, JLong] = {
+    JavaPairRDD.fromRDD(rdd.zipWithUniqueId()).asInstanceOf[JavaPairRDD[T, JLong]]
+  }
+
+  /**
+   * Zips this RDD with its element indices. The ordering is first based on the partition index
+   * and then the ordering of items within each partition. So the first item in the first
+   * partition gets index 0, and the last item in the last partition receives the largest index.
+   * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
+   * This method needs to trigger a spark job when this RDD contains more than one partitions.
+   */
+  def zipWithIndex(): JavaPairRDD[T, JLong] = {
+    JavaPairRDD.fromRDD(rdd.zipWithIndex()).asInstanceOf[JavaPairRDD[T, JLong]]
+  }
+
   // Actions (launch a job to return a value to the user program)
 
   /**
@@ -394,7 +415,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     new java.util.ArrayList(arr)
   }
 
-  def takeSample(withReplacement: Boolean, num: Int, seed: Int): JList[T] = {
+  def takeSample(withReplacement: Boolean, num: Int): JList[T] = 
+    takeSample(withReplacement, num, Utils.random.nextLong)
+    
+  def takeSample(withReplacement: Boolean, num: Int, seed: Long): JList[T] = {
     import scala.collection.JavaConversions._
     val arr: java.util.Collection[T] = rdd.takeSample(withReplacement, num, seed).toSeq
     new java.util.ArrayList(arr)

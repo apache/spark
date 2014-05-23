@@ -202,6 +202,39 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(repartitioned2.collect().toSet === (1 to 1000).toSet)
   }
 
+  test("repartitioned RDDs perform load balancing") {
+    // Coalesce partitions
+    val input = Array.fill(1000)(1)
+    val initialPartitions = 10
+    val data = sc.parallelize(input, initialPartitions)
+
+    val repartitioned1 = data.repartition(2)
+    assert(repartitioned1.partitions.size == 2)
+    val partitions1 = repartitioned1.glom().collect()
+    // some noise in balancing is allowed due to randomization
+    assert(math.abs(partitions1(0).length - 500) < initialPartitions)
+    assert(math.abs(partitions1(1).length - 500) < initialPartitions)
+    assert(repartitioned1.collect() === input)
+
+    def testSplitPartitions(input: Seq[Int], initialPartitions: Int, finalPartitions: Int) {
+      val data = sc.parallelize(input, initialPartitions)
+      val repartitioned = data.repartition(finalPartitions)
+      assert(repartitioned.partitions.size === finalPartitions)
+      val partitions = repartitioned.glom().collect()
+      // assert all elements are present
+      assert(repartitioned.collect().sortWith(_ > _).toSeq === input.toSeq.sortWith(_ > _).toSeq)
+      // assert no bucket is overloaded
+      for (partition <- partitions) {
+        val avg = input.size / finalPartitions
+        val maxPossible = avg + initialPartitions
+        assert(partition.length <=  maxPossible)
+      }
+    }
+
+    testSplitPartitions(Array.fill(100)(1), 10, 20)
+    testSplitPartitions(Array.fill(10000)(1) ++ Array.fill(10000)(2), 20, 100)
+  }
+
   test("coalesced RDDs") {
     val data = sc.parallelize(1 to 10, 10)
 
@@ -381,8 +414,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       val prng42 = new Random(42)
       val prng43 = new Random(43)
       Array(1, 2, 3, 4, 5, 6).filter{i =>
-        if (i < 4) 0 == prng42.nextInt(3)
-        else 0 == prng43.nextInt(3)}
+        if (i < 4) 0 == prng42.nextInt(3) else 0 == prng43.nextInt(3)
+      }
     }
     assert(sample.size === checkSample.size)
     for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
@@ -463,7 +496,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("takeSample") {
     val data = sc.parallelize(1 to 100, 2)
-
+    
+    for (num <- List(5, 20, 100)) {
+      val sample = data.takeSample(withReplacement=false, num=num)
+      assert(sample.size === num)        // Got exactly num elements
+      assert(sample.toSet.size === num)  // Elements are distinct
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
@@ -479,6 +518,19 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=true, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
+    {
+      val sample = data.takeSample(withReplacement=true, num=20)
+      assert(sample.size === 20)        // Got exactly 100 elements
+      assert(sample.toSet.size <= 20, "sampling with replacement returned all distinct elements")
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
+    {
+      val sample = data.takeSample(withReplacement=true, num=100)
+      assert(sample.size === 100)        // Got exactly 100 elements
+      // Chance of getting all distinct elements is astronomically low, so test we got < 100
+      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
       assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
     }
     for (seed <- 1 to 5) {

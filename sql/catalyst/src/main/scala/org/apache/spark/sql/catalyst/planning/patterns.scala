@@ -19,7 +19,10 @@ package org.apache.spark.sql.catalyst.planning
 
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.Logging
+
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
@@ -98,6 +101,56 @@ object PhysicalOperation extends PredicateHelper {
 
     case a: AttributeReference =>
       aliases.get(a).map(Alias(_, a.name)(a.exprId, a.qualifiers)).getOrElse(a)
+  }
+}
+
+/**
+ * A pattern that finds joins with equality conditions that can be evaluated using hashing
+ * techniques.  For inner joins, any filters on top of the join operator are also matched.
+ */
+object HashFilteredJoin extends Logging with PredicateHelper {
+  /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
+  type ReturnType =
+    (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    // All predicates can be evaluated for inner join (i.e., those that are in the ON
+    // clause and WHERE clause.)
+    case FilteredOperation(predicates, join @ Join(left, right, Inner, condition)) =>
+      logger.debug(s"Considering hash inner join on: ${predicates ++ condition}")
+      splitPredicates(predicates ++ condition, join)
+    case join @ Join(left, right, joinType, condition) =>
+      logger.debug(s"Considering hash join on: $condition")
+      splitPredicates(condition.toSeq, join)
+    case _ => None
+  }
+
+  // Find equi-join predicates that can be evaluated before the join, and thus can be used
+  // as join keys.
+  def splitPredicates(allPredicates: Seq[Expression], join: Join): Option[ReturnType] = {
+    val Join(left, right, joinType, _) = join
+    val (joinPredicates, otherPredicates) =
+      allPredicates.flatMap(splitConjunctivePredicates).partition {
+        case Equals(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
+          (canEvaluate(l, right) && canEvaluate(r, left)) => true
+        case _ => false
+      }
+
+    val joinKeys = joinPredicates.map {
+      case Equals(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
+      case Equals(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
+    }
+
+    // Do not consider this strategy if there are no join keys.
+    if (joinKeys.nonEmpty) {
+      val leftKeys = joinKeys.map(_._1)
+      val rightKeys = joinKeys.map(_._2)
+
+      Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
+    } else {
+      logger.debug(s"Avoiding hash join with no join keys.")
+      None
+    }
   }
 }
 

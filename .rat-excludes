@@ -43,3 +43,9 @@ test.out/*
 .*iml
 service.properties
 db.lck
+build/*
+dist/*
+.*out
+.*ipr
+.*iws
+logs

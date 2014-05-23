@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst
 import scala.language.implicitConversions
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
+import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.input.CharArrayReader.EofCh
 
 import org.apache.spark.sql.catalyst.analysis._
@@ -39,7 +40,7 @@ import org.apache.spark.sql.catalyst.types._
  * This is currently included mostly for illustrative purposes.  Users wanting more complete support
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
-class SqlParser extends StandardTokenParsers {
+class SqlParser extends StandardTokenParsers with PackratParsers {
   def apply(input: String): LogicalPlan = {
     phrase(query)(new lexical.Scanner(input)) match {
       case Success(r, x) => r
@@ -92,6 +93,7 @@ class SqlParser extends StandardTokenParsers {
   protected val AND = Keyword("AND")
   protected val AS = Keyword("AS")
   protected val ASC = Keyword("ASC")
+  protected val APPROXIMATE = Keyword("APPROXIMATE")
   protected val AVG = Keyword("AVG")
   protected val BY = Keyword("BY")
   protected val CAST = Keyword("CAST")
@@ -113,6 +115,8 @@ class SqlParser extends StandardTokenParsers {
   protected val JOIN = Keyword("JOIN")
   protected val LEFT = Keyword("LEFT")
   protected val LIMIT = Keyword("LIMIT")
+  protected val MAX = Keyword("MAX")
+  protected val MIN = Keyword("MIN")
   protected val NOT = Keyword("NOT")
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
@@ -152,7 +156,7 @@ class SqlParser extends StandardTokenParsers {
 
   lexical.delimiters += (
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
-    ",", ";", "%", "{", "}", ":"
+    ",", ";", "%", "{", "}", ":", "[", "]"
   )
 
   protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
@@ -315,8 +319,16 @@ class SqlParser extends StandardTokenParsers {
     COUNT ~> "(" ~ "*" <~ ")" ^^ { case _ => Count(Literal(1)) } |
     COUNT ~> "(" ~ expression <~ ")" ^^ { case dist ~ exp => Count(exp) } |
     COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => CountDistinct(exp :: Nil) } |
+    APPROXIMATE ~> COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ {
+      case exp => ApproxCountDistinct(exp)
+    } |
+    APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^ {
+      case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble)
+    } |
     FIRST ~> "(" ~> expression <~ ")" ^^ { case exp => First(exp) } |
     AVG ~> "(" ~> expression <~ ")" ^^ { case exp => Average(exp) } |
+    MIN ~> "(" ~> expression <~ ")" ^^ { case exp => Min(exp) } |
+    MAX ~> "(" ~> expression <~ ")" ^^ { case exp => Max(exp) } |
     IF ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case c ~ "," ~ t ~ "," ~ f => If(c,t,f)
     } |
@@ -339,7 +351,10 @@ class SqlParser extends StandardTokenParsers {
   protected lazy val floatLit: Parser[String] =
     elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
 
-  protected lazy val baseExpression: Parser[Expression] =
+  protected lazy val baseExpression: PackratParser[Expression] =
+    expression ~ "[" ~  expression <~ "]" ^^ {
+      case base ~ _ ~ ordinal => GetItem(base, ordinal)
+    } |
     TRUE ^^^ Literal(true, BooleanType) |
     FALSE ^^^ Literal(false, BooleanType) |
     cast |

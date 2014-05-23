@@ -31,20 +31,6 @@
   <name>Spark Project External Twitter</name>
   <url>http://spark.apache.org/</url>
 
-  <profiles>
-    <profile>
-      <!-- SPARK-1121: SPARK-1121: Adds an explicit dependency on Avro to work around
-           a Hadoop 0.23.X issue -->
-      <id>yarn-alpha</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
-
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -62,12 +48,6 @@
       <groupId>org.twitter4j</groupId>
       <artifactId>twitter4j-stream</artifactId>
       <version>3.0.3</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.jboss.netty</groupId>
-          <artifactId>netty</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>

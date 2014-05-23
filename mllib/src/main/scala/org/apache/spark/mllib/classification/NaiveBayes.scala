@@ -19,16 +19,13 @@ package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
  * Model for Naive Bayes Classifiers.
  *
  * @param labels list of labels
@@ -36,8 +33,7 @@ import org.apache.spark.rdd.RDD
  * @param theta log of class conditional probabilities, whose dimension is C-by-D,
  *              where D is number of features
  */
-@Experimental
-class NaiveBayesModel(
+class NaiveBayesModel private[mllib] (
     val labels: Array[Double],
     val pi: Array[Double],
     val theta: Array[Array[Double]]) extends ClassificationModel with Serializable {
@@ -125,6 +121,9 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
   }
 }
 
+/**
+ * Top-level methods for calling naive Bayes.
+ */
 object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
@@ -157,24 +156,5 @@ object NaiveBayes {
    */
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
     new NaiveBayes(lambda).run(input)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length != 2 && args.length != 3) {
-      println("Usage: NaiveBayes <master> <input_dir> [<lambda>]")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "NaiveBayes")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = if (args.length == 2) {
-      NaiveBayes.train(data)
-    } else {
-      NaiveBayes.train(data, args(2).toDouble)
-    }
-
-    println("Pi\n: " + model.pi)
-    println("Theta:\n" + model.theta)
-
-    sc.stop()
   }
 }

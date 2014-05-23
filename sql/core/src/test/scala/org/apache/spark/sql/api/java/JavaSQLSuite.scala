@@ -35,6 +35,17 @@ class PersonBean extends Serializable {
   var age: Int = _
 }
 
+class AllTypesBean extends Serializable {
+  @BeanProperty var stringField: String = _
+  @BeanProperty var intField: java.lang.Integer = _
+  @BeanProperty var longField: java.lang.Long = _
+  @BeanProperty var floatField: java.lang.Float = _
+  @BeanProperty var doubleField: java.lang.Double = _
+  @BeanProperty var shortField: java.lang.Short = _
+  @BeanProperty var byteField: java.lang.Byte = _
+  @BeanProperty var booleanField: java.lang.Boolean = _
+}
+
 class JavaSQLSuite extends FunSuite {
   val javaCtx = new JavaSparkContext(TestSQLContext.sparkContext)
   val javaSqlCtx = new JavaSQLContext(javaCtx)
@@ -49,5 +60,55 @@ class JavaSQLSuite extends FunSuite {
 
     schemaRDD.registerAsTable("people")
     javaSqlCtx.sql("SELECT * FROM people").collect()
+  }
+
+  test("all types in JavaBeans") {
+    val bean = new AllTypesBean
+    bean.setStringField("")
+    bean.setIntField(0)
+    bean.setLongField(0)
+    bean.setFloatField(0.0F)
+    bean.setDoubleField(0.0)
+    bean.setShortField(0.toShort)
+    bean.setByteField(0.toByte)
+    bean.setBooleanField(false)
+
+    val rdd = javaCtx.parallelize(bean :: Nil)
+    val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[AllTypesBean])
+    schemaRDD.registerAsTable("allTypes")
+
+    assert(
+      javaSqlCtx.sql(
+        """
+          |SELECT stringField, intField, longField, floatField, doubleField, shortField, byteField,
+          |       booleanField
+          |FROM allTypes
+        """.stripMargin).collect.head.row ===
+      Seq("", 0, 0L, 0F, 0.0, 0.toShort, 0.toByte, false))
+  }
+
+  test("all types null in JavaBeans") {
+    val bean = new AllTypesBean
+    bean.setStringField(null)
+    bean.setIntField(null)
+    bean.setLongField(null)
+    bean.setFloatField(null)
+    bean.setDoubleField(null)
+    bean.setShortField(null)
+    bean.setByteField(null)
+    bean.setBooleanField(null)
+
+    val rdd = javaCtx.parallelize(bean :: Nil)
+    val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[AllTypesBean])
+    schemaRDD.registerAsTable("allTypes")
+
+    assert(
+      javaSqlCtx.sql(
+        """
+          |SELECT stringField, intField, longField, floatField, doubleField, shortField, byteField,
+          |       booleanField
+          |FROM allTypes
+        """.stripMargin).collect.head.row ===
+        Seq.fill(8)(null))
   }
 }

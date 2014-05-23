@@ -33,9 +33,9 @@ import org.apache.spark.util.Utils
 /**
  * The entry point for executing Spark SQL queries from a Java program.
  */
-class JavaSQLContext(sparkContext: JavaSparkContext) {
+class JavaSQLContext(val sqlContext: SQLContext) {
 
-  val sqlContext = new SQLContext(sparkContext.sc)
+  def this(sparkContext: JavaSparkContext) = this(new SQLContext(sparkContext.sc))
 
   /**
    * Executes a query expressed in SQL, returning the result as a JavaSchemaRDD
@@ -132,6 +132,14 @@ class JavaSQLContext(sparkContext: JavaSparkContext) {
         case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
         case c: Class[_] if c == java.lang.Float.TYPE => FloatType
         case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+
+        case c: Class[_] if c == classOf[java.lang.Short] => ShortType
+        case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
+        case c: Class[_] if c == classOf[java.lang.Long] => LongType
+        case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
+        case c: Class[_] if c == classOf[java.lang.Byte] => ByteType
+        case c: Class[_] if c == classOf[java.lang.Float] => FloatType
+        case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
       }
       // TODO: Nullability could be stricter.
       AttributeReference(property.getName, dataType, nullable = true)()

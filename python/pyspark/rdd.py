@@ -30,6 +30,7 @@ from tempfile import NamedTemporaryFile
 from threading import Thread
 import warnings
 import heapq
+from random import Random
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
@@ -332,7 +333,7 @@ class RDD(object):
                    .reduceByKey(lambda x, _: x) \
                    .map(lambda (x, _): x)
 
-    def sample(self, withReplacement, fraction, seed):
+    def sample(self, withReplacement, fraction, seed=None):
         """
         Return a sampled subset of this RDD (relies on numpy and falls back
         on default random generator if numpy is unavailable).
@@ -344,7 +345,7 @@ class RDD(object):
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     # this is ported from scala/spark/RDD.scala
-    def takeSample(self, withReplacement, num, seed):
+    def takeSample(self, withReplacement, num, seed=None):
         """
         Return a fixed-size sampled subset of this RDD (currently requires numpy).
 
@@ -381,13 +382,11 @@ class RDD(object):
         # If the first sample didn't turn out large enough, keep trying to take samples;
         # this shouldn't happen often because we use a big multiplier for their initial size.
         # See: scala/spark/RDD.scala
+        rand = Random(seed)
         while len(samples) < total:
-            if seed > sys.maxint - 2:
-                seed = -1
-            seed += 1
-            samples = self.sample(withReplacement, fraction, seed).collect()
+            samples = self.sample(withReplacement, fraction, rand.randint(0, sys.maxint)).collect()
 
-        sampler = RDDSampler(withReplacement, fraction, seed+1)
+        sampler = RDDSampler(withReplacement, fraction, rand.randint(0, sys.maxint))
         sampler.shuffle(samples)
         return samples[0:total]
 
@@ -538,8 +537,8 @@ class RDD(object):
         """
         Return an RDD created by piping elements to a forked external process.
 
-        >>> sc.parallelize([1, 2, 3]).pipe('cat').collect()
-        ['1', '2', '3']
+        >>> sc.parallelize(['1', '2', '', '3']).pipe('cat').collect()
+        ['1', '2', '', '3']
         """
         def func(iterator):
             pipe = Popen(shlex.split(command), env=env, stdin=PIPE, stdout=PIPE)
@@ -548,7 +547,7 @@ class RDD(object):
                     out.write(str(obj).rstrip('\n') + '\n')
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()
-            return (x.rstrip('\n') for x in pipe.stdout)
+            return (x.rstrip('\n') for x in iter(pipe.stdout.readline, ''))
         return self.mapPartitions(func)
 
     def foreach(self, f):
@@ -600,7 +599,7 @@ class RDD(object):
     def reduce(self, f):
         """
         Reduces the elements of this RDD using the specified commutative and
-        associative binary operator.
+        associative binary operator. Currently reduces partitions locally.
 
         >>> from operator import add
         >>> sc.parallelize([1, 2, 3, 4, 5]).reduce(add)
@@ -642,7 +641,34 @@ class RDD(object):
         vals = self.mapPartitions(func).collect()
         return reduce(op, vals, zeroValue)
 
-    # TODO: aggregate
+    def aggregate(self, zeroValue, seqOp, combOp):
+        """
+        Aggregate the elements of each partition, and then the results for all
+        the partitions, using a given combine functions and a neutral "zero
+        value."
+
+        The functions C{op(t1, t2)} is allowed to modify C{t1} and return it
+        as its result value to avoid object allocation; however, it should not
+        modify C{t2}.
+
+        The first function (seqOp) can return a different result type, U, than
+        the type of this RDD. Thus, we need one operation for merging a T into an U
+        and one operation for merging two U
+
+        >>> seqOp = (lambda x, y: (x[0] + y, x[1] + 1))
+        >>> combOp = (lambda x, y: (x[0] + y[0], x[1] + y[1]))
+        >>> sc.parallelize([1, 2, 3, 4]).aggregate((0, 0), seqOp, combOp)
+        (10, 4)
+        >>> sc.parallelize([]).aggregate((0, 0), seqOp, combOp)
+        (0, 0)
+        """
+        def func(iterator):
+            acc = zeroValue
+            for obj in iterator:
+                acc = seqOp(acc, obj)
+            yield acc
+
+        return self.mapPartitions(func).fold(zeroValue, combOp)
         
 
     def max(self):
@@ -865,6 +891,14 @@ class RDD(object):
         >>> from glob import glob
         >>> ''.join(sorted(input(glob(tempFile.name + "/part-0000*"))))
         '0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n'
+
+        Empty lines are tolerated when saving to text files.
+
+        >>> tempFile2 = NamedTemporaryFile(delete=True)
+        >>> tempFile2.close()
+        >>> sc.parallelize(['', 'foo', '', 'bar', '']).saveAsTextFile(tempFile2.name)
+        >>> ''.join(sorted(input(glob(tempFile2.name + "/part-0000*"))))
+        '\\n\\n\\nbar\\nfoo\\n'
         """
         def func(split, iterator):
             for x in iterator:
@@ -1117,6 +1151,10 @@ class RDD(object):
         """
         Group the values for each key in the RDD into a single sequence.
         Hash-partitions the resulting RDD with into numPartitions partitions.
+
+        Note: If you are grouping in order to perform an aggregation (such as a
+        sum or average) over each key, using reduceByKey will provide much better
+        performance.
 
         >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> map((lambda (x,y): (x, list(y))), sorted(x.groupByKey().collect()))

@@ -60,10 +60,6 @@ By default, PySpark requires `python` to be available on the system `PATH` and u
 
 All of PySpark's library dependencies, including [Py4J](http://py4j.sourceforge.net/), are bundled with PySpark and automatically imported.
 
-Standalone PySpark applications should be run using the `bin/pyspark` script, which automatically configures the Java and Python environment using the settings in `conf/spark-env.sh` or `.cmd`.
-The script automatically adds the `bin/pyspark` package to the `PYTHONPATH`.
-
-
 # Interactive Use
 
 The `bin/pyspark` script launches a Python interpreter that is configured to run PySpark applications. To use `pyspark` interactively, first build Spark, then launch it directly from the command line without any options:
@@ -217,6 +213,11 @@ transform that data on the Scala/Java side to something which can be handled by 
 Future support for 'wrapper' functions for keys/values that allows this to be written in Java/Scala,
 and called from Python, as well as support for writing data out as SequenceFile format
 and other OutputFormats, is forthcoming.
+
+`spark-submit` supports launching Python applications on standalone, Mesos or YARN clusters, through
+its `--master` argument. However, it currently requires the Python driver program to run on the local
+machine, not the cluster (i.e. the `--deploy-mode` parameter cannot be `cluster`).
+
 
 # API Docs
 

@@ -19,16 +19,18 @@ package org.apache.spark.deploy
 
 import java.io.{File, FileInputStream, IOException}
 import java.util.Properties
+import java.util.jar.JarFile
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.SparkException
+import org.apache.spark.util.Utils
 
 /**
  * Parses and encapsulates arguments from the spark-submit script.
  */
-private[spark] class SparkSubmitArguments(args: Array[String]) {
+private[spark] class SparkSubmitArguments(args: Seq[String]) {
   var master: String = null
   var deployMode: String = null
   var executorMemory: String = null
@@ -51,6 +53,8 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var jars: String = null
   var verbose: Boolean = false
+  var isPython: Boolean = false
+  var pyFiles: String = null
 
   parseOpts(args.toList)
   loadDefaults()
@@ -66,8 +70,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         if (k.startsWith("spark")) {
           defaultProperties(k) = v
           if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
-        }
-        else {
+        } else {
           SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
         }
       }
@@ -76,7 +79,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
   }
 
   /** Fill in any undefined values based on the current properties file or built-in defaults. */
-  private def loadDefaults() = {
+  private def loadDefaults(): Unit = {
 
     // Use common defaults file, if not specified by user
     if (propertiesFile == null) {
@@ -107,20 +110,47 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
     master = Option(master).getOrElse(System.getenv("MASTER"))
     deployMode = Option(deployMode).getOrElse(System.getenv("DEPLOY_MODE"))
 
+    // Try to set main class from JAR if no --class argument is given
+    if (mainClass == null && !isPython && primaryResource != null) {
+      try {
+        val jar = new JarFile(primaryResource)
+        // Note that this might still return null if no main-class is set; we catch that later
+        mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
+      } catch {
+        case e: Exception =>
+          SparkSubmit.printErrorAndExit("Failed to read JAR: " + primaryResource)
+          return
+      }
+    }
+
     // Global defaults. These should be keep to minimum to avoid confusing behavior.
-    master = Option(master).getOrElse("local")
+    master = Option(master).getOrElse("local[*]")
+
+    // Set name from main class if not given
+    name = Option(name).orElse(Option(mainClass)).orNull
+    if (name == null && primaryResource != null) {
+      name = Utils.stripDirectory(primaryResource)
+    }
   }
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
   private def checkRequiredArguments() = {
-    if (args.length == 0) printUsageAndExit(-1)
-    if (primaryResource == null) SparkSubmit.printErrorAndExit("Must specify a primary resource")
-    if (mainClass == null) SparkSubmit.printErrorAndExit("Must specify a main class with --class")
+    if (args.length == 0) {
+      printUsageAndExit(-1)
+    }
+    if (primaryResource == null) {
+      SparkSubmit.printErrorAndExit("Must specify a primary resource (JAR or Python file)")
+    }
+    if (mainClass == null && !isPython) {
+      SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
+    }
+    if (pyFiles != null && !isPython) {
+      SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
+    }
 
     if (master.startsWith("yarn")) {
       val hasHadoopEnv = sys.env.contains("HADOOP_CONF_DIR") || sys.env.contains("YARN_CONF_DIR")
-      val testing = sys.env.contains("SPARK_TESTING")
-      if (!hasHadoopEnv && !testing) {
+      if (!hasHadoopEnv && !Utils.isTesting) {
         throw new Exception(s"When running with master '$master' " +
           "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
       }
@@ -144,6 +174,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
     |  queue                   $queue
     |  numExecutors            $numExecutors
     |  files                   $files
+    |  pyFiles                 $pyFiles
     |  archives                $archives
     |  mainClass               $mainClass
     |  primaryResource         $primaryResource
@@ -157,119 +188,128 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
     """.stripMargin
   }
 
-  private def parseOpts(opts: List[String]): Unit = opts match {
-    case ("--name") :: value :: tail =>
-      name = value
-      parseOpts(tail)
+  /** Fill in values by parsing user options. */
+  private def parseOpts(opts: Seq[String]): Unit = {
+    // Delineates parsing of Spark options from parsing of user options.
+    var inSparkOpts = true
+    parse(opts)
 
-    case ("--master") :: value :: tail =>
-      master = value
-      parseOpts(tail)
+    def parse(opts: Seq[String]): Unit = opts match {
+      case ("--name") :: value :: tail =>
+        name = value
+        parse(tail)
 
-    case ("--class") :: value :: tail =>
-      mainClass = value
-      parseOpts(tail)
+      case ("--master") :: value :: tail =>
+        master = value
+        parse(tail)
 
-    case ("--deploy-mode") :: value :: tail =>
-      if (value != "client" && value != "cluster") {
-        SparkSubmit.printErrorAndExit("--deploy-mode must be either \"client\" or \"cluster\"")
-      }
-      deployMode = value
-      parseOpts(tail)
+      case ("--class") :: value :: tail =>
+        mainClass = value
+        parse(tail)
 
-    case ("--num-executors") :: value :: tail =>
-      numExecutors = value
-      parseOpts(tail)
-
-    case ("--total-executor-cores") :: value :: tail =>
-      totalExecutorCores = value
-      parseOpts(tail)
-
-    case ("--executor-cores") :: value :: tail =>
-      executorCores = value
-      parseOpts(tail)
-
-    case ("--executor-memory") :: value :: tail =>
-      executorMemory = value
-      parseOpts(tail)
-
-    case ("--driver-memory") :: value :: tail =>
-      driverMemory = value
-      parseOpts(tail)
-
-    case ("--driver-cores") :: value :: tail =>
-      driverCores = value
-      parseOpts(tail)
-
-    case ("--driver-class-path") :: value :: tail =>
-      driverExtraClassPath = value
-      parseOpts(tail)
-
-    case ("--driver-java-options") :: value :: tail =>
-      driverExtraJavaOptions = value
-      parseOpts(tail)
-
-    case ("--driver-library-path") :: value :: tail =>
-      driverExtraLibraryPath = value
-      parseOpts(tail)
-
-    case ("--properties-file") :: value :: tail =>
-      propertiesFile = value
-      parseOpts(tail)
-
-    case ("--supervise") :: tail =>
-      supervise = true
-      parseOpts(tail)
-
-    case ("--queue") :: value :: tail =>
-      queue = value
-      parseOpts(tail)
-
-    case ("--files") :: value :: tail =>
-      files = value
-      parseOpts(tail)
-
-    case ("--archives") :: value :: tail =>
-      archives = value
-      parseOpts(tail)
-
-    case ("--arg") :: value :: tail =>
-      childArgs += value
-      parseOpts(tail)
-
-    case ("--jars") :: value :: tail =>
-      jars = value
-      parseOpts(tail)
-
-    case ("--help" | "-h") :: tail =>
-      printUsageAndExit(0)
-
-    case ("--verbose" | "-v") :: tail =>
-      verbose = true
-      parseOpts(tail)
-
-    case value :: tail =>
-      if (value.startsWith("-")) {
-        val errMessage = s"Unrecognized option '$value'."
-        val suggestion: Option[String] = value match {
-          case v if v.startsWith("--") && v.contains("=") =>
-            val parts = v.split("=")
-            Some(s"Perhaps you want '${parts(0)} ${parts(1)}'?")
-          case _ =>
-            None
+      case ("--deploy-mode") :: value :: tail =>
+        if (value != "client" && value != "cluster") {
+          SparkSubmit.printErrorAndExit("--deploy-mode must be either \"client\" or \"cluster\"")
         }
-        SparkSubmit.printErrorAndExit(errMessage + suggestion.map(" " + _).getOrElse(""))
-      }
+        deployMode = value
+        parse(tail)
 
-      if (primaryResource != null) {
-        val error = s"Found two conflicting resources, $value and $primaryResource." +
-          " Expecting only one resource."
-        SparkSubmit.printErrorAndExit(error)
-      }
-      primaryResource = value
-      parseOpts(tail)
+      case ("--num-executors") :: value :: tail =>
+        numExecutors = value
+        parse(tail)
 
-    case Nil =>
+      case ("--total-executor-cores") :: value :: tail =>
+        totalExecutorCores = value
+        parse(tail)
+
+      case ("--executor-cores") :: value :: tail =>
+        executorCores = value
+        parse(tail)
+
+      case ("--executor-memory") :: value :: tail =>
+        executorMemory = value
+        parse(tail)
+
+      case ("--driver-memory") :: value :: tail =>
+        driverMemory = value
+        parse(tail)
+
+      case ("--driver-cores") :: value :: tail =>
+        driverCores = value
+        parse(tail)
+
+      case ("--driver-class-path") :: value :: tail =>
+        driverExtraClassPath = value
+        parse(tail)
+
+      case ("--driver-java-options") :: value :: tail =>
+        driverExtraJavaOptions = value
+        parse(tail)
+
+      case ("--driver-library-path") :: value :: tail =>
+        driverExtraLibraryPath = value
+        parse(tail)
+
+      case ("--properties-file") :: value :: tail =>
+        propertiesFile = value
+        parse(tail)
+
+      case ("--supervise") :: tail =>
+        supervise = true
+        parse(tail)
+
+      case ("--queue") :: value :: tail =>
+        queue = value
+        parse(tail)
+
+      case ("--files") :: value :: tail =>
+        files = value
+        parse(tail)
+
+      case ("--py-files") :: value :: tail =>
+        pyFiles = value
+        parse(tail)
+
+      case ("--archives") :: value :: tail =>
+        archives = value
+        parse(tail)
+
+      case ("--jars") :: value :: tail =>
+        jars = value
+        parse(tail)
+
+      case ("--help" | "-h") :: tail =>
+        printUsageAndExit(0)
+
+      case ("--verbose" | "-v") :: tail =>
+        verbose = true
+        parse(tail)
+
+      case value :: tail =>
+        if (inSparkOpts) {
+          value match {
+            // convert --foo=bar to --foo bar
+            case v if v.startsWith("--") && v.contains("=") && v.split("=").size == 2 =>
+              val parts = v.split("=")
+              parse(Seq(parts(0), parts(1)) ++ tail)
+            case v if v.startsWith("-") =>
+              val errMessage = s"Unrecognized option '$value'."
+              SparkSubmit.printErrorAndExit(errMessage)
+            case v =>
+              primaryResource = v
+              inSparkOpts = false
+              isPython = SparkSubmit.isPython(v)
+              parse(tail)
+          }
+        } else {
+          if (!value.isEmpty) {
+            childArgs += value
+          }
+          parse(tail)
+        }
+
+      case Nil =>
+    }
   }
 
   private def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
@@ -278,26 +318,28 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
       outStream.println("Unknown/unsupported param " + unknownParam)
     }
     outStream.println(
-      """Usage: spark-submit <app jar> [options]
+      """Usage: spark-submit [options] <app jar | python file> [app options]
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
-        |  --deploy-mode DEPLOY_MODE   Mode to deploy the app in, either 'client' or 'cluster'.
-        |  --class CLASS_NAME          Name of your app's main class (required for Java apps).
-        |  --arg ARG                   Argument to be passed to your application's main class. This
-        |                              option can be specified multiple times for multiple args.
-        |  --name NAME                 The name of your application (Default: 'Spark').
-        |  --jars JARS                 A comma-separated list of local jars to include on the
-        |                              driver classpath and that SparkContext.addJar will work
-        |                              with. Doesn't work on standalone with 'cluster' deploy mode.
-        |  --files FILES               Comma separated list of files to be placed in the working dir
-        |                              of each executor.
+        |  --deploy-mode DEPLOY_MODE   Where to run the driver program: either "client" to run
+        |                              on the local machine, or "cluster" to run inside cluster.
+        |  --class CLASS_NAME          Your application's main class (for Java / Scala apps).
+        |  --name NAME                 A name of your application.
+        |  --jars JARS                 Comma-separated list of local jars to include on the driver
+        |                              and executor classpaths.
+        |  --py-files PY_FILES         Comma-separated list of .zip or .egg files to place on the
+        |                              PYTHONPATH for Python apps.
+        |  --files FILES               Comma-separated list of files to be placed in the working
+        |                              directory of each executor.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
         |
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
-        |  --driver-java-options       Extra Java options to pass to the driver
-        |  --driver-library-path       Extra library path entries to pass to the driver
-        |  --driver-class-path         Extra class path entries to pass to the driver
+        |  --driver-java-options       Extra Java options to pass to the driver.
+        |  --driver-library-path       Extra library path entries to pass to the driver.
+        |  --driver-class-path         Extra class path entries to pass to the driver. Note that
+        |                              jars added with --jars are automatically included in the
+        |                              classpath.
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |
@@ -310,10 +352,10 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         |
         | YARN-only:
         |  --executor-cores NUM        Number of cores per executor (Default: 1).
-        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: 'default').
-        |  --num-executors NUM         Number of executors to (Default: 2).
+        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
+        |  --num-executors NUM         Number of executors to launch (Default: 2).
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
-        |                              working dir of each executor.""".stripMargin
+        |                              working directory of each executor.""".stripMargin
     )
     SparkSubmit.exitFn()
   }
@@ -332,6 +374,6 @@ object SparkSubmitArguments {
         val message = s"Failed when loading Spark properties file ${file.getName}"
         throw new SparkException(message, e)
     }
-    properties.stringPropertyNames().toSeq.map(k => (k, properties(k)))
+    properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
   }
 }

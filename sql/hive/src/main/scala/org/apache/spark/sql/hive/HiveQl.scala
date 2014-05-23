@@ -233,6 +233,11 @@ private[hive] object HiveQl {
       }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
+      case e: NotImplementedError => sys.error(
+        s"""
+          |Unsupported language features in query: $sql
+          |${dumpTree(getAst(sql))}
+        """.stripMargin)
     }
   }
 
@@ -347,7 +352,11 @@ private[hive] object HiveQl {
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     // Just fake explain for any of the native commands.
     case Token("TOK_EXPLAIN", explainArgs) if nativeCommands contains explainArgs.head.getText =>
-      NoRelation
+      ExplainCommand(NoRelation)
+    // Create tables aren't native commands due to CTAS queries, but we still don't need to
+    // explain them.
+    case Token("TOK_EXPLAIN", explainArgs) if explainArgs.head.getText == "TOK_CREATETABLE" =>
+      ExplainCommand(NoRelation)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: _ :: Nil =
@@ -861,6 +870,17 @@ private[hive] object HiveQl {
       IsNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("IN", Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
+    case Token("TOK_FUNCTION",
+           Token("between", Nil) ::
+           Token("KW_FALSE", Nil) ::
+           target ::
+           minValue ::
+           maxValue :: Nil) =>
+
+      val targetExpression = nodeToExpr(target)
+      And(
+        GreaterThanOrEqual(targetExpression, nodeToExpr(minValue)),
+        LessThanOrEqual(targetExpression, nodeToExpr(maxValue)))
 
     /* Boolean Logic */
     case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))

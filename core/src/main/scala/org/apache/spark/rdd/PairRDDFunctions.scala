@@ -52,11 +52,12 @@ import org.apache.spark.util.SerializableHyperLogLog
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
-class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
+class PairRDDFunctions[K, V](self: RDD[(K, V)])
+    (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
   extends Logging
   with SparkHadoopMapReduceUtil
-  with Serializable {
-
+  with Serializable
+{
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
@@ -77,7 +78,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       mapSideCombine: Boolean = true,
       serializer: Serializer = null): RDD[(K, C)] = {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
-    if (getKeyClass().isArray) {
+    if (keyClass.isArray) {
       if (mapSideCombine) {
         throw new SparkException("Cannot use map-side combining with array keys.")
       }
@@ -170,7 +171,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    */
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = {
 
-    if (getKeyClass().isArray) {
+    if (keyClass.isArray) {
       throw new SparkException("reduceByKeyLocally() does not support array keys")
     }
 
@@ -216,7 +217,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Return approximate number of distinct values for each key in this RDD.
    * The accuracy of approximation can be controlled through the relative standard deviation
    * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. Uses the provided
+   * more accurate counts but increase the memory footprint and vice versa. Uses the provided
    * Partitioner to partition the output RDD.
    */
   def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
@@ -231,7 +232,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Return approximate number of distinct values for each key in this RDD.
    * The accuracy of approximation can be controlled through the relative standard deviation
    * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. HashPartitions the
+   * more accurate counts but increase the memory footprint and vice versa. HashPartitions the
    * output RDD into numPartitions.
    *
    */
@@ -243,7 +244,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Return approximate number of distinct values for each key this RDD.
    * The accuracy of approximation can be controlled through the relative standard deviation
    * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. The default value of
+   * more accurate counts but increase the memory footprint and vice versa. The default value of
    * relativeSD is 0.05. Hash-partitions the output RDD using the existing partitioner/parallelism
    * level.
    */
@@ -263,6 +264,10 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   /**
    * Group the values for each key in the RDD into a single sequence. Allows controlling the
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
+   *
+   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * each key, using [[PairRDDFunctions.reduceByKey]] or [[PairRDDFunctions.combineByKey]]
+   * will provide much better performance.
    */
   def groupByKey(partitioner: Partitioner): RDD[(K, Iterable[V])] = {
     // groupByKey shouldn't use map side combine because map side combine does not
@@ -279,6 +284,10 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   /**
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with into `numPartitions` partitions.
+   *
+   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * each key, using [[PairRDDFunctions.reduceByKey]] or [[PairRDDFunctions.combineByKey]]
+   * will provide much better performance.
    */
   def groupByKey(numPartitions: Int): RDD[(K, Iterable[V])] = {
     groupByKey(new HashPartitioner(numPartitions))
@@ -288,10 +297,14 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Return a copy of the RDD partitioned using the specified partitioner.
    */
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = {
-    if (getKeyClass().isArray && partitioner.isInstanceOf[HashPartitioner]) {
+    if (keyClass.isArray && partitioner.isInstanceOf[HashPartitioner]) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
-    if (self.partitioner == partitioner) self else new ShuffledRDD[K, V, (K, V)](self, partitioner)
+    if (self.partitioner == Some(partitioner)) {
+      self
+    } else {
+      new ShuffledRDD[K, V, (K, V)](self, partitioner)
+    }
   }
 
   /**
@@ -360,6 +373,10 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   /**
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with the existing partitioner/parallelism level.
+   *
+   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * each key, using [[PairRDDFunctions.reduceByKey]] or [[PairRDDFunctions.combineByKey]]
+   * will provide much better performance,
    */
   def groupByKey(): RDD[(K, Iterable[V])] = {
     groupByKey(defaultPartitioner(self))
@@ -458,7 +475,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    */
   def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W]))]  = {
-    if (partitioner.isInstanceOf[HashPartitioner] && getKeyClass().isArray) {
+    if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
@@ -473,7 +490,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    */
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
-    if (partitioner.isInstanceOf[HashPartitioner] && getKeyClass().isArray) {
+    if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
@@ -573,7 +590,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * supporting the key and value types K and V in this RDD.
    */
   def saveAsHadoopFile[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
-    saveAsHadoopFile(path, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]])
+    saveAsHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
   /**
@@ -584,7 +601,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   def saveAsHadoopFile[F <: OutputFormat[K, V]](
       path: String, codec: Class[_ <: CompressionCodec]) (implicit fm: ClassTag[F]) {
     val runtimeClass = fm.runtimeClass
-    saveAsHadoopFile(path, getKeyClass, getValueClass, runtimeClass.asInstanceOf[Class[F]], codec)
+    saveAsHadoopFile(path, keyClass, valueClass, runtimeClass.asInstanceOf[Class[F]], codec)
   }
 
   /**
@@ -592,7 +609,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * (mapreduce.OutputFormat) object supporting the key and value types K and V in this RDD.
    */
   def saveAsNewAPIHadoopFile[F <: NewOutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
-    saveAsNewAPIHadoopFile(path, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]])
+    saveAsNewAPIHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
   /**
@@ -782,7 +799,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    */
   def values: RDD[V] = self.map(_._2)
 
-  private[spark] def getKeyClass() = implicitly[ClassTag[K]].runtimeClass
+  private[spark] def keyClass: Class[_] = kt.runtimeClass
 
-  private[spark] def getValueClass() = implicitly[ClassTag[V]].runtimeClass
+  private[spark] def valueClass: Class[_] = vt.runtimeClass
+
+  private[spark] def keyOrdering: Option[Ordering[K]] = Option(ord)
 }

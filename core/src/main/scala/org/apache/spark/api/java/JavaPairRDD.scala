@@ -39,6 +39,7 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.{OrderedRDDFunctions, RDD}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
                        (implicit val kClassTag: ClassTag[K], implicit val vClassTag: ClassTag[V])
@@ -119,7 +120,13 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Int): JavaPairRDD[K, V] =
+  def sample(withReplacement: Boolean, fraction: Double): JavaPairRDD[K, V] =
+    sample(withReplacement, fraction, Utils.random.nextLong)
+    
+  /**
+   * Return a sampled subset of this RDD.
+   */
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.sample(withReplacement, fraction, seed))
 
   /**
@@ -256,6 +263,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Group the values for each key in the RDD into a single sequence. Allows controlling the
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
+   *
+   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * will provide much better performance.
    */
   def groupByKey(partitioner: Partitioner): JavaPairRDD[K, JIterable[V]] =
     fromRDD(groupByResultToJava(rdd.groupByKey(partitioner)))
@@ -263,6 +274,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with into `numPartitions` partitions.
+   *
+   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * will provide much better performance.
    */
   def groupByKey(numPartitions: Int): JavaPairRDD[K, JIterable[V]] =
     fromRDD(groupByResultToJava(rdd.groupByKey(numPartitions)))
@@ -373,6 +388,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with the existing partitioner/parallelism level.
+   *
+   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * will provide much better performance.
    */
   def groupByKey(): JavaPairRDD[K, JIterable[V]] =
     fromRDD(groupByResultToJava(rdd.groupByKey()))

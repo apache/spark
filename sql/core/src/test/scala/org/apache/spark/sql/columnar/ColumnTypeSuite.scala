@@ -21,11 +21,12 @@ import java.nio.ByteBuffer
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
-class ColumnTypeSuite extends FunSuite {
+class ColumnTypeSuite extends FunSuite with Logging {
   val DEFAULT_BUFFER_SIZE = 512
 
   test("defaultSize") {
@@ -58,7 +59,7 @@ class ColumnTypeSuite extends FunSuite {
     checkActualSize(DOUBLE,  Double.MaxValue, 8)
     checkActualSize(FLOAT,   Float.MaxValue,  4)
     checkActualSize(BOOLEAN, true,            1)
-    checkActualSize(STRING,  "hello",         4 + 5)
+    checkActualSize(STRING,  "hello",         4 + "hello".getBytes("utf-8").length)
 
     val binary = Array.fill[Byte](4)(0: Byte)
     checkActualSize(BINARY,  binary, 4 + 4)
@@ -91,14 +92,16 @@ class ColumnTypeSuite extends FunSuite {
   testNativeColumnType[StringType.type](
     STRING,
     (buffer: ByteBuffer, string: String) => {
-      val bytes = string.getBytes()
-      buffer.putInt(bytes.length).put(string.getBytes)
+
+      val bytes = string.getBytes("utf-8")
+      buffer.putInt(bytes.length)
+      buffer.put(bytes)
     },
     (buffer: ByteBuffer) => {
       val length = buffer.getInt()
       val bytes = new Array[Byte](length)
-      buffer.get(bytes, 0, length)
-      new String(bytes)
+      buffer.get(bytes)
+      new String(bytes, "utf-8")
     })
 
   testColumnType[BinaryType.type, Array[Byte]](
@@ -161,9 +164,13 @@ class ColumnTypeSuite extends FunSuite {
 
       buffer.rewind()
       seq.foreach { expected =>
+        logger.info("buffer = " + buffer + ", expected = " + expected)
+        val extracted = columnType.extract(buffer)
         assert(
-          expected === columnType.extract(buffer),
-          "Extracted value didn't equal to the original one")
+          expected === extracted,
+          "Extracted value didn't equal to the original one. " +
+            hexDump(expected) + " != " + hexDump(extracted) +
+            ", buffer = " + dumpBuffer(buffer.duplicate().rewind().asInstanceOf[ByteBuffer]))
       }
     }
 
@@ -178,5 +185,29 @@ class ColumnTypeSuite extends FunSuite {
           "Extracted value didn't equal to the original one")
       }
     }
+  }
+
+  private def hexDump(value: Any): String = {
+    if (value.isInstanceOf[String]) {
+      val sb = new StringBuilder()
+      for (ch <- value.asInstanceOf[String].toCharArray) {
+        sb.append(Integer.toHexString(ch & 0xffff)).append(' ')
+      }
+      if (! sb.isEmpty) sb.setLength(sb.length - 1)
+      sb.toString()
+    } else {
+      // for now ..
+      hexDump(value.toString)
+    }
+  }
+
+  private def dumpBuffer(buff: ByteBuffer): Any = {
+    val sb = new StringBuilder()
+    while (buff.hasRemaining) {
+      val b = buff.get()
+      sb.append(Integer.toHexString(b & 0xff)).append(' ')
+    }
+    if (! sb.isEmpty) sb.setLength(sb.length - 1)
+    sb.toString()
   }
 }

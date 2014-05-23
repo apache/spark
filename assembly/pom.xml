@@ -40,14 +40,6 @@
     <deb.user>root</deb.user>
   </properties>
 
-  <repositories>
-    <!-- A repository in the local filesystem for the Py4J JAR, which is not in Maven central -->
-    <repository>
-      <id>lib</id>
-      <url>file://${project.basedir}/lib</url>
-    </repository>
-  </repositories>
-
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -84,11 +76,6 @@
       <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <dependency>
-      <groupId>net.sf.py4j</groupId>
-      <artifactId>py4j</artifactId>
-      <version>0.8.1</version>
-    </dependency>
   </dependencies>
 
   <build>
@@ -109,6 +96,7 @@
             <filter>
               <artifact>*:*</artifact>
               <excludes>
+                <exclude>org/datanucleus/**</exclude>
                 <exclude>META-INF/*.SF</exclude>
                 <exclude>META-INF/*.DSA</exclude>
                 <exclude>META-INF/*.RSA</exclude>
@@ -134,6 +122,8 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
                   <resource>log4j.properties</resource>
                 </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
               </transformers>
             </configuration>
           </execution>

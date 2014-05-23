@@ -94,7 +94,7 @@ class UISuite extends FunSuite {
     }
   }
 
-  test("jetty port increases under contention") {
+  test("jetty selects different port under contention") {
     val startPort = 4040
     val server = new Server(startPort)
 
@@ -110,8 +110,9 @@ class UISuite extends FunSuite {
     // Allow some wiggle room in case ports on the machine are under contention
     val boundPort1 = serverInfo1.boundPort
     val boundPort2 = serverInfo2.boundPort
-    assert(boundPort1 > startPort && boundPort1 < startPort + 10)
-    assert(boundPort2 > boundPort1 && boundPort2 < boundPort1 + 10)
+    assert(boundPort1 != startPort)
+    assert(boundPort2 != startPort)
+    assert(boundPort1 != boundPort2)
   }
 
   test("jetty binds to port 0 correctly") {

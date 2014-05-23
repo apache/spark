@@ -33,8 +33,8 @@ private[spark] object TestClient {
       System.exit(0)
     }
 
-    def dead() {
-      logInfo("Could not connect to master")
+    def dead(reason: String) {
+      logInfo("Application died with error: " + reason)
       System.exit(0)
     }
 

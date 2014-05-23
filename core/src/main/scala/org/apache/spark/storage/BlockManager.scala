@@ -46,11 +46,12 @@ private[spark] class BlockManager(
     val master: BlockManagerMaster,
     val defaultSerializer: Serializer,
     maxMemory: Long,
-    val conf: SparkConf,
+    val _conf: SparkConf,
     securityManager: SecurityManager,
     mapOutputTracker: MapOutputTracker)
   extends Logging {
 
+  def conf = _conf
   val shuffleBlockManager = new ShuffleBlockManager(this)
   val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
     conf.get("spark.local.dir",  System.getProperty("java.io.tmpdir")))
@@ -154,7 +155,7 @@ private[spark] class BlockManager(
     BlockManagerWorker.startBlockManagerWorker(this)
     if (!BlockManager.getDisableHeartBeatsForTesting(conf)) {
       heartBeatTask = actorSystem.scheduler.schedule(0.seconds, heartBeatFrequency.milliseconds) {
-        heartBeat()
+        Utils.tryOrExit { heartBeat() }
       }
     }
   }
@@ -281,7 +282,9 @@ private[spark] class BlockManager(
       val onDiskSize = status.diskSize
       master.updateBlockInfo(
         blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inTachyonSize)
-    } else true
+    } else {
+      true
+    }
   }
 
   /**
@@ -676,7 +679,7 @@ private[spark] class BlockManager(
               tachyonStore.putValues(blockId, iterator, level, false)
             case ArrayBufferValues(array) =>
               tachyonStore.putValues(blockId, array, level, false)
-            case ByteBufferValues(bytes) => 
+            case ByteBufferValues(bytes) =>
               bytes.rewind()
               tachyonStore.putBytes(blockId, bytes, level)
           }
@@ -695,7 +698,7 @@ private[spark] class BlockManager(
               diskStore.putValues(blockId, iterator, level, askForBytes)
             case ArrayBufferValues(array) =>
               diskStore.putValues(blockId, array, level, askForBytes)
-            case ByteBufferValues(bytes) => 
+            case ByteBufferValues(bytes) =>
               bytes.rewind()
               diskStore.putBytes(blockId, bytes, level)
           }
@@ -1021,6 +1024,8 @@ private[spark] class BlockManager(
       heartBeatTask.cancel()
     }
     connectionManager.stop()
+    shuffleBlockManager.stop()
+    diskBlockManager.stop()
     actorSystem.stop(slaveActor)
     blockInfo.clear()
     memoryStore.clear()

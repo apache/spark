@@ -28,7 +28,7 @@ private[sql] trait ColumnBuilder {
   /**
    * Initializes with an approximate lower bound on the expected number of elements in this column.
    */
-  def initialize(initialSize: Int, columnName: String = "")
+  def initialize(initialSize: Int, columnName: String = "", useCompression: Boolean = false)
 
   /**
    * Appends `row(ordinal)` to the column builder.
@@ -55,7 +55,11 @@ private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
 
   protected var buffer: ByteBuffer = _
 
-  override def initialize(initialSize: Int, columnName: String = "") = {
+  override def initialize(
+      initialSize: Int,
+      columnName: String = "",
+      useCompression: Boolean = false) = {
+
     val size = if (initialSize == 0) DEFAULT_INITIAL_BUFFER_SIZE else initialSize
     this.columnName = columnName
 
@@ -130,7 +134,12 @@ private[sql] object ColumnBuilder {
     }
   }
 
-  def apply(typeId: Int, initialSize: Int = 0, columnName: String = ""): ColumnBuilder = {
+  def apply(
+      typeId: Int,
+      initialSize: Int = 0,
+      columnName: String = "",
+      useCompression: Boolean = false): ColumnBuilder = {
+
     val builder = (typeId match {
       case INT.typeId     => new IntColumnBuilder
       case LONG.typeId    => new LongColumnBuilder
@@ -144,7 +153,7 @@ private[sql] object ColumnBuilder {
       case GENERIC.typeId => new GenericColumnBuilder
     }).asInstanceOf[ColumnBuilder]
 
-    builder.initialize(initialSize, columnName)
+    builder.initialize(initialSize, columnName, useCompression)
     builder
   }
 }

@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.types.{BooleanType, StringType, TimestampType}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.types.BooleanType
+
 
 object InterpretedPredicate {
   def apply(expression: Expression): (Row => Boolean) = {
@@ -37,10 +38,26 @@ trait Predicate extends Expression {
 }
 
 trait PredicateHelper {
-  def splitConjunctivePredicates(condition: Expression): Seq[Expression] = condition match {
-    case And(cond1, cond2) => splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
-    case other => other :: Nil
+  protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
+    condition match {
+      case And(cond1, cond2) =>
+        splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
+      case other => other :: Nil
+    }
   }
+
+  /**
+   * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
+   * can be used to determine when is is acceptable to move expression evaluation within a query
+   * plan.
+   *
+   * For example consider a join between two relations R(a, b) and S(c, d).
+   *
+   * `canEvaluate(Equals(a,b), R)` returns `true` where as `canEvaluate(Equals(a,c), R)` returns
+   * `false`.
+   */
+  protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
+    expr.references.subsetOf(plan.outputSet)
 }
 
 abstract class BinaryPredicate extends BinaryExpression with Predicate {
@@ -48,8 +65,7 @@ abstract class BinaryPredicate extends BinaryExpression with Predicate {
   def nullable = left.nullable || right.nullable
 }
 
-case class Not(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
-  def references = child.references
+case class Not(child: Expression) extends UnaryExpression with Predicate {
   override def foldable = child.foldable
   def nullable = child.nullable
   override def toString = s"NOT $child"
@@ -82,13 +98,19 @@ case class And(left: Expression, right: Expression) extends BinaryPredicate {
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    val r = right.eval(input)
-    if (l == false || r == false) {
-      false
-    } else if (l == null || r == null ) {
-      null
+    if (l == false) {
+       false
     } else {
-      true
+      val r = right.eval(input)
+      if (r == false) {
+        false
+      } else {
+        if (l != null && r != null) {
+          true
+        } else {
+          null
+        }
+      }
     }
   }
 }
@@ -98,13 +120,19 @@ case class Or(left: Expression, right: Expression) extends BinaryPredicate {
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    val r = right.eval(input)
-    if (l == true || r == true) {
+    if (l == true) {
       true
-    } else if (l == null || r == null) {
-      null
     } else {
-      false
+      val r = right.eval(input)
+      if (r == true) {
+        true
+      } else {
+        if (l != null && r != null) {
+          false
+        } else {
+          null
+        }
+      }
     }
   }
 }
@@ -117,8 +145,12 @@ case class Equals(left: Expression, right: Expression) extends BinaryComparison 
   def symbol = "="
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    val r = right.eval(input)
-    if (l == null || r == null) null else l == r
+    if (l == null) {
+      null
+    } else {
+      val r = right.eval(input)
+      if (r == null) null else l == r
+    }
   }
 }
 
@@ -146,7 +178,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     extends Expression {
 
   def children = predicate :: trueValue :: falseValue :: Nil
-  def nullable = trueValue.nullable || falseValue.nullable
+  override def nullable = trueValue.nullable || falseValue.nullable
   def references = children.flatMap(_.references).toSet
   override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
   def dataType = {
@@ -159,8 +191,9 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   }
 
   type EvaluatedType = Any
+
   override def eval(input: Row): Any = {
-    if (predicate.eval(input).asInstanceOf[Boolean]) {
+    if (true == predicate.eval(input)) {
       trueValue.eval(input)
     } else {
       falseValue.eval(input)
