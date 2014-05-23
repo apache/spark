@@ -162,7 +162,10 @@ class SparkContext(object):
         # with SparkContext.addFile, so we just need to add them
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
-                self._python_includes.append(os.path.basename(path))
+                file_name = os.path.basename(path)
+                file_server_directory = SparkFiles.getRootDirectory()
+                self._python_includes.append(file_name)
+                sys.path.append(os.path.join(file_server_directory, file_name))
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
