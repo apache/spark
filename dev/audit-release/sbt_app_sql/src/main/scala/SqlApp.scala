@@ -20,30 +20,28 @@ package main.scala
 import scala.collection.mutable.{ListBuffer, Queue}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming._
+import org.apache.spark.sql.SQLContext
 
-object SparkStreamingExample {
+case class Person(name: String, age: Int)
+
+object SparkSqlExample {
 
   def main(args: Array[String]) {
     val conf = sys.env.get("SPARK_AUDIT_MASTER") match {
-      case Some(master) => new SparkConf().setAppName("Simple Streaming App").setMaster(master)
-      case None => new SparkConf().setAppName("Simple Streaming App")
+      case Some(master) => new SparkConf().setAppName("Simple Sql App").setMaster(master)
+      case None => new SparkConf().setAppName("Simple Sql App")
     }
-    val ssc = new StreamingContext(conf, Seconds(1))
-    val seen = ListBuffer[RDD[Int]]()
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-    val rdd1 = ssc.sparkContext.makeRDD(1 to 100, 10)
-    val rdd2 = ssc.sparkContext.makeRDD(1 to 1000, 10)
-    val rdd3 = ssc.sparkContext.makeRDD(1 to 10000, 10)
-
-    val queue = Queue(rdd1, rdd2, rdd3)
-    val stream = ssc.queueStream(queue)
-
-    stream.foreachRDD(rdd => seen += rdd)
-    ssc.start()
-    Thread.sleep(5000)
+    import sqlContext._
+    val people = sc.makeRDD(1 to 100, 10).map(x => Person(s"Name$x", x))
+    people.registerAsTable("people")
+    val teenagers = sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+    val teenagerNames = teenagers.map(t => "Name: " + t(0)).collect()
+    teenagerNames.foreach(println)
 
     def test(f: => Boolean, failureMsg: String) = {
       if (!f) {
@@ -51,13 +49,9 @@ object SparkStreamingExample {
         System.exit(-1)
       }
     }
-
-    val rddCounts = seen.map(rdd => rdd.count()).filter(_ > 0)
-    test(rddCounts.length == 3, "Did not collect three RDD's from stream")
-    test(rddCounts.toSet == Set(100, 1000, 10000), "Did not find expected streams")
-
+    
+    test(teenagerNames.size == 7, "Unexpected number of selected elements: " + teenagerNames)
     println("Test succeeded")
-
-    ssc.stop()
+    sc.stop()
   }
 }

@@ -93,9 +93,12 @@ original_dir = os.getcwd()
 # For each of these modules, we'll test an 'empty' application in sbt and 
 # maven that links against them. This will catch issues with messed up
 # dependencies within those projects.
-modules = ["spark-core", "spark-bagel", "spark-mllib", "spark-streaming", "spark-repl", 
-           "spark-graphx", "spark-streaming-flume", "spark-streaming-kafka", 
-           "spark-streaming-mqtt", "spark-streaming-twitter", "spark-streaming-zeromq"]
+modules = [
+  "spark-core", "spark-bagel", "spark-mllib", "spark-streaming", "spark-repl",
+  "spark-graphx", "spark-streaming-flume", "spark-streaming-kafka",
+  "spark-streaming-mqtt", "spark-streaming-twitter", "spark-streaming-zeromq",
+  "spark-catalyst", "spark-sql", "spark-hive"
+]
 modules = map(lambda m: "%s_%s" % (m, SCALA_BINARY_VERSION), modules)
 
 # Check for directories that might interfere with tests
@@ -122,7 +125,7 @@ for module in modules:
 os.chdir(original_dir)
 
 # SBT application tests
-for app in ["sbt_app_core", "sbt_app_graphx", "sbt_app_streaming"]:
+for app in ["sbt_app_core", "sbt_app_graphx", "sbt_app_streaming", "sbt_app_sql", "sbt_app_hive"]:
   os.chdir(app)
   ret = run_cmd("sbt clean run", exit_on_failure=False)
   test(ret == 0, "sbt application (%s)" % app)
