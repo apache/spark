@@ -100,7 +100,8 @@ JAVA_CMD="$JAVA_HOME"/bin/java
 JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
 if [[ ! "$JAVA_VERSION" =~ "1.6" && -z "$SKIP_JAVA_TEST" ]]; then
   echo "***NOTE***: JAVA_HOME is not set to a JDK 6 installation. The resulting"
-  echo "            distribution will not support Java 6. See SPARK-1703."
+  echo "            distribution may not work well with PySpark and will not run"
+  echo "            with Java 6 (See SPARK-1703 and SPARK-1911)."
   echo "            This test can be disabled by adding --skip-java-test."
   echo "Output from 'java -version' was:"
   echo "$JAVA_VERSION"
