@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
@@ -58,6 +59,12 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
   @volatile private var applications: mutable.LinkedHashMap[String, FsApplicationHistoryInfo]
     = new mutable.LinkedHashMap()
+
+  // Constants used to parse Spark 1.0.0 log directories.
+  private[history] val LOG_PREFIX = "EVENT_LOG_"
+  private[history] val SPARK_VERSION_PREFIX = "SPARK_VERSION_"
+  private[history] val COMPRESSION_CODEC_PREFIX = "COMPRESSION_CODEC_"
+  private[history] val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
 
   /**
    * A background thread that periodically checks for event log updates on disk.
@@ -98,8 +105,12 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
 
     checkForLogs()
-    logCheckingThread.setDaemon(true)
-    logCheckingThread.start()
+
+    // Treat 0 as "disable the background thread", mostly for testing.
+    if (UPDATE_INTERVAL_MS > 0) {
+      logCheckingThread.setDaemon(true)
+      logCheckingThread.start()
+    }
   }
 
   override def getListing() = applications.values
@@ -142,13 +153,23 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    * Tries to reuse as much of the data already in memory as possible, by not reading
    * applications that haven't been updated since last time the logs were checked.
    */
-  private def checkForLogs() = {
+  private[history] def checkForLogs() = {
     lastLogCheckTimeMs = getMonotonicTimeMs()
     logDebug("Checking for logs. Time is now %d.".format(lastLogCheckTimeMs))
     try {
       val matcher = EventLoggingListener.LOG_FILE_NAME_REGEX
-      val logInfos = fs.listStatus(new Path(logDir)).filter {
-        entry => entry.isFile() && matcher.pattern.matcher(entry.getPath()getName()).matches() }
+      val logInfos = fs.listStatus(new Path(logDir)).filter { entry =>
+        if (entry.isDir()) {
+          fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
+        } else {
+          try {
+            val matcher(version, codecName, inprogress) = entry.getPath().getName()
+            inprogress == null
+          } catch {
+            case e: Exception => false
+          }
+        }
+      }
 
       val currentApps = Map[String, ApplicationHistoryInfo](
         appList.map(app => (app.id -> app)):_*)
@@ -161,7 +182,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         val curr = currentApps.getOrElse(log.getPath().getName(), null)
         if (curr == null || curr.lastUpdated < log.getModificationTime()) {
           try {
-            newApps += loadAppInfo(log, false)._1
+            val info = loadAppInfo(log, false)._1
+            if (info != null) {
+              newApps += info
+            }
           } catch {
             case e: Exception => logError(s"Failed to load app info from directory $log.")
           }
@@ -213,10 +237,27 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    * @return A 2-tuple `(app info, ui)`. `ui` will be null if `renderUI` is false.
    */
   private def loadAppInfo(log: FileStatus, renderUI: Boolean): (ApplicationHistoryInfo, SparkUI) = {
-    val elogInfo = EventLoggingListener.parseLoggingInfo(log.getPath())
-    val appId = elogInfo.path.getName
+    val elogInfo = if (log.isFile()) {
+        EventLoggingListener.parseLoggingInfo(log.getPath())
+      } else {
+        loadOldLoggingInfo(log.getPath())
+      }
 
-    val replayBus = new ReplayListenerBus(log.getPath(), fs, elogInfo.compressionCodec)
+    if (elogInfo == null) {
+      return (null, null)
+    }
+
+    val (logFile, lastUpdated) = if (log.isFile()) {
+        (elogInfo.path, log.getModificationTime())
+      } else {
+        // For old-style log directories, need to find the actual log file.
+        val status = fs.listStatus(elogInfo.path)
+          .filter(e => e.getPath().getName().startsWith(LOG_PREFIX))(0)
+        (status.getPath(), status.getModificationTime())
+      }
+
+    val appId = elogInfo.path.getName
+    val replayBus = new ReplayListenerBus(logFile, fs, elogInfo.compressionCodec)
     val appListener = new ApplicationEventListener
     replayBus.addListener(appListener)
 
@@ -235,7 +276,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       appListener.appName,
       appListener.startTime,
       appListener.endTime,
-      log.getModificationTime(),
+      lastUpdated,
       appListener.sparkUser)
 
     if (ui != null) {
@@ -244,6 +285,52 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       ui.getSecurityManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
     }
     (appInfo, ui)
+  }
+
+  /**
+   * Load the app log information from a Spark 1.0.0 log directory, for backwards compatibility.
+   * This assumes that the log directory contains a single event log file, which is the case for
+   * directories generated by the code in that release.
+   */
+  private[history] def loadOldLoggingInfo(dir: Path): EventLoggingInfo = {
+    val children = fs.listStatus(dir)
+    var eventLogPath: Path = null
+    var sparkVersion: String = null
+    var codecName: String = null
+    var applicationCompleted: Boolean = false
+
+    children.foreach(child => child.getPath().getName() match {
+      case name if name.startsWith(LOG_PREFIX) =>
+        eventLogPath = child.getPath()
+
+      case ver if ver.startsWith(SPARK_VERSION_PREFIX) =>
+        sparkVersion = ver.substring(SPARK_VERSION_PREFIX.length())
+
+      case codec if codec.startsWith(COMPRESSION_CODEC_PREFIX) =>
+        codecName = codec.substring(COMPRESSION_CODEC_PREFIX.length())
+
+      case complete if complete == APPLICATION_COMPLETE =>
+        applicationCompleted = true
+
+      case _ =>
+      })
+
+    val codec = try {
+        if (codecName != null) {
+          Some(CompressionCodec.createCodec(conf, codecName))
+        } else None
+      } catch {
+        case e: Exception =>
+          logError(s"Unknown compression codec $codecName.")
+        return null
+      }
+
+    if (eventLogPath == null || sparkVersion == null) {
+      logInfo(s"$dir is not a Spark application log directory.")
+      return null
+    }
+
+    EventLoggingInfo(dir, sparkVersion, codec, applicationCompleted)
   }
 
   /** Returns the system's mononotically increasing time. */
