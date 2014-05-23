@@ -19,6 +19,7 @@ package main.scala
 
 import scala.util.Try
 
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 
@@ -30,7 +31,6 @@ object SimpleApp {
     }
     val logFile = "input.txt"
     val sc = new SparkContext(conf)
-    SparkContext.jarOfClass(this.getClass).foreach(sc.addJar)
     val logData = sc.textFile(logFile, 2).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
     val numBs = logData.filter(line => line.contains("b")).count()
