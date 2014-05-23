@@ -329,8 +329,21 @@ private[spark] class BlockManager(
    * never deletes (recent) items.
    */
   def getLocalFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    diskStore.getValues(blockId, serializer).orElse(
-      sys.error("Block " + blockId + " not found on disk, though it should be"))
+    class LazyProxyIterator(f: => Iterator[Any]) extends Iterator[Any] {
+
+      lazy val proxy = f
+
+      def hasNext: Boolean = proxy.hasNext
+
+      def next(): Any = proxy.next()
+    }
+
+    if (diskStore.contains(blockId)) {
+      Some(new LazyProxyIterator(diskStore.getValues(blockId, serializer).get))
+    } else {
+      sys.error("Block " + blockId + " not found on disk, though it should be")
+      None
+    }
   }
 
   /**
