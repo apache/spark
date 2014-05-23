@@ -249,6 +249,7 @@ object ShuffleBlockManager {
 
     /** Returns the FileSegment associated with the given map task, or None if no entry exists. */
     def getFileSegmentFor(mapId: Int, reducerId: Int): Option[FileSegment] = {
+      //TODO: potential issue here when map and reduce stages overlap
       val file = files(reducerId)
       val blockOffsets = blockOffsetsByReducer(reducerId)
       val index = mapIdToIndex.getOrElse(mapId, -1)

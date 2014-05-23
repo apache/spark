@@ -369,7 +369,7 @@ object BlockFetcherIterator {
     //get the updated map output
     private def updateStatuses() {
       logInfo("Trying to update map statuses for reduceId "+reduceId+" ---lirui")
-      mapOutputTracker.updateMapStatusesForShuffle(shuffleId)
+      mapOutputTracker.clearOutdatedMapStatuses(shuffleId)
       statuses = mapOutputTracker.getServerStatuses(shuffleId, reduceId)
     }
 

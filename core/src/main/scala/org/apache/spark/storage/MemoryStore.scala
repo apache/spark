@@ -154,7 +154,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * size must also be passed by the caller.
    *
    * Lock on the object putLock to ensure that all the put requests and its associated block
-   * dropping is done by only on thread at a time. Otherwise while one thread is dropping
+   * dropping is done by only one thread at a time. Otherwise while one thread is dropping
    * blocks to free memory for one block, another thread may use up the freed space for
    * another block.
    *

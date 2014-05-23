@@ -247,7 +247,7 @@ class DAGScheduler(
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId, callSite)
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
-      val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
+      val locs = MapOutputTracker.deserializeMapStatuses(serLocs)._1
       for (i <- 0 until locs.size) {
         stage.outputLocs(i) = Option(locs(i)).toList   // locs(i) will be null if missing
       }
@@ -923,7 +923,9 @@ class DAGScheduler(
                     val preStartedStage = waitingStages.head
                     logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
                     //register map output finished so far
-                    mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId, stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray, true)
+                    mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
+                      stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+                      changeEpoch = true, isPartial = true)
                     waitingStages -= preStartedStage
                     runningStages += preStartedStage
                     dependantStagePreStarted += stage
