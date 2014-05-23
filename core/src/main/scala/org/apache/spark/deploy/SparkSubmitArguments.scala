@@ -118,7 +118,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
       } catch {
         case e: Exception =>
-          SparkSubmit.printErrorAndExit("Failed to read JAR: " + primaryResource)
+          SparkSubmit.printErrorAndExit("Cannot load main class from JAR: " + primaryResource)
           return
       }
     }
@@ -332,8 +332,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |  --name NAME                 A name of your application.
         |  --jars JARS                 Comma-separated list of local jars to include on the driver
         |                              and executor classpaths.
-        |  --py-files PY_FILES         Comma-separated list of .zip or .egg files to place on the
-        |                              PYTHONPATH for Python apps.
+        |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
+        |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
