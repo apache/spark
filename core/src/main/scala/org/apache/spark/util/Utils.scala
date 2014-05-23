@@ -1182,6 +1182,9 @@ private[spark] object Utils extends Logging {
     val windowsDrive = "([a-zA-Z])".r
 
     val uri = new URI(formattedPath)
+    if (uri.getPath == null) {
+      throw new IllegalArgumentException(s"Given path is malformed: $uri")
+    }
     uri.getScheme match {
       case windowsDrive(d) if windows =>
         new URI("file:/" + uri.toString.stripPrefix("/"))

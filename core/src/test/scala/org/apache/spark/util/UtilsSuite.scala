@@ -188,14 +188,17 @@ class UtilsSuite extends FunSuite {
     assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
+    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo") }
+    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo:baby") }
 
     // Test resolving comma-delimited paths
     assert(Utils.resolveURIs("jar1,jar2") === s"file:$cwd/jar1,file:$cwd/jar2")
-    assert(Utils.resolveURIs("file:jar1,file:jar2") === "file:jar1,file:jar2")
-    assert(Utils.resolveURIs("hdfs:jar1,file:jar2,jar3") === s"hdfs:jar1,file:jar2,file:$cwd/jar3")
-    assert(Utils.resolveURIs("hdfs:jar1,file:jar2,jar3,jar4#jar5") ===
-      s"hdfs:jar1,file:jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
-    assert(Utils.resolveURIs("hdfs:jar1,file:jar2,jar3,C:\\pi.py#py.pi", testWindows = true) ===
-      s"hdfs:jar1,file:jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi")
+    assert(Utils.resolveURIs("file:/jar1,file:/jar2") === "file:/jar1,file:/jar2")
+    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3") ===
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
+    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3,jar4#jar5") ===
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
+    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi", testWindows = true) ===
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi")
   }
 }
