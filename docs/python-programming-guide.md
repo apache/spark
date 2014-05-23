@@ -141,6 +141,10 @@ conf = (SparkConf()
 sc = SparkContext(conf = conf)
 {% endhighlight %}
 
+`spark-submit` supports launching Python applications on standalone, Mesos or YARN clusters, through
+its `--master` argument. However, it currently requires the Python driver program to run on the local
+machine, not the cluster (i.e. the `--deploy-mode` parameter cannot be `cluster`).
+
 # SequenceFile and Hadoop InputFormats
 
 In addition to reading text files, PySpark supports reading Hadoop SequenceFile and arbitrary InputFormats.
@@ -213,11 +217,6 @@ transform that data on the Scala/Java side to something which can be handled by 
 Future support for 'wrapper' functions for keys/values that allows this to be written in Java/Scala,
 and called from Python, as well as support for writing data out as SequenceFile format
 and other OutputFormats, is forthcoming.
-
-`spark-submit` supports launching Python applications on standalone, Mesos or YARN clusters, through
-its `--master` argument. However, it currently requires the Python driver program to run on the local
-machine, not the cluster (i.e. the `--deploy-mode` parameter cannot be `cluster`).
-
 
 # API Docs
 
