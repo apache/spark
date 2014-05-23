@@ -1167,7 +1167,12 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /** Return the URI of the input path. If a relative path is given, assume it is local. */
+  /**
+   * Return a well-formed URI for the file described by a user input string.
+   *
+   * If the supplied path does not contain a scheme, or is a relative path, it will be
+   * converted into an absolute path with a file:// scheme.
+   */
   def resolveURI(path: String, testWindows: Boolean = false): URI = {
 
     // On Windows, file names cannot contain backslashes and colons,
@@ -1181,6 +1186,8 @@ private[spark] object Utils extends Logging {
       case windowsDrive(d) if windows =>
         new URI("file:/" + uri.toString.stripPrefix("/"))
       case null =>
+        // Preserve fragments for HDFS file name substitution (denoted by "#")
+        // For instance, in "abc.py#xyz.py", "xyz.py" is the name observed by the application
         val fragment = uri.getFragment
         val part = new File(uri.getPath).toURI
         new URI(part.getScheme, part.getPath, fragment)
@@ -1189,7 +1196,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  /** Resolves a comma-separated list of paths. */
+  /** Resolve a comma-separated list of paths. */
   def resolveURIs(paths: String, testWindows: Boolean = false): String = {
     if (paths == null || paths.trim.isEmpty) {
       ""
