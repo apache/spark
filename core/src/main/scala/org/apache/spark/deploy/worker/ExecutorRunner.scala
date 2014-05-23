@@ -67,6 +67,11 @@ private[spark] class ExecutorRunner(
     Runtime.getRuntime.addShutdownHook(shutdownHook)
   }
 
+  /**
+   * kill executor process, wait for exit and notify worker to update resource status
+   *
+   * @param message the exception message which caused the executor's death 
+   */
   private def killProcess(message: Option[String]) {
     if (process != null) {
       logInfo("Killing process!")
