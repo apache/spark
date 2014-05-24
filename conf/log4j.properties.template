@@ -1,5 +1,7 @@
-# Log INFO and above to stdout
+# Send logs to both stdout and stderr appenders
 log4j.rootCategory=INFO, stdout, stderr
+
+# Log INFO and above to stdout
 log4j.appender.stdout=org.apache.log4j.ConsoleAppender
 log4j.appender.stdout.target=System.out
 log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
