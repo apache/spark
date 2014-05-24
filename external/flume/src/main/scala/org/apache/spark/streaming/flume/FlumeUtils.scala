@@ -21,6 +21,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import java.net.InetSocketAddress
 
 object FlumeUtils {
   /**
@@ -72,8 +73,7 @@ object FlumeUtils {
   /**
    * Creates an input stream that is to be used with the Spark Sink deployed on a Flume agent.
    * This stream will poll the sink for data and will pull events as they are available.
-   * @param host The host on which the Flume agent is running
-   * @param port The port the Spark Sink is accepting connections on
+   * @param addresses List of InetSocketAddresses representing the hosts to connect to.
    * @param maxBatchSize The maximum number of events to be pulled from the Spark sink in a
    *                     single RPC call
    * @param parallelism Number of concurrent requests this stream should send to the sink. Note
@@ -83,21 +83,19 @@ object FlumeUtils {
    */
   def createPollingStream (
     ssc: StreamingContext,
-    host: String,
-    port: Int,
+    addresses: Seq[InetSocketAddress],
     maxBatchSize: Int = 100,
     parallelism: Int = 5,
     storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
   ): ReceiverInputDStream[SparkPollingEvent] = {
-    new FlumePollingInputDStream[SparkPollingEvent](ssc, host, port, maxBatchSize,
+    new FlumePollingInputDStream[SparkPollingEvent](ssc, addresses, maxBatchSize,
       parallelism, storageLevel)
   }
 
   /**
    * Creates an input stream that is to be used with the Spark Sink deployed on a Flume agent.
    * This stream will poll the sink for data and will pull events as they are available.
-   * @param host The host on which the Flume agent is running
-   * @param port The port the Spark Sink is accepting connections on
+   * @param addresses List of InetSocketAddresses representing the hosts to connect to.
    * @param maxBatchSize The maximum number of events to be pulled from the Spark sink in a
    *                     single RPC call
    * @param parallelism Number of concurrent requests this stream should send to the sink. Note
@@ -107,13 +105,12 @@ object FlumeUtils {
    */
   def createJavaPollingStream (
     ssc: StreamingContext,
-    host: String,
-    port: Int,
+    addresses: Seq[InetSocketAddress],
     maxBatchSize: Int = 100,
     parallelism: Int = 5,
     storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
   ): JavaReceiverInputDStream[SparkPollingEvent] = {
-    new FlumePollingInputDStream[SparkPollingEvent](ssc, host, port, maxBatchSize,
+    new FlumePollingInputDStream[SparkPollingEvent](ssc, addresses, maxBatchSize,
       parallelism, storageLevel)
   }
 }

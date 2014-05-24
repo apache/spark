@@ -32,11 +32,11 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import java.io.{ObjectOutput, ObjectInput, Externalizable}
 import java.nio.ByteBuffer
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 
 class FlumePollingInputDStream[T: ClassTag](
   @transient ssc_ : StreamingContext,
-  val host: String,
-  val port: Int,
+  val addresses: Seq[InetSocketAddress],
   val maxBatchSize: Int,
   val parallelism: Int,
   storageLevel: StorageLevel
@@ -47,30 +47,44 @@ class FlumePollingInputDStream[T: ClassTag](
    * of a NetworkInputDStream.
    */
   override def getReceiver(): Receiver[SparkPollingEvent] = {
-    new FlumePollingReceiver(host, port, maxBatchSize, parallelism, storageLevel)
+    new FlumePollingReceiver(addresses, maxBatchSize, parallelism, storageLevel)
   }
 }
 
 private[streaming] class FlumePollingReceiver(
-  host: String,
-  port: Int,
+  addresses: Seq[InetSocketAddress],
   maxBatchSize: Int,
   parallelism: Int,
   storageLevel: StorageLevel
 ) extends Receiver[SparkPollingEvent](storageLevel) with Logging {
 
+  lazy val channelFactoryExecutor =
+    Executors.newCachedThreadPool(new ThreadFactoryBuilder().setDaemon(true).
+      setNameFormat("Flume Receiver Channel Thread - %d").build())
+
   lazy val channelFactory =
-    new NioClientSocketChannelFactory(Executors.newSingleThreadExecutor(),
-      Executors.newSingleThreadExecutor())
-  lazy val transceiver = new NettyTransceiver(new InetSocketAddress(host, port), channelFactory)
-  lazy val client = SpecificRequestor.getClient(classOf[SparkFlumeProtocol.Callback], transceiver)
+    new NioClientSocketChannelFactory(channelFactoryExecutor, channelFactoryExecutor)
+
   lazy val receiverExecutor = Executors.newFixedThreadPool(parallelism,
     new ThreadFactoryBuilder().setDaemon(true).setNameFormat("Flume Receiver Thread - %d").build())
 
+  private var connections = Array.empty[FlumeConnection] // temporarily empty, filled in later
+
   override def onStart(): Unit = {
+    val connectionBuilder = new mutable.ArrayBuilder.ofRef[FlumeConnection]()
+    addresses.map(host => {
+      val transceiver = new NettyTransceiver(host, channelFactory)
+      val client = SpecificRequestor.getClient(classOf[SparkFlumeProtocol.Callback], transceiver)
+      connectionBuilder += new FlumeConnection(transceiver, client)
+    })
+    connections = connectionBuilder.result()
     val dataReceiver = new Runnable {
       override def run(): Unit = {
+        var counter = 0
         while (true) {
+          counter = counter % connections.size
+          val client = connections(counter).client
+          counter += 1
           val batch = client.getEventBatch(maxBatchSize)
           val seq = batch.getSequenceNumber
           val events: java.util.List[SparkSinkEvent] = batch.getEventBatch
@@ -104,10 +118,15 @@ private[streaming] class FlumePollingReceiver(
   override def onStop(): Unit = {
     logInfo("Shutting down Flume Polling Receiver")
     receiverExecutor.shutdownNow()
-    transceiver.close()
+    connections.map(connection => {
+      connection.tranceiver.close()
+    })
     channelFactory.releaseExternalResources()
   }
 }
+
+private class FlumeConnection(val tranceiver: NettyTransceiver,
+                              val client: SparkFlumeProtocol.Callback)
 
 private[streaming] object SparkPollingEvent {
   def fromSparkSinkEvent(in: SparkSinkEvent): SparkPollingEvent = {
