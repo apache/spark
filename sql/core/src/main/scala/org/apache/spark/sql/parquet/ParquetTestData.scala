@@ -386,8 +386,8 @@ private[sql] object ParquetTestData {
     writer.close()
   }
 
-  /* // TODO: this is not actually used anywhere but useful for debugging
-  def readNestedFile(file: File, schemaString: String): Unit = {
+  // TODO: this is not actually used anywhere but useful for debugging
+  /* def readNestedFile(file: File, schemaString: String): Unit = {
     val configuration = new Configuration()
     val path = new Path(new Path(file.toURI), new Path("part-r-0.parquet"))
     val fs: FileSystem = path.getFileSystem(configuration)
@@ -399,6 +399,6 @@ private[sql] object ParquetTestData {
     val reader = new ParquetReader(new Path(path.toString), new GroupReadSupport())
     val first = reader.read()
     assert(first != null)
-  }*/
+  } */
 }
 
