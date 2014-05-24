@@ -63,7 +63,8 @@ private[sql] object CatalystConverter {
   val MAP_VALUE_SCHEMA_NAME = "value"
   val MAP_SCHEMA_NAME = "map"
 
-  type ArrayScalaType[T] = Array[T]
+  // TODO: consider using Array[T] for arrays to avoid boxing of primitive types
+  type ArrayScalaType[T] = Seq[T]
   type StructScalaType[T] = Seq[T]
   type MapScalaType[K, V] = Map[K, V]
 
@@ -426,7 +427,7 @@ private[parquet] class CatalystArrayConverter(
   override def end(): Unit = {
     assert(parent != null)
     // here we need to make sure to use ArrayScalaType
-    parent.updateField(index, buffer.toArray)
+    parent.updateField(index, buffer.toArray.toSeq)
     clearBuffer()
   }
 }
@@ -451,8 +452,7 @@ private[parquet] class CatalystNativeArrayConverter(
 
   type NativeType = elementType.JvmType
 
-  private var buffer: CatalystConverter.ArrayScalaType[NativeType] =
-    elementType.classTag.newArray(capacity)
+  private var buffer: Array[NativeType] = elementType.classTag.newArray(capacity)
 
   private var elements: Int = 0
 
@@ -526,15 +526,14 @@ private[parquet] class CatalystNativeArrayConverter(
     // here we need to make sure to use ArrayScalaType
     parent.updateField(
       index,
-      buffer.slice(0, elements))
+      buffer.slice(0, elements).toSeq)
     clearBuffer()
   }
 
   private def checkGrowBuffer(): Unit = {
     if (elements >= capacity) {
       val newCapacity = 2 * capacity
-      val tmp: CatalystConverter.ArrayScalaType[NativeType] =
-        elementType.classTag.newArray(newCapacity)
+      val tmp: Array[NativeType] = elementType.classTag.newArray(newCapacity)
       Array.copy(buffer, 0, tmp, 0, capacity)
       buffer = tmp
       capacity = newCapacity

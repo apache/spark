@@ -377,13 +377,13 @@ private[sql] object ParquetTestData {
     val map2 = r1.addGroup(2)
     val keyValue3 = map2.addGroup(0)
     // TODO: currently only string key type supported
-    keyValue3.add(0, "7")
+    keyValue3.add(0, "seven")
     val valueGroup1 = keyValue3.addGroup(1)
     valueGroup1.add(0, 42.toLong)
     valueGroup1.add(1, "the answer")
     val keyValue4 = map2.addGroup(0)
     // TODO: currently only string key type supported
-    keyValue4.add(0, "8")
+    keyValue4.add(0, "eight")
     val valueGroup2 = keyValue4.addGroup(1)
     valueGroup2.add(0, 49.toLong)
 
