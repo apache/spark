@@ -205,17 +205,10 @@ private[sql] object ParquetTestData {
   lazy val testNestedData1 = new ParquetRelation(testNestedDir1.toURI.toString)
   lazy val testNestedData2 = new ParquetRelation(testNestedDir2.toURI.toString)
 
-  // Implicit
-  // TODO: get rid of this since it is confusing!
-  implicit def makePath(dir: File): Path = {
-    new Path(new Path(dir.toURI), new Path("part-r-0.parquet"))
-  }
-
   def writeFile() = {
     testDir.delete()
     val path: Path = new Path(new Path(testDir.toURI), new Path("part-r-0.parquet"))
     val job = new Job()
-    val configuration: Configuration = ContextUtil.getConfiguration(job)
     val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)
     val writeSupport = new TestGroupWriteSupport(schema)
     val writer = new ParquetWriter[Group](path, writeSupport)
@@ -267,7 +260,7 @@ private[sql] object ParquetTestData {
   def writeNestedFile1() {
     // example data from https://blog.twitter.com/2013/dremel-made-simple-with-parquet
     testNestedDir1.delete()
-    val path: Path = testNestedDir1
+    val path: Path = new Path(new Path(testNestedDir1.toURI), new Path("part-r-0.parquet"))
     val schema: MessageType = MessageTypeParser.parseMessageType(testNestedSchema1)
 
     val r1 = new SimpleGroup(schema)
@@ -295,7 +288,7 @@ private[sql] object ParquetTestData {
 
   def writeNestedFile2() {
     testNestedDir2.delete()
-    val path: Path = testNestedDir2
+    val path: Path = new Path(new Path(testNestedDir2.toURI), new Path("part-r-0.parquet"))
     val schema: MessageType = MessageTypeParser.parseMessageType(testNestedSchema2)
 
     val r1 = new SimpleGroup(schema)
@@ -332,7 +325,7 @@ private[sql] object ParquetTestData {
 
   def writeNestedFile3() {
     testNestedDir3.delete()
-    val path: Path = testNestedDir3
+    val path: Path = new Path(new Path(testNestedDir3.toURI), new Path("part-r-0.parquet"))
     val schema: MessageType = MessageTypeParser.parseMessageType(testNestedSchema3)
 
     val r1 = new SimpleGroup(schema)
@@ -362,7 +355,7 @@ private[sql] object ParquetTestData {
 
   def writeNestedFile4() {
     testNestedDir4.delete()
-    val path: Path = testNestedDir4
+    val path: Path = new Path(new Path(testNestedDir4.toURI), new Path("part-r-0.parquet"))
     val schema: MessageType = MessageTypeParser.parseMessageType(testNestedSchema4)
 
     val r1 = new SimpleGroup(schema)
@@ -393,8 +386,10 @@ private[sql] object ParquetTestData {
     writer.close()
   }
 
-  def readNestedFile(path: File, schemaString: String): Unit = {
+  /* // TODO: this is not actually used anywhere but useful for debugging
+  def readNestedFile(file: File, schemaString: String): Unit = {
     val configuration = new Configuration()
+    val path = new Path(new Path(file.toURI), new Path("part-r-0.parquet"))
     val fs: FileSystem = path.getFileSystem(configuration)
     val schema: MessageType = MessageTypeParser.parseMessageType(schemaString)
     assert(schema != null)
@@ -404,6 +399,6 @@ private[sql] object ParquetTestData {
     val reader = new ParquetReader(new Path(path.toString), new GroupReadSupport())
     val first = reader.read()
     assert(first != null)
-  }
+  }*/
 }
 
