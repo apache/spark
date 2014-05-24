@@ -201,4 +201,36 @@ class UtilsSuite extends FunSuite {
     assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi", testWindows = true) ===
       s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi")
   }
+
+  test("nonLocalPaths") {
+    assert(Utils.nonLocalPaths("spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("file:/spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("file:///spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("local:/spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("local:///spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar") === Array("hdfs:/spark.jar"))
+    assert(Utils.nonLocalPaths("hdfs:///spark.jar") === Array("hdfs:///spark.jar"))
+    assert(Utils.nonLocalPaths("file:/spark.jar,local:/smart.jar,family.py") === Array.empty)
+    assert(Utils.nonLocalPaths("local:/spark.jar,file:/smart.jar,family.py") === Array.empty)
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar,local.py,file:/hello/pi.py") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(Utils.nonLocalPaths("local.py,hdfs:/spark.jar,file:/hello/pi.py,s3:/smart.jar") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+
+    // Test Windows paths
+    assert(Utils.nonLocalPaths("C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("file:/C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("file:///C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("local:/C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("local:///C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("hdfs:/a.jar,C:/my.jar,s3:/another.jar", testWindows = true) ===
+      Array("hdfs:/a.jar", "s3:/another.jar"))
+    assert(Utils.nonLocalPaths("D:/your.jar,hdfs:/a.jar,s3:/another.jar", testWindows = true) ===
+      Array("hdfs:/a.jar", "s3:/another.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/a.jar,s3:/another.jar,e:/our.jar", testWindows = true) ===
+      Array("hdfs:/a.jar", "s3:/another.jar"))
+  }
+
 }

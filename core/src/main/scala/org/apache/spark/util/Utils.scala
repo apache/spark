@@ -1086,9 +1086,19 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return true if this is Windows.
+   * Whether the underlying operating system is Windows.
    */
-  def isWindows = SystemUtils.IS_OS_WINDOWS
+  val isWindows = SystemUtils.IS_OS_WINDOWS
+
+  /**
+   * Pattern for matching a Windows drive, which contains only a single alphabet character.
+   */
+  val windowsDrive = "([a-zA-Z])".r
+
+  /**
+   * Format a Windows path such that it can be safely passed to a URI.
+   */
+  def formatWindowsPath(path: String): String = path.replace("\\", "/")
 
   /**
    * Indicates whether Spark is currently running unit tests.
@@ -1175,11 +1185,9 @@ private[spark] object Utils extends Logging {
    */
   def resolveURI(path: String, testWindows: Boolean = false): URI = {
 
-    val windows = isWindows || testWindows
     // In Windows, the file separator is a backslash, but this is inconsistent with the URI format
-    val formattedPath = if (windows) path.replace("\\", "/") else path
-    // Each Windows drive contains only a single alphabet character
-    val windowsDrive = "([a-zA-Z])".r
+    val windows = isWindows || testWindows
+    val formattedPath = if (windows) formatWindowsPath(path) else path
 
     val uri = new URI(formattedPath)
     if (uri.getPath == null) {
@@ -1207,4 +1215,22 @@ private[spark] object Utils extends Logging {
       paths.split(",").map { p => Utils.resolveURI(p, testWindows) }.mkString(",")
     }
   }
+
+  /** Return all non-local paths from a comma-separated list of paths. */
+  def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
+    val windows = isWindows || testWindows
+    if (paths == null || paths.trim.isEmpty) {
+      Array.empty
+    } else {
+      paths.split(",").filter { p =>
+        val formattedPath = if (windows) formatWindowsPath(p) else p
+        new URI(formattedPath).getScheme match {
+          case windowsDrive(d) if windows => false
+          case "local" | "file" | null => false
+          case _ => true
+        }
+      }
+    }
+  }
+
 }

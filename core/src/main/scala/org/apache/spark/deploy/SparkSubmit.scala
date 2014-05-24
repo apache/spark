@@ -19,7 +19,7 @@ package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
 import java.lang.reflect.InvocationTargetException
-import java.net.URL
+import java.net.{URI, URL}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
@@ -136,9 +136,9 @@ object SparkSubmit {
         args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
         args.files = mergeFileLists(args.files, args.primaryResource)
       }
-      val pyFiles = Option(args.pyFiles).getOrElse("")
-      args.files = mergeFileLists(args.files, pyFiles)
-      sysProps("spark.submit.pyFiles") = pyFiles
+      args.files = mergeFileLists(args.files, args.pyFiles)
+      // Format python file paths properly before adding them to the PYTHONPATH
+      sysProps("spark.submit.pyFiles") = PythonRunner.formatPaths(args.pyFiles).mkString(",")
     }
 
     // If we're deploying into YARN, use yarn.Client as a wrapper around the user class
