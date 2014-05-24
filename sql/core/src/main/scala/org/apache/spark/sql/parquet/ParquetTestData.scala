@@ -56,13 +56,13 @@ private[sql] object ParquetTestData {
 
   val testSchema =
     """message myrecord {
-      |optional boolean myboolean;
-      |optional int32 myint;
-      |optional binary mystring;
-      |optional int64 mylong;
-      |optional float myfloat;
-      |optional double mydouble;
-      |}""".stripMargin
+      optional boolean myboolean;
+      optional int32 myint;
+      optional binary mystring;
+      optional int64 mylong;
+      optional float myfloat;
+      optional double mydouble;
+      }"""
 
   // field names for test assertion error messages
   val testSchemaFieldNames = Seq(
@@ -76,23 +76,23 @@ private[sql] object ParquetTestData {
 
   val subTestSchema =
     """
-      |message myrecord {
-      |optional boolean myboolean;
-      |optional int64 mylong;
-      |}
-    """.stripMargin
+      message myrecord {
+      optional boolean myboolean;
+      optional int64 mylong;
+      }
+    """
 
   val testFilterSchema =
     """
-      |message myrecord {
-      |required boolean myboolean;
-      |required int32 myint;
-      |required binary mystring;
-      |required int64 mylong;
-      |required float myfloat;
-      |required double mydouble;
-      |}
-    """.stripMargin
+      message myrecord {
+      required boolean myboolean;
+      required int32 myint;
+      required binary mystring;
+      required int64 mylong;
+      required float myfloat;
+      required double mydouble;
+      }
+    """
 
   // field names for test assertion error messages
   val subTestSchemaFieldNames = Seq(
@@ -118,84 +118,84 @@ private[sql] object ParquetTestData {
     // The "values" inside ownerPhoneNumbers is a keyword currently
     // so that array types can be translated correctly.
     """
-      |message AddressBook {
-        |required binary owner;
-        |optional group ownerPhoneNumbers {
-          |repeated binary array;
-        |}
-        |optional group contacts {
-          |repeated group array {
-            |required binary name;
-            |optional binary phoneNumber;
-          |}
-        |}
-      |}
-    """.stripMargin
+      message AddressBook {
+        required binary owner;
+        optional group ownerPhoneNumbers {
+          repeated binary array;
+        }
+        optional group contacts {
+          repeated group array {
+            required binary name;
+            optional binary phoneNumber;
+          }
+        }
+      }
+    """
 
 
   val testNestedSchema2 =
     """
-      |message TestNested2 {
-        |required int32 firstInt;
-        |optional int32 secondInt;
-        |optional group longs {
-          |repeated int64 array;
-        |}
-        |required group entries {
-          |repeated group array {
-            |required double value;
-            |optional boolean truth;
-          |}
-        |}
-        |optional group outerouter {
-          |repeated group array {
-            |repeated group array {
-              |repeated int32 array;
-            |}
-          |}
-        |}
-      |}
-    """.stripMargin
+      message TestNested2 {
+        required int32 firstInt;
+        optional int32 secondInt;
+        optional group longs {
+          repeated int64 array;
+        }
+        required group entries {
+          repeated group array {
+            required double value;
+            optional boolean truth;
+          }
+        }
+        optional group outerouter {
+          repeated group array {
+            repeated group array {
+              repeated int32 array;
+            }
+          }
+        }
+      }
+    """
 
   val testNestedSchema3 =
     """
-      |message TestNested3 {
-        |required int32 x;
-        |optional group booleanNumberPairs {
-          |repeated group array {
-            |required int32 key;
-            |optional group value {
-              |repeated group array {
-                |required double nestedValue;
-                |optional boolean truth;
-              |}
-            |}
-          |}
-        |}
-      |}
-    """.stripMargin
+      message TestNested3 {
+        required int32 x;
+        optional group booleanNumberPairs {
+          repeated group array {
+            required int32 key;
+            optional group value {
+              repeated group array {
+                required double nestedValue;
+                optional boolean truth;
+              }
+            }
+          }
+        }
+      }
+    """
 
   val testNestedSchema4 =
     """
-      |message TestNested4 {
-        |required int32 x;
-        |optional group data1 {
-          |repeated group map {
-            |required binary key;
-            |required int32 value;
-          |}
-        |}
-        |required group data2 {
-          |repeated group map {
-            |required binary key;
-            |required group value {
-              |required int64 payload1;
-              |optional binary payload2;
-            |}
-          |}
-        |}
-      |}
-    """.stripMargin
+      message TestNested4 {
+        required int32 x;
+        optional group data1 {
+          repeated group map {
+            required binary key;
+            required int32 value;
+          }
+        }
+        required group data2 {
+          repeated group map {
+            required binary key;
+            required group value {
+              required int64 payload1;
+              optional binary payload2;
+            }
+          }
+        }
+      }
+    """
 
   val testNestedDir1 = Utils.createTempDir()
   val testNestedDir2 = Utils.createTempDir()
