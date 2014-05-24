@@ -312,11 +312,13 @@ private[spark] class Worker(
         case DriverState.ERROR =>
           logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
         case DriverState.FAILED =>
-          logWarning(s"Driver $driverId failed with state $state")
+          logWarning(s"Driver $driverId exited with failure")
         case DriverState.FINISHED =>
           logInfo(s"Driver $driverId exited successfully")
         case DriverState.KILLED =>
           logInfo(s"Driver $driverId was killed by user")
+        case _ =>
+          logDebug(s"Driver $driverId changed state to $state")
       }
       masterLock.synchronized {
         master ! DriverStateChanged(driverId, state, exception)
