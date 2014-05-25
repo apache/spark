@@ -96,6 +96,14 @@ You can optionally configure the cluster further by setting environment variable
     <td>Configuration properties that apply only to the master in the form "-Dx=y" (default: none).</td>
   </tr>
   <tr>
+    <td><code>SPARK_LOCAL_DIRS</code></td>
+    <td>
+    Directory to use for "scratch" space in Spark, including map output files and RDDs that get 
+    stored on disk. This should be on a fast, local disk in your system. It can also be a 
+    comma-separated list of multiple directories on different disks.
+    </td>
+  </tr>
+  <tr>
     <td><code>SPARK_WORKER_CORES</code></td>
     <td>Total number of cores to allow Spark applications to use on the machine (default: all available cores).</td>
   </tr>
