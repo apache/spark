@@ -823,6 +823,14 @@ configure those ports.
     <td><code>spark.ui.port</code></td>
     <td></td>
   </tr>
+  <tr>
+    <td>Browser</td>
+    <td>History Server</td>
+    <td>18080</td>
+    <td>Web UI</td>
+    <td><code>spark.history.ui.port</code></td>
+    <td></td>
+  </tr>
 
   <!-- Cluster interactions -->
   <tr>
