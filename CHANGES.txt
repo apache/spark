@@ -3,6 +3,91 @@ Spark Change Log
 
 Release 1.0.0
 
+  SPARK-1911: Emphasize that Spark jars should be built with Java 6.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-24 18:27:00 -0700
+  Commit: 217bd56, github.com/apache/spark/pull/859
+
+  [SPARK-1900 / 1918] PySpark on YARN is broken
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-24 18:01:49 -0700
+  Commit: 12f5ecc, github.com/apache/spark/pull/853
+
+  Update LBFGSSuite.scala
+  baishuo(白硕) <vc_java@hotmail.com>
+  2014-05-23 13:02:40 -0700
+  Commit: 9be103a, github.com/apache/spark/pull/815
+
+  Updated scripts for auditing releases
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-05-22 20:48:55 -0700
+  Commit: 6541ca2, github.com/apache/spark/pull/844
+
+  [SPARK-1896] Respect spark.master (and --master) before MASTER in spark-shell
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-22 20:32:27 -0700
+  Commit: c3b4065, github.com/apache/spark/pull/846
+
+  [SPARK-1897] Respect spark.jars (and --jars) in spark-shell
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-22 20:25:41 -0700
+  Commit: 23cc40e, github.com/apache/spark/pull/849
+
+  Fix UISuite unit test that fails under Jenkins contention
+  Aaron Davidson <aaron@databricks.com>
+  2014-05-22 15:11:05 -0700
+  Commit: a566216, github.com/apache/spark/pull/857
+
+  [SPARK-1870] Make spark-submit --jars work in yarn-cluster mode.
+  Xiangrui Meng <meng@databricks.com>
+  2014-05-22 01:52:50 -0700
+  Commit: 79cd26c, github.com/apache/spark/pull/848
+
+  Configuration documentation updates
+  Reynold Xin <rxin@apache.org>
+  2014-05-21 18:49:12 -0700
+  Commit: 75af8bd, github.com/apache/spark/pull/851
+
+  [SPARK-1889] [SQL] Apply splitConjunctivePredicates to join condition while finding join ke...
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-05-21 15:37:47 -0700
+  Commit: 6e7934e, github.com/apache/spark/pull/836
+
+  [SPARK-1519] Support minPartitions param of wholeTextFiles() in PySpark
+  Kan Zhang <kzhang@apache.org>
+  2014-05-21 13:26:53 -0700
+  Commit: 30d1df5, github.com/apache/spark/pull/697
+
+  [Typo] Stoped -> Stopped
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-21 11:59:05 -0700
+  Commit: 9b8f772, github.com/apache/spark/pull/847
+
+  [Minor] Move JdbcRDDSuite to the correct package
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-21 01:25:10 -0700
+  Commit: bc6bbfa, github.com/apache/spark/pull/839
+
+  [Docs] Correct example of creating a new SparkConf
+  Andrew Or <andrewor14@gmail.com>
+  2014-05-21 01:23:34 -0700
+  Commit: 7295dd9, github.com/apache/spark/pull/842
+
+  [SPARK-1250] Fixed misleading comments in bin/pyspark, bin/spark-class
+  Sumedh Mungee <smungee@gmail.com>
+  2014-05-21 01:22:25 -0700
+  Commit: 364c14a, github.com/apache/spark/pull/843
+
+  [Hotfix] Blacklisted flaky HiveCompatibility test
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-05-20 10:27:12 -0700
+  Commit: b4d93d3, github.com/apache/spark/pull/838
+
+  Updated CHANGES.txt
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-05-19 23:12:24 -0700
+  Commit: 1c00f2a
+
   [Spark 1877] ClassNotFoundException when loading RDD with serialized objects
   Tathagata Das <tathagata.das1565@gmail.com>, Ghidireac <bogdang@u448a5b0a73d45358d94a.ant.amazon.com>
   2014-05-19 22:36:24 -0700
@@ -676,7 +761,7 @@ Release 1.0.0
   Proposal: clarify Scala programming guide on caching ...
   Ethan Jewett <esjewett@gmail.com>
   2014-05-06 20:50:08 -0700
-  Commit: 51e27755, github.com/apache/spark/pull/668
+  Commit: 51e2775, github.com/apache/spark/pull/668
 
   SPARK-1727. Correct small compile errors, typos, and markdown issues in (primarly) MLlib docs
   Sean Owen <sowen@cloudera.com>
