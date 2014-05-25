@@ -276,12 +276,12 @@ class SchemaRDD(
 
   /**
    * :: Experimental ::
-   * Overriding base RDD implementation to leverage query optimizer
+   * Return the number of elements in the RDD. Unlike the base RDD implementation of count, this
+   * implementation leverages the query optimizer to compute the count on the SchemaRDD, which
+   * supports features such as filter pushdown.
    */
   @Experimental
-  override def count(): Long = {
-    groupBy()(Count(Literal(1))).collect().head.getLong(0)
-  }
+  override def count(): Long = groupBy()(Count(Literal(1))).collect().head.getLong(0)
 
   /**
    * :: Experimental ::
