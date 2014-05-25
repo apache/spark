@@ -325,7 +325,10 @@ class SchemaRDD(RDD):
 
     def count(self):
         """
-        Return the number of elements in this RDD.
+        Return the number of elements in this RDD. Unlike the base RDD
+        implementation of count, this implementation leverages the query
+        optimizer to compute the count on the SchemaRDD, which supports
+        features such as filter pushdown.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.count()

@@ -124,7 +124,7 @@ class DslQuerySuite extends QueryTest {
   }
 
   test("zero count") {
-    assert(testData4.count() === 0)
+    assert(emptyTableData.count() === 0)
   }
 
   test("inner join where, one match per row") {
