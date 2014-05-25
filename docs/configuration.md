@@ -30,22 +30,28 @@ val conf = new SparkConf()
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
-## Loading Default Configurations
+## Dynamically Loading Spark Properties
+In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
+instance, if you'd like to run the same applicaiton with different masters or different
+amounts of memory.
 
-In the case of `spark-shell`, a SparkContext has already been created for you, so you cannot control
-the configuration properties through SparkConf. However, you can still set configuration properties
-through a default configuration file. By default, `spark-shell` (and more generally `spark-submit`)
-will read configuration options from `conf/spark-defaults.conf`, in which each line consists of a
-key and a value separated by whitespace. For example,
+The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit) tool support two ways to load configurations dynamically. 
+When a SparkConf is created, it will read configuration options from `conf/spark-defaults.conf`, 
+in which each line consists of a key and a value separated by whitespace. For example,
 
     spark.master            spark://5.6.7.8:7077
     spark.executor.memory   512m
     spark.eventLog.enabled  true
     spark.serializer        org.apache.spark.serializer.KryoSerializer
 
-Any values specified in the file will be passed on to the application, and merged with those
-specified through SparkConf. If the same configuration property exists in both `spark-defaults.conf`
-and SparkConf, then the latter will take precedence as it is the most application-specific.
+
+In addition, when launching programs with the [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit) tool, certain options can be configured as flags. For instance, the 
+`--master` flag to `spark-submit` will automatically set the master. Run `./bin/spark-submit --help` to see the entire list of options.
+
+Any values specified as flags or in the properties file will be passed on to the application
+and merged with those specified through SparkConf. Properties set directly on the SparkConf
+take highest precedence, then flags passed to `spark-submit` or `spark-shell`, then options
+in the `spark-defaults.conf` file.
 
 ## Viewing Spark Properties
 
