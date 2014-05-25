@@ -72,7 +72,7 @@ class LogisticRegressionWithSGD(object):
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0, initialWeights=None):
         """Train a logistic regression model on the given data."""
         sc = data.context
-        train_func = lambda d, i: c._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(
+        train_func = lambda d, i: sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(
             d._jrdd, iterations, step, miniBatchFraction, i)
         return _regression_train_wrapper(sc, train_func, LogisticRegressionModel, data,
                                          initialWeights)
