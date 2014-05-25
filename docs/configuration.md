@@ -582,7 +582,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.logConf</code></td>
   <td>false</td>
   <td>
-    Whether to log the supplied SparkConf as INFO at start of spark context.
+    Whether to log the supplied SparkConf as INFO when a SparkContext is started.
   </td>
 </tr>
 <tr>
