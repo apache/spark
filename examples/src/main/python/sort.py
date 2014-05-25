@@ -27,8 +27,8 @@ if __name__ == "__main__":
     sc = SparkContext(appName="PythonSort")
     lines = sc.textFile(sys.argv[1], 1)
     sortedCount = lines.flatMap(lambda x: x.split(' ')) \
-                  .map(lambda x: (int(x), 1)) \
-                  .sortByKey(lambda x: x)
+        .map(lambda x: (int(x), 1)) \
+        .sortByKey(lambda x: x)
     # This is just a demo on how to bring all the sorted data back to a single node.
     # In reality, we wouldn't want to collect all the data to the driver node.
     output = sortedCount.collect()
