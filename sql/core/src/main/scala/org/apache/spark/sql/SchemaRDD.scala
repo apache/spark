@@ -206,6 +206,7 @@ class SchemaRDD(
 
   /**
    * Performs an aggregation over all Rows in this RDD.
+   * This is equivalent to a groupBy with no grouping expressions.
    *
    * {{{
    *   schemaRDD.aggregate(Sum('sales) as 'totalSales)
