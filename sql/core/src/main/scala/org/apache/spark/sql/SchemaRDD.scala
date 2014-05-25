@@ -276,6 +276,15 @@ class SchemaRDD(
 
   /**
    * :: Experimental ::
+   * Overriding base RDD implementation to leverage query optimizer
+   */
+  @Experimental
+  override def count(): Long = {
+    groupBy()(Count(Literal(1))).collect().head.getLong(0)
+  }
+
+  /**
+   * :: Experimental ::
    * Applies the given Generator, or table generating function, to this relation.
    *
    * @param generator A table generating function.  The API for such functions is likely to change

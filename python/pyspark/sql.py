@@ -268,7 +268,7 @@ class SchemaRDD(RDD):
     def _jrdd(self):
         """
         Lazy evaluation of PythonRDD object. Only done when a user calls methods defined by the
-        L{pyspark.rdd.RDD} super class (map, count, etc.).
+        L{pyspark.rdd.RDD} super class (map, filter, etc.).
         """
         if not hasattr(self, '_lazy_jrdd'):
             self._lazy_jrdd = self._toPython()._jrdd
@@ -320,6 +320,18 @@ class SchemaRDD(RDD):
         Creates a new table with the contents of this SchemaRDD.
         """
         self._jschema_rdd.saveAsTable(tableName)
+
+    def count(self):
+        """
+        Return the number of elements in this RDD.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.count()
+        3L
+        >>> srdd.count() == srdd.map(lambda x: x).count()
+        True
+        """
+        return self._jschema_rdd.count()
 
     def _toPython(self):
         # We have to import the Row class explicitly, so that the reference Pickler has is
