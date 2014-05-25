@@ -358,5 +358,9 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
     assert(stringResult(0).getString(2) == "100", "stringvalue incorrect")
     assert(stringResult(0).getInt(1) === 100)
   }
-}
 
+  test("SPARK-1913 regression: columns only referenced by pushed down filters should remain") {
+    val query = sql(s"SELECT mystring FROM testfiltersource WHERE myint < 10")
+    assert(query.collect().size === 10)
+  }
+}
