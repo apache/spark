@@ -805,7 +805,7 @@ configure those ports.
     <td>8080</td>
     <td>Web UI</td>
     <td><code>master.ui.port</code></td>
-    <td></td>
+    <td>Jetty-based</td>
   </tr>
   <tr>
     <td>Browser</td>
@@ -813,7 +813,7 @@ configure those ports.
     <td>8081</td>
     <td>Web UI</td>
     <td><code>worker.ui.port</code></td>
-    <td></td>
+    <td>Jetty-based</td>
   </tr>
   <tr>
     <td>Browser</td>
@@ -821,7 +821,7 @@ configure those ports.
     <td>4040</td>
     <td>Web UI</td>
     <td><code>spark.ui.port</code></td>
-    <td></td>
+    <td>Jetty-based</td>
   </tr>
   <tr>
     <td>Browser</td>
@@ -829,7 +829,7 @@ configure those ports.
     <td>18080</td>
     <td>Web UI</td>
     <td><code>spark.history.ui.port</code></td>
-    <td></td>
+    <td>Jetty-based</td>
   </tr>
 
   <!-- Cluster interactions -->
@@ -839,7 +839,7 @@ configure those ports.
     <td>7077</td>
     <td>Submit job to cluster</td>
     <td><code>spark.driver.port</code></td>
-    <td>Uses Akka.  Set to "0" to choose a port randomly</td>
+    <td>Akka-based.  Set to "0" to choose a port randomly</td>
   </tr>
   <tr>
     <td>Worker</td>
@@ -847,7 +847,7 @@ configure those ports.
     <td>7077</td>
     <td>Join cluster</td>
     <td><code>spark.driver.port</code></td>
-    <td>Uses Akka.  Set to "0" to choose a port randomly</td>
+    <td>Akka-based.  Set to "0" to choose a port randomly</td>
   </tr>
   <tr>
     <td>Application</td>
@@ -855,7 +855,7 @@ configure those ports.
     <td>(random)</td>
     <td>Join cluster</td>
     <td><code>SPARK_WORKER_PORT</code> (standalone cluster)</td>
-    <td>Uses Akka</td>
+    <td>Akka-based</td>
   </tr>
 
   <!-- Other misc stuff -->
@@ -871,7 +871,7 @@ configure those ports.
       </ul>
     </td>
     <td>None</td>
-    <td>Uses Jetty.  Each of these services starts on a random port that cannot be configured</td>
+    <td>Jetty-based.  Each of these services starts on a random port that cannot be configured</td>
   </tr>
 
 </table>
