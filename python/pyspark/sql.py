@@ -156,10 +156,10 @@ class SQLContext:
 
 
 class HiveContext(SQLContext):
-    """
-    An instance of the Spark SQL execution engine that integrates with data
-    stored in Hive. Configuration for Hive is read from hive-site.xml on
-    the classpath. It supports running both SQL and HiveQL commands.
+    """A variant of Spark SQL that integrates with data stored in Hive.
+
+    Configuration for Hive is read from hive-site.xml on the classpath.
+    It supports running both SQL and HiveQL commands.
     """
 
     @property
@@ -324,11 +324,11 @@ class SchemaRDD(RDD):
         self._jschema_rdd.saveAsTable(tableName)
 
     def count(self):
-        """
-        Return the number of elements in this RDD. Unlike the base RDD
-        implementation of count, this implementation leverages the query
-        optimizer to compute the count on the SchemaRDD, which supports
-        features such as filter pushdown.
+        """Return the number of elements in this RDD.
+
+        Unlike the base RDD implementation of count, this implementation
+        leverages the query optimizer to compute the count on the SchemaRDD,
+        which supports features such as filter pushdown.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.count()
