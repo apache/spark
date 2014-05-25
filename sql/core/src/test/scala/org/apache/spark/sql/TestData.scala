@@ -47,7 +47,7 @@ object TestData {
       (1, null) ::
       (2, 2) :: Nil)
 
-  val testData4 = logical.LocalRelation('a.int, 'b.int)
+  val emptyTableData = logical.LocalRelation('a.int, 'b.int)
 
   case class UpperCaseData(N: Int, L: String)
   val upperCaseData =
