@@ -93,7 +93,7 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_MASTER_OPTS</code></td>
-    <td>Configuration properties that apply only to the master in the form "-Dx=y" (default: none).</td>
+    <td>Configuration properties that apply only to the master in the form "-Dx=y" (default: none). See below for a list of possible options.</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_DIRS</code></td>
@@ -134,7 +134,7 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_WORKER_OPTS</code></td>
-    <td>Configuration properties that apply only to the worker in the form "-Dx=y" (default: none).</td>
+    <td>Configuration properties that apply only to the worker in the form "-Dx=y" (default: none). See below for a list of possible options.</td>
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
@@ -152,6 +152,72 @@ You can optionally configure the cluster further by setting environment variable
 
 **Note:** The launch scripts do not currently support Windows. To run a Spark cluster on Windows, start the master and workers by hand.
 
+SPARK_MASTER_OPTS supports the following system properties:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.deploy.spreadOut</td>
+  <td>true</td>
+  <td>
+    Whether the standalone cluster manager should spread applications out across nodes or try
+    to consolidate them onto as few nodes as possible. Spreading out is usually better for
+    data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
+  </td>
+</tr>
+<tr>
+  <td>spark.deploy.defaultCores</td>
+  <td>(infinite)</td>
+  <td>
+    Default number of cores to give to applications in Spark's standalone mode if they don't
+    set <code>spark.cores.max</code>. If not set, applications always get all available
+    cores unless they configure <code>spark.cores.max</code> themselves.
+    Set this lower on a shared cluster to prevent users from grabbing
+    the whole cluster by default. <br/>
+  </td>
+</tr>
+<tr>
+  <td>spark.worker.timeout</td>
+  <td>60</td>
+  <td>
+    Number of seconds after which the standalone deploy master considers a worker lost if it
+    receives no heartbeats.
+  </td>
+</tr>
+</table>
+
+SPARK_WORKER_OPTS supports the following system properties:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.worker.cleanup.enabled</td>
+  <td>false</td>
+  <td>
+    Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
+    mode, as YARN works differently. Applications directories are cleaned up regardless of whether
+    the application is still running.
+  </td>
+</tr>
+<tr>
+  <td>spark.worker.cleanup.interval</td>
+  <td>1800 (30 minutes)</td>
+  <td>
+    Controls the interval, in seconds, at which the worker cleans up old application work dirs
+    on the local machine.
+  </td>
+</tr>
+<tr>
+  <td>spark.worker.cleanup.appDataTtl</td>
+  <td>7 * 24 * 3600 (7 days)</td>
+  <td>
+    The number of seconds to retain application work directories on each worker.  This is a Time To Live
+    and should depend on the amount of available disk space you have.  Application logs and jars are
+    downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
+    especially if you run jobs very frequently.
+  </td>
+</tr>
+</table>
 # Connecting an Application to the Cluster
 
 To run an application on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
