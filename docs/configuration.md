@@ -16,10 +16,10 @@ Spark provides three locations to configure the system:
 # Spark Properties
 
 Spark properties control most application settings and are configured separately for each
-application. The preferred way is to set them through
-[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) and passing it as an argument to your
-SparkContext. SparkConf allows you to configure most of the common properties to initialize a
-cluster (e.g. master URL and application name), as well as arbitrary key-value pairs through the
+application. These properties can be set directly on a
+[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) and passed as an argument to your
+SparkContext. SparkConf allows you to configure some of the common properties
+(e.g. master URL and application name), as well as arbitrary key-value pairs through the
 `set()` method. For example, we could initialize an application as follows:
 
 {% highlight scala %}
@@ -32,8 +32,13 @@ val sc = new SparkContext(conf)
 
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
-instance, if you'd like to run the same applicaiton with different masters or different
-amounts of memory.
+instance, if you'd like to run the same application with different masters or different
+amounts of memory. Spark allows you to omit this in your code:
+
+{% highlight scala %}
+val conf = new SparkConf().setAppName("myApp")
+{% endhighlight %}
+
 
 The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit) tool support two ways to load configurations dynamically. 
 When a SparkConf is created, it will read configuration options from `conf/spark-defaults.conf`, 
