@@ -804,7 +804,7 @@ configure those ports.
     <td>Standalone Cluster Master</td>
     <td>8080</td>
     <td>Web UI</td>
-    <td><code>spark.history.ui.port</code></td>
+    <td><code>master.ui.port</code></td>
     <td></td>
   </tr>
   <tr>
@@ -812,8 +812,8 @@ configure those ports.
     <td>Worker</td>
     <td>8081</td>
     <td>Web UI</td>
-    <td><code>spark.ui.port</code></td>
-    <td>Note: this is the same configuration setting as the webui on the driver</td>
+    <td><code>worker.ui.port</code></td>
+    <td></td>
   </tr>
   <tr>
     <td>Browser</td>
@@ -821,7 +821,7 @@ configure those ports.
     <td>4040</td>
     <td>Web UI</td>
     <td><code>spark.ui.port</code></td>
-    <td>Note: this is the same configuration setting as the webui on the worker</td>
+    <td></td>
   </tr>
 
   <!-- Cluster interactions -->
