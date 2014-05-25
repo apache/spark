@@ -19,6 +19,7 @@ package org.apache.spark
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
+import org.apache.spark.serializer.Serializer
 
 /**
  * :: DeveloperApi ::
@@ -32,7 +33,8 @@ import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
 case class Aggregator[K, V, C] (
     createCombiner: V => C,
     mergeValue: (C, V) => C,
-    mergeCombiners: (C, C) => C) {
+    mergeCombiners: (C, C) => C,
+    serializer: Serializer = SparkEnv.get.serializer) {
 
   private val externalSorting = SparkEnv.get.conf.getBoolean("spark.shuffle.spill", true)
 
@@ -54,7 +56,8 @@ case class Aggregator[K, V, C] (
       }
       combiners.iterator
     } else {
-      val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+      val combiners = new ExternalAppendOnlyMap[K, V, C](
+        createCombiner, mergeValue, mergeCombiners, serializer)
       while (iter.hasNext) {
         val (k, v) = iter.next()
         combiners.insert(k, v)
@@ -83,7 +86,8 @@ case class Aggregator[K, V, C] (
       }
       combiners.iterator
     } else {
-      val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
+      val combiners = new ExternalAppendOnlyMap[K, C, C](
+        identity, mergeCombiners, mergeCombiners, serializer)
       while (iter.hasNext) {
         val (k, c) = iter.next()
         combiners.insert(k, c)

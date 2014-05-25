@@ -82,6 +82,7 @@ abstract class AggregateFunction
   override def dataType = base.dataType
 
   def update(input: Row): Unit
+  def merge(other: AggregateFunction): Unit
   override def eval(input: Row): Any
 
   // Do we really need this?
@@ -290,6 +291,16 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
     count += 1
     sum.update(addFunction, input)
   }
+
+  override def merge(other: AggregateFunction): Unit = {
+    other match {
+      case avg: AverageFunction => {
+        count += avg.count
+        sum.update(Add(sum, avg.sum), EmptyRow)
+      }
+      case _ => throw new TreeNodeException(this, s"Types do not match ${this.dataType} != ${other.dataType}")
+    }
+  }
 }
 
 case class CountFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
@@ -301,6 +312,15 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
     val evaluatedExpr = expr.map(_.eval(input))
     if (evaluatedExpr.map(_ != null).reduceLeft(_ || _)) {
       count += 1
+    }
+  }
+
+  override def merge(other: AggregateFunction): Unit = {
+    other match {
+      case c: CountFunction => {
+        count += c.count
+      }
+      case _ => throw new TreeNodeException(this, s"Types do not match ${this.dataType} != ${other.dataType}")
     }
   }
 
@@ -356,6 +376,15 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
     sum.update(addFunction, input)
   }
 
+  override def merge(other: AggregateFunction): Unit = {
+    other match {
+      case s: SumFunction => {
+        sum.update(Add(sum, s.sum), EmptyRow)
+      }
+      case _ => throw new TreeNodeException(this, s"Types do not match ${this.dataType} != ${other.dataType}")
+    }
+  }
+
   override def eval(input: Row): Any = sum.eval(null)
 }
 
@@ -370,6 +399,19 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
       seen += evaluatedExpr
+    }
+  }
+
+  override def merge(other: AggregateFunction): Unit = {
+    other match {
+      case sd: SumDistinctFunction => {
+        // TODO(lamuguo): Change to HashSet union scala rebase to support it. Related change:
+        // https://github.com/scala/scala/pull/3322
+        for (item <- sd.seen) {
+          seen += item
+        }
+      }
+      case _ => throw new TreeNodeException(this, s"Types do not match ${this.dataType} != ${other.dataType}")
     }
   }
 
@@ -391,6 +433,17 @@ case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpressio
     }
   }
 
+  override def merge(other: AggregateFunction): Unit = {
+    other match {
+      case cd: CountDistinctFunction => {
+        for (item <- cd.seen) {
+          seen += item
+        }
+      }
+      case _ => throw new TreeNodeException(this, s"Types do not match ${this.dataType} != ${other.dataType}")
+    }
+  }
+
   override def eval(input: Row): Any = seen.size
 }
 
@@ -402,6 +455,17 @@ case class FirstFunction(expr: Expression, base: AggregateExpression) extends Ag
   override def update(input: Row): Unit = {
     if (result == null) {
       result = expr.eval(input)
+    }
+  }
+
+  override def merge(other: AggregateFunction): Unit = {
+    other match {
+      case second: FirstFunction => {
+        if (result == null) {
+          result = second.result
+        }
+      }
+      case _ => throw new TreeNodeException(this, s"Types do not match ${this.dataType} != ${other.dataType}")
     }
   }
 
