@@ -39,6 +39,14 @@ class DslQuerySuite extends QueryTest {
       testData2.groupBy('a)('a, Sum('b)),
       Seq((1,3),(2,3),(3,3))
     )
+    checkAnswer(
+      testData2.groupBy('a)('a, Sum('b) as 'totB).aggregate(Sum('totB)),
+      9
+    )
+    checkAnswer(
+      testData2.aggregate(Sum('b)),
+      9
+    )
   }
 
   test("select *") {
