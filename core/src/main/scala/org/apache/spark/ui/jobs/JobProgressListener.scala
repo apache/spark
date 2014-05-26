@@ -57,6 +57,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   val stageIdToTasksActive = HashMap[Int, HashSet[TaskInfo]]()
   val stageIdToTasksComplete = HashMap[Int, Int]()
   val stageIdToTasksFailed = HashMap[Int, Int]()
+  val jobIdToTotalStages = HashMap[Int, Int]()
   val stageIdToTaskInfos =
     HashMap[Int, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
   val stageIdToExecutorSummaries = HashMap[Int, HashMap[String, ExecutorSummary]]()
@@ -88,6 +89,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
         stageIdToExecutorSummaries.remove(s.stageId)
         stageIdToPool.remove(s.stageId)
         if (stageIdToDescription.contains(s.stageId)) {stageIdToDescription.remove(s.stageId)}
+        jobIdToTotalStages.remove(s.jobId)
       }
       stages.trimStart(toRemove)
     }
@@ -107,6 +109,13 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
       p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
     }
     description.map(d => stageIdToDescription(stage.stageId) = d)
+
+    var numStages = jobIdToTotalStages.getOrElseUpdate(stage.jobId, 0)
+    val totalStagesAsPerCurrentStage = stage.parents.size + stage.shuffleDep.size + 1
+    if (numStages < totalStagesAsPerCurrentStage) { // Check for stage having highest parents and update the same
+      numStages = totalStagesAsPerCurrentStage
+    }
+    jobIdToTotalStages.update(stage.jobId, numStages)
 
     val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[StageInfo]())
     stages += stage

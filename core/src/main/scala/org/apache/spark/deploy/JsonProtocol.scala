@@ -22,6 +22,10 @@ import net.liftweb.json.JsonDSL._
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, WorkerInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
+import org.apache.spark.scheduler.{SchedulingMode, StageInfo, TaskInfo}
+import org.apache.spark.storage.RDDInfo
+import org.apache.spark.ui.jobs.{StageTable}
+import org.apache.spark.util.Utils
 
 
 private[spark] object JsonProtocol {
@@ -48,6 +52,29 @@ private[spark] object JsonProtocol {
     ("submitdate" -> obj.submitDate.toString) ~
     ("state" -> obj.state.toString) ~
     ("duration" -> obj.duration)
+  }
+
+  def writeStageInfo(obj: StageInfo) = {
+    ("jobid" -> obj.jobId) ~
+    ("stageid" -> obj.stageId) ~
+    ("name" -> obj.name) ~
+    ("description" -> obj.description) ~
+    ("startedTasks" -> obj.startedTasks) ~
+    ("completedTasks" -> obj.completedTasks) ~
+    ("failedTasks" -> obj.failedTasks) ~
+    ("numTasks" -> obj.numTasks) ~
+    ("poolName" -> obj.poolName) ~
+    ("submissiontime" -> obj.submissionTime.getOrElse(System.currentTimeMillis())) ~
+    ("completiontime" -> obj.completionTime.getOrElse(System.currentTimeMillis())) ~
+    ("shuffleRead" -> obj.shuffleRead) ~
+    ("shuffleWrite" -> obj.shuffleWrite) ~
+    ("numStages" -> obj.numStages)
+  }
+
+  def writeStagesInfo(obj: Seq[Seq[StageInfo]]) = {
+    ("activeStages" -> obj(0).toList.map(writeStageInfo)) ~
+    ("completedStages" -> obj(1).toList.map(writeStageInfo)) ~
+    ("failedStages" -> obj(2).toList.map(writeStageInfo))
   }
 
   def writeApplicationDescription(obj: ApplicationDescription) = {
@@ -86,5 +113,43 @@ private[spark] object JsonProtocol {
     ("memoryused" -> obj.memoryUsed) ~
     ("executors" -> obj.executors.toList.map(writeExecutorRunner)) ~
     ("finishedexecutors" -> obj.finishedExecutors.toList.map(writeExecutorRunner))
+  }
+
+  def writeExecInfo(kv: Seq[String]) = {
+    ("execId" -> kv(0)) ~
+    ("hostPort" -> kv(1)) ~
+    ("rddBlocks" -> kv(2)) ~
+    ("memUsed" -> kv(3).toLong) ~
+    ("maxMem" -> kv(4).toLong) ~
+    ("diskUsed" -> kv(5).toLong) ~
+    ("activeTasks" -> kv(6)) ~
+    ("failedTasks" -> kv(7)) ~
+    ("completedTasks" -> kv(8)) ~
+    ("totalTasks" -> kv(9)) ~
+    ("totalDuration" -> kv(10).toLong) ~
+    ("totalShuffleRead" -> kv(11).toLong) ~
+    ("totalShuffleWrite" -> kv(12).toLong)
+  }
+
+  def writeExecutorsInfo(memUsed: String, maxMem: String, diskUsed: String,
+                             execInfo: Seq[Seq[String]]) = {
+    ("memUsed" -> memUsed) ~
+    ("maxMem" -> maxMem) ~
+    ("diskUsed" -> diskUsed) ~
+    ("execInfo" -> execInfo.toList.map(writeExecInfo))
+  }
+
+  def writeRDDInfo(rdd: RDDInfo) = {
+    ("name" -> rdd.name) ~
+    ("storageLevel" -> rdd.storageLevel.description) ~
+    ("numCachedPartitions" -> rdd.numCachedPartitions) ~
+    ("numPartitions" -> rdd.numPartitions) ~
+    ("memSize" -> Utils.bytesToString(rdd.memSize)) ~
+    ("diskSize" -> Utils.bytesToString(rdd.diskSize))
+  }
+
+  def writeStorageInfo(storageInfo: Seq[RDDInfo]) = {
+    ("storageInfo" -> storageInfo.toList.map(writeRDDInfo)) ~
+    ("meta" -> "Storage Info")
   }
 }

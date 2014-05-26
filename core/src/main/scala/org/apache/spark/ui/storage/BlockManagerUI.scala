@@ -33,6 +33,7 @@ private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
 
   def getHandlers = Seq[(String, Handler)](
     ("/storage/rdd", (request: HttpServletRequest) => rddPage.render(request)),
+    ("/storage/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
     ("/storage", (request: HttpServletRequest) => indexPage.render(request))
   )
 }

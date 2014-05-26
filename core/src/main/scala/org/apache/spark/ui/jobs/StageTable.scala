@@ -39,10 +39,50 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
     }
   }
 
+  /* Methods for json generation */
+  def toItemSeq(): Seq[StageInfo] = {
+    listener.synchronized {
+      stageItemArray(stageItem, stages)
+    }
+  }
+
+  private def stageItem(s: StageInfo): StageInfo = {
+    s.description = listener.stageIdToDescription.get(s.stageId)
+    s.startedTasks = listener.stageIdToTasksActive.getOrElse(s.stageId, HashSet[TaskInfo]()).size
+    s.completedTasks = listener.stageIdToTasksComplete.getOrElse(s.stageId, 0)
+    s.failedTasks = listener.stageIdToTasksFailed.getOrElse(s.stageId, 0) match {
+      case f if f > 0 => "(%s failed)".format(f)
+      case _ => ""
+    }
+    s.numTasks = s.numTasks
+    s.poolName = listener.stageIdToPool.get(s.stageId)
+    s.numStages = listener.jobIdToTotalStages.getOrElse(s.jobId, 0)
+
+    val shuffleReadSortable = listener.stageIdToShuffleRead.getOrElse(s.stageId, 0L)
+    s.shuffleRead = shuffleReadSortable match {
+      case 0 => ""
+      case b => Utils.bytesToString(b)
+    }
+
+    val shuffleWriteSortable = listener.stageIdToShuffleWrite.getOrElse(s.stageId, 0L)
+    s.shuffleWrite = shuffleWriteSortable match {
+      case 0 => ""
+      case b => Utils.bytesToString(b)
+    }
+
+    s
+  }
+
+  private def stageItemArray[T](makeRow: T => StageInfo, rows: Seq[StageInfo]): Seq[StageInfo] = {
+    rows.map{r => stageItem(r)}
+  }
+
+
   /** Special table which merges two header cells. */
   private def stageTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable">
       <thead>
+        <th>Job Id</th>
         <th>Stage Id</th>
         {if (isFairScheduler) {<th>Pool Name</th>} else {}}
         <th>Description</th>
@@ -110,6 +150,7 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
     }
 
     <tr>
+      <td>{s.jobId}</td>
       <td>{s.stageId}</td>
       {if (isFairScheduler) {
         <td><a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(),poolName.get)}>
