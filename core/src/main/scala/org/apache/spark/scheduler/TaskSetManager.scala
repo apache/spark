@@ -742,4 +742,14 @@ private[spark] class TaskSetManager(
     logDebug("Valid locality levels for " + taskSet + ": " + levels.mkString(", "))
     levels.toArray
   }
+
+  //Re-assign tasks in pendingTasksWithNoPrefs when there's new executor added
+  def reAssignTasksWithNoPrefs() {
+    val tasksClone = pendingTasksWithNoPrefs.clone()
+    pendingTasksWithNoPrefs.clear()
+    for (index <- tasksClone) {
+      addPendingTask(index)
+    }
+    logInfo("Moved " + (tasksClone.size - pendingTasksWithNoPrefs.size) + " tasks from NoPrefs to other pending list. ---lirui")
+  }
 }

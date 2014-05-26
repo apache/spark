@@ -209,11 +209,14 @@ private[spark] class TaskSchedulerImpl(
     SparkEnv.set(sc.env)
 
     // Mark each slave as alive and remember its hostname
+    //also track if new executor is added
+    var executorUpdated = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
+        executorUpdated = true
       }
     }
 
@@ -232,6 +235,9 @@ private[spark] class TaskSchedulerImpl(
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     var launchedTask = false
     for (taskSet <- sortedTaskSets; maxLocality <- TaskLocality.values) {
+      if (executorUpdated) {
+        taskSet.reAssignTasksWithNoPrefs()
+      }
       do {
         launchedTask = false
         for (i <- 0 until shuffledOffers.size) {
