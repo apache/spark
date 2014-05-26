@@ -772,7 +772,7 @@ private[spark] class BlockManager(
   /**
    * Replicate block to another node.
    */
-  var cachedPeers: Seq[BlockManagerId] = null
+  @volatile var cachedPeers: Seq[BlockManagerId] = null
   private def replicate(blockId: BlockId, data: ByteBuffer, level: StorageLevel) {
     val tLevel = StorageLevel(
       level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
