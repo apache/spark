@@ -236,7 +236,7 @@ private[spark] class TaskSchedulerImpl(
     var launchedTask = false
     for (taskSet <- sortedTaskSets; maxLocality <- TaskLocality.values) {
       if (executorUpdated) {
-        taskSet.reAssignTasksWithNoPrefs()
+        taskSet.reAddPendingTasks()
       }
       do {
         launchedTask = false

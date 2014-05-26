@@ -199,7 +199,7 @@ private[spark] class TaskSetManager(
       }
     }
 
-    if (!hadAliveLocations) {
+    if (tasks(index).preferredLocations.isEmpty) {
       // Even though the task might've had preferred locations, all of those hosts or executors
       // are dead; put it in the no-prefs list so we can schedule it elsewhere right away.
       addTo(pendingTasksWithNoPrefs)
@@ -743,13 +743,11 @@ private[spark] class TaskSetManager(
     levels.toArray
   }
 
-  //Re-assign tasks in pendingTasksWithNoPrefs when there's new executor added
-  def reAssignTasksWithNoPrefs() {
-    val tasksClone = pendingTasksWithNoPrefs.clone()
-    pendingTasksWithNoPrefs.clear()
-    for (index <- tasksClone) {
-      addPendingTask(index)
+  //Re-compute the pending lists. This should be called when new executor is added
+  def reAddPendingTasks() {
+    logInfo("Re-computing pending task lists.")
+    for (i <- (0 until numTasks).reverse.filter(index => copiesRunning(index) == 0 && !successful(index))) {
+      addPendingTask(i, readding = true)
     }
-    logInfo("Moved " + (tasksClone.size - pendingTasksWithNoPrefs.size) + " tasks from NoPrefs to other pending list. ---lirui")
   }
 }
