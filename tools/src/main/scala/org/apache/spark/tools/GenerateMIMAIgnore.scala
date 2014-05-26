@@ -70,26 +70,26 @@ object GenerateMIMAIgnore {
           false
         }
       }
-    }  
-	
+    }
+    
     def classesAnnotationCheck(className: String) = {
-	try {
-	val annotList=mirror
-		.classSymbol(Class.forName(className, false, classLoader))
-		.annotations
+    try {
+     val annotList=mirror
+       .classSymbol(Class.forName(className, false, classLoader))
+       .annotations
 	
-	isAnnotationExistClassLevel(annotList)
+       isAnnotationExistClassLevel(annotList)
      } catch {
-        case _: Throwable => {
+       case _: Throwable => {
           println("Error determining Annotations: " + className)
           false
-        }
-      }
-    }  
+          }
+       }
+     }  
 	
     for (className <- classes) {
       val directlyPrivateSpark = isPackagePrivate(className)
-	val annotationCheck = classesAnnotationCheck(className)
+      val annotationCheck = classesAnnotationCheck(className)
 
       /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
@@ -112,10 +112,10 @@ object GenerateMIMAIgnore {
       writeAll(classesPrivateWithin("org.apache.spark").mkString("\n"))
     println("Created : .mima-excludes in current directory.")
   }
-
+  
   private def isAnnotationExistClassLevel(annotList: List[unv.Annotation]): Boolean = {
     annotList.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
-  }
+    }
 
   private def shouldExclude(name: String) = {
     // Heuristic to remove JVM classes that do not correspond to user-facing classes in Scala
