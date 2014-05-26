@@ -6,6 +6,8 @@ title: Spark Configuration
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
+Spark provides several locations to configure the system:
+
 # Spark Properties
 
 Spark properties control most application settings and are configured separately for each
