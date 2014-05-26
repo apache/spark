@@ -59,7 +59,7 @@ import java.util.{Map => JMap}
  *  // Importing the SQL context gives access to all the SQL functions and implicit conversions.
  *  import sqlContext._
  *
- *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_\$i")))
+ *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
  *  // Any RDD containing case classes can be registered as a table.  The schema of the table is
  *  // automatically inferred using scala reflection.
  *  rdd.registerAsTable("records")
@@ -205,6 +205,20 @@ class SchemaRDD(
   }
 
   /**
+   * Performs an aggregation over all Rows in this RDD.
+   * This is equivalent to a groupBy with no grouping expressions.
+   *
+   * {{{
+   *   schemaRDD.aggregate(Sum('sales) as 'totalSales)
+   * }}}
+   *
+   * @group Query
+   */
+  def aggregate(aggregateExprs: Expression*): SchemaRDD = {
+    groupBy()(aggregateExprs: _*)
+  }
+
+  /**
    * Applies a qualifier to the attributes of this relation.  Can be used to disambiguate attributes
    * with the same name, for example, when performing self-joins.
    *
@@ -281,7 +295,7 @@ class SchemaRDD(
    * supports features such as filter pushdown.
    */
   @Experimental
-  override def count(): Long = groupBy()(Count(Literal(1))).collect().head.getLong(0)
+  override def count(): Long = aggregate(Count(Literal(1))).collect().head.getLong(0)
 
   /**
    * :: Experimental ::
