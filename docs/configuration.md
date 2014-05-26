@@ -39,12 +39,13 @@ Then, you can supply configuration values at runtime:
 ./bin/spark-submit --name "My fancy app" --master local[4] myApp.jar
 {% endhighlight %}
 
-The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit) tool support
-two ways to load configurations dynamically. The first are command line options, such as `--master`, as shown above.
-Running `./bin/spark-submit --help` will show the entire list of options.
+The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit)
+tool support two ways to load configurations dynamically. The first are command line options,
+such as `--master`, as shown above. Running `./bin/spark-submit --help` will show the entire list
+of options.
 
-`bin/spark-submit` will also read configuration options from `conf/spark-defaults.conf`, in which each line consists
-of a key and a value separated by whitespace. For example:
+`bin/spark-submit` will also read configuration options from `conf/spark-defaults.conf`, in which
+each line consists of a key and a value separated by whitespace. For example:
 
     spark.master            spark://5.6.7.8:7077
     spark.executor.memory   512m
@@ -81,8 +82,8 @@ of the most common options to set are:
   <td><strong><code>spark.master</code></strong></td>
   <td>(none)</td>
   <td>
-    The cluster manager to connect to. See the list of <a href="scala-programming-guide.html#master-urls">
-    allowed master URL's</a>.
+    The cluster manager to connect to. See the list of
+    <a href="scala-programming-guide.html#master-urls"> allowed master URL's</a>.
   </td>
 </tr>
 <tr>
@@ -98,10 +99,12 @@ of the most common options to set are:
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
     Class to use for serializing objects that will be sent over the network or need to be cached
-    in serialized form. The default of Java serialization works with any Serializable Java object but is
-    quite slow, so we recommend <a href="tuning.html">using <code>org.apache.spark.serializer.KryoSerializer</code>
-    and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of
-    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer"><code>org.apache.spark.Serializer</code></a>.
+    in serialized form. The default of Java serialization works with any Serializable Java object
+    but is quite slow, so we recommend <a href="tuning.html">using
+    <code>org.apache.spark.serializer.KryoSerializer</code> and configuring Kryo serialization</a>
+    when speed is necessary. Can be any subclass of
+    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer">
+    <code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
 <tr>
@@ -110,7 +113,8 @@ of the most common options to set are:
   <td>
     If you use Kryo serialization, set this class to register your custom classes with Kryo.
     It should be set to a class that extends
-    <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator"><code>KryoRegistrator</code></a>.
+    <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
+    <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
 </tr>
@@ -118,9 +122,9 @@ of the most common options to set are:
   <td><code>spark.local.dir</code></td>
   <td>/tmp</td>
   <td>
-    Directory to use for "scratch" space in Spark, including map output files and RDDs that get stored
-    on disk. This should be on a fast, local disk in your system. It can also be a comma-separated
-    list of multiple directories on different disks.
+    Directory to use for "scratch" space in Spark, including map output files and RDDs that get
+    stored on disk. This should be on a fast, local disk in your system. It can also be a
+    comma-separated list of multiple directories on different disks.
 
     NOTE: In Spark 1.0 and later this will be overriden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
     LOCAL_DIRS (YARN) environment variables set by the cluster manager.
@@ -193,18 +197,18 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.consolidateFiles</code></td>
   <td>false</td>
   <td>
-    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve
-    filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true"
-    when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8)
-    cores due to filesystem limitations.
+    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer
+    files can improve filesystem performance for shuffles with large numbers of reduce tasks. It
+    is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option
+    might degrade performance on machines with many (>8) cores due to filesystem limitations.
   </td>
 </tr>
 <tr>
   <td><code>spark.shuffle.spill</code></td>
   <td>true</td>
   <td>
-    If set to "true", limits the amount of memory used during reduces by spilling data out to disk. This spilling
-    threshold is specified by <code>spark.shuffle.memoryFraction</code>.
+    If set to "true", limits the amount of memory used during reduces by spilling data out to disk.
+    This spilling threshold is specified by <code>spark.shuffle.memoryFraction</code>.
   </td>
 </tr>
 <tr>
@@ -254,8 +258,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>48</td>
   <td>
     Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
-    each output requires us to create a buffer to receive it, this represents a fixed memory overhead
-    per reduce task, so keep it small unless you have a large amount of memory.
+    each output requires us to create a buffer to receive it, this represents a fixed memory
+    overhead per reduce task, so keep it small unless you have a large amount of memory.
   </td>
 </tr>
 </table>
@@ -288,7 +292,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.eventLog.enabled</code></td>
   <td>false</td>
   <td>
-    Whether to log spark events, useful for reconstructing the Web UI after the application has finished.
+    Whether to log spark events, useful for reconstructing the Web UI after the application has
+    finished.
   </td>
 </tr>
 <tr>
@@ -303,8 +308,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>file:///tmp/spark-events</td>
   <td>
     Base directory in which spark events are logged, if <code>spark.eventLog.enabled</code> is true.
-    Within this base directory, Spark creates a sub-directory for each application, and logs the events
-    specific to the application in this directory.
+    Within this base directory, Spark creates a sub-directory for each application, and logs the
+    events specific to the application in this directory.
   </td>
 </tr>
 </table>
@@ -323,23 +328,26 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rdd.compress</code></td>
   <td>false</td>
   <td>
-    Whether to compress serialized RDD partitions (e.g. for <code>StorageLevel.MEMORY_ONLY_SER</code>).
-    Can save substantial space at the cost of some extra CPU time.
+    Whether to compress serialized RDD partitions (e.g. for
+    <code>StorageLevel.MEMORY_ONLY_SER</code>). Can save substantial space at the cost of some
+    extra CPU time.
   </td>
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
   <td>org.apache.spark.io.<br />LZFCompressionCodec</td>
   <td>
-    The codec used to compress internal data such as RDD partitions and shuffle outputs. By default, Spark provides two
-    codecs: <code>org.apache.spark.io.LZFCompressionCodec</code> and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
+    The codec used to compress internal data such as RDD partitions and shuffle outputs.
+    By default, Spark provides two codecs: <code>org.apache.spark.io.LZFCompressionCodec</code>
+    and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
 </tr>
 <tr>
   <td><code>spark.io.compression.snappy.block.size</code></td>
   <td>32768</td>
   <td>
-    Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec is used.
+    Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec
+    is used.
   </td>
 </tr>
 <tr>
@@ -376,7 +384,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Maximum object size to allow within Kryo (the library needs to create a buffer at least as
     large as the largest single object you'll serialize). Increase this if you get a "buffer limit
-    exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each worker.
+    exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each
+    worker.
   </td>
 </tr>
 </table>
@@ -394,8 +403,8 @@ Apart from these, the following properties are also available, and may be useful
     </ul>
   </td>
   <td>
-    Default number of tasks to use across the cluster for distributed shuffle operations (<code>groupByKey</code>,
-    <code>reduceByKey</code>, etc) when not set by user.
+    Default number of tasks to use across the cluster for distributed shuffle operations
+    (<code>groupByKey</code>, <code>reduceByKey</code>, etc) when not set by user.
   </td>
 </tr>
 <tr>
@@ -410,16 +419,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>4096</td>
   <td>
     Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
-    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small,
-    <code>BlockManager</code> might take a performance hit.
+    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is
+    too small, <code>BlockManager</code> might take a performance hit.
   </td>
 </tr>
 <tr>
   <td><code>spark.files.overwrite</code></td>
   <td>false</td>
   <td>
-    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not
-    match those of the source.
+    Whether to overwrite files added through SparkContext.addFile() when the target file exists and
+    its contents do not match those of the source.
   </td>
 </tr>
 <tr>
@@ -435,8 +444,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.6</td>
   <td>
     Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
-    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can increase
-    it if you configure your own old generation size.
+    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
+    increase it if you configure your own old generation size.
   </td>
 </tr>
 <tr>
@@ -444,8 +453,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>System.getProperty("java.io.tmpdir")</td>
   <td>
     Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by
-    <code>spark.tachyonStore.url</code>. It can also be a comma-separated list of multiple directories
-    on Tachyon file system.
+    <code>spark.tachyonStore.url</code>. It can also be a comma-separated list of multiple
+    directories on Tachyon file system.
   </td>
 </tr>
 <tr>
@@ -502,33 +511,36 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.heartbeat.pauses</code></td>
   <td>600</td>
   <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you
-     plan to use this feature (Not recommended). Acceptable heart beat pause in seconds for akka. This can be used to
-     control sensitivity to gc pauses. Tune this in combination of `spark.akka.heartbeat.interval` and
-     `spark.akka.failure-detector.threshold` if you need to.
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
+     enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause
+     in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in
+     combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold`
+     if you need to.
   </td>
 </tr>
 <tr>
   <td><code>spark.akka.failure-detector.threshold</code></td>
   <td>300.0</td>
   <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you
-     plan to use this feature (Not recommended). This maps to akka's `akka.remote.transport-failure-detector.threshold`.
-     Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
+     enabled again, if you plan to use this feature (Not recommended). This maps to akka's
+     `akka.remote.transport-failure-detector.threshold`. Tune this in combination of
+     `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
   </td>
 </tr>
 <tr>
   <td><code>spark.akka.heartbeat.interval</code></td>
   <td>1000</td>
   <td>
-    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you
-    plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a
-    smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination
-    of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use
-    case for using failure detector can be, a sensistive failure detector can help evict rogue executors really
-    quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster.
-    Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the
-    network with those.
+    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
+    enabled again, if you plan to use this feature (Not recommended). A larger interval value in
+    seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for
+    akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and
+    `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using
+    failure detector can be, a sensistive failure detector can help evict rogue executors really
+    quick. However this is usually not the case as gc pauses and network lags are expected in a
+    real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats
+    between nodes leading to flooding the network with those.
   </td>
 </tr>
 </table>
@@ -579,17 +591,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     If set to "true", runs over Mesos clusters in
     <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
-    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
-    duration of the Spark job.
+    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per
+    Spark task. This gives lower-latency scheduling for short queries, but leaves resources in use
+    for the whole duration of the Spark job.
   </td>
 </tr>
 <tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>
-    If set to "true", performs speculative execution of tasks. This means if one or more tasks are running slowly in a
-    stage, they will be re-launched.
+    If set to "true", performs speculative execution of tasks. This means if one or more tasks are
+    running slowly in a stage, they will be re-launched.
   </td>
 </tr>
 <tr>
@@ -652,7 +664,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.revive.interval</code></td>
   <td>1000</td>
   <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
+    The interval length for the scheduler to revive the worker resource offers to run tasks.
+    (in milliseconds)
   </td>
 </tr>
 </table>
@@ -664,8 +677,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.authenticate</code></td>
   <td>false</td>
   <td>
-    Whether spark authenticates its internal connections. See <code>spark.authenticate.secret</code> if not
-    running on Yarn.
+    Whether spark authenticates its internal connections. See
+    <code>spark.authenticate.secret</code> if not running on Yarn.
   </td>
 </tr>
 <tr>
@@ -691,7 +704,8 @@ Apart from these, the following properties are also available, and may be useful
     Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
     standard javax servlet Filter. Parameters to each filter can also be specified by setting a
     java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
-    (e.g. -Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
+    (e.g. -Dspark.ui.filters=com.test.filter1
+    -Dspark.com.test.filter1.params='param1=foo,param2=testing')
   </td>
 </tr>
 <tr>
@@ -721,10 +735,11 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.cleaner.ttl</code></td>
   <td>(infinite)</td>
   <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
-    Periodic cleanups will ensure that metadata older than this duration will be forgotten. This is
-    useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
-    applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
+    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks
+    generated, etc.). Periodic cleanups will ensure that metadata older than this duration will be
+    forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
+    case of Spark Streaming applications). Note that any RDD that persists in memory for more than
+    this duration will be cleared as well.
   </td>
 </tr>
 <tr>
@@ -782,8 +797,8 @@ The following variables can be set in `spark-env.sh`:
 </table>
 
 In addition to the above, there are also options for setting up the Spark
-[standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores to use on each
-machine and maximum memory.
+[standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores
+to use on each machine and maximum memory.
 
 Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
 compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
