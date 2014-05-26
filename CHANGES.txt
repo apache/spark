@@ -3,6 +3,71 @@ Spark Change Log
 
 Release 1.0.0
 
+  HOTFIX: Add no-arg SparkContext constructor in Java
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-25 20:13:32 -0700
+  Commit: 18c77cb, github.com/apache/spark/pull/878
+
+  [SQL] Minor: Introduce SchemaRDD#aggregate() for simple aggregations
+  Aaron Davidson <aaron@databricks.com>
+  2014-05-25 18:37:44 -0700
+  Commit: a3976a2, github.com/apache/spark/pull/874
+
+  SPARK-1903 Document Spark's network connections
+  Andrew Ash <andrew@andrewash.com>
+  2014-05-25 17:15:47 -0700
+  Commit: 5107a6f, github.com/apache/spark/pull/856
+
+  Fix PEP8 violations in Python mllib.
+  Reynold Xin <rxin@apache.org>
+  2014-05-25 17:15:01 -0700
+  Commit: 07f34ca, github.com/apache/spark/pull/871
+
+  Python docstring update for sql.py.
+  Reynold Xin <rxin@apache.org>
+  2014-05-25 16:04:17 -0700
+  Commit: 8891495, github.com/apache/spark/pull/869
+
+  Fix PEP8 violations in examples/src/main/python.
+  Reynold Xin <rxin@apache.org>
+  2014-05-25 14:48:27 -0700
+  Commit: 3368397, github.com/apache/spark/pull/870
+
+  Added license header for tox.ini.
+  Reynold Xin <rxin@apache.org>
+  2014-05-25 01:47:08 -0700
+  Commit: 7273bfc
+
+  SPARK-1822: Some minor cleanup work on SchemaRDD.count()
+  Reynold Xin <rxin@apache.org>
+  2014-05-25 01:44:49 -0700
+  Commit: aeffc20, github.com/apache/spark/pull/868
+
+  Added PEP8 style configuration file.
+  Reynold Xin <rxin@apache.org>
+  2014-05-25 01:32:15 -0700
+  Commit: 291567d, github.com/apache/spark/pull/872
+
+  [SPARK-1822] SchemaRDD.count() should use query optimizer
+  Kan Zhang <kzhang@apache.org>
+  2014-05-25 00:06:42 -0700
+  Commit: 64d0fb5, github.com/apache/spark/pull/841
+
+  spark-submit: add exec at the end of the script
+  Colin Patrick Mccabe <cmccabe@cloudera.com>
+  2014-05-24 22:39:27 -0700
+  Commit: 7e59335, github.com/apache/spark/pull/858
+
+  [SPARK-1886] check executor id existence when executor exit
+  Zhen Peng <zhenpeng01@baidu.com>
+  2014-05-24 20:40:19 -0700
+  Commit: b5e9686, github.com/apache/spark/pull/827
+
+  Updated CHANGES.txt
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-05-25 02:20:13 +0000
+  Commit: 8406092
+
   SPARK-1911: Emphasize that Spark jars should be built with Java 6.
   Patrick Wendell <pwendell@gmail.com>
   2014-05-24 18:27:00 -0700
