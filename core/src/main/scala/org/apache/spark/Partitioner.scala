@@ -156,3 +156,41 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       false
   }
 }
+
+/**
+ * A [[org.apache.spark.Partitioner]] that partitions records into balanced partitions
+ * by allocating keys to partitions in a round robin fashion.
+ */
+class BalancedPartitioner[K : Ordering : ClassTag, V](
+                                                    partitions: Int,
+                                                    @transient rdd: RDD[_ <: Product2[K,V]])
+  extends Partitioner {
+
+  // this array keeps track of keys assigned to a partition
+  // counts[0] refers to # of keys in partition 0 and so on
+  private val counts: Array[Int] = {
+    new Array[Int](numPartitions)
+  }
+
+  def numPartitions = math.abs(partitions)
+
+  var currPartition = 0
+
+  /*
+  * Pick current partition for the key in round robin manner
+  */
+  def getPartition(key: Any): Int = {
+    val partition = currPartition
+    counts(partition) = counts(partition) + 1
+    currPartition = (currPartition + 1) % numPartitions
+    partition
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case r: BalancedPartitioner[_,_] =>
+      (r.counts.sameElements(counts)
+        && r.currPartition == currPartition)
+    case _ =>
+      false
+  }
+}
