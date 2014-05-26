@@ -86,7 +86,8 @@ of the most common options to set are:
   <td><strong><code>spark.master</code></strong></td>
   <td>(none)</td>
   <td>
-    The cluster manager to connect to. See the list of [allowed master URL's](scala-programming-guide.html#master-urls).
+    The cluster manager to connect to. See the list of <a href="scala-programming-guide.html#master-urls">
+    allowed master URL's</a>.
   </td>
 </tr>
 <tr>
