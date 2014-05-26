@@ -3,15 +3,10 @@ layout: global
 title: Spark Configuration
 ---
 
-Spark provides three locations to configure the system:
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
-* [Spark properties](#spark-properties) control most application parameters and can be set by
-  passing a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object to SparkContext,
-  or through the `conf/spark-defaults.conf` properties file.
-* [Environment variables](#environment-variables) can be used to set per-machine settings, such as
-  the IP address, through the `conf/spark-env.sh` script on each node.
-* [Logging](#configuring-logging) can be configured through `log4j.properties`.
-
+Spark provides several locations to configure the system:
 
 # Spark Properties
 
@@ -65,7 +60,8 @@ there are at least five properties that you will commonly want to control:
   <td><code>spark.executor.memory</code></td>
   <td>512m</td>
   <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
+    Amount of memory to use per executor process, in the same format as JVM memory strings (e.g.
+    <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
 <tr>
@@ -93,9 +89,9 @@ there are at least five properties that you will commonly want to control:
   <td><code>spark.local.dir</code></td>
   <td>/tmp</td>
   <td>
-    Directory to use for "scratch" space in Spark, including map output files and RDDs that get stored
-    on disk. This should be on a fast, local disk in your system. It can also be a comma-separated
-    list of multiple directories on different disks.
+    Directory to use for "scratch" space in Spark, including map output files and RDDs that get
+    stored on disk. This should be on a fast, local disk in your system. It can also be a
+    comma-separated list of multiple directories on different disks.
 
     NOTE: In Spark 1.0 and later this will be overriden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
     LOCAL_DIRS (YARN) envrionment variables set by the cluster manager.
@@ -130,8 +126,8 @@ Apart from these, the following properties are also available, and may be useful
     </ul>
   </td>
   <td>
-    Default number of tasks to use across the cluster for distributed shuffle operations (<code>groupByKey</code>,
-    <code>reduceByKey</code>, etc) when not set by user.
+    Default number of tasks to use across the cluster for distributed shuffle operations
+    (<code>groupByKey</code>, <code>reduceByKey</code>, etc) when not set by user.
   </td>
 </tr>
 <tr>
@@ -167,8 +163,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.tachyonStore.baseDir</code></td>
   <td>System.getProperty("java.io.tmpdir")</td>
   <td>
-    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by <code>spark.tachyonStore.url</code>.
-    It can also be a comma-separated list of multiple directories on Tachyon file system.
+    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by
+    <code>spark.tachyonStore.url</code>.  It can also be a comma-separated list of multiple
+    directories on Tachyon file system.
   </td>
 </tr>
 <tr>
@@ -182,9 +179,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.mesos.coarse</code></td>
   <td>false</td>
   <td>
-    If set to "true", runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
+    If set to "true", runs over Mesos clusters in <a
+    href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>, where Spark
+    acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
     This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
     duration of the Spark job.
   </td>
@@ -271,15 +268,17 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.io.compression.codec</code></td>
   <td>org.apache.spark.io.<br />LZFCompressionCodec</td>
   <td>
-    The codec used to compress internal data such as RDD partitions and shuffle outputs. By default, Spark provides two
-    codecs: <code>org.apache.spark.io.LZFCompressionCodec</code> and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
+    The codec used to compress internal data such as RDD partitions and shuffle outputs. By default,
+    Spark provides two codecs: <code>org.apache.spark.io.LZFCompressionCodec</code> and
+    <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
 </tr>
 <tr>
   <td><code>spark.io.compression.snappy.block.size</code></td>
   <td>32768</td>
   <td>
-    Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec is used.
+    Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec is
+    used.
   </td>
 </tr>
 <tr>
@@ -296,7 +295,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.revive.interval</code></td>
   <td>1000</td>
   <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
+    The interval length for the scheduler to revive the worker resource offers to run tasks. (in
+    milliseconds)
   </td>
 </tr>
 <tr>
@@ -304,8 +304,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>48</td>
   <td>
     Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
-    each output requires us to create a buffer to receive it, this represents a fixed memory overhead
-    per reduce task, so keep it small unless you have a large amount of memory.
+    each output requires us to create a buffer to receive it, this represents a fixed memory
+    overhead per reduce task, so keep it small unless you have a large amount of memory.
   </td>
 </tr>
 <tr>
@@ -329,9 +329,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.kryoserializer.buffer.mb</code></td>
   <td>2</td>
   <td>
-    Maximum object size to allow within Kryo (the library needs to create a buffer at least as
-    large as the largest single object you'll serialize). Increase this if you get a "buffer limit
-    exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each worker.
+    Maximum object size to allow within Kryo (the library needs to create a buffer at least as large
+    as the largest single object you'll serialize). Increase this if you get a "buffer limit
+    exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each
+    worker.
   </td>
 </tr>
 <tr>
@@ -399,9 +400,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
   <td>
-    Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
-    mode, as YARN works differently. Applications directories are cleaned up regardless of whether
-    the application is still running.
+    Enable periodic cleanup of worker / application directories.  Note that this only affects
+    standalone mode, as YARN works differently. Applications directories are cleaned up regardless
+    of whether the application is still running.
   </td>
 </tr>
 <tr>
@@ -416,10 +417,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.worker.cleanup.appDataTtl</code></td>
   <td>7 * 24 * 3600 (7 days)</td>
   <td>
-    The number of seconds to retain application work directories on each worker.  This is a Time To Live
-    and should depend on the amount of available disk space you have.  Application logs and jars are
-    downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
-    especially if you run jobs very frequently.
+    The number of seconds to retain application work directories on each worker.  This is a Time To
+    Live and should depend on the amount of available disk space you have.  Application logs and
+    jars are downloaded to each application work dir.  Over time, the work dirs can quickly fill up
+    disk space, especially if you run jobs very frequently.
   </td>
 </tr>
 <tr>
@@ -450,21 +451,36 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.heartbeat.pauses</code></td>
   <td>600</td>
   <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold` if you need to.
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
+     enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause
+     in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in
+     combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold` if
+     you need to.
   </td>
 </tr>
 <tr>
   <td><code>spark.akka.failure-detector.threshold</code></td>
   <td>300.0</td>
   <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). This maps to akka's `akka.remote.transport-failure-detector.threshold`. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
+     enabled again, if you plan to use this feature (Not recommended). This maps to akka's
+     `akka.remote.transport-failure-detector.threshold`. Tune this in combination of
+     `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
   </td>
 </tr>
 <tr>
   <td><code>spark.akka.heartbeat.interval</code></td>
   <td>1000</td>
   <td>
-    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those.
+    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
+    enabled again, if you plan to use this feature (Not recommended). A larger interval value in
+    seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for
+    akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and
+    `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure
+    detector can be, a sensistive failure detector can help evict rogue executors really quick.
+    However this is usually not the case as gc pauses and network lags are expected in a real spark
+    cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes
+    leading to flooding the network with those.
   </td>
 </tr>
 <tr>
@@ -485,10 +501,11 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.cleaner.ttl</code></td>
   <td>(infinite)</td>
   <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
-    Periodic cleanups will ensure that metadata older than this duration will be forgotten. This is
-    useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
-    applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
+    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks
+    generated, etc.).  Periodic cleanups will ensure that metadata older than this duration will be
+    forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
+    case of Spark Streaming applications). Note that any RDD that persists in memory for more than
+    this duration will be cleared as well.
   </td>
 </tr>
 <tr>
@@ -523,7 +540,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>4096</td>
   <td>
     Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
-    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
+    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is
+    too small, <code>BlockManager</code> might take a performance hit.
   </td>
 </tr>
 
@@ -531,7 +549,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.consolidateFiles</code></td>
   <td>false</td>
   <td>
-    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
+    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files
+    can improve filesystem performance for shuffles with large numbers of reduce tasks. It is
+    recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might
+    degrade performance on machines with many (>8) cores due to filesystem limitations.
   </td>
 </tr>
 <tr>
@@ -546,15 +567,16 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.spill</code></td>
   <td>true</td>
   <td>
-    If set to "true", limits the amount of memory used during reduces by spilling data out to disk. This spilling
-    threshold is specified by <code>spark.shuffle.memoryFraction</code>.
+    If set to "true", limits the amount of memory used during reduces by spilling data out to disk.
+    This spilling threshold is specified by <code>spark.shuffle.memoryFraction</code>.
   </td>
 </tr>
 <tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>
-    If set to "true", performs speculative execution of tasks. This means if one or more tasks are running slowly in a stage, they will be re-launched.
+    If set to "true", performs speculative execution of tasks. This means if one or more tasks are
+    running slowly in a stage, they will be re-launched.
   </td>
 </tr>
 <tr>
@@ -589,7 +611,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.eventLog.enabled</code></td>
   <td>false</td>
   <td>
-    Whether to log spark events, useful for reconstructing the Web UI after the application has finished.
+    Whether to log spark events, useful for reconstructing the Web UI after the application has
+    finished.
   </td>
 </tr>
 <tr>
@@ -604,39 +627,40 @@ Apart from these, the following properties are also available, and may be useful
   <td>file:///tmp/spark-events</td>
   <td>
     Base directory in which spark events are logged, if <code>spark.eventLog.enabled</code> is true.
-    Within this base directory, Spark creates a sub-directory for each application, and logs the events
-    specific to the application in this directory.
+    Within this base directory, Spark creates a sub-directory for each application, and logs the
+    events specific to the application in this directory.
   </td>
 </tr>
 <tr>
   <td><code>spark.deploy.spreadOut</code></td>
   <td>true</td>
   <td>
-    Whether the standalone cluster manager should spread applications out across nodes or try
-    to consolidate them onto as few nodes as possible. Spreading out is usually better for
-    data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
-    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-    applications; you can set it through <code>SPARK_MASTER_OPTS</code> in <code>spark-env.sh</code>.
+    Whether the standalone cluster manager should spread applications out across nodes or try to
+    consolidate them onto as few nodes as possible. Spreading out is usually better for data
+    locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
+    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in
+    individual applications; you can set it through <code>SPARK_MASTER_OPTS</code> in
+    <code>spark-env.sh</code>.
   </td>
 </tr>
 <tr>
   <td><code>spark.deploy.defaultCores</code></td>
   <td>(infinite)</td>
   <td>
-    Default number of cores to give to applications in Spark's standalone mode if they don't
-    set <code>spark.cores.max</code>. If not set, applications always get all available
-    cores unless they configure <code>spark.cores.max</code> themselves.
-    Set this lower on a shared cluster to prevent users from grabbing
-    the whole cluster by default. <br/>
-    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-    applications; you can set it through <code>SPARK_MASTER_OPTS</code> in <code>spark-env.sh</code>.
+    Default number of cores to give to applications in Spark's standalone mode if they don't set
+    <code>spark.cores.max</code>. If not set, applications always get all available cores unless
+    they configure <code>spark.cores.max</code> themselves.  Set this lower on a shared cluster to
+    prevent users from grabbing the whole cluster by default. <br/> <b>Note:</b> this setting needs
+    to be configured in the standalone cluster master, not in individual applications; you can set
+    it through <code>SPARK_MASTER_OPTS</code> in <code>spark-env.sh</code>.
   </td>
 </tr>
 <tr>
   <td><code>spark.files.overwrite</code></td>
   <td>false</td>
   <td>
-    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
+    Whether to overwrite files added through SparkContext.addFile() when the target file exists and
+    its contents do not match those of the source.
   </td>
 </tr>
 <tr>
@@ -660,8 +684,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.authenticate</code></td>
   <td>false</td>
   <td>
-    Whether spark authenticates its internal connections. See <code>spark.authenticate.secret</code> if not
-    running on Yarn.
+    Whether spark authenticates its internal connections. See <code>spark.authenticate.secret</code>
+    if not running on Yarn.
   </td>
 </tr>
 <tr>
@@ -719,13 +743,13 @@ Apart from these, the following properties are also available, and may be useful
 
 # Environment Variables
 
-Certain Spark settings can be configured through environment variables, which are read from the `conf/spark-env.sh`
-script in the directory where Spark is installed (or `conf/spark-env.cmd` on Windows). In Standalone and Mesos modes,
-this file can give machine specific information such as hostnames. It is also sourced when running local
-Spark applications or submission scripts.
+Certain Spark settings can be configured through environment variables, which are read from the
+`conf/spark-env.sh` script in the directory where Spark is installed (or `conf/spark-env.cmd` on
+Windows). In Standalone and Mesos modes, this file can give machine specific information such as
+hostnames. It is also sourced when running local Spark applications or submission scripts.
 
-Note that `conf/spark-env.sh` does not exist by default when Spark is installed. However, you can copy
-`conf/spark-env.sh.template` to create it. Make sure you make the copy executable.
+Note that `conf/spark-env.sh` does not exist by default when Spark is installed. However, you can
+copy `conf/spark-env.sh.template` to create it. Make sure you make the copy executable.
 
 The following variables can be set in `spark-env.sh`:
 
@@ -750,12 +774,104 @@ The following variables can be set in `spark-env.sh`:
   </tr>
 </table>
 
-In addition to the above, there are also options for setting up the Spark [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores to use on each machine and maximum memory.
+In addition to the above, there are also options for setting up the Spark [standalone cluster
+scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores to use on each
+machine and maximum memory.
 
-Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
-compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
+Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example,
+you might compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
 
 # Configuring Logging
 
-Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a `log4j.properties`
-file in the `conf` directory. One way to start is to copy the existing `log4j.properties.template` located there.
+Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
+`log4j.properties` file in the `conf` directory. One way to start is to copy the existing
+`log4j.properties.template` located there.
+
+# Configuring Ports for Network Security
+
+Spark makes heavy use of the network, and some environments have strict requirements for using tight
+firewall settings.  Below are the primary ports that Spark uses for its communication and how to
+configure those ports.
+
+<table class="table">
+  <tr>
+    <th>From</th><th>To</th><th>Default Port</th><th>Purpose</th><th>Configuration
+    Setting</th><th>Notes</th>
+  </tr>
+  <!-- Web UIs -->
+  <tr>
+    <td>Browser</td>
+    <td>Standalone Cluster Master</td>
+    <td>8080</td>
+    <td>Web UI</td>
+    <td><code>master.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>Worker</td>
+    <td>8081</td>
+    <td>Web UI</td>
+    <td><code>worker.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>Driver</td>
+    <td>4040</td>
+    <td>Web UI</td>
+    <td><code>spark.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>History Server</td>
+    <td>18080</td>
+    <td>Web UI</td>
+    <td><code>spark.history.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+
+  <!-- Cluster interactions -->
+  <tr>
+    <td>Application</td>
+    <td>Standalone Cluster Master</td>
+    <td>7077</td>
+    <td>Submit job to cluster</td>
+    <td><code>spark.driver.port</code></td>
+    <td>Akka-based.  Set to "0" to choose a port randomly</td>
+  </tr>
+  <tr>
+    <td>Worker</td>
+    <td>Standalone Cluster Master</td>
+    <td>7077</td>
+    <td>Join cluster</td>
+    <td><code>spark.driver.port</code></td>
+    <td>Akka-based.  Set to "0" to choose a port randomly</td>
+  </tr>
+  <tr>
+    <td>Application</td>
+    <td>Worker</td>
+    <td>(random)</td>
+    <td>Join cluster</td>
+    <td><code>SPARK_WORKER_PORT</code> (standalone cluster)</td>
+    <td>Akka-based</td>
+  </tr>
+
+  <!-- Other misc stuff -->
+  <tr>
+    <td>Driver and other Workers</td>
+    <td>Worker</td>
+    <td>(random)</td>
+    <td>
+      <ul>
+        <li>File server for file and jars</li>
+        <li>Http Broadcast</li>
+        <li>Class file server (Spark Shell only)</li>
+      </ul>
+    </td>
+    <td>None</td>
+    <td>Jetty-based.  Each of these services starts on a random port that cannot be configured</td>
+  </tr>
+
+</table>
