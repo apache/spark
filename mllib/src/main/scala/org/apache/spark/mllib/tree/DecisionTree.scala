@@ -230,10 +230,10 @@ object DecisionTree extends Serializable with Logging {
    * @return a DecisionTreeModel that can be used for prediction
    */
   def train(
-             input: RDD[LabeledPoint],
-             algo: Algo,
-             impurity: Impurity,
-             maxDepth: Int): DecisionTreeModel = {
+      input: RDD[LabeledPoint],
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth)
     // Converting from standard instance format to weighted input format for tree training
     val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
@@ -279,10 +279,10 @@ object DecisionTree extends Serializable with Logging {
    * @param impurity impurity criterion used for information gain calculation
    * @param maxDepth maxDepth maximum depth of the tree
    * @param numClassesForClassification number of classes for classification. Default value of 2.
-   * @param labelWeights A map storing weights applied to each label for handling unbalanced
+   * @param labelWeights A map storing weights for each label to handle unbalanced
    *                     datasets. For example, an entry (n -> k) implies the a weight of k is
    *                     applied to an instance with label n. It's important to note that labels
-   *                     are zero-index and take values 0, 1, 2, ... , numClasses.
+   *                     are zero-index and take values 0, 1, 2, ... , numClasses - 1.
    * @return a DecisionTreeModel that can be used for prediction
    */
   def train(
@@ -316,7 +316,7 @@ object DecisionTree extends Serializable with Logging {
    * @param labelWeights A map storing weights applied to each label for handling unbalanced
    *                     datasets. For example, an entry (n -> k) implies the a weight of k is
    *                     applied to an instance with label n. It's important to note that labels
-   *                     are zero-index and take values 0, 1, 2, ... , numClasses.
+   *                     are zero-index and take values 0, 1, 2, ... , numClasses - 1.
    * @param maxBins maximum number of bins used for splitting features
    * @param quantileCalculationStrategy  algorithm for calculating quantiles
    * @param categoricalFeaturesInfo A map storing information about the categorical variables and
