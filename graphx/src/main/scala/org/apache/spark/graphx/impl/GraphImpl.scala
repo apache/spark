@@ -279,7 +279,8 @@ object GraphImpl {
 
   /**
    * Create a graph from a VertexRDD and an EdgeRDD with arbitrary replicated vertices. The
-   * VertexRDD must already be set up for efficient joins with the EdgeRDD.
+   * VertexRDD must already be set up for efficient joins with the EdgeRDD by calling
+   * `VertexRDD.withEdges` or an appropriate VertexRDD constructor.
    */
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: VertexRDD[VD],
@@ -293,7 +294,8 @@ object GraphImpl {
 
   /**
    * Create a graph from a VertexRDD and an EdgeRDD with the same replicated vertex type as the
-   * vertices. The VertexRDD must already be set up for efficient joins with the EdgeRDD.
+   * vertices. The VertexRDD must already be set up for efficient joins with the EdgeRDD by calling
+   * `VertexRDD.withEdges` or an appropriate VertexRDD constructor.
    */
   def fromExistingRDDs[VD: ClassTag, ED: ClassTag](
       vertices: VertexRDD[VD],
