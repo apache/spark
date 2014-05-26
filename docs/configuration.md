@@ -33,25 +33,28 @@ val sc = new SparkContext(conf)
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, if you'd like to run the same application with different masters or different
-amounts of memory. Spark allows you to omit this in your code:
+amounts of memory. Spark allows you to simply create an empty conf:
 
 {% highlight scala %}
-val conf = new SparkConf().setAppName("myApp")
+val sc = new SparkContext(new SparkConf())
 {% endhighlight %}
 
+Then, you can supply configuration values at runtime:
+{% highlight bash %}
+./bin/spark-submit --name "My fancy app" --master local[4] myApp.jar
+{% endhighlight %}
 
-The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit) tool support two ways to load configurations dynamically. 
-When a SparkConf is created, it will read configuration options from `conf/spark-defaults.conf`, 
-in which each line consists of a key and a value separated by whitespace. For example,
+The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit) tool support
+two ways to load configurations dynamically. The first are command line options, such as `--master`, as shown above.
+Running `./bin/spark-submit --help` will show the entire list of options.
+
+`bin/spark-submit` will also read configuration options from `conf/spark-defaults.conf`, in which each line consists
+of a key and a value separated by whitespace. For example:
 
     spark.master            spark://5.6.7.8:7077
     spark.executor.memory   512m
     spark.eventLog.enabled  true
     spark.serializer        org.apache.spark.serializer.KryoSerializer
-
-
-In addition, when launching programs with the [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit) tool, certain options can be configured as flags. For instance, the 
-`--master` flag to `spark-submit` will automatically set the master. Run `./bin/spark-submit --help` to see the entire list of options.
 
 Any values specified as flags or in the properties file will be passed on to the application
 and merged with those specified through SparkConf. Properties set directly on the SparkConf
@@ -67,16 +70,31 @@ appear. For all other configuration properties, you can assume the default value
 
 ## All Configuration Properties
 
-Most of the properties that control internal settings have reasonable default values. However,
-there are at least five properties that you will commonly want to control:
+Most of the properties that control internal settings have reasonable default values. Some
+of the most common options to set are:
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><strong><code>spark.app.name</code></strong></td>
+  <td>(none)</td>
+  <td>
+    The name of your application. This will appear in the UI and in log data.
+  </td>
+</tr>
+<tr>
+  <td><strong><code>spark.master</code></strong></td>
+  <td>(none)</td>
+  <td>
+    The cluster manager to connect to. See the list of [allowed master URL's](scala-programming-guide.html#master-urls).
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.memory</code></td>
   <td>512m</td>
   <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
+    Amount of memory to use per executor process, in the same format as JVM memory strings
+    (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
 <tr>
@@ -109,49 +127,94 @@ there are at least five properties that you will commonly want to control:
     list of multiple directories on different disks.
 
     NOTE: In Spark 1.0 and later this will be overriden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
-    LOCAL_DIRS (YARN) envrionment variables set by the cluster manager.
+    LOCAL_DIRS (YARN) environment variables set by the cluster manager.
   </td>
 </tr>
 <tr>
-  <td><code>spark.cores.max</code></td>
-  <td>(not set)</td>
+  <td><code>spark.logConf</code></td>
+  <td>false</td>
   <td>
-    When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
-    <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
-    sharing mode</a>, the maximum amount of CPU cores to request for the application from
-    across the cluster (not from each machine). If not set, the default will be
-    <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
-    infinite (all available cores) on Mesos.
+    Logs the effective SparkConf as INFO when a SparkContext is started.
   </td>
 </tr>
 </table>
 
-
 Apart from these, the following properties are also available, and may be useful in some situations:
 
+#### Runtime Environment
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.default.parallelism</code></td>
+  <td><code>spark.executor.memory</code></td>
+  <td>512m</td>
   <td>
-    <ul>
-      <li>Local mode: number of cores on the local machine</li>
-      <li>Mesos fine grained mode: 8</li>
-      <li>Others: total number of cores on all executor nodes or 2, whichever is larger</li>
-    </ul>
-  </td>
-  <td>
-    Default number of tasks to use across the cluster for distributed shuffle operations (<code>groupByKey</code>,
-    <code>reduceByKey</code>, etc) when not set by user.
+    Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.memoryFraction</code></td>
-  <td>0.6</td>
+  <td><code>spark.executor.extraJavaOptions</code></td>
+  <td>(none)</td>
   <td>
-    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
-    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can increase
-    it if you configure your own old generation size.
+    A string of extra JVM options to pass to executors. For instance, GC settings or other
+    logging. Note that it is illegal to set Spark properties or heap size settings with this
+    option. Spark properties should be set using a SparkConf object or the
+    spark-defaults.conf file used with the spark-submit script. Heap size settings can be set
+    with spark.executor.memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.extraClassPath</code></td>
+  <td>(none)</td>
+  <td>
+    Extra classpath entries to append to the classpath of executors. This exists primarily
+    for backwards-compatibility with older versions of Spark. Users typically should not need
+    to set this option.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.extraLibraryPath</code></td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching executor JVM's.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.files.userClassPathFirst</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) Whether to give user-added jars precedence over Spark's own jars when
+    loading classes in Executors. This feature can be used to mitigate conflicts between
+    Spark's dependencies and user dependencies. It is currently an experimental feature.
+  </td>
+</tr>
+</table>
+
+#### Shuffle Behavior
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.shuffle.consolidateFiles</code></td>
+  <td>false</td>
+  <td>
+    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve
+    filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true"
+    when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8)
+    cores due to filesystem limitations.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.spill</code></td>
+  <td>true</td>
+  <td>
+    If set to "true", limits the amount of memory used during reduces by spilling data out to disk. This spilling
+    threshold is specified by <code>spark.shuffle.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.spill.compress</code></td>
+  <td>true</td>
+  <td>
+    Whether to compress data spilled during shuffles.
   </td>
 </tr>
 <tr>
@@ -166,6 +229,21 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.compress</code></td>
+  <td>true</td>
+  <td>
+    Whether to compress map output files. Generally a good idea.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.file.buffer.kb</code></td>
+  <td>100</td>
+  <td>
+    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
+    reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
+  </td>
+</tr>
+<tr>
   <td><code>spark.storage.memoryMapThreshold</code></td>
   <td>8192</td>
   <td>
@@ -175,31 +253,19 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.tachyonStore.baseDir</code></td>
-  <td>System.getProperty("java.io.tmpdir")</td>
+  <td><code>spark.reducer.maxMbInFlight</code></td>
+  <td>48</td>
   <td>
-    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by <code>spark.tachyonStore.url</code>.
-    It can also be a comma-separated list of multiple directories on Tachyon file system.
+    Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
+    each output requires us to create a buffer to receive it, this represents a fixed memory overhead
+    per reduce task, so keep it small unless you have a large amount of memory.
   </td>
 </tr>
-<tr>
-  <td><code>spark.tachyonStore.url</code></td>
-  <td>tachyon://localhost:19998</td>
-  <td>
-    The URL of the underlying Tachyon file system in the TachyonStore.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.mesos.coarse</code></td>
-  <td>false</td>
-  <td>
-    If set to "true", runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
-    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
-    duration of the Spark job.
-  </td>
-</tr>
+</table>
+
+#### Spark UI
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.ui.port</code></td>
   <td>4040</td>
@@ -215,34 +281,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.ui.filters</code></td>
-  <td>None</td>
-  <td>
-    Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
-    standard javax servlet Filter. Parameters to each filter can also be specified by setting a
-    java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
-    (e.g. -Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
-  </td>
-</tr>
-<tr>
-  <td><code>spark.ui.acls.enable</code></td>
-  <td>false</td>
-  <td>
-    Whether spark web ui acls should are enabled. If enabled, this checks to see if the user has
-    access permissions to view the web ui. See <code>spark.ui.view.acls</code> for more details.
-    Also note this requires the user to be known, if the user comes across as null no checks
-    are done. Filters can be used to authenticate and set the user.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.ui.view.acls</code></td>
-  <td>Empty</td>
-  <td>
-    Comma separated list of users that have view access to the spark web ui. By default only the
-    user that started the Spark job has view access.
-  </td>
-</tr>
-<tr>
   <td><code>spark.ui.killEnabled</code></td>
   <td>true</td>
   <td>
@@ -250,19 +288,33 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.compress</code></td>
-  <td>true</td>
+  <td><code>spark.eventLog.enabled</code></td>
+  <td>false</td>
   <td>
-    Whether to compress map output files. Generally a good idea.
+    Whether to log spark events, useful for reconstructing the Web UI after the application has finished.
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.spill.compress</code></td>
-  <td>true</td>
+  <td><code>spark.eventLog.compress</code></td>
+  <td>false</td>
   <td>
-    Whether to compress data spilled during shuffles.
+    Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
   </td>
 </tr>
+<tr>
+  <td><code>spark.eventLog.dir</code></td>
+  <td>file:///tmp/spark-events</td>
+  <td>
+    Base directory in which spark events are logged, if <code>spark.eventLog.enabled</code> is true.
+    Within this base directory, Spark creates a sub-directory for each application, and logs the events
+    specific to the application in this directory.
+  </td>
+</tr>
+</table>
+
+#### Compression and Serialization
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.broadcast.compress</code></td>
   <td>true</td>
@@ -294,36 +346,21 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.scheduler.mode</code></td>
-  <td>FIFO</td>
-  <td>
-    The <a href="job-scheduling.html#scheduling-within-an-application">scheduling mode</a> between
-    jobs submitted to the same SparkContext. Can be set to <code>FAIR</code>
-    to use fair sharing instead of queueing jobs one after another. Useful for
-    multi-user services.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.scheduler.revive.interval</code></td>
-  <td>1000</td>
-  <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
-  </td>
-</tr>
-<tr>
-  <td><code>spark.reducer.maxMbInFlight</code></td>
-  <td>48</td>
-  <td>
-    Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
-    each output requires us to create a buffer to receive it, this represents a fixed memory overhead
-    per reduce task, so keep it small unless you have a large amount of memory.
-  </td>
-</tr>
-<tr>
   <td><code>spark.closure.serializer</code></td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
     Serializer class to use for closures. Currently only the Java serializer is supported.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.serializer.objectStreamReset</code></td>
+  <td>10000</td>
+  <td>
+    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
+    objects to prevent writing redundant data, however that stops garbage collection of those
+    objects. By calling 'reset' you flush that info from the serializer, and allow old
+    objects to be collected. To turn off this periodic reset set it to a value &lt;= 0.
+    By default it will reset the serializer every 10,000 objects.
   </td>
 </tr>
 <tr>
@@ -345,15 +382,23 @@ Apart from these, the following properties are also available, and may be useful
     exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each worker.
   </td>
 </tr>
+</table>
+
+#### Execution Behavior
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.serializer.objectStreamReset</code></td>
-  <td>10000</td>
+  <td><code>spark.default.parallelism</code></td>
   <td>
-    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
-    objects to prevent writing redundant data, however that stops garbage collection of those
-    objects. By calling 'reset' you flush that info from the serializer, and allow old
-    objects to be collected. To turn off this periodic reset set it to a value &lt;= 0.
-    By default it will reset the serializer every 10,000 objects.
+    <ul>
+      <li>Local mode: number of cores on the local machine</li>
+      <li>Mesos fine grained mode: 8</li>
+      <li>Others: total number of cores on all executor nodes or 2, whichever is larger</li>
+    </ul>
+  </td>
+  <td>
+    Default number of tasks to use across the cluster for distributed shuffle operations (<code>groupByKey</code>,
+    <code>reduceByKey</code>, etc) when not set by user.
   </td>
 </tr>
 <tr>
@@ -364,73 +409,70 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.locality.wait</code></td>
-  <td>3000</td>
+  <td><code>spark.broadcast.blockSize</code></td>
+  <td>4096</td>
   <td>
-    Number of milliseconds to wait to launch a data-local task before giving up and launching it
-    on a less-local node. The same wait will be used to step through multiple locality levels
-    (process-local, node-local, rack-local and then any). It is also possible to customize the
-    waiting time for each level by setting <code>spark.locality.wait.node</code>, etc.
-    You should increase this setting if your tasks are long and see poor locality, but the
-    default usually works well.
+    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
+    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small,
+    <code>BlockManager</code> might take a performance hit.
   </td>
 </tr>
 <tr>
-  <td><code>spark.locality.wait.process</code></td>
-  <td>spark.locality.wait</td>
-  <td>
-    Customize the locality wait for process locality. This affects tasks that attempt to access
-    cached data in a particular executor process.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.locality.wait.node</code></td>
-  <td>spark.locality.wait</td>
-  <td>
-    Customize the locality wait for node locality. For example, you can set this to 0 to skip
-    node locality and search immediately for rack locality (if your cluster has rack information).
-  </td>
-</tr>
-<tr>
-  <td><code>spark.locality.wait.rack</code></td>
-  <td>spark.locality.wait</td>
-  <td>
-    Customize the locality wait for rack locality.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.worker.timeout</code></td>
-  <td>60</td>
-  <td>
-    Number of seconds after which the standalone deploy master considers a worker lost if it
-    receives no heartbeats.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.worker.cleanup.enabled</code></td>
+  <td><code>spark.files.overwrite</code></td>
   <td>false</td>
   <td>
-    Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
-    mode, as YARN works differently. Applications directories are cleaned up regardless of whether
-    the application is still running.
+    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
   </td>
 </tr>
 <tr>
-  <td><code>spark.worker.cleanup.interval</code></td>
-  <td>1800 (30 minutes)</td>
+  <td><code>spark.files.fetchTimeout</code></td>
+  <td>false</td>
   <td>
-    Controls the interval, in seconds, at which the worker cleans up old application work dirs
-    on the local machine.
+    Communication timeout to use when fetching files added through SparkContext.addFile() from
+    the driver.
   </td>
 </tr>
 <tr>
-  <td><code>spark.worker.cleanup.appDataTtl</code></td>
-  <td>7 * 24 * 3600 (7 days)</td>
+  <td><code>spark.storage.memoryFraction</code></td>
+  <td>0.6</td>
   <td>
-    The number of seconds to retain application work directories on each worker.  This is a Time To Live
-    and should depend on the amount of available disk space you have.  Application logs and jars are
-    downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
-    especially if you run jobs very frequently.
+    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
+    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can increase
+    it if you configure your own old generation size.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.tachyonStore.baseDir</code></td>
+  <td>System.getProperty("java.io.tmpdir")</td>
+  <td>
+    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by <code>spark.tachyonStore.url</code>.
+    It can also be a comma-separated list of multiple directories on Tachyon file system.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.tachyonStore.url</code></td>
+  <td>tachyon://localhost:19998</td>
+  <td>
+    The URL of the underlying Tachyon file system in the TachyonStore.
+  </td>
+</tr>
+</table>
+
+#### Networking
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.driver.host</code></td>
+  <td>(local hostname)</td>
+  <td>
+    Hostname or IP address for the driver to listen on.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver to listen on.
   </td>
 </tr>
 <tr>
@@ -478,47 +520,16 @@ Apart from these, the following properties are also available, and may be useful
     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those.
   </td>
 </tr>
+</table>
+
+#### Scheduling
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.driver.host</code></td>
-  <td>(local hostname)</td>
+  <td><code>spark.task.cpus</code></td>
+  <td>1</td>
   <td>
-    Hostname or IP address for the driver to listen on.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.driver.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver to listen on.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.cleaner.ttl</code></td>
-  <td>(infinite)</td>
-  <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
-    Periodic cleanups will ensure that metadata older than this duration will be forgotten. This is
-    useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
-    applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.streaming.blockInterval</code></td>
-  <td>200</td>
-  <td>
-    Interval (milliseconds) at which data received by Spark Streaming receivers is coalesced
-    into blocks of data before storing them in Spark.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.streaming.unpersist</code></td>
-  <td>true</td>
-  <td>
-    Force RDDs generated and persisted by Spark Streaming to be automatically unpersisted from
-    Spark's memory. The raw input data received by Spark Streaming is also automatically cleared.
-    Setting this to false will allow the raw data and persisted RDDs to be accessible outside the
-    streaming application as they will not be cleared automatically. But it comes at the cost of
-    higher memory usage in Spark.
+    Number of cores to allocate for each task.
   </td>
 </tr>
 <tr>
@@ -530,35 +541,36 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.broadcast.blockSize</code></td>
-  <td>4096</td>
+  <td><code>spark.scheduler.mode</code></td>
+  <td>FIFO</td>
   <td>
-    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
-    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
+    The <a href="job-scheduling.html#scheduling-within-an-application">scheduling mode</a> between
+    jobs submitted to the same SparkContext. Can be set to <code>FAIR</code>
+    to use fair sharing instead of queueing jobs one after another. Useful for
+    multi-user services.
   </td>
 </tr>
-
 <tr>
-  <td><code>spark.shuffle.consolidateFiles</code></td>
+  <td><code>spark.cores.max</code></td>
+  <td>(not set)</td>
+  <td>
+    When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
+    <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
+    sharing mode</a>, the maximum amount of CPU cores to request for the application from
+    across the cluster (not from each machine). If not set, the default will be
+    <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
+    infinite (all available cores) on Mesos.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.coarse</code></td>
   <td>false</td>
   <td>
-    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.file.buffer.kb</code></td>
-  <td>100</td>
-  <td>
-    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
-    reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.spill</code></td>
-  <td>true</td>
-  <td>
-    If set to "true", limits the amount of memory used during reduces by spilling data out to disk. This spilling
-    threshold is specified by <code>spark.shuffle.memoryFraction</code>.
+    If set to "true", runs over Mesos clusters in
+    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
+    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
+    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
+    duration of the Spark job.
   </td>
 </tr>
 <tr>
@@ -590,83 +602,52 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.logConf</code></td>
-  <td>false</td>
+  <td><code>spark.locality.wait</code></td>
+  <td>3000</td>
   <td>
-    Whether to log the supplied SparkConf as INFO when a SparkContext is started.
+    Number of milliseconds to wait to launch a data-local task before giving up and launching it
+    on a less-local node. The same wait will be used to step through multiple locality levels
+    (process-local, node-local, rack-local and then any). It is also possible to customize the
+    waiting time for each level by setting <code>spark.locality.wait.node</code>, etc.
+    You should increase this setting if your tasks are long and see poor locality, but the
+    default usually works well.
   </td>
 </tr>
 <tr>
-  <td><code>spark.eventLog.enabled</code></td>
-  <td>false</td>
+  <td><code>spark.locality.wait.process</code></td>
+  <td>spark.locality.wait</td>
   <td>
-    Whether to log spark events, useful for reconstructing the Web UI after the application has finished.
+    Customize the locality wait for process locality. This affects tasks that attempt to access
+    cached data in a particular executor process.
   </td>
 </tr>
 <tr>
-  <td><code>spark.eventLog.compress</code></td>
-  <td>false</td>
+  <td><code>spark.locality.wait.node</code></td>
+  <td>spark.locality.wait</td>
   <td>
-    Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
+    Customize the locality wait for node locality. For example, you can set this to 0 to skip
+    node locality and search immediately for rack locality (if your cluster has rack information).
   </td>
 </tr>
 <tr>
-  <td><code>spark.eventLog.dir</code></td>
-  <td>file:///tmp/spark-events</td>
+  <td><code>spark.locality.wait.rack</code></td>
+  <td>spark.locality.wait</td>
   <td>
-    Base directory in which spark events are logged, if <code>spark.eventLog.enabled</code> is true.
-    Within this base directory, Spark creates a sub-directory for each application, and logs the events
-    specific to the application in this directory.
+    Customize the locality wait for rack locality.
   </td>
 </tr>
 <tr>
-  <td><code>spark.deploy.spreadOut</code></td>
-  <td>true</td>
+  <td><code>spark.scheduler.revive.interval</code></td>
+  <td>1000</td>
   <td>
-    Whether the standalone cluster manager should spread applications out across nodes or try
-    to consolidate them onto as few nodes as possible. Spreading out is usually better for
-    data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
-    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-    applications; you can set it through <code>SPARK_MASTER_OPTS</code> in <code>spark-env.sh</code>.
+    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
   </td>
 </tr>
-<tr>
-  <td><code>spark.deploy.defaultCores</code></td>
-  <td>(infinite)</td>
-  <td>
-    Default number of cores to give to applications in Spark's standalone mode if they don't
-    set <code>spark.cores.max</code>. If not set, applications always get all available
-    cores unless they configure <code>spark.cores.max</code> themselves.
-    Set this lower on a shared cluster to prevent users from grabbing
-    the whole cluster by default. <br/>
-    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-    applications; you can set it through <code>SPARK_MASTER_OPTS</code> in <code>spark-env.sh</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.files.overwrite</code></td>
-  <td>false</td>
-  <td>
-    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.files.fetchTimeout</code></td>
-  <td>false</td>
-  <td>
-    Communication timeout to use when fetching files added through SparkContext.addFile() from
-    the driver.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.files.userClassPathFirst</code></td>
-  <td>false</td>
-  <td>
-    (Experimental) Whether to give user-added jars precedence over Spark's own jars when
-    loading classes in Executors. This feature can be used to mitigate conflicts between
-    Spark's dependencies and user dependencies. It is currently an experimental feature.
-  </td>
-</tr>
+</table>
+
+#### Security
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.authenticate</code></td>
   <td>false</td>
@@ -692,40 +673,67 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.task.cpus</code></td>
-  <td>1</td>
+  <td><code>spark.ui.filters</code></td>
+  <td>None</td>
   <td>
-    Number of cores to allocate for each task.
+    Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
+    standard javax servlet Filter. Parameters to each filter can also be specified by setting a
+    java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
+    (e.g. -Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.extraJavaOptions</code></td>
-  <td>(none)</td>
+  <td><code>spark.ui.acls.enable</code></td>
+  <td>false</td>
   <td>
-    A string of extra JVM options to pass to executors. For instance, GC settings or other
-    logging. Note that it is illegal to set Spark properties or heap size settings with this 
-    option. Spark properties should be set using a SparkConf object or the 
-    spark-defaults.conf file used with the spark-submit script. Heap size settings can be set
-    with spark.executor.memory.
+    Whether spark web ui acls should are enabled. If enabled, this checks to see if the user has
+    access permissions to view the web ui. See <code>spark.ui.view.acls</code> for more details.
+    Also note this requires the user to be known, if the user comes across as null no checks
+    are done. Filters can be used to authenticate and set the user.
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.extraClassPath</code></td>
-  <td>(none)</td>
+  <td><code>spark.ui.view.acls</code></td>
+  <td>Empty</td>
   <td>
-    Extra classpath entries to append to the classpath of executors. This exists primarily
-    for backwards-compatibility with older versions of Spark. Users typically should not need
-    to set this option.
+    Comma separated list of users that have view access to the spark web ui. By default only the
+    user that started the Spark job has view access.
   </td>
 </tr>
-<tr>
-  <td><code>spark.executor.extraLibraryPath</code></td>
-  <td>(none)</td>
-  <td>
-    Set a special library path to use when launching executor JVM's.
-  </td>
-</tr>
+</table>
 
+#### Spark Streaming
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.cleaner.ttl</code></td>
+  <td>(infinite)</td>
+  <td>
+    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
+    Periodic cleanups will ensure that metadata older than this duration will be forgotten. This is
+    useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
+    applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.blockInterval</code></td>
+  <td>200</td>
+  <td>
+    Interval (milliseconds) at which data received by Spark Streaming receivers is coalesced
+    into blocks of data before storing them in Spark.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.unpersist</code></td>
+  <td>true</td>
+  <td>
+    Force RDDs generated and persisted by Spark Streaming to be automatically unpersisted from
+    Spark's memory. The raw input data received by Spark Streaming is also automatically cleared.
+    Setting this to false will allow the raw data and persisted RDDs to be accessible outside the
+    streaming application as they will not be cleared automatically. But it comes at the cost of
+    higher memory usage in Spark.
+  </td>
+</tr>
 </table>
 
 # Environment Variables
