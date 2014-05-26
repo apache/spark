@@ -151,6 +151,10 @@ private[spark] class TaskSetManager(
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i)
   }
+  //add some debug info here
+  for(tasks <- pendingTasksForExecutor){
+    logInfo("Pending tasks size for executorId "+tasks._1+" is "+tasks._2.size+". ---lirui")
+  }
 
   // Figure out which locality levels we have in our TaskSet, so we can do delay scheduling
   val myLocalityLevels = computeValidLocalityLevels()
