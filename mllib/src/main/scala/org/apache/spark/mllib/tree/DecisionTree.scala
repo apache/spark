@@ -292,8 +292,7 @@ object DecisionTree extends Serializable with Logging {
       maxDepth: Int,
       numClassesForClassification: Int,
       labelWeights: Map[Int,Int]): DecisionTreeModel = {
-    val strategy
-      = new Strategy(algo, impurity, maxDepth, numClassesForClassification,
+    val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification,
       labelWeights = labelWeights)
     // Converting from standard instance format to weighted input format for tree training
     val weightedInput = input.map(x => WeightedLabeledPoint(x.label, x.features))
