@@ -108,10 +108,7 @@ class DslQuerySuite extends QueryTest {
   }
 
   test("count") {
-    checkAnswer(
-      testData2.groupBy()(Count(1)),
-      testData2.count()
-    )
+    assert(testData2.count() === testData2.map(_ => 1).count())
   }
 
   test("null count") {
@@ -129,6 +126,10 @@ class DslQuerySuite extends QueryTest {
       testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
       (2, 1, 2, 2, 1) :: Nil
     )
+  }
+
+  test("zero count") {
+    assert(emptyTableData.count() === 0)
   }
 
   test("inner join where, one match per row") {

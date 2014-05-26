@@ -151,7 +151,7 @@ case class MaxFunction(expr: Expression, base: AggregateExpression) extends Aggr
 case class Count(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
   override def nullable = false
-  override def dataType = IntegerType
+  override def dataType = LongType
   override def toString = s"COUNT($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -295,12 +295,12 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
 case class CountFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  var count: Int = _
+  var count: Long = _
 
   override def update(input: Row): Unit = {
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
-      count += 1
+      count += 1L
     }
   }
 
