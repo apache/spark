@@ -286,6 +286,94 @@ In addition, detailed log output for each job is also written to the work direct
 You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the same machines. To access Hadoop data from Spark, just use a hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
 
 
+# Configuring Ports for Network Security
+
+Spark makes heavy use of the network, and some environments have strict requirements for using tight
+firewall settings.  Below are the primary ports that Spark uses for its communication and how to
+configure those ports.
+
+<table class="table">
+  <tr>
+    <th>From</th><th>To</th><th>Default Port</th><th>Purpose</th><th>Configuration
+    Setting</th><th>Notes</th>
+  </tr>
+  <!-- Web UIs -->
+  <tr>
+    <td>Browser</td>
+    <td>Standalone Cluster Master</td>
+    <td>8080</td>
+    <td>Web UI</td>
+    <td><code>master.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>Driver</td>
+    <td>4040</td>
+    <td>Web UI</td>
+    <td><code>spark.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>History Server</td>
+    <td>18080</td>
+    <td>Web UI</td>
+    <td><code>spark.history.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>Worker</td>
+    <td>8081</td>
+    <td>Web UI</td>
+    <td><code>worker.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <!-- Cluster interactions -->
+  <tr>
+    <td>Application</td>
+    <td>Standalone Cluster Master</td>
+    <td>7077</td>
+    <td>Submit job to cluster</td>
+    <td><code>spark.driver.port</code></td>
+    <td>Akka-based.  Set to "0" to choose a port randomly</td>
+  </tr>
+  <tr>
+    <td>Worker</td>
+    <td>Standalone Cluster Master</td>
+    <td>7077</td>
+    <td>Join cluster</td>
+    <td><code>spark.driver.port</code></td>
+    <td>Akka-based.  Set to "0" to choose a port randomly</td>
+  </tr>
+  <tr>
+    <td>Application</td>
+    <td>Worker</td>
+    <td>(random)</td>
+    <td>Join cluster</td>
+    <td><code>SPARK_WORKER_PORT</code> (standalone cluster)</td>
+    <td>Akka-based</td>
+  </tr>
+
+  <!-- Other misc stuff -->
+  <tr>
+    <td>Driver and other Workers</td>
+    <td>Worker</td>
+    <td>(random)</td>
+    <td>
+      <ul>
+        <li>File server for file and jars</li>
+        <li>Http Broadcast</li>
+        <li>Class file server (Spark Shell only)</li>
+      </ul>
+    </td>
+    <td>None</td>
+    <td>Jetty-based.  Each of these services starts on a random port that cannot be configured</td>
+  </tr>
+
+</table>
+
 # High Availability
 
 By default, standalone scheduling clusters are resilient to Worker failures (insofar as Spark itself is resilient to losing work by moving it to other workers). However, the scheduler uses a Master to make scheduling decisions, and this (by default) creates a single point of failure: if the Master crashes, no new applications can be created. In order to circumvent this, we have two high availability schemes, detailed below.

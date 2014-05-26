@@ -3,15 +3,8 @@ layout: global
 title: Spark Configuration
 ---
 
-Spark provides three locations to configure the system:
-
-* [Spark properties](#spark-properties) control most application parameters and can be set by
-  passing a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object to SparkContext,
-  or through the `conf/spark-defaults.conf` properties file.
-* [Environment variables](#environment-variables) can be used to set per-machine settings, such as
-  the IP address, through the `conf/spark-env.sh` script on each node.
-* [Logging](#configuring-logging) can be configured through `log4j.properties`.
-
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
 # Spark Properties
 
@@ -149,7 +142,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.memory</code></td>
   <td>512m</td>
   <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
+    Amount of memory to use per executor process, in the same format as JVM memory strings
+    (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
 <tr>
@@ -422,7 +416,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.files.overwrite</code></td>
   <td>false</td>
   <td>
-    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
+    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not
+    match those of the source.
   </td>
 </tr>
 <tr>
@@ -446,8 +441,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.tachyonStore.baseDir</code></td>
   <td>System.getProperty("java.io.tmpdir")</td>
   <td>
-    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by <code>spark.tachyonStore.url</code>.
-    It can also be a comma-separated list of multiple directories on Tachyon file system.
+    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by
+    <code>spark.tachyonStore.url</code>. It can also be a comma-separated list of multiple directories
+    on Tachyon file system.
   </td>
 </tr>
 <tr>
@@ -504,21 +500,33 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.heartbeat.pauses</code></td>
   <td>600</td>
   <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold` if you need to.
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you
+     plan to use this feature (Not recommended). Acceptable heart beat pause in seconds for akka. This can be used to
+     control sensitivity to gc pauses. Tune this in combination of `spark.akka.heartbeat.interval` and
+     `spark.akka.failure-detector.threshold` if you need to.
   </td>
 </tr>
 <tr>
   <td><code>spark.akka.failure-detector.threshold</code></td>
   <td>300.0</td>
   <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). This maps to akka's `akka.remote.transport-failure-detector.threshold`. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you
+     plan to use this feature (Not recommended). This maps to akka's `akka.remote.transport-failure-detector.threshold`.
+     Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
   </td>
 </tr>
 <tr>
   <td><code>spark.akka.heartbeat.interval</code></td>
   <td>1000</td>
   <td>
-    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those.
+    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you
+    plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a
+    smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination
+    of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use
+    case for using failure detector can be, a sensistive failure detector can help evict rogue executors really
+    quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster.
+    Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the
+    network with those.
   </td>
 </tr>
 </table>
@@ -578,7 +586,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>
-    If set to "true", performs speculative execution of tasks. This means if one or more tasks are running slowly in a stage, they will be re-launched.
+    If set to "true", performs speculative execution of tasks. This means if one or more tasks are running slowly in a
+    stage, they will be re-launched.
   </td>
 </tr>
 <tr>
@@ -739,13 +748,13 @@ Apart from these, the following properties are also available, and may be useful
 
 # Environment Variables
 
-Certain Spark settings can be configured through environment variables, which are read from the `conf/spark-env.sh`
-script in the directory where Spark is installed (or `conf/spark-env.cmd` on Windows). In Standalone and Mesos modes,
-this file can give machine specific information such as hostnames. It is also sourced when running local
-Spark applications or submission scripts.
+Certain Spark settings can be configured through environment variables, which are read from the
+`conf/spark-env.sh` script in the directory where Spark is installed (or `conf/spark-env.cmd` on
+Windows). In Standalone and Mesos modes, this file can give machine specific information such as
+hostnames. It is also sourced when running local Spark applications or submission scripts.
 
-Note that `conf/spark-env.sh` does not exist by default when Spark is installed. However, you can copy
-`conf/spark-env.sh.template` to create it. Make sure you make the copy executable.
+Note that `conf/spark-env.sh` does not exist by default when Spark is installed. However, you can
+copy `conf/spark-env.sh.template` to create it. Make sure you make the copy executable.
 
 The following variables can be set in `spark-env.sh`:
 
@@ -770,12 +779,16 @@ The following variables can be set in `spark-env.sh`:
   </tr>
 </table>
 
-In addition to the above, there are also options for setting up the Spark [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores to use on each machine and maximum memory.
+In addition to the above, there are also options for setting up the Spark
+[standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores to use on each
+machine and maximum memory.
 
 Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
 compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
 
 # Configuring Logging
 
-Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a `log4j.properties`
-file in the `conf` directory. One way to start is to copy the existing `log4j.properties.template` located there.
+Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
+`log4j.properties` file in the `conf` directory. One way to start is to copy the existing
+`log4j.properties.template` located there.
+</table>
