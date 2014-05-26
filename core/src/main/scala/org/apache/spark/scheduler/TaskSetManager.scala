@@ -366,7 +366,7 @@ private[spark] class TaskSetManager(
 
     // Look for no-pref tasks after rack-local tasks since they can run anywhere.
     for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)) {
-      return Some((index, TaskLocality.PROCESS_LOCAL))
+      return Some((index, TaskLocality.NO_PREFER))
     }
 
     if (TaskLocality.isAllowed(locality, TaskLocality.ANY)) {
