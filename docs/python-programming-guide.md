@@ -6,7 +6,7 @@ title: Python Programming Guide
 
 The Spark Python API (PySpark) exposes the Spark programming model to Python.
 To learn the basics of Spark, we recommend reading through the
-[Scala programming guide](scala-programming-guide.html) first; it should be
+[Scala programming guide](programming-guide.html) first; it should be
 easy to follow even if you don't know Scala.
 This guide will show how to use the Spark features described there in Python.
 

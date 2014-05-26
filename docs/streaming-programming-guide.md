@@ -360,12 +360,12 @@ new JavaStreamingContext(master, appName, batchInterval, [sparkHome], [jars])
 </div>
 </div>
 
-The `master` parameter is a standard [Spark cluster URL](scala-programming-guide.html#master-urls)
+The `master` parameter is a standard [Spark cluster URL](programming-guide.html#master-urls)
 and can be "local" for local testing. The `appName` is a name of your program,
 which will be shown on your cluster's web UI. The `batchInterval` is the size of the batches,
 as explained earlier. Finally, the last two parameters are needed to deploy your code to a cluster
  if running in distributed mode, as described in the
- [Spark programming guide](scala-programming-guide.html#deploying-code-on-a-cluster).
+ [Spark programming guide](programming-guide.html#deploying-code-on-a-cluster).
  Additionally, the underlying SparkContext can be accessed as
 `ssc.sparkContext`.
 
@@ -833,7 +833,7 @@ default persistence level is set to replicate the data to two nodes for fault-to
 Note that, unlike RDDs, the default persistence level of DStreams keeps the data serialized in
 memory. This is further discussed in the [Performance Tuning](#memory-tuning) section. More
 information on different persistence levels can be found in
-[Spark Programming Guide](scala-programming-guide.html#rdd-persistence).
+[Spark Programming Guide](programming-guide.html#rdd-persistence).
 
 ## RDD Checkpointing
 A _stateful operation_ is one which operates over multiple batches of data. This includes all

@@ -5,7 +5,7 @@ title: Java Programming Guide
 
 The Spark Java API exposes all the Spark features available in the Scala version to Java.
 To learn the basics of Spark, we recommend reading through the
-[Scala programming guide](scala-programming-guide.html) first; it should be
+[Scala programming guide](programming-guide.html) first; it should be
 easy to follow even if you don't know Scala.
 This guide will show how to use the Spark features described there in Java.
 
@@ -80,16 +80,16 @@ package. Each interface has a single abstract method, `call()`.
 
 ## Storage Levels
 
-RDD [storage level](scala-programming-guide.html#rdd-persistence) constants, such as `MEMORY_AND_DISK`, are
+RDD [storage level](programming-guide.html#rdd-persistence) constants, such as `MEMORY_AND_DISK`, are
 declared in the [org.apache.spark.api.java.StorageLevels](api/java/index.html?org/apache/spark/api/java/StorageLevels.html) class. To
 define your own storage level, you can use StorageLevels.create(...). 
 
 # Other Features
 
 The Java API supports other Spark features, including
-[accumulators](scala-programming-guide.html#accumulators),
-[broadcast variables](scala-programming-guide.html#broadcast-variables), and
-[caching](scala-programming-guide.html#rdd-persistence).
+[accumulators](programming-guide.html#accumulators),
+[broadcast variables](programming-guide.html#broadcast-variables), and
+[caching](programming-guide.html#rdd-persistence).
 
 # Upgrading From Pre-1.0 Versions of Spark
 

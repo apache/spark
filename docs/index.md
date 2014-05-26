@@ -4,18 +4,19 @@ title: Spark Overview
 ---
 
 Apache Spark is a fast and general-purpose cluster computing system.
-It provides high-level APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html) that make parallel jobs easy to write, and an optimized engine that supports general computation graphs.
+It provides high-level APIs in Java, Scala and Python,
+and an optimized engine that supports general execution graphs.
 It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
 
 # Downloading
 
-Get Spark by visiting the [downloads page](http://spark.apache.org/downloads.html) of the Apache Spark site. This documentation is for Spark version {{site.SPARK_VERSION}}. The downloads page 
+Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. The downloads page 
 contains Spark packages for many popular HDFS versions. If you'd like to build Spark from 
 scratch, visit the [building with Maven](building-with-maven.html) page.
 
-Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). All you need to run it is 
-to have `java` to installed on your system `PATH`, or the `JAVA_HOME` environment variable 
-pointing to a Java installation.
+Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy to run
+locally on one machine -- all you need is to have `java` installed on your system `PATH`,
+or the `JAVA_HOME` environment variable pointing to a Java installation.
 
 For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_BINARY_VERSION}}. 
 If you write applications in Scala, you will need to use a compatible Scala version 
@@ -39,7 +40,7 @@ great way to learn the framework.
     ./bin/spark-shell --master local[2]
 
 The `--master` option specifies the
-[master URL for a distributed cluster](scala-programming-guide.html#master-urls), or `local` to run
+[master URL for a distributed cluster](programming-guide.html#master-urls), or `local` to run
 locally with one thread, or `local[N]` to run locally with N threads. You should start by using
 `local` for testing. For a full list of options, run Spark shell with the `--help` option.
 
@@ -69,9 +70,8 @@ options for deployment:
 **Programming guides:**
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [Spark Programming Guide](scala-programming-guide.html): an overview of Spark concepts, and details on the Scala API
-  * [Java Programming Guide](java-programming-guide.html): using Spark from Java
-  * [Python Programming Guide](python-programming-guide.html): using Spark from Python
+* [Spark Programming Guide](programming-guide.html): a detailed overview of Spark concepts
+  in all supported languages (Scala, Java, Python)
 * [Spark Streaming](streaming-programming-guide.html): Spark's API for processing data streams
 * [Spark SQL](sql-programming-guide.html): Support for running relational queries on Spark
 * [MLlib (Machine Learning)](mllib-guide.html): Spark's built-in machine learning library

@@ -103,7 +103,7 @@ the `make-distribution.sh` script included in a Spark source tarball/checkout.
 ## Using a Mesos Master URL
 
 The Master URLs for Mesos are in the form `mesos://host:5050` for a single-master Mesos
-cluster, or `zk://host:2181` for a multi-master Mesos cluster using ZooKeeper.
+cluster, or `mesos://zk://host:2181` for a multi-master Mesos cluster using ZooKeeper.
 
 The driver also needs some configuration in `spark-env.sh` to interact properly with Mesos:
 
