@@ -329,13 +329,18 @@ private[spark] class BlockManager(
    * never deletes (recent) items.
    */
   def getLocalFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
+
+    // Reducer may need to read many local shuffle blocks and will wrap them into Iterators
+    // at the beginning. The wrapping will cost some memory(compression instance
+    // initialization, etc.). Reducer read shuffle blocks one by one so we could do the
+    // wrapping lazily to save memory.
     class LazyProxyIterator(f: => Iterator[Any]) extends Iterator[Any] {
 
       lazy val proxy = f
 
-      def hasNext: Boolean = proxy.hasNext
+      override def hasNext: Boolean = proxy.hasNext
 
-      def next(): Any = proxy.next()
+      override def next(): Any = proxy.next()
     }
 
     if (diskStore.contains(blockId)) {
