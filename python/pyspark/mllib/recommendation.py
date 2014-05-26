@@ -24,6 +24,7 @@ from pyspark.mllib._common import \
     _serialize_tuple, RatingDeserializer
 from pyspark.rdd import RDD
 
+
 class MatrixFactorizationModel(object):
     """A matrix factorisation model trained by regularized alternating
     least-squares.
@@ -55,32 +56,34 @@ class MatrixFactorizationModel(object):
         return RDD(self._java_model.predict(usersProductsJRDD._jrdd),
                    self._context, RatingDeserializer())
 
+
 class ALS(object):
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
         sc = ratings.context
         ratingBytes = _get_unmangled_rdd(ratings, _serialize_rating)
-        mod = sc._jvm.PythonMLLibAPI().trainALSModel(ratingBytes._jrdd,
-                rank, iterations, lambda_, blocks)
+        mod = sc._jvm.PythonMLLibAPI().trainALSModel(
+            ratingBytes._jrdd, rank, iterations, lambda_, blocks)
         return MatrixFactorizationModel(sc, mod)
 
     @classmethod
     def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01):
         sc = ratings.context
         ratingBytes = _get_unmangled_rdd(ratings, _serialize_rating)
-        mod = sc._jvm.PythonMLLibAPI().trainImplicitALSModel(ratingBytes._jrdd,
-                rank, iterations, lambda_, blocks, alpha)
+        mod = sc._jvm.PythonMLLibAPI().trainImplicitALSModel(
+            ratingBytes._jrdd, rank, iterations, lambda_, blocks, alpha)
         return MatrixFactorizationModel(sc, mod)
+
 
 def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs,
-            optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)
+
 
 if __name__ == "__main__":
     _test()
