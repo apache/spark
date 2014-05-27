@@ -281,14 +281,17 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
   private val sum = MutableLiteral(zero.eval(EmptyRow))
   private val sumAsDouble = Cast(sum, DoubleType)
 
-  private val addFunction = Add(sum, Coalesce(Seq(expr, zero)))
+  private def addFunction(value: Any) = Add(sum, Literal(value))
 
   override def eval(input: Row): Any =
     sumAsDouble.eval(EmptyRow).asInstanceOf[Double] / count.toDouble
 
   override def update(input: Row): Unit = {
-    count += 1
-    sum.update(addFunction, input)
+    val evaluatedExpr = expr.eval(input)
+    if (evaluatedExpr != null) {
+      count += 1
+      sum.update(addFunction(evaluatedExpr), input)
+    }
   }
 }
 
