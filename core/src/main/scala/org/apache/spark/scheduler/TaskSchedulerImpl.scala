@@ -235,7 +235,7 @@ private[spark] class TaskSchedulerImpl(
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     var launchedTask = false
     for (taskSet <- sortedTaskSets; maxLocality <- TaskLocality.values) {
-      if (executorUpdated) {
+      if (executorUpdated && conf.getBoolean("spark.schedule.delaySchedule", false)) {
         taskSet.reAddPendingTasks()
       }
       do {

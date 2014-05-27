@@ -199,7 +199,8 @@ private[spark] class TaskSetManager(
       }
     }
 
-    if (tasks(index).preferredLocations.isEmpty) {
+    if (tasks(index).preferredLocations.isEmpty ||
+      (!conf.getBoolean("spark.schedule.delaySchedule", false) && !hadAliveLocations)) {
       // Even though the task might've had preferred locations, all of those hosts or executors
       // are dead; put it in the no-prefs list so we can schedule it elsewhere right away.
       addTo(pendingTasksWithNoPrefs)
