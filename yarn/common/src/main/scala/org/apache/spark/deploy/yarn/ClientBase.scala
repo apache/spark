@@ -386,7 +386,8 @@ object ClientBase {
   val LOCAL_SCHEME = "local"
   val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
 
-  def getSparkJar = sys.env.get("SPARK_JAR").getOrElse(SparkContext.jarOfClass(this.getClass).head)
+  def getSparkJar = sys.props.get("SPARK_JAR").orElse(sys.env.get("SPARK_JAR"))
+    .getOrElse(SparkContext.jarOfClass(this.getClass).head)
 
   // Based on code from org.apache.hadoop.mapreduce.v2.util.MRApps
   def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) {
