@@ -742,9 +742,6 @@ class DAGScheduler(
     if (stage.isShuffleMap) {
       for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
         val locs = getPreferredLocs(stage.rdd, p)
-        if(!locs.isEmpty){
-          logInfo("Partition "+p+" has "+locs.size+" preferred locations. First is "+locs(0).host+". ---lirui")
-        }
         tasks += new ShuffleMapTask(stage.id, stage.rdd, stage.shuffleDep.get, p, locs)
       }
     } else {
