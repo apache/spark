@@ -59,9 +59,17 @@ object MimaBuild {
     val defaultExcludes = Seq()
 
     // Read package-private excludes from file
+<<<<<<< variant A
     val classExcludeFilePath = file(base.getAbsolutePath + "/.generated-mima-class-excludes")
     val memberExcludeFilePath = file(base.getAbsolutePath + "/.generated-mima-member-excludes")
 
+>>>>>>> variant B
+    val excludeFilePath = base.getAbsolutePath + "/.generated-mima-excludes"
+    val excludeFile = file(excludeFilePath)
+####### Ancestor
+    val excludeFilePath = (base.getAbsolutePath + "/.generated-mima-excludes")
+    val excludeFile = file(excludeFilePath)
+======= end
     val ignoredClasses: Seq[String] =
       if (!classExcludeFilePath.exists()) {
         Seq()
