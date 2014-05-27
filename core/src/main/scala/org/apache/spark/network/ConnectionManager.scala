@@ -93,7 +93,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   implicit val futureExecContext = ExecutionContext.fromExecutor(
     Utils.newDaemonCachedThreadPool("Connection manager future execution context"))
 
-  private var onReceiveCallback: (BufferMessage, ConnectionManagerId) => Option[Message]= null
+  @volatile
+  private var onReceiveCallback: (BufferMessage, ConnectionManagerId) => Option[Message] = null
 
   private val authEnabled = securityManager.isAuthenticationEnabled()
 
