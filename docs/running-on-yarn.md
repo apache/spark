@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Launching Spark on YARN
+title: Running Spark on YARN
 ---
 
 Support for running on [YARN (Hadoop

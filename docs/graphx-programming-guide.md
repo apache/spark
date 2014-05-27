@@ -10,7 +10,7 @@ title: GraphX Programming Guide
   <img src="img/graphx_logo.png"
        title="GraphX Logo"
        alt="GraphX"
-       width="65%" />
+       width="60%" />
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
@@ -24,6 +24,8 @@ operators (e.g., [subgraph](#structural_operators), [joinVertices](#join_operato
 [mapReduceTriplets](#mrTriplets)) as well as an optimized variant of the [Pregel](#pregel) API. In
 addition, GraphX includes a growing collection of graph [algorithms](#graph_algorithms) and
 [builders](#graph_builders) to simplify graph analytics tasks.
+
+**GraphX is currently an alpha component. While we will minimize API changes, some APIs may change in future releases.**
 
 ## Background on Graph-Parallel Computation
 
