@@ -813,10 +813,8 @@ output operators are defined:
 The complete list of DStream operations is available in the API documentation. For the Scala API,
 see [DStream](api/scala/index.html#org.apache.spark.streaming.dstream.DStream)
 and [PairDStreamFunctions](api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions).
-For the Java API, see [JavaDStream](api/scala/index.html#org.apache.spark.streaming.api.java.dstream.DStream)
-and [JavaPairDStream](api/scala/index.html#org.apache.spark.streaming.api.java.JavaPairDStream).
-Specifically for the Java API, see [Spark's Java programming guide](java-programming-guide.html)
-for more information.
+For the Java API, see [JavaDStream](api/java/org/apache/spark/streaming/api/java/JavaDStream.html)
+and [JavaPairDStream](api/java/org/apache/spark/streaming/api/java/JavaPairDStream.html).
 
 ## Persistence
 Similar to RDDs, DStreams also allow developers to persist the stream's data in memory. That is,

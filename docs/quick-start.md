@@ -336,7 +336,7 @@ As with the Scala example, we initialize a SparkContext, though we use the speci
 `JavaSparkContext` class to get a Java-friendly one. We also create RDDs (represented by
 `JavaRDD`) and run transformations on them. Finally, we pass functions to Spark by creating classes
 that extend `spark.api.java.function.Function`. The
-[Java programming guide](java-programming-guide.html) describes these differences in more detail.
+[Spark programming guide](programming-guide.html) describes these differences in more detail.
 
 To build the program, we also write a Maven `pom.xml` file that lists Spark as a dependency.
 Note that Spark artifacts are tagged with a Scala version.
