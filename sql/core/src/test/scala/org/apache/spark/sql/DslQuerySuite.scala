@@ -115,6 +115,16 @@ class DslQuerySuite extends QueryTest {
       2.0)
   }
 
+  test("null average") {
+    checkAnswer(
+      testData3.groupBy()(Average('b)),
+      2.0)
+
+    checkAnswer(
+      testData3.groupBy()(Average('b), CountDistinct('b :: Nil)),
+      (2.0, 1) :: Nil)
+  }
+
   test("count") {
     assert(testData2.count() === testData2.map(_ => 1).count())
   }
