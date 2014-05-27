@@ -24,7 +24,7 @@ packaging them into a `.zip` or `.egg`.
 
 # Launching Applications with spark-submit
 
-Once a user application is bundled, it can be launched using the `bin/spark-submit` script
+Once a user application is bundled, it can be launched using the `bin/spark-submit` script.
 This script takes care of setting up the classpath with Spark and its
 dependencies, and can support different cluster managers and deploy modes that Spark supports:
 
@@ -55,14 +55,14 @@ examples of common options:
 {% highlight bash %}
 # Run application locally on 8 cores
 ./bin/spark-submit \
-  --class org.apache.spark.examples.SparkPi
+  --class org.apache.spark.examples.SparkPi \
   --master local[8] \
   /path/to/examples.jar \
   100
 
 # Run on a Spark standalone cluster
 ./bin/spark-submit \
-  --class org.apache.spark.examples.SparkPi
+  --class org.apache.spark.examples.SparkPi \
   --master spark://207.184.161.138:7077 \
   --executor-memory 20G \
   --total-executor-cores 100 \
@@ -72,7 +72,7 @@ examples of common options:
 # Run on a YARN cluster
 export HADOOP_CONF_DIR=XXX
 ./bin/spark-submit \
-  --class org.apache.spark.examples.SparkPi
+  --class org.apache.spark.examples.SparkPi \
   --master yarn-cluster \  # can also be `yarn-client` for client mode
   --executor-memory 20G \
   --num-executors 50 \
