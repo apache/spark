@@ -90,7 +90,7 @@ abstract class AggregateFunction
 
 case class Min(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
-  override def nullable = child.nullable
+  override def nullable = true
   override def dataType = child.dataType
   override def toString = s"MIN($child)"
 
@@ -120,7 +120,7 @@ case class MinFunction(expr: Expression, base: AggregateExpression) extends Aggr
 
 case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
-  override def nullable = child.nullable
+  override def nullable = true
   override def dataType = child.dataType
   override def toString = s"MAX($child)"
 
@@ -257,7 +257,7 @@ case class SumDistinct(child: Expression)
 
 case class First(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
-  override def nullable = child.nullable
+  override def nullable = true
   override def dataType = child.dataType
   override def toString = s"FIRST($child)"
 
