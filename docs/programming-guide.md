@@ -849,7 +849,7 @@ for details.
 
 ### Actions
 
-The following table lists some of the common transformations supported by Spark. Refer to the
+The following table lists some of the common actions supported by Spark. Refer to the
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
  [Java](api/java/org/apache/spark/api/java/JavaRDD.html),
