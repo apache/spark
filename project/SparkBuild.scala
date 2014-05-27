@@ -89,21 +89,34 @@ object SparkBuild extends PomBuild {
   allProjects ++ optionallyEnabledProjects ++ assemblyProjects foreach enable(sharedSettings)
 
   /* Enable tests settings for all projects except examples, assembly and tools */
-  allProjects ++ optionallyEnabledProjects foreach enable(TestSettings.s)
+  allProjects ++ optionallyEnabledProjects foreach enable(TestSettings.settings)
 
   /* Enable Mima for all projects except spark, sql, hive, catalyst  and repl */
-  allProjects filterNot(y => Seq(spark, sql, hive, catalyst, repl).exists(x => x == y)) foreach (x => enable(MimaSettings.effectiveSetting(x))(x))
+  allProjects.filterNot(y => Seq(spark, sql, hive, catalyst, repl).exists(x => x == y)).
+    foreach (x => enable(MimaBuild.mimaSettings(sparkHome, x))(x))
 
   /* Enable Assembly for all assembly projects */
-  assemblyProjects foreach enable(AssemblySettings.s)
+  assemblyProjects foreach enable(Assembly.settings)
 
   /* Enable unidoc only for the root spark project */
-  Seq(spark) foreach enable (UnidocSettings.s)
+  enable(Unidoc.settings)(spark)
 
   /* Hive console settings */
-  Seq(hive) foreach enable (hiveSettings)
+  enable(Hive.settings)(hive)
 
-  lazy val hiveSettings = Seq(
+  // TODO: move this to its upstream project.
+  override def projectDefinitions(baseDirectory: File): Seq[Project] = {
+    super.projectDefinitions(baseDirectory).map { x =>
+      if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
+      else x.settings(Seq[Setting[_]](): _*)
+    }
+  }
+
+}
+
+object Hive {
+
+  lazy val settings = Seq(
 
     javaOptions += "-XX:MaxPermSize=1g",
     // Multiple queries rely on the TestHive singleton. See comments there for more details.
@@ -129,36 +142,13 @@ object SparkBuild extends PomBuild {
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
   )
 
-  // TODO: move this to its upstream project.
-  override def projectDefinitions(baseDirectory: File): Seq[Project] = {
-    super.projectDefinitions(baseDirectory).map { x =>
-      if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
-      else x.settings(Seq[Setting[_]](): _*)
-    }
-  }
-
 }
 
-object MimaSettings {
-
-  import BuildCommons._
-  import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
-
-  private lazy val s = MimaBuild.mimaSettings(sparkHome)
-
-  def effectiveSetting(projectRef: ProjectRef) = {
-    val organization = "org.apache.spark"
-    val version = "0.9.0-incubating"
-    val fullId = "spark-" + projectRef.project + "_2.10"
-    s ++ Seq(previousArtifact := Some(organization % fullId % version))
-  }
-}
-
-object AssemblySettings {
+object Assembly {
   import sbtassembly.Plugin._
   import AssemblyKeys._
 
-  lazy val s = assemblySettings ++ Seq(
+  lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
     jarName in assembly <<= (version, moduleName) map { (v, mName) => mName + "-"+v + "-hadoop" +
       Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar" }, // TODO: add proper default hadoop version.
@@ -175,7 +165,7 @@ object AssemblySettings {
 
 }
 
-object UnidocSettings {
+object Unidoc {
 
   import BuildCommons._
   import sbtunidoc.Plugin._
@@ -186,7 +176,7 @@ object UnidocSettings {
     names.map(s => "org.apache.spark." + s).mkString(":")
   }
 
-  lazy val s = scalaJavaUnidocSettings ++ Seq (
+  lazy val settings = scalaJavaUnidocSettings ++ Seq (
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
@@ -240,10 +230,9 @@ object UnidocSettings {
 }
 
 object TestSettings {
-
   import BuildCommons._
 
-  lazy val s = Seq (
+  lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
     javaOptions in Test += "-Dspark.home=" + sparkHome,

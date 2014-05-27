@@ -88,8 +88,13 @@ object MimaBuild {
     ignoredMembers.flatMap(excludeMember) ++ MimaExcludes.excludes
   }
 
-  def mimaSettings(sparkHome: File) = mimaDefaultSettings ++ Seq(
-    previousArtifact := None,
-    binaryIssueFilters ++= ignoredABIProblems(sparkHome)
-  )
+  def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
+    val organization = "org.apache.spark"
+    val version = "0.9.0-incubating"
+    val fullId = "spark-" + projectRef.project + "_2.10"
+    mimaDefaultSettings ++ 
+    Seq(previousArtifact := Some(organization % fullId % version),
+      binaryIssueFilters ++= ignoredABIProblems(sparkHome))
+  }
+
 }
