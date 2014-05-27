@@ -20,6 +20,7 @@ package org.apache.spark.util
 import scala.util.Random
 
 import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
+import java.net.URI
 import java.nio.{ByteBuffer, ByteOrder}
 
 import com.google.common.base.Charsets
@@ -200,5 +201,68 @@ class UtilsSuite extends FunSuite {
     assert(result.size.equals(1))
     assert(result(0).getCanonicalPath.equals(child1.getCanonicalPath))
   }
-}
 
+  test("resolveURI") {
+    def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
+      assume(before.split(",").length == 1)
+      assert(Utils.resolveURI(before, testWindows) === new URI(after))
+      assert(Utils.resolveURI(after, testWindows) === new URI(after))
+      assert(new URI(Utils.resolveURIs(before, testWindows)) === new URI(after))
+      assert(new URI(Utils.resolveURIs(after, testWindows)) === new URI(after))
+    }
+    val cwd = System.getProperty("user.dir")
+    assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
+    assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
+    assertResolves("spark.jar", s"file:$cwd/spark.jar")
+    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
+    assertResolves("C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
+    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo") }
+    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo:baby") }
+
+    // Test resolving comma-delimited paths
+    assert(Utils.resolveURIs("jar1,jar2") === s"file:$cwd/jar1,file:$cwd/jar2")
+    assert(Utils.resolveURIs("file:/jar1,file:/jar2") === "file:/jar1,file:/jar2")
+    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3") ===
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
+    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3,jar4#jar5") ===
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
+    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi", testWindows = true) ===
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi")
+  }
+
+  test("nonLocalPaths") {
+    assert(Utils.nonLocalPaths("spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("file:/spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("file:///spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("local:/spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("local:///spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar") === Array("hdfs:/spark.jar"))
+    assert(Utils.nonLocalPaths("hdfs:///spark.jar") === Array("hdfs:///spark.jar"))
+    assert(Utils.nonLocalPaths("file:/spark.jar,local:/smart.jar,family.py") === Array.empty)
+    assert(Utils.nonLocalPaths("local:/spark.jar,file:/smart.jar,family.py") === Array.empty)
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar,local.py,file:/hello/pi.py") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(Utils.nonLocalPaths("local.py,hdfs:/spark.jar,file:/hello/pi.py,s3:/smart.jar") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+
+    // Test Windows paths
+    assert(Utils.nonLocalPaths("C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("file:/C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("file:///C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("local:/C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("local:///C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("hdfs:/a.jar,C:/my.jar,s3:/another.jar", testWindows = true) ===
+      Array("hdfs:/a.jar", "s3:/another.jar"))
+    assert(Utils.nonLocalPaths("D:/your.jar,hdfs:/a.jar,s3:/another.jar", testWindows = true) ===
+      Array("hdfs:/a.jar", "s3:/another.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/a.jar,s3:/another.jar,e:/our.jar", testWindows = true) ===
+      Array("hdfs:/a.jar", "s3:/another.jar"))
+  }
+
+}

@@ -118,7 +118,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
       } catch {
         case e: Exception =>
-          SparkSubmit.printErrorAndExit("Failed to read JAR: " + primaryResource)
+          SparkSubmit.printErrorAndExit("Cannot load main class from JAR: " + primaryResource)
           return
       }
     }
@@ -146,6 +146,18 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     }
     if (pyFiles != null && !isPython) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
+    }
+
+    // Require all python files to be local, so we can add them to the PYTHONPATH
+    if (isPython) {
+      if (Utils.nonLocalPaths(primaryResource).nonEmpty) {
+        SparkSubmit.printErrorAndExit(s"Only local python files are supported: $primaryResource")
+      }
+      val nonLocalPyFiles = Utils.nonLocalPaths(pyFiles).mkString(",")
+      if (nonLocalPyFiles.nonEmpty) {
+        SparkSubmit.printErrorAndExit(
+          s"Only local additional python files are supported: $nonLocalPyFiles")
+      }
     }
 
     if (master.startsWith("yarn")) {
@@ -263,19 +275,19 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         parse(tail)
 
       case ("--files") :: value :: tail =>
-        files = value
+        files = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--py-files") :: value :: tail =>
-        pyFiles = value
+        pyFiles = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--archives") :: value :: tail =>
-        archives = value
+        archives = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--jars") :: value :: tail =>
-        jars = value
+        jars = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--help" | "-h") :: tail =>
@@ -296,7 +308,12 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               val errMessage = s"Unrecognized option '$value'."
               SparkSubmit.printErrorAndExit(errMessage)
             case v =>
-              primaryResource = v
+              primaryResource =
+                if (!SparkSubmit.isShell(v)) {
+                  Utils.resolveURI(v).toString
+                } else {
+                  v
+                }
               inSparkOpts = false
               isPython = SparkSubmit.isPython(v)
               parse(tail)
@@ -326,10 +343,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |  --class CLASS_NAME          Your application's main class (for Java / Scala apps).
         |  --name NAME                 A name of your application.
         |  --jars JARS                 Comma-separated list of local jars to include on the driver
-        |                              and executor classpaths. Doesn't work for drivers in
-        |                              standalone mode with "cluster" deploy mode.
-        |  --py-files PY_FILES         Comma-separated list of .zip or .egg files to place on the
-        |                              PYTHONPATH for Python apps.
+        |                              and executor classpaths.
+        |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
+        |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not

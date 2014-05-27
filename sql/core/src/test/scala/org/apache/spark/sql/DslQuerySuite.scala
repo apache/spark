@@ -39,6 +39,14 @@ class DslQuerySuite extends QueryTest {
       testData2.groupBy('a)('a, Sum('b)),
       Seq((1,3),(2,3),(3,3))
     )
+    checkAnswer(
+      testData2.groupBy('a)('a, Sum('b) as 'totB).aggregate(Sum('totB)),
+      9
+    )
+    checkAnswer(
+      testData2.aggregate(Sum('b)),
+      9
+    )
   }
 
   test("select *") {
@@ -107,11 +115,18 @@ class DslQuerySuite extends QueryTest {
       2.0)
   }
 
-  test("count") {
+  test("null average") {
     checkAnswer(
-      testData2.groupBy()(Count(1)),
-      testData2.count()
-    )
+      testData3.groupBy()(Average('b)),
+      2.0)
+
+    checkAnswer(
+      testData3.groupBy()(Average('b), CountDistinct('b :: Nil)),
+      (2.0, 1) :: Nil)
+  }
+
+  test("count") {
+    assert(testData2.count() === testData2.map(_ => 1).count())
   }
 
   test("null count") {
@@ -121,9 +136,18 @@ class DslQuerySuite extends QueryTest {
     )
 
     checkAnswer(
+      testData3.groupBy('a)('a, Count('a + 'b)),
+      Seq((1,0), (2, 1))
+    )
+
+    checkAnswer(
       testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
       (2, 1, 2, 2, 1) :: Nil
     )
+  }
+
+  test("zero count") {
+    assert(emptyTableData.count() === 0)
   }
 
   test("inner join where, one match per row") {
