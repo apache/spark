@@ -122,12 +122,6 @@ val conf = new SparkConf().setAppName(appName).setMaster(master)
 new SparkContext(conf)
 {% endhighlight %}
 
-The `master` parameter is a string specifying a [Spark, Mesos or YARN cluster URL](#master-urls)
-to connect to, or a special "local" string to run in local mode, as described below. `appName` is
-a name for your application, which will be shown in the cluster web UI. It's also possible to set
-these variables [using a configuration file](cluster-overview.html#loading-configurations-from-a-file)
-which avoids hard-coding the master url in your application.
-
 </div>
 
 <div data-lang="java"  markdown="1">
@@ -140,12 +134,6 @@ that contains information about your application.
 SparkConf conf = new SparkConf().setAppName(appName).setMaster(master);
 JavaSparkContext sc = new JavaSparkContext(conf);
 {% endhighlight %}
-
-The `master` parameter is a string specifying a [Spark, Mesos or YARN cluster URL](#master-urls)
-to connect to, or a special "local" string to run in local mode, as described below. `appName` is
-a name for your application, which will be shown in the cluster web UI. It's also possible to set
-these variables [using a configuration file](cluster-overview.html#loading-configurations-from-a-file)
-which avoids hard-coding the master url in your application.
 
 </div>
 
@@ -160,15 +148,18 @@ conf = SparkConf().setAppName(appName).setMaster(master)
 sc = SparkContext(conf)
 {% endhighlight %}
 
-The `master` parameter is a string specifying a [Spark, Mesos or YARN cluster URL](#master-urls)
-to connect to, or a special "local" string to run in local mode, as described below. `appName` is
-a name for your application, which will be shown in the cluster web UI. It's also possible to set
-these variables [using a configuration file](cluster-overview.html#loading-configurations-from-a-file)
-which avoids hard-coding the master url in your application.
-
 </div>
 
 </div>
+
+The `appName` parameter is a name for your application to show on the cluster UI.
+`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
+or a special "local" string to run in local mode.
+In practice, when running on a cluster, you will not want to hardcode `master` in the program,
+but rather [launch the application with `spark-submit`](submitting-applications.html) and
+receive it there. However, for local testing and unit tests, you can pass "local" to run Spark
+in-process.
+
 
 ## Using the Shell
 
@@ -193,7 +184,7 @@ $ ./bin/spark-shell --master local[4] --jars code.jar
 {% endhighlight %}
 
 For a complete list of options, run `spark-shell --help`. Behind the scenes,
-`spark-shell` invokes the more general [Spark submit script](cluster-overview.html#launching-applications-with-spark-submit).
+`spark-shell` invokes the more general [`spark-submit` script](submitting-applications.html).
 
 </div>
 
@@ -216,7 +207,7 @@ $ ./bin/pyspark --master local[4] --py-files code.py
 {% endhighlight %}
 
 For a complete list of options, run `pyspark --help`. Behind the scenes,
-`pyspark` invokes the more general [Spark submit script](cluster-overview.html#launching-applications-with-spark-submit).
+`pyspark` invokes the more general [`spark-submit` script](submitting-applications.html).
 
 It is also possible to launch the PySpark shell in [IPython](http://ipython.org), the
 enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To
@@ -1221,33 +1212,19 @@ vecAccum = sc.accumulator(Vector(...))(VectorAccumulatorParam())
 
 </div>
 
-
 # Deploying to a Cluster
 
-### Master URLs
+The [application submission guide](submitting-applications.html) describes how to submit applications to a cluster.
+In short, once you package your application into a JAR (for Java/Scala) or a set of `.py` or `.zip` files (for Python),
+the `bin/spark-submit` script lets you submit it to any supported cluster manager.
 
-The master URL passed to Spark can be in one of the following formats:
+# Unit Testing
 
-<table class="table">
-<tr><th>Master URL</th><th>Meaning</th></tr>
-<tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
-<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). </td></tr>
-<tr><td> local[*] </td><td> Run Spark locally with as many worker threads as logical cores on your machine.</td></tr>
-<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
-        cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default.
-</td></tr>
-<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
-        The port must be whichever one your is configured to use, which is 5050 by default.
-        Or, for a Mesos cluster using ZooKeeper, use mesos://zk://....
-</td></tr>
-<tr><td> yarn-client </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-client mode. The cluster location will be found based on the HADOOP_CONF_DIR variable.
-</td></tr>
-<tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-cluster mode. The cluster location will be found based on HADOOP_CONF_DIR.
-</td></tr>
-</table>
-
+Spark is friendly to unit testing with any popular unit test framework.
+Simply create a `SparkContext` in your test with the master URL set to `local`, run your operations,
+and then call `SparkContext.stop()` to tear it down.
+Make sure you stop the context within a `finally` block or the test framework's `tearDown` method,
+as Spark does not support two contexts running concurrently in the same program.
 
 # Migrating from pre-1.0 Versions of Spark
 
@@ -1288,8 +1265,8 @@ have changed from returning (key, list of values) pairs to (key, iterable of val
 
 </div>
 
-Migration guides are also available for [Spark Streaming](streaming-programming-guide.html#migration-guide-from-091-or-below-to-1x)
-and [MLlib](mllib-guide.html#migration-guide).
+Migration guides are also available for [Spark Streaming](streaming-programming-guide.html#migration-guide-from-091-or-below-to-1x),
+[MLlib](mllib-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-091).
 
 
 # Where to Go from Here

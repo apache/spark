@@ -29,7 +29,7 @@ Spark comes with several sample programs.  Scala, Java and Python examples are i
 `examples/src/main` directory. To run one of the Java or Scala sample programs, use
 `bin/run-example <class> [params]` in the top-level Spark directory. (Behind the scenes, this
 invokes the more general
-[Spark submit script](cluster-overview.html#launching-applications-with-spark-submit) for
+[`spark-submit` script](submitting-applications.html) for
 launching applications). For example,
 
     ./bin/run-example SparkPi 10

@@ -442,6 +442,19 @@ Lines with a: 46, Lines with b: 23
 # Where to Go from Here
 Congratulations on running your first Spark application!
 
-* For an in-depth overview of the API see "Programming Guides" menu section.
-* For running applications on a cluster head to the [deployment overview](cluster-overview.html).
-* For configuration options available to Spark applications see the [configuration page](configuration.html).
+* For an in-depth overview of the API, start with the [Spark programming guide](programming-guide.html),
+  or see "Programming Guides" menu for other components.
+* For running applications on a cluster, head to the [deployment overview](cluster-overview.html).
+* Finally, Spark includes several samples in the `examples` directory
+([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
+ [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
+ [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python)).
+You can run them as follows:
+
+{% highlight bash %}
+# For Scala and Java, use run-example:
+./bin/run-example SparkPi
+
+# For Python examples, use spark-submit directly:
+./bin/spark-submit examples/src/main/python/pi.py
+{% endhighlight %}

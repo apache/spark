@@ -237,7 +237,7 @@ You can also pass an option `--cores <numCores>` to control the number of cores 
 
 Spark supports two deploy modes: applications may run with the driver inside the client process or
 entirely inside the cluster. The
-[Spark submit script](cluster-overview.html#launching-applications-with-spark-submit) provides the
+[`spark-submit` script](submitting-applications.html) provides the
 most straightforward way to submit a compiled Spark application to the cluster in either deploy
 mode.
 
