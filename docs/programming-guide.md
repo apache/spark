@@ -275,9 +275,7 @@ We describe operations on distributed datasets later on.
 **Note:** *In this guide, we'll often use the concise Java 8 lambda syntax to specify Java functions, but
 in older versions of Java you can implement the interfaces in the
 [org.apache.spark.api.java.function](api/java/org/apache/spark/api/java/function/package-summary.html) package.
-For example, for the `reduce` above, we could create a 
-[Function2](api/java/org/apache/spark/api/java/function/Function2.html) that adds two numbers.
-We describe [writing functions in Java](#java-functions) in more detail below.*
+We describe [passing functions to Spark](#passing-functions-to-spark) in more detail below.*
 
 </div>
 
@@ -409,7 +407,7 @@ By default, each transformed RDD may be recomputed each time you run an action o
 
 <div class="codetabs">
 
-<div data-lang="scala"  markdown="1">
+<div data-lang="scala" markdown="1">
 
 To illustrate RDD basics, consider the simple program below:
 
@@ -435,7 +433,71 @@ lineLengths.persist()
 
 which would cause it to be saved in memory after the first time it is computed.
 
-<h4 id="scala-functions">Passing Functions in Scala</h4>
+</div>
+
+<div data-lang="java" markdown="1">
+
+To illustrate RDD basics, consider the simple program below:
+
+{% highlight java %}
+JavaRDD<String> lines = sc.textFile("data.txt");
+JavaRDD<Integer> lineLengths = lines.map(s -> s.length());
+int totalLength = lineLengths.reduce((a, b) -> a + b);
+{% endhighlight %}
+
+The first line defines a base RDD from an external file. This dataset is not loaded in memory or
+otherwise acted on: `lines` is merely a pointer to the file.
+The second line defines `lineLengths` as the result of a `map` transformation. Again, `lineLengths`
+is *not* immediately computed, due to laziness.
+Finally, we run `reduce`, which is an action. At this point Spark breaks the computation into tasks
+to run on separate machines, and each machine runs both its part of the map and a local reduction,
+returning only its answer to the driver program.
+
+If we also wanted to use `lineLengths` again later, we could add:
+
+{% highlight java %}
+lineLengths.persist();
+{% endhighlight %}
+
+which would cause it to be saved in memory after the first time it is computed.
+
+</div>
+
+<div data-lang="python" markdown="1">
+
+To illustrate RDD basics, consider the simple program below:
+
+{% highlight python %}
+lines = sc.textFile("data.txt")
+lineLengths = lines.map(lambda s: len(s))
+totalLength = lineLengths.reduce(lambda a, b: a + b)
+{% endhighlight %}
+
+The first line defines a base RDD from an external file. This dataset is not loaded in memory or
+otherwise acted on: `lines` is merely a pointer to the file.
+The second line defines `lineLengths` as the result of a `map` transformation. Again, `lineLengths`
+is *not* immediately computed, due to laziness.
+Finally, we run `reduce`, which is an action. At this point Spark breaks the computation into tasks
+to run on separate machines, and each machine runs both its part of the map and a local reduction,
+returning only its answer to the driver program.
+
+If we also wanted to use `lineLengths` again later, we could add:
+
+{% highlight scala %}
+lineLengths.persist()
+{% endhighlight %}
+
+which would cause it to be saved in memory after the first time it is computed.
+
+</div>
+
+</div>
+
+### Passing Functions to Spark
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
 
 Spark's API relies heavily on passing functions in the driver program to run on the cluster.
 There are two recommended ways to do this:
@@ -491,32 +553,6 @@ def doStuff(rdd: RDD[String]): RDD[String] = {
 
 <div data-lang="java"  markdown="1">
 
-To illustrate RDD basics, consider the simple program below:
-
-{% highlight java %}
-JavaRDD<String> lines = sc.textFile("data.txt");
-JavaRDD<Integer> lineLengths = lines.map(s -> s.length());
-int totalLength = lineLengths.reduce((a, b) -> a + b);
-{% endhighlight %}
-
-The first line defines a base RDD from an external file. This dataset is not loaded in memory or
-otherwise acted on: `lines` is merely a pointer to the file.
-The second line defines `lineLengths` as the result of a `map` transformation. Again, `lineLengths`
-is *not* immediately computed, due to laziness.
-Finally, we run `reduce`, which is an action. At this point Spark breaks the computation into tasks
-to run on separate machines, and each machine runs both its part of the map and a local reduction,
-returning only its answer to the driver program.
-
-If we also wanted to use `lineLengths` again later, we could add:
-
-{% highlight java %}
-lineLengths.persist();
-{% endhighlight %}
-
-which would cause it to be saved in memory after the first time it is computed.
-
-<h4 id="java-functions">Passing Functions in Java</h4>
-
 Spark's API relies heavily on passing functions in the driver program to run on the cluster.
 In Java, functions are represented by classes implementing the interfaces in the
 [org.apache.spark.api.java.function](api/java/org/apache/spark/api/java/function/package-summary.html) package.
@@ -562,32 +598,6 @@ for other languages.
 </div>
 
 <div data-lang="python"  markdown="1">
-
-To illustrate RDD basics, consider the simple program below:
-
-{% highlight python %}
-lines = sc.textFile("data.txt")
-lineLengths = lines.map(lambda s: len(s))
-totalLength = lineLengths.reduce(lambda a, b: a + b)
-{% endhighlight %}
-
-The first line defines a base RDD from an external file. This dataset is not loaded in memory or
-otherwise acted on: `lines` is merely a pointer to the file.
-The second line defines `lineLengths` as the result of a `map` transformation. Again, `lineLengths`
-is *not* immediately computed, due to laziness.
-Finally, we run `reduce`, which is an action. At this point Spark breaks the computation into tasks
-to run on separate machines, and each machine runs both its part of the map and a local reduction,
-returning only its answer to the driver program.
-
-If we also wanted to use `lineLengths` again later, we could add:
-
-{% highlight scala %}
-lineLengths.persist()
-{% endhighlight %}
-
-which would cause it to be saved in memory after the first time it is computed.
-
-<h4 id="python-functions">Passing Functions in Python</h4>
 
 Spark's API relies heavily on passing functions in the driver program to run on the cluster.
 There are three recommended ways to do this:
