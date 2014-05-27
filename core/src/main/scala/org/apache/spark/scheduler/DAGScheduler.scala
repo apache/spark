@@ -581,10 +581,7 @@ class DAGScheduler(
         jobResult = JobFailed(e)
         job.listener.jobFailed(e)
       case oom: OutOfMemoryError =>
-        val errors: StringWriter = new StringWriter()
-        oom.printStackTrace(new PrintWriter(errors))
-        val exception = new SparkException("job failed for: " + oom.getMessage() +
-                                           "\n" + errors.toString())
+        val exception = new SparkException("job failed for Out of memory exception", oom)
         jobResult = JobFailed(exception)
         job.listener.jobFailed(exception)
     } finally {
