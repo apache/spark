@@ -37,6 +37,8 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
 from boto import ec2
 
+AWS_EVENTUAL_CONSISTENCY = 30
+
 class UsageError(Exception):
   pass
 
@@ -465,7 +467,6 @@ def setup_spark_cluster(master, opts):
   if opts.ganglia:
     print "Ganglia started at http://%s:5080/ganglia" % master
 
-
 # Wait for a whole cluster (masters, slaves and ZooKeeper) to start up
 def wait_for_cluster(conn, wait_secs, master_nodes, slave_nodes):
   print "Waiting for instances to start up..."
@@ -673,6 +674,59 @@ def get_partition(total, num_partitions, current_partitions):
   return num_slaves_this_zone
 
 
+def destroy_cluster(conn, opts, cluster_name):
+  (master_nodes, slave_nodes) = get_existing_cluster(
+      conn, opts, cluster_name, die_on_error=False)
+  print "Terminating master..."
+  for inst in master_nodes:
+    inst.terminate()
+  print "Terminating slaves..."
+  for inst in slave_nodes:
+    inst.terminate()
+
+  # Delete security groups as well
+  if opts.delete_groups:
+    print "Deleting security groups (this will take some time)..."
+    group_names = [cluster_name + "-master", cluster_name + "-slaves"]
+
+    attempt = 1;
+    while attempt <= 3:
+      print "Attempt %d" % attempt
+      groups = [g for g in conn.get_all_security_groups() if g.name in group_names]
+      success = True
+      # Delete individual rules in all groups before deleting groups to
+      # remove dependencies between them
+      for group in groups:
+        print "Deleting rules in security group " + group.name
+        for rule in group.rules:
+          for grant in rule.grants:
+              success &= group.revoke(ip_protocol=rule.ip_protocol,
+                       from_port=rule.from_port,
+                       to_port=rule.to_port,
+                       src_group=grant)
+
+      # Sleep for AWS eventual-consistency to catch up, and for instances
+      # to terminate
+      time.sleep(AWS_EVENTUAL_CONSISTENCY)  # Yes, it does have to be this long :-(
+      for group in groups:
+        try:
+          conn.delete_security_group(group.name)
+          print "Deleted security group " + group.name
+        except boto.exception.EC2ResponseError:
+          success = False;
+          print "Failed to delete security group " + group.name
+
+      # Unfortunately, group.revoke() returns True even if a rule was not
+      # deleted, so this needs to be rerun if something fails
+      if success: break;
+
+      attempt += 1
+
+    if not success:
+      print "Failed to delete all security groups after 3 tries."
+      print "Try re-running in a few minutes."
+
+
 def real_main():
   (opts, action, cluster_name) = parse_args()
   try:
@@ -703,56 +757,7 @@ def real_main():
         cluster_name + "?\nALL DATA ON ALL NODES WILL BE LOST!!\n" +
         "Destroy cluster " + cluster_name + " (y/N): ")
     if response == "y":
-      (master_nodes, slave_nodes) = get_existing_cluster(
-          conn, opts, cluster_name, die_on_error=False)
-      print "Terminating master..."
-      for inst in master_nodes:
-        inst.terminate()
-      print "Terminating slaves..."
-      for inst in slave_nodes:
-        inst.terminate()
-
-      # Delete security groups as well
-      if opts.delete_groups:
-        print "Deleting security groups (this will take some time)..."
-        group_names = [cluster_name + "-master", cluster_name + "-slaves"]
-
-        attempt = 1;
-        while attempt <= 3:
-          print "Attempt %d" % attempt
-          groups = [g for g in conn.get_all_security_groups() if g.name in group_names]
-          success = True
-          # Delete individual rules in all groups before deleting groups to
-          # remove dependencies between them
-          for group in groups:
-            print "Deleting rules in security group " + group.name
-            for rule in group.rules:
-              for grant in rule.grants:
-                  success &= group.revoke(ip_protocol=rule.ip_protocol,
-                           from_port=rule.from_port,
-                           to_port=rule.to_port,
-                           src_group=grant)
-
-          # Sleep for AWS eventual-consistency to catch up, and for instances
-          # to terminate
-          time.sleep(30)  # Yes, it does have to be this long :-(
-          for group in groups:
-            try:
-              conn.delete_security_group(group.name)
-              print "Deleted security group " + group.name
-            except boto.exception.EC2ResponseError:
-              success = False;
-              print "Failed to delete security group " + group.name
-
-          # Unfortunately, group.revoke() returns True even if a rule was not
-          # deleted, so this needs to be rerun if something fails
-          if success: break;
-
-          attempt += 1
-
-        if not success:
-          print "Failed to delete all security groups after 3 tries."
-          print "Try re-running in a few minutes."
+      destroy_cluster()
 
   elif action == "login":
     (master_nodes, slave_nodes) = get_existing_cluster(

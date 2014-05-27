@@ -3,6 +3,7 @@
 *.ipr
 *.iml
 *.iws
+*.pyc
 .idea/
 sbt/*.jar
 .settings
