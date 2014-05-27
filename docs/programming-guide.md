@@ -1249,6 +1249,49 @@ cluster mode. The cluster location will be found based on HADOOP_CONF_DIR.
 </table>
 
 
+# Migrating from pre-1.0 Versions of Spark
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+
+Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
+not marked "experimental" or "developer API" will be supported in future versions.
+The only change for Scala users is that the grouping operations, e.g. `groupByKey`, `cogroup` and `join`,
+have changed from returning `(Key, Seq[Value])` pairs to `(Key, Iterable[Value])`.
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
+not marked "experimental" or "developer API" will be supported in future versions.
+Several changes were made to the Java API:
+
+* The Function classes in `org.apache.spark.api.java.function` became interfaces in 1.0, meaning that old
+  code that `extends Function` should `implement Function` instead.
+* New variants of the `map` transformations, like `mapToPair` and `mapToDouble`, were added to create RDDs
+  of special data types.
+* Grouping operations like `groupByKey`, `cogroup` and `join` have changed from returning 
+  `(Key, List<Value>)` pairs to `(Key, Iterable<Value>)`.
+
+</div>
+
+<div data-lang="python"  markdown="1">
+
+Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
+not marked "experimental" or "developer API" will be supported in future versions.
+The only change for Python users is that the grouping operations, e.g. `groupByKey`, `cogroup` and `join`,
+have changed from returning (key, list of values) pairs to (key, iterable of values).
+
+</div>
+
+</div>
+
+Migration guides are also available for [Spark Streaming](streaming-programming-guide.html#migration-guide-from-091-or-below-to-1x)
+and [MLlib](mllib-guide.html#migration-guide).
+
+
 # Where to Go from Here
 
 You can see some [example Spark programs](http://spark.apache.org/examples.html) on the Spark website.
@@ -1256,7 +1299,6 @@ In addition, Spark includes several samples in the `examples` directory
 ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
  [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python)).
-Some of them have both Spark versions and local (non-parallel) versions, allowing you to see what was changed to make the program run on a cluster.
 You can run Java and Scala examples by passing the class name to Spark's `bin/run-example` script; for instance:
 
     ./bin/run-example SparkPi
@@ -1270,3 +1312,6 @@ For help on optimizing your programs, the [configuration](configuration.html) an
 making sure that your data is stored in memory in an efficient format.
 For help on deploying, the [cluster mode overview](cluster-overview.html) describes the components involved
 in distributed operation and supported cluster managers.
+
+Finally, full API documentation is available in
+[Scala](api/scala/#org.apache.spark.package), [Java](api/java/) and [Python](api/python/).

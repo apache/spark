@@ -31,7 +31,7 @@ MLlib is a new component under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 
 and we will provide migration guide between releases.
 
-## Dependencies
+# Dependencies
 
 MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/), which depends on
 [netlib-java](https://github.com/fommil/netlib-java), and
@@ -50,9 +50,9 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 
 ---
 
-## Migration guide
+# Migration Guide
 
-### From 0.9 to 1.0
+## From 0.9 to 1.0
 
 In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few
 breaking changes.  If your data is sparse, please store it in a sparse format instead of dense to
