@@ -146,7 +146,7 @@ private[spark] class ExecutorRunner(
 
       val stderr = new File(executorDir, "stderr")
       Files.write(header, stderr, Charsets.UTF_8)
-      stderrAppender = FileAppender(process.getInputStream, stderr, conf)
+      stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
       // Wait for it to exit; this is actually a bad thing if it happens, because we expect to run
       // long-lived processes only. However, in the future, we might restart the executor a few

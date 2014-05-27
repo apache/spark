@@ -1,13 +1,29 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.util
 
-import java.io.{FileFilter, File, FileOutputStream, InputStream}
+import java.io.{File, FileFilter, FileOutputStream, InputStream}
 import java.text.SimpleDateFormat
-import java.util.{Calendar, Timer, TimerTask}
+import java.util.Calendar
+import java.util.concurrent.{Executors, ThreadFactory, TimeUnit}
 
-import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.util.{IntParam, Utils}
 import org.apache.commons.io.FileUtils
-import java.util.concurrent.{TimeUnit, ThreadFactory, Executors}
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * Continuously appends the data from an input stream into the given file
@@ -49,6 +65,7 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
   /** Continuously read chunks from the input stream and append to the file */
   protected def appendStreamToFile() {
     try {
+      logDebug("Started appending thread")
       openFile()
       val buf = new Array[Byte](bufferSize)
       var n = 0
@@ -95,9 +112,10 @@ private[spark] object FileAppender extends Logging {
 
   /** Create the right appender based on the configuration */
   def apply(inputStream: InputStream, file: File, conf: SparkConf): FileAppender = {
-    val rolloverEnabled = conf.getBoolean("spark.executor.rolloverLogs.enabled", false)
+    val rolloverEnabled = conf.getBoolean("spark.executor.rollingLogs.enabled", false)
+    logDebug("Log rollover enabled = " + rolloverEnabled)
     if (rolloverEnabled) {
-      val rolloverInterval = conf.get("spark.executor.rolloverLogs.interval", "daily")
+      val rolloverInterval = conf.get("spark.executor.rollingLogs.interval", "daily")
       rolloverInterval match {
         case "daily" =>
           logDebug(s"Using DailyRollingFileAppender for $file")
@@ -109,12 +127,13 @@ private[spark] object FileAppender extends Logging {
           logInfo(s"Using MinutelyRollingFileAppender for $file")
           new MinutelyRollingFileAppender(inputStream, file, conf)
         case IntParam(millis) =>
-          logInfo(s"Using RollingFileAppender with interval of $millis ")
+          logInfo(s"Using RollingFileAppender with interval of $millis ms")
           new RollingFileAppender(
             inputStream, file, millis, s"'${file.getName}'--YYYY-MM-dd--HH-mm-ss-SSSS", conf)
         case _ =>
           logWarning(
-            s"Illegal rollover interval for executor logs [$rolloverInterval], disabling rolling")
+            s"Illegal rollover interval for executor logs [$rolloverInterval], " +
+              s"rolling logs not enabled")
           new FileAppender(inputStream, file)
       }
     } else {
@@ -148,7 +167,7 @@ private[spark] class RollingFileAppender(
   require(rolloverIntervalMillis >= 100)
 
   private val cleanupTtlMillis = conf.getLong(
-    "spark.executor.rolloverLogs.cleanupTtl", 60 * 60 * 24 * 7) * 1000  // 7 days
+    "spark.executor.rollingLogs.cleanupTtl", 60 * 60 * 24 * 7) * 1000  // 7 days
   private val cleanupIntervalMillis = cleanupTtlMillis / 10
   private val formatter = new SimpleDateFormat(rolloverFilePattern)
   @volatile private var shouldRollover = false
@@ -156,7 +175,7 @@ private[spark] class RollingFileAppender(
   private val firstRolloverDelayMillis = {
     val now = currentTime()
     val targetTime = math.ceil(now / rolloverIntervalMillis) * rolloverIntervalMillis
-    targetTime.toLong - now + 10
+    targetTime.toLong - now + 5  // +5 to make sure this falls in the next interval
   }
 
   private val executor = Executors.newScheduledThreadPool(1, new ThreadFactory{
@@ -225,13 +244,13 @@ private[spark] class RollingFileAppender(
           // In case the rollover file name clashes, make a unique file name.
           // The resultant file names are long and ugly, so this is used only
           // if there is a name collision. This can be avoided by the using
-          // the right pattern.
+          // the right pattern such that name collisions do not occur.
           val altRolloverFile = new File(
-            file.getParent, s"$rolloverFileName-${System.currentTimeMillis}}").getAbsoluteFile
+            file.getParent, s"$rolloverFileName-${System.currentTimeMillis}").getAbsoluteFile
           logWarning(s"Rollover file $rolloverFile already exists, " +
             s"rolled over $file to file $altRolloverFile")
           logWarning(s"Make sure that the given file name pattern [$rolloverFilePattern] " +
-            s"generates using file names for the given interval [$rolloverIntervalMillis ms]")
+            s"generates unique file names for the given interval [$rolloverIntervalMillis ms]")
           FileUtils.moveFile(file, altRolloverFile)
         }
       } else {
@@ -248,7 +267,6 @@ private[spark] class RollingFileAppender(
   private[util] def cleanup() {
     try {
       val modTimeThreshold = System.currentTimeMillis - (cleanupTtlMillis * 1000)
-
       val oldFiles = file.getParentFile.listFiles(new FileFilter {
         def accept(f: File): Boolean = {
           f.getName.contains(file.getName) && f != file &&
