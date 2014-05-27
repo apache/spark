@@ -71,7 +71,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 
     val capability = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
     // Memory for the ApplicationMaster.
-    capability.setMemory(args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
+    capability.setMemory((args.amMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt)
     amContainer.setResource(capability)
 
     appContext.setQueue(args.amQueue)

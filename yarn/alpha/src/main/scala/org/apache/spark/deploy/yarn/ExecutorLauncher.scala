@@ -98,7 +98,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     val minimumMemory = appMasterResponse.getMinimumResourceCapability().getMemory()
 
     if (minimumMemory > 0) {
-      val mem = args.executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD
+      val mem = (args.executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt
       val numCore = (mem  / minimumMemory) + (if (0 != (mem % minimumMemory)) 1 else 0)
 
       if (numCore > 0) {

@@ -99,7 +99,8 @@ private[yarn] class YarnAllocationHandler(
   def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
 
   def isResourceConstraintSatisfied(container: Container): Boolean = {
-    container.getResource.getMemory >= (executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
+    container.getResource.getMemory >= (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).
+      ceil.toInt
   }
 
   def allocateContainers(executorsToRequest: Int) {
@@ -229,7 +230,7 @@ private[yarn] class YarnAllocationHandler(
         val containerId = container.getId
 
         assert( container.getResource.getMemory >=
-          (executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD))
+          (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt)
 
         if (numExecutorsRunningNow > maxExecutors) {
           logInfo("""Ignoring container %s at host %s, since we already have the required number of
@@ -450,7 +451,7 @@ private[yarn] class YarnAllocationHandler(
 
     if (numExecutors > 0) {
       logInfo("Allocating %d executor containers with %d of memory each.".format(numExecutors,
-        executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD))
+        (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD)).ceil.toInt)
     } else {
       logDebug("Empty allocation req ..  release : " + releasedContainerList)
     }
@@ -505,7 +506,7 @@ private[yarn] class YarnAllocationHandler(
     val rsrcRequest = Records.newRecord(classOf[ResourceRequest])
     val memCapability = Records.newRecord(classOf[Resource])
     // There probably is some overhead here, let's reserve a bit more memory.
-    memCapability.setMemory(executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
+    memCapability.setMemory((executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt)
     rsrcRequest.setCapability(memCapability)
 
     val pri = Records.newRecord(classOf[Priority])
@@ -544,8 +545,8 @@ object YarnAllocationHandler {
   // request types (like map/reduce in hadoop for example)
   val PRIORITY = 1
 
-  // Additional memory overhead - in mb
-  val MEMORY_OVERHEAD = 384
+  // Additional memory overhead
+  val MEMORY_OVERHEAD = 1.25D
 
   // Host to rack map - saved from allocation requests
   // We are expecting this not to change.

@@ -71,11 +71,7 @@ trait ClientBase extends Logging {
       ((args.userJar == null && args.amClass == classOf[ApplicationMaster].getName) ->
           "Error: You must specify a user jar when running in standalone mode!"),
       (args.userClass == null) -> "Error: You must specify a user class!",
-      (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!",
-      (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: AM memory size must be" +
-        "greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD),
-      (args.executorMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: Executor memory size" +
-        "must be greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD.toString)
+      (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!"
     ).foreach { case(cond, errStr) =>
       if (cond) {
         logError(errStr)
@@ -98,7 +94,7 @@ trait ClientBase extends Logging {
         format(args.executorMemory, maxMem))
       System.exit(1)
     }
-    val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
+    val amMem = (args.amMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt
     if (amMem > maxMem) {
       logError("Required AM memory (%d) is above the max threshold (%d) of this cluster".
         format(args.amMemory, maxMem))

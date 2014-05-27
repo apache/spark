@@ -84,7 +84,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 
     // Memory for the ApplicationMaster.
     val memoryResource = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
-    memoryResource.setMemory(args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
+    memoryResource.setMemory((args.amMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt)
     appContext.setResource(memoryResource)
 
     // Finally, submit and monitor the application.

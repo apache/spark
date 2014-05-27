@@ -106,7 +106,8 @@ private[yarn] class YarnAllocationHandler(
   def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
 
   def isResourceConstraintSatisfied(container: Container): Boolean = {
-    container.getResource.getMemory >= (executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
+    container.getResource.getMemory >= (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).
+      ceil.toInt
   }
 
   def releaseContainer(container: Container) {
@@ -248,7 +249,8 @@ private[yarn] class YarnAllocationHandler(
         val executorHostname = container.getNodeId.getHost
         val containerId = container.getId
 
-        val executorMemoryOverhead = (executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
+        val executorMemoryOverhead = (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).
+          ceil.toInt
         assert(container.getResource.getMemory >= executorMemoryOverhead)
 
         if (numExecutorsRunningNow > maxExecutors) {
@@ -477,7 +479,7 @@ private[yarn] class YarnAllocationHandler(
       numPendingAllocate.addAndGet(numExecutors)
       logInfo("Will Allocate %d executor containers, each with %d memory".format(
         numExecutors,
-        (executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD)))
+        (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt))
     } else {
       logDebug("Empty allocation request ...")
     }
@@ -537,7 +539,7 @@ private[yarn] class YarnAllocationHandler(
       priority: Int
     ): ArrayBuffer[ContainerRequest] = {
 
-    val memoryRequest = executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD
+    val memoryRequest = (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt
     val resource = Resource.newInstance(memoryRequest, executorCores)
 
     val prioritySetting = Records.newRecord(classOf[Priority])
@@ -558,8 +560,8 @@ object YarnAllocationHandler {
   // request types (like map/reduce in hadoop for example)
   val PRIORITY = 1
 
-  // Additional memory overhead - in mb.
-  val MEMORY_OVERHEAD = 384
+  // Additional memory overhead.
+  val MEMORY_OVERHEAD = 1.25D
 
   // Host to rack map - saved from allocation requests. We are expecting this not to change.
   // Note that it is possible for this to change : and ResurceManager will indicate that to us via
