@@ -60,8 +60,9 @@ private[spark] class HttpFileServer(securityManager: SecurityManager) extends Lo
 
   def addFileToDir(file: File, dir: File) : String = {
     // Check whether the file is a directory. If it is, throw a more meaningful exception.
-    // If we don't catch this, Guava throws an confusing error message when [file] is a directory:
+    // If we don't catch this, Guava throws a very confusing error message:
     //   java.io.FileNotFoundException: [file] (No such file or directory)
+    // even though the directory ([file]) exists.
     if (file.isDirectory) {
       throw new IllegalArgumentException(s"$file cannot be a directory.")
     }
