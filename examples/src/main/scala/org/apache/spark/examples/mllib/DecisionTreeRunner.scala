@@ -125,11 +125,11 @@ object DecisionTreeRunner {
 
     val strategy
       = new Strategy(
-            algo = params.algo,
-            impurity = impurityCalculator,
-            maxDepth = params.maxDepth,
-            maxBins = params.maxBins,
-            numClassesForClassification = params.numClassesForClassification)
+          algo = params.algo,
+          impurity = impurityCalculator,
+          maxDepth = params.maxDepth,
+          maxBins = params.maxBins,
+          numClassesForClassification = params.numClassesForClassification)
     val model = DecisionTree.train(training, strategy)
 
     if (params.algo == Classification) {
