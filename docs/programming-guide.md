@@ -674,10 +674,10 @@ by a key.
 In Scala, these operations are automatically available on RDDs containing
 [Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) objects
 (the built-in tuples in the language, created by simply writing `(a, b)`), as long as you
-`import org.apache.spark.SparkContext._` at the top of your program to make available Spark's implicit
+`import org.apache.spark.SparkContext._` in your program to enable Spark's implicit
 conversions. The key-value pair operations are available in the
 [PairRDDFunctions](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) class,
-which automatically wraps around an RDD of tuples as long as you import the implicit conversions.
+which automatically wraps around an RDD of tuples if you import the conversions.
 
 For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
 many times each line of text occurs in a file:
@@ -717,7 +717,7 @@ many times each line of text occurs in a file:
 {% highlight scala %}
 JavaRDD<String> lines = sc.textFile("data.txt");
 JavaPairRDD<String, Integer> pairs = lines.map(s -> new Tuple2(s, 1));
-JavaPairRDD<String, Integer> counts = pairs.reduceByKey((a, b) => a + b);
+JavaPairRDD<String, Integer> counts = pairs.reduceByKey((a, b) -> a + b);
 {% endhighlight %}
 
 We could also use `counts.sortByKey()`, for example, to sort the pairs by word, and finally
