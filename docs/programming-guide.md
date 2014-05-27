@@ -431,7 +431,7 @@ If we also wanted to use `lineLengths` again later, we could add:
 lineLengths.persist()
 {% endhighlight %}
 
-which would cause it to be saved in memory after the first time it is computed.
+before the `reduce`, which would cause `lineLengths` to be saved in memory after the first time it is computed.
 
 </div>
 
@@ -459,7 +459,7 @@ If we also wanted to use `lineLengths` again later, we could add:
 lineLengths.persist();
 {% endhighlight %}
 
-which would cause it to be saved in memory after the first time it is computed.
+before the `reduce`, which would cause `lineLengths` to be saved in memory after the first time it is computed.
 
 </div>
 
@@ -483,11 +483,11 @@ returning only its answer to the driver program.
 
 If we also wanted to use `lineLengths` again later, we could add:
 
-{% highlight scala %}
+{% highlight python %}
 lineLengths.persist()
 {% endhighlight %}
 
-which would cause it to be saved in memory after the first time it is computed.
+before the `reduce`, which would cause `lineLengths` to be saved in memory after the first time it is computed.
 
 </div>
 
@@ -661,6 +661,97 @@ def doStuff(self, rdd):
 </div>
 
 ### Working with Key-Value Pairs
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+While most Spark operations work on RDDs containing any type of objects, a few special operations are
+only available on RDDs of key-value pairs.
+The most common ones are distibuted "shuffle" operations, such as grouping or aggregating the elements
+by a key.
+
+In Scala, these operations are automatically available on RDDs containing
+[Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) objects
+(the built-in tuples in the language, created by simply writing `(a, b)`), as long as you
+`import org.apache.spark.SparkContext._` at the top of your program to make available Spark's implicit
+conversions. The key-value pair operations are available in the
+[PairRDDFunctions](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) class,
+which automatically wraps around an RDD of tuples as long as you import the implicit conversions.
+
+For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
+many times each line of text occurs in a file:
+
+{% highlight scala %}
+val lines = sc.textFile("data.txt")
+val pairs = lines.map(s => (s, 1))
+val counts = pairs.reduceByKey((a, b) => a + b)
+{% endhighlight %}
+
+We could also use `counts.sortByKey()`, for example, to sort the pairs by word, and finally
+`counts.collect()` to bring them back to the driver program as an array of objects.
+
+</div>
+
+<div data-lang="java" markdown="1">
+
+While most Spark operations work on RDDs containing any type of objects, a few special operations are
+only available on RDDs of key-value pairs.
+The most common ones are distibuted "shuffle" operations, such as grouping or aggregating the elements
+by a key.
+
+In Java, key-value pairs are represented using the 
+[scala.Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) class
+from the Scala standard library. You can simply call `new Tuple2(a, b)` to create a tuple, and access
+its fields later with `tuple._1()` and `tuple._2()`.
+
+RDDs of key-value pairs are represented by the
+[JavaPairRDD](api/java/org/apache/spark/api/java/JavaPairRDD.html) class. You can construct
+JavaPairRDDs from JavaRDDs using special versions of the `map` operations, like
+`mapToPair` and `flatMapToPair`. The JavaPairRDD will have both standard RDD functions and special
+key-value ones.
+
+For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
+many times each line of text occurs in a file:
+
+{% highlight scala %}
+JavaRDD<String> lines = sc.textFile("data.txt");
+JavaPairRDD<String, Integer> pairs = lines.map(s -> new Tuple2(s, 1));
+JavaPairRDD<String, Integer> counts = pairs.reduceByKey((a, b) => a + b);
+{% endhighlight %}
+
+We could also use `counts.sortByKey()`, for example, to sort the pairs by word, and finally
+`counts.collect()` to bring them back to the driver program as an array of objects.
+
+
+</div>
+
+<div data-lang="python" markdown="1">
+
+While most Spark operations work on RDDs containing any type of objects, a few special operations are
+only available on RDDs of key-value pairs.
+The most common ones are distibuted "shuffle" operations, such as grouping or aggregating the elements
+by a key.
+
+In Python, these operations work on RDDs containing built-in Python tuples such as `(1, 2)`.
+Simply create such tuples and then call your desired operation.
+
+For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
+many times each line of text occurs in a file:
+
+{% highlight python %}
+lines = sc.textFile("data.txt")
+pairs = lines.map(lambda s: (s, 1))
+counts = pairs.reduceByKey(lambda a, b: a + b)
+{% endhighlight %}
+
+We could also use `counts.sortByKey()`, for example, to sort the pairs by word, and finally
+`counts.collect()` to bring them back to the driver program as an array of objects.
+
+</div>
+
+</div>
+
 
 ### Transformations
 
