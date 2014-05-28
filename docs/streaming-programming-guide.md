@@ -234,12 +234,12 @@ Then, in a different terminal, you can start the example by using
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight bash %}
-$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount local[2] localhost 9999
+$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount localhost 9999
 {% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
 {% highlight bash %}
-$ ./bin/run-example org.apache.spark.examples.streaming.JavaNetworkWordCount local[2] localhost 9999
+$ ./bin/run-example org.apache.spark.examples.streaming.JavaNetworkWordCount localhost 9999
 {% endhighlight %}
 </div>
 </div>
@@ -268,7 +268,7 @@ hello world
 {% highlight bash %}
 # TERMINAL 2: RUNNING NetworkWordCount or JavaNetworkWordCount
 
-$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount local[2] localhost 9999
+$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount localhost 9999
 ...
 -------------------------------------------
 Time: 1357008430000 ms
