@@ -723,12 +723,14 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>
-    Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
+    Comma separated list of filter class names to apply to the Spark web UI. The filter should be a
     standard <a href="http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html">
     javax servlet Filter</a>. Parameters to each filter can also be specified by setting a
-    java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
-    (e.g. -Dspark.ui.filters=com.test.filter1
-    -Dspark.com.test.filter1.params='param1=foo,param2=testing')
+    java system property of: <br />
+    <code>spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'</code><br />
+    For example: <br />
+    <code>-Dspark.ui.filters=com.test.filter1</code> <br />
+    <code>-Dspark.com.test.filter1.params='param1=foo,param2=testing'</code>
   </td>
 </tr>
 <tr>
@@ -779,7 +781,7 @@ Apart from these, the following properties are also available, and may be useful
 Each cluster manager in Spark has additional configuration options. Configurations 
 can be found on the pages for each mode:
 
- * [Yarn](running-on-yarn.html#configuration)
+ * [YARN](running-on-yarn.html#configuration)
  * [Mesos](running-on-mesos.html)
  * [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
 
@@ -828,4 +830,3 @@ compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
 `log4j.properties` file in the `conf` directory. One way to start is to copy the existing
 `log4j.properties.template` located there.
-</table>
