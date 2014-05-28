@@ -218,6 +218,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
 </tr>
 </table>
+
 # Connecting an Application to the Cluster
 
 To run an application on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
