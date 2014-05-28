@@ -82,7 +82,6 @@ abstract class AggregateFunction
   override def dataType = base.dataType
 
   def update(input: Row): Unit
-  override def eval(input: Row): Any
 
   // Do we really need this?
   override def newInstance() = makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
