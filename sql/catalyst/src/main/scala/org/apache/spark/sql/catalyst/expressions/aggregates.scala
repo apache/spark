@@ -166,7 +166,7 @@ case class CountDistinct(expressions: Seq[Expression]) extends AggregateExpressi
   override def children = expressions
   override def references = expressions.flatMap(_.references).toSet
   override def nullable = false
-  override def dataType = IntegerType
+  override def dataType = LongType
   override def toString = s"COUNT(DISTINCT ${expressions.mkString(",")})"
   override def newInstance() = new CountDistinctFunction(expressions, this)
 }
@@ -184,7 +184,7 @@ case class ApproxCountDistinctMerge(child: Expression, relativeSD: Double)
   extends AggregateExpression with trees.UnaryNode[Expression] {
   override def references = child.references
   override def nullable = false
-  override def dataType = IntegerType
+  override def dataType = LongType
   override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
   override def newInstance() = new ApproxCountDistinctMergeFunction(child, this, relativeSD)
 }
@@ -193,7 +193,7 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
   extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
   override def nullable = false
-  override def dataType = IntegerType
+  override def dataType = LongType
   override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
 
   override def asPartial: SplitEvaluation = {
@@ -391,7 +391,7 @@ case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpressio
     }
   }
 
-  override def eval(input: Row): Any = seen.size
+  override def eval(input: Row): Any = seen.size.toLong
 }
 
 case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
