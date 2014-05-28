@@ -252,11 +252,11 @@ we initialize a SparkContext as part of the program.
 We pass the SparkContext constructor a 
 [SparkConf](api/scala/index.html#org.apache.spark.SparkConf)
 object which contains information about our
-application. We also call sc.addJar to make sure that when our application is launched in cluster
-mode, the jar file containing it will be shipped automatically to worker nodes.
+application. 
 
-This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt`
-which explains that Spark is a dependency. This file also adds a repository that Spark depends on:
+Our application depends on the Spark API, so we'll also include an sbt configuration file, 
+`simple.sbt` which explains that Spark is a dependency. This file also adds a repository that 
+Spark depends on:
 
 {% highlight scala %}
 name := "Simple Project"
