@@ -55,7 +55,7 @@ import org.apache.spark.SparkConf
 Spark {{site.SPARK_VERSION}} works with Java 6 and higher. If you are using Java 8, Spark supports
 [lambda expressions](http://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html)
 for concisely writing functions, otherwise you can use the classes in the
-[org.apache.spark.api.java.function](api/java/org/apache/spark/api/java/function/package-summary.html) package.
+[org.apache.spark.api.java.function](api/java/index.html?org/apache/spark/api/java/function/package-summary.html) package.
 
 To write a Spark application in Java, you need to add a dependency on Spark. Spark is available through Maven Central at:
 
@@ -126,8 +126,8 @@ new SparkContext(conf)
 
 <div data-lang="java"  markdown="1">
 
-The first thing a Spark program must do is to create a [JavaSparkContext](api/java/org/apache/spark/api/java/JavaSparkContext.html) object, which tells Spark
-how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/java/org/apache/spark/SparkConf.html) object
+The first thing a Spark program must do is to create a [JavaSparkContext](api/java/index.html?org/apache/spark/api/java/JavaSparkContext.html) object, which tells Spark
+how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/java/index.html?org/apache/spark/SparkConf.html) object
 that contains information about your application.
 
 {% highlight java %}
@@ -265,7 +265,7 @@ We describe operations on distributed datasets later on.
 
 **Note:** *In this guide, we'll often use the concise Java 8 lambda syntax to specify Java functions, but
 in older versions of Java you can implement the interfaces in the
-[org.apache.spark.api.java.function](api/java/org/apache/spark/api/java/function/package-summary.html) package.
+[org.apache.spark.api.java.function](api/java/index.html?org/apache/spark/api/java/function/package-summary.html) package.
 We describe [passing functions to Spark](#passing-functions-to-spark) in more detail below.*
 
 </div>
@@ -546,7 +546,7 @@ def doStuff(rdd: RDD[String]): RDD[String] = {
 
 Spark's API relies heavily on passing functions in the driver program to run on the cluster.
 In Java, functions are represented by classes implementing the interfaces in the
-[org.apache.spark.api.java.function](api/java/org/apache/spark/api/java/function/package-summary.html) package.
+[org.apache.spark.api.java.function](api/java/index.html?org/apache/spark/api/java/function/package-summary.html) package.
 There are two ways to create such functions:
 
 * Implement the Function interfaces in your own class, either as an anonymous inner class or a named one,
@@ -697,7 +697,7 @@ from the Scala standard library. You can simply call `new Tuple2(a, b)` to creat
 its fields later with `tuple._1()` and `tuple._2()`.
 
 RDDs of key-value pairs are represented by the
-[JavaPairRDD](api/java/org/apache/spark/api/java/JavaPairRDD.html) class. You can construct
+[JavaPairRDD](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html) class. You can construct
 JavaPairRDDs from JavaRDDs using special versions of the `map` operations, like
 `mapToPair` and `flatMapToPair`. The JavaPairRDD will have both standard RDD functions and special
 key-value ones.
@@ -749,11 +749,11 @@ We could also use `counts.sortByKey()`, for example, to sort the pairs alphabeti
 The following table lists some of the common transformations supported by Spark. Refer to the
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
- [Java](api/java/org/apache/spark/api/java/JavaRDD.html),
+ [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
  [Python](api/python/pyspark.rdd.RDD-class.html))
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
- [Java](api/java/org/apache/spark/api/java/JavaPairRDD.html))
+ [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
 <table class="table">
@@ -852,11 +852,11 @@ for details.
 The following table lists some of the common actions supported by Spark. Refer to the
 RDD API doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.RDD),
- [Java](api/java/org/apache/spark/api/java/JavaRDD.html),
+ [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
  [Python](api/python/pyspark.rdd.RDD-class.html))
 and pair RDD functions doc
 ([Scala](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions),
- [Java](api/java/org/apache/spark/api/java/JavaPairRDD.html))
+ [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
 <table class="table">
@@ -931,7 +931,7 @@ to persist the dataset on disk, persist it in memory but as serialized Java obje
 replicate it across nodes, or store it off-heap in [Tachyon](http://tachyon-project.org/).
 These levels are set by passing a
 `StorageLevel` object ([Scala](api/scala/index.html#org.apache.spark.storage.StorageLevel),
-[Java](api/java/org/apache/spark/storage/StorageLevel.html),
+[Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
 [Python](api/python/pyspark.storagelevel.StorageLevel-class.html))
 to `persist()`. The `cache()` method is a shorthand for using the default storage level,
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
@@ -1150,7 +1150,7 @@ accum.value();
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Integer, programmers can also
-create their own types by subclassing [AccumulatorParam](api/java/org/apache/spark/AccumulatorParam.html). 
+create their own types by subclassing [AccumulatorParam](api/java/index.html?org/apache/spark/AccumulatorParam.html).
 The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
 type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
 representing mathematical vectors, we could write:
@@ -1166,10 +1166,10 @@ class VectorAccumulatorParam implements AccumulatorParam<Vector> {
 }
 
 // Then, create an Accumulator of this type:
-Accumulator<Vector> vecAccum = sc.accumulator(new Vector(...))(new VectorAccumulatorParam());
+Accumulator<Vector> vecAccum = sc.accumulator(new Vector(...), new VectorAccumulatorParam());
 {% endhighlight %}
 
-In Java, Spark also supports the more general [Accumulable](api/java/org/apache/spark/Accumulable.html)
+In Java, Spark also supports the more general [Accumulable](api/java/index.html?org/apache/spark/Accumulable.html)
 interface to accumulate data where the resulting type is not the same as the elements added (e.g. build
 a list by collecting together elements).
 
@@ -1205,7 +1205,7 @@ class VectorAccumulatorParam(AccumulatorParam):
         return v1
 
 # Then, create an Accumulator of this type:
-vecAccum = sc.accumulator(Vector(...))(VectorAccumulatorParam())
+vecAccum = sc.accumulator(Vector(...), VectorAccumulatorParam())
 {% endhighlight %}
 
 </div>

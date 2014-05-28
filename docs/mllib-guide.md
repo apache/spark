@@ -84,9 +84,9 @@ val vector: Vector = Vectors.dense(array) // a dense vector
 <div data-lang="java" markdown="1">
 
 We used to represent a feature vector by `double[]`, which is replaced by
-[`Vector`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used
+[`Vector`](api/java/index.html?org/apache/spark/mllib/linalg/Vector.html) in v1.0. Algorithms that used
 to accept `RDD<double[]>` now take
-`RDD<Vector>`. [`LabeledPoint`](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint)
+`RDD<Vector>`. [`LabeledPoint`](api/java/index.html?org/apache/spark/mllib/regression/LabeledPoint.html)
 is now a wrapper of `(double, Vector)` instead of `(double, double[])`. Converting `double[]` to
 `Vector` is straightforward:
 
