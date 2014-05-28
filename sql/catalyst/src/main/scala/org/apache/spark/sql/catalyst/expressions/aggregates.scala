@@ -340,7 +340,7 @@ case class ApproxCountDistinctMergeFunction(
     hyperLogLog.addAll(evaluatedExpr.asInstanceOf[HyperLogLog])
   }
 
-  override def eval(input: Row): Any = hyperLogLog.cardinality().toInt
+  override def eval(input: Row): Any = hyperLogLog.cardinality()
 }
 
 case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
