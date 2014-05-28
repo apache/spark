@@ -17,6 +17,8 @@
 
 package org.apache.spark.graphx
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
 
@@ -55,7 +57,7 @@ object GraphLoader extends Logging {
       path: String,
       canonicalOrientation: Boolean = false,
       minEdgePartitions: Int = 1)
-    : Graph[Int, Int] =
+    : Graph[Int, ED] =
   {
     val startTime = System.currentTimeMillis
 
@@ -72,8 +74,8 @@ object GraphLoader extends Logging {
           val srcId = lineArray(0).toLong
           val dstId = lineArray(1).toLong
           val edgeAttr : ED = 
-            if (lineArray.length >= 3) lineArray(2)
-            else 1
+            if (lineArray.length >= 3) lineArray(2).asInstanceOf[ED]
+            else 1.asInstanceOf[ED]
           if (canonicalOrientation && srcId > dstId) {
             builder.add(dstId, srcId, edgeAttr)
           } else {
@@ -87,7 +89,7 @@ object GraphLoader extends Logging {
 
     logInfo("It took %d ms to load the edges".format(System.currentTimeMillis - startTime))
 
-    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1)
+    GraphImpl.fromEdgePartitions[Int, ED](edges, defaultVertexAttr = 1)
   } // end of edgeListFile
 
 }
