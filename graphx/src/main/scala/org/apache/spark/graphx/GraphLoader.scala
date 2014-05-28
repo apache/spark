@@ -27,7 +27,7 @@ object GraphLoader extends Logging {
 
   /**
    * Loads a graph from an edge list formatted file where each line contains atleast two integers: a source
-   * id and a target id. If third Integer is porivided that is used as edge attribute; default edge attribute is 1.
+   * id and a target id. If third argument is porivided that is used as edge attribute; default edge attribute is 1.
    * Skips lines that begin with `#`.
    *
    * If desired the edges can be automatically oriented in the positive
@@ -50,7 +50,7 @@ object GraphLoader extends Logging {
    *        direction
    * @param minEdgePartitions the number of partitions for the edge RDD
    */
-  def edgeListFile(
+  def edgeListFile[ED: ClassTag](
       sc: SparkContext,
       path: String,
       canonicalOrientation: Boolean = false,
@@ -62,7 +62,7 @@ object GraphLoader extends Logging {
     // Parse the edge data table directly into edge partitions
     val lines = sc.textFile(path, minEdgePartitions).coalesce(minEdgePartitions)
     val edges = lines.mapPartitionsWithIndex { (pid, iter) =>
-      val builder = new EdgePartitionBuilder[Int, Int]
+      val builder = new EdgePartitionBuilder[ED, Int]
       iter.foreach { line =>
         if (!line.isEmpty && line(0) != '#') {
           val lineArray = line.split("\\s+")
@@ -71,8 +71,8 @@ object GraphLoader extends Logging {
           }
           val srcId = lineArray(0).toLong
           val dstId = lineArray(1).toLong
-          val edgeAttr = 
-            if (lineArray.length >= 3) lineArray(2).toInt
+          val edgeAttr : ED = 
+            if (lineArray.length >= 3) lineArray(2)
             else 1
           if (canonicalOrientation && srcId > dstId) {
             builder.add(dstId, srcId, edgeAttr)
