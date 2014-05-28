@@ -284,7 +284,7 @@
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
-        <version>2.5.1</version>
+        <version>2.7.0</version>
         <exclusions>
           <!-- Only HyperLogLog is used, which doesn't depend on fastutil -->
           <exclusion>
