@@ -54,4 +54,5 @@ private[spark] trait TaskScheduler {
 
   // Get the default level of parallelism to use in the cluster, as a hint for sizing jobs.
   def defaultParallelism(): Int
+  def waitBackendReady(): Unit = {return}
 }

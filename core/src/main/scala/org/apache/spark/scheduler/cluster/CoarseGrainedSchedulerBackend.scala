@@ -46,9 +46,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
+  var totalExecutors = new AtomicInteger(0)
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
+  val registeredRatio = conf.getDouble("spark.executor.registeredRatio", 0)
+  val maxRegisteredWaitingTime = conf.getInt("spark.executor.maxRegisteredWaitingTime", 10000)
+  val createTime = System.currentTimeMillis()
+  var ready = if(registeredRatio==0)true else false
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
     private val executorActor = new HashMap[String, ActorRef]
@@ -83,6 +88,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
+          if (executorActor.size >= totalExecutors.get() * registeredRatio) {
+            ready = true
+          }
           makeOffers()
         }
 
@@ -243,6 +251,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       case e: Exception =>
         throw new SparkException("Error notifying standalone scheduler's driver actor", e)
     }
+  }
+
+  override def isReady(): Boolean = {
+    if (ready){
+      return true
+    }
+    if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTime) {
+      ready = true
+      return true
+    }
+    return false
   }
 }
 

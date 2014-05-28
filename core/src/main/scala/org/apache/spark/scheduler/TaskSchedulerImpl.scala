@@ -431,6 +431,16 @@ private[spark] class TaskSchedulerImpl(
 
   // By default, rack is unknown
   def getRackForHost(value: String): Option[String] = None
+  override def waitBackendReady():Unit={
+    if(backend.isReady){
+      return
+    }
+    while(!backend.isReady){
+      synchronized{
+        this.wait(100)
+      }
+    }
+  }
 }
 
 
