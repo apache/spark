@@ -58,15 +58,15 @@ trait ClientBase extends Logging {
   private val SPARK_STAGING: String = ".sparkStaging"
   private val distCacheMgr = new ClientDistributedCacheManager()
 
-  // Additional memory overhead - in mb.
-  val memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead", 384)
-
   // Staging directory is private! -> rwx--------
   val STAGING_DIR_PERMISSION: FsPermission =
     FsPermission.createImmutable(Integer.parseInt("700", 8).toShort)
   // App files are world-wide readable and owner writable -> rw-r--r--
   val APP_FILE_PERMISSION: FsPermission =
     FsPermission.createImmutable(Integer.parseInt("644", 8).toShort)
+
+  // Additional memory overhead - in mb.
+  def memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead", 384)
 
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {
