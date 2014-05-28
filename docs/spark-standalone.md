@@ -157,7 +157,7 @@ SPARK_MASTER_OPTS supports the following system properties:
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td>spark.deploy.spreadOut</td>
+  <td><code>spark.deploy.spreadOut</code></td>
   <td>true</td>
   <td>
     Whether the standalone cluster manager should spread applications out across nodes or try
@@ -166,7 +166,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
-  <td>spark.deploy.defaultCores</td>
+  <td><code>spark.deploy.defaultCores</code></td>
   <td>(infinite)</td>
   <td>
     Default number of cores to give to applications in Spark's standalone mode if they don't
@@ -177,7 +177,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
-  <td>spark.worker.timeout</td>
+  <td><code>spark.worker.timeout</code></td>
   <td>60</td>
   <td>
     Number of seconds after which the standalone deploy master considers a worker lost if it
@@ -191,7 +191,7 @@ SPARK_WORKER_OPTS supports the following system properties:
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td>spark.worker.cleanup.enabled</td>
+  <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
@@ -200,7 +200,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
-  <td>spark.worker.cleanup.interval</td>
+  <td><code>spark.worker.cleanup.interval</code></td>
   <td>1800 (30 minutes)</td>
   <td>
     Controls the interval, in seconds, at which the worker cleans up old application work dirs
@@ -208,7 +208,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
-  <td>spark.worker.cleanup.appDataTtl</td>
+  <td><code>spark.worker.cleanup.appDataTtl</code></td>
   <td>7 * 24 * 3600 (7 days)</td>
   <td>
     The number of seconds to retain application work directories on each worker.  This is a Time To Live

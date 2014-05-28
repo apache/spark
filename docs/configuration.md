@@ -64,7 +64,7 @@ This is a useful place to check to make sure that your properties have been set 
 that only values explicitly specified through either `spark-defaults.conf` or SparkConf will
 appear. For all other configuration properties, you can assume the default value is used.
 
-## All Configuration Properties
+## Available Properties
 
 Most of the properties that control internal settings have reasonable default values. Some
 of the most common options to set are:
@@ -72,14 +72,14 @@ of the most common options to set are:
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><strong><code>spark.app.name</code></strong></td>
+  <td><code>spark.app.name</code></td>
   <td>(none)</td>
   <td>
     The name of your application. This will appear in the UI and in log data.
   </td>
 </tr>
 <tr>
-  <td><strong><code>spark.master</code></strong></td>
+  <td><code>spark.master</code></td>
   <td>(none)</td>
   <td>
     The cluster manager to connect to. See the list of
@@ -245,15 +245,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.memoryMapThreshold</code></td>
-  <td>8192</td>
-  <td>
-    Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
-    This prevents Spark from memory mapping very small blocks. In general, memory
-    mapping has high overhead for blocks close to or below the page size of the operating system.
-  </td>
-</tr>
-<tr>
   <td><code>spark.reducer.maxMbInFlight</code></td>
   <td>48</td>
   <td>
@@ -292,7 +283,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.eventLog.enabled</code></td>
   <td>false</td>
   <td>
-    Whether to log spark events, useful for reconstructing the Web UI after the application has
+    Whether to log Spark events, useful for reconstructing the Web UI after the application has
     finished.
   </td>
 </tr>
@@ -307,7 +298,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.eventLog.dir</code></td>
   <td>file:///tmp/spark-events</td>
   <td>
-    Base directory in which spark events are logged, if <code>spark.eventLog.enabled</code> is true.
+    Base directory in which Spark events are logged, if <code>spark.eventLog.enabled</code> is true.
     Within this base directory, Spark creates a sub-directory for each application, and logs the
     events specific to the application in this directory.
   </td>
@@ -458,10 +449,30 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.storage.memoryMapThreshold</code></td>
+  <td>8192</td>
+  <td>
+    Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
+    This prevents Spark from memory mapping very small blocks. In general, memory
+    mapping has high overhead for blocks close to or below the page size of the operating system.
+  </td>
+</tr>
+<tr>
   <td><code>spark.tachyonStore.url</code></td>
   <td>tachyon://localhost:19998</td>
   <td>
     The URL of the underlying Tachyon file system in the TachyonStore.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.ttl</code></td>
+  <td>(infinite)</td>
+  <td>
+    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks
+    generated, etc.). Periodic cleanups will ensure that metadata older than this duration will be
+    forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
+    case of Spark Streaming applications). Note that any RDD that persists in memory for more than
+    this duration will be cleared as well.
   </td>
 </tr>
 </table>
@@ -539,7 +550,7 @@ Apart from these, the following properties are also available, and may be useful
     `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using
     failure detector can be, a sensistive failure detector can help evict rogue executors really
     quick. However this is usually not the case as gc pauses and network lags are expected in a
-    real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats
+    real Spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats
     between nodes leading to flooding the network with those.
   </td>
 </tr>
@@ -677,8 +688,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.authenticate</code></td>
   <td>false</td>
   <td>
-    Whether spark authenticates its internal connections. See
-    <code>spark.authenticate.secret</code> if not running on Yarn.
+    Whether Spark authenticates its internal connections. See
+    <code>spark.authenticate.secret</code> if not running on YARN.
   </td>
 </tr>
 <tr>
@@ -686,7 +697,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>None</td>
   <td>
     Set the secret key used for Spark to authenticate between components. This needs to be set if
-    not running on Yarn and authentication is enabled.
+    not running on YARN and authentication is enabled.
   </td>
 </tr>
 <tr>
@@ -702,7 +713,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>None</td>
   <td>
     Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
-    standard javax servlet Filter. Parameters to each filter can also be specified by setting a
+    standard <a href="http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html">
+    javax servlet Filter</a>. Parameters to each filter can also be specified by setting a
     java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
     (e.g. -Dspark.ui.filters=com.test.filter1
     -Dspark.com.test.filter1.params='param1=foo,param2=testing')
@@ -712,7 +724,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.acls.enable</code></td>
   <td>false</td>
   <td>
-    Whether spark web ui acls should are enabled. If enabled, this checks to see if the user has
+    Whether Spark web ui acls should are enabled. If enabled, this checks to see if the user has
     access permissions to view the web ui. See <code>spark.ui.view.acls</code> for more details.
     Also note this requires the user to be known, if the user comes across as null no checks
     are done. Filters can be used to authenticate and set the user.
@@ -722,7 +734,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.view.acls</code></td>
   <td>Empty</td>
   <td>
-    Comma separated list of users that have view access to the spark web ui. By default only the
+    Comma separated list of users that have view access to the Spark web ui. By default only the
     user that started the Spark job has view access.
   </td>
 </tr>
@@ -731,17 +743,6 @@ Apart from these, the following properties are also available, and may be useful
 #### Spark Streaming
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
-<tr>
-  <td><code>spark.cleaner.ttl</code></td>
-  <td>(infinite)</td>
-  <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks
-    generated, etc.). Periodic cleanups will ensure that metadata older than this duration will be
-    forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
-    case of Spark Streaming applications). Note that any RDD that persists in memory for more than
-    this duration will be cleared as well.
-  </td>
-</tr>
 <tr>
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200</td>
