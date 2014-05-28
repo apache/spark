@@ -58,6 +58,9 @@ trait ClientBase extends Logging {
   private val SPARK_STAGING: String = ".sparkStaging"
   private val distCacheMgr = new ClientDistributedCacheManager()
 
+  // Additional memory overhead - in mb.
+  val memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead", 384)
+
   // Staging directory is private! -> rwx--------
   val STAGING_DIR_PERMISSION: FsPermission =
     FsPermission.createImmutable(Integer.parseInt("700", 8).toShort)
@@ -71,7 +74,11 @@ trait ClientBase extends Logging {
       ((args.userJar == null && args.amClass == classOf[ApplicationMaster].getName) ->
           "Error: You must specify a user jar when running in standalone mode!"),
       (args.userClass == null) -> "Error: You must specify a user class!",
-      (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!"
+      (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!",
+      (args.amMemory <= memoryOverhead) -> ("Error: AM memory size must be" +
+        "greater than: " + memoryOverhead),
+      (args.executorMemory <= memoryOverhead) -> ("Error: Executor memory size" +
+        "must be greater than: " + memoryOverhead.toString)
     ).foreach { case(cond, errStr) =>
       if (cond) {
         logError(errStr)
@@ -94,7 +101,7 @@ trait ClientBase extends Logging {
         format(args.executorMemory, maxMem))
       System.exit(1)
     }
-    val amMem = (args.amMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt
+    val amMem = args.amMemory + memoryOverhead
     if (amMem > maxMem) {
       logError("Required AM memory (%d) is above the max threshold (%d) of this cluster".
         format(args.amMemory, maxMem))

@@ -90,6 +90,9 @@ private[yarn] class YarnAllocationHandler(
   // Containers to be released in next request to RM
   private val pendingReleaseContainers = new ConcurrentHashMap[ContainerId, Boolean]
 
+  // Additional memory overhead - in mb.
+  private val memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead", 384)
+
   // Number of container requests that have been sent to, but not yet allocated by the
   // ApplicationMaster.
   private val numPendingAllocate = new AtomicInteger()
@@ -106,8 +109,7 @@ private[yarn] class YarnAllocationHandler(
   def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
 
   def isResourceConstraintSatisfied(container: Container): Boolean = {
-    container.getResource.getMemory >= (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).
-      ceil.toInt
+    container.getResource.getMemory >= (executorMemory + memoryOverhead)
   }
 
   def releaseContainer(container: Container) {
@@ -249,8 +251,7 @@ private[yarn] class YarnAllocationHandler(
         val executorHostname = container.getNodeId.getHost
         val containerId = container.getId
 
-        val executorMemoryOverhead = (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).
-          ceil.toInt
+        val executorMemoryOverhead = (executorMemory + memoryOverhead)
         assert(container.getResource.getMemory >= executorMemoryOverhead)
 
         if (numExecutorsRunningNow > maxExecutors) {
@@ -479,7 +480,7 @@ private[yarn] class YarnAllocationHandler(
       numPendingAllocate.addAndGet(numExecutors)
       logInfo("Will Allocate %d executor containers, each with %d memory".format(
         numExecutors,
-        (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt))
+        (executorMemory + memoryOverhead)))
     } else {
       logDebug("Empty allocation request ...")
     }
@@ -539,7 +540,7 @@ private[yarn] class YarnAllocationHandler(
       priority: Int
     ): ArrayBuffer[ContainerRequest] = {
 
-    val memoryRequest = (executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt
+    val memoryRequest = executorMemory + memoryOverhead
     val resource = Resource.newInstance(memoryRequest, executorCores)
 
     val prioritySetting = Records.newRecord(classOf[Priority])
@@ -559,9 +560,6 @@ object YarnAllocationHandler {
   // All requests are issued with same priority : we do not (yet) have any distinction between 
   // request types (like map/reduce in hadoop for example)
   val PRIORITY = 1
-
-  // Additional memory overhead.
-  val MEMORY_OVERHEAD = 1.25D
 
   // Host to rack map - saved from allocation requests. We are expecting this not to change.
   // Note that it is possible for this to change : and ResurceManager will indicate that to us via

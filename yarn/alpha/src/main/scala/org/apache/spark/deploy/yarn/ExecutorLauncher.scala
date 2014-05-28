@@ -92,21 +92,22 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 
     appAttemptId = getApplicationAttemptId()
     resourceManager = registerWithResourceManager()
-    val appMasterResponse: RegisterApplicationMasterResponse = registerApplicationMaster()
 
-    // Compute number of threads for akka
-    val minimumMemory = appMasterResponse.getMinimumResourceCapability().getMemory()
-
-    if (minimumMemory > 0) {
-      val mem = (args.executorMemory * YarnAllocationHandler.MEMORY_OVERHEAD).ceil.toInt
-      val numCore = (mem  / minimumMemory) + (if (0 != (mem % minimumMemory)) 1 else 0)
-
-      if (numCore > 0) {
-        // do not override - hits https://issues.apache.org/jira/browse/HADOOP-8406
-        // TODO: Uncomment when hadoop is on a version which has this fixed.
-        // args.workerCores = numCore
-      }
-    }
+    //  // do not override - hits https://issues.apache.org/jira/browse/HADOOP-8406
+    //  // TODO: Uncomment when hadoop is on a version which has this fixed.
+    //  val appMasterResponse: RegisterApplicationMasterResponse = registerApplicationMaster()
+    //  // Compute number of threads for akka
+    //  val minimumMemory = appMasterResponse.getMinimumResourceCapability().getMemory()
+    //  // Additional memory overhead - in mb.
+    //  val memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead", 384)
+    //
+    //  if (minimumMemory > 0) {
+    //     val mem = args.executorMemory + memoryOverhead
+    //     val numCore = (mem / minimumMemory) + (if (0 != (mem % minimumMemory)) 1 else 0)
+    //     if (numCore > 0) {
+    //       args.workerCores = numCore
+    //     }
+    //  }
 
     waitForSparkMaster()
 
