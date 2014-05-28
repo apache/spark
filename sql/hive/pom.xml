@@ -52,6 +52,11 @@
       <version>${hive.version}</version>
     </dependency>
     <dependency>
+      <groupId>commons-httpclient</groupId>
+      <artifactId>commons-httpclient</artifactId>
+      <version>3.1</version>
+    </dependency>
+    <dependency>
       <groupId>org.spark-project.hive</groupId>
       <artifactId>hive-exec</artifactId>
       <version>${hive.version}</version>
