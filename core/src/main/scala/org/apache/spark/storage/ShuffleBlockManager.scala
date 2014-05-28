@@ -123,7 +123,7 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
       override def releaseWriters(success: Boolean) {
         if (consolidateShuffleFiles) {
           if (success) {
-            val offsets = writers.map(_.fileSegment().offset)
+            val offsets = writers.map(writer => writer.fileSegment().offset + writer.bytesWritten)
             fileGroup.recordMapOutput(mapId, offsets)
           }
           recycleFileGroup(fileGroup)
@@ -231,9 +231,13 @@ object ShuffleBlockManager {
      * This ordering allows us to compute block lengths by examining the following block offset.
      * Note: mapIdToIndex(mapId) returns the index of the mapper into the vector for every
      * reducer.
+     * We also keep the offset of "one past the end" block, which is effectively the file length.
+     * Therefore when append new offsets, we're actually appending new file lengths
      */
     private val blockOffsetsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
-      new PrimitiveVector[Long]()
+      val offsets = new PrimitiveVector[Long]()
+      offsets += 0
+      offsets
     }
 
     def numBlocks = mapIdToIndex.size
@@ -254,13 +258,15 @@ object ShuffleBlockManager {
       val blockOffsets = blockOffsetsByReducer(reducerId)
       val index = mapIdToIndex.getOrElse(mapId, -1)
       if (index >= 0) {
+        assert(index + 1 < blockOffsets.size, "Index is " + index + ", total size is " + blockOffsets.size)
         val offset = blockOffsets(index)
-        val length =
-          if (index + 1 < numBlocks) {
-            blockOffsets(index + 1) - offset
-          } else {
-            file.length() - offset
-          }
+        val length = blockOffsets(index + 1) - offset
+//        val length =
+//          if (index + 1 < numBlocks) {
+//            blockOffsets(index + 1) - offset
+//          } else {
+//            file.length() - offset
+//          }
         assert(length >= 0)
         Some(new FileSegment(file, offset, length))
       } else {
