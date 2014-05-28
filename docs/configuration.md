@@ -221,7 +221,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.spill.compress</code></td>
   <td>true</td>
   <td>
-    Whether to compress data spilled during shuffles.
+    Whether to compress data spilled during shuffles. Compression will use
+    <code>spark.io.compression.codec</code>.
   </td>
 </tr>
 <tr>
@@ -239,7 +240,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
-    Whether to compress map output files. Generally a good idea.
+    Whether to compress map output files. Generally a good idea. Compression will use
+    <code>spark.io.compression.codec</code>.
   </td>
 </tr>
 <tr>
@@ -306,7 +308,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Base directory in which Spark events are logged, if <code>spark.eventLog.enabled</code> is true.
     Within this base directory, Spark creates a sub-directory for each application, and logs the
-    events specific to the application in this directory.
+    events specific to the application in this directory. Users may want to set this to
+    and HDFS directory so that history files can be read by the history server.
   </td>
 </tr>
 </table>
@@ -336,7 +339,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The codec used to compress internal data such as RDD partitions and shuffle outputs.
     By default, Spark provides two codecs: <code>org.apache.spark.io.LZFCompressionCodec</code>
-    and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
+    and <code>org.apache.spark.io.SnappyCompressionCodec</code>. Of these two choices,
+    Snappy offers faster compression and decompression, while LZF offers a better compression
+    ratio.
   </td>
 </tr>
 <tr>
@@ -769,6 +774,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 </table>
+
+#### Cluster Managers (YARN, Mesos, Standalone)
+Each cluster manager in Spark has additional configuration options. Configurations 
+can be found on the pages for each mode:
+
+ * [Yarn](running-on-yarn.html#configuration)
+ * [Mesos](running-on-mesos.html)
+ * [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
 
 # Environment Variables
 
