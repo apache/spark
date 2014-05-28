@@ -111,6 +111,8 @@ private[spark] class TaskSchedulerImpl(
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
 
+  private val delaySchedule = conf.getBoolean("spark.schedule.delaySchedule", true)
+
   override def setDAGScheduler(dagScheduler: DAGScheduler) {
     this.dagScheduler = dagScheduler
   }
@@ -210,11 +212,14 @@ private[spark] class TaskSchedulerImpl(
     SparkEnv.set(sc.env)
 
     // Mark each slave as alive and remember its hostname
+    //also track if new executor is added
+    var newExecAvail = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
+        newExecAvail = true
       }
     }
 
@@ -233,6 +238,9 @@ private[spark] class TaskSchedulerImpl(
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     var launchedTask = false
     for (taskSet <- sortedTaskSets; maxLocality <- TaskLocality.values) {
+      if (delaySchedule && newExecAvail) {
+        taskSet.reAddPendingTasks()
+      }
       do {
         launchedTask = false
         for (i <- 0 until shuffledOffers.size) {
