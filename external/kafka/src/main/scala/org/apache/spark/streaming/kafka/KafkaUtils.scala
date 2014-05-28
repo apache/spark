@@ -31,6 +31,7 @@ import org.apache.spark.streaming.api.java.{JavaStreamingContext, JavaPairDStrea
 import org.apache.spark.streaming.dstream.DStream
 
 
+
 object KafkaUtils {
   /**
    * Create an input stream that pulls messages from a Kafka Broker.
@@ -55,6 +56,51 @@ object KafkaUtils {
     createStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, topics, storageLevel)
   }
+  /**
+   * Create an input stream that pulls messages from a Kafka Broker.
+   * @param ssc       StreamingContext object
+   * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
+   * @param groupId   The group id for this consumer
+   * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   *                  in its own thread
+   * @param consumerNum   Number of consumers.
+   * @param storageLevel  Storage level to use for storing the received objects
+   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
+   */
+  def createStreamWithMutiConsumers(
+      ssc: StreamingContext,
+      zkQuorum: String,
+      groupId: String,
+      topics: Map[String, Int],
+      consumerNum: Int,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+    ): DStream[(String, String)] = {
+    val kafkaParams = Map[String, String](
+      "zookeeper.connect" -> zkQuorum, "group.id" -> groupId,
+      "zookeeper.connection.timeout.ms" -> "10000")
+    createStreamWithMutiConsumers[String, String, StringDecoder, StringDecoder](
+      ssc, kafkaParams, topics,consumerNum, storageLevel)
+  }
+  /**
+   * Create an input stream that pulls messages from a Kafka Broker.
+   * @param ssc         StreamingContext object
+   * @param kafkaParams Map of kafka configuration parameters,
+   *                    see http://kafka.apache.org/08/configuration.html
+   * @param topics      Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   *                    in its own thread.
+   * @param consumerNum   Number of consumers.
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def createStreamWithMutiConsumers[K: ClassTag, V: ClassTag, U <: Decoder[_]: Manifest, T <: Decoder[_]: Manifest](
+      ssc: StreamingContext,
+      kafkaParams: Map[String, String],
+      topics: Map[String, Int],
+      consumerNum: Int,
+      storageLevel: StorageLevel
+    ): DStream[(K, V)] = {
+    (1 to consumerNum).map(_ => createStream[K, V, StringDecoder, StringDecoder](ssc, kafkaParams, topics, storageLevel)
+    ).reduce(_.union(_))
+  }
 
   /**
    * Create an input stream that pulls messages from a Kafka Broker.
@@ -72,6 +118,28 @@ object KafkaUtils {
       storageLevel: StorageLevel
     ): DStream[(K, V)] = {
     new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, storageLevel)
+  }
+
+  /**
+   * Create an input stream that pulls messages form a Kafka Broker.
+   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
+   * @param jssc      JavaStreamingContext object
+   * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
+   * @param groupId   The group id for this consumer
+   * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   *                  in its own thread
+   * @param consumerNum   Number of consumers.
+   */
+  def createStreamWithMutiConsumers(
+      jssc: JavaStreamingContext,
+      zkQuorum: String,
+      groupId: String,
+      topics: JMap[String, JInt],
+      consumerNum: Int
+    ): JavaPairDStream[String, String] = {
+    implicit val cmt: ClassTag[String] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
+    createStreamWithMutiConsumers(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),consumerNum)
   }
 
   /**
@@ -101,6 +169,31 @@ object KafkaUtils {
    * @param groupId   The group id for this consumer.
    * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    *                  in its own thread.
+   * @param consumerNum   Number of consumers.
+   * @param storageLevel RDD storage level.
+   *
+   */
+  def createStreamWithMutiConsumers(
+      jssc: JavaStreamingContext,
+      zkQuorum: String,
+      groupId: String,
+      topics: JMap[String, JInt],
+      consumerNum:Int,
+      storageLevel: StorageLevel
+    ): JavaPairDStream[String, String] = {
+    implicit val cmt: ClassTag[String] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
+    createStreamWithMutiConsumers(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),consumerNum,
+      storageLevel)
+  }
+
+  /**
+   * Create an input stream that pulls messages form a Kafka Broker.
+   * @param jssc      JavaStreamingContext object
+   * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..).
+   * @param groupId   The group id for this consumer.
+   * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   *                  in its own thread.
    * @param storageLevel RDD storage level.
    *
    */
@@ -113,7 +206,45 @@ object KafkaUtils {
     ): JavaPairDStream[String, String] = {
     implicit val cmt: ClassTag[String] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
-    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
+    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
+      storageLevel)
+  }
+
+  /**
+   * Create an input stream that pulls messages form a Kafka Broker.
+   * @param jssc      JavaStreamingContext object
+   * @param keyTypeClass Key type of RDD
+   * @param valueTypeClass value type of RDD
+   * @param keyDecoderClass Type of kafka key decoder
+   * @param valueDecoderClass Type of kafka value decoder
+   * @param kafkaParams Map of kafka configuration parameters,
+   *                    see http://kafka.apache.org/08/configuration.html
+   * @param topics  Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   *                in its own thread
+   *@param consumerNum   Number of consumers.
+   * @param storageLevel RDD storage level.
+   */
+  def createStreamWithMutiConsumers[K, V, U <: Decoder[_], T <: Decoder[_]](
+      jssc: JavaStreamingContext,
+      keyTypeClass: Class[K],
+      valueTypeClass: Class[V],
+      keyDecoderClass: Class[U],
+      valueDecoderClass: Class[T],
+      kafkaParams: JMap[String, String],
+      topics: JMap[String, JInt],
+      consumerNum:Int,
+      storageLevel: StorageLevel
+    ): JavaPairDStream[K, V] = {
+    implicit val keyCmt: ClassTag[K] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
+    implicit val valueCmt: ClassTag[V] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
+
+    implicit val keyCmd: Manifest[U] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[U]]
+    implicit val valueCmd: Manifest[T] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[T]]
+
+    createStreamWithMutiConsumers[K, V, U, T](
+      jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), consumerNum,storageLevel)
   }
 
   /**
