@@ -26,8 +26,9 @@ import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
 object GraphLoader extends Logging {
 
   /**
-   * Loads a graph from an edge list formatted file where each line contains two integers: a source
-   * id and a target id. Skips lines that begin with `#`.
+   * Loads a graph from an edge list formatted file where each line contains atleast two integers: a source
+   * id and a target id. If third Integer is porivided that is used as edge attribute; default edge attribute is 1.
+   * Skips lines that begin with `#`.
    *
    * If desired the edges can be automatically oriented in the positive
    * direction (source Id < target Id) by setting `canonicalOrientation` to
@@ -36,10 +37,10 @@ object GraphLoader extends Logging {
    * @example Loads a file in the following format:
    * {{{
    * # Comment Line
-   * # Source Id <\t> Target Id
-   * 1   -5
-   * 1    2
-   * 2    7
+   * # Source Id <\t> Target Id [<\t> Edge attribute]
+   * 1   -5   100 
+   * 1    2   200
+   * 2    7   
    * 1    8
    * }}}
    *
@@ -70,10 +71,13 @@ object GraphLoader extends Logging {
           }
           val srcId = lineArray(0).toLong
           val dstId = lineArray(1).toLong
+          val edgeAttr = 
+            if (lineArray.length >= 3) lineArray(2).toInt
+            else 1
           if (canonicalOrientation && srcId > dstId) {
-            builder.add(dstId, srcId, 1)
+            builder.add(dstId, srcId, edgeAttr)
           } else {
-            builder.add(srcId, dstId, 1)
+            builder.add(srcId, dstId, edgeAttr)
           }
         }
       }
