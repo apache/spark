@@ -19,15 +19,18 @@ package org.apache.spark.api.java
 
 import java.lang.{Double => JDouble}
 
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.Partitioner
 import org.apache.spark.SparkContext.doubleRDDToDoubleRDDFunctions
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
+import org.apache.spark.util.Utils
 
 class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, JavaDoubleRDD] {
 
@@ -83,7 +86,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
   def filter(f: JFunction[JDouble, java.lang.Boolean]): JavaDoubleRDD =
-    fromRDD(srdd.filter(x => f(x).booleanValue()))
+    fromRDD(srdd.filter(x => f.call(x).booleanValue()))
 
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
@@ -131,7 +134,13 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: JDouble, seed: Int): JavaDoubleRDD =
+  def sample(withReplacement: Boolean, fraction: JDouble): JavaDoubleRDD =
+    sample(withReplacement, fraction, Utils.random.nextLong)
+    
+  /**
+   * Return a sampled subset of this RDD.
+   */
+  def sample(withReplacement: Boolean, fraction: JDouble, seed: Long): JavaDoubleRDD =
     fromRDD(srdd.sample(withReplacement, fraction, seed))
 
   /**
@@ -139,6 +148,14 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
    * times (use `.distinct()` to eliminate them).
    */
   def union(other: JavaDoubleRDD): JavaDoubleRDD = fromRDD(srdd.union(other.srdd))
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   */
+  def intersection(other: JavaDoubleRDD): JavaDoubleRDD = fromRDD(srdd.intersection(other.srdd))
 
   // Double RDD functions
 
@@ -176,14 +193,26 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
   def meanApprox(timeout: Long, confidence: JDouble): PartialResult[BoundedDouble] =
     srdd.meanApprox(timeout, confidence)
 
-  /** (Experimental) Approximate operation to return the mean within a timeout. */
+  /**
+   * :: Experimental ::
+   * Approximate operation to return the mean within a timeout.
+   */
+  @Experimental
   def meanApprox(timeout: Long): PartialResult[BoundedDouble] = srdd.meanApprox(timeout)
 
-  /** (Experimental) Approximate operation to return the sum within a timeout. */
+  /**
+   * :: Experimental ::
+   * Approximate operation to return the sum within a timeout.
+   */
+  @Experimental
   def sumApprox(timeout: Long, confidence: JDouble): PartialResult[BoundedDouble] =
     srdd.sumApprox(timeout, confidence)
 
-  /** (Experimental) Approximate operation to return the sum within a timeout. */
+  /**
+   * :: Experimental ::
+   * Approximate operation to return the sum within a timeout.
+   */
+  @Experimental
   def sumApprox(timeout: Long): PartialResult[BoundedDouble] = srdd.sumApprox(timeout)
 
   /**

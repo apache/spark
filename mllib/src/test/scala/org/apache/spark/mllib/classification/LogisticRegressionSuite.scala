@@ -20,11 +20,10 @@ package org.apache.spark.mllib.classification
 import scala.util.Random
 import scala.collection.JavaConversions._
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 
-import org.apache.spark.SparkContext
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.LocalSparkContext
 
@@ -47,24 +46,14 @@ object LogisticRegressionSuite {
     val rnd = new Random(seed)
     val x1 = Array.fill[Double](nPoints)(rnd.nextGaussian())
 
-    // NOTE: if U is uniform[0, 1] then ln(u) - ln(1-u) is Logistic(0,1)
-    val unifRand = new scala.util.Random(45)
-    val rLogis = (0 until nPoints).map { i =>
-      val u = unifRand.nextDouble()
-      math.log(u) - math.log(1.0-u)
+    val y = (0 until nPoints).map { i =>
+      val p = 1.0 / (1.0 + math.exp(-(offset + scale * x1(i))))
+      if (rnd.nextDouble() < p) 1.0 else 0.0
     }
 
-    // y <- A + B*x + rLogis()
-    // y <- as.numeric(y > 0)
-    val y: Seq[Int] = (0 until nPoints).map { i =>
-      val yVal = offset + scale * x1(i) + rLogis(i)
-      if (yVal > 0) 1 else 0
-    }
-
-    val testData = (0 until nPoints).map(i => LabeledPoint(y(i), Array(x1(i))))
+    val testData = (0 until nPoints).map(i => LabeledPoint(y(i), Vectors.dense(Array(x1(i)))))
     testData
   }
-
 }
 
 class LogisticRegressionSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
@@ -86,7 +75,7 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Shoul
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegressionWithSGD()
+    val lr = new LogisticRegressionWithSGD().setIntercept(true)
     lr.optimizer.setStepSize(10.0).setNumIterations(20)
 
     val model = lr.run(testRDD)
@@ -113,13 +102,13 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Shoul
     val testData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 42)
 
     val initialB = -1.0
-    val initialWeights = Array(initialB)
+    val initialWeights = Vectors.dense(initialB)
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegressionWithSGD()
+    val lr = new LogisticRegressionWithSGD().setIntercept(true)
     lr.optimizer.setStepSize(10.0).setNumIterations(10)
 
     val model = lr.run(testRDD, initialWeights)

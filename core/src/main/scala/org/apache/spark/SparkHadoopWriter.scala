@@ -15,28 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.mapred
+package org.apache.spark
 
 import java.io.IOException
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 
+import org.apache.hadoop.mapred._
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.Logging
-import org.apache.spark.SerializableWritable
+import org.apache.spark.rdd.HadoopRDD
 
 /**
- * Internal helper class that saves an RDD using a Hadoop OutputFormat. This is only public
- * because we need to access this class from the `spark` package to use some package-private Hadoop
- * functions, but this class should not be used directly by users.
+ * Internal helper class that saves an RDD using a Hadoop OutputFormat.
  *
  * Saves the RDD using a JobConf, which should contain an output key class, an output value class,
  * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
  */
-private[apache]
+private[spark]
 class SparkHadoopWriter(@transient jobConf: JobConf)
   extends Logging
   with SparkHadoopMapRedUtil
@@ -44,7 +42,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
 
   private val now = new Date()
   private val conf = new SerializableWritable(jobConf)
-  
+
   private var jobID = 0
   private var splitID = 0
   private var attemptID = 0
@@ -59,23 +57,24 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
 
   def preSetup() {
     setIDs(0, 0, 0)
-    setConfParams()
-    
-    val jCtxt = getJobContext() 
+    HadoopRDD.addLocalConfiguration("", 0, 0, 0, conf.value)
+
+    val jCtxt = getJobContext()
     getOutputCommitter().setupJob(jCtxt)
   }
 
 
   def setup(jobid: Int, splitid: Int, attemptid: Int) {
     setIDs(jobid, splitid, attemptid)
-    setConfParams() 
+    HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(now),
+      jobid, splitID, attemptID, conf.value)
   }
 
   def open() {
     val numfmt = NumberFormat.getInstance()
     numfmt.setMinimumIntegerDigits(5)
     numfmt.setGroupingUsed(false)
-    
+
     val outputName = "part-"  + numfmt.format(splitID)
     val path = FileOutputFormat.getOutputPath(conf.value)
     val fs: FileSystem = {
@@ -86,7 +85,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
       }
     }
 
-    getOutputCommitter().setupTask(getTaskContext()) 
+    getOutputCommitter().setupTask(getTaskContext())
     writer = getOutputFormat().getRecordWriter(fs, conf.value, outputName, Reporter.NULL)
   }
 
@@ -104,18 +103,18 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
 
   def commit() {
     val taCtxt = getTaskContext()
-    val cmtr = getOutputCommitter() 
+    val cmtr = getOutputCommitter()
     if (cmtr.needsTaskCommit(taCtxt)) {
       try {
         cmtr.commitTask(taCtxt)
         logInfo (taID + ": Committed")
       } catch {
-        case e: IOException => { 
+        case e: IOException => {
           logError("Error committing the output of task: " + taID.value, e)
           cmtr.abortTask(taCtxt)
           throw e
         }
-      }   
+      }
     } else {
       logWarning ("No need to commit output of task: " + taID.value)
     }
@@ -145,7 +144,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   }
 
   private def getJobContext(): JobContext = {
-    if (jobContext == null) { 
+    if (jobContext == null) {
       jobContext = newJobContext(conf.value, jID.value)
     }
     jobContext
@@ -167,24 +166,16 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     taID = new SerializableWritable[TaskAttemptID](
         new TaskAttemptID(new TaskID(jID.value, true, splitID), attemptID))
   }
-
-  private def setConfParams() {
-    conf.value.set("mapred.job.id", jID.value.toString)
-    conf.value.set("mapred.tip.id", taID.value.getTaskID.toString)
-    conf.value.set("mapred.task.id", taID.value.toString)
-    conf.value.setBoolean("mapred.task.is.map", true)
-    conf.value.setInt("mapred.task.partition", splitID)
-  }
 }
 
-private[apache]
+private[spark]
 object SparkHadoopWriter {
   def createJobID(time: Date, id: Int): JobID = {
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
-    val jobtrackerID = formatter.format(new Date())
+    val jobtrackerID = formatter.format(time)
     new JobID(jobtrackerID, id)
   }
-  
+
   def createPathFromString(path: String, conf: JobConf): Path = {
     if (path == null) {
       throw new IllegalArgumentException("Output path is null")

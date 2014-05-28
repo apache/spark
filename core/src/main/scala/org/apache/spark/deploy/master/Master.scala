@@ -23,28 +23,38 @@ import java.util.Date
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.util.Random
 
 import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
+import org.apache.hadoop.fs.FileSystem
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{AkkaUtils, Utils}
 
-private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
+private[spark] class Master(
+    host: String,
+    port: Int,
+    webUiPort: Int,
+    val securityMgr: SecurityManager)
+  extends Actor with Logging {
+
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
   val conf = new SparkConf
 
-  val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
+  def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000
   val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
   val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
@@ -63,6 +73,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val completedApps = new ArrayBuffer[ApplicationInfo]
   var nextAppNumber = 0
 
+  val appIdToUI = new HashMap[String, SparkUI]
+  val fileSystemsUsed = new HashSet[FileSystem]
+
   val drivers = new HashSet[DriverInfo]
   val completedDrivers = new ArrayBuffer[DriverInfo]
   val waitingDrivers = new ArrayBuffer[DriverInfo] // Drivers currently spooled for scheduling
@@ -70,8 +83,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   Utils.checkHost(host, "Expected hostname")
 
-  val masterMetricsSystem = MetricsSystem.createMetricsSystem("master", conf)
-  val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications", conf)
+  val masterMetricsSystem = MetricsSystem.createMetricsSystem("master", conf, securityMgr)
+  val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications", conf,
+    securityMgr)
   val masterSource = new MasterSource(this)
 
   val webUi = new MasterWebUI(this, webUiPort)
@@ -90,6 +104,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   var leaderElectionAgent: ActorRef = _
 
+  private var recoveryCompletionTask: Cancellable = _
+
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
@@ -105,8 +121,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     logInfo("Starting Spark master at " + masterUrl)
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-    webUi.start()
-    masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort.get
+    webUi.bind()
+    masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)
 
     masterMetricsSystem.registerSource(masterSource)
@@ -138,7 +154,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   }
 
   override def postStop() {
+    // prevent the CompleteRecovery message sending to restarted master
+    if (recoveryCompletionTask != null) {
+      recoveryCompletionTask.cancel()
+    }
     webUi.stop()
+    fileSystemsUsed.foreach(_.close())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
@@ -156,9 +177,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedDrivers, storedWorkers)
-        context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis) { completeRecovery() }
+        recoveryCompletionTask = context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis, self,
+          CompleteRecovery)
       }
     }
+
+    case CompleteRecovery => completeRecovery()
 
     case RevokedLeadership => {
       logError("Leadership has been revoked -- master shutting down.")
@@ -222,8 +246,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
             if (waitingDrivers.contains(d)) {
               waitingDrivers -= d
               self ! DriverStateChanged(driverId, DriverState.KILLED, None)
-            }
-            else {
+            } else {
               // We just notify the worker to kill the driver here. The final bookkeeping occurs
               // on the return path when the worker submits a state change back to the master
               // to notify it that the driver was successfully killed.
@@ -371,7 +394,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
 
     case RequestWebUIPort => {
-      sender ! WebUIPortResponse(webUi.boundPort.getOrElse(-1))
+      sender ! WebUIPortResponse(webUi.boundPort)
     }
   }
 
@@ -451,7 +474,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
    * Schedule the currently available resources among waiting apps. This method will be called
    * every time a new app joins or resource availability changes.
    */
-  def schedule() {
+  private def schedule() {
     if (state != RecoveryState.ALIVE) { return }
 
     // First schedule drivers, they take strict precedence over applications
@@ -471,7 +494,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       // Try to spread out each app among all the nodes, until it has all its cores
       for (app <- waitingApps if app.coresLeft > 0) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-                                   .filter(canUse(app, _)).sortBy(_.coresFree).reverse
+          .filter(canUse(app, _)).sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
         var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
@@ -529,8 +552,15 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     val workerAddress = worker.actor.path.address
     if (addressToWorker.contains(workerAddress)) {
-      logInfo("Attempted to re-register worker at same address: " + workerAddress)
-      return false
+      val oldWorker = addressToWorker(workerAddress)
+      if (oldWorker.state == WorkerState.UNKNOWN) {
+        // A worker registering from UNKNOWN implies that the worker was restarted during recovery.
+        // The old worker must thus be dead, so we will remove it and accept the new worker.
+        removeWorker(oldWorker)
+      } else {
+        logInfo("Attempted to re-register worker at same address: " + workerAddress)
+        return false
+      }
     }
 
     workers += worker
@@ -572,8 +602,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    new ApplicationInfo(
-      now, newApplicationId(date), desc, date, driver, desc.appUiUrl, defaultCores)
+    new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
   }
 
   def registerApplication(app: ApplicationInfo): Unit = {
@@ -605,12 +634,20 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach( a => {
+          appIdToUI.remove(a.id).foreach { ui => webUi.detachSparkUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
         })
         completedApps.trimStart(toRemove)
       }
       completedApps += app // Remember it in our history
       waitingApps -= app
+
+      // If application events are logged, use them to rebuild the UI
+      if (!rebuildSparkUI(app)) {
+        // Avoid broken links if the UI is not reconstructed
+        app.desc.appUiUrl = ""
+      }
+
       for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)
         exec.worker.actor ! KillExecutor(masterUrl, exec.application.id, exec.id)
@@ -625,9 +662,40 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
   }
 
+  /**
+   * Rebuild a new SparkUI from the given application's event logs.
+   * Return whether this is successful.
+   */
+  def rebuildSparkUI(app: ApplicationInfo): Boolean = {
+    val appName = app.desc.name
+    val eventLogDir = app.desc.eventLogDir.getOrElse { return false }
+    val fileSystem = Utils.getHadoopFileSystem(eventLogDir)
+    val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
+    val eventLogPaths = eventLogInfo.logPaths
+    val compressionCodec = eventLogInfo.compressionCodec
+    if (!eventLogPaths.isEmpty) {
+      try {
+        val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
+        val ui = new SparkUI(
+          new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
+        replayBus.replay()
+        app.desc.appUiUrl = ui.basePath
+        appIdToUI(app.id) = ui
+        webUi.attachSparkUI(ui)
+        return true
+      } catch {
+        case e: Exception =>
+          logError("Exception in replaying log for application %s (%s)".format(appName, app.id), e)
+      }
+    } else {
+      logWarning("Application %s (%s) has no valid logs: %s".format(appName, app.id, eventLogDir))
+    }
+    false
+  }
+
   /** Generate a new app ID given a app's submission date */
   def newApplicationId(submitDate: Date): String = {
-    val appId = "app-%s-%04d".format(DATE_FORMAT.format(submitDate), nextAppNumber)
+    val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
     appId
   }
@@ -651,7 +719,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   }
 
   def newDriverId(submitDate: Date): String = {
-    val appId = "driver-%s-%04d".format(DATE_FORMAT.format(submitDate), nextDriverNumber)
+    val appId = "driver-%s-%04d".format(createDateFormat.format(submitDate), nextDriverNumber)
     nextDriverNumber += 1
     appId
   }
@@ -708,11 +776,16 @@ private[spark] object Master {
     }
   }
 
-  def startSystemAndActor(host: String, port: Int, webUiPort: Int, conf: SparkConf)
-      : (ActorSystem, Int, Int) =
-  {
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf)
-    val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort), actorName)
+  def startSystemAndActor(
+      host: String,
+      port: Int,
+      webUiPort: Int,
+      conf: SparkConf): (ActorSystem, Int, Int) = {
+    val securityMgr = new SecurityManager(conf)
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
+      securityManager = securityMgr)
+    val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort,
+      securityMgr), actorName)
     val timeout = AkkaUtils.askTimeout(conf)
     val respFuture = actor.ask(RequestWebUIPort)(timeout)
     val resp = Await.result(respFuture, timeout).asInstanceOf[WebUIPortResponse]

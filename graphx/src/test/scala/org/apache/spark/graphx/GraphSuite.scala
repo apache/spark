@@ -62,7 +62,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       assert( graph.edges.count() === rawEdges.size )
       // Vertices not explicitly provided but referenced by edges should be created automatically
       assert( graph.vertices.count() === 100)
-      graph.triplets.map { et =>
+      graph.triplets.collect.map { et =>
         assert((et.srcId < 10 && et.srcAttr) || (et.srcId >= 10 && !et.srcAttr))
         assert((et.dstId < 10 && et.dstAttr) || (et.dstId >= 10 && !et.dstAttr))
       }
@@ -110,7 +110,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val p = 100
       val verts = 1 to n
       val graph = Graph.fromEdgeTuples(sc.parallelize(verts.flatMap(x =>
-        verts.filter(y => y % x == 0).map(y => (x: VertexId, y: VertexId))), p), 0)
+        verts.withFilter(y => y % x == 0).map(y => (x: VertexId, y: VertexId))), p), 0)
       assert(graph.edges.partitions.length === p)
       val partitionedGraph = graph.partitionBy(EdgePartition2D)
       assert(graph.edges.partitions.length === p)
@@ -120,13 +120,29 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         val part = iter.next()._2
         Iterator((part.srcIds ++ part.dstIds).toSet)
       }.collect
-      assert(verts.forall(id => partitionSets.count(_.contains(id)) <= bound))
+      if (!verts.forall(id => partitionSets.count(_.contains(id)) <= bound)) {
+        val numFailures = verts.count(id => partitionSets.count(_.contains(id)) > bound)
+        val failure = verts.maxBy(id => partitionSets.count(_.contains(id)))
+        fail(("Replication bound test failed for %d/%d vertices. " +
+          "Example: vertex %d replicated to %d (> %f) partitions.").format(
+          numFailures, n, failure, partitionSets.count(_.contains(failure)), bound))
+      }
       // This should not be true for the default hash partitioning
       val partitionSetsUnpartitioned = graph.edges.partitionsRDD.mapPartitions { iter =>
         val part = iter.next()._2
         Iterator((part.srcIds ++ part.dstIds).toSet)
       }.collect
       assert(verts.exists(id => partitionSetsUnpartitioned.count(_.contains(id)) > bound))
+
+      // Forming triplets view
+      val g = Graph(
+        sc.parallelize(List((0L, "a"), (1L, "b"), (2L, "c"))),
+        sc.parallelize(List(Edge(0L, 1L, 1), Edge(0L, 2L, 1)), 2))
+      assert(g.triplets.collect.map(_.toTuple).toSet ===
+        Set(((0L, "a"), (1L, "b"), 1), ((0L, "a"), (2L, "c"), 1)))
+      val gPart = g.partitionBy(EdgePartition2D)
+      assert(gPart.triplets.collect.map(_.toTuple).toSet ===
+        Set(((0L, "a"), (1L, "b"), 1), ((0L, "a"), (2L, "c"), 1)))
     }
   }
 
@@ -169,6 +185,16 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val n = 5
       val star = starGraph(sc, n)
       assert(star.reverse.outDegrees.collect.toSet === (1 to n).map(x => (x: VertexId, 1)).toSet)
+    }
+  }
+
+  test("reverse with join elimination") {
+    withSpark { sc =>
+      val vertices: RDD[(VertexId, Int)] = sc.parallelize(Array((1L, 1), (2L, 2)))
+      val edges: RDD[Edge[Int]] = sc.parallelize(Array(Edge(1L, 2L, 0)))
+      val graph = Graph(vertices, edges).reverse
+      val result = graph.mapReduceTriplets[Int](et => Iterator((et.dstId, et.srcAttr)), _ + _)
+      assert(result.collect.toSet === Set((1L, 2)))
     }
   }
 
@@ -284,6 +310,18 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         reverseStar.outerJoinVertices(messages) { (vid, a, bOpt) => a + bOpt.getOrElse("") }
       assert(newReverseStar.vertices.map(_._2).collect.toSet ===
         (0 to n).map(x => "v%d".format(x)).toSet)
+    }
+  }
+
+  test("more edge partitions than vertex partitions") {
+    withSpark { sc =>
+      val verts = sc.parallelize(List((1: VertexId, "a"), (2: VertexId, "b")), 1)
+      val edges = sc.parallelize(List(Edge(1, 2, 0), Edge(2, 1, 0)), 2)
+      val graph = Graph(verts, edges)
+      val triplets = graph.triplets.map(et => (et.srcId, et.dstId, et.srcAttr, et.dstAttr))
+        .collect.toSet
+      assert(triplets ===
+        Set((1: VertexId, 2: VertexId, "a", "b"), (2: VertexId, 1: VertexId, "b", "a")))
     }
   }
 

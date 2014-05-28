@@ -43,7 +43,7 @@ private[spark] class ClientArguments(args: Array[String]) {
 
   // kill parameters
   var driverId: String = ""
-  
+
   parse(args.toList)
 
   def parse(args: List[String]): Unit = args match {
@@ -112,5 +112,5 @@ private[spark] class ClientArguments(args: Array[String]) {
 }
 
 object ClientArguments {
-  def isValidJarUrl(s: String) = s.matches("(.+):(.+)jar")
+  def isValidJarUrl(s: String): Boolean = s.matches("(.+):(.+)jar")
 }

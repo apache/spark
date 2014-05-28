@@ -90,6 +90,20 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
 
+  /** Check if disk block manager has a block. */
+  def containsBlock(blockId: BlockId): Boolean = {
+    getBlockLocation(blockId).file.exists()
+  }
+
+  /** List all the blocks currently stored on disk by the disk manager. */
+  def getAllBlocks(): Seq[BlockId] = {
+    // Get all the files inside the array of array of directories
+    subDirs.flatten.filter(_ != null).flatMap { dir =>
+      val files = dir.list()
+      if (files != null) files else Seq.empty
+    }.map(BlockId.apply)
+  }
+
   /** Produces a unique block id and File suitable for intermediate results. */
   def createTempBlock(): (TempBlockId, File) = {
     var blockId = new TempBlockId(UUID.randomUUID())
@@ -134,22 +148,29 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   private def addShutdownHook() {
     localDirs.foreach(localDir => Utils.registerShutdownDeleteDir(localDir))
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark local dirs") {
-      override def run() {
+      override def run(): Unit = Utils.logUncaughtExceptions {
         logDebug("Shutdown hook called")
-        localDirs.foreach { localDir =>
-          try {
-            if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
-          } catch {
-            case t: Throwable =>
-              logError("Exception while deleting local spark dir: " + localDir, t)
-          }
-        }
-
-        if (shuffleSender != null) {
-          shuffleSender.stop()
-        }
+        DiskBlockManager.this.stop()
       }
     })
+  }
+
+  /** Cleanup local dirs and stop shuffle sender. */
+  private[spark] def stop() {
+    localDirs.foreach { localDir =>
+      if (localDir.isDirectory() && localDir.exists()) {
+        try {
+          if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
+        } catch {
+          case e: Exception =>
+            logError("Exception while deleting local spark dir: " + localDir, e)
+        }
+      }
+    }
+
+    if (shuffleSender != null) {
+      shuffleSender.stop()
+    }
   }
 
   private[storage] def startShuffleBlockSender(port: Int): Int = {

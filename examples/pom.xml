@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-incubating-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -29,22 +29,7 @@
   <artifactId>spark-examples_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Examples</name>
-  <url>http://spark.incubator.apache.org/</url>
-
-  <repositories>
-    <repository>
-      <id>apache-repo</id>
-      <name>Apache Repository</name>
-      <url>https://repository.apache.org/content/repositories/releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-  </repositories>
-
+  <url>http://spark.apache.org/</url>
 
   <dependencies>
     <dependency>
@@ -68,6 +53,12 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-bagel_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-hive_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
@@ -105,7 +96,7 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase</artifactId>
-      <version>0.94.6</version>
+      <version>${hbase.version}</version>
       <exclusions>
         <exclusion>
           <groupId>asm</groupId>
@@ -116,8 +107,16 @@
           <artifactId>netty</artifactId>
         </exclusion>
         <exclusion>
+          <groupId>io.netty</groupId>
+          <artifactId>netty</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jruby</groupId>
+          <artifactId>jruby-complete</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -169,15 +168,12 @@
           <groupId>org.apache.cassandra.deps</groupId>
           <artifactId>avro</artifactId>
         </exclusion>
-        <exclusion>
-          <groupId>org.sonatype.sisu.inject</groupId>
-          <artifactId>*</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.xerial.snappy</groupId>
-          <artifactId>*</artifactId>
-        </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>com.github.scopt</groupId>
+      <artifactId>scopt_${scala.binary.version}</artifactId>
+      <version>3.2.0</version>
     </dependency>
   </dependencies>
 
@@ -190,7 +186,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/scala-${scala.binary.version}/${project.artifactId}-assembly-${project.version}.jar</outputFile>
+          <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-examples-${project.version}-hadoop${hadoop.version}.jar</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>

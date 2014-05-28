@@ -70,10 +70,10 @@ def parse_args():
            "slaves across multiple (an additional $0.01/Gb for bandwidth" +
            "between zones applies)")
   parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
-  parser.add_option("-v", "--spark-version", default="0.9.0",
+  parser.add_option("-v", "--spark-version", default="0.9.1",
       help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
   parser.add_option("--spark-git-repo",
-      default="https://github.com/apache/incubator-spark",
+      default="https://github.com/apache/spark",
       help="Github repo from which to checkout supplied commit hash")
   parser.add_option("--hadoop-major-version", default="1",
       help="Major version of Hadoop (default: 1)")
@@ -103,6 +103,12 @@ def parse_args():
       help="When destroying a cluster, delete the security groups that were created")
   parser.add_option("--use-existing-master", action="store_true", default=False,
       help="Launch fresh slaves, but use an existing stopped master if possible")
+  parser.add_option("--worker-instances", type="int", default=1,
+      help="Number of instances per worker: variable SPARK_WORKER_INSTANCES (default: 1)")
+  parser.add_option("--master-opts", type="string", default="",
+      help="Extra options to give to master through SPARK_MASTER_OPTS variable (e.g -Dspark.worker.timeout=180)")
+
+
 
   (opts, args) = parser.parse_args()
   if len(args) != 2:
@@ -157,7 +163,7 @@ def is_active(instance):
 
 # Return correct versions of Spark and Shark, given the supplied Spark version
 def get_spark_shark_version(opts):
-  spark_shark_map = {"0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0"}
+  spark_shark_map = {"0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0", "0.9.1": "0.9.1"}
   version = opts.spark_version.replace("v", "")
   if version not in spark_shark_map:
     print >> stderr, "Don't know about Spark version: %s" % version
@@ -223,7 +229,7 @@ def launch_cluster(conn, opts, cluster_name):
     sys.exit(1)
   if opts.key_pair is None:
     print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
-    sys.exit(1)    
+    sys.exit(1)
   print "Setting up security groups..."
   master_group = get_or_make_group(conn, cluster_name + "-master")
   slave_group = get_or_make_group(conn, cluster_name + "-slaves")
@@ -398,15 +404,13 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
   if any((master_nodes, slave_nodes)):
     print ("Found %d master(s), %d slaves" %
            (len(master_nodes), len(slave_nodes)))
-  if (master_nodes != [] and slave_nodes != []) or not die_on_error:
+  if master_nodes != [] or not die_on_error:
     return (master_nodes, slave_nodes)
   else:
     if master_nodes == [] and slave_nodes != []:
-      print "ERROR: Could not find master in group " + cluster_name + "-master"
-    elif master_nodes != [] and slave_nodes == []:
-      print "ERROR: Could not find slaves in group " + cluster_name + "-slaves"
+      print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name + "-master"
     else:
-      print "ERROR: Could not find any existing cluster"
+      print >> sys.stderr, "ERROR: Could not find any existing cluster"
     sys.exit(1)
 
 
@@ -439,7 +443,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
 
   # NOTE: We should clone the repository before running deploy_files to
   # prevent ec2-variables.sh from being overwritten
-  ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/mesos/spark-ec2.git -b v2")
+  ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/mesos/spark-ec2.git -b v3")
 
   print "Deploying files to master..."
   deploy_files(conn, "deploy.generic", opts, master_nodes, slave_nodes, modules)
@@ -553,7 +557,9 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     "modules": '\n'.join(modules),
     "spark_version": spark_v,
     "shark_version": shark_v,
-    "hadoop_major_version": opts.hadoop_major_version
+    "hadoop_major_version": opts.hadoop_major_version,
+    "spark_worker_instances": "%d" % opts.worker_instances,
+    "spark_master_opts": opts.master_opts
   }
 
   # Create a temp directory in which we will place all the files to be
@@ -606,7 +612,7 @@ def ssh_command(opts):
   return ['ssh'] + ssh_args(opts)
 
 
-# Run a command on a host through ssh, retrying up to two times
+# Run a command on a host through ssh, retrying up to five times
 # and then throwing an exception if ssh continues to fail.
 def ssh(host, opts, command):
   tries = 0
@@ -615,7 +621,7 @@ def ssh(host, opts, command):
       return subprocess.check_call(
         ssh_command(opts) + ['-t', '-t', '%s@%s' % (opts.user, host), stringify_command(command)])
     except subprocess.CalledProcessError as e:
-      if (tries > 2):
+      if (tries > 5):
         # If this was an ssh failure, provide the user with hints.
         if e.returncode == 255:
           raise UsageError("Failed to SSH to remote host {0}.\nPlease check that you have provided the correct --identity-file and --key-pair parameters and try again.".format(host))
@@ -642,7 +648,7 @@ def ssh_write(host, opts, command, input):
     status = proc.wait()
     if status == 0:
       break
-    elif (tries > 2):
+    elif (tries > 5):
       raise RuntimeError("ssh_write failed with error %s" % proc.returncode)
     else:
       print >> stderr, "Error {0} while executing remote command, retrying after 30 seconds".format(status)
@@ -680,6 +686,9 @@ def real_main():
     opts.zone = random.choice(conn.get_all_zones()).name
 
   if action == "launch":
+    if opts.slaves <= 0:
+      print >> sys.stderr, "ERROR: You have to start at least 1 slave"
+      sys.exit(1)
     if opts.resume:
       (master_nodes, slave_nodes) = get_existing_cluster(
           conn, opts, cluster_name)
@@ -805,6 +814,7 @@ def main():
     real_main()
   except UsageError, e:
     print >> stderr, "\nError:\n", e
+    sys.exit(1)
 
 
 if __name__ == "__main__":

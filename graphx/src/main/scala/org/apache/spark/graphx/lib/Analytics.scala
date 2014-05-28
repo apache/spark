@@ -26,11 +26,15 @@ import org.apache.spark.graphx.PartitionStrategy._
  */
 object Analytics extends Logging {
 
-  def main(args: Array[String]) = {
-    val host = args(0)
-    val taskType = args(1)
-    val fname = args(2)
-    val options =  args.drop(3).map { arg =>
+  def main(args: Array[String]): Unit = {
+    if (args.length < 2) {
+      System.err.println("Usage: Analytics <taskType> <file> [other options]")
+      System.exit(1)
+    }
+
+    val taskType = args(0)
+    val fname = args(1)
+    val options =  args.drop(2).map { arg =>
       arg.dropWhile(_ == '-').split('=') match {
         case Array(opt, v) => (opt -> v)
         case _ => throw new IllegalArgumentException("Invalid argument: " + arg)
@@ -51,6 +55,7 @@ object Analytics extends Logging {
     val conf = new SparkConf()
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
+      .set("spark.locality.wait", "100000")
 
     taskType match {
       case "pagerank" =>
@@ -58,12 +63,14 @@ object Analytics extends Logging {
         var outFname = ""
         var numEPart = 4
         var partitionStrategy: Option[PartitionStrategy] = None
+        var numIterOpt: Option[Int] = None
 
         options.foreach{
           case ("tol", v) => tol = v.toFloat
           case ("output", v) => outFname = v
           case ("numEPart", v) => numEPart = v.toInt
           case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
+          case ("numIter", v) => numIterOpt = Some(v.toInt)
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
         }
 
@@ -71,7 +78,7 @@ object Analytics extends Logging {
         println("|             PageRank               |")
         println("======================================")
 
-        val sc = new SparkContext(host, "PageRank(" + fname + ")", conf)
+        val sc = new SparkContext(conf.setAppName("PageRank(" + fname + ")"))
 
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
           minEdgePartitions = numEPart).cache()
@@ -80,7 +87,10 @@ object Analytics extends Logging {
         println("GRAPHX: Number of vertices " + graph.vertices.count)
         println("GRAPHX: Number of edges " + graph.edges.count)
 
-        val pr = graph.pageRank(tol).vertices.cache()
+        val pr = (numIterOpt match {
+          case Some(numIter) => PageRank.run(graph, numIter)
+          case None => PageRank.runUntilConvergence(graph, tol)
+        }).vertices.cache()
 
         println("GRAPHX: Total rank: " + pr.map(_._2).reduce(_ + _))
 
@@ -115,7 +125,7 @@ object Analytics extends Logging {
         println("|      Connected Components          |")
         println("======================================")
 
-        val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")", conf)
+        val sc = new SparkContext(conf.setAppName("ConnectedComponents(" + fname + ")"))
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
           minEdgePartitions = numEPart).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
@@ -137,7 +147,7 @@ object Analytics extends Logging {
         println("======================================")
         println("|      Triangle Count                |")
         println("======================================")
-        val sc = new SparkContext(host, "TriangleCount(" + fname + ")", conf)
+        val sc = new SparkContext(conf.setAppName("TriangleCount(" + fname + ")"))
         val graph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
           minEdgePartitions = numEPart).partitionBy(partitionStrategy).cache()
         val triangles = TriangleCount.run(graph)

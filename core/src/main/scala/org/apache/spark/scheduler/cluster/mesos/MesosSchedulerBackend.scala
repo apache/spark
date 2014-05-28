@@ -24,7 +24,7 @@ import java.util.Collections
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import com.google.protobuf.ByteString
+import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
@@ -41,8 +41,7 @@ import org.apache.spark.util.Utils
 private[spark] class MesosSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
-    master: String,
-    appName: String)
+    master: String)
   extends SchedulerBackend
   with MScheduler
   with Logging {
@@ -71,7 +70,7 @@ private[spark] class MesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = MesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(appName).build()
+          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(sc.appName).build()
           driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try {
             val ret = driver.run()
@@ -176,7 +175,7 @@ private[spark] class MesosSchedulerBackend(
   override def reregistered(d: SchedulerDriver, masterInfo: MasterInfo) {}
 
   /**
-   * Method called by Mesos to offer resources on slaves. We resond by asking our active task sets
+   * Method called by Mesos to offer resources on slaves. We respond by asking our active task sets
    * for tasks in order of priority. We fill each node with tasks in a round-robin manner so that
    * tasks are balanced across the cluster.
    */
@@ -203,7 +202,7 @@ private[spark] class MesosSchedulerBackend(
             getResource(offer.getResourcesList, "cpus").toInt)
         }
 
-        // Call into the ClusterScheduler
+        // Call into the TaskSchedulerImpl
         val taskLists = scheduler.resourceOffers(offerableWorkers)
 
         // Build a list of Mesos tasks for each slave
@@ -247,7 +246,7 @@ private[spark] class MesosSchedulerBackend(
     val cpuResource = Resource.newBuilder()
       .setName("cpus")
       .setType(Value.Type.SCALAR)
-      .setScalar(Value.Scalar.newBuilder().setValue(1).build())
+      .setScalar(Value.Scalar.newBuilder().setValue(scheduler.CPUS_PER_TASK).build())
       .build()
     MesosTaskInfo.newBuilder()
       .setTaskId(taskId)

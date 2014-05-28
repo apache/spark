@@ -55,7 +55,7 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
       }
     }
   }
-  
+
   test ("filter") {
     withSpark { sc =>
       val n = 5
@@ -165,8 +165,11 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
       // not have any edges in the specified direction.
       assert(edges.count === 50)
       edges.collect.foreach {
-        case (vid, edges) => if (vid > 0 && vid < 49) assert(edges.size == 2)
-        else assert(edges.size == 1)
+        case (vid, edges) => if (vid > 0 && vid < 49) {
+          assert(edges.size == 2)
+        } else {
+          assert(edges.size == 1)
+        }
       }
       edges.collect.foreach {
         case (vid, edges) =>

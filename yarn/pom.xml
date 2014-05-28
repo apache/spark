@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-incubating-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -28,7 +28,7 @@
   <artifactId>yarn-parent_2.10</artifactId>
   <packaging>pom</packaging>
   <name>Spark Project YARN Parent POM</name>
-  
+
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -45,20 +45,15 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-server-web-proxy</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-yarn-client</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
-      <version>${yarn.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.avro</groupId>
-      <artifactId>avro</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.avro</groupId>
-      <artifactId>avro-ipc</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
@@ -133,10 +128,10 @@
             </goals>
             <configuration>
               <exportAntProperties>true</exportAntProperties>
-              <tasks>
+              <target>
                 <property name="spark.classpath" refid="maven.test.classpath" />
                 <property environment="env" />
-                <fail message="Please set the SCALA_HOME (or SCALA_LIBRARY_PATH if scala is on the path) environment variables and retry.">  
+                <fail message="Please set the SCALA_HOME (or SCALA_LIBRARY_PATH if scala is on the path) environment variables and retry.">
                   <condition>
                     <not>
                       <or>
@@ -146,7 +141,7 @@
                     </not>
                   </condition>
                 </fail>
-              </tasks>
+              </target>
             </configuration>
           </execution>
         </executions>
@@ -166,6 +161,12 @@
 
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+  
+    <resources>
+      <resource>
+        <directory>../common/src/main/resources</directory>
+      </resource>
+    </resources>
   </build>
 
 </project>

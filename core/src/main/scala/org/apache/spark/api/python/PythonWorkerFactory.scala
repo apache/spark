@@ -17,15 +17,18 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, File, IOException, OutputStreamWriter}
+import java.io.{DataInputStream, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 
 import scala.collection.JavaConversions._
 
 import org.apache.spark._
+import org.apache.spark.util.Utils
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
-    extends Logging {
+  extends Logging {
+
+  import PythonWorkerFactory._
 
   // Because forking processes from Java is expensive, we prefer to launch a single Python daemon
   // (pyspark/daemon.py) and tell it to fork new workers for our tasks. This daemon currently
@@ -36,6 +39,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
   var daemonPort: Int = 0
+
+  val pythonPath = PythonUtils.mergePythonPaths(
+    PythonUtils.sparkPythonPath,
+    envVars.getOrElse("PYTHONPATH", ""),
+    sys.env.getOrElse("PYTHONPATH", ""))
 
   def create(): Socket = {
     if (useDaemon) {
@@ -58,13 +66,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       try {
         new Socket(daemonHost, daemonPort)
       } catch {
-        case exc: SocketException => {
+        case exc: SocketException =>
           logWarning("Python daemon unexpectedly quit, attempting to restart")
           stopDaemon()
           startDaemon()
           new Socket(daemonHost, daemonPort)
-        }
-        case e: Throwable => throw e
       }
     }
   }
@@ -78,47 +84,14 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
 
       // Create and start the worker
-      val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
-      val pb = new ProcessBuilder(Seq(pythonExec, sparkHome + "/python/pyspark/worker.py"))
+      val pb = new ProcessBuilder(Seq(pythonExec, "-u", "-m", "pyspark.worker"))
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars)
-      val pythonPath = sparkHome + "/python/" + File.pathSeparator + workerEnv.get("PYTHONPATH")
       workerEnv.put("PYTHONPATH", pythonPath)
       val worker = pb.start()
 
-      // Redirect the worker's stderr to ours
-      new Thread("stderr reader for " + pythonExec) {
-        setDaemon(true)
-        override def run() {
-          scala.util.control.Exception.ignoring(classOf[IOException]) {
-            // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-            val in = worker.getErrorStream
-            val buf = new Array[Byte](1024)
-            var len = in.read(buf)
-            while (len != -1) {
-              System.err.write(buf, 0, len)
-              len = in.read(buf)
-            }
-          }
-        }
-      }.start()
-
-      // Redirect worker's stdout to our stderr
-      new Thread("stdout reader for " + pythonExec) {
-        setDaemon(true)
-        override def run() {
-          scala.util.control.Exception.ignoring(classOf[IOException]) {
-            // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-            val in = worker.getInputStream
-            val buf = new Array[Byte](1024)
-            var len = in.read(buf)
-            while (len != -1) {
-              System.err.write(buf, 0, len)
-              len = in.read(buf)
-            }
-          }
-        }
-      }.start()
+      // Redirect worker stdout and stderr
+      redirectStreamsToStderr(worker.getInputStream, worker.getErrorStream)
 
       // Tell the worker our port
       val out = new OutputStreamWriter(worker.getOutputStream)
@@ -141,10 +114,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     null
   }
 
-  def stop() {
-    stopDaemon()
-  }
-
   private def startDaemon() {
     synchronized {
       // Is it already running?
@@ -154,58 +123,61 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       try {
         // Create and start the daemon
-        val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
-        val pb = new ProcessBuilder(Seq(pythonExec, sparkHome + "/python/pyspark/daemon.py"))
+        val pb = new ProcessBuilder(Seq(pythonExec, "-u", "-m", "pyspark.daemon"))
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars)
-        val pythonPath = sparkHome + "/python/" + File.pathSeparator + workerEnv.get("PYTHONPATH")
         workerEnv.put("PYTHONPATH", pythonPath)
         daemon = pb.start()
-
-        // Redirect the stderr to ours
-        new Thread("stderr reader for " + pythonExec) {
-          setDaemon(true)
-          override def run() {
-            scala.util.control.Exception.ignoring(classOf[IOException]) {
-              // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-              val in = daemon.getErrorStream
-              val buf = new Array[Byte](1024)
-              var len = in.read(buf)
-              while (len != -1) {
-                System.err.write(buf, 0, len)
-                len = in.read(buf)
-              }
-            }
-          }
-        }.start()
 
         val in = new DataInputStream(daemon.getInputStream)
         daemonPort = in.readInt()
 
-        // Redirect further stdout output to our stderr
-        new Thread("stdout reader for " + pythonExec) {
-          setDaemon(true)
-          override def run() {
-            scala.util.control.Exception.ignoring(classOf[IOException]) {
-              // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-              val buf = new Array[Byte](1024)
-              var len = in.read(buf)
-              while (len != -1) {
-                System.err.write(buf, 0, len)
-                len = in.read(buf)
-              }
-            }
-          }
-        }.start()
+        // Redirect daemon stdout and stderr
+        redirectStreamsToStderr(in, daemon.getErrorStream)
+
       } catch {
-        case e: Throwable => {
+        case e: Exception =>
+
+          // If the daemon exists, wait for it to finish and get its stderr
+          val stderr = Option(daemon)
+            .flatMap { d => Utils.getStderr(d, PROCESS_WAIT_TIMEOUT_MS) }
+            .getOrElse("")
+
           stopDaemon()
-          throw e
-        }
+
+          if (stderr != "") {
+            val formattedStderr = stderr.replace("\n", "\n  ")
+            val errorMessage = s"""
+              |Error from python worker:
+              |  $formattedStderr
+              |PYTHONPATH was:
+              |  $pythonPath
+              |$e"""
+
+            // Append error message from python daemon, but keep original stack trace
+            val wrappedException = new SparkException(errorMessage.stripMargin)
+            wrappedException.setStackTrace(e.getStackTrace)
+            throw wrappedException
+          } else {
+            throw e
+          }
       }
 
       // Important: don't close daemon's stdin (daemon.getOutputStream) so it can correctly
       // detect our disappearance.
+    }
+  }
+
+  /**
+   * Redirect the given streams to our stderr in separate threads.
+   */
+  private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream) {
+    try {
+      new RedirectThread(stdout, System.err, "stdout reader for " + pythonExec).start()
+      new RedirectThread(stderr, System.err, "stderr reader for " + pythonExec).start()
+    } catch {
+      case e: Exception =>
+        logError("Exception in redirecting streams", e)
     }
   }
 
@@ -220,4 +192,12 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       daemonPort = 0
     }
   }
+
+  def stop() {
+    stopDaemon()
+  }
+}
+
+private object PythonWorkerFactory {
+  val PROCESS_WAIT_TIMEOUT_MS = 10000
 }

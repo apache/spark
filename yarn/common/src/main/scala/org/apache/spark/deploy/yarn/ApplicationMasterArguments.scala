@@ -24,9 +24,9 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var userJar: String = null
   var userClass: String = null
   var userArgs: Seq[String] = Seq[String]()
-  var workerMemory = 1024
-  var workerCores = 1
-  var numWorkers = 2
+  var executorMemory = 1024
+  var executorCores = 1
+  var numExecutors = 2
 
   parseArgs(args.toList)
   
@@ -36,7 +36,8 @@ class ApplicationMasterArguments(val args: Array[String]) {
     var args = inputArgs
 
     while (! args.isEmpty) {
-
+      // --num-workers, --worker-memory, and --worker-cores are deprecated since 1.0,
+      // the properties with executor in their names are preferred.
       args match {
         case ("--jar") :: value :: tail =>
           userJar = value
@@ -50,16 +51,16 @@ class ApplicationMasterArguments(val args: Array[String]) {
           userArgsBuffer += value
           args = tail
 
-        case ("--num-workers") :: IntParam(value) :: tail =>
-          numWorkers = value
+        case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
+          numExecutors = value
           args = tail
 
-        case ("--worker-memory") :: IntParam(value) :: tail =>
-          workerMemory = value
+        case ("--worker-memory" | "--executor-memory") :: IntParam(value) :: tail =>
+          executorMemory = value
           args = tail
 
-        case ("--worker-cores") :: IntParam(value) :: tail =>
-          workerCores = value
+        case ("--worker-cores" | "--executor-cores") :: IntParam(value) :: tail =>
+          executorCores = value
           args = tail
 
         case Nil =>
@@ -86,9 +87,9 @@ class ApplicationMasterArguments(val args: Array[String]) {
       "  --class CLASS_NAME   Name of your application's main class (required)\n" +
       "  --args ARGS          Arguments to be passed to your application's main class.\n" +
       "                       Mutliple invocations are possible, each will be passed in order.\n" +
-      "  --num-workers NUM    Number of workers to start (Default: 2)\n" +
-      "  --worker-cores NUM   Number of cores for the workers (Default: 1)\n" +
-      "  --worker-memory MEM  Memory per Worker (e.g. 1000M, 2G) (Default: 1G)\n")
+      "  --num-executors NUM    Number of executors to start (Default: 2)\n" +
+      "  --executor-cores NUM   Number of cores for the executors (Default: 1)\n" +
+      "  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)\n")
     System.exit(exitCode)
   }
 }

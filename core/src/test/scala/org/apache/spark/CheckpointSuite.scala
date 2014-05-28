@@ -35,6 +35,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   override def beforeEach() {
     super.beforeEach()
     checkpointDir = File.createTempFile("temp", "")
+    checkpointDir.deleteOnExit()
     checkpointDir.delete()
     sc = new SparkContext("local", "test")
     sc.setCheckpointDir(checkpointDir.toString)
@@ -42,9 +43,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
 
   override def afterEach() {
     super.afterEach()
-    if (checkpointDir != null) {
-      checkpointDir.delete()
-    }
+    Utils.deleteRecursively(checkpointDir)
   }
 
   test("basic checkpointing") {
@@ -432,7 +431,6 @@ object CheckpointSuite {
   // This is a custom cogroup function that does not use mapValues like
   // the PairRDDFunctions.cogroup()
   def cogroup[K, V](first: RDD[(K, V)], second: RDD[(K, V)], part: Partitioner) = {
-    //println("First = " + first + ", second = " + second)
     new CoGroupedRDD[K](
       Seq(first.asInstanceOf[RDD[(K, _)]], second.asInstanceOf[RDD[(K, _)]]),
       part

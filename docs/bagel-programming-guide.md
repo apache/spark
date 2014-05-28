@@ -46,7 +46,7 @@ import org.apache.spark.bagel.Bagel._
 Next, we load a sample graph from a text file as a distributed dataset and package it into `PRVertex` objects. We also cache the distributed dataset because Bagel will use it multiple times and we'd like to avoid recomputing it.
 
 {% highlight scala %}
-val input = sc.textFile("pagerank_data.txt")
+val input = sc.textFile("data/pagerank_data.txt")
 
 val numVerts = input.count()
 
@@ -108,7 +108,7 @@ _Example_
 
 ## Operations
 
-Here are the actions and types in the Bagel API. See [Bagel.scala](https://github.com/apache/incubator-spark/blob/master/bagel/src/main/scala/org/apache/spark/bagel/Bagel.scala) for details.
+Here are the actions and types in the Bagel API. See [Bagel.scala](https://github.com/apache/spark/blob/master/bagel/src/main/scala/org/apache/spark/bagel/Bagel.scala) for details.
 
 ### Actions
 

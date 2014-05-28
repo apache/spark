@@ -22,10 +22,10 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 
-import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
-import org.objectweb.asm.Opcodes._
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkException}
 
 private[spark] object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it
@@ -45,7 +45,7 @@ private[spark] object ClosureCleaner extends Logging {
   private def isClosure(cls: Class[_]): Boolean = {
     cls.getName.contains("$anonfun$")
   }
-  
+
   // Get a list of the classes of the outer objects of a given closure object, obj;
   // the outer objects are defined as any closures that obj is nested within, plus
   // possibly the class that the outermost closure is in, if any. We stop searching
@@ -63,7 +63,7 @@ private[spark] object ClosureCleaner extends Logging {
     }
     Nil
   }
-  
+
   // Get a list of the outer objects for a given closure object.
   private def getOuterObjects(obj: AnyRef): List[AnyRef] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
@@ -76,7 +76,7 @@ private[spark] object ClosureCleaner extends Logging {
     }
     Nil
   }
-  
+
   private def getInnerClasses(obj: AnyRef): List[Class[_]] = {
     val seen = Set[Class[_]](obj.getClass)
     var stack = List[Class[_]](obj.getClass)
@@ -92,7 +92,7 @@ private[spark] object ClosureCleaner extends Logging {
     }
     return (seen - obj.getClass).toList
   }
-  
+
   private def createNullValue(cls: Class[_]): AnyRef = {
     if (cls.isPrimitive) {
       new java.lang.Byte(0: Byte) // Should be convertible to any primitive type
@@ -100,19 +100,22 @@ private[spark] object ClosureCleaner extends Logging {
       null
     }
   }
-  
+
   def clean(func: AnyRef) {
     // TODO: cache outerClasses / innerClasses / accessedFields
     val outerClasses = getOuterClasses(func)
     val innerClasses = getInnerClasses(func)
     val outerObjects = getOuterObjects(func)
-    
+
     val accessedFields = Map[Class[_], Set[String]]()
+    
+    getClassReader(func.getClass).accept(new ReturnStatementFinder(), 0)
+    
     for (cls <- outerClasses)
       accessedFields(cls) = Set[String]()
     for (cls <- func.getClass :: innerClasses)
       getClassReader(cls).accept(new FieldAccessFinder(accessedFields), 0)
-    //logInfo("accessedFields: " + accessedFields)
+    // logInfo("accessedFields: " + accessedFields)
 
     val inInterpreter = {
       try {
@@ -139,21 +142,21 @@ private[spark] object ClosureCleaner extends Logging {
         val field = cls.getDeclaredField(fieldName)
         field.setAccessible(true)
         val value = field.get(obj)
-        //logInfo("1: Setting " + fieldName + " on " + cls + " to " + value);
+        // logInfo("1: Setting " + fieldName + " on " + cls + " to " + value);
         field.set(outer, value)
       }
     }
-    
+
     if (outer != null) {
-      //logInfo("2: Setting $outer on " + func.getClass + " to " + outer);
+      // logInfo("2: Setting $outer on " + func.getClass + " to " + outer);
       val field = func.getClass.getDeclaredField("$outer")
       field.setAccessible(true)
       field.set(func, outer)
     }
   }
-  
+
   private def instantiateClass(cls: Class[_], outer: AnyRef, inInterpreter: Boolean): AnyRef = {
-    //logInfo("Creating a " + cls + " with outer = " + outer)
+    // logInfo("Creating a " + cls + " with outer = " + outer)
     if (!inInterpreter) {
       // This is a bona fide closure class, whose constructor has no effects
       // other than to set its fields, so use its constructor
@@ -170,12 +173,30 @@ private[spark] object ClosureCleaner extends Logging {
       val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
       val obj = newCtor.newInstance().asInstanceOf[AnyRef]
       if (outer != null) {
-        //logInfo("3: Setting $outer on " + cls + " to " + outer);
+        // logInfo("3: Setting $outer on " + cls + " to " + outer);
         val field = cls.getDeclaredField("$outer")
         field.setAccessible(true)
         field.set(obj, outer)
       }
       obj
+    }
+  }
+}
+
+private[spark]
+class ReturnStatementFinder extends ClassVisitor(ASM4) {
+  override def visitMethod(access: Int, name: String, desc: String,
+      sig: String, exceptions: Array[String]): MethodVisitor = {
+    if (name.contains("apply")) {
+      new MethodVisitor(ASM4) {
+        override def visitTypeInsn(op: Int, tp: String) {
+          if (op == NEW && tp.contains("scala/runtime/NonLocalReturnControl")) {
+            throw new SparkException("Return statements aren't allowed in Spark closures")
+          }
+        }
+      }
+    } else {
+      new MethodVisitor(ASM4) {}
     }
   }
 }
@@ -192,7 +213,7 @@ class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends ClassVisitor
           }
         }
       }
-      
+
       override def visitMethodInsn(op: Int, owner: String, name: String,
           desc: String) {
         // Check for calls a getter method for a variable in an interpreter wrapper object.
@@ -209,12 +230,12 @@ class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends ClassVisitor
 
 private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM4) {
   var myName: String = null
-  
+
   override def visit(version: Int, access: Int, name: String, sig: String,
       superName: String, interfaces: Array[String]) {
     myName = name
   }
-  
+
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     new MethodVisitor(ASM4) {

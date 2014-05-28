@@ -1,0 +1,16 @@
+get_json_object(json_txt, path) - Extract a json object from path 
+Extract json object from a json string based on json path specified, and return json string of the extracted json object. It will return null if the input json string is invalid.
+A limited version of JSONPath supported:
+  $   : Root object
+  .   : Child operator
+  []  : Subscript operator for array
+  *   : Wildcard for []
+Syntax not supported that's worth noticing:
+  ''  : Zero length string as key
+  ..  : Recursive descent
+  &amp;#064;   : Current object/element
+  ()  : Script expression
+  ?() : Filter (script) expression.
+  [,] : Union operator
+  [start:end:step] : array slice operator
+

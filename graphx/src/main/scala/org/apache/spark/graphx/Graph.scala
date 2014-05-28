@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx
 
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx.impl._
@@ -45,7 +46,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * @note vertex ids are unique.
    * @return an RDD containing the vertices in this graph
    */
-  val vertices: VertexRDD[VD]
+  @transient val vertices: VertexRDD[VD]
 
   /**
    * An RDD containing the edges and their associated attributes.  The entries in the RDD contain
@@ -58,7 +59,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * along with their vertex data.
    *
    */
-  val edges: EdgeRDD[ED]
+  @transient val edges: EdgeRDD[ED, VD]
 
   /**
    * An RDD containing the edge triplets, which are edges along with the vertex data associated with
@@ -76,7 +77,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * val numInvalid = graph.triplets.map(e => if (e.src.data == e.dst.data) 1 else 0).sum
    * }}}
    */
-  val triplets: RDD[EdgeTriplet[VD, ED]]
+  @transient val triplets: RDD[EdgeTriplet[VD, ED]]
 
   /**
    * Caches the vertices and edges associated with this graph at the specified storage level.
@@ -419,5 +420,6 @@ object Graph {
    * All the convenience operations are defined in the [[GraphOps]] class which may be
    * shared across multiple graph implementations.
    */
-  implicit def graphToGraphOps[VD: ClassTag, ED: ClassTag](g: Graph[VD, ED]) = g.ops
+  implicit def graphToGraphOps[VD: ClassTag, ED: ClassTag]
+      (g: Graph[VD, ED]): GraphOps[VD, ED] = g.ops
 } // end of Graph object

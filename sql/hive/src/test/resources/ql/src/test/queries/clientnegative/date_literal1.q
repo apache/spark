@@ -1,0 +1,2 @@
+-- Not in YYYY-MM-DD format
+SELECT DATE '2001-1-1' FROM src LIMIT 2;

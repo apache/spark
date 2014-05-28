@@ -17,19 +17,170 @@
 
 package org.apache.spark.mllib.util
 
+import scala.reflect.ClassTag
+
+import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
+  squaredDistance => breezeSquaredDistance}
+
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
-
-import org.jblas.DoubleMatrix
+import org.apache.spark.rdd.PartitionwiseSampledRDD
+import org.apache.spark.util.random.BernoulliSampler
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
  */
 object MLUtils {
 
+  private[util] lazy val EPSILON = {
+    var eps = 1.0
+    while ((1.0 + (eps / 2.0)) != 1.0) {
+      eps /= 2.0
+    }
+    eps
+  }
+
   /**
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint].
+   * The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
+   * Each line represents a labeled sparse feature vector using the following format:
+   * {{{label index1:value1 index2:value2 ...}}}
+   * where the indices are one-based and in ascending order.
+   * This method parses each line into a [[org.apache.spark.mllib.regression.LabeledPoint]],
+   * where the feature indices are converted to zero-based.
+   *
+   * @param sc Spark context
+   * @param path file or directory path in any Hadoop-supported file system URI
+   * @param labelParser parser for labels
+   * @param numFeatures number of features, which will be determined from the input data if a
+   *                    nonpositive value is given. This is useful when the dataset is already split
+   *                    into multiple files and you want to load them separately, because some
+   *                    features may not present in certain files, which leads to inconsistent
+   *                    feature dimensions.
+   * @param minPartitions min number of partitions
+   * @return labeled data stored as an RDD[LabeledPoint]
+   */
+  private def loadLibSVMFile(
+      sc: SparkContext,
+      path: String,
+      labelParser: LabelParser,
+      numFeatures: Int,
+      minPartitions: Int): RDD[LabeledPoint] = {
+    val parsed = sc.textFile(path, minPartitions)
+      .map(_.trim)
+      .filter(line => !(line.isEmpty || line.startsWith("#")))
+      .map { line =>
+        val items = line.split(' ')
+        val label = labelParser.parse(items.head)
+        val (indices, values) = items.tail.map { item =>
+          val indexAndValue = item.split(':')
+          val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
+          val value = indexAndValue(1).toDouble
+          (index, value)
+        }.unzip
+        (label, indices.toArray, values.toArray)
+      }
+
+    // Determine number of features.
+    val d = if (numFeatures > 0) {
+      numFeatures
+    } else {
+      parsed.persist(StorageLevel.MEMORY_ONLY)
+      parsed.map { case (label, indices, values) =>
+        indices.lastOption.getOrElse(0)
+      }.reduce(math.max) + 1
+    }
+
+    parsed.map { case (label, indices, values) =>
+      LabeledPoint(label, Vectors.sparse(d, indices, values))
+    }
+  }
+
+  // Convenient methods for `loadLibSVMFile`.
+
+  /**
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint].
+   * The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
+   * Each line represents a labeled sparse feature vector using the following format:
+   * {{{label index1:value1 index2:value2 ...}}}
+   * where the indices are one-based and in ascending order.
+   * This method parses each line into a [[org.apache.spark.mllib.regression.LabeledPoint]],
+   * where the feature indices are converted to zero-based.
+   *
+   * @param sc Spark context
+   * @param path file or directory path in any Hadoop-supported file system URI
+   * @param multiclass whether the input labels contain more than two classes. If false, any label
+   *                   with value greater than 0.5 will be mapped to 1.0, or 0.0 otherwise. So it
+   *                   works for both +1/-1 and 1/0 cases. If true, the double value parsed directly
+   *                   from the label string will be used as the label value.
+   * @param numFeatures number of features, which will be determined from the input data if a
+   *                    nonpositive value is given. This is useful when the dataset is already split
+   *                    into multiple files and you want to load them separately, because some
+   *                    features may not present in certain files, which leads to inconsistent
+   *                    feature dimensions.
+   * @param minPartitions min number of partitions
+   * @return labeled data stored as an RDD[LabeledPoint]
+   */
+   def loadLibSVMFile(
+      sc: SparkContext,
+      path: String,
+      multiclass: Boolean,
+      numFeatures: Int,
+      minPartitions: Int): RDD[LabeledPoint] =
+    loadLibSVMFile(sc, path, LabelParser.getInstance(multiclass), numFeatures, minPartitions)
+
+  /**
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the default number of
+   * partitions.
+   */
+  def loadLibSVMFile(
+      sc: SparkContext,
+      path: String,
+      multiclass: Boolean,
+      numFeatures: Int): RDD[LabeledPoint] =
+    loadLibSVMFile(sc, path, multiclass, numFeatures, sc.defaultMinPartitions)
+
+  /**
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the number of features
+   * determined automatically and the default number of partitions.
+   */
+  def loadLibSVMFile(
+      sc: SparkContext,
+      path: String,
+      multiclass: Boolean): RDD[LabeledPoint] =
+    loadLibSVMFile(sc, path, multiclass, -1, sc.defaultMinPartitions)
+
+  /**
+   * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint], with number of
+   * features determined automatically and the default number of partitions.
+   */
+  def loadLibSVMFile(sc: SparkContext, path: String): RDD[LabeledPoint] =
+    loadLibSVMFile(sc, path, multiclass = false, -1, sc.defaultMinPartitions)
+
+  /**
+   * Save labeled data in LIBSVM format.
+   * @param data an RDD of LabeledPoint to be saved
+   * @param dir directory to save the data
+   *
+   * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
+   */
+  def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
+    // TODO: allow to specify label precision and feature precision.
+    val dataStr = data.map { case LabeledPoint(label, features) =>
+      val featureStrings = features.toBreeze.activeIterator.map { case (i, v) =>
+        s"${i + 1}:$v"
+      }
+      (Iterator(label) ++ featureStrings).mkString(" ")
+    }
+    dataStr.saveAsTextFile(dir)
+  }
+
+  /**
+   * :: Experimental ::
    * Load labeled data from a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -39,16 +190,18 @@ object MLUtils {
    * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
    *         the label, and the second element represents the feature values (an array of Double).
    */
+  @Experimental
   def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
       val parts = line.split(',')
       val label = parts(0).toDouble
-      val features = parts(1).trim().split(' ').map(_.toDouble)
+      val features = Vectors.dense(parts(1).trim().split(' ').map(_.toDouble))
       LabeledPoint(label, features)
     }
   }
 
   /**
+   * :: Experimental ::
    * Save labeled data to a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -56,68 +209,95 @@ object MLUtils {
    * @param data An RDD of LabeledPoints containing data to be saved.
    * @param dir Directory to save the data.
    */
+  @Experimental
   def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
-    val dataStr = data.map(x => x.label + "," + x.features.mkString(" "))
+    val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
     dataStr.saveAsTextFile(dir)
   }
 
   /**
-   * Utility function to compute mean and standard deviation on a given dataset.
-   *
-   * @param data - input data set whose statistics are computed
-   * @param nfeatures - number of features
-   * @param nexamples - number of examples in input dataset
-   *
-   * @return (yMean, xColMean, xColSd) - Tuple consisting of
-   *     yMean - mean of the labels
-   *     xColMean - Row vector with mean for every column (or feature) of the input data
-   *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
+   * :: Experimental ::
+   * Return a k element array of pairs of RDDs with the first element of each pair
+   * containing the training data, a complement of the validation data and the second
+   * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
    */
-  def computeStats(data: RDD[LabeledPoint], nfeatures: Int, nexamples: Long):
-      (Double, DoubleMatrix, DoubleMatrix) = {
-    val yMean: Double = data.map { labeledPoint => labeledPoint.label }.reduce(_ + _) / nexamples
-
-    // NOTE: We shuffle X by column here to compute column sum and sum of squares.
-    val xColSumSq: RDD[(Int, (Double, Double))] = data.flatMap { labeledPoint =>
-      val nCols = labeledPoint.features.length
-      // Traverse over every column and emit (col, value, value^2)
-      Iterator.tabulate(nCols) { i =>
-        (i, (labeledPoint.features(i), labeledPoint.features(i)*labeledPoint.features(i)))
-      }
-    }.reduceByKey { case(x1, x2) =>
-      (x1._1 + x2._1, x1._2 + x2._2)
-    }
-    val xColSumsMap = xColSumSq.collectAsMap()
-
-    val xColMean = DoubleMatrix.zeros(nfeatures, 1)
-    val xColSd = DoubleMatrix.zeros(nfeatures, 1)
-
-    // Compute mean and unbiased variance using column sums
-    var col = 0
-    while (col < nfeatures) {
-      xColMean.put(col, xColSumsMap(col)._1 / nexamples)
-      val variance =
-        (xColSumsMap(col)._2 - (math.pow(xColSumsMap(col)._1, 2) / nexamples)) / nexamples
-      xColSd.put(col, math.sqrt(variance))
-      col += 1
-    }
-
-    (yMean, xColMean, xColSd)
+  @Experimental
+  def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
+    val numFoldsF = numFolds.toFloat
+    (1 to numFolds).map { fold =>
+      val sampler = new BernoulliSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
+        complement = false)
+      val validation = new PartitionwiseSampledRDD(rdd, sampler, seed)
+      val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
+      (training, validation)
+    }.toArray
   }
 
   /**
-   * Return the squared Euclidean distance between two vectors.
+   * Returns a new vector with `1.0` (bias) appended to the input vector.
    */
-  def squaredDistance(v1: Array[Double], v2: Array[Double]): Double = {
-    if (v1.length != v2.length) {
-      throw new IllegalArgumentException("Vector sizes don't match")
+  def appendBias(vector: Vector): Vector = {
+    val vector1 = vector.toBreeze match {
+      case dv: BDV[Double] => BDV.vertcat(dv, new BDV[Double](Array(1.0)))
+      case sv: BSV[Double] => BSV.vertcat(sv, new BSV[Double](Array(0), Array(1.0), 1))
+      case v: Any => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
     }
-    var i = 0
-    var sum = 0.0
-    while (i < v1.length) {
-      sum += (v1(i) - v2(i)) * (v1(i) - v2(i))
-      i += 1
+    Vectors.fromBreeze(vector1)
+  }
+
+  /**
+   * Returns the squared Euclidean distance between two vectors. The following formula will be used
+   * if it does not introduce too much numerical error:
+   * <pre>
+   *   \|a - b\|_2^2 = \|a\|_2^2 + \|b\|_2^2 - 2 a^T b.
+   * </pre>
+   * When both vector norms are given, this is faster than computing the squared distance directly,
+   * especially when one of the vectors is a sparse vector.
+   *
+   * @param v1 the first vector
+   * @param norm1 the norm of the first vector, non-negative
+   * @param v2 the second vector
+   * @param norm2 the norm of the second vector, non-negative
+   * @param precision desired relative precision for the squared distance
+   * @return squared distance between v1 and v2 within the specified precision
+   */
+  private[mllib] def fastSquaredDistance(
+      v1: BV[Double],
+      norm1: Double,
+      v2: BV[Double],
+      norm2: Double,
+      precision: Double = 1e-6): Double = {
+    val n = v1.size
+    require(v2.size == n)
+    require(norm1 >= 0.0 && norm2 >= 0.0)
+    val sumSquaredNorm = norm1 * norm1 + norm2 * norm2
+    val normDiff = norm1 - norm2
+    var sqDist = 0.0
+    /*
+     * The relative error is
+     * <pre>
+     * EPSILON * ( \|a\|_2^2 + \|b\\_2^2 + 2 |a^T b|) / ( \|a - b\|_2^2 ),
+     * </pre>
+     * which is bounded by
+     * <pre>
+     * 2.0 * EPSILON * ( \|a\|_2^2 + \|b\|_2^2 ) / ( (\|a\|_2 - \|b\|_2)^2 ).
+     * </pre>
+     * The bound doesn't need the inner product, so we can use it as a sufficient condition to
+     * check quickly whether the inner product approach is accurate.
+     */
+    val precisionBound1 = 2.0 * EPSILON * sumSquaredNorm / (normDiff * normDiff + EPSILON)
+    if (precisionBound1 < precision) {
+      sqDist = sumSquaredNorm - 2.0 * v1.dot(v2)
+    } else if (v1.isInstanceOf[BSV[Double]] || v2.isInstanceOf[BSV[Double]]) {
+      val dot = v1.dot(v2)
+      sqDist = math.max(sumSquaredNorm - 2.0 * dot, 0.0)
+      val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dot)) / (sqDist + EPSILON)
+      if (precisionBound2 > precision) {
+        sqDist = breezeSquaredDistance(v1, v2)
+      }
+    } else {
+      sqDist = breezeSquaredDistance(v1, v2)
     }
-    sum
+    sqDist
   }
 }

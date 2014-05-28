@@ -54,6 +54,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     private val executorAddress = new HashMap[String, Address]
     private val executorHost = new HashMap[String, String]
     private val freeCores = new HashMap[String, Int]
+    private val totalCores = new HashMap[String, Int]
     private val addressToExecutorId = new HashMap[Address, String]
 
     override def preStart() {
@@ -76,6 +77,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           sender ! RegisteredExecutor(sparkProperties)
           executorActor(executorId) = sender
           executorHost(executorId) = Utils.parseHostPort(hostPort)._1
+          totalCores(executorId) = cores
           freeCores(executorId) = cores
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
@@ -87,7 +89,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           if (executorActor.contains(executorId)) {
-            freeCores(executorId) += 1
+            freeCores(executorId) += scheduler.CPUS_PER_TASK
             makeOffers(executorId)
           } else {
             // Ignoring the update since we don't know about the executor.
@@ -99,8 +101,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       case ReviveOffers =>
         makeOffers()
 
-      case KillTask(taskId, executorId) =>
-        executorActor(executorId) ! KillTask(taskId, executorId)
+      case KillTask(taskId, executorId, interruptThread) =>
+        executorActor(executorId) ! KillTask(taskId, executorId, interruptThread)
 
       case StopDriver =>
         sender ! true
@@ -138,7 +140,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     // Launch tasks returned by a set of resource offers
     def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
-        freeCores(task.executorId) -= 1
+        freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
         executorActor(task.executorId) ! LaunchTask(task)
       }
     }
@@ -147,10 +149,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     def removeExecutor(executorId: String, reason: String) {
       if (executorActor.contains(executorId)) {
         logInfo("Executor " + executorId + " disconnected, so removing it")
-        val numCores = freeCores(executorId)
-        addressToExecutorId -= executorAddress(executorId)
+        val numCores = totalCores(executorId)
         executorActor -= executorId
         executorHost -= executorId
+        addressToExecutorId -= executorAddress(executorId)
+        executorAddress -= executorId
+        totalCores -= executorId
         freeCores -= executorId
         totalCoreCount.addAndGet(-numCores)
         scheduler.executorLost(executorId, SlaveLost(reason))
@@ -168,7 +172,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         properties += ((key, value))
       }
     }
-    //TODO (prashant) send conf instead of properties
+    // TODO (prashant) send conf instead of properties
     driverActor = actorSystem.actorOf(
       Props(new DriverActor(properties)), name = CoarseGrainedSchedulerBackend.ACTOR_NAME)
   }
@@ -203,8 +207,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     driverActor ! ReviveOffers
   }
 
-  override def killTask(taskId: Long, executorId: String) {
-    driverActor ! KillTask(taskId, executorId)
+  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
+    driverActor ! KillTask(taskId, executorId, interruptThread)
   }
 
   override def defaultParallelism(): Int = {

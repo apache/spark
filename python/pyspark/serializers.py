@@ -64,6 +64,7 @@ import cPickle
 from itertools import chain, izip, product
 import marshal
 import struct
+import sys
 from pyspark import cloudpickle
 
 
@@ -113,6 +114,11 @@ class FramedSerializer(Serializer):
     where C{length} is a 32-bit integer and data is C{length} bytes.
     """
 
+    def __init__(self):
+        # On Python 2.6, we can't write bytearrays to streams, so we need to convert them
+        # to strings first. Check if the version number is that old.
+        self._only_write_strings = sys.version_info[0:2] <= (2, 6)
+
     def dump_stream(self, iterator, stream):
         for obj in iterator:
             self._write_with_length(obj, stream)
@@ -127,7 +133,10 @@ class FramedSerializer(Serializer):
     def _write_with_length(self, obj, stream):
         serialized = self.dumps(obj)
         write_int(len(serialized), stream)
-        stream.write(serialized)
+        if self._only_write_strings:
+            stream.write(str(serialized))
+        else:
+            stream.write(serialized)
 
     def _read_with_length(self, stream):
         length = read_int(stream)
@@ -204,7 +213,7 @@ class CartesianDeserializer(FramedSerializer):
         self.key_ser = key_ser
         self.val_ser = val_ser
 
-    def load_stream(self, stream):
+    def prepare_keys_values(self, stream):
         key_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_stream = self.val_ser._load_stream_without_unbatching(stream)
         key_is_batched = isinstance(self.key_ser, BatchedSerializer)
@@ -212,6 +221,10 @@ class CartesianDeserializer(FramedSerializer):
         for (keys, vals) in izip(key_stream, val_stream):
             keys = keys if key_is_batched else [keys]
             vals = vals if val_is_batched else [vals]
+            yield (keys, vals)
+
+    def load_stream(self, stream):
+        for (keys, vals) in self.prepare_keys_values(stream):
             for pair in product(keys, vals):
                 yield pair
 
@@ -221,6 +234,29 @@ class CartesianDeserializer(FramedSerializer):
 
     def __str__(self):
         return "CartesianDeserializer<%s, %s>" % \
+               (str(self.key_ser), str(self.val_ser))
+
+
+class PairDeserializer(CartesianDeserializer):
+    """
+    Deserializes the JavaRDD zip() of two PythonRDDs.
+    """
+
+    def __init__(self, key_ser, val_ser):
+        self.key_ser = key_ser
+        self.val_ser = val_ser
+
+    def load_stream(self, stream):
+        for (keys, vals) in self.prepare_keys_values(stream):
+            for pair in izip(keys, vals):
+                yield pair
+
+    def __eq__(self, other):
+        return isinstance(other, PairDeserializer) and \
+               self.key_ser == other.key_ser and self.val_ser == other.val_ser
+
+    def __str__(self):
+        return "PairDeserializer<%s, %s>" % \
                (str(self.key_ser), str(self.val_ser))
 
 
@@ -263,7 +299,7 @@ class MarshalSerializer(FramedSerializer):
 
 class UTF8Deserializer(Serializer):
     """
-    Deserializes streams written by getBytes.
+    Deserializes streams written by String.getBytes.
     """
 
     def loads(self, stream):

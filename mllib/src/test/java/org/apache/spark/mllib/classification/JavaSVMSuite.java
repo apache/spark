@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.classification;
 
-
 import java.io.Serializable;
 import java.util.List;
 
@@ -28,7 +27,6 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-
 import org.apache.spark.mllib.regression.LabeledPoint;
 
 public class JavaSVMSuite implements Serializable {
@@ -69,6 +67,7 @@ public class JavaSVMSuite implements Serializable {
         SVMSuite.generateSVMInputAsList(A, weights, nPoints, 17);
 
     SVMWithSGD svmSGDImpl = new SVMWithSGD();
+    svmSGDImpl.setIntercept(true);
     svmSGDImpl.optimizer().setStepSize(1.0)
                           .setRegParam(1.0)
                           .setNumIterations(100);
@@ -81,7 +80,7 @@ public class JavaSVMSuite implements Serializable {
   @Test
   public void runSVMUsingStaticMethods() {
     int nPoints = 10000;
-    double A = 2.0;
+    double A = 0.0;
     double[] weights = {-1.5, 1.0};
 
     JavaRDD<LabeledPoint> testRDD = sc.parallelize(SVMSuite.generateSVMInputAsList(A,
@@ -94,5 +93,4 @@ public class JavaSVMSuite implements Serializable {
     int numAccurate = validatePrediction(validationData, model);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
   }
-
 }

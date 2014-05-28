@@ -1,0 +1,4 @@
+xpath_int(xml, xpath) - Returns an integer value that matches the xpath expression
+Example:
+  > SELECT xpath_int('<a><b>1</b><b>2</b></a>','sum(a/b)') FROM src LIMIT 1;
+  3

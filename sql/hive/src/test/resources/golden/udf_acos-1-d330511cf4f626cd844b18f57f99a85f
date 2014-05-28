@@ -1,0 +1,6 @@
+acos(x) - returns the arc cosine of x if -1<=x<=1 or NULL otherwise
+Example:
+  > SELECT acos(1) FROM src LIMIT 1;
+  0
+  > SELECT acos(2) FROM src LIMIT 1;
+  NULL

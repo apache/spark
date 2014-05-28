@@ -9,12 +9,14 @@ with these distributions:
 
 # Compile-time Hadoop Version
 
-When compiling Spark, you'll need to 
-[set the SPARK_HADOOP_VERSION flag](index.html#a-note-about-hadoop-versions):
+When compiling Spark, you'll need to specify the Hadoop version by defining the `hadoop.version`
+property. For certain versions, you will need to specify additional profiles. For more detail,
+see the guide on [building with maven](building-with-maven.html#specifying-the-hadoop-version):
 
-    SPARK_HADOOP_VERSION=1.0.4 sbt/sbt assembly
+    mvn -Dhadoop.version=1.0.4 -DskipTests clean package
+    mvn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
 
-The table below lists the corresponding `SPARK_HADOOP_VERSION` code for each CDH/HDP release. Note that
+The table below lists the corresponding `hadoop.version` code for each CDH/HDP release. Note that
 some Hadoop releases are binary compatible across client versions. This means the pre-built Spark
 distribution may "just work" without you needing to compile. That said, we recommend compiling with 
 the _exact_ Hadoop version you are running to avoid any compatibility errors.
@@ -45,6 +47,10 @@ the _exact_ Hadoop version you are running to avoid any compatibility errors.
     </td>
   </tr>
 </table>
+
+In SBT, the equivalent can be achieved by setting the SPARK_HADOOP_VERSION flag:
+
+    SPARK_HADOOP_VERSION=1.0.4 sbt/sbt assembly
 
 # Linking Applications to the Hadoop Version
 
@@ -110,10 +116,5 @@ The location of these configuration files varies across CDH and HDP versions, bu
 a common location is inside of `/etc/hadoop/conf`. Some tools, such as Cloudera Manager, create
 configurations on-the-fly, but offer a mechanisms to download copies of them.
 
-There are a few ways to make these files visible to Spark:
-
-* You can copy these files into `$SPARK_HOME/conf` and they will be included in Spark's
-classpath automatically.
-* If you are running Spark on the same nodes as Hadoop _and_ your distribution includes both
-`hdfs-site.xml` and `core-site.xml` in the same directory, you can set `HADOOP_CONF_DIR` 
-in `$SPARK_HOME/spark-env.sh` to that directory.
+To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/spark-env.sh` 
+to a location containing the configuration files.

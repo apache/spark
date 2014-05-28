@@ -20,17 +20,20 @@ package org.apache.spark.storage
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
 /**
+ * :: DeveloperApi ::
  * This class represent an unique identifier for a BlockManager.
- * The first 2 constructors of this class is made private to ensure that
- * BlockManagerId objects can be created only using the apply method in
- * the companion object. This allows de-duplication of ID objects.
- * Also, constructor parameters are private to ensure that parameters cannot
- * be modified from outside this class.
+ *
+ * The first 2 constructors of this class is made private to ensure that BlockManagerId objects
+ * can be created only using the apply method in the companion object. This allows de-duplication
+ * of ID objects. Also, constructor parameters are private to ensure that parameters cannot be
+ * modified from outside this class.
  */
-private[spark] class BlockManagerId private (
+@DeveloperApi
+class BlockManagerId private (
     private var executorId_ : String,
     private var host_ : String,
     private var port_ : Int,
@@ -50,7 +53,6 @@ private[spark] class BlockManagerId private (
     // DEBUG code
     Utils.checkHost(host)
     assert (port > 0)
-
     host + ":" + port
   }
 
@@ -93,7 +95,7 @@ private[spark] class BlockManagerId private (
 private[spark] object BlockManagerId {
 
   /**
-   * Returns a [[org.apache.spark.storage.BlockManagerId]] for the given configuraiton.
+   * Returns a [[org.apache.spark.storage.BlockManagerId]] for the given configuration.
    *
    * @param execId ID of the executor.
    * @param host Host name of the block manager.

@@ -18,21 +18,22 @@
 package org.apache.spark.metrics
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
-
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.master.MasterSource
 
 class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
   var filePath: String = _
   var conf: SparkConf = null
+  var securityMgr: SecurityManager = null
 
   before {
     filePath = getClass.getClassLoader.getResource("test_metrics_system.properties").getFile()
     conf = new SparkConf(false).set("spark.metrics.conf", filePath)
+    securityMgr = new SecurityManager(conf)
   }
 
   test("MetricsSystem with default config") {
-    val metricsSystem = MetricsSystem.createMetricsSystem("default", conf)
+    val metricsSystem = MetricsSystem.createMetricsSystem("default", conf, securityMgr)
     val sources = metricsSystem.sources
     val sinks = metricsSystem.sinks
 
@@ -42,7 +43,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("MetricsSystem with sources add") {
-    val metricsSystem = MetricsSystem.createMetricsSystem("test", conf)
+    val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
     val sources = metricsSystem.sources
     val sinks = metricsSystem.sinks
 

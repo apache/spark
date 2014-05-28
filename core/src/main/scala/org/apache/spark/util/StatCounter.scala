@@ -19,9 +19,9 @@ package org.apache.spark.util
 
 /**
  * A class for tracking the statistics of a set of numbers (count, mean and variance) in a
- * numerically robust way. Includes support for merging two StatCounters. Based on 
- * [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
- * Welford and Chan's algorithms for running variance]].
+ * numerically robust way. Includes support for merging two StatCounters. Based on Welford
+ * and Chan's [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance algorithms]]
+ * for running variance.
  *
  * @constructor Initialize the StatCounter with the given values.
  */
@@ -29,6 +29,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   private var n: Long = 0     // Running count of our values
   private var mu: Double = 0  // Running mean of our values
   private var m2: Double = 0  // Running variance numerator (sum of (x - mean)^2)
+  private var maxValue: Double = Double.NegativeInfinity // Running max of our values
+  private var minValue: Double = Double.PositiveInfinity // Running min of our values
 
   merge(values)
 
@@ -41,6 +43,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     n += 1
     mu += delta / n
     m2 += delta * (value - mu)
+    maxValue = math.max(maxValue, value)
+    minValue = math.min(minValue, value)
     this
   }
 
@@ -58,8 +62,10 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
       if (n == 0) {
         mu = other.mu
         m2 = other.m2
-        n = other.n       
-      } else if (other.n != 0) {        
+        n = other.n
+        maxValue = other.maxValue
+        minValue = other.minValue
+      } else if (other.n != 0) {
         val delta = other.mu - mu
         if (other.n * 10 < n) {
           mu = mu + (delta * other.n) / (n + other.n)
@@ -70,6 +76,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
         }
         m2 += other.m2 + (delta * delta * n * other.n) / (n + other.n)
         n += other.n
+        maxValue = math.max(maxValue, other.maxValue)
+        minValue = math.min(minValue, other.minValue)
       }
       this
     }
@@ -81,6 +89,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     other.n = n
     other.mu = mu
     other.m2 = m2
+    other.maxValue = maxValue
+    other.minValue = minValue
     other
   }
 
@@ -89,6 +99,10 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   def mean: Double = mu
 
   def sum: Double = n * mu
+
+  def max: Double = maxValue
+
+  def min: Double = minValue
 
   /** Return the variance of the values. */
   def variance: Double = {
@@ -121,7 +135,7 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   def sampleStdev: Double = math.sqrt(sampleVariance)
 
   override def toString: String = {
-    "(count: %d, mean: %f, stdev: %f)".format(count, mean, stdev)
+    "(count: %d, mean: %f, stdev: %f, max: %f, min: %f)".format(count, mean, stdev, max, min)
   }
 }
 

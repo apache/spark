@@ -116,14 +116,14 @@ trait SparkILoopInit {
     }
   }
 
- def initializeSpark() {
+  def initializeSpark() {
     intp.beQuietDuring {
       command("""
          @transient val sc = org.apache.spark.repl.Main.interp.createSparkContext();
         """)
       command("import org.apache.spark.SparkContext._")
     }
-   echo("Spark context available as sc.")
+    echo("Spark context available as sc.")
   }
 
   // code to be executed only after the interpreter is initialized

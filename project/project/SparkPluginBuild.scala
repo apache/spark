@@ -16,11 +16,28 @@
  */
 
 import sbt._
+import sbt.Keys._
 
+/**
+ * This plugin project is there to define new scala style rules for spark. This is
+ * a plugin project so that this gets compiled first and is put on the classpath and
+ * becomes available for scalastyle sbt plugin.
+ */
 object SparkPluginDef extends Build {
-  lazy val root = Project("plugins", file(".")) dependsOn(junitXmlListener)
-  /* This is not published in a Maven repository, so we get it from GitHub directly */
-  lazy val junitXmlListener = uri(
-    "https://github.com/chenkelmann/junit_xml_listener.git#3f8029fbfda54dc7a68b1afd2f885935e1090016"
+  lazy val root = Project("plugins", file(".")) dependsOn(sparkStyle)
+  lazy val sparkStyle = Project("spark-style", file("spark-style"), settings = styleSettings)
+  val sparkVersion = "1.0.0-SNAPSHOT"
+  // There is actually no need to publish this artifact.
+  def styleSettings = Defaults.defaultSettings ++ Seq (
+    name                 :=  "spark-style",
+    organization         :=  "org.apache.spark",
+    version              :=  sparkVersion,
+    scalaVersion         :=  "2.10.4",
+    scalacOptions        :=  Seq("-unchecked", "-deprecation"),
+    libraryDependencies  ++= Dependencies.scalaStyle
   )
+
+  object Dependencies {
+    val scalaStyle = Seq("org.scalastyle" %% "scalastyle" % "0.4.0")
+  }
 }

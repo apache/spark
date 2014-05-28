@@ -23,7 +23,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.mock.EasyMockSugar
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.{BlockManager, RDDBlockId, StorageLevel}
+import org.apache.spark.storage._
 
 // TODO: Test the CacheManager's thread-safety aspects
 class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar {
@@ -54,12 +54,11 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     expecting {
       blockManager.get(RDDBlockId(0, 0)).andReturn(None)
       blockManager.put(RDDBlockId(0, 0), ArrayBuffer[Any](1, 2, 3, 4), StorageLevel.MEMORY_ONLY,
-        true).andReturn(0)
+        true).andStubReturn(Seq[(BlockId, BlockStatus)]())
     }
 
     whenExecuting(blockManager) {
-      val context = new TaskContext(0, 0, 0, interrupted = false, runningLocally = false,
-        taskMetrics = null)
+      val context = new TaskContext(0, 0, 0)
       val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
       assert(value.toList === List(1, 2, 3, 4))
     }
@@ -71,8 +70,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
 
     whenExecuting(blockManager) {
-      val context = new TaskContext(0, 0, 0, interrupted = false, runningLocally = false,
-        taskMetrics = null)
+      val context = new TaskContext(0, 0, 0)
       val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
       assert(value.toList === List(5, 6, 7))
     }
@@ -85,8 +83,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
 
     whenExecuting(blockManager) {
-      val context = new TaskContext(0, 0, 0, runningLocally = true, interrupted = false,
-        taskMetrics = null)
+      val context = new TaskContext(0, 0, 0, runningLocally = true)
       val value = cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
       assert(value.toList === List(1, 2, 3, 4))
     }

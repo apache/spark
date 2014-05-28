@@ -21,6 +21,7 @@ import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.{DStream, ForEachDStream}
+import org.apache.spark.util.Utils
 import StreamingContext._
 
 import scala.util.Random
@@ -28,12 +29,12 @@ import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import scala.reflect.ClassTag
 
 import java.io.{File, ObjectInputStream, IOException}
+import java.nio.charset.Charset
 import java.util.UUID
 
 import com.google.common.io.Files
 
-import org.apache.commons.io.FileUtils
-import org.apache.hadoop.fs.{FileUtil, FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
 
 
@@ -380,6 +381,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
 
   override def run() {
     val localTestDir = Files.createTempDir()
+    localTestDir.deleteOnExit()
     var fs = testDir.getFileSystem(new Configuration())
     val maxTries = 3
     try {
@@ -389,7 +391,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
         val localFile = new File(localTestDir, (i + 1).toString)
         val hadoopFile = new Path(testDir, (i + 1).toString)
         val tempHadoopFile = new Path(testDir, ".tmp_" + (i + 1).toString)
-        FileUtils.writeStringToFile(localFile, input(i).toString + "\n")
+        Files.write(input(i) + "\n", localFile, Charset.forName("UTF-8"))
         var tries = 0
         var done = false
             while (!done && tries < maxTries) {
@@ -421,6 +423,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
       case e: Exception => logWarning("File generating in killing thread", e)
     } finally {
       fs.close()
+      Utils.deleteRecursively(localTestDir)
     }
   }
 }

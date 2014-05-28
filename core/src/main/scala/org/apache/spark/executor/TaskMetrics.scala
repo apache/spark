@@ -17,21 +17,29 @@
 
 package org.apache.spark.executor
 
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.storage.{BlockId, BlockStatus}
+
+/**
+ * :: DeveloperApi ::
+ * Metrics tracked during the execution of a task.
+ */
+@DeveloperApi
 class TaskMetrics extends Serializable {
   /**
-   * Host's name the task runs on 
+   * Host's name the task runs on
    */
   var hostname: String = _
 
   /**
    * Time taken on the executor to deserialize this task
    */
-  var executorDeserializeTime: Int = _
+  var executorDeserializeTime: Long = _
 
   /**
    * Time the executor spends actually running the task (including fetching shuffle data)
    */
-  var executorRunTime: Int = _
+  var executorRunTime: Long = _
 
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult
@@ -68,13 +76,23 @@ class TaskMetrics extends Serializable {
    * here
    */
   var shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
+
+  /**
+   * Storage statuses of any blocks that have been updated as a result of this task.
+   */
+  var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 }
 
-object TaskMetrics {
-  private[spark] def empty(): TaskMetrics = new TaskMetrics
+private[spark] object TaskMetrics {
+  def empty: TaskMetrics = new TaskMetrics
 }
 
 
+/**
+ * :: DeveloperApi ::
+ * Metrics pertaining to shuffle data read in a given task.
+ */
+@DeveloperApi
 class ShuffleReadMetrics extends Serializable {
   /**
    * Absolute time when this task finished reading shuffle data
@@ -104,18 +122,16 @@ class ShuffleReadMetrics extends Serializable {
   var fetchWaitTime: Long = _
 
   /**
-   * Total time spent fetching remote shuffle blocks. This aggregates the time spent fetching all
-   * input blocks. Since block fetches are both pipelined and parallelized, this can
-   * exceed fetchWaitTime and executorRunTime.
-   */
-  var remoteFetchTime: Long = _
-
-  /**
    * Total number of remote bytes read from the shuffle by this task
    */
   var remoteBytesRead: Long = _
 }
 
+/**
+ * :: DeveloperApi ::
+ * Metrics pertaining to shuffle data written in a given task.
+ */
+@DeveloperApi
 class ShuffleWriteMetrics extends Serializable {
   /**
    * Number of bytes written for the shuffle by this task

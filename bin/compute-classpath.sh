@@ -25,33 +25,76 @@ SCALA_VERSION=2.10
 # Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
-# Load environment variables from conf/spark-env.sh, if it exists
-if [ -e "$FWDIR/conf/spark-env.sh" ] ; then
-  . $FWDIR/conf/spark-env.sh
-fi
+. $FWDIR/bin/load-spark-env.sh
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
+CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH:$FWDIR/conf"
+
+ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
+
+if [ -n "$JAVA_HOME" ]; then
+  JAR_CMD="$JAVA_HOME/bin/jar"
+else
+  JAR_CMD="jar"
+fi
 
 # First check if we have a dependencies jar. If so, include binary classes with the deps jar
-if [ -f "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*-deps.jar ]; then
+if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/bagel/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/graphx/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/streaming/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/tools/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/catalyst/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/core/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/yarn/stable/target/scala-$SCALA_VERSION/classes"
 
-  DEPS_ASSEMBLY_JAR=`ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*-deps.jar`
-  CLASSPATH="$CLASSPATH:$DEPS_ASSEMBLY_JAR"
+  ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar 2>/dev/null)
 else
   # Else use spark-assembly jar from either RELEASE or assembly directory
   if [ -f "$FWDIR/RELEASE" ]; then
-    ASSEMBLY_JAR=`ls "$FWDIR"/jars/spark-assembly*.jar`
+    ASSEMBLY_JAR=$(ls "$FWDIR"/lib/spark-assembly*hadoop*.jar 2>/dev/null)
   else
-    ASSEMBLY_JAR=`ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*.jar`
+    ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*.jar 2>/dev/null)
   fi
-  CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
+fi
+
+# Verify that versions of java used to build the jars and run Spark are compatible
+jar_error_check=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" nonexistent/class/path 2>&1)
+if [[ "$jar_error_check" =~ "invalid CEN header" ]]; then
+  echo "Loading Spark jar with '$JAR_CMD' failed. "
+  echo "This is likely because Spark was compiled with Java 7 and run "
+  echo "with Java 6. (see SPARK-1703). Please use Java 7 to run Spark "
+  echo "or build Spark with Java 6."
+  exit 1
+fi
+
+CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
+
+# When Hive support is needed, Datanucleus jars must be included on the classpath.
+# Datanucleus jars do not work if only included in the uber jar as plugin.xml metadata is lost.
+# Both sbt and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is
+# built with Hive, so first check if the datanucleus jars exist, and then ensure the current Spark
+# assembly is built for Hive, before actually populating the CLASSPATH with the jars.
+# Note that this check order is faster (by up to half a second) in the case where Hive is not used.
+if [ -f "$FWDIR/RELEASE" ]; then
+  datanucleus_dir="$FWDIR"/lib
+else
+  datanucleus_dir="$FWDIR"/lib_managed/jars
+fi
+
+datanucleus_jars=$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\.jar")
+datanucleus_jars=$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)
+
+if [ -n "$datanucleus_jars" ]; then
+  hive_files=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null)
+  if [ -n "$hive_files" ]; then
+    echo "Spark assembly has been built with Hive, including Datanucleus jars on classpath" 1>&2
+    CLASSPATH="$CLASSPATH:$datanucleus_jars"
+  fi
 fi
 
 # Add test classes if we're running from SBT or Maven with SPARK_TESTING set to 1
@@ -62,15 +105,18 @@ if [[ $SPARK_TESTING == 1 ]]; then
   CLASSPATH="$CLASSPATH:$FWDIR/bagel/target/scala-$SCALA_VERSION/test-classes"
   CLASSPATH="$CLASSPATH:$FWDIR/graphx/target/scala-$SCALA_VERSION/test-classes"
   CLASSPATH="$CLASSPATH:$FWDIR/streaming/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/catalyst/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/core/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SCALA_VERSION/test-classes"
 fi
 
 # Add hadoop conf dir if given -- otherwise FileSystem.*, etc fail !
 # Note, this assumes that there is either a HADOOP_CONF_DIR or YARN_CONF_DIR which hosts
 # the configurtion files.
-if [ "x" != "x$HADOOP_CONF_DIR" ]; then
+if [ -n "$HADOOP_CONF_DIR" ]; then
   CLASSPATH="$CLASSPATH:$HADOOP_CONF_DIR"
 fi
-if [ "x" != "x$YARN_CONF_DIR" ]; then
+if [ -n "$YARN_CONF_DIR" ]; then
   CLASSPATH="$CLASSPATH:$YARN_CONF_DIR"
 fi
 
