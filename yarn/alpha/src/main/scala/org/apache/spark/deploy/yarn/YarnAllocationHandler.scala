@@ -89,7 +89,8 @@ private[yarn] class YarnAllocationHandler(
   private val pendingReleaseContainers = new ConcurrentHashMap[ContainerId, Boolean]
 
   // Additional memory overhead - in mb.
-  private val memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead", 384)
+  private val memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead",
+    YarnAllocationHandler.MEMORY_OVERHEAD)
 
   private val numExecutorsRunning = new AtomicInteger()
   // Used to generate a unique id per executor
@@ -546,6 +547,9 @@ object YarnAllocationHandler {
   // All requests are issued with same priority : we do not (yet) have any distinction between
   // request types (like map/reduce in hadoop for example)
   val PRIORITY = 1
+
+  // Additional memory overhead - in mb
+  val MEMORY_OVERHEAD = 384
 
   // Host to rack map - saved from allocation requests
   // We are expecting this not to change.

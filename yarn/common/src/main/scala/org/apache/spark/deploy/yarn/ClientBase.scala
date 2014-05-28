@@ -66,7 +66,8 @@ trait ClientBase extends Logging {
     FsPermission.createImmutable(Integer.parseInt("644", 8).toShort)
 
   // Additional memory overhead - in mb.
-  def memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead", 384)
+  def memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead",
+    YarnAllocationHandler.MEMORY_OVERHEAD)
 
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {

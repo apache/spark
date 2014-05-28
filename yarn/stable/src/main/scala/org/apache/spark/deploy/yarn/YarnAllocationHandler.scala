@@ -90,8 +90,11 @@ private[yarn] class YarnAllocationHandler(
   // Containers to be released in next request to RM
   private val pendingReleaseContainers = new ConcurrentHashMap[ContainerId, Boolean]
 
+  // TODO: Here we can dynamically calculate the default value.
+  // eg: val memoryOverhead = (executorMemory * 0.25D).ceil.toInt
   // Additional memory overhead - in mb.
-  private val memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead", 384)
+  private val memoryOverhead = sparkConf.getInt("spark.yarn.container.memoryOverhead",
+    YarnAllocationHandler.MEMORY_OVERHEAD)
 
   // Number of container requests that have been sent to, but not yet allocated by the
   // ApplicationMaster.
@@ -560,6 +563,9 @@ object YarnAllocationHandler {
   // All requests are issued with same priority : we do not (yet) have any distinction between 
   // request types (like map/reduce in hadoop for example)
   val PRIORITY = 1
+
+  // Additional memory overhead - in mb.
+  val MEMORY_OVERHEAD = 384
 
   // Host to rack map - saved from allocation requests. We are expecting this not to change.
   // Note that it is possible for this to change : and ResurceManager will indicate that to us via
