@@ -32,6 +32,7 @@ import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
+import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
@@ -309,7 +310,7 @@ trait ClientBase extends Logging {
     // Add Xmx for AM memory
     JAVA_OPTS += "-Xmx" + amMemory + "m"
 
-    val tmpDir = new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
+    val tmpDir = new Path(Environment.PWD.$$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
     JAVA_OPTS += "-Djava.io.tmpdir=" + tmpDir
 
     // TODO: Remove once cpuset version is pushed out.
@@ -357,7 +358,7 @@ trait ClientBase extends Logging {
     JAVA_OPTS += ClientBase.getLog4jConfiguration(localResources)
 
     // Command for the ApplicationMaster
-    val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
+    val commands = Seq(Environment.JAVA_HOME.$$() + "/bin/java", "-server") ++
       JAVA_OPTS ++
       Seq(args.amClass, "--class", args.userClass, "--jar ", args.userJar,
         userArgsToString(args),
@@ -396,7 +397,7 @@ object ClientBase {
     if (classpathEntries != null) {
       for (c <- classpathEntries) {
         YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
-          File.pathSeparator)
+          ApplicationConstants.CLASS_PATH_SEPARATOR)
       }
     }
 
@@ -406,7 +407,7 @@ object ClientBase {
     if (mrClasspathEntries != null) {
       for (c <- mrClasspathEntries) {
         YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
-          File.pathSeparator)
+          ApplicationConstants.CLASS_PATH_SEPARATOR)
       }
     }
   }
@@ -473,15 +474,15 @@ object ClientBase {
       if (localPath != null) {
         val parentPath = new File(localPath).getParent()
         YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, parentPath,
-          File.pathSeparator)
+          ApplicationConstants.CLASS_PATH_SEPARATOR)
       }
     }
 
     /** Add entry to the classpath. */
     def addClasspathEntry(path: String) = YarnSparkHadoopUtil.addToEnvironment(env,
-      Environment.CLASSPATH.name, path, File.pathSeparator)
+      Environment.CLASSPATH.name, path, ApplicationConstants.CLASS_PATH_SEPARATOR)
     /** Add entry to the classpath. Interpreted as a path relative to the working directory. */
-    def addPwdClasspathEntry(entry: String) = addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + entry)
+    def addPwdClasspathEntry(entry: String) = addClasspathEntry(Environment.PWD.$$() + Path.SEPARATOR + entry)
 
     extraClassPath.foreach(addClasspathEntry)
 
@@ -500,7 +501,7 @@ object ClientBase {
       cachedSecondaryJarLinks.foreach(addPwdClasspathEntry)
     }
     // Append all class files and jar files under the working directory to the classpath.
-    addClasspathEntry(Environment.PWD.$())
+    addClasspathEntry(Environment.PWD.$$())
     addPwdClasspathEntry("*")
   }
 
