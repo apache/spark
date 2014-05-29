@@ -329,23 +329,8 @@ private[spark] class BlockManager(
    * never deletes (recent) items.
    */
   def getLocalFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-
-    // Reducer may need to read many local shuffle blocks and will wrap them into Iterators
-    // at the beginning. The wrapping will cost some memory(compression instance
-    // initialization, etc.). Reducer read shuffle blocks one by one so we could do the
-    // wrapping lazily to save memory.
-    class LazyProxyIterator(f: => Iterator[Any]) extends Iterator[Any] {
-      lazy val proxy = f
-      override def hasNext: Boolean = proxy.hasNext
-      override def next(): Any = proxy.next()
-    }
-
-    if (diskStore.contains(blockId)) {
-      Some(new LazyProxyIterator(diskStore.getValues(blockId, serializer).get))
-    } else {
-      sys.error("Block " + blockId + " not found on disk, though it should be")
-      None
-    }
+    diskStore.getValues(blockId, serializer).orElse(
+      sys.error("Block " + blockId + " not found on disk, though it should be"))
   }
 
   /**
@@ -1030,8 +1015,26 @@ private[spark] class BlockManager(
       bytes: ByteBuffer,
       serializer: Serializer = defaultSerializer): Iterator[Any] = {
     bytes.rewind()
-    val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
-    serializer.newInstance().deserializeStream(stream).asIterator
+
+    def doWork() = {
+      val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
+      serializer.newInstance().deserializeStream(stream).asIterator
+    }
+
+    if (blockId.isShuffle) {
+      // Reducer may need to read many local shuffle blocks and will wrap them into Iterators
+      // at the beginning. The wrapping will cost some memory(compression instance
+      // initialization, etc.). Reducer read shuffle blocks one by one so we could do the
+      // wrapping lazily to save memory.
+      class LazyProxyIterator(f: => Iterator[Any]) extends Iterator[Any] {
+        lazy val proxy = f
+        override def hasNext: Boolean = proxy.hasNext
+        override def next(): Any = proxy.next()
+      }
+      new LazyProxyIterator(doWork())
+    } else {
+      doWork()
+    }
   }
 
   def stop() {
