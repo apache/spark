@@ -116,7 +116,7 @@ case class Aggregate(
    */
   @transient
   private[this] lazy val resultMap =
-    (computedAggregates.map { agg => agg.unbound -> agg.resultAttribute} ++ namedGroups).toMap
+    (computedAggregates.map { agg => agg.unbound -> agg.resultAttribute } ++ namedGroups).toMap
 
   /**
    * Substituted version of aggregateExpressions expressions which are used to compute final
