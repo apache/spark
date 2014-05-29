@@ -43,7 +43,7 @@ object GenerateMIMAIgnore {
   private def classesPrivateWithin(packageName: String): Set[String] = {
 
     val classes = getClasses(packageName)
-    val privateClasses = mutable.HashSet[String]()
+    val ignoredClasses = mutable.HashSet[String]()
 
     def isPackagePrivate(className: String) = {
       try {
@@ -98,10 +98,10 @@ object GenerateMIMAIgnore {
         }
       }
       if (directlyPrivateSpark || indirectlyPrivateSpark || developerApi) {
-        privateClasses += className
+        ignoredClasses += className
       }
     }
-    privateClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet
+    ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet
   }
 
   def main(args: Array[String]) {
