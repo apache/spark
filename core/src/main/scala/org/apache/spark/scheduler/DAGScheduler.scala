@@ -124,8 +124,8 @@ class DAGScheduler(
 
   //whether to enable remove stage barrier
   val removeStageBarrier = env.conf.getBoolean("spark.schedule.removeStageBarrier", true)
-  //whether there's pre-started stages depending on this stage
-  val dependantStagePreStarted = new mutable.HashSet[Stage]()
+  //track the pre-started stages depending on a stage (the key)
+  val dependantStagePreStarted = new mutable.HashMap[Stage, ArrayBuffer[Stage]]()
 
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
@@ -886,6 +886,21 @@ class DAGScheduler(
                 logInfo("Resubmitting " + stage + " (" + stage.name +
                   ") because some of its tasks had failed: " +
                   stage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
+                //Pre-started dependant stages should fail
+                if (dependantStagePreStarted.contains(stage)) {
+                  for (preStartedStage <- dependantStagePreStarted.get(stage).get) {
+                    runningStages -= preStartedStage
+                    // TODO: Cancel running tasks in the stage
+                    logInfo("Marking " + preStartedStage + " (" + preStartedStage.name +
+                      ") for resubmision due to parent stage resubmission")
+                    if (failedStages.isEmpty && eventProcessActor != null) {
+                      import env.actorSystem.dispatcher
+                      env.actorSystem.scheduler.scheduleOnce(
+                        RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
+                    }
+                    failedStages += preStartedStage
+                  }
+                }
                 submitStage(stage)
               } else {
                 val newlyRunnable = new ArrayBuffer[Stage]
@@ -929,8 +944,10 @@ class DAGScheduler(
                         changeEpoch = true, isPartial = true)
                       waitingStages -= preStartedStage
                       runningStages += preStartedStage
-                      //inform parent stages that the depending stage has been pre-started
-                      dependantStagePreStarted ++= getMissingParentStages(preStartedStage)
+                      //inform parent stages that the dependant stage has been pre-started
+                      for (parentStage <- getMissingParentStages(preStartedStage)) {
+                        dependantStagePreStarted.getOrElseUpdate(parentStage, new ArrayBuffer[Stage]()) += preStartedStage
+                      }
                       submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage).get)
                     }
                   }
