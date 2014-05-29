@@ -573,7 +573,6 @@ object SparkBuild extends Build {
   def assemblyProjSettings = sharedSettings ++ Seq(
     name := "spark-assembly",
     jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
-    jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" }
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(

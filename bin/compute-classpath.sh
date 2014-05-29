@@ -62,7 +62,7 @@ else
   assembly_folder="$ASSEMBLY_DIR"
 fi
 
-num_jars=$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*.jar" | wc -l)
+num_jars=$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*\.jar" | wc -l)
 if [ "$num_jars" -eq "0" ]; then
   echo "Failed to find Spark assembly in $assembly_folder"
   echo "You need to build Spark before running this program."
