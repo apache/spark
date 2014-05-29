@@ -173,12 +173,18 @@ class SparkContext(object):
         self._temp_dir = \
             self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
 
-    # Initialize SparkContext in function to allow subclass specific initialization
     def _initialize_context(self, jconf):
+        """
+        Initialize SparkContext in function to allow subclass specific initialization
+        """
         return self._jvm.JavaSparkContext(jconf)
 
     @classmethod
     def _ensure_initialized(cls, instance=None, gateway=None):
+        """
+        Checks whether a SparkContext is initialized or not.
+        Throws error if a SparkContext is already running.
+        """
         with SparkContext._lock:
             if not SparkContext._gateway:
                 SparkContext._gateway = gateway or launch_gateway()
@@ -270,6 +276,13 @@ class SparkContext(object):
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
         RDD of Strings.
+        
+        >>> path = os.path.join(tempdir, "sample-text.txt")
+        >>> with open(path, "w") as testFile:
+        ...    testFile.write("Hello world!")
+        >>> textFile = sc.textFile(path)
+        >>> textFile.collect()
+        [u'Hello world!']
         """
         minPartitions = minPartitions or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minPartitions), self,
