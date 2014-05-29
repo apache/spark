@@ -80,36 +80,6 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
 
     val itr = blockFetcherItr.flatMap(unpackBlock)
 
-    //time interval(in second) the thread should sleep
-//    var sleepInterval = 8.toFloat
-//    while(!missingMapOutputs.isEmpty){
-//      val oldMissingNum = missingMapOutputs.size
-//      logInfo("Still missing " + oldMissingNum + " outputs for reduceId " + reduceId +
-//        ". Sleep " + sleepInterval + "s. ---lirui")
-//      Thread.sleep((sleepInterval * 1000).toLong)
-//      logInfo("Trying to update map output statuses for reduceId "+reduceId+" ---lirui")
-//      mapOutputTracker.updateMapStatusesForShuffle(shuffleId)
-//      statuses = mapOutputTracker.getServerStatuses(shuffleId, reduceId)
-//      val missingSplitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
-//      for (index <- missingMapOutputs if statuses(index)._1 != null) {
-//        missingSplitsByAddress.getOrElseUpdate(statuses(index)._1, ArrayBuffer()) += ((index, statuses(index)._2))
-//      }
-//      //we have new outputs ready for this reduce
-//      if(!missingSplitsByAddress.isEmpty){
-//        val missingBlocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = missingSplitsByAddress.toSeq.map {
-//          case (address, splits) =>
-//            (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
-//        }
-//        val missingBlockFetcherItr = blockManager.getMultiple(missingBlocksByAddress, serializer)
-//        itr = itr ++ missingBlockFetcherItr.flatMap(unpackBlock)
-//      } else {
-//        logInfo("No updates in the previous interval "+sleepInterval+"s, sleep longer. ---lirui")
-//      }
-//      missingMapOutputs = statuses.zipWithIndex.filter(_._1._1 == null).map(_._2)
-//      val fillingUpSpeed = (oldMissingNum - missingMapOutputs.size).toFloat / sleepInterval
-//      sleepInterval = if (fillingUpSpeed > 0.01) math.max(10.toFloat, missingMapOutputs.size.toFloat / 2) / fillingUpSpeed else sleepInterval * 4
-//    }
-
     val completionIter = CompletionIterator[T, Iterator[T]](itr, {
       val shuffleMetrics = new ShuffleReadMetrics
       shuffleMetrics.shuffleFinishTime = System.currentTimeMillis

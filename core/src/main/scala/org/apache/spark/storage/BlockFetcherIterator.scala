@@ -380,14 +380,14 @@ object BlockFetcherIterator {
 
     private def getIterator(initial: Boolean = false) = {
       if (isPartial && !initial) {
-        logInfo("Still missing "+statuses.filter(_._1==null).size+" map outputs for reduceId "+reduceId+" ---lirui")
+        logInfo("Still missing " + statuses.filter(_._1 == null).size + " map outputs for reduceId " + reduceId + " ---lirui")
         updateStatuses()
       }
       var trialCount = 0
       while (!newStatusesReady) {
         if (!isPartial && delegatedStatuses.size >= statuses.size) {
-          //shouldn't get here, could be due to empty blocks though
-          throw new SparkException("No more blocks to fetch for reduceId " + reduceId)
+          //shouldn't get here, just to avoid infinite loop
+          throw new SparkException("All blocks have been delegated for reduceId " + reduceId)
         }
         logInfo("Waiting for new map outputs for reduceId " + reduceId + " ---lirui")
         Thread.sleep(5000 + 2000 * trialCount)
@@ -408,19 +408,36 @@ object BlockFetcherIterator {
     }
 
     override def initialize(){
-      iterators += getIterator(true)
+      iterators += getIterator(initial = true)
     }
 
-    override def hasNext: Boolean = delegatedStatuses.size < statuses.size || iterators.exists(_.hasNext)
+    override def hasNext: Boolean = {
+      //firstly see if the delegated iterators have more blocks for us
+      if (iterators.exists(_.hasNext)) {
+        return true
+      }
+      //If we have blocks not delegated yet, try to delegate them to a new iterator
+      //and depend on the iterator to tell us if there are valid blocks.
+      while (delegatedStatuses.size < statuses.size) {
+        try {
+          iterators += getIterator()
+        } catch {
+          case e: SparkException => return false
+        }
+        if (iterators.exists(_.hasNext)) {
+          return true
+        }
+      }
+      false
+    }
 
     override def next(): (BlockId, Option[Iterator[Any]]) = {
-      //firstly try to get a block from the iterators we've created
+      //try to get a block from the iterators we've created
       for (itr <- iterators if itr.hasNext) {
         return itr.next()
       }
-      //TODO: need to take care of empty blocks here
-      iterators += getIterator()
-      next()
+      //we rely on the iterators for "hasNext", shouldn't get here
+      throw new SparkException("No more blocks to fetch for reduceId " + reduceId)
     }
 
     override def totalBlocks = iterators.map(_.totalBlocks).sum
@@ -433,4 +450,5 @@ object BlockFetcherIterator {
 
     override def remoteBytesRead = iterators.map(_.remoteBytesRead).sum
   }
+  // End of PartialBlockFetcherIterator
 }
