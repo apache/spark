@@ -36,11 +36,11 @@ def generateGraph():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        print >> sys.stderr, "Usage: transitive_closure <master> [<slices>]"
-        exit(-1)
-    sc = SparkContext(sys.argv[1], "PythonTransitiveClosure")
-    slices = int(sys.argv[2]) if len(sys.argv) > 2 else 2
+    """
+    Usage: transitive_closure [slices]
+    """
+    sc = SparkContext(appName="PythonTransitiveClosure")
+    slices = int(sys.argv[1]) if len(sys.argv) > 1 else 2
     tc = sc.parallelize(generateGraph(), slices).cache()
 
     # Linear transitive closure: each round grows paths by one edge,

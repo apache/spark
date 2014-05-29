@@ -33,12 +33,12 @@ def parseVector(line):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print >> sys.stderr, "Usage: kmeans <master> <file> <k>"
+    if len(sys.argv) != 3:
+        print >> sys.stderr, "Usage: kmeans <file> <k>"
         exit(-1)
-    sc = SparkContext(sys.argv[1], "KMeans")
-    lines = sc.textFile(sys.argv[2])
+    sc = SparkContext(appName="KMeans")
+    lines = sc.textFile(sys.argv[1])
     data = lines.map(parseVector)
-    k = int(sys.argv[3])
+    k = int(sys.argv[2])
     model = KMeans.train(data, k)
     print "Final centers: " + str(model.clusterCenters)

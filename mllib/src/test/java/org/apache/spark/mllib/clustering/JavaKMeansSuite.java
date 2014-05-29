@@ -88,4 +88,18 @@ public class JavaKMeansSuite implements Serializable {
       .run(data.rdd());
     assertEquals(expectedCenter, model.clusterCenters()[0]);
   }
+
+  @Test
+  public void testPredictJavaRDD() {
+    List<Vector> points = Lists.newArrayList(
+      Vectors.dense(1.0, 2.0, 6.0),
+      Vectors.dense(1.0, 3.0, 0.0),
+      Vectors.dense(1.0, 4.0, 6.0)
+    );
+    JavaRDD<Vector> data = sc.parallelize(points, 2);
+    KMeansModel model = new KMeans().setK(1).setMaxIterations(5).run(data.rdd());
+    JavaRDD<Integer> predictions = model.predict(data);
+    // Should be able to get the first prediction.
+    predictions.first();
+  }
 }
