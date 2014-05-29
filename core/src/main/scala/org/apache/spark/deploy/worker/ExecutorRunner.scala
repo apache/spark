@@ -61,7 +61,7 @@ private[spark] class ExecutorRunner(
     // Shutdown hook that kills actors on shutdown.
     shutdownHook = new Thread() {
       override def run() {
-        killProcess(None)
+        killProcess(Some("Worker shutting down"))
       }
     }
     Runtime.getRuntime.addShutdownHook(shutdownHook)
@@ -159,7 +159,7 @@ private[spark] class ExecutorRunner(
       case e: Exception => {
         logError("Error running executor", e)
         state = ExecutorState.FAILED
-        killProcess(Some(e.getClass + ":" + e.getMessage))
+        killProcess(Some(e.toString))
       }
     }
   }
