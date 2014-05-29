@@ -107,8 +107,9 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * Repartitions the edges in the graph according to `partitionStrategy` (WARNING: broken in
    * Spark 1\u20240\u20240).
    *
-   * To use this function in Spark 1.0.0, either build the latest version of Spark from the master
-   * branch, or apply the following workaround:
+   * To use this function in Spark 1.0.0, either build the latest version of Spark from
+   * [[https://github.com/apache/spark/tree/branch-1.0 branch-1.0]], or apply the following
+   * workaround:
    * {{{
    * // Define our own version of partitionBy to work around SPARK-1931
    * import org.apache.spark.HashPartitioner

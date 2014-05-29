@@ -95,7 +95,7 @@ GraphX in Spark {{site.SPARK_VERSION}} contains one user-facing interface change
 ## Workaround for `Graph.partitionBy` in Spark 1.0.0
 <a name="partitionBy_workaround"></a>
 
-The [`Graph.partitionBy`][Graph.partitionBy] operator allows users to choose the graph partitioning strategy, but due to [SPARK-1931](https://issues.apache.org/jira/browse/SPARK-1931), this method is broken in Spark 1.0.0. We encourage users to build the latest version of Spark from the master branch, which contains a fix. Alternatively, a workaround is to partition the edges before constructing the graph, as follows:
+The [`Graph.partitionBy`][Graph.partitionBy] operator allows users to choose the graph partitioning strategy, but due to [SPARK-1931](https://issues.apache.org/jira/browse/SPARK-1931), this method is broken in Spark 1.0.0. We encourage users to build the latest version of Spark from [`branch-1.0`](https://github.com/apache/spark/tree/branch-1.0), which contains a fix. Alternatively, a workaround is to partition the edges before constructing the graph, as follows:
 
 {% highlight scala %}
 // Define our own version of partitionBy to work around SPARK-1931
