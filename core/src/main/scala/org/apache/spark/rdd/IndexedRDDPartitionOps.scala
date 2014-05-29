@@ -15,48 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.graphx.impl
+package org.apache.spark.rdd
 
 import scala.language.higherKinds
-import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
 import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 
-import org.apache.spark.graphx._
-import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+import IndexedRDD.Id
+import IndexedRDDPartition.Index
 
-/**
- * An class containing additional operations for subclasses of VertexPartitionBase that provide
- * implicit evidence of membership in the `VertexPartitionBaseOpsConstructor` typeclass (for
- * example, [[VertexPartition.VertexPartitionOpsConstructor]]).
- */
-private[graphx] abstract class VertexPartitionBaseOps
-    [VD: ClassTag, Self[X] <: VertexPartitionBase[X] : VertexPartitionBaseOpsConstructor]
-    (self: Self[VD])
+private[spark] trait IndexedRDDPartitionOps[V, Self[X] <: IndexedRDDPartitionBase[X] with IndexedRDDPartitionOps[X, Self]]
     extends Logging {
 
-  def withIndex(index: VertexIdToIndexMap): Self[VD]
-  def withValues[VD2: ClassTag](values: Array[VD2]): Self[VD2]
-  def withMask(mask: BitSet): Self[VD]
+  def self: Self[V]
 
-  /**
-   * Pass each vertex attribute along with the vertex id through a map
-   * function and retain the original RDD's partitioning and index.
-   *
-   * @tparam VD2 the type returned by the map function
-   *
-   * @param f the function applied to each vertex id and vertex
-   * attribute in the RDD
-   *
-   * @return a new VertexPartition with values obtained by applying `f` to
-   * each of the entries in the original VertexRDD.  The resulting
-   * VertexPartition retains the same index.
-   */
-  def map[VD2: ClassTag](f: (VertexId, VD) => VD2): Self[VD2] = {
+  implicit def vTag: ClassTag[V]
+
+  def withIndex(index: Index): Self[V]
+  def withValues[V2: ClassTag](values: Array[V2]): Self[V2]
+  def withMask(mask: BitSet): Self[V]
+
+  def map[V2: ClassTag](f: (Id, V) => V2): Self[V2] = {
     // Construct a view of the map transformation
-    val newValues = new Array[VD2](self.capacity)
+    val newValues = new Array[V2](self.capacity)
     var i = self.mask.nextSetBit(0)
     while (i >= 0) {
       newValues(i) = f(self.index.getValue(i), self.values(i))
@@ -74,7 +58,7 @@ private[graphx] abstract class VertexPartitionBaseOps
    *       RDD can be easily joined with the original vertex-set. Furthermore, the filter only
    *       modifies the bitmap index and so no new values are allocated.
    */
-  def filter(pred: (VertexId, VD) => Boolean): Self[VD] = {
+  def filter(pred: (Id, V) => Boolean): Self[V] = {
     // Allocate the array to store the results into
     val newMask = new BitSet(self.capacity)
     // Iterate over the active bits in the old mask and evaluate the predicate
@@ -92,9 +76,9 @@ private[graphx] abstract class VertexPartitionBaseOps
    * Hides vertices that are the same between this and other. For vertices that are different, keeps
    * the values from `other`. The indices of `this` and `other` must be the same.
    */
-  def diff(other: Self[VD]): Self[VD] = {
+  def diff(other: Self[V]): Self[V] = {
     if (self.index != other.index) {
-      logWarning("Diffing two VertexPartitions with different indexes is slow.")
+      logWarning("Diffing two IndexedRDDPartitions with different indexes is slow.")
       diff(createUsingIndex(other.iterator))
     } else {
       val newMask = self.mask & other.mask
@@ -109,19 +93,19 @@ private[graphx] abstract class VertexPartitionBaseOps
     }
   }
 
-  /** Left outer join another VertexPartition. */
-  def leftJoin[VD2: ClassTag, VD3: ClassTag]
-      (other: Self[VD2])
-      (f: (VertexId, VD, Option[VD2]) => VD3): Self[VD3] = {
+  /** Left outer join another IndexedRDDPartition. */
+  def leftJoin[V2: ClassTag, V3: ClassTag]
+      (other: Self[V2])
+      (f: (Id, V, Option[V2]) => V3): Self[V3] = {
     if (self.index != other.index) {
-      logWarning("Joining two VertexPartitions with different indexes is slow.")
+      logWarning("Joining two IndexedRDDPartitions with different indexes is slow.")
       leftJoin(createUsingIndex(other.iterator))(f)
     } else {
-      val newValues = new Array[VD3](self.capacity)
+      val newValues = new Array[V3](self.capacity)
 
       var i = self.mask.nextSetBit(0)
       while (i >= 0) {
-        val otherV: Option[VD2] = if (other.mask.get(i)) Some(other.values(i)) else None
+        val otherV: Option[V2] = if (other.mask.get(i)) Some(other.values(i)) else None
         newValues(i) = f(self.index.getValue(i), self.values(i), otherV)
         i = self.mask.nextSetBit(i + 1)
       }
@@ -130,22 +114,49 @@ private[graphx] abstract class VertexPartitionBaseOps
   }
 
   /** Left outer join another iterator of messages. */
-  def leftJoin[VD2: ClassTag, VD3: ClassTag]
-      (other: Iterator[(VertexId, VD2)])
-      (f: (VertexId, VD, Option[VD2]) => VD3): Self[VD3] = {
+  def leftJoin[V2: ClassTag, V3: ClassTag]
+      (other: Iterator[(Id, V2)])
+      (f: (Id, V, Option[V2]) => V3): Self[V3] = {
     leftJoin(createUsingIndex(other))(f)
   }
 
-  /** Inner join another VertexPartition. */
-  def innerJoin[U: ClassTag, VD2: ClassTag]
+  def join[U: ClassTag]
       (other: Self[U])
-      (f: (VertexId, VD, U) => VD2): Self[VD2] = {
+      (f: (Id, V, U) => V): Self[V] = {
     if (self.index != other.index) {
-      logWarning("Joining two VertexPartitions with different indexes is slow.")
+      logWarning("Joining two IndexedRDDPartitions with different indexes is slow.")
+      join(createUsingIndex(other.iterator))(f)
+    } else {
+      val iterMask = self.mask & other.mask
+      val newValues = new Array[V](self.capacity)
+      System.arraycopy(self.values, 0, newValues, 0, newValues.length)
+
+      var i = iterMask.nextSetBit(0)
+      while (i >= 0) {
+        newValues(i) = f(self.index.getValue(i), self.values(i), other.values(i))
+        i = iterMask.nextSetBit(i + 1)
+      }
+      this.withValues(newValues)
+    }
+  }
+
+  /** Join another iterator of messages. */
+  def join[U: ClassTag]
+      (other: Iterator[(Id, U)])
+      (f: (Id, V, U) => V): Self[V] = {
+    join(createUsingIndex(other))(f)
+  }
+
+  /** Inner join another IndexedRDDPartition. */
+  def innerJoin[U: ClassTag, V2: ClassTag]
+      (other: Self[U])
+      (f: (Id, V, U) => V2): Self[V2] = {
+    if (self.index != other.index) {
+      logWarning("Joining two IndexedRDDPartitions with different indexes is slow.")
       innerJoin(createUsingIndex(other.iterator))(f)
     } else {
       val newMask = self.mask & other.mask
-      val newValues = new Array[VD2](self.capacity)
+      val newValues = new Array[V2](self.capacity)
       var i = newMask.nextSetBit(0)
       while (i >= 0) {
         newValues(i) = f(self.index.getValue(i), self.values(i), other.values(i))
@@ -158,19 +169,19 @@ private[graphx] abstract class VertexPartitionBaseOps
   /**
    * Inner join an iterator of messages.
    */
-  def innerJoin[U: ClassTag, VD2: ClassTag]
-      (iter: Iterator[Product2[VertexId, U]])
-      (f: (VertexId, VD, U) => VD2): Self[VD2] = {
+  def innerJoin[U: ClassTag, V2: ClassTag]
+      (iter: Iterator[Product2[Id, U]])
+      (f: (Id, V, U) => V2): Self[V2] = {
     innerJoin(createUsingIndex(iter))(f)
   }
 
   /**
    * Similar effect as aggregateUsingIndex((a, b) => a)
    */
-  def createUsingIndex[VD2: ClassTag](iter: Iterator[Product2[VertexId, VD2]])
-    : Self[VD2] = {
+  def createUsingIndex[V2: ClassTag](iter: Iterator[Product2[Id, V2]])
+    : Self[V2] = {
     val newMask = new BitSet(self.capacity)
-    val newValues = new Array[VD2](self.capacity)
+    val newValues = new Array[V2](self.capacity)
     iter.foreach { pair =>
       val pos = self.index.getPos(pair._1)
       if (pos >= 0) {
@@ -185,9 +196,9 @@ private[graphx] abstract class VertexPartitionBaseOps
    * Similar to innerJoin, but vertices from the left side that don't appear in iter will remain in
    * the partition, hidden by the bitmask.
    */
-  def innerJoinKeepLeft(iter: Iterator[Product2[VertexId, VD]]): Self[VD] = {
+  def innerJoinKeepLeft(iter: Iterator[Product2[Id, V]]): Self[V] = {
     val newMask = new BitSet(self.capacity)
-    val newValues = new Array[VD](self.capacity)
+    val newValues = new Array[V](self.capacity)
     System.arraycopy(self.values, 0, newValues, 0, newValues.length)
     iter.foreach { pair =>
       val pos = self.index.getPos(pair._1)
@@ -199,11 +210,11 @@ private[graphx] abstract class VertexPartitionBaseOps
     this.withValues(newValues).withMask(newMask)
   }
 
-  def aggregateUsingIndex[VD2: ClassTag](
-      iter: Iterator[Product2[VertexId, VD2]],
-      reduceFunc: (VD2, VD2) => VD2): Self[VD2] = {
+  def aggregateUsingIndex[V2: ClassTag](
+      iter: Iterator[Product2[Id, V2]],
+      reduceFunc: (V2, V2) => V2): Self[V2] = {
     val newMask = new BitSet(self.capacity)
-    val newValues = new Array[VD2](self.capacity)
+    val newValues = new Array[V2](self.capacity)
     iter.foreach { product =>
       val vid = product._1
       val vdata = product._2
@@ -221,25 +232,14 @@ private[graphx] abstract class VertexPartitionBaseOps
   }
 
   /**
-   * Construct a new VertexPartition whose index contains only the vertices in the mask.
+   * Construct a new IndexedRDDPartition whose index contains only the vertices in the mask.
    */
-  def reindex(): Self[VD] = {
-    val hashMap = new GraphXPrimitiveKeyOpenHashMap[VertexId, VD]
-    val arbitraryMerge = (a: VD, b: VD) => a
+  def reindex(): Self[V] = {
+    val hashMap = new PrimitiveKeyOpenHashMap[Id, V]
+    val arbitraryMerge = (a: V, b: V) => a
     for ((k, v) <- self.iterator) {
       hashMap.setMerge(k, v, arbitraryMerge)
     }
     this.withIndex(hashMap.keySet).withValues(hashMap._values).withMask(hashMap.keySet.getBitSet)
-  }
-
-  /**
-   * Converts a vertex partition (in particular, one of type `Self`) into a
-   * `VertexPartitionBaseOps`. Within this class, this allows chaining the methods defined above,
-   * because these methods return a `Self` and this implicit conversion re-wraps that in a
-   * `VertexPartitionBaseOps`. This relies on the context bound on `Self`.
-   */
-  private implicit def toOps[VD2: ClassTag](
-      partition: Self[VD2]): VertexPartitionBaseOps[VD2, Self] = {
-    implicitly[VertexPartitionBaseOpsConstructor[Self]].toOps(partition)
   }
 }

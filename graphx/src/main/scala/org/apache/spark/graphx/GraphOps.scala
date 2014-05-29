@@ -104,7 +104,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         throw new SparkException("It doesn't make sense to collect neighbor ids without a " +
           "direction. (EdgeDirection.Both is not supported; use EdgeDirection.Either instead.)")
       }
-    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
+    graph.vertices.leftJoin(nbrs) { (vid, vdata, nbrsOpt) =>
       nbrsOpt.getOrElse(Array.empty[VertexId])
     }
   } // end of collectNeighborIds
@@ -137,7 +137,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       },
       (a, b) => a ++ b)
 
-    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
+    graph.vertices.leftJoin(nbrs) { (vid, vdata, nbrsOpt) =>
       nbrsOpt.getOrElse(Array.empty[(VertexId, VD)])
     }
   } // end of collectNeighbor

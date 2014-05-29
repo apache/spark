@@ -18,6 +18,7 @@
 package org.apache.spark.graphx
 
 import org.apache.spark.SparkContext
+import org.apache.spark.graphx._
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.impl.EdgePartition
 import org.apache.spark.rdd._
@@ -27,6 +28,26 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
 
   def vertices(sc: SparkContext, n: Int) = {
     VertexRDD(sc.parallelize((0 to n).map(x => (x.toLong, x)), 5))
+  }
+
+  test("shipVertexAttributes") {
+    withSpark { sc =>
+      val verts = VertexRDD(
+        sc.parallelize(List((0L, "a"), (1L, "b"), (2L, "c")), 2),
+        EdgeRDD.fromEdges(sc.parallelize(
+          List(Edge(0L, 1L, 1), Edge(1L, 2L, 1), Edge(2L, 0L, 1)), 3)))
+      val shipped = verts.shipVertexAttributes(true, true).collect
+      assert(shipped.length === 3)
+      assert(shipped(0)._1 === 0)
+      assert(shipped(0)._2.vids === Array(0L, 1L))
+      assert(shipped(0)._2.attrs === Array("a", "b"))
+      assert(shipped(1)._1 === 1)
+      assert(shipped(1)._2.vids === Array(1L, 2L))
+      assert(shipped(1)._2.attrs === Array("b", "c"))
+      assert(shipped(2)._1 === 2)
+      assert(shipped(2)._2.vids === Array(0L, 2L))
+      assert(shipped(2)._2.attrs === Array("a", "c"))
+    }
   }
 
   test("filter") {

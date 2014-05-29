@@ -108,14 +108,14 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     if (classTag[VD] equals classTag[VD2]) {
       vertices.cache()
       // The map preserves type, so we can use incremental replication
-      val newVerts = vertices.mapVertexPartitions(_.map(f)).cache()
+      val newVerts = vertices.mapValues(f).cache()
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newReplicatedVertexView = replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2, ED]]
         .updateVertices(changedVerts)
       new GraphImpl(newVerts, newReplicatedVertexView)
     } else {
       // The map does not preserve type, so we must re-replicate all vertices
-      GraphImpl(vertices.mapVertexPartitions(_.map(f)), replicatedVertexView.edges)
+      GraphImpl(vertices.mapValues(f), replicatedVertexView.edges)
     }
   }
 
@@ -143,7 +143,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       vpred: (VertexId, VD) => Boolean = (a, b) => true): Graph[VD, ED] = {
     vertices.cache()
     // Filter the vertices, reusing the partitioner and the index from this graph
-    val newVerts = vertices.mapVertexPartitions(_.filter(vpred))
+    val newVerts = vertices.filter(vpred.tupled)
     // Filter the triplets. We must always upgrade the triplet view fully because vpred always runs
     // on both src and dst vertices
     replicatedVertexView.upgrade(vertices, true, true)
