@@ -103,8 +103,34 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    */
   def unpersistVertices(blocking: Boolean = true): Graph[VD, ED]
 
+  /** @define dot  */
   /**
-   * Repartitions the edges in the graph according to `partitionStrategy`.
+   * Repartitions the edges in the graph according to `partitionStrategy` (WARNING: broken in
+   * Spark 1\u20240\u20240).
+   *
+   * To use this function in Spark 1.0.0, either build the latest version of Spark from the master
+   * branch, or apply the following workaround:
+   * {{{
+   * // Define our own version of partitionBy to work around SPARK-1931
+   * import org.apache.spark.HashPartitioner
+   * def partitionBy[ED](
+   *     edges: RDD[Edge[ED]], partitionStrategy: PartitionStrategy): RDD[Edge[ED]] = {
+   *   val numPartitions = edges.partitions.size
+   *   edges.map(e => (partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions), e))
+   *     .partitionBy(new HashPartitioner(numPartitions))
+   *     .mapPartitions(_.map(_._2), preservesPartitioning = true)
+   * }
+   *
+   * val vertices = ...
+   * val edges = ...
+   *
+   * // Instead of:
+   * val g = Graph(vertices, edges)
+   *   .partitionBy(PartitionStrategy.EdgePartition2D) // broken in Spark 1.0.0
+   *
+   * // Use:
+   * val g = Graph(vertices, partitionBy(edges, PartitionStrategy.EdgePartition2D))
+   * }}}
    */
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
 
