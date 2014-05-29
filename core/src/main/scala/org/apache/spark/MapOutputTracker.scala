@@ -241,7 +241,6 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         if (masterEpoch > epoch) {
           logInfo("Master's epoch is " + masterEpoch + ", local epoch is " + epoch + ". Clear local cache. ---lirui")
           mapStatuses -= shuffleId
-          partialForShuffle -= shuffleId
           epoch = masterEpoch
         }
       }
