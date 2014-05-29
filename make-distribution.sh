@@ -46,27 +46,6 @@ set -o pipefail
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
 
-if [ -z "$JAVA_HOME" ]; then
-  echo "Error: JAVA_HOME is not set, cannot proceed."
-  exit -1
-fi
-
-JAVA_CMD="$JAVA_HOME"/bin/java
-JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
-if ! [[ "$JAVA_VERSION" =~ "1.6" ]]; then
-  echo "***NOTE***: JAVA_HOME is not set to a JDK 6 installation. The resulting"
-  echo "            distribution will not support Java 6. See SPARK-1703."
-  echo "Output from 'java -version' was:"
-  echo "$JAVA_VERSION"
-fi
-
-VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
-if [ $? != 0 ]; then
-    echo -e "You need Maven installed to build Spark."
-    echo -e "Download Maven from https://maven.apache.org/"
-    exit -1;
-fi
-
 # Initialize defaults
 SPARK_HADOOP_VERSION=1.0.4
 SPARK_YARN=false
@@ -88,6 +67,9 @@ while (( "$#" )); do
     --with-hive)
       SPARK_HIVE=true
       ;;
+    --skip-java-test)
+      SKIP_JAVA_TEST=true
+      ;;
     --with-tachyon)
       SPARK_TACHYON=true
       ;;
@@ -101,6 +83,34 @@ while (( "$#" )); do
   esac
   shift
 done
+
+if [ -z "$JAVA_HOME" ]; then
+  echo "Error: JAVA_HOME is not set, cannot proceed."
+  exit -1
+fi
+
+VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+if [ $? != 0 ]; then
+    echo -e "You need Maven installed to build Spark."
+    echo -e "Download Maven from https://maven.apache.org/"
+    exit -1;
+fi
+
+JAVA_CMD="$JAVA_HOME"/bin/java
+JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
+if [[ ! "$JAVA_VERSION" =~ "1.6" && -z "$SKIP_JAVA_TEST" ]]; then
+  echo "***NOTE***: JAVA_HOME is not set to a JDK 6 installation. The resulting"
+  echo "            distribution may not work well with PySpark and will not run"
+  echo "            with Java 6 (See SPARK-1703 and SPARK-1911)."
+  echo "            This test can be disabled by adding --skip-java-test."
+  echo "Output from 'java -version' was:"
+  echo "$JAVA_VERSION"
+  read -p "Would you like to continue anyways? [y,n]: " -r
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Okay, exiting."
+    exit 1
+  fi 
+fi
 
 if [ "$NAME" == "none" ]; then
   NAME=$SPARK_HADOOP_VERSION
