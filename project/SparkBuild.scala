@@ -363,7 +363,8 @@ object SparkBuild extends Build {
         "org.spark-project"          % "pyrolite"         % "2.0.1",
         "net.sf.py4j"                % "py4j"             % "0.8.1"
       ),
-    libraryDependencies ++= maybeAvro
+    libraryDependencies ++= maybeAvro,
+    previousArtifact := sparkPreviousArtifact("spark-core")
   )
 
   // Create a colon-separate package list adding "org.apache.spark" in front of all of them,
