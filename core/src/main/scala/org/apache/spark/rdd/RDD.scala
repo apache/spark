@@ -379,8 +379,17 @@ abstract class RDD[T: ClassTag](
     }.toArray
   }
 
-  def takeSample(withReplacement: Boolean, num: Int, seed: Long = Utils.random.nextLong): Array[T] =
-  {
+  /**
+   * Return a fixed-size sampled subset of this RDD in an array
+   *
+   * @param withReplacement whether sampling is done with replacement
+   * @param num size of the returned sample
+   * @param seed seed for the random number generator
+   * @return sample of specified size in an array
+   */
+  def takeSample(withReplacement: Boolean,
+                 num: Int,
+                 seed: Long = Utils.random.nextLong): Array[T] = {
     var fraction = 0.0
     var total = 0
     val multiplier = 3.0
@@ -402,10 +411,11 @@ abstract class RDD[T: ClassTag](
     }
 
     if (num > initialCount && !withReplacement) {
+      // special case not covered in computeFraction
       total = maxSelected
       fraction = multiplier * (maxSelected + 1) / initialCount
     } else {
-      fraction = multiplier * (num + 1) / initialCount
+      fraction = computeFraction(num, initialCount, withReplacement)
       total = num
     }
 
@@ -419,6 +429,22 @@ abstract class RDD[T: ClassTag](
     }
 
     Utils.randomizeInPlace(samples, rand).take(total)
+  }
+
+  private[spark] def computeFraction(num: Int, total: Long, withReplacement: Boolean) : Double = {
+    val fraction = num.toDouble / total
+    if (withReplacement) {
+      var numStDev = 5
+      if (num < 12) {
+        // special case to guarantee sample size for small s
+        numStDev = 9
+      }
+      fraction + numStDev * math.sqrt(fraction / total)
+    } else {
+      val delta = 0.00005
+      val gamma = - math.log(delta)/total
+      math.min(1, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction))
+    }
   }
 
   /**

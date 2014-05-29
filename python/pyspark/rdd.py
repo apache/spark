@@ -31,6 +31,7 @@ from threading import Thread
 import warnings
 import heapq
 from random import Random
+from math import sqrt, log, min
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
@@ -374,7 +375,7 @@ class RDD(object):
             total = maxSelected
             fraction = multiplier * (maxSelected + 1) / initialCount
         else:
-            fraction = multiplier * (num + 1) / initialCount
+            fraction = self._computeFraction(num, initialCount, withReplacement)
             total = num
 
         samples = self.sample(withReplacement, fraction, seed).collect()
@@ -389,6 +390,18 @@ class RDD(object):
         sampler = RDDSampler(withReplacement, fraction, rand.randint(0, sys.maxint))
         sampler.shuffle(samples)
         return samples[0:total]
+
+    def _computeFraction(self, num, total, withReplacement):
+        fraction = float(num)/total
+        if withReplacement:
+            numStDev = 5
+            if (num < 12):
+                numStDev = 9
+            return fraction + numStDev * sqrt(fraction/total)
+        else:
+            delta = 0.00005
+            gamma = - log(delta)/total
+            return min(1, fraction + gamma + sqrt(gamma * gamma + 2* gamma * fraction))
 
     def union(self, other):
         """
