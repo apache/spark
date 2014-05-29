@@ -103,7 +103,6 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    */
   def unpersistVertices(blocking: Boolean = true): Graph[VD, ED]
 
-  /** @define dot  */
   /**
    * Repartitions the edges in the graph according to `partitionStrategy` (WARNING: broken in
    * Spark 1\u20240\u20240).
