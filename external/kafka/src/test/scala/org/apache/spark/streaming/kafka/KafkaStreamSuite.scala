@@ -20,7 +20,7 @@ package org.apache.spark.streaming.kafka
 import kafka.serializer.StringDecoder
 import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.dstream.DStream
 
 class KafkaStreamSuite extends TestSuiteBase {
 
@@ -29,12 +29,14 @@ class KafkaStreamSuite extends TestSuiteBase {
     val topics = Map("my-topic" -> 1)
 
     // tests the API, does not actually test data receiving
-    val test1: ReceiverInputDStream[(String, String)] =
+    val test1: DStream[(String, String)] =
       KafkaUtils.createStream(ssc, "localhost:1234", "group", topics)
-    val test2: ReceiverInputDStream[(String, String)] =
+    val test2: DStream[(String, String)] =
       KafkaUtils.createStream(ssc, "localhost:12345", "group", topics, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test3: DStream[(String, String)] =
+      KafkaUtils.createStream(ssc, "localhost:12345", "group", topics, StorageLevel.MEMORY_AND_DISK_SER_2,2)
     val kafkaParams = Map("zookeeper.connect"->"localhost:12345","group.id"->"consumer-group")
-    val test3: ReceiverInputDStream[(String, String)] =
+    val test4: DStream[(String, String)] =
       KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, topics, StorageLevel.MEMORY_AND_DISK_SER_2)
 

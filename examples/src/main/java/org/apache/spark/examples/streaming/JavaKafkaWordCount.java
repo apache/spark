@@ -76,7 +76,7 @@ public final class JavaKafkaWordCount {
       topicMap.put(topic, numThreads);
     }
 
-    JavaPairReceiverInputDStream<String, String> messages =
+    JavaPairDStream<String, String> messages =
             KafkaUtils.createStream(jssc, args[0], args[1], topicMap);
 
     JavaDStream<String> lines = messages.map(new Function<Tuple2<String, String>, String>() {

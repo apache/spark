@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kafka;
 
 import java.util.HashMap;
 
-import org.apache.spark.streaming.api.java.JavaPairReceiverInputDStream;
+import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.junit.Test;
 import com.google.common.collect.Maps;
 import kafka.serializer.StringDecoder;
@@ -32,15 +32,15 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext {
     HashMap<String, Integer> topics = Maps.newHashMap();
 
     // tests the API, does not actually test data receiving
-    JavaPairReceiverInputDStream<String, String> test1 =
+    JavaPairDStream<String, String> test1 =
             KafkaUtils.createStream(ssc, "localhost:12345", "group", topics);
-    JavaPairReceiverInputDStream<String, String> test2 = KafkaUtils.createStream(ssc, "localhost:12345", "group", topics,
+    JavaPairDStream<String, String> test2 = KafkaUtils.createStream(ssc, "localhost:12345", "group", topics,
       StorageLevel.MEMORY_AND_DISK_SER_2());
 
     HashMap<String, String> kafkaParams = Maps.newHashMap();
     kafkaParams.put("zookeeper.connect", "localhost:12345");
     kafkaParams.put("group.id","consumer-group");
-      JavaPairReceiverInputDStream<String, String> test3 = KafkaUtils.createStream(ssc,
+      JavaPairDStream<String, String> test3 = KafkaUtils.createStream(ssc,
       String.class, String.class, StringDecoder.class, StringDecoder.class,
       kafkaParams, topics, StorageLevel.MEMORY_AND_DISK_SER_2());
   }
