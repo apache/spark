@@ -236,7 +236,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def clearOutdatedMapStatuses(shuffleId: Int){
     mapStatuses.synchronized {
       //we may have cached partial map outputs, the master may have updates for us
-      if (mapStatuses.get(shuffleId).isDefined) {
+      if (mapStatuses.get(shuffleId).isDefined && partialForShuffle.contains(shuffleId)) {
         val masterEpoch = askTracker(GetMasterEpoch).asInstanceOf[Long]
         if (masterEpoch > epoch) {
           logInfo("Master's epoch is " + masterEpoch + ", local epoch is " + epoch + ". Clear local cache. ---lirui")
@@ -275,6 +275,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     if (mapStatuses.put(shuffleId, new Array[MapStatus](numMaps)).isDefined) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
+    //we allow partial output by default. should be later properly set when register map outputs
+    partialForShuffle += shuffleId
   }
 
   def registerMapOutput(shuffleId: Int, mapId: Int, status: MapStatus) {
