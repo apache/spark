@@ -335,11 +335,8 @@ private[spark] class BlockManager(
     // initialization, etc.). Reducer read shuffle blocks one by one so we could do the
     // wrapping lazily to save memory.
     class LazyProxyIterator(f: => Iterator[Any]) extends Iterator[Any] {
-
       lazy val proxy = f
-
       override def hasNext: Boolean = proxy.hasNext
-
       override def next(): Any = proxy.next()
     }
 
