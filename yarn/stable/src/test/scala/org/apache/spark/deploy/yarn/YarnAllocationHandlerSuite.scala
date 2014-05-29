@@ -65,8 +65,6 @@ class YarnAllocationHandlerSuite extends FunSuite with ShouldMatchers with Befor
     rmClient = AMRMClient.createAMRMClient()
     rmClient.init(conf)
     rmClient.start()
-
-    // rmClient.registerApplicationMaster("Host", 10000, "")
   }
 
   override def afterEach() {
