@@ -28,6 +28,7 @@ import org.apache.spark.serializer.Serializer
  * @param createCombiner function to create the initial value of the aggregation.
  * @param mergeValue function to merge a new value into the aggregation result.
  * @param mergeCombiners function to merge outputs from multiple mergeValue function.
+ * @param serializer serializer to persist data internally.
  */
 @DeveloperApi
 case class Aggregator[K, V, C] (

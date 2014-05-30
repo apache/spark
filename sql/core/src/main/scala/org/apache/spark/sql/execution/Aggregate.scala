@@ -155,15 +155,13 @@ case class Aggregate(
       }
     } else {
       child.execute().mapPartitions { iter =>
-        val groupingProjection = new
-            MutableProjection(groupingExpressions, childOutput)
-        // TODO: Can't use "Array[AggregateFunction]" directly, due to lack of
-        // "concat(AggregateFunction, AggregateFunction)". Should add
-        // AggregateFunction.update(agg: AggregateFunction) in the future.
+        val groupingProjection = new MutableProjection(groupingExpressions, childOutput)
         def createCombiner(row: Row) = mergeValue(newAggregateBuffer(), row)
         def mergeValue(buffer: Array[AggregateFunction], row: Row) = {
-          for (i <- 0 to buffer.length - 1) {
+          var i = 0
+          while (i < buffer.length) {
             buffer(i).update(row)
+            i += 1
           }
           buffer
         }
@@ -171,8 +169,10 @@ case class Aggregate(
           if (buf1.length != buf2.length) {
             throw new TreeNodeException(this, s"Unequal aggregate buffer length ${buf1.length} != ${buf2.length}")
           }
-          for (i <- 0 to buf1.length - 1) {
+          var i = 0
+          while (i < buf1.length) {
             buf1(i).merge(buf2(i))
+            i += 1
           }
           buf1
         }
@@ -205,9 +205,12 @@ case class Aggregate(
             val group = entry._1
             val data = entry._2
 
-            for (i <- 0 to data.length - 1) {
+            var i = 0
+            while (i < data.length) {
               aggregateResults(i) = data(i).eval(EmptyRow)
+              i += 1
             }
+
             resultProjection(joinedRow(aggregateResults, group))
           }
         }
