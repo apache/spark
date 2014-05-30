@@ -7,8 +7,8 @@ title: Spark Configuration
 
 Spark provides three locations to configure the system:
 
-* [Spark properties](#spark-properties) control most application parameters and can be set by passing
-  a [SparkConf](api/core/index.html#org.apache.spark.SparkConf) object to SparkContext, or through Java
+* [Spark properties](#spark-properties) control most application parameters and can be set by using
+  a [SparkConf](api/core/index.html#org.apache.spark.SparkConf) object, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
@@ -18,8 +18,8 @@ Spark provides three locations to configure the system:
 
 Spark properties control most application settings and are configured separately for each
 application. These properties can be set directly on a
-[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) and passed as an argument to your
-SparkContext. SparkConf allows you to configure some of the common properties
+[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) passed to your
+`SparkContext`. `SparkConf` allows you to configure some of the common properties
 (e.g. master URL and application name), as well as arbitrary key-value pairs through the
 `set()` method. For example, we could initialize an application as follows:
 
@@ -75,6 +75,7 @@ appear. For all other configuration properties, you can assume the default value
 Most of the properties that control internal settings have reasonable default values. Some
 of the most common options to set are:
 
+#### Application Properties
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -777,7 +778,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Cluster Managers (YARN, Mesos, Standalone)
+#### Cluster Managers
 Each cluster manager in Spark has additional configuration options. Configurations 
 can be found on the pages for each mode:
 

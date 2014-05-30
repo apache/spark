@@ -222,7 +222,7 @@ SPARK_WORKER_OPTS supports the following system properties:
 # Connecting an Application to the Cluster
 
 To run an application on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
-constructor](scala-programming-guide.html#initializing-spark).
+constructor](programming-guide.html#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
 
@@ -237,7 +237,7 @@ You can also pass an option `--cores <numCores>` to control the number of cores 
 
 Spark supports two deploy modes: applications may run with the driver inside the client process or
 entirely inside the cluster. The
-[Spark submit script](cluster-overview.html#launching-applications-with-spark-submit) provides the
+[`spark-submit` script](submitting-applications.html) provides the
 most straightforward way to submit a compiled Spark application to the cluster in either deploy
 mode.
 

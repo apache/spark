@@ -103,7 +103,7 @@ the `make-distribution.sh` script included in a Spark source tarball/checkout.
 ## Using a Mesos Master URL
 
 The Master URLs for Mesos are in the form `mesos://host:5050` for a single-master Mesos
-cluster, or `zk://host:2181` for a multi-master Mesos cluster using ZooKeeper.
+cluster, or `mesos://zk://host:2181` for a multi-master Mesos cluster using ZooKeeper.
 
 The driver also needs some configuration in `spark-env.sh` to interact properly with Mesos:
 
@@ -116,7 +116,7 @@ The driver also needs some configuration in `spark-env.sh` to interact properly 
 2. Also set `spark.executor.uri` to `<URL of spark-{{site.SPARK_VERSION}}.tar.gz>`.
 
 Now when starting a Spark application against the cluster, pass a `mesos://`
-or `zk://` URL as the master when creating a `SparkContext`. For example:
+URL as the master when creating a `SparkContext`. For example:
 
 {% highlight scala %}
 val conf = new SparkConf()
@@ -125,6 +125,9 @@ val conf = new SparkConf()
   .set("spark.executor.uri", "<path to spark-{{site.SPARK_VERSION}}.tar.gz uploaded above>")
 val sc = new SparkContext(conf)
 {% endhighlight %}
+
+(You can also use [`spark-submit`](submitting-applications.html) and configure `spark.executor.uri`
+in the [conf/spark-defaults.conf](configuration.html#loading-default-configurations) file.)
 
 When running a shell, the `spark.executor.uri` parameter is inherited from `SPARK_EXECUTOR_URI`, so
 it does not need to be redundantly passed in as a system property.
