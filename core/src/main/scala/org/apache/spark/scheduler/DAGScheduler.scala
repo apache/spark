@@ -854,7 +854,6 @@ class DAGScheduler(
               stage.addOutputLoc(smt.partitionId, status)
               //we need to register map outputs progressively if remove stage barrier is enabled
               if (removeStageBarrier && dependantStagePreStarted.contains(stage) && stage.shuffleDep.isDefined) {
-                logInfo("Register output progressively: Map task "+smt.partitionId+" ---lirui")
                 mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
                   stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
                   changeEpoch = true, isPartial = true)

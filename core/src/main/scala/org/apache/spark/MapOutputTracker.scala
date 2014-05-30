@@ -154,7 +154,6 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         logInfo("Updating epoch from "+epoch+" to " + newEpoch + " and clearing cache")
         epoch = newEpoch
         mapStatuses.clear()
-        partialForShuffle.clear()
       }
     }
   }
@@ -162,7 +161,6 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   /** Unregister shuffle data. */
   def unregisterShuffle(shuffleId: Int) {
     mapStatuses.remove(shuffleId)
-    partialForShuffle -= shuffleId
   }
 
   /** Stop the tracker. */
@@ -205,10 +203,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           val fetchedResults = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
           fetchedStatuses = fetchedResults._1
           if (fetchedResults._2) {
-            logInfo("Got partial map outputs from master for reduceId " + reduceId + ". ---lirui")
+            logInfo("Got partial map outputs from master for shuffleId " + shuffleId + ". ---lirui")
             partialForShuffle += shuffleId
           } else {
-            logInfo("Got complete map outputs from master for reduceId " + reduceId + ". ---lirui")
+            logInfo("Got complete map outputs from master for shuffleId " + shuffleId + ". ---lirui")
             partialForShuffle -= shuffleId
           }
           logInfo("Got the output locations")
@@ -236,7 +234,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def clearOutdatedMapStatuses(shuffleId: Int){
     mapStatuses.synchronized {
       //we may have cached partial map outputs, the master may have updates for us
-      if (mapStatuses.get(shuffleId).isDefined && partialForShuffle.contains(shuffleId)) {
+      if (mapStatuses.get(shuffleId).isDefined) {
         val masterEpoch = askTracker(GetMasterEpoch).asInstanceOf[Long]
         if (masterEpoch > epoch) {
           logInfo("Master's epoch is " + masterEpoch + ", local epoch is " + epoch + ". Clear local cache. ---lirui")
@@ -292,10 +290,10 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       incrementEpoch()
     }
     if (isPartial) {
-      logInfo("Registered partial map outputs. ---lirui")
+      logInfo("Registered partial map outputs for shuffleId "+shuffleId+". ---lirui")
       partialForShuffle += shuffleId
     } else {
-      logInfo("Registered complete map outputs. ---lirui")
+      logInfo("Registered complete map outputs for shuffleId "+shuffleId+". ---lirui")
       partialForShuffle -= shuffleId
     }
   }
