@@ -159,10 +159,14 @@ class SparkContext(object):
             self.addPyFile(path)
 
         # Deploy code dependencies set by spark-submit; these will already have been added
-        # with SparkContext.addFile, so we just need to add them
+        # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
-                self._python_includes.append(os.path.basename(path))
+                (dirname, filename) = os.path.split(path)
+                self._python_includes.append(filename)
+                sys.path.append(path)
+                if not dirname in sys.path:
+                    sys.path.append(dirname)
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
@@ -210,6 +214,13 @@ class SparkContext(object):
         reduce tasks)
         """
         return self._jsc.sc().defaultParallelism()
+
+    @property
+    def defaultMinPartitions(self):
+        """
+        Default min number of partitions for Hadoop RDDs when not given by user
+        """
+        return self._jsc.sc().defaultMinPartitions()
 
     def __del__(self):
         self.stop()
@@ -264,7 +275,7 @@ class SparkContext(object):
         return RDD(self._jsc.textFile(name, minPartitions), self,
                    UTF8Deserializer())
 
-    def wholeTextFiles(self, path):
+    def wholeTextFiles(self, path, minPartitions=None):
         """
         Read a directory of text files from HDFS, a local file system
         (available on all nodes), or any  Hadoop-supported file system
@@ -300,7 +311,8 @@ class SparkContext(object):
         >>> sorted(textFiles.collect())
         [(u'.../1.txt', u'1'), (u'.../2.txt', u'2')]
         """
-        return RDD(self._jsc.wholeTextFiles(path), self,
+        minPartitions = minPartitions or self.defaultMinPartitions
+        return RDD(self._jsc.wholeTextFiles(path, minPartitions), self,
                    PairDeserializer(UTF8Deserializer(), UTF8Deserializer()))
 
     def _checkpointFile(self, name, input_deserializer):

@@ -25,7 +25,7 @@ import scala.collection.mutable.Set
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkException}
 
 private[spark] object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it
@@ -108,6 +108,9 @@ private[spark] object ClosureCleaner extends Logging {
     val outerObjects = getOuterObjects(func)
 
     val accessedFields = Map[Class[_], Set[String]]()
+    
+    getClassReader(func.getClass).accept(new ReturnStatementFinder(), 0)
+    
     for (cls <- outerClasses)
       accessedFields(cls) = Set[String]()
     for (cls <- func.getClass :: innerClasses)
@@ -176,6 +179,24 @@ private[spark] object ClosureCleaner extends Logging {
         field.set(obj, outer)
       }
       obj
+    }
+  }
+}
+
+private[spark]
+class ReturnStatementFinder extends ClassVisitor(ASM4) {
+  override def visitMethod(access: Int, name: String, desc: String,
+      sig: String, exceptions: Array[String]): MethodVisitor = {
+    if (name.contains("apply")) {
+      new MethodVisitor(ASM4) {
+        override def visitTypeInsn(op: Int, tp: String) {
+          if (op == NEW && tp.contains("scala/runtime/NonLocalReturnControl")) {
+            throw new SparkException("Return statements aren't allowed in Spark closures")
+          }
+        }
+      }
+    } else {
+      new MethodVisitor(ASM4) {}
     }
   }
 }

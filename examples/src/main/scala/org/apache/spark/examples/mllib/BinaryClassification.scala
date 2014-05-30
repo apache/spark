@@ -30,8 +30,9 @@ import org.apache.spark.mllib.regression.LabeledPoint
 /**
  * An example app for binary classification. Run with
  * {{{
- * ./bin/run-example org.apache.spark.examples.mllib.BinaryClassification
+ * bin/run-example org.apache.spark.examples.mllib.BinaryClassification
  * }}}
+ * A synthetic dataset is located at `data/mllib/sample_binary_classification_data.txt`.
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object BinaryClassification {
@@ -108,6 +109,15 @@ object BinaryClassification {
           .required()
           .text("path for model")
           .action((x, c) => c.copy(model = x))
+      note(
+        """
+          |For example, the following command runs this app on a synthetic dataset:
+          |
+          | bin/spark-submit --class org.apache.spark.examples.mllib.BinaryClassification \
+          |  examples/target/scala-*/spark-examples-*.jar \
+          |  --algorithm LR --regType L2 --regParam 1.0 \
+          |  data/mllib/sample_binary_classification_data.txt
+        """.stripMargin)
     }
 
     parser.parse(args, defaultParams).map { params =>

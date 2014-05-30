@@ -30,7 +30,7 @@ object MimaBuild {
 
     // Read package-private excludes from file
     val excludeFilePath = (base.getAbsolutePath + "/.mima-excludes")
-    val excludeFile = file(excludeFilePath) 
+    val excludeFile = file(excludeFilePath)
     val packagePrivateList: Seq[String] =
       if (!excludeFile.exists()) {
         Seq()
@@ -41,10 +41,10 @@ object MimaBuild {
     // Exclude a single class and its corresponding object
     def excludeClass(className: String) = {
       Seq(
-        excludePackage(className), 
+        excludePackage(className),
         ProblemFilters.exclude[MissingClassProblem](className),
         ProblemFilters.exclude[MissingTypesProblem](className),
-        excludePackage(className + "$"), 
+        excludePackage(className + "$"),
         ProblemFilters.exclude[MissingClassProblem](className + "$"),
         ProblemFilters.exclude[MissingTypesProblem](className + "$")
       )
@@ -76,6 +76,10 @@ object MimaBuild {
           excludeSparkClass("util.XORShiftRandom") ++
           excludeSparkClass("graphx.EdgeRDD") ++
           excludeSparkClass("graphx.VertexRDD") ++
+          excludeSparkClass("graphx.impl.GraphImpl") ++
+          excludeSparkClass("graphx.impl.RoutingTable") ++
+          excludeSparkClass("graphx.util.collection.PrimitiveKeyOpenHashMap") ++
+          excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap") ++
           excludeSparkClass("mllib.recommendation.MFDataGenerator") ++
           excludeSparkClass("mllib.optimization.SquaredGradient") ++
           excludeSparkClass("mllib.regression.RidgeRegressionWithSGD") ++

@@ -59,7 +59,7 @@ import java.util.{Map => JMap}
  *  // Importing the SQL context gives access to all the SQL functions and implicit conversions.
  *  import sqlContext._
  *
- *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_\$i")))
+ *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
  *  // Any RDD containing case classes can be registered as a table.  The schema of the table is
  *  // automatically inferred using scala reflection.
  *  rdd.registerAsTable("records")
@@ -179,6 +179,15 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
 
   /**
+   * Limits the results by the given expressions.
+   * {{{
+   *   schemaRDD.limit(10)
+   * }}}
+   */
+  def limit(limitExpr: Expression): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+
+  /**
    * Performs a grouping followed by an aggregation.
    *
    * {{{
@@ -193,6 +202,20 @@ class SchemaRDD(
       case e => Alias(e, e.toString)()
     }
     new SchemaRDD(sqlContext, Aggregate(groupingExprs, aliasedExprs, logicalPlan))
+  }
+
+  /**
+   * Performs an aggregation over all Rows in this RDD.
+   * This is equivalent to a groupBy with no grouping expressions.
+   *
+   * {{{
+   *   schemaRDD.aggregate(Sum('sales) as 'totalSales)
+   * }}}
+   *
+   * @group Query
+   */
+  def aggregate(aggregateExprs: Expression*): SchemaRDD = {
+    groupBy()(aggregateExprs: _*)
   }
 
   /**
@@ -264,6 +287,15 @@ class SchemaRDD(
       fraction: Double,
       seed: Long) =
     new SchemaRDD(sqlContext, Sample(fraction, withReplacement, seed, logicalPlan))
+
+  /**
+   * :: Experimental ::
+   * Return the number of elements in the RDD. Unlike the base RDD implementation of count, this
+   * implementation leverages the query optimizer to compute the count on the SchemaRDD, which
+   * supports features such as filter pushdown.
+   */
+  @Experimental
+  override def count(): Long = aggregate(Count(Literal(1))).collect().head.getLong(0)
 
   /**
    * :: Experimental ::

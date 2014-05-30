@@ -24,7 +24,9 @@ import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import java.util.Random
 
 /**
  * Class used to solve an optimization problem using Gradient Descent.
@@ -257,6 +259,9 @@ object GradientDescent extends Logging {
     // Initialize weights as a column vector
     var weights = Vectors.dense(initialWeights.toArray)
 
+    val rand = new Random()
+    val reordered = data.map(x => (rand.nextInt, x)).sortByKey(true).map { _._2 }
+
     val iters = new Array[Int](numPartitions)
     for (i <- 1 to numIterations) {
 
@@ -290,7 +295,7 @@ object GradientDescent extends Logging {
         (sumWeights, m1._2 + m2._2, m1._3 ++ m2._3)
       }
       val (newWeights, lossSum, iterIndexedSeq) =
-        data.mapPartitionsWithIndex(descentPartition, true)
+        reordered.mapPartitionsWithIndex(descentPartition, true)
           .reduce(mergeWeights)
       weights = Vectors.fromBreeze(newWeights.toBreeze :*= 1.0 / iterIndexedSeq.size)
       stochasticLossHistory.append(lossSum / iterIndexedSeq.size)

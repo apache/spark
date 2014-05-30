@@ -22,6 +22,8 @@ import java.io.{BufferedInputStream, BufferedOutputStream}
 import java.net.{URL, URLConnection, URI}
 import java.util.concurrent.TimeUnit
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{HttpServer, Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
@@ -34,7 +36,8 @@ import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedH
  * (through a HTTP server running at the driver) and stored in the BlockManager of the
  * executor to speed up future accesses.
  */
-private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+private[spark] class HttpBroadcast[T: ClassTag](
+    @transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
   def getValue = value_
@@ -109,7 +112,7 @@ private[spark] object HttpBroadcast extends Logging {
   private var securityManager: SecurityManager = null
 
   // TODO: This shouldn't be a global variable so that multiple SparkContexts can coexist
-  private val files = new TimeStampedHashSet[String]
+  private val files = new TimeStampedHashSet[File]
   private val httpReadTimeout = TimeUnit.MILLISECONDS.convert(5, TimeUnit.MINUTES).toInt
   private var compressionCodec: CompressionCodec = null
   private var cleaner: MetadataCleaner = null
@@ -170,10 +173,10 @@ private[spark] object HttpBroadcast extends Logging {
     val serOut = ser.serializeStream(out)
     serOut.writeObject(value)
     serOut.close()
-    files += file.getAbsolutePath
+    files += file
   }
 
-  def read[T](id: Long): T = {
+  def read[T: ClassTag](id: Long): T = {
     logDebug("broadcast read server: " +  serverUri + " id: broadcast-" + id)
     val url = serverUri + "/" + BroadcastBlockId(id).name
 
@@ -213,7 +216,7 @@ private[spark] object HttpBroadcast extends Logging {
     SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
     if (removeFromDriver) {
       val file = getFile(id)
-      files.remove(file.toString)
+      files.remove(file)
       deleteBroadcastFile(file)
     }
   }
@@ -229,7 +232,7 @@ private[spark] object HttpBroadcast extends Logging {
       val (file, time) = (entry.getKey, entry.getValue)
       if (time < cleanupTime) {
         iterator.remove()
-        deleteBroadcastFile(new File(file.toString))
+        deleteBroadcastFile(file)
       }
     }
   }

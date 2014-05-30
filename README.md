@@ -9,12 +9,13 @@ You can find the latest Spark documentation, including a programming
 guide, on the project webpage at <http://spark.apache.org/documentation.html>.
 This README file only contains basic setup instructions.
 
-
 ## Building Spark
 
 Spark is built on Scala 2.10. To build Spark and its example programs, run:
 
     ./sbt/sbt assembly
+
+(You do not need to do this if you downloaded a pre-built package.)
 
 ## Interactive Scala Shell
 
@@ -39,17 +40,22 @@ And run the following command, which should also return 1000:
 ## Example Programs
 
 Spark also comes with several sample programs in the `examples` directory.
-To run one of them, use `./bin/run-example <class> <params>`. For example:
+To run one of them, use `./bin/run-example <class> [params]`. For example:
 
-    ./bin/run-example org.apache.spark.examples.SparkLR local[2]
+    ./bin/run-example SparkPi
 
-will run the Logistic Regression example locally on 2 CPUs.
+will run the Pi example locally.
 
-Each of the example programs prints usage help if no params are given.
+You can set the MASTER environment variable when running examples to submit
+examples to a cluster. This can be a mesos:// or spark:// URL, 
+"yarn-cluster" or "yarn-client" to run on YARN, and "local" to run 
+locally with one thread, or "local[N]" to run locally with N threads. You 
+can also use an abbreviated class name if the class is in the `examples`
+package. For instance:
 
-All of the Spark samples take a `<master>` parameter that is the cluster URL
-to connect to. This can be a mesos:// or spark:// URL, or "local" to run
-locally with one thread, or "local[N]" to run locally with N threads.
+    MASTER=spark://host:7077 ./bin/run-example SparkPi
+
+Many of the example programs print usage help if no params are given.
 
 ## Running Tests
 

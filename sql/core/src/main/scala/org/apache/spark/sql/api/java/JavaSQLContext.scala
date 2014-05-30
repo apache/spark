@@ -33,9 +33,9 @@ import org.apache.spark.util.Utils
 /**
  * The entry point for executing Spark SQL queries from a Java program.
  */
-class JavaSQLContext(sparkContext: JavaSparkContext) {
+class JavaSQLContext(val sqlContext: SQLContext) {
 
-  val sqlContext = new SQLContext(sparkContext.sc)
+  def this(sparkContext: JavaSparkContext) = this(new SQLContext(sparkContext.sc))
 
   /**
    * Executes a query expressed in SQL, returning the result as a JavaSchemaRDD
