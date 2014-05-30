@@ -28,6 +28,7 @@ setlocal enabledelayedexpansion
 :skip_delayed_expansion
 
 set SCALA_VERSION=2.10
+set SPARK_TESTING=1
 
 rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0..\
@@ -74,6 +75,7 @@ set SPARK_CLASSES=%SPARK_CLASSES%;%FWDIR%tools\target\scala-%SCALA_VERSION%\clas
 set SPARK_CLASSES=%SPARK_CLASSES%;%FWDIR%sql\catalyst\target\scala-%SCALA_VERSION%\classes
 set SPARK_CLASSES=%SPARK_CLASSES%;%FWDIR%sql\core\target\scala-%SCALA_VERSION%\classes
 set SPARK_CLASSES=%SPARK_CLASSES%;%FWDIR%sql\hive\target\scala-%SCALA_VERSION%\classes
+set SPARK_CLASSES=%SPARK_CLASSES%;%FWDIR%examples\target\scala-%SCALA_VERSION%\classes
 
 set SPARK_TEST_CLASSES=%FWDIR%core\target\scala-%SCALA_VERSION%\test-classes
 set SPARK_TEST_CLASSES=%SPARK_TEST_CLASSES%;%FWDIR%repl\target\scala-%SCALA_VERSION%\test-classes
