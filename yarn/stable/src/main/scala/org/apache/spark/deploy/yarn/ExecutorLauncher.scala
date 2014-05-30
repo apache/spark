@@ -206,6 +206,10 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     yarnAllocator.addResourceRequests(args.numExecutors)
     while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
       yarnAllocator.allocateResources()
+      val numExecutorsFailed = yarnAllocator.getNumExecutorsFailed
+      if (numExecutorsFailed > 0) {
+        yarnAllocator.addResourceRequests(numExecutorsFailed)
+      }
       Thread.sleep(100)
     }
 

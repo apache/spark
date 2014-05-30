@@ -261,6 +261,10 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
           finishApplicationMaster(FinalApplicationStatus.FAILED,
             "max number of executor failures reached")
         }
+        val numExecutorsFailed = yarnAllocator.getNumExecutorsFailed
+        if (numExecutorsFailed > 0) {
+          yarnAllocator.addResourceRequests(numExecutorsFailed)
+        }
         yarnAllocator.allocateResources()
         ApplicationMaster.incrementAllocatorLoop(1)
         Thread.sleep(100)
