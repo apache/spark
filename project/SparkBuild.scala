@@ -331,7 +331,7 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
         "com.google.guava"           % "guava"            % "14.0.1",
         "org.apache.commons"         % "commons-lang3"    % "3.3.2",
-        "org.apache.commons"         % "commons-math3"    % "3.2",
+        "org.apache.commons"         % "commons-math3"    % "3.3" % "test",
         "com.google.code.findbugs"   % "jsr305"           % "1.3.9",
         "log4j"                      % "log4j"            % "1.2.17",
         "org.slf4j"                  % "slf4j-api"        % slf4jVersion,

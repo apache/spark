@@ -388,8 +388,8 @@ abstract class RDD[T: ClassTag](
    * @return sample of specified size in an array
    */
   def takeSample(withReplacement: Boolean,
-                 num: Int,
-                 seed: Long = Utils.random.nextLong): Array[T] = {
+      num: Int,
+      seed: Long = Utils.random.nextLong): Array[T] = {
     var fraction = 0.0
     var total = 0
     val multiplier = 3.0
@@ -431,18 +431,31 @@ abstract class RDD[T: ClassTag](
     Utils.randomizeInPlace(samples, rand).take(total)
   }
 
-  private[spark] def computeFraction(num: Int, total: Long, withReplacement: Boolean) : Double = {
+  /**
+   * Let p = num / total, where num is the sample size and total is the total number of
+   * datapoints in the RDD. We're trying to compute q > p such that
+   *   - when sampling with replacement, we're drawing each datapoint with prob_i ~ Pois(q),
+   *     where we want to guarantee Pr[s < num] < 0.0001 for s = sum(prob_i for i from 0 to total),
+   *     i.e. the failure rate of not having a sufficiently large sample < 0.0001.
+   *     Setting q = p + 5 * sqrt(p/total) is sufficient to guarantee 0.9999 success rate for
+   *     num > 12, but we need a slightly larger q (9 empirically determined).
+   *   - when sampling without replacement, we're drawing each datapoint with prob_i
+   *     ~ Binomial(total, fraction) and our choice of q guarantees 1-delta, or 0.9999 success
+   *     rate, where success rate is defined the same as in sampling with replacement.
+   *
+   * @param num sample size
+   * @param total size of RDD
+   * @param withReplacement whether sampling with replacement
+   * @return a sampling rate that guarantees sufficient sample size with 99.99% success rate
+   */
+  private[rdd] def computeFraction(num: Int, total: Long, withReplacement: Boolean): Double = {
     val fraction = num.toDouble / total
     if (withReplacement) {
-      var numStDev = 5
-      if (num < 12) {
-        // special case to guarantee sample size for small s
-        numStDev = 9
-      }
+      val numStDev = if (num < 12) 9 else 5
       fraction + numStDev * math.sqrt(fraction / total)
     } else {
-      val delta = 0.00005
-      val gamma = - math.log(delta)/total
+      val delta = 1e-4
+      val gamma = - math.log(delta) / total
       math.min(1, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction))
     }
   }

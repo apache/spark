@@ -22,7 +22,9 @@ import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
 
+import org.apache.commons.math3.distribution.BinomialDistribution
 import org.apache.commons.math3.distribution.PoissonDistribution
+
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
@@ -496,29 +498,25 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("computeFraction") {
-    // test that the computed fraction guarantees enough datapoints in the sample with a failure rate <= 0.0001
+    // test that the computed fraction guarantees enough datapoints
+    // in the sample with a failure rate <= 0.0001
     val data = new EmptyRDD[Int](sc)
     val n = 100000
 
     for (s <- 1 to 15) {
       val frac = data.computeFraction(s, n, true)
-      val qpois = new PoissonDistribution(frac * n)
-      assert(qpois.inverseCumulativeProbability(0.0001) >= s, "Computed fraction is too low")
+      val poisson = new PoissonDistribution(frac * n)
+      assert(poisson.inverseCumulativeProbability(0.0001) >= s, "Computed fraction is too low")
     }
-    for (s <- 1 to 15) {
-      val frac = data.computeFraction(s, n, false)
-      val qpois = new PoissonDistribution(frac * n)
-      assert(qpois.inverseCumulativeProbability(0.0001) >= s, "Computed fraction is too low")
-    }
-    for (s <- List(1, 10, 100, 1000)) {
+    for (s <- List(20, 100, 1000)) {
       val frac = data.computeFraction(s, n, true)
-      val qpois = new PoissonDistribution(frac * n)
-      assert(qpois.inverseCumulativeProbability(0.0001) >= s, "Computed fraction is too low")
+      val poisson = new PoissonDistribution(frac * n)
+      assert(poisson.inverseCumulativeProbability(0.0001) >= s, "Computed fraction is too low")
     }
     for (s <- List(1, 10, 100, 1000)) {
       val frac = data.computeFraction(s, n, false)
-      val qpois = new PoissonDistribution(frac * n)
-      assert(qpois.inverseCumulativeProbability(0.0001) >= s, "Computed fraction is too low")
+      val binomial = new BinomialDistribution(n, frac)
+      assert(binomial.inverseCumulativeProbability(0.0001)*n >= s, "Computed fraction is too low")
     }
   }
 
@@ -530,37 +528,37 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       val sample = data.takeSample(withReplacement=false, num=num)
       assert(sample.size === num)        // Got exactly num elements
       assert(sample.toSet.size === num)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= n), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
       assert(sample.toSet.size === 20)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= n), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 100, seed)
       assert(sample.size === 100)        // Got only 100 elements
       assert(sample.toSet.size === 100)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= n), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=true, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
-      assert(sample.forall(x => 1 <= x && x <= n), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
       val sample = data.takeSample(withReplacement=true, num=20)
       assert(sample.size === 20)        // Got exactly 100 elements
       assert(sample.toSet.size <= 20, "sampling with replacement returned all distinct elements")
-      assert(sample.forall(x => 1 <= x && x <= n), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
       val sample = data.takeSample(withReplacement=true, num=n)
       assert(sample.size === n)        // Got exactly 100 elements
       // Chance of getting all distinct elements is astronomically low, so test we got < 100
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
-      assert(sample.forall(x => 1 <= x && x <= n), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=true, n, seed)
