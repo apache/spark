@@ -26,7 +26,7 @@ import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 object BuildCommons {
   
-  val sparkVersion = "1.0.0-SNAPSHOT"
+  val sparkVersion = "1.1.0-SNAPSHOT"
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
