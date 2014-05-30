@@ -70,6 +70,13 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(applicationEnd, applicationEndJsonString)
   }
 
+  test("Custom Metrics in TaskMetrics") {
+    val taskMetric = makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8)
+    taskMetric.setCustomMetric("Custom TaskMetric 1", 1)
+    taskMetric.setCustomMetric("Custom TaskMetric 2", 2)
+    testTaskMetrics(taskMetric)
+  }
+
   test("Dependent Classes") {
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
@@ -280,6 +287,7 @@ class JsonProtocolSuite extends FunSuite {
     assertOptionEquals(
       metrics1.shuffleWriteMetrics, metrics2.shuffleWriteMetrics, assertShuffleWriteEquals)
     assertOptionEquals(metrics1.updatedBlocks, metrics2.updatedBlocks, assertBlocksEquals)
+    assert(metrics1.customMetrics === metrics2.customMetrics)
   }
 
   private def assertEquals(metrics1: ShuffleReadMetrics, metrics2: ShuffleReadMetrics) {
