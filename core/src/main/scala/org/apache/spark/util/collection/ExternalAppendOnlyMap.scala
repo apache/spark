@@ -63,13 +63,15 @@ class ExternalAppendOnlyMap[K, V, C](
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
     serializer: Serializer = SparkEnv.get.serializer,
-    blockManager: BlockManager = SparkEnv.get.blockManager)
+    blockManager: BlockManager = SparkEnv.get.blockManager,
+    customizedComparator: Comparator[(K, C)] = null
+  )
   extends Iterable[(K, C)] with Serializable with Logging {
 
   import ExternalAppendOnlyMap._
 
-  private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
-  private val spilledMaps = new ArrayBuffer[DiskMapIterator]
+  protected var currentMap = new SizeTrackingAppendOnlyMap[K, C]
+  protected val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
   private val diskBlockManager = blockManager.diskBlockManager
 
@@ -105,7 +107,8 @@ class ExternalAppendOnlyMap[K, V, C](
   private var _diskBytesSpilled = 0L
 
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
-  private val comparator = new KCComparator[K, C]
+  protected val comparator = if (customizedComparator == null) new KCComparator[K, C] 
+    else customizedComparator
   private val ser = serializer.newInstance()
 
   /**
@@ -223,7 +226,7 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * An iterator that sort-merges (K, C) pairs from the in-memory map and the spilled maps
    */
-  private class ExternalIterator extends Iterator[(K, C)] {
+  protected class ExternalIterator extends Iterator[(K, C)] {
 
     // A queue that maintains a buffer for each stream we are currently merging
     // This queue maintains the invariant that it only contains non-empty buffers
@@ -252,10 +255,18 @@ class ExternalAppendOnlyMap[K, V, C](
       if (it.hasNext) {
         var kc = it.next()
         kcPairs += kc
-        val minHash = getKeyHashCode(kc)
-        while (it.hasNext && it.head._1.hashCode() == minHash) {
-          kc = it.next()
-          kcPairs += kc
+//<<<<<<< HEAD
+//        val minHash = getKeyHashCode(kc)
+//        while (it.hasNext && it.head._1.hashCode() == minHash) {
+//          kc = it.next()
+//          kcPairs += kc
+//=======
+        while (it.hasNext) {
+          var kc1 = it.next()
+          kcPairs += kc1
+          if (comparator.compare(kc, kc1) != 0)
+            return kcPairs
+//>>>>>>> Fix JIRA-983 and support exteranl sort for sortByKey
         }
       }
       kcPairs
@@ -293,15 +304,20 @@ class ExternalAppendOnlyMap[K, V, C](
       }
       // Select a key from the StreamBuffer that holds the lowest key hash
       val minBuffer = mergeHeap.dequeue()
-      val (minPairs, minHash) = (minBuffer.pairs, minBuffer.minKeyHash)
-      val minPair = minPairs.remove(0)
-      var (minKey, minCombiner) = minPair
-      assert(getKeyHashCode(minPair) == minHash)
+//<<<<<<< HEAD
+//      val (minPairs, minHash) = (minBuffer.pairs, minBuffer.minKeyHash)
+//      val minPair = minPairs.remove(0)
+//      var (minKey, minCombiner) = minPair
+//      assert(getKeyHashCode(minPair) == minHash)
+//=======
+      val minPairs = minBuffer.pairs
+      var (minKey, minCombiner) = minPairs.remove(0)
+//>>>>>>> Fix JIRA-983 and support exteranl sort for sortByKey
 
       // For all other streams that may have this key (i.e. have the same minimum key hash),
       // merge in the corresponding value (if any) from that stream
       val mergedBuffers = ArrayBuffer[StreamBuffer](minBuffer)
-      while (mergeHeap.length > 0 && mergeHeap.head.minKeyHash == minHash) {
+      while (mergeHeap.length > 0 && comparator.compare(mergeHeap.head.pairs.head, (minKey, minCombiner)) == 0) {
         val newBuffer = mergeHeap.dequeue()
         minCombiner = mergeIfKeyExists(minKey, minCombiner, newBuffer)
         mergedBuffers += newBuffer
@@ -342,7 +358,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
       override def compareTo(other: StreamBuffer): Int = {
         // descending order because mutable.PriorityQueue dequeues the max, not the min
-        if (other.minKeyHash < minKeyHash) -1 else if (other.minKeyHash == minKeyHash) 0 else 1
+        comparator.compare(other.pairs.head, pairs.head)
       }
     }
   }
@@ -350,7 +366,7 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * An iterator that returns (K, C) pairs in sorted order from an on-disk map
    */
-  private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
+  protected class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
     extends Iterator[(K, C)] {
     private val fileStream = new FileInputStream(file)
     private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
