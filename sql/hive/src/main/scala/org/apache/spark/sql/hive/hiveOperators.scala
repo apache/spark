@@ -113,7 +113,6 @@ case class HiveTableScan(
   }
 
   private def unwrapHiveData(value: Any) = value match {
-    case maybeNull: String if maybeNull.toLowerCase == "null" => null
     case varchar: HiveVarchar => varchar.getValue
     case decimal: HiveDecimal => BigDecimal(decimal.bigDecimalValue)
     case other => other
