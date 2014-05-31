@@ -247,6 +247,11 @@ class ALS private (
       for (iter <- 1 to iterations) {
         // perform ALS update
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
+        // All references to it's parent RDDs will be removed,
+        // so that be cleaned in sc.cleaner
+        if (sc.checkpointDir.isDefined && (iter % 3 == 1)) {
+          users.checkpoint()
+        }
         // Persist users because it will be called twice.
         users.setName(s"users-$iter").persist()
         val YtY = Some(sc.broadcast(computeYtY(users)))
@@ -255,6 +260,9 @@ class ALS private (
           rank, lambda, alpha, YtY)
         previousProducts.unpersist()
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
+        if (sc.checkpointDir.isDefined && (iter % 3 == 1)) {
+          products.checkpoint()
+        }
         products.setName(s"products-$iter").persist()
         val XtX = Some(sc.broadcast(computeYtY(products)))
         val previousUsers = users
@@ -268,11 +276,17 @@ class ALS private (
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
           rank, lambda, alpha, YtY = None)
+        if (sc.checkpointDir.isDefined && (iter % 3 == 1)) {
+          products.checkpoint()
+        }
         products.setName(s"products-$iter")
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
           rank, lambda, alpha, YtY = None)
         users.setName(s"users-$iter")
+        if (sc.checkpointDir.isDefined && (iter % 3 == 1)) {
+          users.checkpoint()
+        }
       }
     }
 
