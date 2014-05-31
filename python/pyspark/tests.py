@@ -35,6 +35,14 @@ from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int
 
+_have_scipy = False
+try:
+    import scipy.sparse
+    _have_scipy = True
+except:
+    # No SciPy, but that's okay, we'll skip those tests
+    pass
+
 
 SPARK_HOME = os.environ["SPARK_HOME"]
 
@@ -359,5 +367,21 @@ class TestSparkSubmit(unittest.TestCase):
         self.assertIn("[2, 4, 6]", out)
 
 
+@unittest.skipIf(not _have_scipy, "SciPy not installed")
+class SciPyTests(PySparkTestCase):
+    """General PySpark tests that depend on scipy """
+
+    def test_serialize(self):
+        from scipy.special import gammaln
+        x = range(1, 5)
+        expected = map(gammaln, x)
+        observed = self.sc.parallelize(x).map(gammaln).collect()
+        self.assertEqual(expected, observed)
+
+
 if __name__ == "__main__":
+    if not _have_scipy:
+        print "NOTE: Skipping SciPy tests as it does not seem to be installed"
     unittest.main()
+    if not _have_scipy:
+        print "NOTE: SciPy tests were skipped as it does not seem to be installed"
