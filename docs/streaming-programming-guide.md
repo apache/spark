@@ -80,7 +80,8 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api._
 // Create a StreamingContext with a local master
-val ssc = new StreamingContext("local", "NetworkWordCount", Seconds(1))
+// Spark Streaming needs at least two working thread
+val ssc = new StreamingContext("local[2]", "NetworkWordCount", Seconds(1))
 {% endhighlight %}
 
 Using this context, we then create a new DStream
