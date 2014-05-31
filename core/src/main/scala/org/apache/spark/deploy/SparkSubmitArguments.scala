@@ -319,6 +319,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               parse(tail)
           }
         } else {
+	  if (!value.isEmpty && value.equals("--arg")) {
+	    val errMessage = "User application arguments are inferred directly, --arg not supported"
+	    SparkSubmit.printErrorAndExit(errMessage) 
+	  }
           if (!value.isEmpty) {
             childArgs += value
           }
