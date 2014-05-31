@@ -22,11 +22,11 @@ import org.apache.hadoop.hbase.{HBaseConfiguration, HTableDescriptor}
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 
 import org.apache.spark._
-import org.apache.spark.rdd.NewHadoopRDD
 
 object HBaseTest {
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("HBaseTest")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(sparkConf)
     val conf = HBaseConfiguration.create()
     // Other options for configuring scan behavior are available. More information available at

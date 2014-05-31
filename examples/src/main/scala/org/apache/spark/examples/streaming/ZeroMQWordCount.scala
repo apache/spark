@@ -84,6 +84,7 @@ object ZeroMQWordCount {
     StreamingExamples.setStreamingLogLevels()
     val Seq(url, topic) = args.toSeq
     val sparkConf = new SparkConf().setAppName("ZeroMQWordCount")
+      .setIfMissing("spark.master", "local[2]")
     // Create the context and set the batch size
     val ssc = new StreamingContext(sparkConf, Seconds(2))
 

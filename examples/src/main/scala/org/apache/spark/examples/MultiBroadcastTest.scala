@@ -26,7 +26,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 object MultiBroadcastTest {
   def main(args: Array[String]) {
 
-    val sparkConf = new SparkConf().setAppName("Multi-Broadcast Test")
+    val sparkConf = new SparkConf().setAppName("MultiBroadcastTest")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(sparkConf)
 
     val slices = if (args.length > 0) args(0).toInt else 2

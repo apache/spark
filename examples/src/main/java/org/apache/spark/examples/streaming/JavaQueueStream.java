@@ -30,7 +30,6 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.examples.streaming.StreamingExamples;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
@@ -43,7 +42,8 @@ public final class JavaQueueStream {
   public static void main(String[] args) throws Exception {
 
     StreamingExamples.setStreamingLogLevels();
-    SparkConf sparkConf = new SparkConf().setAppName("JavaQueueStream");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaQueueStream")
+        .setIfMissing("spark.master", "local[2]");
 
     // Create the context
     JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, new Duration(1000));

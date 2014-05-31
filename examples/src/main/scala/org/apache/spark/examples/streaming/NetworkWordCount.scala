@@ -44,6 +44,7 @@ object NetworkWordCount {
 
     // Create the context with a 1 second batch size
     val sparkConf = new SparkConf().setAppName("NetworkWordCount")
+      .setIfMissing("spark.master", "local[2]")
     val ssc = new StreamingContext(sparkConf, Seconds(1))
 
     // Create a socket stream on target ip:port and count the

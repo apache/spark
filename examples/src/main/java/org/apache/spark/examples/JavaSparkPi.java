@@ -31,10 +31,10 @@ import java.util.List;
  * Usage: JavaSparkPi [slices]
  */
 public final class JavaSparkPi {
-  
 
   public static void main(String[] args) throws Exception {
-    SparkConf sparkConf = new SparkConf().setAppName("JavaSparkPi");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaSparkPi")
+        .setIfMissing("spark.master", "local[2]");
     JavaSparkContext jsc = new JavaSparkContext(sparkConf);
 
     int slices = (args.length == 1) ? Integer.parseInt(args[0]) : 2;

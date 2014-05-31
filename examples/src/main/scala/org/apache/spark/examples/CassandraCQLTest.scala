@@ -72,7 +72,8 @@ import org.apache.spark.SparkContext._
 object CassandraCQLTest {
 
   def main(args: Array[String]) {
-    val sparkConf = new SparkConf().setAppName("CQLTestApp")
+    val sparkConf = new SparkConf().setAppName("CassandraCQLTest")
+      .setIfMissing("spark.master", "local[2]")
 
     val sc = new SparkContext(sparkConf)
     val cHost: String = args(0)

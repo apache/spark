@@ -35,7 +35,7 @@ import org.apache.spark.SparkConf
  *   blog post</a> and this
  *   <a href= "http://highscalability.com/blog/2012/4/5/big-data-counting-how-to-count-a-billion-distinct-objects-us.html">
  *     blog post</a>
- *   have good overviews of HyperLogLog (HLL). HLL is a memory-efficient datastructure for
+ *   have good overviews of HyperLogLog (HLL). HLL is a memory-efficient data structure for
  *   estimating the cardinality of a data stream, i.e. the number of unique elements.
  * <p><p>
  *   Algebird's implementation is a monoid, so we can succinctly merge two HLL instances in the
@@ -51,6 +51,7 @@ object TwitterAlgebirdHLL {
     val BIT_SIZE = 12
     val filters = args
     val sparkConf = new SparkConf().setAppName("TwitterAlgebirdHLL")
+      .setIfMissing("spark.master", "local[2]")
     val ssc = new StreamingContext(sparkConf, Seconds(5))
     val stream = TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_ONLY_SER)
 

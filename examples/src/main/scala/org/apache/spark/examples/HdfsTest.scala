@@ -21,7 +21,7 @@ import org.apache.spark._
 
 object HdfsTest {
   def main(args: Array[String]) {
-    val sparkConf = new SparkConf().setAppName("HdfsTest")
+    val sparkConf = new SparkConf().setAppName("HdfsTest").setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(sparkConf)
     val file = sc.textFile(args(1))
     val mapped = file.map(s => s.length).cache()

@@ -62,7 +62,8 @@ public final class JavaKMeans {
     if (args.length >= 4) {
       runs = Integer.parseInt(args[3]);
     }
-    SparkConf sparkConf = new SparkConf().setAppName("JavaKMeans");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaKMeans")
+        .setIfMissing("spark.master", "local[2]");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
     JavaRDD<String> lines = sc.textFile(inputFile);
 

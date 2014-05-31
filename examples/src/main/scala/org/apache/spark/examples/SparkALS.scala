@@ -105,6 +105,7 @@ object SparkALS {
     }
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
     val sparkConf = new SparkConf().setAppName("SparkALS")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(sparkConf)
 
     val R = generateR()

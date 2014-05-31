@@ -55,7 +55,8 @@ public final class JavaNetworkWordCount {
     StreamingExamples.setStreamingLogLevels();
 
     // Create the context with a 1 second batch size
-    SparkConf sparkConf = new SparkConf().setAppName("JavaNetworkWordCount");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaNetworkWordCount")
+        .setIfMissing("spark.master", "local[2]");
     JavaStreamingContext ssc = new JavaStreamingContext(sparkConf,  new Duration(1000));
 
     // Create a JavaReceiverInputDStream on target ip:port and count the

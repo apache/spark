@@ -46,6 +46,7 @@ object CustomReceiver {
 
     // Create the context with a 1 second batch size
     val sparkConf = new SparkConf().setAppName("CustomReceiver")
+      .setIfMissing("spark.master", "local[2]")
     val ssc = new StreamingContext(sparkConf, Seconds(1))
 
     // Create a input stream with the custom receiver on target ip:port and count the

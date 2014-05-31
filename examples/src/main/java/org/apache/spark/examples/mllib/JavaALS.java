@@ -63,7 +63,8 @@ public final class JavaALS {
         "Usage: JavaALS <ratings_file> <rank> <iterations> <output_dir> [<blocks>]");
       System.exit(1);
     }
-    SparkConf sparkConf = new SparkConf().setAppName("JavaALS");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaALS")
+        .setIfMissing("spark.master", "local[2]");
     int rank = Integer.parseInt(args[1]);
     int iterations = Integer.parseInt(args[2]);
     String outputDir = args[3];

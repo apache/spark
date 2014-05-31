@@ -54,6 +54,7 @@ object FlumeEventCount {
 
     // Create the context and set the batch size
     val sparkConf = new SparkConf().setAppName("FlumeEventCount")
+      .setIfMissing("spark.master", "local[2]")
     val ssc = new StreamingContext(sparkConf, batchInterval)
 
     // Create a flume stream

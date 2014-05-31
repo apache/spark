@@ -96,6 +96,7 @@ object MovieLensALS {
 
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
+      .setIfMissing("spark.master", "local[2]")
     if (params.kryo) {
       conf.set("spark.serializer", classOf[KryoSerializer].getName)
         .set("spark.kryo.registrator", classOf[ALSRegistrator].getName)

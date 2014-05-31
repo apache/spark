@@ -30,6 +30,7 @@ object QueueStream {
 
     StreamingExamples.setStreamingLogLevels()
     val sparkConf = new SparkConf().setAppName("QueueStream")
+      .setIfMissing("spark.master", "local[2]")
     // Create the context
     val ssc = new StreamingContext(sparkConf, Seconds(1))
 

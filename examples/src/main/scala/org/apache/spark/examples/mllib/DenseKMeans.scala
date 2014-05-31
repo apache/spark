@@ -77,6 +77,7 @@ object DenseKMeans {
 
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"DenseKMeans with $params")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)
