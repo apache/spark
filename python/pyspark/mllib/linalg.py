@@ -54,7 +54,7 @@ class SparseVector(object):
         if len(args) == 1:
             pairs = args[0]
             if type(pairs) == dict:
-               pairs = pairs.items()
+                pairs = pairs.items()
             pairs = sorted(pairs)
             self.indices = array([p[0] for p in pairs], dtype=int32)
             self.values = array([p[1] for p in pairs], dtype=float64)
@@ -88,7 +88,7 @@ class SparseVector(object):
                     result += self.values[i] * other[self.indices[i]]
                 return result
             elif other.ndim == 2:
-                results = [self.dot(other[:,i]) for i in xrange(other.shape[1])]
+                results = [self.dot(other[:, i]) for i in xrange(other.shape[1])]
                 return array(results)
             else:
                 raise Exception("Cannot call dot with %d-dimensional array" % other.ndim)
@@ -135,7 +135,7 @@ class SparseVector(object):
                 return result
             else:
                 raise Exception("Cannot call squared_distance with %d-dimensional array" %
-                        other.ndim)
+                                other.ndim)
         else:
             result = 0.0
             i, j = 0, 0
@@ -184,13 +184,12 @@ class SparseVector(object):
         """
 
         return (isinstance(other, self.__class__)
-            and other.size == self.size
-            and array_equal(other.indices, self.indices)
-            and array_equal(other.values, self.values))
+                and other.size == self.size
+                and array_equal(other.indices, self.indices)
+                and array_equal(other.values, self.values))
 
     def __ne__(self, other):
         return not self.__eq__(other)
-
 
 
 class Vectors(object):

@@ -159,22 +159,32 @@ class SparkContext(object):
             self.addPyFile(path)
 
         # Deploy code dependencies set by spark-submit; these will already have been added
-        # with SparkContext.addFile, so we just need to add them
+        # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
-                self._python_includes.append(os.path.basename(path))
+                (dirname, filename) = os.path.split(path)
+                self._python_includes.append(filename)
+                sys.path.append(path)
+                if not dirname in sys.path:
+                    sys.path.append(dirname)
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = \
             self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
 
-    # Initialize SparkContext in function to allow subclass specific initialization
     def _initialize_context(self, jconf):
+        """
+        Initialize SparkContext in function to allow subclass specific initialization
+        """
         return self._jvm.JavaSparkContext(jconf)
 
     @classmethod
     def _ensure_initialized(cls, instance=None, gateway=None):
+        """
+        Checks whether a SparkContext is initialized or not.
+        Throws error if a SparkContext is already running.
+        """
         with SparkContext._lock:
             if not SparkContext._gateway:
                 SparkContext._gateway = gateway or launch_gateway()
@@ -266,6 +276,13 @@ class SparkContext(object):
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
         RDD of Strings.
+        
+        >>> path = os.path.join(tempdir, "sample-text.txt")
+        >>> with open(path, "w") as testFile:
+        ...    testFile.write("Hello world!")
+        >>> textFile = sc.textFile(path)
+        >>> textFile.collect()
+        [u'Hello world!']
         """
         minPartitions = minPartitions or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minPartitions), self,
