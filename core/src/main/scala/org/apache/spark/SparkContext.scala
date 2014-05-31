@@ -76,8 +76,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * :: DeveloperApi ::
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
-   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Ca
-   * be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
+   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
+   * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
    */
   @DeveloperApi
