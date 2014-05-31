@@ -941,6 +941,12 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void cachePoint() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4)).cachePoint();
+    Assert.assertEquals(Arrays.asList(1, 2, 3, 4), rdd.collect());
+  }
+
+  @Test
   public void checkpointAndComputation() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     sc.setCheckpointDir(tempDir.getAbsolutePath());

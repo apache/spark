@@ -40,7 +40,7 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, SerializableHyperLogLog, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
@@ -1095,6 +1095,38 @@ abstract class RDD[T: ClassTag](
   /** A private method for tests, to look at the contents of each partition */
   private[spark] def collectPartitions(): Array[Array[T]] = {
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
+  }
+
+  /** Persist this RDD with the default storage level (`MEMORY_AND_DISK_2`) and
+   *  all references to its parent RDDs will be removed.
+   */
+  def cachePoint(): RDD[T] = cachePoint(StorageLevel.MEMORY_AND_DISK_2)
+
+  /** Persist this RDD with the storage level (`level`) and
+   *  all references to its parent RDDs will be removed.
+   */
+  def cachePoint(level: StorageLevel): RDD[T] = {
+    if (sc.env.blockManager.blockCleaner.scheduled) {
+      val msg = "Periodically clean up block open,does not support cachePoint"
+      logWarning(msg)
+      return persist(level)
+    }
+    val cachePointRDD = new CachePointRDD[T](sc, this.partitions.length)
+    val func = (ctx: TaskContext, iterator: Iterator[T]) => {
+      val key = RDDBlockId(cachePointRDD.id, ctx.partitionId)
+      SparkEnv.get.blockManager.put(key, iterator, level, true)
+      true
+    }
+    val partitionSize = partitions.size
+    val results = new Array[Boolean](partitionSize)
+    sc.runJob(this, func, (index: Int, res: Boolean) => results(index) = res)
+    if (results.forall(t => t)) {
+      cachePointRDD.persist(level)
+      cachePointRDD
+    }
+    else {
+      return persist(level)
+    }
   }
 
   /**

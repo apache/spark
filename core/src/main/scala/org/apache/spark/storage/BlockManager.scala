@@ -117,7 +117,7 @@ private[spark] class BlockManager(
 
   var heartBeatTask: Cancellable = null
 
-  private val metadataCleaner = new MetadataCleaner(
+  private[spark] val blockCleaner = new MetadataCleaner(
     MetadataCleanerType.BLOCK_MANAGER, this.dropOldNonBroadcastBlocks, conf)
   private val broadcastCleaner = new MetadataCleaner(
     MetadataCleanerType.BROADCAST_VARS, this.dropOldBroadcastBlocks, conf)
@@ -1033,7 +1033,7 @@ private[spark] class BlockManager(
     if (tachyonInitialized) {
       tachyonStore.clear()
     }
-    metadataCleaner.cancel()
+    blockCleaner.cancel()
     broadcastCleaner.cancel()
     logInfo("BlockManager stopped")
   }
