@@ -256,18 +256,22 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       // TODO: Handle container failure
       yarnAllocator.addResourceRequests(args.numExecutors)
       // Exits the loop if the user thread exits.
-      while (yarnAllocator.getNumExecutorsRunning < args.numExecutors && userThread.isAlive) {
+      val startTime = System.currentTimeMillis()
+      var usedTime = 0L
+      while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors
+        && userThread.isAlive) && (usedTime < 1000L * 60 * 10)) {
         if (yarnAllocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
           finishApplicationMaster(FinalApplicationStatus.FAILED,
             "max number of executor failures reached")
         }
+        yarnAllocator.allocateResources()
         val numExecutorsFailed = yarnAllocator.getNumExecutorsFailed
         if (numExecutorsFailed > 0) {
           yarnAllocator.addResourceRequests(numExecutorsFailed)
         }
-        yarnAllocator.allocateResources()
         ApplicationMaster.incrementAllocatorLoop(1)
         Thread.sleep(100)
+        usedTime = System.currentTimeMillis() - startTime
       }
     } finally {
       // In case of exceptions, etc - ensure that count is at least ALLOCATOR_LOOP_WAIT_COUNT,

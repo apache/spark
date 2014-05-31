@@ -204,13 +204,17 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     // TODO: Handle container failure
 
     yarnAllocator.addResourceRequests(args.numExecutors)
-    while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
+    val startTime = System.currentTimeMillis()
+    var usedTime = 0L
+    while (((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed))
+      && (usedTime < 1000L * 60 * 10)) {
       yarnAllocator.allocateResources()
       val numExecutorsFailed = yarnAllocator.getNumExecutorsFailed
       if (numExecutorsFailed > 0) {
         yarnAllocator.addResourceRequests(numExecutorsFailed)
       }
       Thread.sleep(100)
+      usedTime = System.currentTimeMillis() - startTime
     }
 
     logInfo("All executors have launched.")
