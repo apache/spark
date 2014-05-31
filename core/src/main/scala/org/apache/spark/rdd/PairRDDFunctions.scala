@@ -213,20 +213,24 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * :: Experimental ::
+   *
    * Return approximate number of distinct values for each key in this RDD.
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vice versa. Uses the provided
-   * [[Partitioner]] to partition the output RDD.
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
    * [[http://research.google.com/pubs/pub40671.html]].
+   *
+   * @param p The precision value for the normal set.
+   *          <code>p</code> must be a value between 4 and <code>sp</code> (32 max).
+   * @param sp The precision value for the sparse set, between 0 and 32.
+   *           If <code>sp</code> equals 0, the sparse representation is skipped.
+   * @param partitioner Partitioner to use for the resulting RDD.
    */
-  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
-    val precision = (math.log((1.106 / relativeSD) * (1.106 / relativeSD)) / math.log(2)).toInt
+  @Experimental
+  def countApproxDistinctByKey(p: Int, sp: Int, partitioner: Partitioner): RDD[(K, Long)] = {
     val createHLL = (v: V) => {
-      val hll = new HyperLogLogPlus(precision)
+      val hll = new HyperLogLogPlus(p, sp)
       hll.offer(v)
       hll
     }
@@ -243,13 +247,74 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * :: Experimental ::
+   *
+   * Return approximate number of distinct values for each key in this RDD.
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
+   * [[http://research.google.com/pubs/pub40671.html]].
+   *
+   * @param p The precision value for the normal set.
+   *          <code>p</code> must be a value between 4 and <code>sp</code> (32 max).
+   * @param sp The precision value for the sparse set, between 0 and 32.
+   *           If <code>sp</code> equals 0, the sparse representation is skipped.
+   * @param numPartitions Number of partitions in the resulting RDD.
+   */
+  @Experimental
+  def countApproxDistinctByKey(p: Int, sp: Int, numPartitions: Int): RDD[(K, Long)] = {
+    countApproxDistinctByKey(p, sp, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Return approximate number of distinct values for each key in this RDD.
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
+   * [[http://research.google.com/pubs/pub40671.html]].
+   *
+   * @param p The precision value for the normal set.
+   *          <code>p</code> must be a value between 4 and <code>sp</code> (32 max).
+   * @param sp The precision value for the sparse set, between 0 and 32.
+   *           If <code>sp</code> equals 0, the sparse representation is skipped.
+   */
+  @Experimental
+  def countApproxDistinctByKey(p: Int, sp: Int): RDD[(K, Long)] = {
+    countApproxDistinctByKey(p, sp, defaultPartitioner(self))
+  }
+
+  /**
+   * Return approximate number of distinct values for each key in this RDD.
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
+   * [[http://research.google.com/pubs/pub40671.html]].
+   *
+   * @param relativeSD The relative standard deviation for the counter.
+   *                   Smaller values create counters that require more space.
+   * @param partitioner Partitioner to use for the resulting RDD
+   */
+  @deprecated("Use countApproxDistinctByKey with parameter p and sp", "1.0.1")
+  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
+    // See stream-lib's HyperLogLog implementation on the conversion from relativeSD to p.
+    val p = (math.log((1.106 / relativeSD) * (1.106 / relativeSD)) / math.log(2)).toInt
+    countApproxDistinctByKey(p, 0, partitioner)
+  }
+
+  /**
    * Return approximate number of distinct values for each key in this RDD.
    * The accuracy of approximation can be controlled through the relative standard deviation
    * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
    * more accurate counts but increase the memory footprint and vice versa. HashPartitions the
    * output RDD into numPartitions.
    *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
+   * [[http://research.google.com/pubs/pub40671.html]].
    */
+  @deprecated("Use countApproxDistinctByKey with parameter p and sp", "1.0.1")
   def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): RDD[(K, Long)] = {
     countApproxDistinctByKey(relativeSD, new HashPartitioner(numPartitions))
   }
@@ -261,7 +326,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * more accurate counts but increase the memory footprint and vice versa. The default value of
    * relativeSD is 0.05. Hash-partitions the output RDD using the existing partitioner/parallelism
    * level.
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
+   * [[http://research.google.com/pubs/pub40671.html]].
    */
+  @deprecated("Use countApproxDistinctByKey with parameter p and sp", "1.0.1")
   def countApproxDistinctByKey(relativeSD: Double = 0.05): RDD[(K, Long)] = {
     countApproxDistinctByKey(relativeSD, defaultPartitioner(self))
   }

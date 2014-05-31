@@ -921,19 +921,21 @@ abstract class RDD[T: ClassTag](
    * :: Experimental ::
    * Return approximate number of distinct elements in the RDD.
    *
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. The default value of
-   * relativeSD is 0.05.
-   *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
    * [[http://research.google.com/pubs/pub40671.html]].
+   *
+   * @param p The precision value for the normal set.
+   *          <code>p</code> must be a value between 4 and <code>sp</code>.
+   * @param sp The precision value for the sparse set, between 0 and 32.
+   *           If <code>sp</code> equals 0, the sparse representation is skipped.
    */
   @Experimental
-  def countApproxDistinct(relativeSD: Double = 0.05): Long = {
-    val precision = (math.log((1.106 / relativeSD) * (1.106 / relativeSD)) / math.log(2)).toInt
-    val zeroCounter = new HyperLogLogPlus(precision)
+  def countApproxDistinct(p: Int, sp: Int): Long = {
+    require(p >= 4, s"p ($p) must be greater than 0")
+    require(sp <= 32, s"sp ($sp) cannot be greater than 32")
+    require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
+    val zeroCounter = new HyperLogLogPlus(p, sp)
     aggregate(zeroCounter)(
       (hll: HyperLogLogPlus, v: T) => {
         hll.offer(v)
@@ -943,6 +945,20 @@ abstract class RDD[T: ClassTag](
         h1.addAll(h2)
         h2
       }).cardinality()
+  }
+
+  /**
+   * Return approximate number of distinct elements in the RDD.
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
+   * [[http://research.google.com/pubs/pub40671.html]].
+   */
+  @deprecated("Use countApproxDistinct with parameter p and sp", "1.0.1")
+  def countApproxDistinct(relativeSD: Double = 0.05): Long = {
+    // See stream-lib's HyperLogLog implementation on the conversion from relativeSD to p.
+    val p = (math.log((1.106 / relativeSD) * (1.106 / relativeSD)) / math.log(2)).toInt
+    countApproxDistinct(p, 0)
   }
 
   /**

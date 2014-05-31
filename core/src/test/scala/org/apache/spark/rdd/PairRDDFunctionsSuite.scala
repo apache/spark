@@ -119,13 +119,15 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
      * relatively tight error bounds to check correctness of functionality rather than checking
      * whether the approximation conforms with the requested bound.
      */
-    val relativeSD = 0.001
+    val p = 20
+    val sp = 0
+    val relativeSD = 0.01
 
     // For each value i, there are i tuples with first element equal to i.
     // Therefore, the expected count for key i would be i.
     val stacked = (1 to 100).flatMap(i => (1 to i).map(j => (i, j)))
     val rdd1 = sc.parallelize(stacked)
-    val counted1 = rdd1.countApproxDistinctByKey(relativeSD).collect()
+    val counted1 = rdd1.countApproxDistinctByKey(p, sp).collect()
     counted1.foreach { case (k, count) => assert(error(count, k) < relativeSD) }
 
     val rnd = new Random()
@@ -136,7 +138,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       (1 to num).map(j => (num, j))
     }
     val rdd2 = sc.parallelize(randStacked)
-    val counted2 = rdd2.countApproxDistinctByKey(relativeSD, 4).collect()
+    val counted2 = rdd2.countApproxDistinctByKey(p, sp, 4).collect()
     counted2.foreach { case(k, count) => assert(error(count, k) < relativeSD) }
   }
 
