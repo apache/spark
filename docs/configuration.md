@@ -310,7 +310,7 @@ Apart from these, the following properties are also available, and may be useful
     Base directory in which Spark events are logged, if <code>spark.eventLog.enabled</code> is true.
     Within this base directory, Spark creates a sub-directory for each application, and logs the
     events specific to the application in this directory. Users may want to set this to
-    and HDFS directory so that history files can be read by the history server.
+    a unified location like an HDFS directory so history files can be read by the history server.
   </td>
 </tr>
 </table>
