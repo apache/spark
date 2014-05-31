@@ -24,8 +24,8 @@ object ShortestPaths {
   def SPMap(x: (VertexId, Int)*) = Map(x: _*)
   def increment(spmap: SPMap): SPMap = spmap.map { case (v, d) => v -> (d + 1) }
   def plus(spmap1: SPMap, spmap2: SPMap): SPMap =
-    (spmap1.keySet ++ spmap2.keySet).map{
-      k => k -> scala.math.min(spmap1.getOrElse(k, Int.MaxValue), spmap2.getOrElse(k, Int.MaxValue))
+    (spmap1.keySet ++ spmap2.keySet).map {
+      k => k -> math.min(spmap1.getOrElse(k, Int.MaxValue), spmap2.getOrElse(k, Int.MaxValue))
     }.toMap
 
   /**
@@ -47,11 +47,11 @@ object ShortestPaths {
     (implicit m1: Manifest[VD], m2: Manifest[ED]): Graph[SPMap, SPMap] = {
 
     val spGraph = graph
-      .mapVertices{ (vid, attr) =>
+      .mapVertices { (vid, attr) =>
         if (landmarks.contains(vid)) SPMap(vid -> 0)
         else SPMap()
       }
-      .mapTriplets{ edge => edge.srcAttr }
+      .mapTriplets(edge => edge.srcAttr)
 
     val initialMessage = SPMap()
 
