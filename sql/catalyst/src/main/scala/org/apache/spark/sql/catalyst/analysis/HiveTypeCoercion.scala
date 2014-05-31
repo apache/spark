@@ -264,10 +264,22 @@ trait HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      // Promote SUM to largest types to prevent overflows.
+      // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
       case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
       case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
+
+      case s @ SumDistinct(e @ DecimalType()) => s // Decimal is already the biggest.
+      case SumDistinct(e @ IntegralType()) if e.dataType != LongType =>
+        SumDistinct(Cast(e, LongType))
+      case SumDistinct(e @ FractionalType()) if e.dataType != DoubleType =>
+        SumDistinct(Cast(e, DoubleType))
+
+      case s @ Average(e @ DecimalType()) => s // Decimal is already the biggest.
+      case Average(e @ IntegralType()) if e.dataType != LongType =>
+        Average(Cast(e, LongType))
+      case Average(e @ FractionalType()) if e.dataType != DoubleType =>
+        Average(Cast(e, DoubleType))
     }
   }
 }
