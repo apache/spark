@@ -190,6 +190,7 @@ object HiveMetastoreTypes extends RegexParsers {
     "binary" ^^^ BinaryType |
     "boolean" ^^^ BooleanType |
     "decimal" ^^^ DecimalType |
+    "timestamp" ^^^ TimestampType |
     "varchar\\((\\d+)\\)".r ^^^ StringType
 
   protected lazy val arrayType: Parser[DataType] =
