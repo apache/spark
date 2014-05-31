@@ -18,6 +18,7 @@
 package org.apache.spark.graphx.lib
 
 import org.apache.spark.graphx._
+import scala.reflect.ClassTag
 
 object ShortestPaths {
   type SPMap = Map[VertexId, Int] // map of landmarks -> minimum distance to landmark
@@ -33,9 +34,7 @@ object ShortestPaths {
    * return an RDD with the map of landmarks to their shortest-path
    * lengths.
    *
-   * @tparam VD the shortest paths map for the vertex
-   * @tparam ED the incremented shortest-paths map of the originating
-   * vertex (discarded in the computation)
+   * @tparam ED the edge attribute type (not used in the computation)
    *
    * @param graph the graph for which to compute the shortest paths
    * @param landmarks the list of landmark vertex ids
@@ -43,15 +42,12 @@ object ShortestPaths {
    * @return a graph with vertex attributes containing a map of the
    * shortest paths to each landmark
    */
-  def run[VD, ED](graph: Graph[VD, ED], landmarks: Seq[VertexId])
-    (implicit m1: Manifest[VD], m2: Manifest[ED]): Graph[SPMap, SPMap] = {
-
+  def run[ED: ClassTag](graph: Graph[_, ED], landmarks: Seq[VertexId]): Graph[SPMap, ED] = {
     val spGraph = graph
       .mapVertices { (vid, attr) =>
         if (landmarks.contains(vid)) SPMap(vid -> 0)
         else SPMap()
       }
-      .mapTriplets(edge => edge.srcAttr)
 
     val initialMessage = SPMap()
 
@@ -59,7 +55,7 @@ object ShortestPaths {
       plus(attr, msg)
     }
 
-    def sendMessage(edge: EdgeTriplet[SPMap, SPMap]): Iterator[(VertexId, SPMap)] = {
+    def sendMessage(edge: EdgeTriplet[SPMap, _]): Iterator[(VertexId, SPMap)] = {
       val newAttr = increment(edge.srcAttr)
       if (edge.dstAttr != plus(newAttr, edge.dstAttr)) Iterator((edge.dstId, newAttr))
       else Iterator.empty
