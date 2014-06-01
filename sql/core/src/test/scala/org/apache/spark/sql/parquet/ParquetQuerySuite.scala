@@ -56,6 +56,10 @@ case class OptionalReflectData(
     doubleField: Option[Double],
     booleanField: Option[Boolean])
 
+case class ByteTypeData(
+    intField: Int,
+    byteField: Byte)
+
 class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
   import TestData._
   TestData // Load test data tables.
@@ -362,5 +366,18 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
   test("SPARK-1913 regression: columns only referenced by pushed down filters should remain") {
     val query = sql(s"SELECT mystring FROM testfiltersource WHERE myint < 10")
     assert(query.collect().size === 10)
+  }
+
+  test("SPARK-1982 regression: saveToParquetFile doesn't support ByteType") {
+    val path = getTempFilePath("parquet").toString
+    val rdd = TestSQLContext.sparkContext.parallelize((1 to 10))
+      .map(i => ByteTypeData(i, i.toByte))
+    rdd.saveAsParquetFile(path)
+
+    TestSQLContext.parquetFile(path).registerAsTable("byteTable")
+    val result = sql("SELECT * FROM byteTable WHERE byteField > 5").collect()
+    result.foreach {
+      row => assert(row.getInt(0) === row.getByte(1).toInt)
+    }
   }
 }

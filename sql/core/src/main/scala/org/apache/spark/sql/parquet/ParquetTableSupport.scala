@@ -156,13 +156,12 @@ private[parquet] class CatalystGroupConverter(
 
   val converters: Array[Converter] = schema.map {
     a => a.dataType match {
-      case ctype: NativeType =>
-        // note: for some reason matching for StringType fails so use this ugly if instead
-        if (ctype == StringType) {
-          new CatalystPrimitiveStringConverter(this, schema.indexOf(a))
-        } else {
-          new CatalystPrimitiveConverter(this, schema.indexOf(a))
-        }
+      case StringType =>
+        new CatalystPrimitiveStringConverter(this, schema.indexOf(a))
+      case ByteType =>
+        new CatalystPrimitiveByteConverter(this, schema.indexOf(a))
+      case ctype: NativeType => // need the type tag here
+        new CatalystPrimitiveConverter(this, schema.indexOf(a))
       case _ => throw new RuntimeException(
         s"unable to convert datatype ${a.dataType.toString} in CatalystGroupConverter")
     }
@@ -225,3 +224,18 @@ private[parquet] class CatalystPrimitiveStringConverter(
   override def addBinary(value: Binary): Unit =
     parent.getCurrentRecord.setString(fieldIndex, value.toStringUsingUTF8)
 }
+
+/**
+ * A `parquet.io.api.PrimitiveConverter` that converts Parquet byte primitives
+ * (length-one byte arrays) into Catalyst ByteType values.
+ *
+ * @param parent The parent group converter.
+ * @param fieldIndex The index inside the record.
+ */
+private[parquet] class CatalystPrimitiveByteConverter(
+    parent: CatalystGroupConverter,
+    fieldIndex: Int) extends CatalystPrimitiveConverter(parent, fieldIndex) {
+  override def addBinary(value: Binary): Unit =
+    parent.getCurrentRecord.setByte(fieldIndex, value.getBytes.apply(0))
+}
+
