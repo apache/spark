@@ -105,9 +105,9 @@ object GenerateMIMAIgnore {
   }
 
   def main(args: Array[String]) {
-    scala.tools.nsc.io.File(".mima-excludes").
+    scala.tools.nsc.io.File(".generated-mima-excludes").
       writeAll(classesPrivateWithin("org.apache.spark").mkString("\n"))
-    println("Created : .mima-excludes in current directory.")
+    println("Created : .generated-mima-excludes in current directory.")
   }
 
 
