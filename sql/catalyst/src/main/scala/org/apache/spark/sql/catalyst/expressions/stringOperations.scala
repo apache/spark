@@ -78,7 +78,7 @@ trait CaseConversionExpression {
   def convert(v: String): String
   
   def nullable: Boolean = true
-  def dataType: DataType = BooleanType
+  def dataType: DataType = StringType
 
   override def eval(input: Row): Any = {
     val beConverted = child.eval(input)
