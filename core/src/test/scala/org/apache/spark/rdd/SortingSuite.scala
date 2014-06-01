@@ -120,5 +120,15 @@ class SortingSuite extends FunSuite with SharedSparkContext with ShouldMatchers 
     partitions(1).last should be > partitions(2).head
     partitions(2).last should be > partitions(3).head
   }
-}
 
+  test("sortPartitions") {
+    val rand = new scala.util.Random()
+    val array = Array.fill(10) { (rand.nextInt()) }
+    val pairs = sc.parallelize(array, 2)
+    val sorted = pairs.sortPartitions((x, y) => x < y)
+    assert(sorted.partitions.size === 2)
+    val partitions = sorted.collectPartitions()
+    assert(partitions(0) === partitions(0).sortWith((x, y) => x < y))
+    assert(partitions(1) === partitions(1).sortWith((x, y) => x < y))
+  }
+}

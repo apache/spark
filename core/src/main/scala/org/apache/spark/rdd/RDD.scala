@@ -282,6 +282,11 @@ abstract class RDD[T: ClassTag](
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
 
   /**
+   * Return a new RDD containing sorted partitions in this RDD.
+   */
+  def sortPartitions(lt: (T, T) => Boolean): RDD[T] = new SortedPartitionsRDD(this, sc.clean(lt))
+
+  /**
    * Return a new RDD containing the distinct elements in this RDD.
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] =
