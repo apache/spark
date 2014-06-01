@@ -20,34 +20,39 @@ package org.apache.spark.graphx.lib
 import org.apache.spark.graphx._
 import scala.reflect.ClassTag
 
+/**
+ * Computes shortest paths to the given set of landmark vertices, returning a graph where each
+ * vertex attribute is a map containing the shortest-path distance to each reachable landmark.
+ */
 object ShortestPaths {
-  type SPMap = Map[VertexId, Int] // map of landmarks -> minimum distance to landmark
+  /** Stores a map from the vertex id of a landmark to the distance to that landmark. */
+  type SPMap = Map[VertexId, Int]
+
   def SPMap(x: (VertexId, Int)*) = Map(x: _*)
+
   def increment(spmap: SPMap): SPMap = spmap.map { case (v, d) => v -> (d + 1) }
+
   def plus(spmap1: SPMap, spmap2: SPMap): SPMap =
     (spmap1.keySet ++ spmap2.keySet).map {
       k => k -> math.min(spmap1.getOrElse(k, Int.MaxValue), spmap2.getOrElse(k, Int.MaxValue))
     }.toMap
 
   /**
-   * Compute the shortest paths to each landmark for each vertex and
-   * return an RDD with the map of landmarks to their shortest-path
-   * lengths.
+   * Computes shortest paths to the given set of landmark vertices.
    *
    * @tparam ED the edge attribute type (not used in the computation)
    *
    * @param graph the graph for which to compute the shortest paths
-   * @param landmarks the list of landmark vertex ids
+   * @param landmarks the list of landmark vertex ids. Shortest paths will be computed to each
+   * landmark.
    *
-   * @return a graph with vertex attributes containing a map of the
-   * shortest paths to each landmark
+   * @return a graph where each vertex attribute is a map containing the shortest-path distance to
+   * each reachable landmark vertex.
    */
   def run[ED: ClassTag](graph: Graph[_, ED], landmarks: Seq[VertexId]): Graph[SPMap, ED] = {
-    val spGraph = graph
-      .mapVertices { (vid, attr) =>
-        if (landmarks.contains(vid)) SPMap(vid -> 0)
-        else SPMap()
-      }
+    val spGraph = graph.mapVertices { (vid, attr) =>
+      if (landmarks.contains(vid)) SPMap(vid -> 0) else SPMap()
+    }
 
     val initialMessage = SPMap()
 
@@ -61,12 +66,7 @@ object ShortestPaths {
       else Iterator.empty
     }
 
-    def messageCombiner(s1: SPMap, s2: SPMap): SPMap = {
-      plus(s1, s2)
-    }
-
     Pregel(spGraph, initialMessage)(
-      vertexProgram, sendMessage, messageCombiner)
+      vertexProgram, sendMessage, plus)
   }
-
 }
