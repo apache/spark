@@ -17,6 +17,8 @@
 
 package org.apache.spark.graphx
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
 
@@ -27,7 +29,7 @@ object GraphLoader extends Logging {
 
   /**
    * Loads a graph from an edge list formatted file where each line contains atleast two integers: a source
-   * id and a target id. If third Integer is porivided that is used as edge attribute; default edge attribute is 1.
+   * id and a target id. If third argument is porivided that is used as edge attribute; default edge attribute is 1.
    * Skips lines that begin with `#`.
    *
    * If desired the edges can be automatically oriented in the positive
@@ -50,19 +52,19 @@ object GraphLoader extends Logging {
    *        direction
    * @param minEdgePartitions the number of partitions for the edge RDD
    */
-  def edgeListFile(
+  def edgeListFile[ED: ClassTag](
       sc: SparkContext,
       path: String,
       canonicalOrientation: Boolean = false,
       minEdgePartitions: Int = 1)
-    : Graph[Int, Int] =
+    : Graph[Int, ED] =
   {
     val startTime = System.currentTimeMillis
 
     // Parse the edge data table directly into edge partitions
     val lines = sc.textFile(path, minEdgePartitions).coalesce(minEdgePartitions)
     val edges = lines.mapPartitionsWithIndex { (pid, iter) =>
-      val builder = new EdgePartitionBuilder[Int, Int]
+      val builder = new EdgePartitionBuilder[ED, Int]
       iter.foreach { line =>
         if (!line.isEmpty && line(0) != '#') {
           val lineArray = line.split("\\s+")
@@ -71,9 +73,9 @@ object GraphLoader extends Logging {
           }
           val srcId = lineArray(0).toLong
           val dstId = lineArray(1).toLong
-          val edgeAttr = 
-            if (lineArray.length >= 3) lineArray(2).toInt
-            else 1
+          val edgeAttr : ED = 
+            if (lineArray.length >= 3) lineArray(2).asInstanceOf[ED]
+            else 1.asInstanceOf[ED]
           if (canonicalOrientation && srcId > dstId) {
             builder.add(dstId, srcId, edgeAttr)
           } else {
@@ -87,7 +89,7 @@ object GraphLoader extends Logging {
 
     logInfo("It took %d ms to load the edges".format(System.currentTimeMillis - startTime))
 
-    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1)
+    GraphImpl.fromEdgePartitions[Int, ED](edges, defaultVertexAttr = 1)
   } // end of edgeListFile
 
 }
