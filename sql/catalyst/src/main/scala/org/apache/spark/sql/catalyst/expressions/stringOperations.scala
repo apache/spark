@@ -70,6 +70,22 @@ trait StringRegexExpression {
   }
 }
 
+trait CaseConversionExpression {
+  self: UnaryExpression =>
+
+  type EvaluatedType = Any
+
+  def convert(v: String): String
+  
+  def nullable: Boolean = true
+  def dataType: DataType = BooleanType
+
+  override def eval(input: Row): Any = {
+    val beConverted = child.eval(input)
+    convert(beConverted.toString)
+  }
+}
+
 /**
  * Simple RegEx pattern matching function
  */
@@ -114,4 +130,22 @@ case class RLike(left: Expression, right: Expression)
   def symbol = "RLIKE"
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
+}
+
+/**
+ * System function upper()
+ * */
+case class Upper(child: Expression)
+  extends UnaryExpression with CaseConversionExpression {
+  
+  override def convert(v: String): String = {v.toUpperCase()}
+}
+
+/**
+ * System function lower()
+ * */
+case class Lower(child: Expression)
+  extends UnaryExpression with CaseConversionExpression {
+  
+  override def convert(v: String): String = {v.toLowerCase()}
 }
