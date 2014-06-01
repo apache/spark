@@ -151,7 +151,6 @@ private[parquet] object RowWriteSupport {
 private[parquet] class CatalystGroupConverter(
     schema: Seq[Attribute],
     protected[parquet] val current: ParquetRelation.RowType) extends GroupConverter {
-  import org.apache.spark.sql.catalyst.types.NativeType
 
   def this(schema: Seq[Attribute]) = this(schema, new ParquetRelation.RowType(schema.length))
 
