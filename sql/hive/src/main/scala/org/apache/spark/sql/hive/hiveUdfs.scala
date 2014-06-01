@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
+import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
@@ -237,17 +238,41 @@ private[hive] case class HiveGenericUdf(name: String, children: Seq[Expression])
   @transient
   protected lazy val returnInspector = function.initialize(argumentInspectors.toArray)
 
+  @transient
+  protected lazy val isUDFDeterministic = {
+    val udfType = function.getClass().getAnnotation(classOf[HiveUDFType])
+    (udfType != null && udfType.deterministic())
+  }
+
+  override def foldable = {
+    isUDFDeterministic && children.foldLeft(true)((prev, n) => prev && n.foldable)
+  }
+
+  protected lazy val deferedObjects = Array.fill[DeferredObject](children.length)({
+    new DeferredObjectAdapter
+  })
+
+  // Adapter from Catalyst ExpressionResult to Hive DeferredObject
+  class DeferredObjectAdapter extends DeferredObject {
+    private var func: () => Any = _
+    def set(func: () => Any) {
+      this.func = func
+    }
+    override def prepare(i: Int) = {}
+    override def get(): AnyRef = wrap(func())
+  }
+
   val dataType: DataType = inspectorToDataType(returnInspector)
 
   override def eval(input: Row): Any = {
     returnInspector // Make sure initialized.
-    val args = children.map { v =>
-      new DeferredObject {
-        override def prepare(i: Int) = {}
-        override def get(): AnyRef = wrap(v.eval(input))
-      }
-    }.toArray
-    unwrap(function.evaluate(args))
+    var i = 0
+    while (i < children.length) {
+      val idx = i
+      deferedObjects(i).asInstanceOf[DeferredObjectAdapter].set(() => {children(idx).eval(input)})
+      i += 1
+    }
+    unwrap(function.evaluate(deferedObjects))
   }
 }
 

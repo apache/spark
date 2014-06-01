@@ -45,7 +45,7 @@ private[hive] trait HiveStrategies {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case logical.InsertIntoTable(SparkLogicalPlan(InMemoryColumnarTableScan(
-        _, HiveTableScan(_, table, _))), partition, child, overwrite) =>
+        _, HiveTableScan(_, table, _), _)), partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case _ => Nil
     }
@@ -69,6 +69,7 @@ private[hive] trait HiveStrategies {
         pruneFilterProject(
           projectList,
           otherPredicates,
+          identity[Seq[Expression]],
           HiveTableScan(_, relation, pruningPredicates.reduceLeftOption(And))(hiveContext)) :: Nil
       case _ =>
         Nil

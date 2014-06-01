@@ -19,6 +19,7 @@ package org.apache.spark.ui.storage
 
 import scala.collection.mutable
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ui._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{RDDInfo, StorageStatusListener, StorageUtils}
@@ -35,9 +36,11 @@ private[ui] class StorageTab(parent: SparkUI) extends WebUITab(parent, "storage"
 }
 
 /**
- * A SparkListener that prepares information to be displayed on the BlockManagerUI
+ * :: DeveloperApi ::
+ * A SparkListener that prepares information to be displayed on the BlockManagerUI.
  */
-private[ui] class StorageListener(storageStatusListener: StorageStatusListener)
+@DeveloperApi
+class StorageListener(storageStatusListener: StorageStatusListener)
   extends SparkListener {
 
   private val _rddInfoMap = mutable.Map[Int, RDDInfo]()

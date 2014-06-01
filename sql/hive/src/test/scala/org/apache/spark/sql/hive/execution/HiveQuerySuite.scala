@@ -24,6 +24,10 @@ import org.apache.spark.sql.hive.test.TestHive._
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  createQueryTest("between",
+    "SELECT * FROM src WHERE key between 1 and 2"
+  )
+
   test("Query expressed in SQL") {
     assert(sql("SELECT 1").collect() === Array(Seq(1)))
   }
@@ -32,6 +36,9 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("FROM src SELECT key").collect()
     hiveql("FROM src SELECT key").collect()
   }
+
+  createQueryTest("Constant Folding Optimization for AVG_SUM_COUNT",
+    "SELECT AVG(0), SUM(0), COUNT(null), COUNT(value) FROM src GROUP BY key")
 
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")

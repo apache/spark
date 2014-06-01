@@ -30,7 +30,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.{Utils, AkkaUtils}
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -60,6 +60,7 @@ private[spark] class AppClient(
     var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times
+    var registrationRetryTimer: Option[Cancellable] = None
 
     override def preStart() {
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
@@ -83,21 +84,22 @@ private[spark] class AppClient(
 
     def registerWithMaster() {
       tryRegisterAllMasters()
-
       import context.dispatcher
       var retries = 0
-      lazy val retryTimer: Cancellable =
+      registrationRetryTimer = Some {
         context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
-          retries += 1
-          if (registered) {
-            retryTimer.cancel()
-          } else if (retries >= REGISTRATION_RETRIES) {
-            markDead("All masters are unresponsive! Giving up.")
-          } else {
-            tryRegisterAllMasters()
+          Utils.tryOrExit {
+            retries += 1
+            if (registered) {
+              registrationRetryTimer.foreach(_.cancel())
+            } else if (retries >= REGISTRATION_RETRIES) {
+              markDead("All masters are unresponsive! Giving up.")
+            } else {
+              tryRegisterAllMasters()
+            }
           }
         }
-      retryTimer // start timer
+      }
     }
 
     def changeMaster(url: String) {
@@ -177,6 +179,11 @@ private[spark] class AppClient(
         alreadyDead = true
       }
     }
+
+    override def postStop() {
+      registrationRetryTimer.foreach(_.cancel())
+    }
+
   }
 
   def start() {

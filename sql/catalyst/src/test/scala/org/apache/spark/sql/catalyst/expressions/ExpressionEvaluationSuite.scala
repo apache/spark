@@ -61,7 +61,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   test("3VL Not") {
     notTrueTable.foreach {
       case (v, answer) =>
-        val expr = Not(Literal(v, BooleanType))
+        val expr = ! Literal(v, BooleanType)
         val result = expr.eval(null)
         if (result != answer)
           fail(s"$expr should not evaluate to $result, expected: $answer")    }
@@ -108,9 +108,7 @@ class ExpressionEvaluationSuite extends FunSuite {
       truthTable.foreach {
         case (l,r,answer) =>
           val expr = op(Literal(l, BooleanType), Literal(r, BooleanType))
-          val result = expr.eval(null)
-          if (result != answer)
-            fail(s"$expr should not evaluate to $result, expected: $answer")
+          checkEvaluation(expr, answer)
       }
     }
   }
@@ -131,6 +129,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("LIKE literal Regular Expression") {
     checkEvaluation(Literal(null, StringType).like("a"), null)
+    checkEvaluation(Literal("a", StringType).like(Literal(null, StringType)), null)
     checkEvaluation(Literal(null, StringType).like(Literal(null, StringType)), null)
     checkEvaluation("abdef" like "abdef", true)
     checkEvaluation("a_%b" like "a\\__b", true)
@@ -159,9 +158,14 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
+    
+    checkEvaluation(Literal(null, StringType) like regEx, null, new GenericRow(Array[Any]("bc%")))
   }
 
   test("RLIKE literal Regular Expression") {
+    checkEvaluation(Literal(null, StringType) rlike "abdef", null)
+    checkEvaluation("abdef" rlike Literal(null, StringType), null)
+    checkEvaluation(Literal(null, StringType) rlike Literal(null, StringType), null)
     checkEvaluation("abdef" rlike "abdef", true)
     checkEvaluation("abbbbc" rlike "a.*c", true)
 
@@ -257,6 +261,8 @@ class ExpressionEvaluationSuite extends FunSuite {
     assert(("abcdef" cast DecimalType).nullable === true)
     assert(("abcdef" cast DoubleType).nullable === true)
     assert(("abcdef" cast FloatType).nullable === true)
+
+    checkEvaluation(Cast(Literal(null, IntegerType), ShortType), null)
   }
 
   test("timestamp") {
@@ -286,6 +292,136 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     // A test for higher precision than millis
     checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
+  }
+  
+  test("null checking") {
+    val row = new GenericRow(Array[Any]("^Ba*n", null, true, null))
+    val c1 = 'a.string.at(0)
+    val c2 = 'a.string.at(1)
+    val c3 = 'a.boolean.at(2)
+    val c4 = 'a.boolean.at(3)
+
+    checkEvaluation(IsNull(c1), false, row)
+    checkEvaluation(IsNotNull(c1), true, row)
+
+    checkEvaluation(IsNull(c2), true, row)
+    checkEvaluation(IsNotNull(c2), false, row)
+
+    checkEvaluation(IsNull(Literal(1, ShortType)), false)
+    checkEvaluation(IsNotNull(Literal(1, ShortType)), true)
+
+    checkEvaluation(IsNull(Literal(null, ShortType)), true)
+    checkEvaluation(IsNotNull(Literal(null, ShortType)), false)
+    
+    checkEvaluation(Coalesce(c1 :: c2 :: Nil), "^Ba*n", row)
+    checkEvaluation(Coalesce(Literal(null, StringType) :: Nil), null, row)
+    checkEvaluation(Coalesce(Literal(null, StringType) :: c1 :: c2 :: Nil), "^Ba*n", row)
+
+    checkEvaluation(If(c3, Literal("a", StringType), Literal("b", StringType)), "a", row)
+    checkEvaluation(If(c3, c1, c2), "^Ba*n", row)
+    checkEvaluation(If(c4, c2, c1), "^Ba*n", row)
+    checkEvaluation(If(Literal(null, BooleanType), c2, c1), "^Ba*n", row)
+    checkEvaluation(If(Literal(true, BooleanType), c1, c2), "^Ba*n", row)
+    checkEvaluation(If(Literal(false, BooleanType), c2, c1), "^Ba*n", row)
+    checkEvaluation(If(Literal(false, BooleanType), 
+      Literal("a", StringType), Literal("b", StringType)), "b", row)
+
+    checkEvaluation(In(c1, c1 :: c2 :: Nil), true, row)
+    checkEvaluation(In(Literal("^Ba*n", StringType), 
+      Literal("^Ba*n", StringType) :: Nil), true, row)
+    checkEvaluation(In(Literal("^Ba*n", StringType),
+      Literal("^Ba*n", StringType) :: c2 :: Nil), true, row)
+  }
+
+  test("complex type") {
+    val row = new GenericRow(Array[Any](
+      "^Ba*n",                                  // 0 
+      null.asInstanceOf[String],                // 1
+      new GenericRow(Array[Any]("aa", "bb")),   // 2
+      Map("aa"->"bb"),                          // 3
+      Seq("aa", "bb")                           // 4
+    ))
+
+    val typeS = StructType(
+      StructField("a", StringType, true) :: StructField("b", StringType, true) :: Nil
+    )
+    val typeMap = MapType(StringType, StringType)
+    val typeArray = ArrayType(StringType)
+
+    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()), 
+      Literal("aa")), "bb", row)
+    checkEvaluation(GetItem(Literal(null, typeMap), Literal("aa")), null, row)
+    checkEvaluation(GetItem(Literal(null, typeMap), Literal(null, StringType)), null, row)
+    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()), 
+      Literal(null, StringType)), null, row)
+
+    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()), 
+      Literal(1)), "bb", row)
+    checkEvaluation(GetItem(Literal(null, typeArray), Literal(1)), null, row)
+    checkEvaluation(GetItem(Literal(null, typeArray), Literal(null, IntegerType)), null, row)
+    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()), 
+      Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(GetField(BoundReference(2, AttributeReference("c", typeS)()), "a"), "aa", row)
+    checkEvaluation(GetField(Literal(null, typeS), "a"), null, row)
+
+    val typeS_notNullable = StructType(
+      StructField("a", StringType, nullable = false)
+        :: StructField("b", StringType, nullable = false) :: Nil
+    )
+
+    assert(GetField(BoundReference(2,
+      AttributeReference("c", typeS)()), "a").nullable === true)
+    assert(GetField(BoundReference(2,
+      AttributeReference("c", typeS_notNullable, nullable = false)()), "a").nullable === false)
+
+    assert(GetField(Literal(null, typeS), "a").nullable === true)
+    assert(GetField(Literal(null, typeS_notNullable), "a").nullable === true)
+  }
+
+  test("arithmetic") {
+    val row = new GenericRow(Array[Any](1, 2, 3, null))
+    val c1 = 'a.int.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.int.at(2)
+    val c4 = 'a.int.at(3)
+
+    checkEvaluation(UnaryMinus(c1), -1, row)
+    checkEvaluation(UnaryMinus(Literal(100, IntegerType)), -100)
+
+    checkEvaluation(Add(c1, c4), null, row)
+    checkEvaluation(Add(c1, c2), 3, row)
+    checkEvaluation(Add(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(Add(Literal(null, IntegerType), c2), null, row)
+    checkEvaluation(Add(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(-c1, -1, row)
+    checkEvaluation(c1 + c2, 3, row)
+    checkEvaluation(c1 - c2, -1, row)
+    checkEvaluation(c1 * c2, 2, row)
+    checkEvaluation(c1 / c2, 0, row)
+    checkEvaluation(c1 % c2, 1, row)
+  }
+
+  test("BinaryComparison") {
+    val row = new GenericRow(Array[Any](1, 2, 3, null))
+    val c1 = 'a.int.at(0)
+    val c2 = 'a.int.at(1)
+    val c3 = 'a.int.at(2)
+    val c4 = 'a.int.at(3)
+
+    checkEvaluation(LessThan(c1, c4), null, row)
+    checkEvaluation(LessThan(c1, c2), true, row)
+    checkEvaluation(LessThan(c1, Literal(null, IntegerType)), null, row)
+    checkEvaluation(LessThan(Literal(null, IntegerType), c2), null, row)
+    checkEvaluation(LessThan(Literal(null, IntegerType), Literal(null, IntegerType)), null, row)
+
+    checkEvaluation(c1 < c2, true, row)
+    checkEvaluation(c1 <= c2, true, row)
+    checkEvaluation(c1 > c2, false, row)
+    checkEvaluation(c1 >= c2, false, row)
+    checkEvaluation(c1 === c2, false, row)
+    checkEvaluation(c1 !== c2, true, row)
   }
 }
 

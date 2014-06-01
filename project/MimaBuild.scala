@@ -30,8 +30,8 @@ object MimaBuild {
 
     // Read package-private excludes from file
     val excludeFilePath = (base.getAbsolutePath + "/.mima-excludes")
-    val excludeFile = file(excludeFilePath) 
-    val packagePrivateList: Seq[String] =
+    val excludeFile = file(excludeFilePath)
+    val ignoredClasses: Seq[String] =
       if (!excludeFile.exists()) {
         Seq()
       } else {
@@ -41,10 +41,10 @@ object MimaBuild {
     // Exclude a single class and its corresponding object
     def excludeClass(className: String) = {
       Seq(
-        excludePackage(className), 
+        excludePackage(className),
         ProblemFilters.exclude[MissingClassProblem](className),
         ProblemFilters.exclude[MissingTypesProblem](className),
-        excludePackage(className + "$"), 
+        excludePackage(className + "$"),
         ProblemFilters.exclude[MissingClassProblem](className + "$"),
         ProblemFilters.exclude[MissingTypesProblem](className + "$")
       )
@@ -60,29 +60,9 @@ object MimaBuild {
       excludePackage("org.apache.spark." + packageName)
     }
 
-    val packagePrivateExcludes = packagePrivateList.flatMap(excludeClass)
+    val externalExcludeFileClasses = ignoredClasses.flatMap(excludeClass)
 
-    /* Excludes specific to a given version of Spark. When comparing the given version against
-       its immediate predecessor, the excludes listed here will be applied. */
-    val versionExcludes =
-      SparkBuild.SPARK_VERSION match {
-        case v if v.startsWith("1.0") =>
-          Seq(
-            excludeSparkPackage("api.java"),
-            excludeSparkPackage("mllib"),
-            excludeSparkPackage("streaming")
-          ) ++
-          excludeSparkClass("rdd.ClassTags") ++
-          excludeSparkClass("util.XORShiftRandom") ++
-          excludeSparkClass("mllib.recommendation.MFDataGenerator") ++
-          excludeSparkClass("mllib.optimization.SquaredGradient") ++
-          excludeSparkClass("mllib.regression.RidgeRegressionWithSGD") ++
-          excludeSparkClass("mllib.regression.LassoWithSGD") ++
-          excludeSparkClass("mllib.regression.LinearRegressionWithSGD")
-        case _ => Seq()
-      }
-
-    defaultExcludes ++ packagePrivateExcludes ++ versionExcludes
+    defaultExcludes ++ externalExcludeFileClasses
   }
 
   def mimaSettings(sparkHome: File) = mimaDefaultSettings ++ Seq(

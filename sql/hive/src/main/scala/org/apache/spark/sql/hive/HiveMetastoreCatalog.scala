@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.Deserializer
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, Catalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -130,7 +131,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         castChildOutput(p, table, child)
 
       case p @ logical.InsertIntoTable(SparkLogicalPlan(InMemoryColumnarTableScan(
-        _, HiveTableScan(_, table, _))), _, child, _) =>
+        _, HiveTableScan(_, table, _), _)), _, child, _) =>
         castChildOutput(p, table, child)
     }
 
@@ -172,17 +173,24 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   override def unregisterAllTables() = {}
 }
 
-private[hive] object HiveMetastoreTypes extends RegexParsers {
+/**
+ * :: DeveloperApi ::
+ * Provides conversions between Spark SQL data types and Hive Metastore types.
+ */
+@DeveloperApi
+object HiveMetastoreTypes extends RegexParsers {
   protected lazy val primitiveType: Parser[DataType] =
     "string" ^^^ StringType |
     "float" ^^^ FloatType |
     "int" ^^^ IntegerType |
-    "tinyint" ^^^ ShortType |
+    "tinyint" ^^^ ByteType |
+    "smallint" ^^^ ShortType |
     "double" ^^^ DoubleType |
     "bigint" ^^^ LongType |
     "binary" ^^^ BinaryType |
     "boolean" ^^^ BooleanType |
     "decimal" ^^^ DecimalType |
+    "timestamp" ^^^ TimestampType |
     "varchar\\((\\d+)\\)".r ^^^ StringType
 
   protected lazy val arrayType: Parser[DataType] =
@@ -194,7 +202,7 @@ private[hive] object HiveMetastoreTypes extends RegexParsers {
     }
 
   protected lazy val structField: Parser[StructField] =
-    "[a-zA-Z0-9]*".r ~ ":" ~ dataType ^^ {
+    "[a-zA-Z0-9_]*".r ~ ":" ~ dataType ^^ {
       case name ~ _ ~ tpe => StructField(name, tpe, nullable = true)
     }
 
@@ -221,7 +229,8 @@ private[hive] object HiveMetastoreTypes extends RegexParsers {
     case StringType => "string"
     case FloatType => "float"
     case IntegerType => "int"
-    case ShortType =>"tinyint"
+    case ByteType => "tinyint"
+    case ShortType => "smallint"
     case DoubleType => "double"
     case LongType => "bigint"
     case BinaryType => "binary"

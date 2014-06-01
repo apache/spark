@@ -103,7 +103,7 @@ object SparkHadoopUtil {
           .newInstance()
           .asInstanceOf[SparkHadoopUtil]
       } catch {
-       case th: Throwable => throw new SparkException("Unable to load YARN support", th)
+       case e: Exception => throw new SparkException("Unable to load YARN support", e)
       }
     } else {
       new SparkHadoopUtil
