@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.catalyst.types._
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   self: Product =>
@@ -54,11 +54,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   /**
    * Optionally resolves the given string to a
    * [[catalyst.expressions.NamedExpression NamedExpression]]. The attribute is expressed as
-   * as string in the following form: `[scope].AttributeName.[nested].[fields]...`. Fields
-   * can contain ordinal expressions, such as `field[i][j][k]...`.
+   * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
   def resolve(name: String): Option[NamedExpression] = {
-    // TODO: extend SqlParser to handle field expressions
     val parts = name.split("\\.")
     // Collect all attributes that are output by this nodes children where either the first part
     // matches the name or where the first part matches the scope and the second part matches the
@@ -69,20 +67,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       val remainingParts =
         if (option.qualifiers.contains(parts.head) && parts.size > 1) parts.drop(1) else parts
       if (option.name == remainingParts.head) (option, remainingParts.tail.toList) :: Nil else Nil
-      // TODO from rebase!
-      /*val remainingParts = if (option.qualifiers contains parts.head) parts.drop(1) else parts
-      val relevantRemaining =
-        if (remainingParts.head.matches("\\w*\\[(\\d+|\\w+)\\]")) { // array field name
-          remainingParts.head.substring(0, remainingParts.head.indexOf("["))
-        } else {
-          remainingParts.head
-        }
-      if (option.name == relevantRemaining) (option, remainingParts.tail.toList) :: Nil else Nil*/
-    // If the first part of the desired name matches a qualifier for this possible match, drop it.
-      /* TODO: from rebase!
-      val remainingParts = if (option.qualifiers contains parts.head) parts.drop(1) else parts
-      if (option.name == remainingParts.head) (option, remainingParts.tail.toList) :: Nil else Nil
-      */
     }
 
     options.distinct match {
