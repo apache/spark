@@ -57,7 +57,7 @@ import org.apache.spark.graphx.impl.VertexRDDFunctions._
  */
 class VertexRDD[@specialized VD: ClassTag](
     val partitionsRDD: RDD[ShippableVertexPartition[VD]])
-  extends RDD[(VertexId, VD)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
+  extends RDD[(VertexId, VD)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) extends Serializable {
 
   require(partitionsRDD.partitioner.isDefined)
 
