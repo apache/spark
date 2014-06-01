@@ -178,7 +178,8 @@ private[parquet] object ParquetTypesConverter {
     case ParquetPrimitiveTypeName.BINARY => StringType
     case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
     case ParquetPrimitiveTypeName.DOUBLE => DoubleType
-    case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY => ArrayType(ByteType)
+    // TODO: at least until SPARK-1293 is resolved there can only be single-element byte arrays
+    case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY => ByteType
     case ParquetPrimitiveTypeName.FLOAT => FloatType
     case ParquetPrimitiveTypeName.INT32 => IntegerType
     case ParquetPrimitiveTypeName.INT64 => LongType
@@ -190,14 +191,21 @@ private[parquet] object ParquetTypesConverter {
       s"Unsupported parquet datatype $parquetType")
   }
 
-  def fromDataType(ctype: DataType): ParquetPrimitiveTypeName = ctype match {
-    case StringType => ParquetPrimitiveTypeName.BINARY
-    case BooleanType => ParquetPrimitiveTypeName.BOOLEAN
-    case DoubleType => ParquetPrimitiveTypeName.DOUBLE
-    case ArrayType(ByteType) => ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
-    case FloatType => ParquetPrimitiveTypeName.FLOAT
-    case IntegerType => ParquetPrimitiveTypeName.INT32
-    case LongType => ParquetPrimitiveTypeName.INT64
+  def fromDataType(
+      ctype: DataType,
+      name: String,
+      repetition: Repetition = Repetition.OPTIONAL): ParquetPrimitiveType = ctype match {
+    case StringType => new ParquetPrimitiveType(repetition, ParquetPrimitiveTypeName.BINARY, name)
+    case BooleanType => new ParquetPrimitiveType(repetition, ParquetPrimitiveTypeName.BOOLEAN, name)
+    case DoubleType => new ParquetPrimitiveType(repetition, ParquetPrimitiveTypeName.DOUBLE, name)
+    // for now (at least until SPARK-1293 is resolved) we use length-one Parquet
+    // fixed-size-byte-arrays for byte primitive types since Parquet does not have a byte primitive
+    // type and we map BINARY to Strings
+    case ByteType =>
+      new ParquetPrimitiveType(repetition, ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, 1, name)
+    case FloatType => new ParquetPrimitiveType(repetition, ParquetPrimitiveTypeName.FLOAT, name)
+    case IntegerType => new ParquetPrimitiveType(repetition, ParquetPrimitiveTypeName.INT32, name)
+    case LongType => new ParquetPrimitiveType(repetition, ParquetPrimitiveTypeName.INT64, name)
     case _ => sys.error(s"Unsupported datatype $ctype")
   }
 
@@ -208,6 +216,8 @@ private[parquet] object ParquetTypesConverter {
           record(index).asInstanceOf[String].getBytes("utf-8")
         )
       )
+      case ByteType => consumer.addBinary(
+        Binary.fromByteArray(Array[Byte](record.getByte(index))))
       case IntegerType => consumer.addInteger(record.getInt(index))
       case LongType => consumer.addLong(record.getLong(index))
       case DoubleType => consumer.addDouble(record.getDouble(index))
@@ -225,6 +235,11 @@ private[parquet] object ParquetTypesConverter {
       case (desc) =>
         val ctype = toDataType(desc.getType)
         val name: String = desc.getPath.mkString(".")
+        if (desc.getType == ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY &&
+            desc.getTypeLength != 1) {
+          throw new RuntimeException(s"Field $name was expected to be length-one byte array" +
+            s"but has length ${desc.getTypeLength}")
+        }
         new AttributeReference(name, ctype, false)()
     }
   }
@@ -232,7 +247,7 @@ private[parquet] object ParquetTypesConverter {
   // TODO: allow nesting?
   def convertFromAttributes(attributes: Seq[Attribute]): MessageType = {
     val fields: Seq[ParquetType] = attributes.map {
-      a => new ParquetPrimitiveType(Repetition.OPTIONAL, fromDataType(a.dataType), a.name)
+      a => fromDataType(a.dataType, a.name, Repetition.OPTIONAL)
     }
     new MessageType("root", fields)
   }
