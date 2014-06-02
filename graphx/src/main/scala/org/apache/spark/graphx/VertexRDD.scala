@@ -56,7 +56,8 @@ import org.apache.spark.graphx.impl.VertexRDDFunctions._
  * @tparam VD the vertex attribute associated with each vertex in the set.
  */
 class VertexRDD[@specialized VD: ClassTag](
-    val partitionsRDD: RDD[ShippableVertexPartition[VD]])
+    val partitionsRDD: RDD[ShippableVertexPartition[VD]],
+    val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   extends RDD[(VertexId, VD)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
   require(partitionsRDD.partitioner.isDefined)
@@ -66,7 +67,7 @@ class VertexRDD[@specialized VD: ClassTag](
    * VertexRDD will be based on a different index and can no longer be quickly joined with this
    * RDD.
    */
-  def reindex(): VertexRDD[VD] = new VertexRDD(partitionsRDD.map(_.reindex()))
+  def reindex(): VertexRDD[VD] = this.withPartitionsRDD(partitionsRDD.map(_.reindex()))
 
   override val partitioner = partitionsRDD.partitioner
 
@@ -85,6 +86,10 @@ class VertexRDD[@specialized VD: ClassTag](
   }
   setName("VertexRDD")
 
+  /**
+   * Persists the vertex partitions at the specified storage level, ignoring any existing target
+   * storage level.
+   */
   override def persist(newLevel: StorageLevel): this.type = {
     partitionsRDD.persist(newLevel)
     this
@@ -92,6 +97,12 @@ class VertexRDD[@specialized VD: ClassTag](
 
   override def unpersist(blocking: Boolean = true): this.type = {
     partitionsRDD.unpersist(blocking)
+    this
+  }
+
+  /** Persists the vertex partitions at `targetStorageLevel`, which defaults to MEMORY_ONLY. */
+  override def cache(): this.type = {
+    partitionsRDD.persist(targetStorageLevel)
     this
   }
 
@@ -114,7 +125,7 @@ class VertexRDD[@specialized VD: ClassTag](
       f: ShippableVertexPartition[VD] => ShippableVertexPartition[VD2])
     : VertexRDD[VD2] = {
     val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(f), preservesPartitioning = true)
-    new VertexRDD(newPartitionsRDD)
+    this.withPartitionsRDD(newPartitionsRDD)
   }
 
 
@@ -165,7 +176,7 @@ class VertexRDD[@specialized VD: ClassTag](
       val otherPart = otherIter.next()
       Iterator(thisPart.diff(otherPart))
     }
-    new VertexRDD(newPartitionsRDD)
+    this.withPartitionsRDD(newPartitionsRDD)
   }
 
   /**
@@ -191,7 +202,7 @@ class VertexRDD[@specialized VD: ClassTag](
       val otherPart = otherIter.next()
       Iterator(thisPart.leftJoin(otherPart)(f))
     }
-    new VertexRDD(newPartitionsRDD)
+    this.withPartitionsRDD(newPartitionsRDD)
   }
 
   /**
@@ -220,7 +231,7 @@ class VertexRDD[@specialized VD: ClassTag](
       case other: VertexRDD[_] =>
         leftZipJoin(other)(f)
       case _ =>
-        new VertexRDD[VD3](
+        this.withPartitionsRDD[VD3](
           partitionsRDD.zipPartitions(
             other.copartitionWithVertices(this.partitioner.get), preservesPartitioning = true) {
             (partIter, msgs) => partIter.map(_.leftJoin(msgs)(f))
@@ -242,7 +253,7 @@ class VertexRDD[@specialized VD: ClassTag](
       val otherPart = otherIter.next()
       Iterator(thisPart.innerJoin(otherPart)(f))
     }
-    new VertexRDD(newPartitionsRDD)
+    this.withPartitionsRDD(newPartitionsRDD)
   }
 
   /**
@@ -264,7 +275,7 @@ class VertexRDD[@specialized VD: ClassTag](
       case other: VertexRDD[_] =>
         innerZipJoin(other)(f)
       case _ =>
-        new VertexRDD(
+        this.withPartitionsRDD(
           partitionsRDD.zipPartitions(
             other.copartitionWithVertices(this.partitioner.get), preservesPartitioning = true) {
             (partIter, msgs) => partIter.map(_.innerJoin(msgs)(f))
@@ -290,7 +301,7 @@ class VertexRDD[@specialized VD: ClassTag](
     val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
       thisIter.map(_.aggregateUsingIndex(msgIter, reduceFunc))
     }
-    new VertexRDD[VD2](parts)
+    this.withPartitionsRDD[VD2](parts)
   }
 
   /**
@@ -309,7 +320,25 @@ class VertexRDD[@specialized VD: ClassTag](
           if (routingTableIter.hasNext) routingTableIter.next() else RoutingTablePartition.empty
         partIter.map(_.withRoutingTable(routingTable))
     }
-    new VertexRDD(vertexPartitions)
+    this.withPartitionsRDD(vertexPartitions)
+  }
+
+  /** Replaces the vertex partitions while preserving all other properties of the VertexRDD. */
+  private[graphx] def withPartitionsRDD[VD2: ClassTag](
+      partitionsRDD_ : RDD[ShippableVertexPartition[VD2]]): VertexRDD[VD2] = {
+    new VertexRDD(partitionsRDD_, targetStorageLevel)
+  }
+
+  /**
+   * Changes the target storage level while preserving all other properties of the
+   * VertexRDD. Operations on the returned VertexRDD will preserve this storage level.
+   *
+   * This does not actually trigger a cache; to do this, call
+   * [[org.apache.spark.graphx.VertexRDD#cache]] on the returned VertexRDD.
+   */
+  private[graphx] def withTargetStorageLevel(
+      targetStorageLevel_ : StorageLevel): VertexRDD[VD] = {
+    new VertexRDD(partitionsRDD, targetStorageLevel_)
   }
 
   /** Generates an RDD of vertex attributes suitable for shipping to the edge partitions. */
