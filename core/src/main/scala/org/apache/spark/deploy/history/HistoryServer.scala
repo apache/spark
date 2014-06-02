@@ -59,14 +59,13 @@ class HistoryServer(
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
       val info = provider.getAppInfo(key)
-      if (info != null) {
-        info.ui.getSecurityManager.setUIAcls(uiAclsEnabled)
-        info.ui.getSecurityManager.setViewAcls(info.sparkUser, info.viewAcls)
-        attachSparkUI(info.ui)
-        info.ui
-      } else {
+      if (info == null) {
         throw new NoSuchElementException()
       }
+      info.ui.getSecurityManager.setUIAcls(uiAclsEnabled)
+      info.ui.getSecurityManager.setViewAcls(info.sparkUser, info.viewAcls)
+      attachSparkUI(info.ui)
+      info.ui
     }
   }
 
