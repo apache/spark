@@ -16,7 +16,6 @@
  */
 
 import com.typesafe.tools.mima.core._
-import com.typesafe.tools.mima.core.ProblemFilters._
 
 /**
  * Additional excludes for checking of Spark's binary compatibility.
@@ -36,6 +35,18 @@ object MimaExcludes {
       SparkBuild.SPARK_VERSION match {
         case v if v.startsWith("1.1") =>
           Seq(
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaPairRDD.countApproxDistinct$default$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaPairRDD.countApproxDistinctByKey$default$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDD.countApproxDistinct$default$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.countApproxDistinct$default$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.countApproxDistinct")
           ) ++
           MimaBuild.excludeSparkClass("util.SerializableHyperLogLog")
         case v if v.startsWith("1.0") =>
