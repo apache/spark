@@ -180,7 +180,7 @@ object MLUtils {
   }
 
   /**
-   * Loads vectors saved using `RDD[Vector]#saveAsTextFile`.
+   * Loads vectors saved using `RDD[Vector].saveAsTextFile`.
    * @param sc Spark context
    * @param path file or directory path in any Hadoop-supported file system URI
    * @param minPartitions min number of partitions
@@ -190,13 +190,13 @@ object MLUtils {
     sc.textFile(path, minPartitions).map(Vectors.parse)
 
   /**
-   * Loads vectors saved using `RDD[Vector]#saveAsTextFile` with the default number of partitions.
+   * Loads vectors saved using `RDD[Vector].saveAsTextFile` with the default number of partitions.
    */
   def loadVectors(sc: SparkContext, path: String): RDD[Vector] =
     sc.textFile(path, sc.defaultMinPartitions).map(Vectors.parse)
 
   /**
-   * Loads labeled points saved using `RDD[LabeledPoint]#saveAsTextFile`.
+   * Loads labeled points saved using `RDD[LabeledPoint].saveAsTextFile`.
    * @param sc Spark context
    * @param path file or directory path in any Hadoop-supported file system URI
    * @param minPartitions min number of partitions
@@ -206,7 +206,7 @@ object MLUtils {
     sc.textFile(path, minPartitions).map(LabeledPoint.parse)
 
   /**
-   * Loads labeled points saved using `RDD[LabeledPoint]#saveAsTextFile` with the default number of
+   * Loads labeled points saved using `RDD[LabeledPoint].saveAsTextFile` with the default number of
    * partitions.
    */
   def loadLabeledPoints(sc: SparkContext, dir: String): RDD[LabeledPoint] =
@@ -225,7 +225,7 @@ object MLUtils {
    * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
    *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
    */
-  @deprecated("Should use RDD#saveAsTextFile and MLUtils#loadLabeledPoints instead.", "1.0")
+  @deprecated("Should use MLUtils.loadLabeledPoints instead.", "1.0")
   def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
       val parts = line.split(',')
@@ -246,7 +246,7 @@ object MLUtils {
    * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
    *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
    */
-  @deprecated("Should use RDD#saveAsTextFile and MLUtils#loadLabeledPoints instead.", "1.0")
+  @deprecated("Should use RDD[LabeledPoint].saveAsTextFile instead.", "1.0")
   def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
     val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
     dataStr.saveAsTextFile(dir)

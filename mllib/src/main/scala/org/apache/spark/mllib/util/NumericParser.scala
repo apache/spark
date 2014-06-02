@@ -107,7 +107,7 @@ private[mllib] object NumericParser {
     if (parsing) {
       throw new SparkException(s"A tuple must end with ')'.")
     }
-    items.toSeq
+    items
   }
 
   private def parseDouble(s: String): Double = {
