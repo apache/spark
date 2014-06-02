@@ -40,6 +40,7 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[RoutingTableMessage])
     kryo.register(classOf[(VertexId, Object)])
     kryo.register(classOf[EdgePartition[Object, Object]])
+    kryo.register(classOf[VertexRDD[Object]])
     kryo.register(classOf[BitSet])
     kryo.register(classOf[VertexIdToIndexMap])
     kryo.register(classOf[VertexAttributeBlock[Object]])

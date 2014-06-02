@@ -57,9 +57,12 @@ import org.apache.spark.graphx.impl.VertexRDDFunctions._
  */
 class VertexRDD[@specialized VD: ClassTag](
     val partitionsRDD: RDD[ShippableVertexPartition[VD]])
-  extends RDD[(VertexId, VD)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
+  extends RDD[(VertexId, VD)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) with Serializable {
 
   require(partitionsRDD.partitioner.isDefined)
+  
+   /** Default constructor is provided to support serialization */
+  protected def this() = this(null)
 
   /**
    * Construct a new VertexRDD that is indexed by only the visible vertices. The resulting
