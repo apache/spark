@@ -124,7 +124,7 @@ case class Like(left: Expression, right: Expression)
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 }
 
-case class RLike(left: Expression, right: Expression) 
+case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
   def symbol = "RLIKE"
