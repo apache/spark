@@ -21,7 +21,6 @@ import com.typesafe.tools.mima.core.MissingTypesProblem
 import com.typesafe.tools.mima.core.ProblemFilters._
 import com.typesafe.tools.mima.plugin.MimaKeys.{binaryIssueFilters, previousArtifact}
 import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
-import sbt._
 
 object MimaBuild {
 
@@ -53,23 +52,15 @@ object MimaBuild {
     excludePackage("org.apache.spark." + packageName)
   }
 
-  def ignoredABIProblems(base: File) = {
+  def ignoredABIProblems(base: File, currentSparkVersion: String) = {
 
     // Excludes placed here will be used for all Spark versions
     val defaultExcludes = Seq()
 
     // Read package-private excludes from file
-<<<<<<< variant A
     val classExcludeFilePath = file(base.getAbsolutePath + "/.generated-mima-class-excludes")
     val memberExcludeFilePath = file(base.getAbsolutePath + "/.generated-mima-member-excludes")
 
->>>>>>> variant B
-    val excludeFilePath = base.getAbsolutePath + "/.generated-mima-excludes"
-    val excludeFile = file(excludeFilePath)
-####### Ancestor
-    val excludeFilePath = (base.getAbsolutePath + "/.generated-mima-excludes")
-    val excludeFile = file(excludeFilePath)
-======= end
     val ignoredClasses: Seq[String] =
       if (!classExcludeFilePath.exists()) {
         Seq()
@@ -90,11 +81,11 @@ object MimaBuild {
 
   def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
     val organization = "org.apache.spark"
-    val version = "1.0.0"
+    val previousSparkVersion = "1.0.0"
     val fullId = "spark-" + projectRef.project + "_2.10"
     mimaDefaultSettings ++ 
-    Seq(previousArtifact := Some(organization % fullId % version),
-      binaryIssueFilters ++= ignoredABIProblems(sparkHome))
+    Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
+      binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
   }
 
 }

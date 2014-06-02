@@ -25,8 +25,6 @@ import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 object BuildCommons {
-  
-  val sparkVersion = "1.1.0-SNAPSHOT"
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
@@ -195,22 +193,10 @@ object Unidoc {
         .map(_.filterNot(_.getCanonicalPath.contains("python")))
         .map(_.filterNot(_.getCanonicalPath.contains("collection")))
     },
-    // Remove certain packages from Scaladoc
-    scalacOptions in (Compile, doc) := Seq(
-      "-groups",
-      "-skip-packages", Seq(
-        "akka",
-        "org.apache.spark.api.python",
-        "org.apache.spark.network",
-        "org.apache.spark.deploy",
-        "org.apache.spark.util.collection"
-      ).mkString(":"),
-      "-doc-title", "Spark " + sparkVersion.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
-    ),
 
     // Javadoc options: create a window title, and group key packages on index page
     javacOptions in doc := Seq(
-      "-windowtitle", "Spark " + sparkVersion.replaceAll("-SNAPSHOT", "") + " JavaDoc",
+      "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
       "-public",
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
       "-group", "Spark Streaming", packageList(
@@ -249,6 +235,19 @@ object TestSettings {
     libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
-    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1))
+    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
+    // Remove certain packages from Scaladoc
+    scalacOptions in (Compile, doc) := Seq(
+      "-groups",
+      "-skip-packages", Seq(
+        "akka",
+        "org.apache.spark.api.python",
+        "org.apache.spark.network",
+        "org.apache.spark.deploy",
+        "org.apache.spark.util.collection"
+      ).mkString(":"),
+      "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
+    )
+  )
 
 }
