@@ -77,12 +77,12 @@ trait CaseConversionExpression {
 
   def convert(v: String): String
   
-  def nullable: Boolean = true
+  def nullable: Boolean = child.nullable
   def dataType: DataType = StringType
 
   override def eval(input: Row): Any = {
-    val beConverted = child.eval(input)
-    convert(beConverted.toString)
+    val converted = child.eval(input)
+    convert(converted.toString)
   }
 }
 
@@ -124,7 +124,7 @@ case class Like(left: Expression, right: Expression)
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 }
 
-case class RLike(left: Expression, right: Expression)
+case class RLike(left: Expression, right: Expression) 
   extends BinaryExpression with StringRegexExpression {
 
   def symbol = "RLIKE"
@@ -133,19 +133,17 @@ case class RLike(left: Expression, right: Expression)
 }
 
 /**
- * System function upper()
- * */
-case class Upper(child: Expression)
-  extends UnaryExpression with CaseConversionExpression {
+ * A function that converts the characters of a string to uppercase.
+ */
+case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
   
-  override def convert(v: String): String = {v.toUpperCase()}
+  override def convert(v: String): String = v.toUpperCase()
 }
 
 /**
- * System function lower()
- * */
-case class Lower(child: Expression)
-  extends UnaryExpression with CaseConversionExpression {
+ * A function that converts the characters of a string to lowercase.
+ */
+case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
   
-  override def convert(v: String): String = {v.toLowerCase()}
+  override def convert(v: String): String = v.toLowerCase()
 }
