@@ -537,6 +537,32 @@ class SparkContext(object):
         """
         self._jsc.sc().cancelAllJobs()
 
+    def runJob(self, rdd, partitionFunc, partitions = None, allowLocal = False):
+        """
+        Executes the given partitionFunc on the specified set of partitions,
+        returning the result as an array of elements.
+
+        If 'partitions' is not specified, this will run over all partitions.
+
+        >>> myRDD = sc.parallelize(range(6), 3)
+        >>> sc.runJob(myRDD, lambda part: [x * x for x in part])
+        [0, 1, 4, 9, 16, 25]
+
+        >>> myRDD = sc.parallelize(range(6), 3)
+        >>> sc.runJob(myRDD, lambda part: [x * x for x in part], [0, 2], True)
+        [0, 1, 16, 25]
+        """
+        if partitions == None:
+            partitions = range(rdd._jrdd.splits().size())
+        javaPartitions = ListConverter().convert(partitions, self._gateway._gateway_client)
+
+        # Implementation note: This is implemented as a mapPartitions followed
+        # by runJob() in order to avoid having to pass a Python lambda into
+        # SparkContext#runJob.
+        mappedRDD = rdd.mapPartitions(partitionFunc)
+        it = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, javaPartitions, allowLocal)
+        return list(mappedRDD._collect_iterator_through_file(it))
+
 def _test():
     import atexit
     import doctest
