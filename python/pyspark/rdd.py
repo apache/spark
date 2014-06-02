@@ -31,7 +31,7 @@ from threading import Thread
 import warnings
 import heapq
 from random import Random
-from math import sqrt, log, min
+from math import sqrt, log
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
