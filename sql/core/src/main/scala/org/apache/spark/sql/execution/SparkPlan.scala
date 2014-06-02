@@ -49,7 +49,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   /**
    * Runs this query returning the result as an array.
    */
-  def executeCollect(): Array[Row] = execute().collect()
+  def executeCollect(): Array[Row] = execute().map(_.copy()).collect()
 
   protected def buildRow(values: Seq[Any]): Row =
     new GenericRow(values.toArray)
