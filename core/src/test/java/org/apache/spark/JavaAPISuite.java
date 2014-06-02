@@ -182,17 +182,15 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void foreach() {
-    final File tempDir = Files.createTempDir();
-    tempDir.deleteOnExit();
+    final Accumulator<Integer> accum = sc.accumulator(0);
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(new VoidFunction<String>() {
       @Override
       public void call(String s) throws IOException {
-        Files.touch(new File(tempDir, s));
+        accum.add(1);
       }
     });
-    Assert.assertEquals(2, tempDir.listFiles().length);
-    Utils.deleteRecursively(tempDir);
+    Assert.assertEquals(2, accum.value().intValue());
   }
 
   @Test
