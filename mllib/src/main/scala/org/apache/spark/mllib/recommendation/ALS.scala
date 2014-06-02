@@ -32,6 +32,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
+import org.apache.spark.mllib.optimization.NNLS
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
@@ -153,6 +154,18 @@ class ALS private (
   /** Sets a random seed to have deterministic results. */
   def setSeed(seed: Long): ALS = {
     this.seed = seed
+    this
+  }
+
+  /** If true, do alternating nonnegative least squares. */
+  private var nonnegative = false
+
+  /**
+   * Set whether the least-squares problems solved at each iteration should have
+   * nonnegativity constraints.
+   */
+  def setNonnegative(b: Boolean): ALS = {
+    this.nonnegative = b
     this
   }
 
@@ -505,6 +518,8 @@ class ALS private (
       }
     }
 
+    val ws = if (nonnegative) NNLS.createWorkspace(rank) else null
+
     // Solve the least-squares problem for each user and return the new feature vectors
     Array.range(0, numUsers).map { index =>
       // Compute the full XtX matrix from the lower-triangular part we got above
@@ -517,10 +532,23 @@ class ALS private (
       }
       // Solve the resulting matrix, which is symmetric and positive-definite
       if (implicitPrefs) {
-        Solve.solvePositive(fullXtX.addi(YtY.get.value), userXy(index)).data
+        solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws)
       } else {
-        Solve.solvePositive(fullXtX, userXy(index)).data
+        solveLeastSquares(fullXtX, userXy(index), ws)
       }
+    }
+  }
+
+  /**
+   * Given A^T A and A^T b, find the x minimising ||Ax - b||_2, possibly subject
+   * to nonnegativity constraints if `nonnegative` is true.
+   */
+  def solveLeastSquares(ata: DoubleMatrix, atb: DoubleMatrix,
+      ws: NNLS.Workspace): Array[Double] = {
+    if (!nonnegative) {
+      Solve.solvePositive(ata, atb).data
+    } else {
+      NNLS.solve(ata, atb, ws)
     }
   }
 
@@ -550,7 +578,6 @@ class ALS private (
  * Top-level methods for calling Alternating Least Squares (ALS) matrix factorization.
  */
 object ALS {
-
   /**
    * Train a matrix factorization model given an RDD of ratings given by users to some products,
    * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
