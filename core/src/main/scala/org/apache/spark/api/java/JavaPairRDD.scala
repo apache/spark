@@ -673,15 +673,14 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Return approximate number of distinct values for each key in this RDD.
    *
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. Uses the provided
-   * Partitioner to partition the output RDD.
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
    *
    * @param p The precision value for the normal set.
-   *          <code>p</code> must be a value between 4 and <code>sp</code> (32 max).
+   *          `p` must be a value between 4 and `sp` (32 max).
    * @param sp The precision value for the sparse set, between 0 and 32.
-   *           If <code>sp</code> equals 0, the sparse representation is skipped.
+   *           If `sp` equals 0, the sparse representation is skipped.
    * @param partitioner Partitioner to use for the resulting RDD.
    */
   def countApproxDistinctByKey(p: Int, sp: Int, partitioner: Partitioner): JavaPairRDD[K, Long] = {
@@ -691,15 +690,14 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Return approximate number of distinct values for each key in this RDD.
    *
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. Uses the provided
-   * Partitioner to partition the output RDD.
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
    *
    * @param p The precision value for the normal set.
-   *          <code>p</code> must be a value between 4 and <code>sp</code> (32 max).
+   *          `p` must be a value between 4 and `sp` (32 max).
    * @param sp The precision value for the sparse set, between 0 and 32.
-   *           If <code>sp</code> equals 0, the sparse representation is skipped.
+   *           If `sp` equals 0, the sparse representation is skipped.
    * @param numPartitions The number of partitions in the resulting RDD.
    */
   def countApproxDistinctByKey(p: Int, sp: Int, numPartitions: Int): JavaPairRDD[K, Long] = {
@@ -709,15 +707,14 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Return approximate number of distinct values for each key in this RDD.
    *
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. Uses the provided
-   * Partitioner to partition the output RDD.
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
    *
    * @param p The precision value for the normal set.
-   *          <code>p</code> must be a value between 4 and <code>sp</code> (32 max).
+   *          `p` must be a value between 4 and `sp` (32 max).
    * @param sp The precision value for the sparse set, between 0 and 32.
-   *           If <code>sp</code> equals 0, the sparse representation is skipped.
+   *           If `sp` equals 0, the sparse representation is skipped.
    */
   def countApproxDistinctByKey(p: Int, sp: Int): JavaPairRDD[K, Long] = {
     fromRDD(rdd.countApproxDistinctByKey(p, sp))
@@ -725,17 +722,34 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /**
    * Return approximate number of distinct values for each key in this RDD. This is deprecated.
-   * Use the variant with <code>p</code> and <code>sp</code> parameters instead.
+   * Use the variant with `p` and `sp` parameters instead.
    *
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. Uses the provided
-   * Partitioner to partition the output RDD.
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
+   *
+   * @param relativeSD The relative standard deviation for the counter.
+   *                   Smaller values create counters that require more space.
    */
   @Deprecated
-  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): JavaPairRDD[K, Long] =
-  {
-    fromRDD(rdd.countApproxDistinctByKey(relativeSD, partitioner))
+  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): JavaRDD[(K, Long)] = {
+    rdd.countApproxDistinctByKey(relativeSD, partitioner)
+  }
+
+  /**
+   * Return approximate number of distinct values for each key in this RDD. This is deprecated.
+   * Use the variant with `p` and `sp` parameters instead.
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
+   *
+   * @param relativeSD The relative standard deviation for the counter.
+   *                   Smaller values create counters that require more space.
+   */
+  @Deprecated
+  def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): JavaRDD[(K, Long)] = {
+    rdd.countApproxDistinctByKey(relativeSD, numPartitions)
   }
 
   /**
@@ -743,31 +757,15 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Use the variant with <code>p</code> and <code>sp</code> parameters instead.
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
-   * [[http://research.google.com/pubs/pub40671.html]].
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
    *
    * @param relativeSD The relative standard deviation for the counter.
    *                   Smaller values create counters that require more space.
    */
   @Deprecated
-  def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): JavaPairRDD[K, Long] = {
-    fromRDD(rdd.countApproxDistinctByKey(relativeSD, numPartitions))
-  }
-
-  /**
-   * Return approximate number of distinct values for each key in this RDD. This is deprecated.
-   * Use the variant with <code>p</code> and <code>sp</code> parameters instead.
-   *
-   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
-   * [[http://research.google.com/pubs/pub40671.html]].
-   *
-   * @param relativeSD The relative standard deviation for the counter.
-   *                   Smaller values create counters that require more space.
-   */
-  @Deprecated
-  def countApproxDistinctByKey(relativeSD: Double): JavaPairRDD[K, Long] = {
-    fromRDD(rdd.countApproxDistinctByKey(relativeSD))
+  def countApproxDistinctByKey(relativeSD: Double): JavaRDD[(K, Long)] = {
+    rdd.countApproxDistinctByKey(relativeSD)
   }
 
   /** Assign a name to this RDD */

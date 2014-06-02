@@ -19,8 +19,7 @@ package org.apache.spark.rdd
 
 import java.util.Random
 
-import scala.collection.Map
-import scala.collection.mutable
+import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
@@ -922,8 +921,8 @@ abstract class RDD[T: ClassTag](
    * Return approximate number of distinct elements in the RDD.
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
-   * [[http://research.google.com/pubs/pub40671.html]].
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
    *
    * @param p The precision value for the normal set.
    *          <code>p</code> must be a value between 4 and <code>sp</code>.
@@ -951,8 +950,8 @@ abstract class RDD[T: ClassTag](
    * Return approximate number of distinct elements in the RDD.
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available at
-   * [[http://research.google.com/pubs/pub40671.html]].
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
    */
   @deprecated("Use countApproxDistinct with parameter p and sp", "1.0.1")
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
