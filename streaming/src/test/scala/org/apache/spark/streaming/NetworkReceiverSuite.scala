@@ -146,6 +146,37 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
     assert(recordedData.toSet === generatedData.toSet)
   }
 
+  test("block generator throttling") {
+    val blockGeneratorListener = new FakeBlockGeneratorListener
+    val blockInterval = 1000
+    val maxRate = 30
+    val conf = new SparkConf().set("spark.streaming.blockInterval", blockInterval.toString).
+      set("spark.streaming.receiver.maxRate", maxRate.toString)
+    val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
+    val expectedBlocks = 1
+    val waitTime = expectedBlocks * blockInterval
+    val expectedMessages = maxRate * waitTime/1000
+    val generatedData = new ArrayBuffer[Int]
+
+    // Generate blocks
+    val startTime = System.currentTimeMillis()
+    blockGenerator.start()
+    var count = 0
+    while(System.currentTimeMillis - startTime < waitTime) {
+      blockGenerator += count
+      generatedData += count
+      count += 1
+      Thread.sleep(2)
+    }
+    blockGenerator.stop()
+
+    val recordedData = blockGeneratorListener.arrayBuffers.flatten
+    assert(blockGeneratorListener.arrayBuffers.size > 0)
+    assert(recordedData.toSet === generatedData.toSet)
+    // recordedData size should be close to the expected rate
+    assert(recordedData.size > expectedMessages * 0.7 && recordedData.size < expectedMessages * 1.5 )
+  }
+
   /**
    * An implementation of NetworkReceiver that is used for testing a receiver's life cycle.
    */
