@@ -670,6 +670,11 @@ def ssh(host, opts, command):
 
 
 def ssh_read(host, opts, command):
+    if sys.version_info < (2, 7):
+        return subprocess.Popen(
+            ssh_command(opts) + ['%s@%s' %
+                                 (opts.user, host), stringify_command(command)],
+        stdout=subprocess.PIPE).stdout
     return subprocess.check_output(
         ssh_command(opts) + ['%s@%s' % (opts.user, host), stringify_command(command)])
 
