@@ -42,7 +42,6 @@ public class JavaNaiveBayesSuite implements Serializable {
   public void tearDown() {
     sc.stop();
     sc = null;
-    System.clearProperty("spark.driver.port");
   }
 
   private static final List<LabeledPoint> POINTS = Arrays.asList(
