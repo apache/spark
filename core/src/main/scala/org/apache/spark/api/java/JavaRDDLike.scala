@@ -572,6 +572,16 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def countApproxDistinct(p: Int, sp: Int): Long = rdd.countApproxDistinct(p, sp)
 
   /**
+   * Return approximate number of distinct elements in the RDD. This method uses 20 as p value
+   * and 0 as sp value (i.e. skipping sparse representation).
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
+   */
+  def countApproxDistinct(): Long = rdd.countApproxDistinct(20, 0)
+
+  /**
    * Return approximate number of distinct elements in the RDD. This is deprecated. Use the
    * variant with `p` and `sp` parameters instead.
    *

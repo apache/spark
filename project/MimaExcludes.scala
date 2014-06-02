@@ -36,8 +36,8 @@ object MimaExcludes {
       SparkBuild.SPARK_VERSION match {
         case v if v.startsWith("1.1") =>
           Seq(
-            MimaBuild.excludeSparkClass("util.SerializableHyperLogLog")
-          )
+          ) ++
+          MimaBuild.excludeSparkClass("util.SerializableHyperLogLog")
         case v if v.startsWith("1.0") =>
           Seq(
             MimaBuild.excludeSparkPackage("api.java"),
