@@ -28,11 +28,11 @@ object ShortestPaths {
   /** Stores a map from the vertex id of a landmark to the distance to that landmark. */
   type SPMap = Map[VertexId, Int]
 
-  def SPMap(x: (VertexId, Int)*) = Map(x: _*)
+  private def makeMap(x: (VertexId, Int)*) = Map(x: _*)
 
-  def increment(spmap: SPMap): SPMap = spmap.map { case (v, d) => v -> (d + 1) }
+  private def incrementMap(spmap: SPMap): SPMap = spmap.map { case (v, d) => v -> (d + 1) }
 
-  def plus(spmap1: SPMap, spmap2: SPMap): SPMap =
+  private def addMaps(spmap1: SPMap, spmap2: SPMap): SPMap =
     (spmap1.keySet ++ spmap2.keySet).map {
       k => k -> math.min(spmap1.getOrElse(k, Int.MaxValue), spmap2.getOrElse(k, Int.MaxValue))
     }.toMap
@@ -51,22 +51,21 @@ object ShortestPaths {
    */
   def run[ED: ClassTag](graph: Graph[_, ED], landmarks: Seq[VertexId]): Graph[SPMap, ED] = {
     val spGraph = graph.mapVertices { (vid, attr) =>
-      if (landmarks.contains(vid)) SPMap(vid -> 0) else SPMap()
+      if (landmarks.contains(vid)) makeMap(vid -> 0) else makeMap()
     }
 
-    val initialMessage = SPMap()
+    val initialMessage = makeMap()
 
     def vertexProgram(id: VertexId, attr: SPMap, msg: SPMap): SPMap = {
-      plus(attr, msg)
+      addMaps(attr, msg)
     }
 
     def sendMessage(edge: EdgeTriplet[SPMap, _]): Iterator[(VertexId, SPMap)] = {
-      val newAttr = increment(edge.srcAttr)
-      if (edge.dstAttr != plus(newAttr, edge.dstAttr)) Iterator((edge.dstId, newAttr))
+      val newAttr = incrementMap(edge.srcAttr)
+      if (edge.dstAttr != addMaps(newAttr, edge.dstAttr)) Iterator((edge.dstId, newAttr))
       else Iterator.empty
     }
 
-    Pregel(spGraph, initialMessage)(
-      vertexProgram, sendMessage, plus)
+    Pregel(spGraph, initialMessage)(vertexProgram, sendMessage, addMaps)
   }
 }
