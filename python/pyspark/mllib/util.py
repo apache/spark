@@ -24,6 +24,7 @@ from pyspark.rdd import RDD
 from pyspark.serializers import NoOpSerializer
 
 
+
 class MLUtils:
     """
     Helper methods to load, save and pre-process data used in MLlib.
@@ -47,7 +48,6 @@ class MLUtils:
             values[i] = float(value)
         return label, indices, values
 
-
     @staticmethod
     def _convert_labeled_point_to_libsvm(p):
         """Converts a LabeledPoint to a string in LIBSVM format."""
@@ -64,7 +64,6 @@ class MLUtils:
             raise TypeError("_convert_labeled_point_to_libsvm needs either ndarray or SparseVector"
                             " but got " % type(v))
         return " ".join(items)
-
 
     @staticmethod
     def loadLibSVMFile(sc, path, multiclass=False, numFeatures=-1, minPartitions=None):
@@ -131,7 +130,6 @@ class MLUtils:
             parsed.cache()
             numFeatures = parsed.map(lambda x: 0 if x[1].size == 0 else x[1][-1]).reduce(max) + 1
         return parsed.map(lambda x: LabeledPoint(x[0], Vectors.sparse(numFeatures, x[1], x[2])))
-
 
     @staticmethod
     def saveAsLibSVMFile(data, dir):

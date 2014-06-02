@@ -57,7 +57,8 @@ except:
 #
 # Sparse double vector format:
 #
-# [1-byte 2] [4-byte length] [4-byte nonzeros] [nonzeros*4 bytes of indices] [nonzeros*8 bytes of values]
+# [1-byte 2] [4-byte length] [4-byte nonzeros] [nonzeros*4 bytes of indices] \
+# [nonzeros*8 bytes of values]
 #
 # Double matrix format:
 #
@@ -111,18 +112,18 @@ def _serialize_double_vector(v):
         return _serialize_sparse_vector(v)
     else:
         raise TypeError("_serialize_double_vector called on a %s; "
-                "wanted ndarray or SparseVector" % type(v))
+                        "wanted ndarray or SparseVector" % type(v))
 
 
 def _serialize_dense_vector(v):
     """Serialize a dense vector given as a NumPy array."""
     if v.ndim != 1:
         raise TypeError("_serialize_double_vector called on a %ddarray; "
-                "wanted a 1darray" % v.ndim)
+                        "wanted a 1darray" % v.ndim)
     if v.dtype != float64:
         if numpy.issubdtype(v.dtype, numpy.complex):
             raise TypeError("_serialize_double_vector called on an ndarray of %s; "
-                    "wanted ndarray of float64" % v.dtype)
+                            "wanted ndarray of float64" % v.dtype)
         v = v.astype(float64)
     length = v.shape[0]
     ba = bytearray(5 + 8 * length)
@@ -159,7 +160,7 @@ def _deserialize_double_vector(ba, offset=0):
     """
     if type(ba) != bytearray:
         raise TypeError("_deserialize_double_vector called on a %s; "
-                "wanted bytearray" % type(ba))
+                        "wanted bytearray" % type(ba))
     nb = len(ba) - offset
     if nb < 5:
         raise TypeError("_deserialize_double_vector called on a %d-byte array, "
@@ -178,7 +179,7 @@ def _deserialize_dense_vector(ba, offset=0):
     nb = len(ba) - offset
     if nb < 5:
         raise TypeError("_deserialize_dense_vector called on a %d-byte array, "
-                "which is too short" % nb)
+                        "which is too short" % nb)
     length = ndarray(shape=[1], buffer=ba, offset=offset + 1, dtype=int32)[0]
     if nb < 8 * length + 5:
         raise TypeError("_deserialize_dense_vector called on bytearray "
@@ -191,7 +192,7 @@ def _deserialize_sparse_vector(ba, offset=0):
     nb = len(ba) - offset
     if nb < 9:
         raise TypeError("_deserialize_sparse_vector called on a %d-byte array, "
-                "which is too short" % l)
+                        "which is too short" % nb)
     header = ndarray(shape=[2], buffer=ba, offset=offset + 1, dtype=int32)
     size = header[0]
     nonzeros = header[1]
@@ -209,7 +210,7 @@ def _serialize_double_matrix(m):
         if m.dtype != float64:
             if numpy.issubdtype(m.dtype, numpy.complex):
                 raise TypeError("_serialize_double_matrix called on an ndarray of %s; "
-                        "wanted ndarray of float64" % m.dtype)
+                                "wanted ndarray of float64" % m.dtype)
             m = m.astype(float64)
         rows = m.shape[0]
         cols = m.shape[1]
@@ -229,10 +230,10 @@ def _deserialize_double_matrix(ba):
     """Deserialize a double matrix from a mutually understood format."""
     if type(ba) != bytearray:
         raise TypeError("_deserialize_double_matrix called on a %s; "
-                "wanted bytearray" % type(ba))
+                        "wanted bytearray" % type(ba))
     if len(ba) < 9:
         raise TypeError("_deserialize_double_matrix called on a %d-byte array, "
-                "which is too short" % len(ba))
+                        "which is too short" % len(ba))
     if ba[0] != DENSE_MATRIX_MAGIC:
         raise TypeError("_deserialize_double_matrix called on bytearray "
                         "with wrong magic")
@@ -297,7 +298,7 @@ def _copyto(array, buffer, offset, shape, dtype):
 def _get_unmangled_rdd(data, serializer):
     dataBytes = data.map(serializer)
     dataBytes._bypass_serializer = True
-    dataBytes.cache() # TODO: users should unpersist() this later!
+    dataBytes.cache()  # TODO: users should unpersist() this later!
     return dataBytes
 
 
@@ -323,14 +324,14 @@ def _linear_predictor_typecheck(x, coeffs):
     if type(x) == ndarray:
         if x.ndim == 1:
             if x.shape != coeffs.shape:
-                raise RuntimeError("Got array of %d elements; wanted %d"
-                        % (numpy.shape(x)[0], coeffs.shape[0]))
+                raise RuntimeError("Got array of %d elements; wanted %d" % (
+                    numpy.shape(x)[0], coeffs.shape[0]))
         else:
             raise RuntimeError("Bulk predict not yet supported.")
     elif type(x) == SparseVector:
         if x.size != coeffs.shape[0]:
-           raise RuntimeError("Got sparse vector of size %d; wanted %d"
-                   % (x.size, coeffs.shape[0]))
+            raise RuntimeError("Got sparse vector of size %d; wanted %d" % (
+                x.size, coeffs.shape[0]))
     elif (type(x) == RDD):
         raise RuntimeError("Bulk predict not yet supported.")
     else:
@@ -345,7 +346,7 @@ def _get_initial_weights(initial_weights, data):
         if type(initial_weights) == ndarray:
             if initial_weights.ndim != 1:
                 raise TypeError("At least one data element has "
-                        + initial_weights.ndim + " dimensions, which is not 1")
+                                + initial_weights.ndim + " dimensions, which is not 1")
             initial_weights = numpy.zeros([initial_weights.shape[0]])
         elif type(initial_weights) == SparseVector:
             initial_weights = numpy.zeros([initial_weights.size])
@@ -363,10 +364,10 @@ def _regression_train_wrapper(sc, train_func, klass, data, initial_weights):
         raise RuntimeError("JVM call result had unexpected length")
     elif type(ans[0]) != bytearray:
         raise RuntimeError("JVM call result had first element of type "
-                + type(ans[0]).__name__ + " which is not bytearray")
+                           + type(ans[0]).__name__ + " which is not bytearray")
     elif type(ans[1]) != float:
         raise RuntimeError("JVM call result had second element of type "
-                + type(ans[0]).__name__ + " which is not float")
+                           + type(ans[0]).__name__ + " which is not float")
     return klass(_deserialize_double_vector(ans[0]), ans[1])
 
 
@@ -480,8 +481,7 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs,
-            optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

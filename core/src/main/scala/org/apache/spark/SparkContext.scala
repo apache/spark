@@ -67,11 +67,17 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
 
   /**
+   * Create a SparkContext that loads settings from system properties (for instance, when
+   * launching with ./bin/spark-submit).
+   */
+  def this() = this(new SparkConf())
+
+  /**
    * :: DeveloperApi ::
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
-   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Ca
-   * be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
+   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
+   * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
    */
   @DeveloperApi
@@ -712,7 +718,7 @@ class SparkContext(config: SparkConf) extends Logging {
       minPartitions: Int = defaultMinPartitions
       ): RDD[T] = {
     sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minPartitions)
-      .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
+      .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes, Utils.getContextOrSparkClassLoader))
   }
 
   protected[spark] def checkpointFile[T: ClassTag](
@@ -788,7 +794,7 @@ class SparkContext(config: SparkConf) extends Logging {
     addedFiles(key) = System.currentTimeMillis
 
     // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
-    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
+    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
     postEnvironmentUpdate()
@@ -926,13 +932,12 @@ class SparkContext(config: SparkConf) extends Logging {
               try {
                 env.httpFileServer.addJar(new File(fileName))
               } catch {
-                case e: Exception => {
+                case e: Exception =>
                   // For now just log an error but allow to go through so spark examples work.
                   // The spark examples don't really need the jar distributed since its also
                   // the app jar.
                   logError("Error adding jar (" + e + "), was the --addJars option used?")
                   null
-                }
               }
             } else {
               env.httpFileServer.addJar(new File(uri.getPath))

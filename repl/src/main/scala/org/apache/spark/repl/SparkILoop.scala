@@ -942,7 +942,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
   def createSparkContext(): SparkContext = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
-    val jars = SparkILoop.getAddedJars.map(new java.io.File(_).getAbsolutePath)
+    val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster())
       .setAppName("Spark shell")
@@ -962,11 +962,10 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   private def getMaster(): String = {
     val master = this.master match {
       case Some(m) => m
-      case None => {
+      case None =>
         val envMaster = sys.env.get("MASTER")
         val propMaster = sys.props.get("spark.master")
-        envMaster.orElse(propMaster).getOrElse("local[*]")
-      }
+        propMaster.orElse(envMaster).getOrElse("local[*]")
     }
     master
   }
@@ -993,7 +992,14 @@ object SparkILoop {
   implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
   private def echo(msg: String) = Console println msg
 
-  def getAddedJars: Array[String] = Option(System.getenv("ADD_JARS")).map(_.split(',')).getOrElse(new Array[String](0))
+  def getAddedJars: Array[String] = {
+    val envJars = sys.env.get("ADD_JARS")
+    val propJars = sys.props.get("spark.jars").flatMap { p =>
+      if (p == "") None else Some(p)
+    }
+    val jars = propJars.orElse(envJars).getOrElse("")
+    Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
+  }
 
   // Designed primarily for use by test code: take a String with a
   // bunch of code, and prints out a transcript of what it would look
