@@ -40,16 +40,11 @@ object MimaExcludes {
           Seq(
             MimaBuild.excludeSparkPackage("api.java"),
             MimaBuild.excludeSparkPackage("mllib"),
-            MimaBuild.excludeSparkPackage("streaming")
+            MimaBuild.excludeSparkPackage("streaming"),
+            MimaBuild.excludeSparkPackage("graphx")
           ) ++
           MimaBuild.excludeSparkClass("rdd.ClassTags") ++
           MimaBuild.excludeSparkClass("util.XORShiftRandom") ++
-          MimaBuild.excludeSparkClass("graphx.EdgeRDD") ++
-          MimaBuild.excludeSparkClass("graphx.VertexRDD") ++
-          MimaBuild.excludeSparkClass("graphx.impl.GraphImpl") ++
-          MimaBuild.excludeSparkClass("graphx.impl.RoutingTable") ++
-          MimaBuild.excludeSparkClass("graphx.util.collection.PrimitiveKeyOpenHashMap") ++
-          MimaBuild.excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap") ++
           MimaBuild.excludeSparkClass("mllib.recommendation.MFDataGenerator") ++
           MimaBuild.excludeSparkClass("mllib.optimization.SquaredGradient") ++
           MimaBuild.excludeSparkClass("mllib.regression.RidgeRegressionWithSGD") ++
@@ -58,4 +53,3 @@ object MimaExcludes {
         case _ => Seq()
       }
 }
-
