@@ -232,6 +232,7 @@ class CheckpointSuite extends TestSuiteBase {
   test("recovery with file input stream") {
     // Set up the streaming context and input streams
     val testDir = Files.createTempDir()
+    testDir.deleteOnExit()
     var ssc = new StreamingContext(master, framework, Seconds(1))
     ssc.checkpoint(checkpointDir)
     val fileStream = ssc.textFileStream(testDir.toString)
@@ -326,6 +327,7 @@ class CheckpointSuite extends TestSuiteBase {
     )
     // To ensure that all the inputs were received correctly
     assert(expectedOutput.last === output.last)
+    Utils.deleteRecursively(testDir)
   }
 
 

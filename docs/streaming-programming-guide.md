@@ -80,7 +80,8 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api._
 // Create a StreamingContext with a local master
-val ssc = new StreamingContext("local", "NetworkWordCount", Seconds(1))
+// Spark Streaming needs at least two working thread
+val ssc = new StreamingContext("local[2]", "NetworkWordCount", Seconds(1))
 {% endhighlight %}
 
 Using this context, we then create a new DStream
@@ -136,7 +137,7 @@ The complete code can be found in the Spark Streaming example
 <div data-lang="java" markdown="1">
 
 First, we create a
-[JavaStreamingContext](api/java/org/apache/spark/streaming/api/java/JavaStreamingContext.html) object,
+[JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html) object,
 which is the main entry point for all streaming
 functionality. Besides Spark's configuration, we specify that any DStream would be processed
 in 1 second batches.
@@ -215,7 +216,7 @@ jssc.awaitTermination();   // Wait for the computation to terminate
 {% endhighlight %}
 
 The complete code can be found in the Spark Streaming example
-[JavaNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaNetworkWordCount.java).
+[JavaNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/index.html?org/apache/spark/examples/streaming/JavaNetworkWordCount.java).
 <br>
 
 </div>
@@ -234,12 +235,12 @@ Then, in a different terminal, you can start the example by using
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight bash %}
-$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount local[2] localhost 9999
+$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount localhost 9999
 {% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
 {% highlight bash %}
-$ ./bin/run-example org.apache.spark.examples.streaming.JavaNetworkWordCount local[2] localhost 9999
+$ ./bin/run-example org.apache.spark.examples.streaming.JavaNetworkWordCount localhost 9999
 {% endhighlight %}
 </div>
 </div>
@@ -268,7 +269,7 @@ hello world
 {% highlight bash %}
 # TERMINAL 2: RUNNING NetworkWordCount or JavaNetworkWordCount
 
-$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount local[2] localhost 9999
+$ ./bin/run-example org.apache.spark.examples.streaming.NetworkWordCount localhost 9999
 ...
 -------------------------------------------
 Time: 1357008430000 ms
@@ -360,12 +361,12 @@ new JavaStreamingContext(master, appName, batchInterval, [sparkHome], [jars])
 </div>
 </div>
 
-The `master` parameter is a standard [Spark cluster URL](scala-programming-guide.html#master-urls)
+The `master` parameter is a standard [Spark cluster URL](programming-guide.html#master-urls)
 and can be "local" for local testing. The `appName` is a name of your program,
 which will be shown on your cluster's web UI. The `batchInterval` is the size of the batches,
 as explained earlier. Finally, the last two parameters are needed to deploy your code to a cluster
  if running in distributed mode, as described in the
- [Spark programming guide](scala-programming-guide.html#deploying-code-on-a-cluster).
+ [Spark programming guide](programming-guide.html#deploying-code-on-a-cluster).
  Additionally, the underlying SparkContext can be accessed as
 `ssc.sparkContext`.
 
@@ -522,9 +523,9 @@ common ones are as follows.
   <td> <b>reduceByKey</b>(<i>func</i>, [<i>numTasks</i>]) </td>
   <td> When called on a DStream of (K, V) pairs, return a new DStream of (K, V) pairs where the
   values for each key are aggregated using the given reduce function. <b>Note:</b> By default,
-  this uses Spark's default number of parallel tasks (2 for local machine, 8 for a cluster) to
-  do the grouping. You can pass an optional <code>numTasks</code> argument to set a different
-  number of tasks.</td>
+  this uses Spark's default number of parallel tasks (2 for local mode, and in cluster mode the number
+  is determined by the config property <code>spark.default.parallelism</code>) to do the grouping.
+  You can pass an optional <code>numTasks</code> argument to set a different number of tasks.</td>
 </tr>
 <tr>
   <td> <b>join</b>(<i>otherStream</i>, [<i>numTasks</i>]) </td>
@@ -743,8 +744,9 @@ said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
   <td> When called on a DStream of (K, V) pairs, returns a new DStream of (K, V)
   pairs where the values for each key are aggregated using the given reduce function <i>func</i>
   over batches in a sliding window. <b>Note:</b> By default, this uses Spark's default number of
-  parallel tasks (2 for local machine, 8 for a cluster) to do the grouping. You can pass an optional
-   <code>numTasks</code> argument to set a different number of tasks.
+  parallel tasks (2 for local mode, and in cluster mode the number is determined by the config
+  property <code>spark.default.parallelism</code>) to do the grouping. You can pass an optional
+  <code>numTasks</code> argument to set a different number of tasks.
   </td>
 </tr>
 <tr>
@@ -812,10 +814,8 @@ output operators are defined:
 The complete list of DStream operations is available in the API documentation. For the Scala API,
 see [DStream](api/scala/index.html#org.apache.spark.streaming.dstream.DStream)
 and [PairDStreamFunctions](api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions).
-For the Java API, see [JavaDStream](api/scala/index.html#org.apache.spark.streaming.api.java.dstream.DStream)
-and [JavaPairDStream](api/scala/index.html#org.apache.spark.streaming.api.java.JavaPairDStream).
-Specifically for the Java API, see [Spark's Java programming guide](java-programming-guide.html)
-for more information.
+For the Java API, see [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html)
+and [JavaPairDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairDStream.html).
 
 ## Persistence
 Similar to RDDs, DStreams also allow developers to persist the stream's data in memory. That is,
@@ -832,7 +832,7 @@ default persistence level is set to replicate the data to two nodes for fault-to
 Note that, unlike RDDs, the default persistence level of DStreams keeps the data serialized in
 memory. This is further discussed in the [Performance Tuning](#memory-tuning) section. More
 information on different persistence levels can be found in
-[Spark Programming Guide](scala-programming-guide.html#rdd-persistence).
+[Spark Programming Guide](programming-guide.html#rdd-persistence).
 
 ## RDD Checkpointing
 A _stateful operation_ is one which operates over multiple batches of data. This includes all
@@ -877,7 +877,7 @@ sending the data to two destinations (i.e., the earlier and upgraded application
 
 - The existing application is shutdown gracefully (see
 [`StreamingContext.stop(...)`](api/scala/index.html#org.apache.spark.streaming.StreamingContext)
-or [`JavaStreamingContext.stop(...)`](api/java/org/apache/spark/streaming/api/java/JavaStreamingContext.html)
+or [`JavaStreamingContext.stop(...)`](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
 for graceful shutdown options) which ensure data that have been received is completely
 processed before shutdown. Then the
 upgraded application can be started, which will start processing from the same point where the earlier
@@ -956,9 +956,10 @@ before further processing.
 ### Level of Parallelism in Data Processing
 Cluster resources maybe under-utilized if the number of parallel tasks used in any stage of the
 computation is not high enough. For example, for distributed reduce operations like `reduceByKey`
-and `reduceByKeyAndWindow`, the default number of parallel tasks is 8. You can pass the level of
-parallelism as an argument (see the
-[`PairDStreamFunctions`](api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
+and `reduceByKeyAndWindow`, the default number of parallel tasks is decided by the [config property]
+(configuration.html#spark-properties) `spark.default.parallelism`. You can pass the level of
+parallelism as an argument (see [`PairDStreamFunctions`]
+(api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
 documentation), or set the [config property](configuration.html#spark-properties)
 `spark.default.parallelism` to change the default.
 
@@ -1311,10 +1312,10 @@ This section elaborates the steps required to migrate your existing code to 1.0.
 `FlumeUtils.createStream`, etc.) now returns
 [InputDStream](api/scala/index.html#org.apache.spark.streaming.dstream.InputDStream) /
 [ReceiverInputDStream](api/scala/index.html#org.apache.spark.streaming.dstream.ReceiverInputDStream)
-(instead of DStream) for Scala, and [JavaInputDStream](api/java/org/apache/spark/streaming/api/java/JavaInputDStream.html) /
-[JavaPairInputDStream](api/java/org/apache/spark/streaming/api/java/JavaPairInputDStream.html) /
-[JavaReceiverInputDStream](api/java/org/apache/spark/streaming/api/java/JavaReceiverInputDStream.html) /
-[JavaPairReceiverInputDStream](api/java/org/apache/spark/streaming/api/java/JavaPairReceiverInputDStream.html)
+(instead of DStream) for Scala, and [JavaInputDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaInputDStream.html) /
+[JavaPairInputDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairInputDStream.html) /
+[JavaReceiverInputDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaReceiverInputDStream.html) /
+[JavaPairReceiverInputDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairReceiverInputDStream.html)
 (instead of JavaDStream) for Java. This ensures that functionality specific to input streams can
 be added to these classes in the future without breaking binary compatibility.
 Note that your existing Spark Streaming applications should not require any change
@@ -1365,14 +1366,14 @@ package and renamed for better clarity.
     [ZeroMQUtils](api/scala/index.html#org.apache.spark.streaming.zeromq.ZeroMQUtils$), and
     [MQTTUtils](api/scala/index.html#org.apache.spark.streaming.mqtt.MQTTUtils$)
   - Java docs
-    * [JavaStreamingContext](api/java/org/apache/spark/streaming/api/java/JavaStreamingContext.html),
-    [JavaDStream](api/java/org/apache/spark/streaming/api/java/JavaDStream.html) and
-    [PairJavaDStream](api/java/org/apache/spark/streaming/api/java/PairJavaDStream.html)
-    * [KafkaUtils](api/java/org/apache/spark/streaming/kafka/KafkaUtils.html),
-    [FlumeUtils](api/java/org/apache/spark/streaming/flume/FlumeUtils.html),
-    [TwitterUtils](api/java/org/apache/spark/streaming/twitter/TwitterUtils.html),
-    [ZeroMQUtils](api/java/org/apache/spark/streaming/zeromq/ZeroMQUtils.html), and
-    [MQTTUtils](api/java/org/apache/spark/streaming/mqtt/MQTTUtils.html)
+    * [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html),
+    [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html) and
+    [PairJavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/PairJavaDStream.html)
+    * [KafkaUtils](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html),
+    [FlumeUtils](api/java/index.html?org/apache/spark/streaming/flume/FlumeUtils.html),
+    [TwitterUtils](api/java/index.html?org/apache/spark/streaming/twitter/TwitterUtils.html),
+    [ZeroMQUtils](api/java/index.html?org/apache/spark/streaming/zeromq/ZeroMQUtils.html), and
+    [MQTTUtils](api/java/index.html?org/apache/spark/streaming/mqtt/MQTTUtils.html)
 
 * More examples in [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming)
   and [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming)

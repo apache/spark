@@ -18,7 +18,6 @@
 package org.apache.spark;
 
 import java.io.*;
-import java.lang.StringBuilder;
 import java.util.*;
 
 import scala.Tuple2;
@@ -49,16 +48,20 @@ import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.StatCounter;
+import org.apache.spark.util.Utils;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
 public class JavaAPISuite implements Serializable {
   private transient JavaSparkContext sc;
+  private transient File tempDir;
 
   @Before
   public void setUp() {
     sc = new JavaSparkContext("local", "JavaAPISuite");
+    tempDir = Files.createTempDir();
+    tempDir.deleteOnExit();
   }
 
   @After
@@ -609,7 +612,6 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void textFiles() throws IOException {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
     rdd.saveAsTextFile(outputDir);
@@ -628,7 +630,6 @@ public class JavaAPISuite implements Serializable {
     byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
     byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
 
-    File tempDir = Files.createTempDir();
     String tempDirName = tempDir.getAbsolutePath();
     DataOutputStream ds = new DataOutputStream(new FileOutputStream(tempDirName + "/part-00000"));
     ds.write(content1);
@@ -651,7 +652,6 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void textFilesCompressed() throws IOException {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
     rdd.saveAsTextFile(outputDir, DefaultCodec.class);
@@ -665,7 +665,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void sequenceFile() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -695,7 +694,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void writeWithNewAPIHadoopFile() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -726,7 +724,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void readWithNewAPIHadoopFile() throws IOException {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -756,7 +753,6 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void objectFilesOfInts() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
     rdd.saveAsObjectFile(outputDir);
@@ -769,7 +765,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void objectFilesOfComplexTypes() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -786,7 +781,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void hadoopFile() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -816,7 +810,6 @@ public class JavaAPISuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void hadoopFileCompressed() {
-    File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output_compressed").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
         new Tuple2<Integer, String>(1, "a"),
@@ -946,7 +939,6 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void checkpointAndComputation() {
-    File tempDir = Files.createTempDir();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     sc.setCheckpointDir(tempDir.getAbsolutePath());
     Assert.assertEquals(false, rdd.isCheckpointed());
@@ -958,7 +950,6 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void checkpointAndRestore() {
-    File tempDir = Files.createTempDir();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     sc.setCheckpointDir(tempDir.getAbsolutePath());
     Assert.assertEquals(false, rdd.isCheckpointed());

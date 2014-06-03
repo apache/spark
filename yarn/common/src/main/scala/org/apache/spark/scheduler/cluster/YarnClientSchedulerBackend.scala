@@ -52,7 +52,7 @@ private[spark] class YarnClientSchedulerBackend(
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
       "--class", "notused",
-      "--jar", null,
+      "--jar", null, // The primary jar will be added dynamically in SparkContext.
       "--args", hostport,
       "--am-class", classOf[ExecutorLauncher].getName
     )
@@ -113,7 +113,7 @@ private[spark] class YarnClientSchedulerBackend(
   override def stop() {
     super.stop()
     client.stop()
-    logInfo("Stoped")
+    logInfo("Stopped")
   }
 
 }

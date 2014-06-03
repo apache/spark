@@ -42,6 +42,12 @@ import org.apache.spark.rdd.RDD
  */
 class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWorkaround {
   /**
+   * Create a JavaSparkContext that loads settings from system properties (for instance, when
+   * launching with ./bin/spark-submit).
+   */
+  def this() = this(new SparkContext())
+
+  /**
    * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
    */
   def this(conf: SparkConf) = this(new SparkContext(conf))
@@ -447,7 +453,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
    */
-  def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)
+  def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)(fakeClassTag)
 
   /** Shut down the SparkContext. */
   def stop() {
