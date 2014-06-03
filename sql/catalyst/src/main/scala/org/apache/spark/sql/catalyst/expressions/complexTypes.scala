@@ -94,7 +94,7 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
   override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[StructType]
 
   override def eval(input: Row): Any = {
-    val baseValue = child.eval(input).asInstanceOf[Seq[_]]
+    val baseValue = child.eval(input).asInstanceOf[Row]
     if (baseValue == null) null else baseValue(ordinal)
   }
 

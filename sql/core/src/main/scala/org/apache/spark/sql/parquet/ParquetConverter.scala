@@ -564,7 +564,7 @@ private[parquet] class CatalystStructConverter(
     // here we need to make sure to use StructScalaType
     // Note: we need to actually make a copy of the array since we
     // may be in a nested field
-    parent.updateField(index, current.toArray.toSeq)
+    parent.updateField(index, new GenericRow(current.toArray))
   }
 }
 
