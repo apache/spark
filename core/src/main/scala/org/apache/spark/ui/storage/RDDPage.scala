@@ -59,7 +59,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
           <ul class="unstyled">
             <li>
               <strong>Storage Level:</strong>
-              {rddInfo.storageLevel.description}
+              {rddInfo._storageLevel.description}
             </li>
             <li>
               <strong>Cached Partitions:</strong>
