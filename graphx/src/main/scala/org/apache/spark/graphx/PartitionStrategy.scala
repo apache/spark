@@ -119,4 +119,13 @@ object PartitionStrategy {
       math.abs((lower, higher).hashCode()) % numParts
     }
   }
+
+  /** Returns the PartitionStrategy with the specified name. */
+  def fromString(s: String): PartitionStrategy = s match {
+    case "RandomVertexCut" => RandomVertexCut
+    case "EdgePartition1D" => EdgePartition1D
+    case "EdgePartition2D" => EdgePartition2D
+    case "CanonicalRandomVertexCut" => CanonicalRandomVertexCut
+    case _ => throw new IllegalArgumentException("Invalid PartitionStrategy: " + s)
+  }
 }
