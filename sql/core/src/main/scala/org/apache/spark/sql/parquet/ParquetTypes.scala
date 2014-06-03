@@ -170,6 +170,9 @@ private[parquet] object ParquetTypesConverter {
       Some(ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)
     case FloatType => Some(ParquetPrimitiveTypeName.FLOAT)
     case IntegerType => Some(ParquetPrimitiveTypeName.INT32)
+    // There is no type for Byte or Short so we promote them to INT32.
+    case ShortType => Some(ParquetPrimitiveTypeName.INT32)
+    case ByteType => Some(ParquetPrimitiveTypeName.INT32)
     case LongType => Some(ParquetPrimitiveTypeName.INT64)
     case _ => None
   }
