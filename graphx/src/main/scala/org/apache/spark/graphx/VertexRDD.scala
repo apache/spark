@@ -325,8 +325,8 @@ class VertexRDD[@specialized VD: ClassTag](
 
   /** Replaces the vertex partitions while preserving all other properties of the VertexRDD. */
   private[graphx] def withPartitionsRDD[VD2: ClassTag](
-      partitionsRDD_ : RDD[ShippableVertexPartition[VD2]]): VertexRDD[VD2] = {
-    new VertexRDD(partitionsRDD_, targetStorageLevel)
+      partitionsRDD: RDD[ShippableVertexPartition[VD2]]): VertexRDD[VD2] = {
+    new VertexRDD(partitionsRDD, this.targetStorageLevel)
   }
 
   /**
@@ -337,8 +337,8 @@ class VertexRDD[@specialized VD: ClassTag](
    * [[org.apache.spark.graphx.VertexRDD#cache]] on the returned VertexRDD.
    */
   private[graphx] def withTargetStorageLevel(
-      targetStorageLevel_ : StorageLevel): VertexRDD[VD] = {
-    new VertexRDD(partitionsRDD, targetStorageLevel_)
+      targetStorageLevel: StorageLevel): VertexRDD[VD] = {
+    new VertexRDD(this.partitionsRDD, targetStorageLevel)
   }
 
   /** Generates an RDD of vertex attributes suitable for shipping to the edge partitions. */

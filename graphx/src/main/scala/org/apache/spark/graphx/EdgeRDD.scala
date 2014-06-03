@@ -140,8 +140,8 @@ class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
 
   /** Replaces the vertex partitions while preserving all other properties of the VertexRDD. */
   private[graphx] def withPartitionsRDD[ED2: ClassTag, VD2: ClassTag](
-      partitionsRDD_ : RDD[(PartitionID, EdgePartition[ED2, VD2])]): EdgeRDD[ED2, VD2] = {
-    new EdgeRDD(partitionsRDD_, targetStorageLevel)
+      partitionsRDD: RDD[(PartitionID, EdgePartition[ED2, VD2])]): EdgeRDD[ED2, VD2] = {
+    new EdgeRDD(partitionsRDD, this.targetStorageLevel)
   }
 
   /**
@@ -152,8 +152,8 @@ class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
    * [[org.apache.spark.graphx.EdgeRDD#cache]] on the returned EdgeRDD.
    */
   private[graphx] def withTargetStorageLevel(
-      targetStorageLevel_ : StorageLevel): EdgeRDD[ED, VD] = {
-    new EdgeRDD(partitionsRDD, targetStorageLevel_)
+      targetStorageLevel: StorageLevel): EdgeRDD[ED, VD] = {
+    new EdgeRDD(this.partitionsRDD, targetStorageLevel)
   }
 
 }
