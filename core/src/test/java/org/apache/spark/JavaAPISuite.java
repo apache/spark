@@ -49,7 +49,6 @@ import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.StatCounter;
-import org.apache.spark.util.Utils;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -115,7 +114,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> intersections = s1.intersection(s2);
     Assert.assertEquals(3, intersections.count());
 
-    ArrayList<Integer> list = new ArrayList<Integer>();
+    List<Integer> list = new ArrayList<Integer>();
     JavaRDD<Integer> empty = sc.parallelize(list);
     JavaRDD<Integer> emptyIntersection = empty.intersection(s2);
     Assert.assertEquals(0, emptyIntersection.count());
@@ -365,8 +364,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(2, localCounts.get(2).intValue());
     Assert.assertEquals(3, localCounts.get(3).intValue());
 
-   localCounts = rdd.reduceByKeyLocally(new Function2<Integer, Integer,
-      Integer>() {
+    localCounts = rdd.reduceByKeyLocally(new Function2<Integer, Integer, Integer>() {
       @Override
       public Integer call(Integer a, Integer b) {
         return a + b;
@@ -457,7 +455,7 @@ public class JavaAPISuite implements Serializable {
     JavaDoubleRDD doubles = rdd.mapToDouble(new DoubleFunction<Integer>() {
       @Override
       public double call(Integer x) {
-        return 1.0 * x;
+        return x.doubleValue();
       }
     }).cache();
     doubles.collect();
@@ -647,7 +645,7 @@ public class JavaAPISuite implements Serializable {
     Files.write(content1, new File(tempDirName + "/part-00000"));
     Files.write(content2, new File(tempDirName + "/part-00001"));
 
-    HashMap<String, String> container = new HashMap<String, String>();
+    Map<String, String> container = new HashMap<String, String>();
     container.put(tempDirName+"/part-00000", new Text(content1).toString());
     container.put(tempDirName+"/part-00001", new Text(content2).toString());
 
@@ -1034,20 +1032,20 @@ public class JavaAPISuite implements Serializable {
       arrayData.add(i % size);
     }
     JavaRDD<Integer> simpleRdd = sc.parallelize(arrayData, 10);
-    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.2) - size) / (size * 1.0)) < 0.2);
-    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.05) - size) / (size * 1.0)) <= 0.05);
-    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.01) - size) / (size * 1.0)) <= 0.01);
+    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.2) - size) / (double) size) < 0.2);
+    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.05) - size) / (double) size) <= 0.05);
+    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.01) - size) / (double) size) <= 0.01);
   }
 
   @Test
   public void countApproxDistinctByKey() {
-    double relativeSD = 0.001;
-
     List<Tuple2<Integer, Integer>> arrayData = new ArrayList<Tuple2<Integer, Integer>>();
-    for (int i = 10; i < 100; i++)
-      for (int j = 0; j < i; j++)
+    for (int i = 10; i < 100; i++) {
+      for (int j = 0; j < i; j++) {
         arrayData.add(new Tuple2<Integer, Integer>(i, j));
-
+      }
+    }
+    double relativeSD = 0.001;
     JavaPairRDD<Integer, Integer> pairRdd = sc.parallelizePairs(arrayData);
     List<Tuple2<Integer, Object>> res =  pairRdd.countApproxDistinctByKey(relativeSD).collect();
     for (Tuple2<Integer, Object> resItem : res) {
