@@ -126,7 +126,7 @@ class HadoopRDD[K, V](
   private val createTime = new Date()
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
-  protected def getJobConf(): JobConf = {
+  protected def getJobConf(): JobConf = synchronized {
     val conf: Configuration = broadcastedConf.value.value
     if (conf.isInstanceOf[JobConf]) {
       // A user-broadcasted JobConf was provided to the HadoopRDD, so always use it.
