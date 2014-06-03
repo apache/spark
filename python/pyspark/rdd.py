@@ -1045,7 +1045,7 @@ class RDD(object):
         return python_right_outer_join(self, other, numPartitions)
 
     # TODO: add option to control map-side combining
-    def partitionBy(self, numPartitions, partitionFunc=hash):
+    def partitionBy(self, numPartitions, partitionFunc=None):
         """
         Return a copy of the RDD partitioned using the specified partitioner.
 
@@ -1056,6 +1056,9 @@ class RDD(object):
         """
         if numPartitions is None:
             numPartitions = self.ctx.defaultParallelism
+
+        if partitionFunc is None:
+            partitionFunc = lambda x: 0 if x is None else hash(x)
         # Transferring O(n) objects to Java is too expensive.  Instead, we'll
         # form the hash buckets in Python, transferring O(numPartitions) objects
         # to Java.  Each object is a (splitNumber, [objects]) pair.
