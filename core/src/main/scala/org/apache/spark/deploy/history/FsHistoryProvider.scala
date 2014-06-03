@@ -29,7 +29,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
-class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
+private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
   with Logging {
 
   // Interval between each check for event log updates
