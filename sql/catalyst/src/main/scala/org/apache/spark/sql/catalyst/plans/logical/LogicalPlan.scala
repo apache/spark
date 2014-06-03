@@ -111,6 +111,11 @@ abstract class Command extends LeafNode {
 case class NativeCommand(cmd: String) extends Command
 
 /**
+ * Commands of the form "set key=value".
+ */
+case class SetCommand(key: String, value: String) extends Command
+
+/**
  * Returned by a parser when the users only wants to see what query plan would be executed, without
  * actually performing the execution.
  */

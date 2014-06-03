@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.{Subquery, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{SetCommand, Subquery, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
@@ -40,7 +40,6 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
 
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.SQLConf
 
 /**
  * :: AlphaComponent ::
@@ -250,6 +249,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val planner = new SparkPlanner
 
+  @transient
+  protected lazy val emptyResult =
+    sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
+
   /**
    * Prepares a planned SparkPlan for execution by binding references to specific ordinals, and
    * inserting shuffle operations as needed.
@@ -275,7 +278,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
     lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
-    lazy val toRdd: RDD[Row] = executedPlan.execute()
+    lazy val toRdd: RDD[Row] = {
+      logical match {
+        case SetCommand(key, value) =>
+          sqlConf.set(key, value)
+          emptyResult
+        case _ => executedPlan.execute()
+      }
+    }
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }

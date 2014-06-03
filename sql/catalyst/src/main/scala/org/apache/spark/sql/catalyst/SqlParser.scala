@@ -131,6 +131,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val OUTER = Keyword("OUTER")
   protected val RIGHT = Keyword("RIGHT")
   protected val SELECT = Keyword("SELECT")
+  protected val SET = Keyword("SET")
   protected val STRING = Keyword("STRING")
   protected val SUM = Keyword("SUM")
   protected val TRUE = Keyword("TRUE")
@@ -168,11 +169,21 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     }
   }
 
-  protected lazy val query: Parser[LogicalPlan] =
-    select * (
-      UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
-      UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
-    ) | insert
+  protected lazy val query: Parser[LogicalPlan] = (
+      setCommand
+    | select * (
+        UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
+        UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
+      )
+    | insert
+  )
+
+  protected lazy val setCommand: Parser[LogicalPlan] = {
+    val keyVal = ident | numericLit | stringLit
+    (SET ~> keyVal <~ "=") ~ keyVal <~ opt(";") ^^ {
+      case key ~ value => SetCommand(key, value)
+    }
+  }
 
   protected lazy val select: Parser[LogicalPlan] =
     SELECT ~> opt(DISTINCT) ~ projections ~

@@ -20,19 +20,15 @@ package org.apache.spark.sql
 import org.apache.spark.sql.test._
 
 /* Implicits */
-//import TestSQLContext._
-//import TestData._
+import TestSQLContext._
 
 class SQLConfSuite extends QueryTest {
 
-  // Make sure the tables are loaded.
-//  TestData
+  val conf = TestSQLContext.sqlConf
+  val testKey = "test.key.0"
+  val testVal = "test.val.0"
 
-  test("basic setting and getting in SQLConf") {
-    val conf = TestSQLContext.sqlConf
-    val testKey = "test.key"
-    val testVal = "test.val"
-
+  test("programmatic ways of basic setting and getting") {
     assert(conf != null)
     assert(conf.getOption(testKey).isEmpty)
     assert(conf.getAll.toSet === Set())
@@ -49,6 +45,19 @@ class SQLConfSuite extends QueryTest {
     assert(TestSQLContext.sqlConf.get(testKey, testVal + "_") == testVal)
     assert(TestSQLContext.sqlConf.getOption(testKey) == Some(testVal))
     assert(TestSQLContext.sqlConf.contains(testKey))
+
+    conf.clear()
+  }
+
+  test("SQLConf picks up SQL set commands") {
+    sql(s"set $testKey=$testVal")
+    assert(conf.get(testKey, testVal + "_") == testVal)
+    assert(TestSQLContext.sqlConf.get(testKey, testVal + "_") == testVal)
+
+    sql("set mapred.reduce.tasks=20")
+    assert(conf.get("mapred.reduce.tasks", "0") == "20")
+    sql("set mapred.reduce.tasks = 40")
+    assert(conf.get("mapred.reduce.tasks", "0") == "40")
   }
 
 }

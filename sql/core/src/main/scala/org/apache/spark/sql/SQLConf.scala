@@ -26,6 +26,10 @@ class SQLConf {
 
   private val settings = new mutable.HashMap[String, String]()
 
+  private[spark] def clear() {
+    settings.clear()
+  }
+
   def set(key: String, value: String): SQLConf = {
     if (key == null) {
       throw new NullPointerException("null key")
