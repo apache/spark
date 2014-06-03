@@ -28,6 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, InsertIntoCreatedTable}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types._
@@ -147,7 +148,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
       // We force query optimization to happen right away instead of letting it happen lazily like
       // when using the query DSL.  This is so DDL commands behave as expected.  This is only
       // generates the RDD lineage for DML queries, but do not perform any execution.
-      case _: Command => result.queryExecution.toRdd
+      case _: Command | _: InsertIntoTable | _: InsertIntoCreatedTable =>
+        result.queryExecution.toRdd
       case _ =>
     }
     result
