@@ -930,6 +930,7 @@ class DAGScheduler(
                   val pendingTaskNum = (for (taskSet <- pendingTasks.values) yield taskSet.size).sum
                   val freeCores = totalCores - pendingTaskNum
                   val waitingStageNum = waitingStages.size
+                  //TODO: compare free cores with "spark.task.cpus"
                   if (freeCores > 0 && waitingStageNum > 0 && stage.shuffleDep.isDefined) {
                     logInfo("We have " + totalCores + " CPUs. " + pendingTaskNum + " tasks are running/pending. " +
                       waitingStageNum + " stages are waiting to be submitted. ---lirui")

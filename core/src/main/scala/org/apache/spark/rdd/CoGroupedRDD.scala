@@ -120,6 +120,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
     // A list of (rdd iterator, dependency number) pairs
     val rddIterators = new ArrayBuffer[(Iterator[Product2[K, Any]], Int)]
+    //record the shuffle IDs we depend on
+    val dependedShuffle = new ArrayBuffer[(Int, Int)]()
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) =>
         // Read them from the parent
@@ -128,10 +130,17 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
       case ShuffleCoGroupSplitDep(shuffleId) =>
         // Read map outputs of shuffle
-        val fetcher = SparkEnv.get.shuffleFetcher
-        val ser = Serializer.getSerializer(serializer)
-        val it = fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser)
-        rddIterators += ((it, depNum))
+//        val fetcher = SparkEnv.get.shuffleFetcher
+//        val ser = Serializer.getSerializer(serializer)
+//        val it = fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser)
+//        rddIterators += ((it, depNum))
+        dependedShuffle +=((shuffleId, depNum))
+    }
+    for ((shuffleId, depNum) <- dependedShuffle.sortBy(_._1).reverse) {
+      val fetcher = SparkEnv.get.shuffleFetcher
+      val ser = Serializer.getSerializer(serializer)
+      val it = fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser)
+      rddIterators += ((it, depNum))
     }
 
     if (!externalSorting) {
