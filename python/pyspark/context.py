@@ -336,8 +336,8 @@ class SparkContext(object):
             jm[k] = v
         return jm
 
-    def sequenceFile(self, path, keyClass, valueClass, keyConverter=None, valueConverter=None,
-                     minSplits=None):
+    def sequenceFile(self, path, keyClass=None, valueClass=None, keyConverter=None,
+                     valueConverter=None, minSplits=None):
         """
         Read a Hadoop SequenceFile with arbitrary key and value Writable class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
