@@ -39,10 +39,12 @@ object MimaExcludes {
             // We made a mistake earlier (ed06500d3) in the Java API to use default parameter values
             // for countApproxDistinct* functions, which does not work in Java. We later removed
             // them, and use the following to tell Mima to not care about them.
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.api.java.JavaPairRDD.countApproxDistinctByKey"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.api.java.JavaPairRDD.countApproxDistinctByKey"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaPairRDD.countApproxDistinct$default$1"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaPairRDD.countApproxDistinctByKey$default$1"),
             ProblemFilters.exclude[MissingMethodProblem](
@@ -50,7 +52,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaRDDLike.countApproxDistinct$default$1"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.api.java.JavaRDDLike.countApproxDistinct")
+              "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1")
           ) ++
           MimaBuild.excludeSparkClass("util.SerializableHyperLogLog")
         case v if v.startsWith("1.0") =>
