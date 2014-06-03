@@ -30,20 +30,19 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
     val requestedFirst = (requestedPage - 1) * pageSize
-    val (apps, actualFirst, count) = parent.getApplicationList(requestedFirst, pageSize)
+    val (apps, actualFirst, totalCount) = parent.getApplicationList(requestedFirst, pageSize)
     val actualPage = (actualFirst / pageSize) + 1
-    val last = Math.min(actualFirst + pageSize, count) - 1
-    val pageCount = count / pageSize + (if (count % pageSize > 0) 1 else 0)
+    val last = Math.min(actualFirst + pageSize, totalCount) - 1
+    val pageCount = totalCount / pageSize + (if (totalCount % pageSize > 0) 1 else 0)
 
     val appTable = UIUtils.listingTable(appHeader, appRow, apps)
     val content =
       <div class="row-fluid">
         <div class="span12">
           {
-            if (count > 0) {
+            if (totalCount > 0) {
               <h4>
-                Showing {actualFirst + 1}-{last + 1} of {count}
-                Application{if (last - actualFirst > 1) "s" else ""}
+                Showing {actualFirst + 1}-{last + 1} of {totalCount}
                 <span style="float: right">
                   {if (actualPage > 1) <a href={"/?page=" + (actualPage - 1)}>&lt;</a>}
                   {if (actualPage < pageCount) <a href={"/?page=" + (actualPage + 1)}>&gt;</a>}
