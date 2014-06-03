@@ -58,8 +58,14 @@ case class TestWritable(var str: String, var int: Int, var double: Double) exten
  * This object contains method to generate SequenceFile test data and write it to a
  * given directory (probably a temp directory)
  */
-object WriteInputFormatTestDataGenerator extends App {
+object WriteInputFormatTestDataGenerator {
   import SparkContext._
+
+  def main(args: Array[String]) {
+    val path = args(0)
+    val sc = new JavaSparkContext("local[4]", "test-writables")
+    generateData(path, sc)
+  }
 
   def generateData(path: String, jsc: JavaSparkContext) {
     val sc = jsc.sc
@@ -99,8 +105,7 @@ object WriteInputFormatTestDataGenerator extends App {
     sc.parallelize(data, numSlices = 2)
       .map{ case (k, v) =>
       (new IntWritable(k), new ArrayWritable(classOf[DoubleWritable], v.map(new DoubleWritable(_))))
-    }
-      .saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, ArrayWritable]](arrPath)
+    }.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, ArrayWritable]](arrPath)
 
     // Create test data for MapWritable, with keys DoubleWritable and values Text
     val mapData = Seq(

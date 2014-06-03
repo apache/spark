@@ -23,15 +23,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
 
 
-/**
- * Utilities for working with Python objects -> Hadoop-related objects
- */
+/** Utilities for working with Python objects -> Hadoop-related objects */
 private[python] object PythonHadoopUtil {
 
   /**
-   * Convert a Map of properties to a [[org.apache.hadoop.conf.Configuration]]
+   * Convert a [[java.util.Map]] of properties to a [[org.apache.hadoop.conf.Configuration]]
    */
-  def mapToConf(map: java.util.Map[String, String]) = {
+  def mapToConf(map: java.util.Map[String, String]): Configuration = {
     import collection.JavaConversions._
     val conf = new Configuration()
     map.foreach{ case (k, v) => conf.set(k, v) }
@@ -42,7 +40,7 @@ private[python] object PythonHadoopUtil {
    * Merges two configurations, returns a copy of left with keys from right overwriting
    * any matching keys in left
    */
-  def mergeConfs(left: Configuration, right: Configuration) = {
+  def mergeConfs(left: Configuration, right: Configuration): Configuration = {
     import collection.JavaConversions._
     val copy = new Configuration(left)
     right.iterator().foreach(entry => copy.set(entry.getKey, entry.getValue))

@@ -24,11 +24,8 @@ import scala.util.Success
 import scala.util.Failure
 import net.razorvine.pickle.Pickler
 
-/**
- * Utilities for serialization / deserialization between Python and Java, using MsgPack.
- * Also contains utilities for converting [[org.apache.hadoop.io.Writable]] ->
- * Scala objects and primitives
- */
+
+/** Utilities for serialization / deserialization between Python and Java, using Pickle. */
 private[python] object SerDeUtil extends Logging {
 
   /**
@@ -37,12 +34,12 @@ private[python] object SerDeUtil extends Logging {
    * representation is serialized
    */
   def rddToPython[K, V](rdd: RDD[(K, V)]): RDD[Array[Byte]] = {
-    rdd.mapPartitions{ iter =>
+    rdd.mapPartitions { iter =>
       val pickle = new Pickler
       var keyFailed = false
       var valueFailed = false
       var firstRecord = true
-      iter.map{ case (k, v) =>
+      iter.map { case (k, v) =>
         if (firstRecord) {
           Try {
             pickle.dumps(Array(k, v))
@@ -57,29 +54,32 @@ private[python] object SerDeUtil extends Logging {
               }
               (kt, vt) match {
                 case (Failure(kf), Failure(vf)) =>
-                  log.warn(s"""Failed to pickle Java object as key: ${k.getClass.getSimpleName};
+                  logWarning(s"""Failed to pickle Java object as key: ${k.getClass.getSimpleName};
                     Error: ${kf.getMessage}""")
-                  log.warn(s"""Failed to pickle Java object as value: ${v.getClass.getSimpleName};
+                  logWarning(s"""Failed to pickle Java object as value: ${v.getClass.getSimpleName};
                     Error: ${vf.getMessage}""")
                   keyFailed = true
                   valueFailed = true
                 case (Failure(kf), _) =>
-                  log.warn(s"""Failed to pickle Java object as key: ${k.getClass.getSimpleName};
+                  logWarning(s"""Failed to pickle Java object as key: ${k.getClass.getSimpleName};
                     Error: ${kf.getMessage}""")
                   keyFailed = true
                 case (_, Failure(vf)) =>
-                  log.warn(s"""Failed to pickle Java object as value: ${v.getClass.getSimpleName};
+                  logWarning(s"""Failed to pickle Java object as value: ${v.getClass.getSimpleName};
                     Error: ${vf.getMessage}""")
                   valueFailed = true
               }
           }
           firstRecord = false
         }
-        (keyFailed, valueFailed) match {
-          case (true, true) => pickle.dumps(Array(k.toString, v.toString))
-          case (true, false) => pickle.dumps(Array(k.toString, v))
-          case (false, true) => pickle.dumps(Array(k, v.toString))
-          case (false, false) => pickle.dumps(Array(k, v))
+        if (keyFailed && valueFailed) {
+          pickle.dumps(Array(k.toString, v.toString))
+        } else if (keyFailed) {
+          pickle.dumps(Array(k.toString, v))
+        } else if (!keyFailed && valueFailed) {
+          pickle.dumps(Array(k, v.toString))
+        } else {
+          pickle.dumps(Array(k, v))
         }
       }
     }
