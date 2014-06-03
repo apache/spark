@@ -27,7 +27,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
 import org.apache.spark.util.random.BernoulliSampler
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.regression.{LabeledPointParser, LabeledPoint}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.storage.StorageLevel
 
@@ -203,7 +203,7 @@ object MLUtils {
    * @return labeled points stored as an RDD[LabeledPoint]
    */
   def loadLabeledPoints(sc: SparkContext, path: String, minPartitions: Int): RDD[LabeledPoint] =
-    sc.textFile(path, minPartitions).map(LabeledPoint.parse)
+    sc.textFile(path, minPartitions).map(LabeledPointParser.parse)
 
   /**
    * Loads labeled points saved using `RDD[LabeledPoint].saveAsTextFile` with the default number of
