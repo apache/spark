@@ -48,12 +48,18 @@ object ALSSuite {
       features: Int,
       samplingRate: Double,
       implicitPrefs: Boolean = false,
-      negativeWeights: Boolean = false): (Seq[Rating], DoubleMatrix, DoubleMatrix) = {
+      negativeWeights: Boolean = false,
+      negativeFactors: Boolean = true): (Seq[Rating], DoubleMatrix, DoubleMatrix) = {
     val rand = new Random(42)
 
     // Create a random matrix with uniform values from -1 to 1
-    def randomMatrix(m: Int, n: Int) =
-      new DoubleMatrix(m, n, Array.fill(m * n)(rand.nextDouble() * 2 - 1): _*)
+    def randomMatrix(m: Int, n: Int) = {
+      if (negativeFactors) {
+        new DoubleMatrix(m, n, Array.fill(m * n)(rand.nextDouble() * 2 - 1): _*)
+      } else {
+        new DoubleMatrix(m, n, Array.fill(m * n)(rand.nextDouble()): _*)
+      }
+    }
 
     val userMatrix = randomMatrix(users, features)
     val productMatrix = randomMatrix(features, products)
@@ -146,6 +152,10 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("NNALS, rank 2") {
+    testALS(100, 200, 2, 15, 0.7, 0.4, false, false, false, -1, false)
+  }
+
   /**
    * Test if we can correctly factorize R = U * P where U and P are of known rank.
    *
@@ -159,19 +169,19 @@ class ALSSuite extends FunSuite with LocalSparkContext {
    * @param bulkPredict    flag to test bulk prediciton
    * @param negativeWeights whether the generated data can contain negative values
    * @param numBlocks      number of blocks to partition users and products into
+   * @param negativeFactors whether the generated user/product factors can have negative entries
    */
   def testALS(users: Int, products: Int, features: Int, iterations: Int,
     samplingRate: Double, matchThreshold: Double, implicitPrefs: Boolean = false,
-    bulkPredict: Boolean = false, negativeWeights: Boolean = false, numBlocks: Int = -1)
+    bulkPredict: Boolean = false, negativeWeights: Boolean = false, numBlocks: Int = -1,
+    negativeFactors: Boolean = true)
   {
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
-      features, samplingRate, implicitPrefs, negativeWeights)
-    val model = implicitPrefs match {
-      case false => ALS.train(sc.parallelize(sampledRatings), features, iterations, 0.01,
-          numBlocks, 0L)
-      case true => ALS.trainImplicit(sc.parallelize(sampledRatings), features, iterations, 0.01,
-          numBlocks, 1.0, 0L)
-    }
+      features, samplingRate, implicitPrefs, negativeWeights, negativeFactors)
+
+    val model = (new ALS().setBlocks(numBlocks).setRank(features).setIterations(iterations)
+          .setAlpha(1.0).setImplicitPrefs(implicitPrefs).setLambda(0.01).setSeed(0L)
+          .setNonnegative(!negativeFactors).run(sc.parallelize(sampledRatings)))
 
     val predictedU = new DoubleMatrix(users, features)
     for ((u, vec) <- model.userFeatures.collect(); i <- 0 until features) {
