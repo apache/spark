@@ -313,4 +313,27 @@ class SQLQuerySuite extends QueryTest {
         (3, "C"),
         (4, "D")))
   }
+  
+  test("system function upper()") {
+    checkAnswer(
+      sql("SELECT n,UPPER(l) FROM lowerCaseData"),
+      Seq(
+        (1, "A"),
+        (2, "B"),
+        (3, "C"),
+        (4, "D")))
+  }
+    
+  test("system function lower()") {
+    checkAnswer(
+      sql("SELECT N,LOWER(L) FROM upperCaseData"),
+      Seq(
+        (1, "a"),
+        (2, "b"),
+        (3, "c"),
+        (4, "d"),
+        (5, "e"),
+        (6, "f")))
+  }  
+  
 }
