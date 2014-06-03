@@ -208,7 +208,8 @@ private[hive] object HiveQl {
   def parseSql(sql: String): LogicalPlan = {
     try {
       if (sql.toLowerCase.startsWith("set")) {
-        NativeCommand(sql)
+        val kvPair = sql.drop(3).split("=")
+        SetCommand(kvPair(0).trim, kvPair(1).trim)
       } else if (sql.toLowerCase.startsWith("add jar")) {
         AddJar(sql.drop(8))
       } else if (sql.toLowerCase.startsWith("add file")) {

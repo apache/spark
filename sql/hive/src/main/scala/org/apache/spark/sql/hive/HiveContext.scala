@@ -30,16 +30,20 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
-import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand, ExplainCommand}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
+import org.apache.spark.sql.catalyst.plans.logical.ExplainCommand
+import org.apache.spark.sql.catalyst.types.ArrayType
+import org.apache.spark.sql.catalyst.plans.logical.LowerCaseSchema
+import org.apache.spark.sql.catalyst.types.MapType
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -168,7 +172,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /**
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
-   */
+   */                                                      `````
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
     try {
       val cmd_trimmed: String = cmd.trim()
@@ -240,20 +244,30 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override lazy val optimizedPlan =
       optimizer(catalog.PreInsertionCasts(catalog.CreateTables(analyzed)))
 
-    override lazy val toRdd: RDD[Row] =
-      analyzed match {
-        case NativeCommand(cmd) =>
-          val output = runSqlHive(cmd)
+    override lazy val toRdd: RDD[Row] = {
 
-          if (output.size == 0) {
-            emptyResult
-          } else {
-            val asRows = output.map(r => new GenericRow(r.split("\t").asInstanceOf[Array[Any]]))
-            sparkContext.parallelize(asRows, 1)
-          }
+      def processCmd(cmd: String): RDD[Row] = {
+        val output = runSqlHive(cmd)
+        if (output.size == 0) {
+          emptyResult
+        } else {
+          val asRows = output.map(r => new GenericRow(r.split("\t").asInstanceOf[Array[Any]]))
+          sparkContext.parallelize(asRows, 1)
+        }
+      }
+
+      analyzed match {
+        case SetCommand(key, value) =>
+          logger.debug("inside Hive's toRdd -- matched SetCommand")
+          // Record the set command inside SQLConf, as well as have Hive execute it.
+          sqlConf.set(key, value)
+          processCmd(s"set $key=$value")
+        case NativeCommand(cmd) =>
+          processCmd(cmd)
         case _ =>
           executedPlan.execute().map(_.copy())
       }
+    }
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
@@ -312,6 +326,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override def simpleString: String =
       logical match {
         case _: NativeCommand => "<Executed by Hive>"
+        case _: SetCommand => "<Set Command: Executed by Hive, and noted by SQLContext>"
         case _ => executedPlan.toString
       }
   }
