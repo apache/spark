@@ -28,7 +28,6 @@ import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 
 import java.io.Serializable;
-import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -101,7 +100,8 @@ public final class JavaLogQuery {
 
   public static void main(String[] args) {
 
-    SparkConf sparkConf = new SparkConf().setAppName("JavaLogQuery");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaLogQuery")
+        .setIfMissing("spark.master", "local[2]");
     JavaSparkContext jsc = new JavaSparkContext(sparkConf);
 
     JavaRDD<String> dataSet = (args.length == 1) ? jsc.textFile(args[0]) : jsc.parallelize(exampleApacheLogs);

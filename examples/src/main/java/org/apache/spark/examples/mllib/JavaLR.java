@@ -56,7 +56,8 @@ public final class JavaLR {
       System.err.println("Usage: JavaLR <input_dir> <step_size> <niters>");
       System.exit(1);
     }
-    SparkConf sparkConf = new SparkConf().setAppName("JavaLR");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaLR")
+        .setIfMissing("spark.master", "local[2]");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
     JavaRDD<String> lines = sc.textFile(args[0]);
     JavaRDD<LabeledPoint> points = lines.map(new ParsePoint()).cache();

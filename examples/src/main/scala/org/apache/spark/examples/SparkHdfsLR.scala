@@ -55,6 +55,7 @@ object SparkHdfsLR {
     }
 
     val sparkConf = new SparkConf().setAppName("SparkHdfsLR")
+      .setIfMissing("spark.master", "local[2]")
     val inputPath = args(0)
     val conf = SparkHadoopUtil.get.newConfiguration()
     val sc = new SparkContext(sparkConf,

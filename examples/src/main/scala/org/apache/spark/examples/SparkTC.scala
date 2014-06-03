@@ -42,7 +42,7 @@ object SparkTC {
   }
 
   def main(args: Array[String]) {
-    val sparkConf = new SparkConf().setAppName("SparkTC")
+    val sparkConf = new SparkConf().setAppName("SparkTC").setIfMissing("spark.master", "local[2]")
     val spark = new SparkContext(sparkConf)
     val slices = if (args.length > 0) args(0).toInt else 2
     var tc = spark.parallelize(generateGraph, slices).cache()

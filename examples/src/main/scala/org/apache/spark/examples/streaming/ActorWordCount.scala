@@ -146,6 +146,7 @@ object ActorWordCount {
 
     val Seq(host, port) = args.toSeq
     val sparkConf = new SparkConf().setAppName("ActorWordCount")
+      .setIfMissing("spark.master", "local[2]")
     // Create the context and set the batch size
     val ssc = new StreamingContext(sparkConf, Seconds(2))
 

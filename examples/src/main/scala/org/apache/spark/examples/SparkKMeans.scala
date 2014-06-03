@@ -36,7 +36,6 @@ object SparkKMeans {
   }
 
   def closestPoint(p: Vector[Double], centers: Array[Vector[Double]]): Int = {
-    var index = 0
     var bestIndex = 0
     var closest = Double.PositiveInfinity
 
@@ -57,6 +56,7 @@ object SparkKMeans {
       System.exit(1)
     }
     val sparkConf = new SparkConf().setAppName("SparkKMeans")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(sparkConf)
     val lines = sc.textFile(args(0))
     val data = lines.map(parseVector _).cache()

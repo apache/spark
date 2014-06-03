@@ -52,13 +52,15 @@ public class JavaSparkSQL {
   }
 
   public static void main(String[] args) throws Exception {
-    SparkConf sparkConf = new SparkConf().setAppName("JavaSparkSQL");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaSparkSQL")
+        .setIfMissing("spark.master", "local[2]");
     JavaSparkContext ctx = new JavaSparkContext(sparkConf);
     JavaSQLContext sqlCtx = new JavaSQLContext(ctx);
 
     // Load a text file and convert each line to a Java Bean.
     JavaRDD<Person> people = ctx.textFile("examples/src/main/resources/people.txt").map(
       new Function<String, Person>() {
+        @Override
         public Person call(String line) throws Exception {
           String[] parts = line.split(",");
 
@@ -80,6 +82,7 @@ public class JavaSparkSQL {
     // The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
     // The columns of a row in the result can be accessed by ordinal.
     List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+      @Override
       public String call(Row row) {
         return "Name: " + row.getString(0);
       }
@@ -88,12 +91,13 @@ public class JavaSparkSQL {
     // JavaSchemaRDDs can be saved as parquet files, maintaining the schema information.
     schemaPeople.saveAsParquetFile("people.parquet");
 
-    // Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
-    // The result of loading a parquet file is also a JavaSchemaRDD.
+    // Read in the parquet file created above.  Parquet files are self-describing so the schema
+    // is preserved. The result of loading a parquet file is also a JavaSchemaRDD.
     JavaSchemaRDD parquetFile = sqlCtx.parquetFile("people.parquet");
 
     //Parquet files can also be registered as tables and then used in SQL statements.
     parquetFile.registerAsTable("parquetFile");
-    JavaSchemaRDD teenagers2 = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
+    JavaSchemaRDD teenagers2 =
+        sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
   }
 }

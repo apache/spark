@@ -26,6 +26,7 @@ object HiveFromSpark {
 
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("HiveFromSpark")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(sparkConf)
 
     // A local hive context creates an instance of the Hive Metastore in process, storing the

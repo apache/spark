@@ -49,6 +49,7 @@ object SparkLR {
 
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("SparkLR")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(sparkConf)
     val numSlices = if (args.length > 0) args(0).toInt else 2
     val points = sc.parallelize(generateData, numSlices).cache()

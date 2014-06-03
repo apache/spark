@@ -96,6 +96,7 @@ object DecisionTreeRunner {
 
   def run(params: Params) {
     val conf = new SparkConf().setAppName("DecisionTreeRunner")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(conf)
 
     // Load training data and cache it.

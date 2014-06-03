@@ -45,13 +45,14 @@ object TwitterPopularTags {
     val filters = args.takeRight(args.length - 4)
 
     // Set the system properties so that Twitter4j library used by twitter stream
-    // can use them to generat OAuth credentials
+    // can use them to generate OAuth credentials
     System.setProperty("twitter4j.oauth.consumerKey", consumerKey)
     System.setProperty("twitter4j.oauth.consumerSecret", consumerSecret)
     System.setProperty("twitter4j.oauth.accessToken", accessToken)
     System.setProperty("twitter4j.oauth.accessTokenSecret", accessTokenSecret)
 
     val sparkConf = new SparkConf().setAppName("TwitterPopularTags")
+      .setIfMissing("spark.master", "local[2]")
     val ssc = new StreamingContext(sparkConf, Seconds(2))
     val stream = TwitterUtils.createStream(ssc, None, filters)
 

@@ -19,7 +19,6 @@ package org.apache.spark.examples.streaming;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.examples.streaming.StreamingExamples;
 import org.apache.spark.streaming.*;
 import org.apache.spark.streaming.api.java.*;
 import org.apache.spark.streaming.flume.FlumeUtils;
@@ -56,9 +55,11 @@ public final class JavaFlumeEventCount {
     int port = Integer.parseInt(args[1]);
 
     Duration batchInterval = new Duration(2000);
-    SparkConf sparkConf = new SparkConf().setAppName("JavaFlumeEventCount");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaFlumeEventCount")
+        .setIfMissing("spark.master", "local[2]");
     JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, batchInterval);
-    JavaReceiverInputDStream<SparkFlumeEvent> flumeStream = FlumeUtils.createStream(ssc, host, port);
+    JavaReceiverInputDStream<SparkFlumeEvent> flumeStream =
+        FlumeUtils.createStream(ssc, host, port);
 
     flumeStream.count();
 

@@ -33,7 +33,7 @@ import org.apache.spark.util.IntParam
  *               of work nodes in the cluster
  *   <host> is "localhost".
  *   <port> is the port on which RawTextSender is running in the worker nodes.
- *   <batchMillise> is the Spark Streaming batch duration in milliseconds.
+ *   <batchMillis> is the Spark Streaming batch duration in milliseconds.
  */
 object RawNetworkGrep {
   def main(args: Array[String]) {
@@ -46,6 +46,7 @@ object RawNetworkGrep {
 
     val Array(IntParam(numStreams), host, IntParam(port), IntParam(batchMillis)) = args
     val sparkConf = new SparkConf().setAppName("RawNetworkGrep")
+      .setIfMissing("spark.master", "local[2]")
     // Create the context
     val ssc = new StreamingContext(sparkConf, Duration(batchMillis))
 

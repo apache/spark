@@ -38,6 +38,7 @@ object WikipediaPageRankStandalone {
       System.exit(-1)
     }
     val sparkConf = new SparkConf()
+    sparkConf.setAppName("WikipediaPageRankStandalone").setIfMissing("spark.master", "local[2]")
     sparkConf.set("spark.serializer", "spark.bagel.examples.WPRSerializer")
 
     val inputFile = args(0)
@@ -45,7 +46,6 @@ object WikipediaPageRankStandalone {
     val numIterations = args(2).toInt
     val usePartitioner = args(3).toBoolean
 
-    sparkConf.setAppName("WikipediaPageRankStandalone")
 
     val sc = new SparkContext(sparkConf)
 

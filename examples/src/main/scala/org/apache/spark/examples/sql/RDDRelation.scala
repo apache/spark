@@ -27,6 +27,7 @@ case class Record(key: Int, value: String)
 object RDDRelation {
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("RDDRelation")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(sparkConf)
     val sqlContext = new SQLContext(sc)
 
@@ -59,10 +60,10 @@ object RDDRelation {
     // Write out an RDD as a parquet file.
     rdd.saveAsParquetFile("pair.parquet")
 
-    // Read in parquet file.  Parquet files are self-describing so the schmema is preserved.
+    // Read in parquet file.  Parquet files are self-describing so the schema is preserved.
     val parquetFile = sqlContext.parquetFile("pair.parquet")
 
-    // Queries can be run using the DSL on parequet files just like the original RDD.
+    // Queries can be run using the DSL on parquet files just like the original RDD.
     parquetFile.where('key === 1).select('value as 'a).collect().foreach(println)
 
     // These files can also be registered as tables.

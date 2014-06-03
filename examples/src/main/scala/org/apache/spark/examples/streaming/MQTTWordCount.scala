@@ -70,7 +70,7 @@ object MQTTPublisher {
  *
  * To work with Mqtt, Mqtt Message broker/server required.
  * Mosquitto (http://mosquitto.org/) is an open source Mqtt Broker
- * In ubuntu mosquitto can be installed using the command  `$ sudo apt-get install mosquitto`
+ * In Ubuntu mosquitto can be installed using the command  `$ sudo apt-get install mosquitto`
  * Eclipse paho project provides Java library for Mqtt Client http://www.eclipse.org/paho/
  * Example Java code for Mqtt Publisher and Subscriber can be found here
  * https://bitbucket.org/mkjinesh/mqttclient
@@ -95,6 +95,7 @@ object MQTTWordCount {
 
     val Seq(brokerUrl, topic) = args.toSeq
     val sparkConf = new SparkConf().setAppName("MQTTWordCount")
+      .setIfMissing("spark.master", "local[2]")
     val ssc = new StreamingContext(sparkConf, Seconds(2))
     val lines = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_ONLY_SER_2)
 

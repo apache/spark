@@ -40,7 +40,7 @@ object TallSkinnyPCA {
       System.exit(1)
     }
 
-    val conf = new SparkConf().setAppName("TallSkinnyPCA")
+    val conf = new SparkConf().setAppName("TallSkinnyPCA").setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(conf)
 
     // Load and parse the data file.

@@ -24,11 +24,12 @@ import org.apache.spark.storage.StorageLevel
 
 /**
  *  Computes an approximation to pi
- *  This example uses Tachyon to persist rdds during computation.
+ *  This example uses Tachyon to persist RDDs during computation.
  */
 object SparkTachyonPi {
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("SparkTachyonPi")
+      .setIfMissing("spark.master", "local[2]")
     val spark = new SparkContext(sparkConf)
 
     val slices = if (args.length > 0) args(0).toInt else 2

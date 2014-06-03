@@ -87,6 +87,7 @@ object LinearRegression extends App {
 
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"LinearRegression with $params")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)

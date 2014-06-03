@@ -27,7 +27,8 @@ import org.apache.spark.SparkContext._
   */
 object GroupByTest {
   def main(args: Array[String]) {
-    val sparkConf = new SparkConf().setAppName("GroupBy Test")
+    val sparkConf = new SparkConf().setAppName("GroupByTest")
+      .setIfMissing("spark.master", "local[2]")
     var numMappers = if (args.length > 0) args(0).toInt else 2
     var numKVPairs = if (args.length > 1) args(1).toInt else 1000
     var valSize = if (args.length > 2) args(2).toInt else 1000
@@ -44,7 +45,7 @@ object GroupByTest {
         arr1(i) = (ranGen.nextInt(Int.MaxValue), byteArr)
       }
       arr1
-    }.cache
+    }.cache()
     // Enforce that everything has been calculated and in cache
     pairs1.count
 

@@ -102,6 +102,7 @@ object BinaryClassification {
 
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"BinaryClassification with $params")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(conf)
 
     Logger.getRootLogger.setLevel(Level.WARN)

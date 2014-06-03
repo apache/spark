@@ -109,7 +109,8 @@ public final class JavaHdfsLR {
       System.exit(1);
     }
 
-    SparkConf sparkConf = new SparkConf().setAppName("JavaHdfsLR");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaHdfsLR")
+        .setIfMissing("spark.master", "local[2]");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
     JavaRDD<String> lines = sc.textFile(args[0]);
     JavaRDD<DataPoint> points = lines.map(new ParsePoint()).cache();

@@ -30,7 +30,6 @@ import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.examples.streaming.StreamingExamples;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
@@ -65,8 +64,9 @@ public final class JavaKafkaWordCount {
     }
 
     StreamingExamples.setStreamingLogLevels();
-    SparkConf sparkConf = new SparkConf().setAppName("JavaKafkaWordCount");
-    // Create the context with a 1 second batch size
+    SparkConf sparkConf = new SparkConf().setAppName("JavaKafkaWordCount")
+        .setIfMissing("spark.master", "local[2]");
+    // Create the context with a 2 second batch size
     JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, new Duration(2000));
 
     int numThreads = Integer.parseInt(args[3]);

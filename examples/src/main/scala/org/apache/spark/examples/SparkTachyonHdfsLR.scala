@@ -31,10 +31,10 @@ import org.apache.spark.storage.StorageLevel
 
 /**
  * Logistic regression based classification.
- * This example uses Tachyon to persist rdds during computation.
+ * This example uses Tachyon to persist RDDs during computation.
  */
 object SparkTachyonHdfsLR {
-  val D = 10   // Numer of dimensions
+  val D = 10   // Number of dimensions
   val rand = new Random(42)
 
   case class DataPoint(x: Vector[Double], y: Double)
@@ -54,6 +54,7 @@ object SparkTachyonHdfsLR {
     val inputPath = args(0)
     val conf = SparkHadoopUtil.get.newConfiguration()
     val sparkConf = new SparkConf().setAppName("SparkTachyonHdfsLR")
+      .setIfMissing("spark.master", "local[2]")
     val sc = new SparkContext(sparkConf,
       InputFormatInfo.computePreferredLocations(
         Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))

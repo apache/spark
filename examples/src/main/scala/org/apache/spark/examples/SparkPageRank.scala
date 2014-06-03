@@ -31,7 +31,8 @@ import org.apache.spark.{SparkConf, SparkContext}
  */
 object SparkPageRank {
   def main(args: Array[String]) {
-    val sparkConf = new SparkConf().setAppName("PageRank")
+    val sparkConf = new SparkConf().setAppName("SparkPageRank")
+      .setIfMissing("spark.master", "local[2]")
     var iters = args(1).toInt
     val ctx = new SparkContext(sparkConf)
     val lines = ctx.textFile(args(0), 1)

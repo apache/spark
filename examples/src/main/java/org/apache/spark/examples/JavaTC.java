@@ -64,7 +64,8 @@ public final class JavaTC {
   }
 
   public static void main(String[] args) {
-    SparkConf sparkConf = new SparkConf().setAppName("JavaHdfsLR");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaHdfsLR")
+        .setIfMissing("spark.master", "local[2]");
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
     Integer slices = (args.length > 0) ? Integer.parseInt(args[0]): 2;
     JavaPairRDD<Integer, Integer> tc = sc.parallelizePairs(generateGraph(), slices).cache();

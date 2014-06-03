@@ -54,7 +54,8 @@ import org.apache.spark.SparkContext._
 object CassandraTest {
 
   def main(args: Array[String]) {
-    val sparkConf = new SparkConf().setAppName("casDemo")
+    val sparkConf = new SparkConf().setAppName("CassandraTest")
+      .setIfMissing("spark.master", "local[2]")
     // Get a SparkContext
     val sc = new SparkContext(sparkConf)
 

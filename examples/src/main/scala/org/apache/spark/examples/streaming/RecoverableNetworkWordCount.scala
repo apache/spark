@@ -77,6 +77,7 @@ object RecoverableNetworkWordCount {
     val outputFile = new File(outputPath)
     if (outputFile.exists()) outputFile.delete()
     val sparkConf = new SparkConf().setAppName("RecoverableNetworkWordCount")
+      .setIfMissing("spark.master", "local[2]")
     // Create the context with a 1 second batch size
     val ssc = new StreamingContext(sparkConf, Seconds(1))
 

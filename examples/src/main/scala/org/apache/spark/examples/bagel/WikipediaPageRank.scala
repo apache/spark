@@ -21,7 +21,6 @@ import org.apache.spark._
 import org.apache.spark.SparkContext._
 
 import org.apache.spark.bagel._
-import org.apache.spark.bagel.Bagel._
 
 import scala.xml.{XML,NodeSeq}
 
@@ -35,10 +34,10 @@ object WikipediaPageRank {
     if (args.length < 4) {
       System.err.println(
         "Usage: WikipediaPageRank <inputFile> <threshold> <numPartitions> <usePartitioner>")
-      System.exit(-1)
+      System.exit(1)
     }
     val sparkConf = new SparkConf()
-    sparkConf.setAppName("WikipediaPageRank")
+    sparkConf.setAppName("WikipediaPageRank").setIfMissing("spark.master", "local[2]")
     sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     sparkConf.set("spark.kryo.registrator",  classOf[PRKryoRegistrator].getName)
 
@@ -47,7 +46,6 @@ object WikipediaPageRank {
     val numPartitions = args(2).toInt
     val usePartitioner = args(3).toBoolean
 
-    sparkConf.setAppName("WikipediaPageRank")
     val sc = new SparkContext(sparkConf)
 
     // Parse the Wikipedia page data into a graph
@@ -78,9 +76,9 @@ object WikipediaPageRank {
       (id, new PRVertex(1.0 / numVertices, outEdges))
     })
     if (usePartitioner) {
-      vertices = vertices.partitionBy(new HashPartitioner(sc.defaultParallelism)).cache
+      vertices = vertices.partitionBy(new HashPartitioner(sc.defaultParallelism)).cache()
     } else {
-      vertices = vertices.cache
+      vertices = vertices.cache()
     }
     println("Done parsing input file.")
 
