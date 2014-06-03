@@ -232,10 +232,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Aggregate the values of each key, using given combine functions and a neutral "zero value".
    * This function can return a different result type, U, than the type of the values in this RDD,
    * V. Thus, we need one operation for merging a V into a U and one operation for merging two U's,
-   * as in scala.TraversableOnce. The former operation is used for merging values within a partition,
-   * and the latter is used for merging values between partitions. To avoid memory allocation, both
-   * of these functions are allowed to modify and return their first argument instead of creating a
-   * new U.
+   * as in scala.TraversableOnce. The former operation is used for merging values within a
+   * partition, and the latter is used for merging values between partitions. To avoid memory
+   * allocation, both of these functions are allowed to modify and return their first argument
+   * instead of creating a new U.
    */
   def aggregateByKey[U](zeroValue: U, partitioner: Partitioner, seqFunc: JFunction2[U, V, U],
       combFunc: JFunction2[U, U, U]): JavaPairRDD[K, U] = {
@@ -247,10 +247,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Aggregate the values of each key, using given combine functions and a neutral "zero value".
    * This function can return a different result type, U, than the type of the values in this RDD,
    * V. Thus, we need one operation for merging a V into a U and one operation for merging two U's,
-   * as in scala.TraversableOnce. The former operation is used for merging values within a partition,
-   * and the latter is used for merging values between partitions. To avoid memory allocation, both
-   * of these functions are allowed to modify and return their first argument instead of creating a
-   * new U.
+   * as in scala.TraversableOnce. The former operation is used for merging values within a
+   * partition, and the latter is used for merging values between partitions. To avoid memory
+   * allocation, both of these functions are allowed to modify and return their first argument
+   * instead of creating a new U.
    */
   def aggregateByKey[U](zeroValue: U, numPartitions: Int, seqFunc: JFunction2[U, V, U],
       combFunc: JFunction2[U, U, U]): JavaPairRDD[K, U] = {
