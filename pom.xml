@@ -205,6 +205,17 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>spring-releases</id>
+      <name>Spring Release Repository</name>
+      <url>http://repo.spring.io/libs-release</url> 
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository> 
   </repositories>
 
   <dependencyManagement>
