@@ -689,7 +689,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
 
-    if (!conf.getBoolean("spark.hadoop.validateOutputSpecs", true) &&
+    if (conf.getBoolean("spark.hadoop.validateOutputSpecs", true) &&
       jobFormat.isInstanceOf[NewFileOutputFormat[_, _]]) {
       // FileOutputFormat ignores the filesystem parameter
       jobFormat.checkOutputSpecs(job)
@@ -756,7 +756,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
 
-    if (!conf.getBoolean("spark.hadoop.validateOutputSpecs", true) &&
+    if (conf.getBoolean("spark.hadoop.validateOutputSpecs", true) &&
       outputFormatInstance.isInstanceOf[FileOutputFormat[_, _]]) {
       // FileOutputFormat ignores the filesystem parameter
       val ignoredFs = FileSystem.get(conf)
