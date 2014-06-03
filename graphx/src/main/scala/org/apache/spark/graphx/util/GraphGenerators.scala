@@ -56,13 +56,13 @@ object GraphGenerators {
    */
   def logNormalGraph(sc: SparkContext, numVertices: Int, numEParts: Int,
                      mu: Double = 4.0, sigma: Double = 1.3): Graph[Long, Int] = {
-    val vertices: RDD[(VertexId, Long)] = sc.parallelize(0 until numVertices, numEParts).map { src =>
+    val vertices = sc.parallelize(0 until numVertices, numEParts).map { src =>
       // Initialize the random number generator with the source vertex id
       val rand = new Random(src)
-      val degree: Long = math.min(numVertices.toLong, math.exp(rand.nextGaussian()*sigma + mu).toLong)
+      val degree = math.min(numVertices.toLong, math.exp(rand.nextGaussian() * sigma + mu).toLong)
       (src.toLong, degree)
     }
-    val edges: RDD[Edge[Int]] = vertices.flatMap { case (src, degree) =>
+    val edges = vertices.flatMap { case (src, degree) =>
       new Iterator[Edge[Int]] {
         // Initialize the random number generator with the source vertex id
         val rand = new Random(src)
