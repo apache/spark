@@ -35,7 +35,8 @@ object MimaExcludes {
     val excludes =
       SparkBuild.SPARK_VERSION match {
         case v if v.startsWith("1.1") =>
-          Seq()
+          Seq(
+            MimaBuild.excludeSparkPackage("graphx"))
         case v if v.startsWith("1.0") =>
           Seq(
             MimaBuild.excludeSparkPackage("api.java"),
@@ -58,4 +59,3 @@ object MimaExcludes {
         case _ => Seq()
       }
 }
-
