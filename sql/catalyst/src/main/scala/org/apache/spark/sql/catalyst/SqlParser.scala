@@ -179,9 +179,10 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   )
 
   protected lazy val setCommand: Parser[LogicalPlan] = {
+    // Comma needed for values such as "table1,table2".
     val keyVal = ident | numericLit | stringLit
-    (SET ~> keyVal <~ "=") ~ keyVal <~ opt(";") ^^ {
-      case key ~ value => SetCommand(key, value)
+    (SET ~> keyVal <~ "=") ~ rep1sep(keyVal, ",") <~ opt(";") ^^ {
+      case key ~ value => SetCommand(key, value.mkString(","))
     }
   }
 

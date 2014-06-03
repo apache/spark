@@ -58,6 +58,14 @@ class SQLConfSuite extends QueryTest {
     assert(conf.get("mapred.reduce.tasks", "0") == "20")
     sql("set mapred.reduce.tasks = 40")
     assert(conf.get("mapred.reduce.tasks", "0") == "40")
+
+
+    val key = "spark.sql.key"
+    val vs = "val0,val_1,val2.3,my_table"
+    sql(s"set $key=$vs")
+    assert(conf.get(key, "0") == vs)
+
+    conf.clear()
   }
 
 }

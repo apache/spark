@@ -30,9 +30,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object HashJoin extends Strategy with PredicateHelper {
 
-//    var broadCastTables =
-//    sqlConf.get("spark.sql.hints.broadcastTables", "").split(",")
-
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Find inner joins where at least some predicates can be evaluated by matching hash keys
       // using the HashFilteredJoin pattern.
