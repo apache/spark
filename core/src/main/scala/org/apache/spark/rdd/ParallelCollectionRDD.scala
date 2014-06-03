@@ -117,10 +117,10 @@ private object ParallelCollectionRDD {
     if (numSlices < 1) {
       throw new IllegalArgumentException("Positive number of slices required")
     }
-    // Sequences need to be sliced at same positions for operations
+    // Sequences need to be sliced at the same set of index positions for operations
     // like RDD.zip() to behave as expected
-    def positions(length: Long, numSlices: Int) = {
-      (0 until numSlices).map(i => {
+    def positions(length: Long, numSlices: Int): Iterator[(Int, Int)] = {
+      (0 until numSlices).iterator.map(i => {
         val start = ((i * length) / numSlices).toInt
         val end = (((i + 1) * length) / numSlices).toInt
         (start, end)
@@ -140,7 +140,7 @@ private object ParallelCollectionRDD {
         positions(r.length, numSlices).map({
           case (start, end) =>
             new Range(r.start + start * r.step, r.start + end * r.step, r.step)
-        }).asInstanceOf[Seq[Seq[T]]]
+        }).toSeq.asInstanceOf[Seq[Seq[T]]]
       }
       case nr: NumericRange[_] => {
         // For ranges of Long, Double, BigInteger, etc
@@ -158,7 +158,7 @@ private object ParallelCollectionRDD {
         positions(array.length, numSlices).map({
           case (start, end) =>
             array.slice(start, end).toSeq
-        })
+        }).toSeq
       }
     }
   }
