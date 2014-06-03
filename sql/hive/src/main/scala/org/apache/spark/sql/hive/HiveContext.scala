@@ -30,14 +30,12 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
-import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand, ExplainCommand}
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution._
 
@@ -79,10 +77,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   def hiveql(hqlQuery: String): SchemaRDD = {
     val result = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
-    // We force query optimization to happen right away instead of letting it happen lazily like
-    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-    // generates the RDD lineage for DML queries, but does not perform any execution.
-    result.queryExecution.toRdd
+    result.logicalPlan match {
+      // We force query optimization to happen right away instead of letting it happen lazily like
+      // when using the query DSL.  This is so DDL commands behave as expected.  This is only
+      // generates the RDD lineage for DML queries, but do not perform any execution.
+      case _: Command => result.queryExecution.toRdd
+      case _ =>
+    }
     result
   }
 
