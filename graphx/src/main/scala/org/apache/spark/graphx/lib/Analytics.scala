@@ -56,25 +56,6 @@ object Analytics extends Logging {
       }
     }
 
-    def pickStorageLevel(v: String): StorageLevel = {
-      // TODO: Find a way to do this without listing all the storage levels
-      v match {
-        case "NONE" => StorageLevel.NONE
-        case "DISK_ONLY" => StorageLevel.DISK_ONLY
-        case "DISK_ONLY_2" => StorageLevel.DISK_ONLY_2
-        case "MEMORY_ONLY" => StorageLevel.MEMORY_ONLY
-        case "MEMORY_ONLY_2" => StorageLevel.MEMORY_ONLY_2
-        case "MEMORY_ONLY_SER" => StorageLevel.MEMORY_ONLY_SER
-        case "MEMORY_ONLY_SER_2" => StorageLevel.MEMORY_ONLY_SER_2
-        case "MEMORY_AND_DISK" => StorageLevel.MEMORY_AND_DISK
-        case "MEMORY_AND_DISK_2" => StorageLevel.MEMORY_AND_DISK_2
-        case "MEMORY_AND_DISK_SER" => StorageLevel.MEMORY_AND_DISK_SER
-        case "MEMORY_AND_DISK_SER_2" => StorageLevel.MEMORY_AND_DISK_SER_2
-        case "OFF_HEAP" => StorageLevel.OFF_HEAP
-        case _ => throw new IllegalArgumentException("Invalid StorageLevel: " + v)
-      }
-    }
-
     val conf = new SparkConf()
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
@@ -87,9 +68,9 @@ object Analytics extends Logging {
     val partitionStrategy: Option[PartitionStrategy] = options.remove("partStrategy")
       .map(pickPartitioner(_))
     val edgeStorageLevel = options.remove("edgeStorageLevel")
-      .map(pickStorageLevel(_)).getOrElse(StorageLevel.MEMORY_ONLY)
+      .map(StorageLevel.fromString(_)).getOrElse(StorageLevel.MEMORY_ONLY)
     val vertexStorageLevel = options.remove("vertexStorageLevel")
-      .map(pickStorageLevel(_)).getOrElse(StorageLevel.MEMORY_ONLY)
+      .map(StorageLevel.fromString(_)).getOrElse(StorageLevel.MEMORY_ONLY)
 
     taskType match {
       case "pagerank" =>
