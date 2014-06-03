@@ -922,7 +922,11 @@ abstract class RDD[T: ClassTag](
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero `sp > p`
+   * would trigger sparse representation of registers, which may reduce the memory consumption
+   * and increase accuracy when the cardinality is small.
    *
    * @param p The precision value for the normal set.
    *          <code>p</code> must be a value between 4 and <code>sp</code>.
@@ -951,12 +955,12 @@ abstract class RDD[T: ClassTag](
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    */
-  @deprecated("Use countApproxDistinct with parameter p and sp", "1.0.1")
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
-    // See stream-lib's HyperLogLog implementation on the conversion from relativeSD to p.
-    val p = (math.log((1.106 / relativeSD) * (1.106 / relativeSD)) / math.log(2)).toInt
+    val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt
     countApproxDistinct(p, 0)
   }
 

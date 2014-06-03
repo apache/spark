@@ -562,34 +562,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
-   * @param p The precision value for the normal set.
-   *          `p` must be a value between 4 and `sp` (32 max).
-   * @param sp The precision value for the sparse set, between 0 and 32.
-   *           If `sp` equals 0, the sparse representation is skipped.
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It should be greater than 0.000017.
    */
-  def countApproxDistinct(p: Int, sp: Int): Long = rdd.countApproxDistinct(p, sp)
-
-  /**
-   * Return approximate number of distinct elements in the RDD. This method uses 20 as p value
-   * and 0 as sp value (i.e. skipping sparse representation).
-   *
-   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
-   */
-  def countApproxDistinct(): Long = rdd.countApproxDistinct(20, 0)
-
-  /**
-   * Return approximate number of distinct elements in the RDD. This is deprecated. Use the
-   * variant with `p` and `sp` parameters instead.
-   *
-   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
-   */
-  @Deprecated
   def countApproxDistinct(relativeSD: Double): Long = rdd.countApproxDistinct(relativeSD)
 
   def name(): String = rdd.name

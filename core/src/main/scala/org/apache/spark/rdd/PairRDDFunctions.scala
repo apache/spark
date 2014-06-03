@@ -219,9 +219,13 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
-   * @param p The precision value for the normal set.
+   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero `sp > p`
+   * would trigger sparse representation of registers, which may reduce the memory consumption
+   * and increase accuracy when the cardinality is small.
+   *
+   *@param p The precision value for the normal set.
    *          `p` must be a value between 4 and `sp` (32 max).
    * @param sp The precision value for the sparse set, between 0 and 32.
    *           If `sp` equals 0, the sparse representation is skipped.
@@ -229,6 +233,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   @Experimental
   def countApproxDistinctByKey(p: Int, sp: Int, partitioner: Partitioner): RDD[(K, Long)] = {
+    require(p >= 4, s"p ($p) should be >= 4")
+    require(sp <= 32, s"sp ($sp) should be <= 32")
+    require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
     val createHLL = (v: V) => {
       val hll = new HyperLogLogPlus(p, sp)
       hll.offer(v)
@@ -247,56 +254,21 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * :: Experimental ::
-   *
    * Return approximate number of distinct values for each key in this RDD.
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
-   * @param p The precision value for the normal set.
-   *          `p` must be a value between 4 and `sp` (32 max).
-   * @param sp The precision value for the sparse set, between 0 and 32.
-   *           If `sp` equals 0, the sparse representation is skipped.
-   * @param numPartitions Number of partitions in the resulting RDD.
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It should be greater than 0.000017.
+   * @param partitioner partitioner of the resulting RDD
    */
-  @Experimental
-  def countApproxDistinctByKey(p: Int, sp: Int, numPartitions: Int): RDD[(K, Long)] = {
-    countApproxDistinctByKey(p, sp, new HashPartitioner(numPartitions))
-  }
-
-  /**
-   * :: Experimental ::
-   *
-   * Return approximate number of distinct values for each key in this RDD.
-   *
-   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
-   *
-   * @param p The precision value for the normal set.
-   *          `p` must be a value between 4 and `sp` (32 max).
-   * @param sp The precision value for the sparse set, between 0 and 32.
-   *           If `sp` equals 0, the sparse representation is skipped.
-   */
-  @Experimental
-  def countApproxDistinctByKey(p: Int, sp: Int): RDD[(K, Long)] = {
-    countApproxDistinctByKey(p, sp, defaultPartitioner(self))
-  }
-
-  /**
-   * Return approximate number of distinct values for each key in this RDD.
-   *
-   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
-   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
-   */
-  @deprecated("Use countApproxDistinctByKey with parameter p and sp", "1.0.1")
   def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
-    // See stream-lib's HyperLogLog implementation on the conversion from relativeSD to p.
-    val p = (math.log((1.106 / relativeSD) * (1.106 / relativeSD)) / math.log(2)).toInt
-    countApproxDistinctByKey(p, 0, partitioner)
+    require(relativeSD > 0.000017, s"accuracy ($relativeSD) should be greater than 0.000017")
+    val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt
+    assert(p <= 32)
+    countApproxDistinctByKey(if (p < 4) 4 else p, 0, partitioner)
   }
 
   /**
@@ -304,9 +276,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It should be greater than 0.000017.
+   * @param numPartitions number of partitions of the resulting RDD
    */
-  @deprecated("Use countApproxDistinctByKey with parameter p and sp", "1.0.1")
   def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): RDD[(K, Long)] = {
     countApproxDistinctByKey(relativeSD, new HashPartitioner(numPartitions))
   }
@@ -316,9 +291,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://research.google.com/pubs/pub40671.html">here</a>.
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It should be greater than 0.000017.
    */
-  @deprecated("Use countApproxDistinctByKey with parameter p and sp", "1.0.1")
   def countApproxDistinctByKey(relativeSD: Double = 0.05): RDD[(K, Long)] = {
     countApproxDistinctByKey(relativeSD, defaultPartitioner(self))
   }
