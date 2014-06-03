@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
 
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.SQLConf
 
 /**
  * :: AlphaComponent ::
@@ -56,6 +57,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   with Serializable {
 
   self =>
+
+  @transient
+  val sqlConf: SQLConf = new SQLConf
 
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog
@@ -189,6 +193,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext = self.sparkContext
+
+    def sqlConf = self.sqlConf
 
     val strategies: Seq[Strategy] =
       TakeOrdered ::
