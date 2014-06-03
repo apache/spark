@@ -328,13 +328,15 @@ class SparkContext(object):
         return RDD(self._jsc.wholeTextFiles(path, minPartitions), self,
                    PairDeserializer(UTF8Deserializer(), UTF8Deserializer()))
 
-    def dictToJavaMap(self, d):
+    def _dictToJavaMap(self, d):
         jm = self._jvm.java.util.HashMap()
+        if not d:
+            d = {}
         for k, v in d.iteritems():
             jm[k] = v
         return jm
 
-    def sequenceFile(self, path, keyClass, valueClass, keyConverter="", valueConverter="",
+    def sequenceFile(self, path, keyClass, valueClass, keyConverter=None, valueConverter=None,
                      minSplits=None):
         """
         Read a Hadoop SequenceFile with arbitrary key and value Writable class from HDFS,
@@ -372,8 +374,8 @@ class SparkContext(object):
                                                 keyConverter, valueConverter, minSplits)
         return RDD(jrdd, self, PickleSerializer())
 
-    def newAPIHadoopFile(self, path, inputFormatClass, keyClass, valueClass,
-                         keyConverter="", valueConverter="", conf={}):
+    def newAPIHadoopFile(self, path, inputFormatClass, keyClass, valueClass, keyConverter=None,
+                         valueConverter=None, conf=None):
         """
         Read a 'new API' Hadoop InputFormat with arbitrary key and value class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -382,26 +384,26 @@ class SparkContext(object):
         A Hadoop configuration can be passed in as a Python dict. This will be converted into a
         Configuration in Java
         """
-        jconf = self.dictToJavaMap(conf)
+        jconf = self._dictToJavaMap(conf)
         jrdd = self._jvm.PythonRDD.newAPIHadoopFile(self._jsc, path, inputFormatClass, keyClass,
                                                     valueClass, keyConverter, valueConverter, jconf)
         return RDD(jrdd, self, PickleSerializer())
 
-    def newAPIHadoopRDD(self, inputFormatClass, keyClass, valueClass,
-                        keyConverter="", valueConverter="", conf={}):
+    def newAPIHadoopRDD(self, inputFormatClass, keyClass, valueClass, keyConverter=None,
+                        valueConverter=None, conf=None):
         """
         Read a 'new API' Hadoop InputFormat with arbitrary key and value class, from an arbitrary
         Hadoop configuration,
         which is passed in as a Python dict. This will be converted into a Configuration in Java.
         The mechanism is the same as for sc.sequenceFile.
         """
-        jconf = self.dictToJavaMap(conf)
+        jconf = self._dictToJavaMap(conf)
         jrdd = self._jvm.PythonRDD.newAPIHadoopRDD(self._jsc, inputFormatClass, keyClass,
                                                    valueClass, keyConverter, valueConverter, jconf)
         return RDD(jrdd, self, PickleSerializer())
 
-    def hadoopFile(self, path, inputFormatClass, keyClass, valueClass,
-                   keyConverter="", valueConverter="", conf={}):
+    def hadoopFile(self, path, inputFormatClass, keyClass, valueClass, keyConverter=None,
+                   valueConverter=None, conf=None):
         """
         Read an 'old' Hadoop InputFormat with arbitrary key and value class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -410,22 +412,22 @@ class SparkContext(object):
         A Hadoop configuration can be passed in as a Python dict. This will be converted into a
         Configuration in Java
         """
-        jconf = self.dictToJavaMap(conf)
+        jconf = self._dictToJavaMap(conf)
         for k, v in conf.iteritems():
             jconf[k] = v
         jrdd = self._jvm.PythonRDD.hadoopFile(self._jsc, path, inputFormatClass, keyClass,
                                               valueClass, keyConverter, valueConverter, jconf)
         return RDD(jrdd, self, PickleSerializer())
 
-    def hadoopRDD(self, inputFormatClass, keyClass, valueClass,
-                  keyConverter="", valueConverter="", conf={}):
+    def hadoopRDD(self, inputFormatClass, keyClass, valueClass, keyConverter=None,
+                  valueConverter=None, conf=None):
         """
         Read an 'old' Hadoop InputFormat with arbitrary key and value class, from an arbitrary
         Hadoop configuration,
         which is passed in as a Python dict. This will be converted into a Configuration in Java.
         The mechanism is the same as for sc.sequenceFile.
         """
-        jconf = self.dictToJavaMap(conf)
+        jconf = self._dictToJavaMap(conf)
         jrdd = self._jvm.PythonRDD.hadoopRDD(self._jsc, inputFormatClass, keyClass, valueClass,
                                              keyConverter, valueConverter, jconf)
         return RDD(jrdd, self, PickleSerializer())

@@ -349,14 +349,14 @@ private[spark] object PythonRDD extends Logging {
     }
   }
 
-  /** Create and RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]] */
+  /** Create an RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]] */
   def sequenceFile[K, V](
       sc: JavaSparkContext,
       path: String,
       keyClass: String,
       valueClass: String,
-      keyWrapper: String,
-      valueWrapper: String,
+      keyConverter: String,
+      valueConverter: String,
       minSplits: Int) = {
     implicit val kcm = ClassTag(Class.forName(keyClass)).asInstanceOf[ClassTag[K]]
     implicit val vcm = ClassTag(Class.forName(valueClass)).asInstanceOf[ClassTag[V]]
@@ -374,18 +374,18 @@ private[spark] object PythonRDD extends Logging {
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
       sc: JavaSparkContext,
       path: String,
-      inputFormatClazz: String,
-      keyClazz: String,
-      valueClazz: String,
-      keyWrapper: String,
-      valueWrapper: String,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      keyConverter: String,
+      valueConverter: String,
       confAsMap: java.util.HashMap[String, String]) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
     val baseConf = sc.hadoopConfiguration()
     val mergedConf = PythonHadoopUtil.mergeConfs(baseConf, conf)
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
-        Some(path), inputFormatClazz, keyClazz, valueClazz, mergedConf)
+        Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
     val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
@@ -397,16 +397,16 @@ private[spark] object PythonRDD extends Logging {
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
       sc: JavaSparkContext,
-      inputFormatClazz: String,
-      keyClazz: String,
-      valueClazz: String,
-      keyWrapper: String,
-      valueWrapper: String,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      keyConverter: String,
+      valueConverter: String,
       confAsMap: java.util.HashMap[String, String]) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
-        None, inputFormatClazz, keyClazz, valueClazz, conf)
+        None, inputFormatClass, keyClass, valueClass, conf)
     val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
@@ -414,13 +414,13 @@ private[spark] object PythonRDD extends Logging {
   private def newAPIHadoopRDDFromClassNames[K, V, F <: NewInputFormat[K, V]](
       sc: JavaSparkContext,
       path: Option[String] = None,
-      inputFormatClazz: String,
-      keyClazz: String,
-      valueClazz: String,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
       conf: Configuration) = {
-    implicit val kcm = ClassTag(Class.forName(keyClazz)).asInstanceOf[ClassTag[K]]
-    implicit val vcm = ClassTag(Class.forName(valueClazz)).asInstanceOf[ClassTag[V]]
-    implicit val fcm = ClassTag(Class.forName(inputFormatClazz)).asInstanceOf[ClassTag[F]]
+    implicit val kcm = ClassTag(Class.forName(keyClass)).asInstanceOf[ClassTag[K]]
+    implicit val vcm = ClassTag(Class.forName(valueClass)).asInstanceOf[ClassTag[V]]
+    implicit val fcm = ClassTag(Class.forName(inputFormatClass)).asInstanceOf[ClassTag[F]]
     val kc = kcm.runtimeClass.asInstanceOf[Class[K]]
     val vc = vcm.runtimeClass.asInstanceOf[Class[V]]
     val fc = fcm.runtimeClass.asInstanceOf[Class[F]]
@@ -439,18 +439,18 @@ private[spark] object PythonRDD extends Logging {
   def hadoopFile[K, V, F <: InputFormat[K, V]](
       sc: JavaSparkContext,
       path: String,
-      inputFormatClazz: String,
-      keyClazz: String,
-      valueClazz: String,
-      keyWrapper: String,
-      valueWrapper: String,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      keyConverter: String,
+      valueConverter: String,
       confAsMap: java.util.HashMap[String, String]) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
     val baseConf = sc.hadoopConfiguration()
     val mergedConf = PythonHadoopUtil.mergeConfs(baseConf, conf)
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
-        Some(path), inputFormatClazz, keyClazz, valueClazz, mergedConf)
+        Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
     val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
@@ -462,16 +462,16 @@ private[spark] object PythonRDD extends Logging {
    */
   def hadoopRDD[K, V, F <: InputFormat[K, V]](
       sc: JavaSparkContext,
-      inputFormatClazz: String,
-      keyClazz: String,
-      valueClazz: String,
-      keyWrapper: String,
-      valueWrapper: String,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      keyConverter: String,
+      valueConverter: String,
       confAsMap: java.util.HashMap[String, String]) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
-        None, inputFormatClazz, keyClazz, valueClazz, conf)
+        None, inputFormatClass, keyClass, valueClass, conf)
     val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
@@ -479,13 +479,13 @@ private[spark] object PythonRDD extends Logging {
   private def hadoopRDDFromClassNames[K, V, F <: InputFormat[K, V]](
       sc: JavaSparkContext,
       path: Option[String] = None,
-      inputFormatClazz: String,
-      keyClazz: String,
-      valueClazz: String,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
       conf: Configuration) = {
-    implicit val kcm = ClassTag(Class.forName(keyClazz)).asInstanceOf[ClassTag[K]]
-    implicit val vcm = ClassTag(Class.forName(valueClazz)).asInstanceOf[ClassTag[V]]
-    implicit val fcm = ClassTag(Class.forName(inputFormatClazz)).asInstanceOf[ClassTag[F]]
+    implicit val kcm = ClassTag(Class.forName(keyClass)).asInstanceOf[ClassTag[K]]
+    implicit val vcm = ClassTag(Class.forName(valueClass)).asInstanceOf[ClassTag[V]]
+    implicit val fcm = ClassTag(Class.forName(inputFormatClass)).asInstanceOf[ClassTag[F]]
     val kc = kcm.runtimeClass.asInstanceOf[Class[K]]
     val vc = vcm.runtimeClass.asInstanceOf[Class[V]]
     val fc = fcm.runtimeClass.asInstanceOf[Class[F]]
