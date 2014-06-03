@@ -51,8 +51,6 @@ class ReplSuite extends FunSuite {
     if (interp.sparkContext != null) {
       interp.sparkContext.stop()
     }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
     return out.toString
   }
 

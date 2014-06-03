@@ -78,8 +78,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   after {
-    System.clearProperty("spark.driver.port")
-
     if (store != null) {
       store.stop()
       store = null

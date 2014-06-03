@@ -68,9 +68,6 @@ public class JavaAPISuite implements Serializable {
   public void tearDown() {
     sc.stop();
     sc = null;
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port");
-    Utils.deleteRecursively(tempDir);
   }
 
   static class ReverseIntComparator implements Comparator<Integer>, Serializable {

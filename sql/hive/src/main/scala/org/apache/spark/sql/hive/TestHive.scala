@@ -58,7 +58,6 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
-  System.clearProperty("spark.driver.port")
   System.clearProperty("spark.hostPort")
 
   override lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
