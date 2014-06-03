@@ -1,8 +1,24 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.examples.graphx
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx.PartitionStrategy
-import org.apache.spark.graphx.PartitionStrategy.{CanonicalRandomVertexCut, EdgePartition2D, EdgePartition1D, RandomVertexCut}
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.graphx.util.GraphGenerators
 import java.io.{PrintWriter, FileOutputStream}
@@ -13,17 +29,6 @@ import java.io.{PrintWriter, FileOutputStream}
  * profile the GraphX system without access to large graph datasets.
  */
 object SynthBenchmark {
-
-  def pickPartitioner(v: String): PartitionStrategy = {
-    // TODO: Use reflection rather than listing all the partitioning strategies here.
-    v match {
-      case "RandomVertexCut" => RandomVertexCut
-      case "EdgePartition1D" => EdgePartition1D
-      case "EdgePartition2D" => EdgePartition2D
-      case "CanonicalRandomVertexCut" => CanonicalRandomVertexCut
-      case _ => throw new IllegalArgumentException("Invalid PartitionStrategy: " + v)
-    }
-  }
 
   /**
    * To run this program use the following:
@@ -40,7 +45,7 @@ object SynthBenchmark {
    *   -sigma the stdev parameter for the log-normal graph (Default: 1.3)
    *   -degFile the local file to save the degree information (Default: Empty)
    */
-  def main(args: Array[String]): Unit = {
+  def main(args: Array[String]) {
     val options = args.map {
       arg =>
         arg.dropWhile(_ == '-').split('=') match {
@@ -51,7 +56,7 @@ object SynthBenchmark {
 
     var app = "pagerank"
     var niter = 10
-    var numVertices = 1000000
+    var numVertices = 100000
     var numEPart: Option[Int] = None
     var partitionStrategy: Option[PartitionStrategy] = None
     var mu: Double = 4.0
@@ -63,7 +68,7 @@ object SynthBenchmark {
       case ("niter", v) => niter = v.toInt
       case ("nverts", v) => numVertices = v.toInt
       case ("numEPart", v) => numEPart = Some(v.toInt)
-      case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
+      case ("partStrategy", v) => partitionStrategy = Some(PartitionStrategy.fromString(v))
       case ("mu", v) => mu = v.toDouble
       case ("sigma", v) => sigma = v.toDouble
       case ("degFile", v) => degFile = v
@@ -78,17 +83,15 @@ object SynthBenchmark {
     val sc = new SparkContext(conf)
 
     // Create the graph
-    var graph = GraphGenerators.logNormalGraph(sc, numVertices, numEPart.getOrElse(sc.defaultParallelism), mu, sigma)
+    println(s"Creating graph...")
+    val unpartitionedGraph = GraphGenerators.logNormalGraph(sc, numVertices,
+      numEPart.getOrElse(sc.defaultParallelism), mu, sigma)
     // Repartition the graph
-    if (!partitionStrategy.isEmpty) {
-      graph = graph.partitionBy(partitionStrategy.get)
-    }
-    graph.cache
+    val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_)).cache()
 
     var startTime = System.currentTimeMillis()
     val numEdges = graph.edges.count()
-    println(s"Num Vertices: $numVertices")
-    println(s"Num Edges: $numEdges}")
+    println(s"Done creating graph. Num Vertices = $numVertices, Num Edges = $numEdges")
     val loadTime = System.currentTimeMillis() - startTime
 
     // Collect the degree distribution (if desired)
@@ -106,20 +109,20 @@ object SynthBenchmark {
     startTime = System.currentTimeMillis()
     if (app == "pagerank") {
       println("Running PageRank")
-      val totalPR = graph.staticPageRank(niter).vertices.map(p => p._2).sum
-      println(s"Total pagerank = $totalPR")
+      val totalPR = graph.staticPageRank(niter).vertices.map(_._2).sum()
+      println(s"Total PageRank = $totalPR")
     } else if (app == "cc") {
-      println("Connected Components")
-      val maxCC = graph.staticPageRank(niter).vertices.map(v => v._2).reduce((a,b)=>math.max(a,b))
-      println(s"Max CC = $maxCC")
+      println("Running Connected Components")
+      val numComponents = graph.connectedComponents.vertices.map(_._2).distinct()
+      println(s"Number of components = $numComponents")
     }
     val runTime = System.currentTimeMillis() - startTime
 
-    sc.stop
-    println(s"Num Vertices: $numVertices")
-    println(s"Num Edges: $numEdges")
-    println(s"Load time: ${loadTime/1000.0} seconds")
-    println(s"Run time:  ${runTime/1000.0} seconds")
+    println(s"Num Vertices = $numVertices")
+    println(s"Num Edges = $numEdges")
+    println(s"Creation time = ${loadTime/1000.0} seconds")
+    println(s"Run time = ${runTime/1000.0} seconds")
 
+    sc.stop()
   }
 }
