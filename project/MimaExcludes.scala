@@ -34,6 +34,7 @@ object MimaExcludes {
     val excludes =
       SparkBuild.SPARK_VERSION match {
         case v if v.startsWith("1.1") =>
+          Seq(MimaBuild.excludeSparkPackage("graphx")) ++
           Seq(
             // We made a mistake earlier (ed06500d3) in the Java API to use default parameter values
             // for countApproxDistinct* functions, which does not work in Java. We later removed
@@ -74,4 +75,3 @@ object MimaExcludes {
         case _ => Seq()
       }
 }
-

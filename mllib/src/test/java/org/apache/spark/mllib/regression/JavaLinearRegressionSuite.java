@@ -43,7 +43,6 @@ public class JavaLinearRegressionSuite implements Serializable {
   public void tearDown() {
     sc.stop();
     sc = null;
-    System.clearProperty("spark.driver.port");
   }
 
   int validatePrediction(List<LabeledPoint> validationData, LinearRegressionModel model) {
