@@ -33,7 +33,8 @@ import heapq
 from random import Random
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
-    BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
+    BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
+    PickleSerializer, pack_long
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -883,21 +884,19 @@ class RDD(object):
         """
         return self.take(1)[0]
 
-    def saveAsPickleFile(self, path):
+    def saveAsPickleFile(self, path, batchSize=10):
         """
-        Save this RDD as a SequenceFile of serialized objects. The serializer
-        used is L{pyspark.serializers.PickleSerializer} with batch size 1024.
+        Save this RDD as a SequenceFile of serialized objects. The serializer used is
+        L{pyspark.serializers.PickleSerializer}, default batch size is 10.
 
-        >>> tFile = NamedTemporaryFile(delete=True)
-        >>> tFile.close()
-        >>> sc.parallelize([1, 2, 'spark', 'rdd']).saveAsPickleFile(tFile.name)
-        >>> sorted(sc.pickleFile(tFile.name).collect())
-        [1, 2, 'rdd', 'spark']
-        >>> sorted(sc.pickleFile(tFile.name, 10).collect())
-        [1, 2, 'rdd', 'spark']
+        >>> tmpFile = NamedTemporaryFile(delete=True)
+        >>> tmpFile.close()
+        >>> sc.parallelize([1, 2, 'spark', 'rdd']).saveAsPickleFile(tmpFile.name, 3)
+        >>> sc.pickleFile(tmpFile.name, 5).collect()
+        [1, 2, 'spark', 'rdd']
         """
-        self._reserialize(
-            self.ctx._pickle_file_serializer)._jrdd.saveAsObjectFile(path)
+        self._reserialize(BatchedSerializer(PickleSerializer(),
+                                batchSize))._jrdd.saveAsObjectFile(path)
 
     def saveAsTextFile(self, path):
         """
