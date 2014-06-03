@@ -268,7 +268,7 @@ class SparkContext(object):
         >>> tmpFile = NamedTemporaryFile(delete=True)
         >>> tmpFile.close()
         >>> sc.parallelize(range(10)).saveAsPickleFile(tmpFile.name, 5)
-        >>> sc.pickleFile(tmpFile.name, 3).collect()
+        >>> sorted(sc.pickleFile(tmpFile.name, 3).collect())
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
         minPartitions = minPartitions or self.defaultMinPartitions

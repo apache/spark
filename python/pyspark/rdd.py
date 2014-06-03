@@ -892,8 +892,8 @@ class RDD(object):
         >>> tmpFile = NamedTemporaryFile(delete=True)
         >>> tmpFile.close()
         >>> sc.parallelize([1, 2, 'spark', 'rdd']).saveAsPickleFile(tmpFile.name, 3)
-        >>> sc.pickleFile(tmpFile.name, 5).collect()
-        [1, 2, 'spark', 'rdd']
+        >>> sorted(sc.pickleFile(tmpFile.name, 5).collect())
+        [1, 2, 'rdd', 'spark']
         """
         self._reserialize(BatchedSerializer(PickleSerializer(),
                                 batchSize))._jrdd.saveAsObjectFile(path)
