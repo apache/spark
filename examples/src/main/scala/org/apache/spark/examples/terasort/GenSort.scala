@@ -106,10 +106,10 @@ object GenSort {
     i = 0
     while (i < 12) {
       val v = rand.getHexDigit(20 + i).toByte
-      recBuf(48+i*4) = v
-      recBuf(49+i*4) = v
-      recBuf(50+i*4) = v
-      recBuf(51+i*4) = v
+      recBuf(48 + i * 4) = v
+      recBuf(49 + i * 4) = v
+      recBuf(50 + i * 4) = v
+      recBuf(51 + i * 4) = v
       i += 1
     }
 
