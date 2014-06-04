@@ -49,7 +49,7 @@ object ShortestPaths {
    * @return a graph where each vertex attribute is a map containing the shortest-path distance to
    * each reachable landmark vertex.
    */
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], landmarks: Seq[VertexId]): Graph[SPMap, ED] = {
+  def run[VD, ED: ClassTag](graph: Graph[VD, ED], landmarks: Seq[VertexId]): Graph[SPMap, ED] = {
     val spGraph = graph.mapVertices { (vid, attr) =>
       if (landmarks.contains(vid)) makeMap(vid -> 0) else makeMap()
     }
