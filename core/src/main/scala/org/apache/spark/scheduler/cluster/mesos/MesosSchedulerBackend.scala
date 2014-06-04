@@ -223,7 +223,7 @@ private[spark] class MesosSchedulerBackend(
         // Reply to the offers
         val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
         for (i <- 0 until offers.size) {
-          d.launchTasks(offers(i).getId, mesosTasks(i), filters)
+          d.launchTasks(Collections.singleton(offers(i).getId), mesosTasks(i), filters)
         }
       }
     } finally {
