@@ -82,39 +82,35 @@ private[parquet] object RowReadSupport {
  * A `parquet.hadoop.api.WriteSupport` for Row ojects.
  */
 private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
-  def setSchema(schema: MessageType, configuration: Configuration) {
-    // for testing
-    this.schema = schema
-    // TODO: could use Attributes themselves instead of Parquet schema?
+
+
+  def setSchema(schema: Seq[Attribute], configuration: Configuration) {
     configuration.set(
       RowWriteSupport.PARQUET_ROW_SCHEMA,
-      schema.toString)
+      StructType.fromAttributes(schema).toString)
     configuration.set(
       ParquetOutputFormat.WRITER_VERSION,
       ParquetProperties.WriterVersion.PARQUET_1_0.toString)
   }
 
-  def getSchema(configuration: Configuration): MessageType = {
-    MessageTypeParser.parseMessageType(configuration.get(RowWriteSupport.PARQUET_ROW_SCHEMA))
-  }
-
-  private[parquet] var schema: MessageType = null
   private[parquet] var writer: RecordConsumer = null
   private[parquet] var attributes: Seq[Attribute] = null
 
   override def init(configuration: Configuration): WriteSupport.WriteContext = {
-    schema = if (schema == null) getSchema(configuration) else schema
-    attributes = ParquetTypesConverter.convertToAttributes(schema)
-    log.debug(s"write support initialized for requested schema $schema")
+    attributes = DataType(configuration.get(RowWriteSupport.PARQUET_ROW_SCHEMA)) match {
+      case s: StructType => s.toAttributes
+      case other => sys.error(s"Can convert $attributes to row")
+    }
+    log.debug(s"write support initialized for requested schema $attributes")
     ParquetRelation.enableLogForwarding()
     new WriteSupport.WriteContext(
-      schema,
+      ParquetTypesConverter.convertFromAttributes(attributes),
       new java.util.HashMap[java.lang.String, java.lang.String]())
   }
 
   override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
     writer = recordConsumer
-    log.debug(s"preparing for write with schema $schema")
+    log.debug(s"preparing for write with schema $attributes")
   }
 
   override def write(record: Row): Unit = {

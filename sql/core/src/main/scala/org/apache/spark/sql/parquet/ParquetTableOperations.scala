@@ -36,6 +36,7 @@ import parquet.schema.MessageType
 import org.apache.spark.{Logging, SerializableWritable, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
+import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 
 /**
@@ -167,7 +168,7 @@ case class InsertIntoParquetTable(
     val job = new Job(sc.hadoopConfiguration)
 
     val writeSupport =
-      if (child.output.map(_.dataType).forall(_.isPrimitive())) {
+      if (child.output.map(_.dataType).forall(_.isPrimitive)) {
         logger.debug("Initializing MutableRowWriteSupport")
         classOf[org.apache.spark.sql.parquet.MutableRowWriteSupport]
       } else {
@@ -178,7 +179,7 @@ case class InsertIntoParquetTable(
 
     // TODO: move that to function in object
     val conf = ContextUtil.getConfiguration(job)
-    conf.set(RowWriteSupport.PARQUET_ROW_SCHEMA, relation.parquetSchema.toString)
+    conf.set(RowWriteSupport.PARQUET_ROW_SCHEMA, StructType.fromAttributes(relation.output).toString)
 
     val fspath = new Path(relation.path)
     val fs = fspath.getFileSystem(conf)
