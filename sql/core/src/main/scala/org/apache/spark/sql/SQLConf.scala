@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
 import scala.collection.mutable
 
 /**
@@ -28,6 +30,12 @@ class SQLConf {
 
   private[spark] def clear() {
     settings.clear()
+  }
+
+  def this(props: Properties) = {
+    this()
+    import scala.collection.JavaConversions._ // implicits for java.util.Properties
+    props.foreach { case (k, v) => this.settings(k) = v }
   }
 
   def set(key: String, value: String): SQLConf = {

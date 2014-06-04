@@ -133,7 +133,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
+  /**
+   * Contract: after initialization of this HiveContext, these two confs should
+   * contain exactly the same key-value pairs throughout the life time of `this`.
+   */
   @transient protected[hive] lazy val hiveconf = new HiveConf(classOf[SessionState])
+  @transient override lazy val sqlConf: SQLConf = new SQLConf(hiveconf.getAllProperties)
+
   @transient protected[hive] lazy val sessionState = new SessionState(hiveconf)
 
   sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
@@ -222,6 +228,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     val hiveContext = self
 
     override val strategies: Seq[Strategy] = Seq(
+      SetCommandStrategy(self),
       TakeOrdered,
       ParquetOperations,
       HiveTableScans,
@@ -259,8 +266,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       analyzed match {
         case SetCommand(key, value) =>
           // Record the set command inside SQLConf, as well as have Hive execute it.
-          sqlConf.set(key, value)
-          processCmd(s"set $key=$value")
+          if (key.isDefined && value.isDefined) {
+            sqlConf.set(key.get, value.get)
+            processCmd(s"SET $key=$value")
+          }
+          // Only the above case needs to be executed in Hive eagerly (i.e. now).
+          // The other cases will be taken care of when the actual results are
+          // being extracted.
+          emptyResult
         case NativeCommand(cmd) =>
           processCmd(cmd)
         case _ =>

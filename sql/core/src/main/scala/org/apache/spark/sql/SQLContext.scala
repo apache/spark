@@ -58,7 +58,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   self =>
 
   @transient
-  val sqlConf: SQLConf = new SQLConf
+  lazy val sqlConf: SQLConf = new SQLConf
 
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog
@@ -193,9 +193,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext = self.sparkContext
 
-    def sqlConf = self.sqlConf
+    val sqlConf = self.sqlConf
 
     val strategies: Seq[Strategy] =
+      SetCommandStrategy(self) ::
       TakeOrdered ::
       PartialAggregation ::
       HashJoin ::
@@ -250,7 +251,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] val planner = new SparkPlanner
 
   @transient
-  protected lazy val emptyResult =
+  protected[sql] lazy val emptyResult =
     sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
 
   /**
@@ -281,8 +282,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
     lazy val toRdd: RDD[Row] = {
       logical match {
         case SetCommand(key, value) =>
-          sqlConf.set(key, value)
-          emptyResult // TODO: should this return something else? Single row consisting of one 0?
+          if (key.isDefined && value.isDefined) {
+            sqlConf.set(key.get, value.get)
+          }
+          // It doesn't matter what we return here, since toRdd is used
+          // to force the evaluation happen eagerly.  To query the results,
+          // one must use SchemaRDD operations to extract them.
+          emptyResult
         case _ => executedPlan.execute()
       }
     }

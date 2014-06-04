@@ -217,4 +217,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
   }
+
+  case class SetCommandStrategy(context: SQLContext) extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.SetCommand(key, value) =>
+        Seq(execution.SetCommandPhysical(key, value, context))
+      case _ => Nil
+    }
+  }
+
 }

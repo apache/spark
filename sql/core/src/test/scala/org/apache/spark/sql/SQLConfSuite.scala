@@ -49,6 +49,8 @@ class SQLConfSuite extends QueryTest {
     conf.clear()
   }
 
+  // TODO: this is more suitable for a "SetCommandSuite"? Or put them inside the query suite?
+
   test("parse SQL set commands") {
     sql(s"set $testKey=$testVal")
     assert(conf.get(testKey, testVal + "_") == testVal)
@@ -64,22 +66,26 @@ class SQLConfSuite extends QueryTest {
     sql(s"set $key=$vs")
     assert(conf.get(key, "0") == vs)
 
-    sql(s"set$key=")
+    sql(s"set $key=")
     assert(conf.get(key, "0") == "")
 
     conf.clear()
   }
 
   test("set itself returns all config variables currently specified in Hive or SQLConf") {
-    assert(sql("set").collect() === Seq(""))
+    def fromRows(row: Array[Row]): Array[String] = row.map(_.getString(0))
+
+    assert(sql("set").collect().size == 0)
 
     sql(s"SET $testKey=$testVal")
-    assert(sql("set").collect() === Seq(s"$testKey=$testVal"))
+    assert(fromRows(sql("set").collect()) sameElements Array(s"$testKey=$testVal"))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    // TODO: should this be 1-elem Seq or 2-elem?
-    assert(sql("set").collect() ===
-      Seq(s"$testKey=$testVal\n${testKey + testKey}=${testVal + testVal}"))
+    assert(fromRows(sql("set").collect()) sameElements
+      Array(
+        s"$testKey=$testVal",
+        s"${testKey + testKey}=${testVal + testVal}"
+      ))
   }
 
 }
