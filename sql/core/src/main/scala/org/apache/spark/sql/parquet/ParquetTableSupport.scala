@@ -59,7 +59,7 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[Row] = {
     log.debug(s"preparing for read with file schema $fileSchema")
-    //new RowRecordMaterializer(readContext.getRequestedSchema)
+    // Note: this very much imitates AvroParquet
     val parquetSchema = readContext.getRequestedSchema
     var schema: Seq[Attribute] =
       if (readContext.getReadSupportMetadata != null &&
@@ -77,17 +77,6 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
       configuration: Configuration,
       keyValueMetaData: java.util.Map[String, String],
       fileSchema: MessageType): ReadContext = {
-    /*val requested_schema_string =
-      configuration.get(RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA, fileSchema.toString)
-    val requested_schema =
-      MessageTypeParser.parseMessageType(requested_schema_string)
-    log.debug(s"read support initialized for requested schema $requested_schema")
-    ParquetRelation.enableLogForwarding()
-    new ReadContext(requested_schema, keyValueMetaData) */
-
-    // GO ON HERE.. figure out why Avro distinguishes between requested read and read schema
-    // try to figure out what when needs to be written to metadata
-
     var parquetSchema: MessageType = fileSchema
     var metadata: java.util.Map[String, String] = null
     val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)

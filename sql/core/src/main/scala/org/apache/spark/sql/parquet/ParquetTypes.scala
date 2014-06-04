@@ -325,7 +325,9 @@ private[parquet] object ParquetTypesConverter {
     }
     val extraMetadata = new java.util.HashMap[String, String]()
     extraMetadata.put("path", path.toString)
-    extraMetadata.put(RowReadSupport.SPARK_METADATA_KEY, ParquetTypesConverter.convertToString(attributes))
+    extraMetadata.put(
+      RowReadSupport.SPARK_METADATA_KEY,
+      ParquetTypesConverter.convertToString(attributes))
     // TODO: add extra data, e.g., table name, date, etc.?
 
     val parquetSchema: MessageType =

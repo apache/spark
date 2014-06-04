@@ -66,13 +66,9 @@ case class ParquetTableScan(
     }
 
     // Store Parquet schema in `Configuration`
-    // TODO: should this here be just the projected fields?
     conf.set(
       RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
       ParquetTypesConverter.convertToString(output))
-    //conf.set(
-    //    RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
-    //    ParquetTypesConverter.convertFromAttributes(output).toString)
 
     // Store record filtering predicate in `Configuration`
     // Note 1: the input format ignores all predicates that cannot be expressed
@@ -181,7 +177,6 @@ case class InsertIntoParquetTable(
 
     ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
 
-    // TODO: move that to function in object
     val conf = ContextUtil.getConfiguration(job)
     //conf.set(RowWriteSupport.PARQUET_ROW_SCHEMA, StructType.fromAttributes(relation.output).toString)
     RowWriteSupport.setSchema(relation.output, conf)

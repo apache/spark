@@ -106,8 +106,9 @@ private[sql] object CatalystConverter {
     }
   }
 
-  protected[parquet] def createRootConverter(parquetSchema: MessageType, attributes: Seq[Attribute]): CatalystConverter = {
-    //val attributes = ParquetTypesConverter.convertToAttributes(parquetSchema)
+  protected[parquet] def createRootConverter(
+      parquetSchema: MessageType,
+      attributes: Seq[Attribute]): CatalystConverter = {
     // For non-nested types we use the optimized Row converter
     if (attributes.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))) {
       new CatalystPrimitiveRowConverter(attributes)
