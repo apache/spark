@@ -229,14 +229,14 @@ class ALS private (
         // perform ALS update
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
         // Persist users because it will be called twice.
-        users.setName("users-%d".format(iter)).persist()
+        users.setName(s"users-$iter").persist()
         val YtY = Some(sc.broadcast(computeYtY(users)))
         val previousProducts = products
         products = updateFeatures(users, userOutLinks, productInLinks, partitioner, rank, lambda,
           alpha, YtY)
         previousProducts.unpersist()
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
-        products.setName("products-%d".format(iter)).persist()
+        products.setName(s"products-$iter").persist()
         val XtX = Some(sc.broadcast(computeYtY(products)))
         val previousUsers = users
         users = updateFeatures(products, productOutLinks, userInLinks, partitioner, rank, lambda,
@@ -249,11 +249,11 @@ class ALS private (
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
         products = updateFeatures(users, userOutLinks, productInLinks, partitioner, rank, lambda,
           alpha, YtY = None)
-        products.setName("products-%d".format(iter))
+        products.setName(s"products-$iter")
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         users = updateFeatures(products, productOutLinks, userInLinks, partitioner, rank, lambda,
           alpha, YtY = None)
-        users.setName("users-%d".format(iter))
+        users.setName(s"users-$iter")
       }
     }
 
