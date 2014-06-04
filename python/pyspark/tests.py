@@ -275,7 +275,8 @@ class TestInputFormat(PySparkTestCase):
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
-        hello = self.sc.hadoopFile("python/test_support/hello.txt",
+        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        hello = self.sc.hadoopFile(hellopath,
                                    "org.apache.hadoop.mapred.TextInputFormat",
                                    "org.apache.hadoop.io.LongWritable",
                                    "org.apache.hadoop.io.Text").collect()
@@ -292,7 +293,8 @@ class TestInputFormat(PySparkTestCase):
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
-        hello = self.sc.newAPIHadoopFile("python/test_support/hello.txt",
+        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        hello = self.sc.newAPIHadoopFile(hellopath,
                                          "org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
                                          "org.apache.hadoop.io.LongWritable",
                                          "org.apache.hadoop.io.Text").collect()
