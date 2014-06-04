@@ -21,6 +21,9 @@ import java.util.Properties
 
 import scala.collection.Map
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
@@ -142,6 +145,28 @@ class JsonProtocolSuite extends FunSuite {
     val oldJson = newJson.removeField { case (field, _) => field == "Input Metrics" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.inputMetrics.isEmpty)
+  }
+
+  test("BlockManager events backward compatibility") {
+    // SparkListenerBlockManagerAdded/Removed in Spark 1.0.0 do not have a "time" property.
+    val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
+      BlockManagerId("Stars", "In your multitude...", 300, 400), 500)
+    val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
+      BlockManagerId("Scarce", "to be counted...", 100, 200))
+
+    val oldBmAdded = JsonProtocol.blockManagerAddedToJson(blockManagerAdded)
+      .removeField({ _._1 == "Timestamp" })
+
+    val deserializedBmAdded = JsonProtocol.blockManagerAddedFromJson(oldBmAdded)
+    assert(SparkListenerBlockManagerAdded(-1L, blockManagerAdded.blockManagerId,
+      blockManagerAdded.maxMem) === deserializedBmAdded)
+
+    val oldBmRemoved = JsonProtocol.blockManagerRemovedToJson(blockManagerRemoved)
+      .removeField({ _._1 == "Timestamp" })
+
+    val deserializedBmRemoved = JsonProtocol.blockManagerRemovedFromJson(oldBmRemoved)
+    assert(SparkListenerBlockManagerRemoved(-1L, blockManagerRemoved.blockManagerId) ===
+      deserializedBmRemoved)
   }
 
 
