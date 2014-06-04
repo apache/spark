@@ -223,10 +223,6 @@ object HistoryServer {
         set("fs.logDirectory",  value)
         parse(tail)
 
-      case ("--port" | "-p") :: value :: tail =>
-        set("ui.port", value)
-        parse(tail)
-
       case ("-D") :: opt :: value :: tail =>
         set(opt, value)
         parse(tail)
@@ -251,7 +247,9 @@ object HistoryServer {
       |Usage: HistoryServer [options]
       |
       |Options are set by passing "-D option value" command line arguments to the class.
-      |Command line options will override the Spark configuration file and system properties.
+      |Command line options will override JVM system properties (which should be prepended
+      |with "spark.history.").
+      |
       |History Server options are always available; additional options depend on the provider.
       |
       |History Server options:

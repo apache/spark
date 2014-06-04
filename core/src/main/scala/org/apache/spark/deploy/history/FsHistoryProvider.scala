@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.history
 
 import java.io.FileNotFoundException
-import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 
@@ -42,7 +41,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private var lastLogCheckTimeMs = -1L
 
   // List of applications, in order from newest to oldest.
-  private val appList = new AtomicReference[Seq[ApplicationHistoryInfo]](Nil)
+  @volatile private var appList: Seq[ApplicationHistoryInfo] = Nil
 
   /**
    * A background thread that periodically checks for event log updates on disk.
@@ -88,7 +87,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   }
 
   override def getListing(offset: Int, count: Int) = {
-    val list = appList.get()
+    val list = appList
     val theOffset = if (offset < list.size) offset else 0
     (list.slice(theOffset, Math.min(theOffset + count, list.size)), theOffset, list.size)
   }
@@ -104,10 +103,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   /**
    * Builds the application list based on the current contents of the log directory.
-   * Tries to reuse as much of the data already in memory as possible, but not reading
-   * applications that hasn't been updated since last time the logs were checked.
+   * Tries to reuse as much of the data already in memory as possible, by not reading
+   * applications that haven't been updated since last time the logs were checked.
    */
-  def checkForLogs() = synchronized {
+  def checkForLogs() = {
     lastLogCheckTimeMs = getMonotonicTime()
     logDebug("Checking for logs. Time is now %d.".format(lastLogCheckTimeMs))
     try {
@@ -118,8 +117,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
             dir => fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))
           }
 
-      var currentApps = Map[String, ApplicationHistoryInfo](
-        appList.get().map(app => (app.id -> app)):_*)
+      val currentApps = Map[String, ApplicationHistoryInfo](
+        appList.map(app => (app.id -> app)):_*)
 
       // For any application that either (i) is not listed or (ii) has changed since the last time
       // the listing was created (defined by the log dir's modification time), load the app's info.
@@ -138,7 +137,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         }
       }
 
-      appList.set(newApps.sortBy { info => -info.lastUpdated })
+      appList = newApps.sortBy { info => -info.lastUpdated }
     } catch {
       case t: Throwable => logError("Exception in checking for event log updates", t)
     }
@@ -166,11 +165,6 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       }
 
     replayBus.replay()
-    val appName = appListener.appName
-    val sparkUser = appListener.sparkUser
-    val startTime = appListener.startTime
-    val endTime = appListener.endTime
-    val lastUpdated = getModificationTime(logDir)
     ApplicationHistoryInfo(appId,
       appListener.appName,
       appListener.startTime,
