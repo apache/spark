@@ -51,7 +51,7 @@ function main(){
     else
         . $FWDIR/bin/load-spark-env.sh
         export SPARK_SUBMIT_OPTS
-        MASTER_URL=""
+        MASTER_OPTION=""
         DEFAULT_SPARK_MASTER_PORT=7077
         if echo "$@" | grep -v -e "--master">/dev/null ; then
             if [ "x" != "x$SPARK_MASTER_IP" ]; then
@@ -60,7 +60,7 @@ function main(){
                 else
                     SPARK_MASTER_PORT=$DEFAULT_SPARK_MASTER_PORT
                 fi
-            MASTER_URL="--master spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}"
+            MASTER_OPTION="--master spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}"
             fi
         fi
         $FWDIR/bin/spark-submit spark-shell $MASTER_URL "$@" --class org.apache.spark.repl.Main
