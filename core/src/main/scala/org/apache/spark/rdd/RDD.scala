@@ -929,9 +929,9 @@ abstract class RDD[T: ClassTag](
    * and increase accuracy when the cardinality is small.
    *
    * @param p The precision value for the normal set.
-   *          <code>p</code> must be a value between 4 and <code>sp</code>.
+   *          `p` must be a value between 4 and `sp` if `sp` is not zero (32 max).
    * @param sp The precision value for the sparse set, between 0 and 32.
-   *           If <code>sp</code> equals 0, the sparse representation is skipped.
+   *           If `sp` equals 0, the sparse representation is skipped.
    */
   @Experimental
   def countApproxDistinct(p: Int, sp: Int): Long = {
@@ -958,6 +958,7 @@ abstract class RDD[T: ClassTag](
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It must be greater than 0.000017.
    */
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
     val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt

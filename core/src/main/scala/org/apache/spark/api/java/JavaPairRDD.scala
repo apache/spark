@@ -678,7 +678,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
-   *                   It should be greater than 0.000017.
+   *                   It must be greater than 0.000017.
    * @param partitioner partitioner of the resulting RDD.
    */
   def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): JavaPairRDD[K, Long] =
@@ -694,7 +694,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
-   *                   It should be greater than 0.000017.
+   *                   It must be greater than 0.000017.
    * @param numPartitions number of partitions of the resulting RDD.
    */
   def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): JavaPairRDD[K, Long] = {
@@ -709,7 +709,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
-   *                   It should be greater than 0.000017.
+   *                   It must be greater than 0.000017.
    */
   def countApproxDistinctByKey(relativeSD: Double): JavaPairRDD[K, Long] = {
     fromRDD(rdd.countApproxDistinctByKey(relativeSD))

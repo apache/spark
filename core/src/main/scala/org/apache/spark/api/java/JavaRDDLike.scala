@@ -565,7 +565,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
-   *                   It should be greater than 0.000017.
+   *                   It must be greater than 0.000017.
    */
   def countApproxDistinct(relativeSD: Double): Long = rdd.countApproxDistinct(relativeSD)
 

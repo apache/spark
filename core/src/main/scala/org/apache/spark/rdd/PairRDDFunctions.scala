@@ -225,16 +225,16 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * would trigger sparse representation of registers, which may reduce the memory consumption
    * and increase accuracy when the cardinality is small.
    *
-   *@param p The precision value for the normal set.
-   *          `p` must be a value between 4 and `sp` (32 max).
+   * @param p The precision value for the normal set.
+   *          `p` must be a value between 4 and `sp` if `sp` is not zero (32 max).
    * @param sp The precision value for the sparse set, between 0 and 32.
    *           If `sp` equals 0, the sparse representation is skipped.
    * @param partitioner Partitioner to use for the resulting RDD.
    */
   @Experimental
   def countApproxDistinctByKey(p: Int, sp: Int, partitioner: Partitioner): RDD[(K, Long)] = {
-    require(p >= 4, s"p ($p) should be >= 4")
-    require(sp <= 32, s"sp ($sp) should be <= 32")
+    require(p >= 4, s"p ($p) must be >= 4")
+    require(sp <= 32, s"sp ($sp) must be <= 32")
     require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
     val createHLL = (v: V) => {
       val hll = new HyperLogLogPlus(p, sp)
@@ -261,11 +261,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
-   *                   It should be greater than 0.000017.
+   *                   It must be greater than 0.000017.
    * @param partitioner partitioner of the resulting RDD
    */
   def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
-    require(relativeSD > 0.000017, s"accuracy ($relativeSD) should be greater than 0.000017")
+    require(relativeSD > 0.000017, s"accuracy ($relativeSD) must be greater than 0.000017")
     val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt
     assert(p <= 32)
     countApproxDistinctByKey(if (p < 4) 4 else p, 0, partitioner)
@@ -279,7 +279,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
-   *                   It should be greater than 0.000017.
+   *                   It must be greater than 0.000017.
    * @param numPartitions number of partitions of the resulting RDD
    */
   def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): RDD[(K, Long)] = {
@@ -294,7 +294,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
-   *                   It should be greater than 0.000017.
+   *                   It must be greater than 0.000017.
    */
   def countApproxDistinctByKey(relativeSD: Double = 0.05): RDD[(K, Long)] = {
     countApproxDistinctByKey(relativeSD, defaultPartitioner(self))
