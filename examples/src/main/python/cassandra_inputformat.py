@@ -59,7 +59,7 @@ if __name__ == "__main__":
     host = sys.argv[1]
     keyspace = sys.argv[2]
     cf = sys.argv[3]
-    sc = SparkContext(appName="HBaseInputFormat")
+    sc = SparkContext(appName="CassandraInputFormat")
 
     conf = {"cassandra.input.thrift.address":host,
             "cassandra.input.thrift.port":"9160",
