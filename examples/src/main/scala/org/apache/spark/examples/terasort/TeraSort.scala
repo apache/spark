@@ -18,21 +18,20 @@
 
 package org.apache.spark.examples.terasort
 
-import org.apache.hadoop.io.{BytesWritable, NullWritable}
-import org.apache.hadoop.io.compress.BZip2Codec
+import org.apache.hadoop.io.BytesWritable
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 
 
-object GenSort {
+object TeraSort {
 
   def main(args: Array[String]) {
 
     if (args.length < 3) {
       println("usage:")
       println("MASTER=[spark-master] bin/run-example org.apache.spark.examples.terasort.GenSort " +
-        " [num-parts] [records-per-part] [output-path]")
+        " [num-parts] [records-per-part] [output-parts]")
       System.exit(0)
     }
 
@@ -40,12 +39,14 @@ object GenSort {
     val parts = args(0).toInt
     val recordsPerPartition = args(1).toInt
     val numRecords = parts.toLong * recordsPerPartition.toLong
-    val output = args(2)
+    val outputParts = args(2).toInt
 
-    println(s"Generating $numRecords records on $parts partitions")
-    println(s"Output path: $output")
+    println(s"Total number of records: $numRecords")
+    println(s"Number of input partitions: $parts")
+    println(s"Number of output partitions: $outputParts")
+    println("Total sorting size: " + (numRecords * 100) + " bytes")
 
-    val sc = new SparkContext(master, "GenSort")
+    val sc = new SparkContext(master, s"TeraSort ($numRecords records)")
 
     val dataset = sc.parallelize(1 to parts, parts).mapPartitionsWithIndex { case (index, _) =>
       val one = new Unsigned16(1)
@@ -67,8 +68,18 @@ object GenSort {
       }
     }
 
-    dataset.map(row => (NullWritable.get(), new BytesWritable(row)))
-      .saveAsSequenceFile(output, Some(classOf[BZip2Codec]))
+    val pairs = dataset.map { row =>
+      val key = new BytesWritable
+      val value = new Array[Byte](90)
+      key.set(row, 0, 10)
+      System.arraycopy(row, 10, value, 0, 90)
+      (key, value)
+    }
+
+    implicit val ordering = new Ordering[BytesWritable] {
+      override def compare(x: BytesWritable, y: BytesWritable): Int = x.compareTo(y)
+    }
+    pairs.sortByKey(ascending = true, numPartitions = outputParts).count()
   }
 
   /**
