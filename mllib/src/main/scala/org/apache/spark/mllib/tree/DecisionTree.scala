@@ -516,7 +516,7 @@ object DecisionTree extends Serializable with Logging {
      * Find bin for one feature.
      */
     def findBin(featureIndex: Int, labeledPoint: WeightedLabeledPoint,
-        isFeatureContinuous: Boolean): Int = {
+        isFeatureContinuous: Boolean, isSpaceSufficientForAllCategoricalSplits: Boolean): Int = {
       val binForFeatures = bins(featureIndex)
       val feature = labeledPoint.features(featureIndex)
 
@@ -550,14 +550,14 @@ object DecisionTree extends Serializable with Logging {
        * splits. The actual left/right child allocation per split is performed in the
        * sequential phase of the bin aggregate operation.
        */
-      def sequentialBinSearchForCategoricalFeatureInMulticlassClassification(): Int = {
+      def sequentialBinSearchForUnorderedCategoricalFeatureInClassification(): Int = {
         labeledPoint.features(featureIndex).toInt
       }
 
       /**
        * Sequential search helper method to find bin for categorical feature.
        */
-      def sequentialBinSearchForCategoricalFeatureInBinaryClassification(): Int = {
+      def sequentialBinSearchForOrderedCategoricalFeatureInClassification(): Int = {
         val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
         val numCategoricalBins = math.pow(2.0, featureCategories - 1).toInt - 1
         var binIndex = 0
@@ -583,10 +583,10 @@ object DecisionTree extends Serializable with Logging {
       } else {
         // Perform sequential search to find bin for categorical features.
         val binIndex = {
-          if (isMulticlassClassification) {
-            sequentialBinSearchForCategoricalFeatureInMulticlassClassification()
+          if (isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits) {
+            sequentialBinSearchForUnorderedCategoricalFeatureInClassification()
           } else {
-            sequentialBinSearchForCategoricalFeatureInBinaryClassification()
+            sequentialBinSearchForOrderedCategoricalFeatureInClassification()
           }
         }
         if (binIndex == -1){
@@ -622,8 +622,19 @@ object DecisionTree extends Serializable with Logging {
         } else {
           var featureIndex = 0
           while (featureIndex < numFeatures) {
-            val isFeatureContinuous = strategy.categoricalFeaturesInfo.get(featureIndex).isEmpty
-            arr(shift + featureIndex) = findBin(featureIndex, labeledPoint,isFeatureContinuous)
+            val featureInfo = strategy.categoricalFeaturesInfo.get(featureIndex)
+            val isFeatureContinuous = featureInfo.isEmpty
+            if (isFeatureContinuous) {
+              arr(shift + featureIndex)
+                = findBin(featureIndex, labeledPoint, isFeatureContinuous, false)
+            } else {
+              val featureCategories = featureInfo.get
+              val isSpaceSufficientForAllCategoricalSplits
+                = numBins > math.pow(2, featureCategories.toInt - 1) - 1
+              arr(shift + featureIndex)
+                = findBin(featureIndex, labeledPoint, isFeatureContinuous,
+                isSpaceSufficientForAllCategoricalSplits)
+            }
             featureIndex += 1
           }
         }
@@ -731,12 +742,19 @@ object DecisionTree extends Serializable with Logging {
           // Iterate over all features.
           var featureIndex = 0
           while (featureIndex < numFeatures) {
-            val isContinuousFeature = strategy.categoricalFeaturesInfo.get(featureIndex).isEmpty
-            if (isContinuousFeature) {
+            val isFeatureContinuous = strategy.categoricalFeaturesInfo.get(featureIndex).isEmpty
+            if (isFeatureContinuous) {
               updateBinForOrderedFeature(arr, agg, nodeIndex, label, featureIndex)
             } else {
-              updateBinForUnorderedFeature(nodeIndex, featureIndex, arr, label, agg, rightChildShift)
+              val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
+              val isSpaceSufficientForAllCategoricalSplits
+                = numBins > math.pow(2, featureCategories.toInt - 1) - 1
+              if (isSpaceSufficientForAllCategoricalSplits) {
+                updateBinForUnorderedFeature(nodeIndex, featureIndex, arr, label, agg, rightChildShift)
+              } else {
+                updateBinForOrderedFeature(arr, agg, nodeIndex, label, featureIndex)
               }
+            }
             featureIndex += 1
           }
         }
@@ -1093,7 +1111,14 @@ object DecisionTree extends Serializable with Logging {
               if (isFeatureContinuous) {
                 findAggForOrderedFeatureClassification(leftNodeAgg, rightNodeAgg, featureIndex)
               } else {
-                findAggForUnorderedFeatureClassification(leftNodeAgg, rightNodeAgg, featureIndex)
+                val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
+                val isSpaceSufficientForAllCategoricalSplits
+                  = numBins > math.pow(2, featureCategories.toInt - 1) - 1
+                if (isSpaceSufficientForAllCategoricalSplits) {
+                  findAggForUnorderedFeatureClassification(leftNodeAgg, rightNodeAgg, featureIndex)
+                } else {
+                  findAggForOrderedFeatureClassification(leftNodeAgg, rightNodeAgg, featureIndex)
+                }
               }
             } else {
               findAggForOrderedFeatureClassification(leftNodeAgg, rightNodeAgg, featureIndex)
@@ -1168,7 +1193,9 @@ object DecisionTree extends Serializable with Logging {
               numBins - 1
             } else { // Categorical feature
               val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
-              if (isMulticlassClassification) {
+              val isSpaceSufficientForAllCategoricalSplits
+                = numBins > math.pow(2, featureCategories.toInt - 1) - 1
+              if (isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits) {
                 math.pow(2.0, featureCategories - 1).toInt - 1
               } else { // Binary classification
                 featureCategories
@@ -1289,11 +1316,6 @@ object DecisionTree extends Serializable with Logging {
       val maxCategoriesForFeatures = strategy.categoricalFeaturesInfo.maxBy(_._2)._2
       require(numBins > maxCategoriesForFeatures, "numBins should be greater than max categories " +
         "in categorical features")
-      if (isMulticlassClassification) {
-        require(numBins > math.pow(2, maxCategoriesForFeatures.toInt - 1) - 1,
-          "numBins should be greater than 2^(maxNumCategories-1) -1 for multiclass classification" +
-            " with categorical variables")
-      }
     }
 
 
@@ -1332,10 +1354,12 @@ object DecisionTree extends Serializable with Logging {
             }
           } else { // Categorical feature
             val featureCategories = strategy.categoricalFeaturesInfo(featureIndex)
+            val isSpaceSufficientForAllCategoricalSplits
+              = numBins > math.pow(2, featureCategories.toInt - 1) - 1
 
             // Use different bin/split calculation strategy for categorical features in multiclass
-            // classification
-            if (isMulticlassClassification) {
+            // classification that satisfy the space constraint
+            if (isMulticlassClassification && isSpaceSufficientForAllCategoricalSplits) {
               // 2^(maxFeatureValue- 1) - 1 combinations
               var index = 0
               while (index < math.pow(2.0, featureCategories - 1).toInt - 1) {
@@ -1360,14 +1384,29 @@ object DecisionTree extends Serializable with Logging {
                 }
                 index += 1
               }
-            } else { // regression or binary classification
+            } else {
 
-              // For categorical variables, each bin is a category. The bins are sorted and they
-              // are ordered by calculating the centroid of their corresponding labels.
-              val centroidForCategories =
-                sampledInput.map(lp => (lp.features(featureIndex),lp.label))
-                  .groupBy(_._1)
-                  .mapValues(x => x.map(_._2).sum / x.map(_._1).length)
+              val centroidForCategories = {
+                if (isMulticlassClassification) {
+                  // For categorical variables in multiclass classification,
+                  // each bin is a category. The bins are sorted and they
+                  // are ordered by calculating the impurity of their corresponding labels.
+                  sampledInput.map(lp => (lp.features(featureIndex), lp.label))
+                   .groupBy(_._1)
+                   .mapValues(x => x.groupBy(_._2).mapValues(x => x.size.toDouble))
+                   .map(x => (x._1, x._2.values.toArray))
+                   .map(x => (x._1, strategy.impurity.calculate(x._2,x._2.sum)))
+                } else { // regression or binary classification
+                  // For categorical variables in regression and binary classification,
+                  // each bin is a category. The bins are sorted and they
+                  // are ordered by calculating the centroid of their corresponding labels.
+                  sampledInput.map(lp => (lp.features(featureIndex), lp.label))
+                    .groupBy(_._1)
+                    .mapValues(x => x.map(_._2).sum / x.map(_._1).length)
+                }
+              }
+
+              logDebug("centriod for categories = " + centroidForCategories.mkString(","))
 
               // Check for missing categorical variables and putting them last in the sorted list.
               val fullCentroidForCategories = scala.collection.mutable.Map[Double,Double]()

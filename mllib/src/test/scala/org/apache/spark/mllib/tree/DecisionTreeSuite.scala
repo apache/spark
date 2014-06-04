@@ -239,7 +239,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(List(3.0, 2.0, 0.0).toSeq == l.toSeq)
   }
 
-  test("split and bin calculations for categorical variables with multiclass classification") {
+  test("split and bin calculations for unordered categorical variables with multiclass " +
+    "classification") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
@@ -331,6 +332,62 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bins(1)(3) === null)
 
   }
+
+  test("split and bin calculations for ordered categorical variables with multiclass " +
+    "classification") {
+    val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
+    assert(arr.length === 3000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(
+      Classification,
+      Gini,
+      maxDepth = 3,
+      numClassesForClassification = 100,
+      maxBins = 100,
+      categoricalFeaturesInfo = Map(0 -> 10, 1-> 10))
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+
+    // 2^10 - 1 > 100, so categorical variables will be ordered
+
+    assert(splits(0)(0).feature === 0)
+    assert(splits(0)(0).threshold === Double.MinValue)
+    assert(splits(0)(0).featureType === Categorical)
+    assert(splits(0)(0).categories.length === 1)
+    assert(splits(0)(0).categories.contains(1.0))
+
+    assert(splits(0)(1).feature === 0)
+    assert(splits(0)(1).threshold === Double.MinValue)
+    assert(splits(0)(1).featureType === Categorical)
+    assert(splits(0)(1).categories.length === 2)
+    assert(splits(0)(1).categories.contains(2.0))
+
+    assert(splits(0)(2).feature === 0)
+    assert(splits(0)(2).threshold === Double.MinValue)
+    assert(splits(0)(2).featureType === Categorical)
+    assert(splits(0)(2).categories.length === 3)
+    assert(splits(0)(2).categories.contains(2.0))
+    assert(splits(0)(2).categories.contains(1.0))
+
+    assert(splits(0)(10) === null)
+    assert(splits(1)(10) === null)
+
+
+    // Check bins.
+
+    assert(bins(0)(0).category === 1.0)
+    assert(bins(0)(0).lowSplit.categories.length === 0)
+    assert(bins(0)(0).highSplit.categories.length === 1)
+    assert(bins(0)(0).highSplit.categories.contains(1.0))
+    assert(bins(0)(1).category === 2.0)
+    assert(bins(0)(1).lowSplit.categories.length === 1)
+    assert(bins(0)(1).highSplit.categories.length === 2)
+    assert(bins(0)(1).highSplit.categories.contains(1.0))
+    assert(bins(0)(1).highSplit.categories.contains(2.0))
+
+    assert(bins(0)(10) === null)
+
+  }
+
 
   test("classification stump with all categorical variables") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
@@ -547,7 +604,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplit.featureType === Categorical)
   }
 
-
   test("stump with continuous variables for multiclass classification") {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val input = sc.parallelize(arr)
@@ -568,7 +624,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   }
 
-
   test("stump with continuous + categorical variables for multiclass classification") {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val input = sc.parallelize(arr)
@@ -587,6 +642,26 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(bestSplit.threshold > 1980)
     assert(bestSplit.threshold < 2020)
   }
+
+  test("stump with categorical variables for ordered multiclass classification") {
+    val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
+    val input = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+      numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 10, 1 -> 10))
+    assert(strategy.isMulticlassClassification)
+    val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
+    val bestSplits = DecisionTree.findBestSplits(input, new Array(31), strategy, 0,
+      Array[List[Filter]](), splits, bins, 10)
+
+    assert(bestSplits.length === 1)
+    val bestSplit = bestSplits(0)._1
+    assert(bestSplit.feature === 0)
+    assert(bestSplit.categories.length === 1)
+    println(bestSplit)
+    assert(bestSplit.categories.contains(1.0))
+    assert(bestSplit.featureType === Categorical)
+  }
+
 
 }
 
@@ -657,6 +732,21 @@ object DecisionTreeSuite {
         arr(i) = new WeightedLabeledPoint(2.0, Vectors.dense(2.0, i))
       } else {
         arr(i) = new WeightedLabeledPoint(1.0, Vectors.dense(2.0, i))
+      }
+    }
+    arr
+  }
+
+  def generateCategoricalDataPointsForMulticlassForOrderedFeatures():
+    Array[WeightedLabeledPoint] = {
+    val arr = new Array[WeightedLabeledPoint](3000)
+    for (i <- 0 until 3000) {
+      if (i < 1000) {
+        arr(i) = new WeightedLabeledPoint(2.0, Vectors.dense(2.0, 2.0))
+      } else if (i < 2000) {
+        arr(i) = new WeightedLabeledPoint(1.0, Vectors.dense(1.0, 2.0))
+      } else {
+        arr(i) = new WeightedLabeledPoint(1.0, Vectors.dense(2.0, 2.0))
       }
     }
     arr
