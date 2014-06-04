@@ -99,7 +99,7 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
       val localMat = mat.toBreeze()
       val (localU, localSigma, localVt) = brzSvd(localMat)
       val localV: BDM[Double] = localVt.t.toDenseMatrix
-      for (k <- 1 to (n - 1)) {
+      for (k <- 1 to n) {
         val svd = mat.computeSVD(k, computeU = true)
         val U = svd.U
         val s = svd.s

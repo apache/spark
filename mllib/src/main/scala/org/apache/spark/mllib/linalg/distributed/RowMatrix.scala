@@ -246,6 +246,9 @@ class RowMatrix(
    * Then we compute U via easy matrix multiplication as U =  A * (V * S-1).
    * Note that this approach requires `O(nnz(A))` time.
    *
+   * When the requested eigenvalues k = n, a non-sparse implementation will be used, which requires
+   * `n^2` doubles to fit in memory and `O(n^3)` time on the master node.
+   *
    * At most k largest non-zero singular values and associated vectors are returned.
    * If there are k such values, then the dimensions of the return will be:
    *
@@ -269,8 +272,16 @@ class RowMatrix(
     val n = numCols().toInt
     require(k > 0 && k <= n, s"Request up to n singular values k=$k n=$n.")
 
-    val (sigmaSquares: BDV[Double], u: BDM[Double]) =
+    val (sigmaSquares: BDV[Double], u: BDM[Double]) = if (k < n) {
       EigenValueDecomposition.symmetricEigs(multiplyGramianMatrix, n, k, tol)
+    } else {
+      logWarning(s"Request full SVD (k = n = $k), while ARPACK requires k strictly less than n. " +
+          s"Using non-sparse implementation.")
+      val G = computeGramianMatrix()
+      val (uFull: BDM[Double], sigmaSquaresFull: BDV[Double], vFull: BDM[Double]) =
+        brzSvd(G.toBreeze.asInstanceOf[BDM[Double]])
+      (sigmaSquaresFull, uFull)
+    }
     val sigmas: BDV[Double] = brzSqrt(sigmaSquares)
 
     // Determine effective rank.
