@@ -95,9 +95,18 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
     The amount of off heap memory (in megabytes) to be allocated per driver. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.jar</code></td>
+  <td>(none)</td>
+  <td>
+    The location of the Spark jar file, in case overriding the default location is desired.
+    By default, Spark on YARN will use a Spark jar installed locally, but the Spark jar can also be
+    in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't
+    need to be distributed each time an application runs. To point to a jar on HDFS, for example,
+    set this configuration to "hdfs:///some/path".
+  </td>
+</tr>
 </table>
-
-By default, Spark on YARN will use a Spark jar installed locally, but the Spark JAR can also be in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't need to be distributed each time an application runs. To point to a JAR on HDFS, `export SPARK_JAR=hdfs:///some/path`.
 
 # Launching Spark on YARN
 
