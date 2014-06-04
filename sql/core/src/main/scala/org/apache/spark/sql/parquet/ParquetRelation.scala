@@ -55,6 +55,8 @@ private[sql] case class ParquetRelation(val path: String)
       .getSchema
 
   /** Attributes */
+  // TODO: THIS POTENTIALLY LOOSES TYPE INFORMATION!!!!
+  // e.g. short <-> INT32 and byte <-> INT32
   override val output =
     ParquetTypesConverter
       .convertToAttributes(parquetSchema)
@@ -132,7 +134,9 @@ private[sql] object ParquetRelation {
     }
     ParquetRelation.enableLogForwarding()
     ParquetTypesConverter.writeMetaData(attributes, path, conf)
-    new ParquetRelation(path.toString)
+    new ParquetRelation(path.toString) {
+      override val output = attributes
+    }
   }
 
   private def checkPath(pathStr: String, allowExisting: Boolean, conf: Configuration): Path = {

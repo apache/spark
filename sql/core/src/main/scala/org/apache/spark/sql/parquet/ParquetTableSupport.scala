@@ -126,12 +126,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 
   override def init(configuration: Configuration): WriteSupport.WriteContext = {
     //attributes = DataType(configuration.get(RowWriteSupport.PARQUET_ROW_SCHEMA))
-    attributes = if (attributes == null) {
-      RowWriteSupport.getSchema(configuration) match {
-        case s: StructType => s.toAttributes
-        case other => sys.error(s"Can convert $attributes to row")
-      }
-    } else attributes
+    attributes = if (attributes == null) RowWriteSupport.getSchema(configuration) else attributes
     schema = if (schema == null) ParquetTypesConverter.convertFromAttributes(attributes) else schema
     // ParquetTypesConverter.convertToAttributes(schema)
     log.debug(s"write support initialized for requested schema $attributes")
@@ -192,7 +187,9 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
           )
         )
         case IntegerType => writer.addInteger(value.asInstanceOf[Int])
+        case ShortType => writer.addInteger(value.asInstanceOf[Int])
         case LongType => writer.addLong(value.asInstanceOf[Long])
+        case ByteType => writer.addInteger(value.asInstanceOf[Int])
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
         case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
@@ -298,7 +295,9 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
         )
       )
       case IntegerType => writer.addInteger(record.getInt(index))
+      case ShortType => writer.addInteger(record.getShort(index))
       case LongType => writer.addLong(record.getLong(index))
+      case ByteType => writer.addInteger(record.getByte(index))
       case DoubleType => writer.addDouble(record.getDouble(index))
       case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))

@@ -292,13 +292,14 @@ private[parquet] object ParquetTypesConverter {
   }
 
   def convertFromString(string: String): Seq[Attribute] = {
-    val decoded: Array[Byte] = BaseEncoding.base64().decode(string)
-    SparkSqlSerializer.deserialize(decoded)
+    DataType(string) match {
+      case s: StructType => s.toAttributes
+      case other => sys.error(s"Can convert $string to row")
+    }
   }
 
   def convertToString(schema: Seq[Attribute]): String = {
-    val serialized: Array[Byte] = SparkSqlSerializer.serialize(schema)
-    BaseEncoding.base64().encode(serialized)
+    StructType.fromAttributes(schema).toString
   }
 
   def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration) {
