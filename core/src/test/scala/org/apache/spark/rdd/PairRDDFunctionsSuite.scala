@@ -119,28 +119,30 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
      * relatively tight error bounds to check correctness of functionality rather than checking
      * whether the approximation conforms with the requested bound.
      */
-    val relativeSD = 0.001
+    val p = 20
+    val sp = 0
+    // When p = 20, the relative accuracy is about 0.001. So with high probability, the
+    // relative error should be smaller than the threshold 0.01 we use here.
+    val relativeSD = 0.01
 
     // For each value i, there are i tuples with first element equal to i.
     // Therefore, the expected count for key i would be i.
     val stacked = (1 to 100).flatMap(i => (1 to i).map(j => (i, j)))
     val rdd1 = sc.parallelize(stacked)
-    val counted1 = rdd1.countApproxDistinctByKey(relativeSD).collect()
-    counted1.foreach{
-      case(k, count) => assert(error(count, k) < relativeSD)
-    }
+    val counted1 = rdd1.countApproxDistinctByKey(p, sp).collect()
+    counted1.foreach { case (k, count) => assert(error(count, k) < relativeSD) }
 
-    val rnd = new Random()
+    val rnd = new Random(42)
 
     // The expected count for key num would be num
     val randStacked = (1 to 100).flatMap { i =>
-      val num = rnd.nextInt % 500
+      val num = rnd.nextInt() % 500
       (1 to num).map(j => (num, j))
     }
     val rdd2 = sc.parallelize(randStacked)
-    val counted2 = rdd2.countApproxDistinctByKey(relativeSD, 4).collect()
-    counted2.foreach{
-      case(k, count) => assert(error(count, k) < relativeSD)
+    val counted2 = rdd2.countApproxDistinctByKey(relativeSD).collect()
+    counted2.foreach { case (k, count) =>
+      assert(error(count, k) < relativeSD, s"${error(count, k)} < $relativeSD")
     }
   }
 
@@ -236,11 +238,13 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
   test("zero-partition RDD") {
     val emptyDir = Files.createTempDir()
+    emptyDir.deleteOnExit()
     val file = sc.textFile(emptyDir.getAbsolutePath)
     assert(file.partitions.size == 0)
     assert(file.collect().toList === Nil)
     // Test that a shuffle on the file works, because this used to be a bug
     assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
+    emptyDir.delete()
   }
 
   test("keys and values") {

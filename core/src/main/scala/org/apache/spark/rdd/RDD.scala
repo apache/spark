@@ -19,12 +19,11 @@ package org.apache.spark.rdd
 
 import java.util.Random
 
-import scala.collection.Map
-import scala.collection.mutable
+import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
-import com.clearspring.analytics.stream.cardinality.HyperLogLog
+import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.NullWritable
@@ -41,7 +40,7 @@ import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BoundedPriorityQueue, SerializableHyperLogLog, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
 
@@ -128,7 +127,7 @@ abstract class RDD[T: ClassTag](
   @transient var name: String = null
 
   /** Assign a name to this RDD */
-  def setName(_name: String): RDD[T] = {
+  def setName(_name: String): this.type = {
     name = _name
     this
   }
@@ -138,7 +137,7 @@ abstract class RDD[T: ClassTag](
    * it is computed. This can only be used to assign a new storage level if the RDD does not
    * have a storage level set yet..
    */
-  def persist(newLevel: StorageLevel): RDD[T] = {
+  def persist(newLevel: StorageLevel): this.type = {
     // TODO: Handle changes of StorageLevel
     if (storageLevel != StorageLevel.NONE && newLevel != storageLevel) {
       throw new UnsupportedOperationException(
@@ -152,10 +151,10 @@ abstract class RDD[T: ClassTag](
   }
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
-  def persist(): RDD[T] = persist(StorageLevel.MEMORY_ONLY)
+  def persist(): this.type = persist(StorageLevel.MEMORY_ONLY)
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
-  def cache(): RDD[T] = persist()
+  def cache(): this.type = persist()
 
   /**
    * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
@@ -163,7 +162,7 @@ abstract class RDD[T: ClassTag](
    * @param blocking Whether to block until all blocks are deleted.
    * @return This RDD.
    */
-  def unpersist(blocking: Boolean = true): RDD[T] = {
+  def unpersist(blocking: Boolean = true): this.type = {
     logInfo("Removing RDD " + id + " from persistence list")
     sc.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE
@@ -328,11 +327,22 @@ abstract class RDD[T: ClassTag](
   def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[T] = null)
       : RDD[T] = {
     if (shuffle) {
+      /** Distributes elements evenly across output partitions, starting from a random partition. */
+      def distributePartition(index: Int, items: Iterator[T]): Iterator[(Int, T)] = {
+        var position = (new Random(index)).nextInt(numPartitions)
+        items.map { t =>
+          // Note that the hash code of the key will just be the key itself. The HashPartitioner 
+          // will mod it with the number of total partitions.
+          position = position + 1
+          (position, t)
+        }
+      }
+
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[T, Null, (T, Null)](map(x => (x, null)),
+        new ShuffledRDD[Int, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
-        numPartitions).keys
+        numPartitions).values
     } else {
       new CoalescedRDD(this, numPartitions)
     }
@@ -910,15 +920,49 @@ abstract class RDD[T: ClassTag](
    * :: Experimental ::
    * Return approximate number of distinct elements in the RDD.
    *
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vise versa. The default value of
-   * relativeSD is 0.05.
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero `sp > p`
+   * would trigger sparse representation of registers, which may reduce the memory consumption
+   * and increase accuracy when the cardinality is small.
+   *
+   * @param p The precision value for the normal set.
+   *          `p` must be a value between 4 and `sp` if `sp` is not zero (32 max).
+   * @param sp The precision value for the sparse set, between 0 and 32.
+   *           If `sp` equals 0, the sparse representation is skipped.
    */
   @Experimental
+  def countApproxDistinct(p: Int, sp: Int): Long = {
+    require(p >= 4, s"p ($p) must be greater than 0")
+    require(sp <= 32, s"sp ($sp) cannot be greater than 32")
+    require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
+    val zeroCounter = new HyperLogLogPlus(p, sp)
+    aggregate(zeroCounter)(
+      (hll: HyperLogLogPlus, v: T) => {
+        hll.offer(v)
+        hll
+      },
+      (h1: HyperLogLogPlus, h2: HyperLogLogPlus) => {
+        h1.addAll(h2)
+        h2
+      }).cardinality()
+  }
+
+  /**
+   * Return approximate number of distinct elements in the RDD.
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It must be greater than 0.000017.
+   */
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
-    val zeroCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
-    aggregate(zeroCounter)(_.add(_), _.merge(_)).value.cardinality()
+    val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt
+    countApproxDistinct(p, 0)
   }
 
   /**

@@ -63,7 +63,7 @@ class SparkFlumeEvent() extends Externalizable {
   def readExternal(in: ObjectInput) {
     val bodyLength = in.readInt()
     val bodyBuff = new Array[Byte](bodyLength)
-    in.read(bodyBuff)
+    in.readFully(bodyBuff)
 
     val numHeaders = in.readInt()
     val headers = new java.util.HashMap[CharSequence, CharSequence]

@@ -2,7 +2,6 @@
 layout: global
 title: Spark SQL Programming Guide
 ---
-**Spark SQL is currently an Alpha component. Therefore, the APIs may be changed in future releases.**
 
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -17,10 +16,10 @@ Spark.  At the core of this component is a new type of RDD,
 [SchemaRDD](api/scala/index.html#org.apache.spark.sql.SchemaRDD).  SchemaRDDs are composed
 [Row](api/scala/index.html#org.apache.spark.sql.catalyst.expressions.Row) objects along with
 a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
-in a traditional relational database.  A SchemaRDD can be created from an existing RDD, parquet
+in a traditional relational database.  A SchemaRDD can be created from an existing RDD, [Parquet](http://parquet.io)
 file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 
-**All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell`.**
+All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell`.
 
 </div>
 
@@ -30,7 +29,7 @@ Spark.  At the core of this component is a new type of RDD,
 [JavaSchemaRDD](api/scala/index.html#org.apache.spark.sql.api.java.JavaSchemaRDD).  JavaSchemaRDDs are composed
 [Row](api/scala/index.html#org.apache.spark.sql.api.java.Row) objects along with
 a schema that describes the data types of each column in the row.  A JavaSchemaRDD is similar to a table
-in a traditional relational database.  A JavaSchemaRDD can be created from an existing RDD, parquet
+in a traditional relational database.  A JavaSchemaRDD can be created from an existing RDD, [Parquet](http://parquet.io)
 file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 </div>
 
@@ -41,12 +40,14 @@ Spark.  At the core of this component is a new type of RDD,
 [SchemaRDD](api/python/pyspark.sql.SchemaRDD-class.html).  SchemaRDDs are composed
 [Row](api/python/pyspark.sql.Row-class.html) objects along with
 a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
-in a traditional relational database.  A SchemaRDD can be created from an existing RDD, parquet
+in a traditional relational database.  A SchemaRDD can be created from an existing RDD, [Parquet](http://parquet.io)
 file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 
-**All of the examples on this page use sample data included in the Spark distribution and can be run in the `pyspark` shell.**
+All of the examples on this page use sample data included in the Spark distribution and can be run in the `pyspark` shell.
 </div>
 </div>
+
+**Spark SQL is currently an alpha component. While we will minimize API changes, some APIs may change in future releases.**
 
 ***************************************************************************************************
 
@@ -169,7 +170,9 @@ A schema can be applied to an existing RDD by calling `applySchema` and providin
 for the JavaBean.
 
 {% highlight java %}
-JavaSQLContext ctx = new org.apache.spark.sql.api.java.JavaSQLContext(sc)
+
+JavaSparkContext ctx = ...; // An existing JavaSparkContext.
+JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(ctx)
 
 // Load a text file and convert each line to a JavaBean.
 JavaRDD<Person> people = ctx.textFile("examples/src/main/resources/people.txt").map(
@@ -240,8 +243,8 @@ Users that want a more complete dialect of SQL should look at the HiveQL support
 
 ## Using Parquet
 
-Parquet is a columnar format that is supported by many other data processing systems.  Spark SQL
-provides support for both reading and writing parquet files that automatically preserves the schema
+[Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
+Spark SQL provides support for both reading and writing Parquet files that automatically preserves the schema
 of the original data.  Using the data from the above example:
 
 <div class="codetabs">
@@ -254,11 +257,11 @@ import sqlContext._
 
 val people: RDD[Person] = ... // An RDD of case class objects, from the previous example.
 
-// The RDD is implicitly converted to a SchemaRDD, allowing it to be stored using parquet.
+// The RDD is implicitly converted to a SchemaRDD, allowing it to be stored using Parquet.
 people.saveAsParquetFile("people.parquet")
 
 // Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
-// The result of loading a parquet file is also a JavaSchemaRDD.
+// The result of loading a Parquet file is also a JavaSchemaRDD.
 val parquetFile = sqlContext.parquetFile("people.parquet")
 
 //Parquet files can also be registered as tables and then used in SQL statements.
@@ -275,10 +278,10 @@ teenagers.collect().foreach(println)
 
 JavaSchemaRDD schemaPeople = ... // The JavaSchemaRDD from the previous example.
 
-// JavaSchemaRDDs can be saved as parquet files, maintaining the schema information.
+// JavaSchemaRDDs can be saved as Parquet files, maintaining the schema information.
 schemaPeople.saveAsParquetFile("people.parquet");
 
-// Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
+// Read in the Parquet file created above.  Parquet files are self-describing so the schema is preserved.
 // The result of loading a parquet file is also a JavaSchemaRDD.
 JavaSchemaRDD parquetFile = sqlCtx.parquetFile("people.parquet");
 
@@ -297,10 +300,10 @@ JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 
 
 peopleTable # The SchemaRDD from the previous example.
 
-# SchemaRDDs can be saved as parquet files, maintaining the schema information.
+# SchemaRDDs can be saved as Parquet files, maintaining the schema information.
 peopleTable.saveAsParquetFile("people.parquet")
 
-# Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
+# Read in the Parquet file created above.  Parquet files are self-describing so the schema is preserved.
 # The result of loading a parquet file is also a SchemaRDD.
 parquetFile = sqlCtx.parquetFile("people.parquet")
 
@@ -415,4 +418,5 @@ results = hiveCtx.hql("FROM src SELECT key, value").collect()
 
 {% endhighlight %}
 
+</div>
 </div>

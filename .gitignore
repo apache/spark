@@ -7,7 +7,7 @@
 sbt/*.jar
 .settings
 .cache
-.mima-excludes
+.generated-mima-excludes
 /build/
 work/
 out/
@@ -49,6 +49,7 @@ unit-tests.log
 /lib/
 rat-results.txt
 scalastyle.txt
+conf/*.conf
 
 # For Hive
 metastore_db/

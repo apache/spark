@@ -250,7 +250,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
           // Remove the block from the slave's BlockManager.
           // Doesn't actually wait for a confirmation and the message might get lost.
           // If message loss becomes frequent, we should add retry logic here.
-          blockManager.get.slaveActor ! RemoveBlock(blockId)
+          blockManager.get.slaveActor.ask(RemoveBlock(blockId))(akkaTimeout)
         }
       }
     }

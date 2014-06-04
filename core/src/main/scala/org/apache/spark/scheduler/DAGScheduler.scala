@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.NotSerializableException
+import java.io.{NotSerializableException, PrintWriter, StringWriter}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -587,6 +587,10 @@ class DAGScheduler(
       case e: Exception =>
         jobResult = JobFailed(e)
         job.listener.jobFailed(e)
+      case oom: OutOfMemoryError =>
+        val exception = new SparkException("Local job aborted due to out of memory error", oom)
+        jobResult = JobFailed(exception)
+        job.listener.jobFailed(exception)
     } finally {
       val s = job.finalStage
       stageIdToJobIds -= s.id    // clean up data structures that were populated for a local job,

@@ -18,11 +18,13 @@
 package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
-import org.apache.spark.SparkContext._
-import org.apache.spark.SparkException
-import org.apache.spark.graphx.lib._
-import org.apache.spark.rdd.RDD
 import scala.util.Random
+
+import org.apache.spark.SparkException
+import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.RDD
+
+import org.apache.spark.graphx.lib._
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -43,19 +45,22 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * The in-degree of each vertex in the graph.
    * @note Vertices with no in-edges are not returned in the resulting RDD.
    */
-  @transient lazy val inDegrees: VertexRDD[Int] = degreesRDD(EdgeDirection.In)
+  @transient lazy val inDegrees: VertexRDD[Int] =
+    degreesRDD(EdgeDirection.In).setName("GraphOps.inDegrees")
 
   /**
    * The out-degree of each vertex in the graph.
    * @note Vertices with no out-edges are not returned in the resulting RDD.
    */
-  @transient lazy val outDegrees: VertexRDD[Int] = degreesRDD(EdgeDirection.Out)
+  @transient lazy val outDegrees: VertexRDD[Int] =
+    degreesRDD(EdgeDirection.Out).setName("GraphOps.outDegrees")
 
   /**
    * The degree of each vertex in the graph.
    * @note Vertices with no edges are not returned in the resulting RDD.
    */
-  @transient lazy val degrees: VertexRDD[Int] = degreesRDD(EdgeDirection.Either)
+  @transient lazy val degrees: VertexRDD[Int] =
+    degreesRDD(EdgeDirection.Either).setName("GraphOps.degrees")
 
   /**
    * Computes the neighboring vertex degrees.

@@ -20,6 +20,7 @@ package org.apache.spark.examples.sql;
 import java.io.Serializable;
 import java.util.List;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
@@ -51,8 +52,8 @@ public class JavaSparkSQL {
   }
 
   public static void main(String[] args) throws Exception {
-    JavaSparkContext ctx = new JavaSparkContext("local", "JavaSparkSQL",
-        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaSparkSQL.class));
+    SparkConf sparkConf = new SparkConf().setAppName("JavaSparkSQL");
+    JavaSparkContext ctx = new JavaSparkContext(sparkConf);
     JavaSQLContext sqlCtx = new JavaSQLContext(ctx);
 
     // Load a text file and convert each line to a Java Bean.

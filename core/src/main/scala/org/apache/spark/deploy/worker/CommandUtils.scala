@@ -47,8 +47,15 @@ object CommandUtils extends Logging {
    */
   def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
-    // Note, this will coalesce multiple options into a single command component
     val extraOpts = command.extraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq())
+
+    // Exists for backwards compatibility with older Spark versions
+    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString)
+      .getOrElse(Nil)
+    if (workerLocalOpts.length > 0) {
+      logWarning("SPARK_JAVA_OPTS was set on the worker. It is deprecated in Spark 1.0.")
+      logWarning("Set SPARK_LOCAL_DIRS for node-specific storage locations.")
+    }
 
     val libraryOpts =
       if (command.libraryPathEntries.size > 0) {
@@ -58,6 +65,8 @@ object CommandUtils extends Logging {
          Seq()
       }
 
+    val permGenOpt = Seq("-XX:MaxPermSize=128m")
+
     // Figure out our classpath with the external compute-classpath script
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
@@ -66,7 +75,7 @@ object CommandUtils extends Logging {
     val userClassPath = command.classPathEntries ++ Seq(classPath)
 
     Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
-      libraryOpts ++ extraOpts ++ memoryOpts
+      permGenOpt ++ libraryOpts ++ extraOpts ++ workerLocalOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */

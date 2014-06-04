@@ -31,7 +31,7 @@ set FOUND_JAR=0
 for %%d in ("%FWDIR%assembly\target\scala-%SCALA_VERSION%\spark-assembly*hadoop*.jar") do (
   set FOUND_JAR=1
 )
-if "%FOUND_JAR%"=="0" (
+if [%FOUND_JAR%] == [0] (
   echo Failed to find Spark assembly JAR.
   echo You need to build Spark with sbt\sbt assembly before running this program.
   goto exit
@@ -42,15 +42,30 @@ rem Load environment variables from conf\spark-env.cmd, if it exists
 if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
 
 rem Figure out which Python to use.
-if "x%PYSPARK_PYTHON%"=="x" set PYSPARK_PYTHON=python
+if [%PYSPARK_PYTHON%] == [] set PYSPARK_PYTHON=python
 
 set PYTHONPATH=%FWDIR%python;%PYTHONPATH%
 set PYTHONPATH=%FWDIR%python\lib\py4j-0.8.1-src.zip;%PYTHONPATH%
 
 set OLD_PYTHONSTARTUP=%PYTHONSTARTUP%
 set PYTHONSTARTUP=%FWDIR%python\pyspark\shell.py
+set PYSPARK_SUBMIT_ARGS=%*
 
 echo Running %PYSPARK_PYTHON% with PYTHONPATH=%PYTHONPATH%
 
-"%PYSPARK_PYTHON%" %*
+rem Check whether the argument is a file
+for /f %%i in ('echo %1^| findstr /R "\.py"') do (
+  set PYTHON_FILE=%%i
+)
+
+if [%PYTHON_FILE%] == [] (
+  %PYSPARK_PYTHON%
+) else (
+  echo.
+  echo WARNING: Running python applications through ./bin/pyspark.cmd is deprecated as of Spark 1.0.
+  echo Use ./bin/spark-submit ^<python file^>
+  echo.
+  "%FWDIR%\bin\spark-submit.cmd" %PYSPARK_SUBMIT_ARGS%
+)
+
 :exit

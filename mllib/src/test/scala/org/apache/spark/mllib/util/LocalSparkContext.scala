@@ -34,7 +34,6 @@ trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
     if (sc != null) {
       sc.stop()
     }
-    System.clearProperty("spark.driver.port")
     super.afterAll()
   }
 }

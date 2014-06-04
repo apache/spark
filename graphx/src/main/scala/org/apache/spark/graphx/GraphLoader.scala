@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx
 
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
 
@@ -47,21 +48,25 @@ object GraphLoader extends Logging {
    * @param path the path to the file (e.g., /home/data/file or hdfs://file)
    * @param canonicalOrientation whether to orient edges in the positive
    *        direction
-   * @param minEdgePartitions the number of partitions for the
-   *        the edge RDD
+   * @param minEdgePartitions the number of partitions for the edge RDD
+   * @param edgeStorageLevel the desired storage level for the edge partitions. To set the vertex
+   *        storage level, call [[org.apache.spark.graphx.Graph#persistVertices]].
    */
   def edgeListFile(
       sc: SparkContext,
       path: String,
       canonicalOrientation: Boolean = false,
-      minEdgePartitions: Int = 1)
+      minEdgePartitions: Int = 1,
+      edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
+      vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
     : Graph[Int, Int] =
   {
     val startTime = System.currentTimeMillis
 
     // Parse the edge data table directly into edge partitions
-    val edges = sc.textFile(path, minEdgePartitions).mapPartitionsWithIndex { (pid, iter) =>
-      val builder = new EdgePartitionBuilder[Int]
+    val lines = sc.textFile(path, minEdgePartitions).coalesce(minEdgePartitions)
+    val edges = lines.mapPartitionsWithIndex { (pid, iter) =>
+      val builder = new EdgePartitionBuilder[Int, Int]
       iter.foreach { line =>
         if (!line.isEmpty && line(0) != '#') {
           val lineArray = line.split("\\s+")
@@ -78,12 +83,13 @@ object GraphLoader extends Logging {
         }
       }
       Iterator((pid, builder.toEdgePartition))
-    }.cache()
+    }.persist(edgeStorageLevel).setName("GraphLoader.edgeListFile - edges (%s)".format(path))
     edges.count()
 
     logInfo("It took %d ms to load the edges".format(System.currentTimeMillis - startTime))
 
-    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1)
+    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1, edgeStorageLevel = edgeStorageLevel,
+      vertexStorageLevel = vertexStorageLevel)
   } // end of edgeListFile
 
 }

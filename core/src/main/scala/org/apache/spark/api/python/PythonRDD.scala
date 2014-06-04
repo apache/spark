@@ -56,104 +56,22 @@ private[spark] class PythonRDD[T: ClassTag](
     val env = SparkEnv.get
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
-    // Ensure worker socket is closed on task completion. Closing sockets is idempotent.
-    context.addOnCompleteCallback(() =>
+    // Start a thread to feed the process input from our parent's iterator
+    val writerThread = new WriterThread(env, worker, split, context)
+
+    context.addOnCompleteCallback { () =>
+      writerThread.shutdownOnTaskCompletion()
+
+      // Cleanup the worker socket. This will also cause the Python worker to exit.
       try {
         worker.close()
       } catch {
         case e: Exception => logWarning("Failed to close worker socket", e)
       }
-    )
-
-    @volatile var readerException: Exception = null
-
-    // Start a thread to feed the process input from our parent's iterator
-    new Thread("stdin writer for " + pythonExec) {
-      override def run() {
-        try {
-          SparkEnv.set(env)
-          val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
-          val dataOut = new DataOutputStream(stream)
-          // Partition index
-          dataOut.writeInt(split.index)
-          // sparkFilesDir
-          PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
-          // Broadcast variables
-          dataOut.writeInt(broadcastVars.length)
-          for (broadcast <- broadcastVars) {
-            dataOut.writeLong(broadcast.id)
-            dataOut.writeInt(broadcast.value.length)
-            dataOut.write(broadcast.value)
-          }
-          // Python includes (*.zip and *.egg files)
-          dataOut.writeInt(pythonIncludes.length)
-          for (include <- pythonIncludes) {
-            PythonRDD.writeUTF(include, dataOut)
-          }
-          dataOut.flush()
-          // Serialized command:
-          dataOut.writeInt(command.length)
-          dataOut.write(command)
-          // Data values
-          PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
-          dataOut.flush()
-          worker.shutdownOutput()
-        } catch {
-
-          case e: java.io.FileNotFoundException =>
-            readerException = e
-            Try(worker.shutdownOutput()) // kill Python worker process
-
-          case e: IOException =>
-            // This can happen for legitimate reasons if the Python code stops returning data
-            // before we are done passing elements through, e.g., for take(). Just log a message to
-            // say it happened (as it could also be hiding a real IOException from a data source).
-            logInfo("stdin writer to Python finished early (may not be an error)", e)
-
-          case e: Exception =>
-            // We must avoid throwing exceptions here, because the thread uncaught exception handler
-            // will kill the whole executor (see Executor).
-            readerException = e
-            Try(worker.shutdownOutput()) // kill Python worker process
-        }
-      }
-    }.start()
-
-    // Necessary to distinguish between a task that has failed and a task that is finished
-    @volatile var complete: Boolean = false
-
-    // It is necessary to have a monitor thread for python workers if the user cancels with
-    // interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
-    // threads can block indefinitely.
-    new Thread(s"Worker Monitor for $pythonExec") {
-      override def run() {
-        // Kill the worker if it is interrupted or completed
-        // When a python task completes, the context is always set to interupted
-        while (!context.interrupted) {
-          Thread.sleep(2000)
-        }
-        if (!complete) {
-          try {
-            logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
-            env.destroyPythonWorker(pythonExec, envVars.toMap)
-          } catch {
-            case e: Exception =>
-              logError("Exception when trying to kill worker", e)
-          }
-        }
-      }
-    }.start()
-
-    /*
-     * Partial fix for SPARK-1019: Attempts to stop reading the input stream since
-     * other completion callbacks might invalidate the input. Because interruption
-     * is not synchronous this still leaves a potential race where the interruption is
-     * processed only after the stream becomes invalid.
-     */
-    context.addOnCompleteCallback{ () =>
-      complete = true // Indicate that the task has completed successfully
-      context.interrupted = true
     }
+
+    writerThread.start()
+    new MonitorThread(env, worker, context).start()
 
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
@@ -161,17 +79,14 @@ private[spark] class PythonRDD[T: ClassTag](
       def next(): Array[Byte] = {
         val obj = _nextObj
         if (hasNext) {
-          // FIXME: can deadlock if worker is waiting for us to
-          // respond to current message (currently irrelevant because
-          // output is shutdown before we read any input)
           _nextObj = read()
         }
         obj
       }
 
       private def read(): Array[Byte] = {
-        if (readerException != null) {
-          throw readerException
+        if (writerThread.exception.isDefined) {
+          throw writerThread.exception.get
         }
         try {
           stream.readInt() match {
@@ -179,6 +94,7 @@ private[spark] class PythonRDD[T: ClassTag](
               val obj = new Array[Byte](length)
               stream.readFully(obj)
               obj
+            case 0 => Array.empty[Byte]
             case SpecialLengths.TIMING_DATA =>
               // Timing data from worker
               val bootTime = stream.readLong()
@@ -190,13 +106,14 @@ private[spark] class PythonRDD[T: ClassTag](
               val total = finishTime - startTime
               logInfo("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot,
                 init, finish))
-              read
+              read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               // Signals that an exception has been thrown in python
               val exLength = stream.readInt()
               val obj = new Array[Byte](exLength)
               stream.readFully(obj)
-              throw new PythonException(new String(obj, "utf-8"), readerException)
+              throw new PythonException(new String(obj, "utf-8"),
+                writerThread.exception.getOrElse(null))
             case SpecialLengths.END_OF_DATA_SECTION =>
               // We've finished the data section of the output, but we can still
               // read some accumulator updates:
@@ -207,13 +124,18 @@ private[spark] class PythonRDD[T: ClassTag](
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
-              Array.empty[Byte]
+              null
           }
         } catch {
-          case e: Exception if readerException != null =>
+
+          case e: Exception if context.interrupted =>
+            logDebug("Exception thrown after task interruption", e)
+            throw new TaskKilledException
+
+          case e: Exception if writerThread.exception.isDefined =>
             logError("Python worker exited unexpectedly (crashed)", e)
-            logError("Python crash may have been caused by prior exception:", readerException)
-            throw readerException
+            logError("This may have been caused by a prior exception:", writerThread.exception.get)
+            throw writerThread.exception.get
 
           case eof: EOFException =>
             throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
@@ -222,12 +144,102 @@ private[spark] class PythonRDD[T: ClassTag](
 
       var _nextObj = read()
 
-      def hasNext = _nextObj.length != 0
+      def hasNext = _nextObj != null
     }
-    stdoutIterator
+    new InterruptibleIterator(context, stdoutIterator)
   }
 
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
+
+  /**
+   * The thread responsible for writing the data from the PythonRDD's parent iterator to the
+   * Python process.
+   */
+  class WriterThread(env: SparkEnv, worker: Socket, split: Partition, context: TaskContext)
+    extends Thread(s"stdout writer for $pythonExec") {
+
+    @volatile private var _exception: Exception = null
+
+    setDaemon(true)
+
+    /** Contains the exception thrown while writing the parent iterator to the Python process. */
+    def exception: Option[Exception] = Option(_exception)
+
+    /** Terminates the writer thread, ignoring any exceptions that may occur due to cleanup. */
+    def shutdownOnTaskCompletion() {
+      assert(context.completed)
+      this.interrupt()
+    }
+
+    override def run(): Unit = Utils.logUncaughtExceptions {
+      try {
+        SparkEnv.set(env)
+        val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
+        val dataOut = new DataOutputStream(stream)
+        // Partition index
+        dataOut.writeInt(split.index)
+        // sparkFilesDir
+        PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
+        // Python includes (*.zip and *.egg files)
+        dataOut.writeInt(pythonIncludes.length)
+        for (include <- pythonIncludes) {
+          PythonRDD.writeUTF(include, dataOut)
+        }
+        // Broadcast variables
+        dataOut.writeInt(broadcastVars.length)
+        for (broadcast <- broadcastVars) {
+          dataOut.writeLong(broadcast.id)
+          dataOut.writeInt(broadcast.value.length)
+          dataOut.write(broadcast.value)
+        }
+        dataOut.flush()
+        // Serialized command:
+        dataOut.writeInt(command.length)
+        dataOut.write(command)
+        // Data values
+        PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
+        dataOut.flush()
+      } catch {
+        case e: Exception if context.completed || context.interrupted =>
+          logDebug("Exception thrown after task completion (likely due to cleanup)", e)
+
+        case e: Exception =>
+          // We must avoid throwing exceptions here, because the thread uncaught exception handler
+          // will kill the whole executor (see org.apache.spark.executor.Executor).
+          _exception = e
+      } finally {
+        Try(worker.shutdownOutput()) // kill Python worker process
+      }
+    }
+  }
+
+  /**
+   * It is necessary to have a monitor thread for python workers if the user cancels with
+   * interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
+   * threads can block indefinitely.
+   */
+  class MonitorThread(env: SparkEnv, worker: Socket, context: TaskContext)
+    extends Thread(s"Worker Monitor for $pythonExec") {
+
+    setDaemon(true)
+
+    override def run() {
+      // Kill the worker if it is interrupted, checking until task completion.
+      // TODO: This has a race condition if interruption occurs, as completed may still become true.
+      while (!context.interrupted && !context.completed) {
+        Thread.sleep(2000)
+      }
+      if (!context.completed) {
+        try {
+          logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
+          env.destroyPythonWorker(pythonExec, envVars.toMap)
+        } catch {
+          case e: Exception =>
+            logError("Exception when trying to kill worker", e)
+        }
+      }
+    }
+  }
 }
 
 /** Thrown for exceptions in user Python code. */
@@ -257,6 +269,26 @@ private object SpecialLengths {
 private[spark] object PythonRDD {
   val UTF8 = Charset.forName("UTF-8")
 
+  /**
+   * Adapter for calling SparkContext#runJob from Python.
+   *
+   * This method will return an iterator of an array that contains all elements in the RDD
+   * (effectively a collect()), but allows you to run on a certain subset of partitions,
+   * or to enable local execution.
+   */
+  def runJob(
+      sc: SparkContext,
+      rdd: JavaRDD[Array[Byte]],
+      partitions: JArrayList[Int],
+      allowLocal: Boolean): Iterator[Array[Byte]] = {
+    type ByteArray = Array[Byte]
+    type UnrolledPartition = Array[ByteArray]
+    val allPartitions: Array[UnrolledPartition] =
+      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions, allowLocal)
+    val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
+    flattenedPartition.iterator
+  }
+
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
   JavaRDD[Array[Byte]] = {
     val file = new DataInputStream(new FileInputStream(filename))
@@ -270,7 +302,6 @@ private[spark] object PythonRDD {
       }
     } catch {
       case eof: EOFException => {}
-      case e: Throwable => throw e
     }
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }

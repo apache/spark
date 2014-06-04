@@ -278,11 +278,11 @@ object SparkEnv extends Logging {
       addedJars: Seq[String],
       addedFiles: Seq[String]): Map[String, Seq[(String, String)]] = {
 
+    import Properties._
     val jvmInformation = Seq(
-      ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
-      ("Java Home", Properties.javaHome),
-      ("Scala Version", Properties.versionString),
-      ("Scala Home", Properties.scalaHome)
+      ("Java Version", s"$javaVersion ($javaVendor)"),
+      ("Java Home", javaHome),
+      ("Scala Version", versionString)
     ).sorted
 
     // Spark properties
@@ -297,18 +297,15 @@ object SparkEnv extends Logging {
 
     // System properties that are not java classpaths
     val systemProperties = System.getProperties.iterator.toSeq
-    val otherProperties = systemProperties.filter { case (k, v) =>
+    val otherProperties = systemProperties.filter { case (k, _) =>
       k != "java.class.path" && !k.startsWith("spark.")
     }.sorted
 
     // Class paths including all added jars and files
-    val classPathProperty = systemProperties.find { case (k, v) =>
-      k == "java.class.path"
-    }.getOrElse(("", ""))
-    val classPathEntries = classPathProperty._2
+    val classPathEntries = javaClassPath
       .split(File.pathSeparator)
-      .filterNot(e => e.isEmpty)
-      .map(e => (e, "System Classpath"))
+      .filterNot(_.isEmpty)
+      .map((_, "System Classpath"))
     val addedJarsAndFiles = (addedJars ++ addedFiles).map((_, "Added By User"))
     val classPaths = (addedJarsAndFiles ++ classPathEntries).sorted
 
