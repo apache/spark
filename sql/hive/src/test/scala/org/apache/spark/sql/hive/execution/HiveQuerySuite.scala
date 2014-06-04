@@ -157,4 +157,28 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SHOW TABLES").toString
     hql("SELECT * FROM src").toString
   }
+
+  test("parse HQL set commands") {
+    // Adapted from SQLConfSuite.
+    sqlConf.clear()
+    val testKey = "spark.sql.key"
+    val testVal = "val0,val_1,val2.3,my_table"
+
+    hql(s"set $testKey=$testVal")
+    assert(sqlConf.get(testKey, testVal + "_") == testVal)
+
+    hql("set mapred.reduce.tasks=20")
+    assert(sqlConf.get("mapred.reduce.tasks", "0") == "20")
+    hql("set mapred.reduce.tasks = 40")
+    assert(sqlConf.get("mapred.reduce.tasks", "0") == "40")
+
+    hql(s"set $testKey=$testVal")
+    assert(sqlConf.get(testKey, "0") == testVal)
+
+    hql(s"set$testKey=")
+    assert(sqlConf.get(testKey, "0") == "")
+
+    sqlConf.clear()
+  }
+
 }
