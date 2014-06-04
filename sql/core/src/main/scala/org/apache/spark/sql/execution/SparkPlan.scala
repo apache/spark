@@ -49,7 +49,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   /**
    * Runs this query returning the result as an array.
    */
-  def executeCollect(): Array[Row] = execute().collect()
+  def executeCollect(): Array[Row] = execute().map(_.copy()).collect()
 
   protected def buildRow(values: Seq[Any]): Row =
     new GenericRow(values.toArray)
@@ -77,7 +77,7 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
     SparkLogicalPlan(
       alreadyPlanned match {
         case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
-        case scan @ InMemoryColumnarTableScan(output, child) =>
+        case scan @ InMemoryColumnarTableScan(output, _, _) =>
           scan.copy(attributes = output.map(_.newInstance))
         case _ => sys.error("Multiple instance of the same relation detected.")
       }).asInstanceOf[this.type]

@@ -40,12 +40,12 @@ private[sql] trait NullableColumnBuilder extends ColumnBuilder {
   private var pos: Int = _
   private var nullCount: Int = _
 
-  abstract override def initialize(initialSize: Int, columnName: String) {
+  abstract override def initialize(initialSize: Int, columnName: String, useCompression: Boolean) {
     nulls = ByteBuffer.allocate(1024)
     nulls.order(ByteOrder.nativeOrder())
     pos = 0
     nullCount = 0
-    super.initialize(initialSize, columnName)
+    super.initialize(initialSize, columnName, useCompression)
   }
 
   abstract override def appendFrom(row: Row, ordinal: Int) {

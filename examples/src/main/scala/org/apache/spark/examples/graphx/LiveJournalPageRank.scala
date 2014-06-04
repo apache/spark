@@ -28,9 +28,9 @@ import org.apache.spark.graphx.lib.Analytics
  */
 object LiveJournalPageRank {
   def main(args: Array[String]) {
-    if (args.length < 2) {
+    if (args.length < 1) {
       System.err.println(
-        "Usage: LiveJournalPageRank <master> <edge_list_file>\n" +
+        "Usage: LiveJournalPageRank <edge_list_file>\n" +
           "    [--tol=<tolerance>]\n" +
           "        The tolerance allowed at convergence (smaller => more accurate). Default is " +
           "0.001.\n" +
@@ -44,6 +44,6 @@ object LiveJournalPageRank {
       System.exit(-1)
     }
 
-    Analytics.main(args.patch(1, List("pagerank"), 0))
+    Analytics.main(args.patch(0, List("pagerank"), 0))
   }
 }

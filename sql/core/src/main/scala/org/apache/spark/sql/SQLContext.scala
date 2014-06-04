@@ -162,8 +162,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Caches the specified table in-memory. */
   def cacheTable(tableName: String): Unit = {
     val currentTable = catalog.lookupRelation(None, tableName)
+    val useCompression =
+      sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
     val asInMemoryRelation =
-      InMemoryColumnarTableScan(currentTable.output, executePlan(currentTable).executedPlan)
+      InMemoryColumnarTableScan(
+        currentTable.output, executePlan(currentTable).executedPlan, useCompression)
 
     catalog.registerTable(None, tableName, SparkLogicalPlan(asInMemoryRelation))
   }
@@ -173,7 +176,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     EliminateAnalysisOperators(catalog.lookupRelation(None, tableName)) match {
       // This is kind of a hack to make sure that if this was just an RDD registered as a table,
       // we reregister the RDD as a table.
-      case SparkLogicalPlan(inMem @ InMemoryColumnarTableScan(_, e: ExistingRdd)) =>
+      case SparkLogicalPlan(inMem @ InMemoryColumnarTableScan(_, e: ExistingRdd, _)) =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
         catalog.registerTable(None, tableName, SparkLogicalPlan(e))
@@ -203,17 +206,21 @@ class SQLContext(@transient val sparkContext: SparkContext)
      * final desired output requires complex expressions to be evaluated or when columns can be
      * further eliminated out after filtering has been done.
      *
+     * The `prunePushedDownFilters` parameter is used to remove those filters that can be optimized
+     * away by the filter pushdown optimization.
+     *
      * The required attributes for both filtering and expression evaluation are passed to the
      * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
      */
     def pruneFilterProject(
         projectList: Seq[NamedExpression],
         filterPredicates: Seq[Expression],
+        prunePushedDownFilters: Seq[Expression] => Seq[Expression],
         scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
 
       val projectSet = projectList.flatMap(_.references).toSet
       val filterSet = filterPredicates.flatMap(_.references).toSet
-      val filterCondition = filterPredicates.reduceLeftOption(And)
+      val filterCondition = prunePushedDownFilters(filterPredicates).reduceLeftOption(And)
 
       // Right now we still use a projection even if the only evaluation is applying an alias
       // to a column.  Since this is a no-op, it could be avoided. However, using this

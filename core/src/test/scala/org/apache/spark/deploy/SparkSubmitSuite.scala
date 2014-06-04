@@ -83,122 +83,175 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   test("handle binary specified but not class") {
-    testPrematureExit(Array("foo.jar"), "Must specify a main class")
+    testPrematureExit(Array("foo.jar"), "No main class")
   }
 
   test("handles arguments with --key=val") {
-    val clArgs = Seq("--jars=one.jar,two.jar,three.jar", "--name=myApp")
+    val clArgs = Seq(
+      "--jars=one.jar,two.jar,three.jar",
+      "--name=myApp")
     val appArgs = new SparkSubmitArguments(clArgs)
-    appArgs.jars should be ("one.jar,two.jar,three.jar")
+    appArgs.jars should include regex (".*one.jar,.*two.jar,.*three.jar")
     appArgs.name should be ("myApp")
   }
 
   test("handles arguments to user program") {
-    val clArgs = Seq("--name", "myApp", "userjar.jar", "some", "--random", "args", "here")
+    val clArgs = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "userjar.jar",
+      "some",
+      "--weird", "args")
     val appArgs = new SparkSubmitArguments(clArgs)
-    appArgs.childArgs should be (Seq("some", "--random", "args", "here"))
+    appArgs.childArgs should be (Seq("some", "--weird", "args"))
   }
 
   test("handles YARN cluster mode") {
-    val clArgs = Seq("--deploy-mode", "cluster",
-      "--master", "yarn", "--executor-memory", "5g", "--executor-cores", "5",
-      "--class", "org.SomeClass", "--jars", "one.jar,two.jar,three.jar",
-      "--driver-memory", "4g", "--queue", "thequeue", "--files", "file1.txt,file2.txt",
-      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6",
-      "thejar.jar", "arg1", "arg2")
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "yarn",
+      "--executor-memory", "5g",
+      "--executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--jars", "one.jar,two.jar,three.jar",
+      "--driver-memory", "4g",
+      "--queue", "thequeue",
+      "--files", "file1.txt,file2.txt",
+      "--archives", "archive1.txt,archive2.txt",
+      "--num-executors", "6",
+      "--name", "beauty",
+      "thejar.jar",
+      "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     val childArgsStr = childArgs.mkString(" ")
-    childArgsStr should include ("--jar thejar.jar")
     childArgsStr should include ("--class org.SomeClass")
-    childArgsStr should include ("--addJars one.jar,two.jar,three.jar")
     childArgsStr should include ("--executor-memory 5g")
     childArgsStr should include ("--driver-memory 4g")
     childArgsStr should include ("--executor-cores 5")
     childArgsStr should include ("--arg arg1 --arg arg2")
     childArgsStr should include ("--queue thequeue")
-    childArgsStr should include ("--files file1.txt,file2.txt")
-    childArgsStr should include ("--archives archive1.txt,archive2.txt")
     childArgsStr should include ("--num-executors 6")
+    childArgsStr should include regex ("--jar .*thejar.jar")
+    childArgsStr should include regex ("--addJars .*one.jar,.*two.jar,.*three.jar")
+    childArgsStr should include regex ("--files .*file1.txt,.*file2.txt")
+    childArgsStr should include regex ("--archives .*archive1.txt,.*archive2.txt")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
     classpath should have length (0)
-    sysProps should have size (1)
+    sysProps("spark.app.name") should be ("beauty")
+    sysProps("SPARK_SUBMIT") should be ("true")
   }
 
   test("handles YARN client mode") {
-    val clArgs = Seq("--deploy-mode", "client",
-      "--master", "yarn", "--executor-memory", "5g", "--executor-cores", "5",
-      "--class", "org.SomeClass", "--jars", "one.jar,two.jar,three.jar",
-      "--driver-memory", "4g", "--queue", "thequeue", "--files", "file1.txt,file2.txt",
-      "--archives", "archive1.txt,archive2.txt", "--num-executors", "6", "thejar.jar",
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "yarn",
+      "--executor-memory", "5g",
+      "--executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--jars", "one.jar,two.jar,three.jar",
+      "--driver-memory", "4g",
+      "--queue", "thequeue",
+      "--files", "file1.txt,file2.txt",
+      "--archives", "archive1.txt,archive2.txt",
+      "--num-executors", "6",
+      "--name", "trill",
+      "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
-    classpath should contain ("thejar.jar")
-    classpath should contain ("one.jar")
-    classpath should contain ("two.jar")
-    classpath should contain ("three.jar")
+    classpath should have length (4)
+    classpath(0) should endWith ("thejar.jar")
+    classpath(1) should endWith ("one.jar")
+    classpath(2) should endWith ("two.jar")
+    classpath(3) should endWith ("three.jar")
+    sysProps("spark.app.name") should be ("trill")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.executor.cores") should be ("5")
     sysProps("spark.yarn.queue") should be ("thequeue")
-    sysProps("spark.yarn.dist.files") should be ("file1.txt,file2.txt")
-    sysProps("spark.yarn.dist.archives") should be ("archive1.txt,archive2.txt")
     sysProps("spark.executor.instances") should be ("6")
+    sysProps("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
+    sysProps("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
+    sysProps("spark.jars") should include regex (".*one.jar,.*two.jar,.*three.jar,.*thejar.jar")
     sysProps("SPARK_SUBMIT") should be ("true")
   }
 
   test("handles standalone cluster mode") {
-    val clArgs = Seq("--deploy-mode", "cluster",
-      "--master", "spark://h:p", "--class", "org.SomeClass",
-      "--supervise", "--driver-memory", "4g", "--driver-cores", "5", "thejar.jar", "arg1", "arg2")
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "spark://h:p",
+      "--class", "org.SomeClass",
+      "--supervise",
+      "--driver-memory", "4g",
+      "--driver-cores", "5",
+      "thejar.jar",
+      "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     val childArgsStr = childArgs.mkString(" ")
-    childArgsStr.startsWith("--memory 4g --cores 5 --supervise") should be (true)
-    childArgsStr should include ("launch spark://h:p thejar.jar org.SomeClass arg1 arg2")
+    childArgsStr should startWith ("--memory 4g --cores 5 --supervise")
+    childArgsStr should include regex ("launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2")
     mainClass should be ("org.apache.spark.deploy.Client")
-    classpath should have length (0)
-    sysProps should have size (2) // contains --jar entry and SPARK_SUBMIT
+    classpath should have size (0)
+    sysProps should have size (2)
+    sysProps.keys should contain ("spark.jars")
+    sysProps.keys should contain ("SPARK_SUBMIT")
   }
 
   test("handles standalone client mode") {
-    val clArgs = Seq("--deploy-mode", "client",
-      "--master", "spark://h:p", "--executor-memory", "5g", "--total-executor-cores", "5",
-      "--class", "org.SomeClass", "--driver-memory", "4g", "thejar.jar", "arg1", "arg2")
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "spark://h:p",
+      "--executor-memory", "5g",
+      "--total-executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--driver-memory", "4g",
+      "thejar.jar",
+      "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
-    classpath should contain ("thejar.jar")
+    classpath should have length (1)
+    classpath(0) should endWith ("thejar.jar")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.cores.max") should be ("5")
   }
 
   test("handles mesos client mode") {
-    val clArgs = Seq("--deploy-mode", "client",
-      "--master", "mesos://h:p", "--executor-memory", "5g", "--total-executor-cores", "5",
-      "--class", "org.SomeClass", "--driver-memory", "4g", "thejar.jar", "arg1", "arg2")
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "mesos://h:p",
+      "--executor-memory", "5g",
+      "--total-executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--driver-memory", "4g",
+      "thejar.jar",
+      "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
-    classpath should contain ("thejar.jar")
+    classpath should have length (1)
+    classpath(0) should endWith ("thejar.jar")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.cores.max") should be ("5")
   }
 
   test("launch simple application with spark-submit") {
-    runSparkSubmit(
-      Seq(
-        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
-        "--name", "testApp",
-        "--master", "local",
-        "unUsed.jar"))
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local",
+      unusedJar.toString)
+    runSparkSubmit(args)
   }
 
   test("spark submit includes jars passed in through --jar") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
     val jarsString = Seq(jar1, jar2).map(j => j.toString).mkString(",")
@@ -207,7 +260,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
       "--name", "testApp",
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
-      "unused.jar")
+      unusedJar.toString)
     runSparkSubmit(args)
   }
 
@@ -225,7 +278,7 @@ object JarCreationTest {
   def main(args: Array[String]) {
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
-    val result = sc.makeRDD(1 to 100, 10).mapPartitions{ x =>
+    val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
       var foundClasses = false
       try {
         Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
@@ -246,7 +299,6 @@ object SimpleApplicationTest {
   def main(args: Array[String]) {
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
-
     val configs = Seq("spark.master", "spark.app.name")
     for (config <- configs) {
       val masterValue = conf.get(config)
@@ -264,6 +316,5 @@ object SimpleApplicationTest {
           s"Master had $config=$masterValue but executor had $config=$executorValue")
       }
     }
-
   }
 }

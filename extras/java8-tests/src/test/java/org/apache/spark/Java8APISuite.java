@@ -23,7 +23,7 @@ import java.util.*;
 
 import scala.Tuple2;
 
-import com.google.common.collections.Iterables;
+import com.google.common.collect.Iterables;
 import com.google.common.base.Optional;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
@@ -39,6 +39,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
+import org.apache.spark.util.Utils;
 
 /**
  * Most of these tests replicate org.apache.spark.JavaAPISuite using java 8
@@ -57,8 +58,6 @@ public class Java8APISuite implements Serializable {
   public void tearDown() {
     sc.stop();
     sc = null;
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port");
   }
 
   @Test
@@ -249,6 +248,7 @@ public class Java8APISuite implements Serializable {
   @Test
   public void sequenceFile() {
     File tempDir = Files.createTempDir();
+    tempDir.deleteOnExit();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
       new Tuple2<Integer, String>(1, "a"),
@@ -265,6 +265,7 @@ public class Java8APISuite implements Serializable {
     JavaPairRDD<Integer, String> readRDD = sc.sequenceFile(outputDir, IntWritable.class, Text.class)
       .mapToPair(pair -> new Tuple2<Integer, String>(pair._1().get(), pair._2().toString()));
     Assert.assertEquals(pairs, readRDD.collect());
+    Utils.deleteRecursively(tempDir);
   }
 
   @Test

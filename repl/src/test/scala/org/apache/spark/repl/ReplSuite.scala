@@ -26,6 +26,7 @@ import com.google.common.io.Files
 import org.scalatest.FunSuite
 import org.apache.spark.SparkContext
 import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.spark.util.Utils
 
 
 class ReplSuite extends FunSuite {
@@ -45,14 +46,11 @@ class ReplSuite extends FunSuite {
     }
     val interp = new SparkILoop(in, new PrintWriter(out), master)
     org.apache.spark.repl.Main.interp = interp
-    val separator = System.getProperty("path.separator")
-    interp.process(Array("-classpath", paths.mkString(separator)))
+    interp.process(Array("-classpath", paths.mkString(File.pathSeparator)))
     org.apache.spark.repl.Main.interp = null
     if (interp.sparkContext != null) {
       interp.sparkContext.stop()
     }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
     return out.toString
   }
 
@@ -179,6 +177,7 @@ class ReplSuite extends FunSuite {
 
   test("interacting with files") {
     val tempDir = Files.createTempDir()
+    tempDir.deleteOnExit()
     val out = new FileWriter(tempDir + "/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")
@@ -197,6 +196,7 @@ class ReplSuite extends FunSuite {
     assertContains("res0: Long = 3", output)
     assertContains("res1: Long = 3", output)
     assertContains("res2: Long = 3", output)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("local-cluster mode") {

@@ -73,10 +73,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val size = 100
     val uniformDistro = for (i <- 1 to 100000) yield i % size
     val simpleRdd = sc.makeRDD(uniformDistro)
-    assert(error(simpleRdd.countApproxDistinct(0.2), size) < 0.2)
-    assert(error(simpleRdd.countApproxDistinct(0.05), size) < 0.05)
-    assert(error(simpleRdd.countApproxDistinct(0.01), size) < 0.01)
-    assert(error(simpleRdd.countApproxDistinct(0.001), size) < 0.001)
+    assert(error(simpleRdd.countApproxDistinct(4, 0), size) < 0.4)
+    assert(error(simpleRdd.countApproxDistinct(8, 0), size) < 0.1)
   }
 
   test("SparkContext.union") {
@@ -202,6 +200,39 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(repartitioned2.collect().toSet === (1 to 1000).toSet)
   }
 
+  test("repartitioned RDDs perform load balancing") {
+    // Coalesce partitions
+    val input = Array.fill(1000)(1)
+    val initialPartitions = 10
+    val data = sc.parallelize(input, initialPartitions)
+
+    val repartitioned1 = data.repartition(2)
+    assert(repartitioned1.partitions.size == 2)
+    val partitions1 = repartitioned1.glom().collect()
+    // some noise in balancing is allowed due to randomization
+    assert(math.abs(partitions1(0).length - 500) < initialPartitions)
+    assert(math.abs(partitions1(1).length - 500) < initialPartitions)
+    assert(repartitioned1.collect() === input)
+
+    def testSplitPartitions(input: Seq[Int], initialPartitions: Int, finalPartitions: Int) {
+      val data = sc.parallelize(input, initialPartitions)
+      val repartitioned = data.repartition(finalPartitions)
+      assert(repartitioned.partitions.size === finalPartitions)
+      val partitions = repartitioned.glom().collect()
+      // assert all elements are present
+      assert(repartitioned.collect().sortWith(_ > _).toSeq === input.toSeq.sortWith(_ > _).toSeq)
+      // assert no bucket is overloaded
+      for (partition <- partitions) {
+        val avg = input.size / finalPartitions
+        val maxPossible = avg + initialPartitions
+        assert(partition.length <=  maxPossible)
+      }
+    }
+
+    testSplitPartitions(Array.fill(100)(1), 10, 20)
+    testSplitPartitions(Array.fill(10000)(1) ++ Array.fill(10000)(2), 20, 100)
+  }
+
   test("coalesced RDDs") {
     val data = sc.parallelize(1 to 10, 10)
 
@@ -318,6 +349,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     intercept[IllegalArgumentException] {
       nums.zip(sc.parallelize(1 to 4, 1)).collect()
+    }
+
+    intercept[SparkException] {
+      nums.zip(sc.parallelize(1 to 5, 2)).collect()
     }
   }
 

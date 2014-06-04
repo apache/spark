@@ -24,7 +24,7 @@ esac
 
 SCALA_VERSION=2.10
 
-# Figure out where the Scala framework is installed
+# Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 # Export this as SPARK_HOME
@@ -99,14 +99,14 @@ else
 fi
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
-JAVA_OPTS="$OUR_JAVA_OPTS"
+JAVA_OPTS="-XX:MaxPermSize=128m $OUR_JAVA_OPTS"
 JAVA_OPTS="$JAVA_OPTS -Xms$OUR_JAVA_MEM -Xmx$OUR_JAVA_MEM"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e "$FWDIR/conf/java-opts" ] ; then
   JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"
 fi
 export JAVA_OPTS
-# Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in ExecutorRunner.scala!
+# Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in CommandUtils.scala!
 
 if [ ! -f "$FWDIR/RELEASE" ]; then
   # Exit if the user hasn't compiled Spark
@@ -114,7 +114,7 @@ if [ ! -f "$FWDIR/RELEASE" ]; then
   jars_list=$(ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/ | grep "spark-assembly.*hadoop.*.jar")
   if [ "$num_jars" -eq "0" ]; then
     echo "Failed to find Spark assembly in $FWDIR/assembly/target/scala-$SCALA_VERSION/" >&2
-    echo "You need to build Spark with 'sbt/sbt assembly' before running this program." >&2
+    echo "You need to build Spark before running this program." >&2
     exit 1
   fi
   if [ "$num_jars" -gt "1" ]; then
@@ -138,7 +138,14 @@ if [ -e "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar ]; then
 fi
 
 # Compute classpath using external script
-CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
+classpath_output=$($FWDIR/bin/compute-classpath.sh)
+if [[ "$?" != "0" ]]; then
+  echo "$classpath_output"
+  exit 1
+else
+  CLASSPATH=$classpath_output
+fi
+
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then
   CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"
 fi

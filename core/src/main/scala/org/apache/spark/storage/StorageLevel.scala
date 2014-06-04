@@ -22,14 +22,17 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import org.apache.spark.annotation.DeveloperApi
 
 /**
+ * :: DeveloperApi ::
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
  * or Tachyon, whether to drop the RDD to disk if it falls out of memory or Tachyon , whether to
  * keep the data in memory in a serialized format, and whether to replicate the RDD partitions on
  * multiple nodes.
+ *
  * The [[org.apache.spark.storage.StorageLevel$]] singleton object contains some static constants
  * for commonly useful storage levels. To create your own storage level object, use the
  * factory method of the singleton object (`StorageLevel(...)`).
  */
+@DeveloperApi
 class StorageLevel private(
     private var useDisk_ : Boolean,
     private var useMemory_ : Boolean,
@@ -54,9 +57,9 @@ class StorageLevel private(
   assert(replication < 40, "Replication restricted to be less than 40 for calculating hashcodes")
 
   if (useOffHeap) {
-    require(useDisk == false, "Off-heap storage level does not support using disk")
-    require(useMemory == false, "Off-heap storage level does not support using heap memory")
-    require(deserialized == false, "Off-heap storage level does not support deserialized storage")
+    require(!useDisk, "Off-heap storage level does not support using disk")
+    require(!useMemory, "Off-heap storage level does not support using heap memory")
+    require(!deserialized, "Off-heap storage level does not support deserialized storage")
     require(replication == 1, "Off-heap storage level does not support multiple replication")
   }
 
@@ -146,7 +149,28 @@ object StorageLevel {
 
   /**
    * :: DeveloperApi ::
-   * Create a new StorageLevel object without setting useOffHeap
+   * Return the StorageLevel object with the specified name.
+   */
+  @DeveloperApi
+  def fromString(s: String): StorageLevel = s match {
+    case "NONE" => NONE
+    case "DISK_ONLY" => DISK_ONLY
+    case "DISK_ONLY_2" => DISK_ONLY_2
+    case "MEMORY_ONLY" => MEMORY_ONLY
+    case "MEMORY_ONLY_2" => MEMORY_ONLY_2
+    case "MEMORY_ONLY_SER" => MEMORY_ONLY_SER
+    case "MEMORY_ONLY_SER_2" => MEMORY_ONLY_SER_2
+    case "MEMORY_AND_DISK" => MEMORY_AND_DISK
+    case "MEMORY_AND_DISK_2" => MEMORY_AND_DISK_2
+    case "MEMORY_AND_DISK_SER" => MEMORY_AND_DISK_SER
+    case "MEMORY_AND_DISK_SER_2" => MEMORY_AND_DISK_SER_2
+    case "OFF_HEAP" => OFF_HEAP
+    case _ => throw new IllegalArgumentException("Invalid StorageLevel: " + s)
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Create a new StorageLevel object without setting useOffHeap.
    */
   @DeveloperApi
   def apply(useDisk: Boolean, useMemory: Boolean, useOffHeap: Boolean,
@@ -155,7 +179,7 @@ object StorageLevel {
 
   /**
    * :: DeveloperApi ::
-   * Create a new StorageLevel object
+   * Create a new StorageLevel object.
    */
   @DeveloperApi
   def apply(useDisk: Boolean, useMemory: Boolean,
@@ -164,7 +188,7 @@ object StorageLevel {
 
   /**
    * :: DeveloperApi ::
-   * Create a new StorageLevel object from its integer representation
+   * Create a new StorageLevel object from its integer representation.
    */
   @DeveloperApi
   def apply(flags: Int, replication: Int): StorageLevel =
@@ -172,7 +196,7 @@ object StorageLevel {
 
   /**
    * :: DeveloperApi ::
-   * Read StorageLevel object from ObjectInput stream
+   * Read StorageLevel object from ObjectInput stream.
    */
   @DeveloperApi
   def apply(in: ObjectInput): StorageLevel = {

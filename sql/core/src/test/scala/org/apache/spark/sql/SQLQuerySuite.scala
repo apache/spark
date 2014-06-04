@@ -50,6 +50,13 @@ class SQLQuerySuite extends QueryTest {
       Seq((1,3),(2,3),(3,3)))
   }
 
+  test("aggregates with nulls") {
+    checkAnswer(
+      sql("SELECT MIN(a), MAX(a), AVG(a), SUM(a), COUNT(a) FROM nullInts"),
+      (1, 3, 2, 6, 3) :: Nil
+    )
+  }
+
   test("select *") {
     checkAnswer(
       sql("SELECT * FROM testData"),
@@ -78,6 +85,36 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"),
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
+
+    checkAnswer(
+      sql("SELECT * FROM arrayData ORDER BY data[0] ASC"),
+      arrayData.collect().sortBy(_.data(0)).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM arrayData ORDER BY data[0] DESC"),
+      arrayData.collect().sortBy(_.data(0)).reverse.toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData ORDER BY data[1] ASC"),
+      mapData.collect().sortBy(_.data(1)).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData ORDER BY data[1] DESC"),
+      mapData.collect().sortBy(_.data(1)).reverse.toSeq)
+  }
+
+  test("limit") {
+    checkAnswer(
+      sql("SELECT * FROM testData LIMIT 10"),
+      testData.take(10).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM arrayData LIMIT 1"),
+      arrayData.collect().take(1).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData LIMIT 1"),
+      mapData.collect().take(1).toSeq)
   }
 
   test("average") {
@@ -89,8 +126,25 @@ class SQLQuerySuite extends QueryTest {
   test("count") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM testData2"),
-      testData2.count()
-    )
+      testData2.count())
+  }
+
+  test("count distinct") {
+    checkAnswer(
+      sql("SELECT COUNT(DISTINCT b) FROM testData2"),
+      2)
+  }
+
+  test("approximate count distinct") {
+    checkAnswer(
+      sql("SELECT APPROXIMATE COUNT(DISTINCT a) FROM testData2"),
+      3)
+  }
+
+  test("approximate count distinct with user provided standard deviation") {
+    checkAnswer(
+      sql("SELECT APPROXIMATE(0.04) COUNT(DISTINCT a) FROM testData2"),
+      3)
   }
 
   // No support for primitive nulls yet.
@@ -259,4 +313,27 @@ class SQLQuerySuite extends QueryTest {
         (3, "C"),
         (4, "D")))
   }
+  
+  test("system function upper()") {
+    checkAnswer(
+      sql("SELECT n,UPPER(l) FROM lowerCaseData"),
+      Seq(
+        (1, "A"),
+        (2, "B"),
+        (3, "C"),
+        (4, "D")))
+  }
+    
+  test("system function lower()") {
+    checkAnswer(
+      sql("SELECT N,LOWER(L) FROM upperCaseData"),
+      Seq(
+        (1, "a"),
+        (2, "b"),
+        (3, "c"),
+        (4, "d"),
+        (5, "e"),
+        (6, "f")))
+  }  
+  
 }

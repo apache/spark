@@ -29,28 +29,28 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.Try
+import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.Files
-import org.apache.commons.lang.SystemUtils
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
-
 
 /**
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
-
   val random = new Random()
 
   def sparkBin(sparkHome: String, which: String): File = {
-    val suffix = if (SystemUtils.IS_OS_WINDOWS) ".cmd" else ""
+    val suffix = if (isWindows) ".cmd" else ""
     new File(sparkHome + File.separator + "bin", which + suffix)
   }
 
@@ -221,9 +221,9 @@ private[spark] object Utils extends Logging {
   def hasRootAsShutdownDeleteDir(file: File): Boolean = {
     val absolutePath = file.getAbsolutePath()
     val retval = shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.find { path =>
+      shutdownDeletePaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }.isDefined
+      }
     }
     if (retval) {
       logInfo("path = " + file + ", already present as root for deletion.")
@@ -236,10 +236,10 @@ private[spark] object Utils extends Logging {
   // paths - resulting in Exception and incomplete cleanup.
   def hasRootAsShutdownDeleteDir(file: TachyonFile): Boolean = {
     val absolutePath = file.getPath()
-    val retval = shutdownDeletePaths.synchronized {
-      shutdownDeletePaths.find { path =>
+    val retval = shutdownDeleteTachyonPaths.synchronized {
+      shutdownDeleteTachyonPaths.exists { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
-      }.isDefined
+      }
     }
     if (retval) {
       logInfo("path = " + file + ", already present as root for deletion.")
@@ -587,15 +587,17 @@ private[spark] object Utils extends Logging {
    * Don't follow directories if they are symlinks.
    */
   def deleteRecursively(file: File) {
-    if ((file.isDirectory) && !isSymlink(file)) {
-      for (child <- listFilesSafely(file)) {
-        deleteRecursively(child)
+    if (file != null) {
+      if ((file.isDirectory) && !isSymlink(file)) {
+        for (child <- listFilesSafely(file)) {
+          deleteRecursively(child)
+        }
       }
-    }
-    if (!file.delete()) {
-      // Delete can also fail if the file simply did not exist
-      if (file.exists()) {
-        throw new IOException("Failed to delete: " + file.getAbsolutePath)
+      if (!file.delete()) {
+        // Delete can also fail if the file simply did not exist
+        if (file.exists()) {
+          throw new IOException("Failed to delete: " + file.getAbsolutePath)
+        }
       }
     }
   }
@@ -614,7 +616,7 @@ private[spark] object Utils extends Logging {
    */
   def isSymlink(file: File): Boolean = {
     if (file == null) throw new NullPointerException("File must not be null")
-    if (SystemUtils.IS_OS_WINDOWS) return false
+    if (isWindows) return false
     val fileInCanonicalDir = if (file.getParent() == null) {
       file
     } else {
@@ -780,6 +782,18 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Execute a block of code that evaluates to Unit, forwarding any uncaught exceptions to the
+   * default UncaughtExceptionHandler
+   */
+  def tryOrExit(block: => Unit) {
+    try {
+      block
+    } catch {
+      case t: Throwable => ExecutorUncaughtExceptionHandler.uncaughtException(t)
+    }
+  }
+
+  /**
    * A regular expression to match classes of the "core" Spark API that we want to skip when
    * finding the call site of a method.
    */
@@ -851,7 +865,7 @@ private[spark] object Utils extends Logging {
   /**
    * Clone an object using a Spark serializer.
    */
-  def clone[T](value: T, serializer: SerializerInstance): T = {
+  def clone[T: ClassTag](value: T, serializer: SerializerInstance): T = {
     serializer.deserialize[T](serializer.serialize(value))
   }
 
@@ -1018,7 +1032,7 @@ private[spark] object Utils extends Logging {
       throw new IOException("Destination must be relative")
     }
     var cmdSuffix = ""
-    val linkCmd = if (SystemUtils.IS_OS_WINDOWS) {
+    val linkCmd = if (isWindows) {
       // refer to http://technet.microsoft.com/en-us/library/cc771254.aspx
       cmdSuffix = " /s /e /k /h /y /i"
       "cmd /c xcopy "
@@ -1063,9 +1077,160 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Return the absolute path of a file in the given directory.
+   */
+  def getFilePath(dir: File, fileName: String): Path = {
+    assert(dir.isDirectory)
+    val path = new File(dir, fileName).getAbsolutePath
+    new Path(path)
+  }
+
+  /**
+   * Whether the underlying operating system is Windows.
+   */
+  val isWindows = SystemUtils.IS_OS_WINDOWS
+
+  /**
+   * Pattern for matching a Windows drive, which contains only a single alphabet character.
+   */
+  val windowsDrive = "([a-zA-Z])".r
+
+  /**
+   * Format a Windows path such that it can be safely passed to a URI.
+   */
+  def formatWindowsPath(path: String): String = path.replace("\\", "/")
+
+  /**
    * Indicates whether Spark is currently running unit tests.
    */
-  private[spark] def isTesting = {
+  def isTesting = {
     sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
   }
+
+  /**
+   * Strip the directory from a path name
+   */
+  def stripDirectory(path: String): String = {
+    new File(path).getName
+  }
+
+  /**
+   * Wait for a process to terminate for at most the specified duration.
+   * Return whether the process actually terminated after the given timeout.
+   */
+  def waitForProcess(process: Process, timeoutMs: Long): Boolean = {
+    var terminated = false
+    val startTime = System.currentTimeMillis
+    while (!terminated) {
+      try {
+        process.exitValue
+        terminated = true
+      } catch {
+        case e: IllegalThreadStateException =>
+          // Process not terminated yet
+          if (System.currentTimeMillis - startTime > timeoutMs) {
+            return false
+          }
+          Thread.sleep(100)
+      }
+    }
+    true
+  }
+
+  /**
+   * Return the stderr of a process after waiting for the process to terminate.
+   * If the process does not terminate within the specified timeout, return None.
+   */
+  def getStderr(process: Process, timeoutMs: Long): Option[String] = {
+    val terminated = Utils.waitForProcess(process, timeoutMs)
+    if (terminated) {
+      Some(Source.fromInputStream(process.getErrorStream).getLines().mkString("\n"))
+    } else {
+      None
+    }
+  }
+
+  /** 
+   * Execute the given block, logging and re-throwing any uncaught exception.
+   * This is particularly useful for wrapping code that runs in a thread, to ensure
+   * that exceptions are printed, and to avoid having to catch Throwable.
+   */
+  def logUncaughtExceptions[T](f: => T): T = {
+    try {
+      f
+    } catch {
+      case ct: ControlThrowable =>
+        throw ct
+      case t: Throwable =>
+        logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+        throw t
+    }
+  }
+
+  /** Returns true if the given exception was fatal. See docs for scala.util.control.NonFatal. */
+  def isFatalError(e: Throwable): Boolean = {
+    e match {
+      case NonFatal(_) | _: InterruptedException | _: NotImplementedError | _: ControlThrowable =>
+        false
+      case _ =>
+        true
+    }
+  }
+
+  /**
+   * Return a well-formed URI for the file described by a user input string.
+   *
+   * If the supplied path does not contain a scheme, or is a relative path, it will be
+   * converted into an absolute path with a file:// scheme.
+   */
+  def resolveURI(path: String, testWindows: Boolean = false): URI = {
+
+    // In Windows, the file separator is a backslash, but this is inconsistent with the URI format
+    val windows = isWindows || testWindows
+    val formattedPath = if (windows) formatWindowsPath(path) else path
+
+    val uri = new URI(formattedPath)
+    if (uri.getPath == null) {
+      throw new IllegalArgumentException(s"Given path is malformed: $uri")
+    }
+    uri.getScheme match {
+      case windowsDrive(d) if windows =>
+        new URI("file:/" + uri.toString.stripPrefix("/"))
+      case null =>
+        // Preserve fragments for HDFS file name substitution (denoted by "#")
+        // For instance, in "abc.py#xyz.py", "xyz.py" is the name observed by the application
+        val fragment = uri.getFragment
+        val part = new File(uri.getPath).toURI
+        new URI(part.getScheme, part.getPath, fragment)
+      case _ =>
+        uri
+    }
+  }
+
+  /** Resolve a comma-separated list of paths. */
+  def resolveURIs(paths: String, testWindows: Boolean = false): String = {
+    if (paths == null || paths.trim.isEmpty) {
+      ""
+    } else {
+      paths.split(",").map { p => Utils.resolveURI(p, testWindows) }.mkString(",")
+    }
+  }
+
+  /** Return all non-local paths from a comma-separated list of paths. */
+  def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
+    val windows = isWindows || testWindows
+    if (paths == null || paths.trim.isEmpty) {
+      Array.empty
+    } else {
+      paths.split(",").filter { p =>
+        val formattedPath = if (windows) formatWindowsPath(p) else p
+        new URI(formattedPath).getScheme match {
+          case windowsDrive(d) if windows => false
+          case "local" | "file" | null => false
+          case _ => true
+        }
+      }
+    }
+  }
+
 }

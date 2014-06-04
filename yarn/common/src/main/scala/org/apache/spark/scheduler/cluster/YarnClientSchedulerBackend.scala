@@ -35,10 +35,10 @@ private[spark] class YarnClientSchedulerBackend(
 
   private[spark] def addArg(optionName: String, envVar: String, sysProp: String,
       arrayBuf: ArrayBuffer[String]) {
-    if (System.getProperty(sysProp) != null) {
-      arrayBuf += (optionName, System.getProperty(sysProp))
-    } else if (System.getenv(envVar) != null) {
+    if (System.getenv(envVar) != null) {
       arrayBuf += (optionName, System.getenv(envVar))
+    } else if (sc.getConf.contains(sysProp)) {
+      arrayBuf += (optionName, sc.getConf.get(sysProp))
     }
   }
 
@@ -52,7 +52,7 @@ private[spark] class YarnClientSchedulerBackend(
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
       "--class", "notused",
-      "--jar", null,
+      "--jar", null, // The primary jar will be added dynamically in SparkContext.
       "--args", hostport,
       "--am-class", classOf[ExecutorLauncher].getName
     )
@@ -113,7 +113,7 @@ private[spark] class YarnClientSchedulerBackend(
   override def stop() {
     super.stop()
     client.stop()
-    logInfo("Stoped")
+    logInfo("Stopped")
   }
 
 }

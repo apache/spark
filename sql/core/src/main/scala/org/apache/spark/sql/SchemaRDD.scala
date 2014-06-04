@@ -19,14 +19,16 @@ package org.apache.spark.sql
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
+import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.api.java.JavaRDD
 import java.util.{Map => JMap}
 
@@ -57,7 +59,7 @@ import java.util.{Map => JMap}
  *  // Importing the SQL context gives access to all the SQL functions and implicit conversions.
  *  import sqlContext._
  *
- *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_\$i")))
+ *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
  *  // Any RDD containing case classes can be registered as a table.  The schema of the table is
  *  // automatically inferred using scala reflection.
  *  rdd.registerAsTable("records")
@@ -133,7 +135,7 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Project(exprs, logicalPlan))
 
   /**
-   * Filters the ouput, only returning those rows where `condition` evaluates to true.
+   * Filters the output, only returning those rows where `condition` evaluates to true.
    *
    * {{{
    *   schemaRDD.where('a === 'b)
@@ -151,9 +153,9 @@ class SchemaRDD(
    *
    * @param otherPlan the [[SchemaRDD]] that should be joined with this one.
    * @param joinType One of `Inner`, `LeftOuter`, `RightOuter`, or `FullOuter`. Defaults to `Inner.`
-   * @param on       An optional condition for the join operation.  This is equivilent to the `ON`
+   * @param on       An optional condition for the join operation.  This is equivalent to the `ON`
    *                 clause in standard SQL.  In the case of `Inner` joins, specifying a
-   *                 `condition` is equivilent to adding `where` clauses after the `join`.
+   *                 `condition` is equivalent to adding `where` clauses after the `join`.
    *
    * @group Query
    */
@@ -177,6 +179,15 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
 
   /**
+   * Limits the results by the given expressions.
+   * {{{
+   *   schemaRDD.limit(10)
+   * }}}
+   */
+  def limit(limitExpr: Expression): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+
+  /**
    * Performs a grouping followed by an aggregation.
    *
    * {{{
@@ -194,8 +205,22 @@ class SchemaRDD(
   }
 
   /**
+   * Performs an aggregation over all Rows in this RDD.
+   * This is equivalent to a groupBy with no grouping expressions.
+   *
+   * {{{
+   *   schemaRDD.aggregate(Sum('sales) as 'totalSales)
+   * }}}
+   *
+   * @group Query
+   */
+  def aggregate(aggregateExprs: Expression*): SchemaRDD = {
+    groupBy()(aggregateExprs: _*)
+  }
+
+  /**
    * Applies a qualifier to the attributes of this relation.  Can be used to disambiguate attributes
-   * with the same name, for example, when peforming self-joins.
+   * with the same name, for example, when performing self-joins.
    *
    * {{{
    *   val x = schemaRDD.where('a === 1).as('x)
@@ -265,6 +290,15 @@ class SchemaRDD(
 
   /**
    * :: Experimental ::
+   * Return the number of elements in the RDD. Unlike the base RDD implementation of count, this
+   * implementation leverages the query optimizer to compute the count on the SchemaRDD, which
+   * supports features such as filter pushdown.
+   */
+  @Experimental
+  override def count(): Long = aggregate(Count(Literal(1))).collect().head.getLong(0)
+
+  /**
+   * :: Experimental ::
    * Applies the given Generator, or table generating function, to this relation.
    *
    * @param generator A table generating function.  The API for such functions is likely to change
@@ -296,6 +330,13 @@ class SchemaRDD(
    */
   def toSchemaRDD = this
 
+  /**
+   * Returns this RDD as a JavaSchemaRDD.
+   *
+   * @group schema
+   */
+  def toJavaSchemaRDD: JavaSchemaRDD = new JavaSchemaRDD(sqlContext, logicalPlan)
+
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val fieldNames: Seq[String] = this.queryExecution.analyzed.output.map(_.name)
     this.mapPartitions { iter =>
@@ -314,4 +355,66 @@ class SchemaRDD(
       }
     }
   }
+
+  /**
+   * Creates SchemaRDD by applying own schema to derived RDD. Typically used to wrap return value
+   * of base RDD functions that do not change schema.
+   *
+   * @param rdd RDD derived from this one and has same schema
+   *
+   * @group schema
+   */
+  private def applySchema(rdd: RDD[Row]): SchemaRDD = {
+    new SchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(logicalPlan.output, rdd)))
+  }
+
+  // =======================================================================
+  // Overriden RDD actions
+  // =======================================================================
+
+  override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
+
+  // =======================================================================
+  // Base RDD functions that do NOT change schema
+  // =======================================================================
+
+  // Transformations (return a new RDD)
+
+  override def coalesce(numPartitions: Int, shuffle: Boolean = false)
+                       (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.coalesce(numPartitions, shuffle)(ord))
+
+  override def distinct(): SchemaRDD =
+    applySchema(super.distinct())
+
+  override def distinct(numPartitions: Int)
+                       (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.distinct(numPartitions)(ord))
+
+  override def filter(f: Row => Boolean): SchemaRDD =
+    applySchema(super.filter(f))
+
+  override def intersection(other: RDD[Row]): SchemaRDD =
+    applySchema(super.intersection(other))
+
+  override def intersection(other: RDD[Row], partitioner: Partitioner)
+                           (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.intersection(other, partitioner)(ord))
+
+  override def intersection(other: RDD[Row], numPartitions: Int): SchemaRDD =
+    applySchema(super.intersection(other, numPartitions))
+
+  override def repartition(numPartitions: Int)
+                          (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.repartition(numPartitions)(ord))
+
+  override def subtract(other: RDD[Row]): SchemaRDD =
+    applySchema(super.subtract(other))
+
+  override def subtract(other: RDD[Row], numPartitions: Int): SchemaRDD =
+    applySchema(super.subtract(other, numPartitions))
+
+  override def subtract(other: RDD[Row], p: Partitioner)
+                       (implicit ord: Ordering[Row] = null): SchemaRDD =
+    applySchema(super.subtract(other, p)(ord))
 }

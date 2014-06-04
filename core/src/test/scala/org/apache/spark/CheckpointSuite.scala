@@ -35,6 +35,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   override def beforeEach() {
     super.beforeEach()
     checkpointDir = File.createTempFile("temp", "")
+    checkpointDir.deleteOnExit()
     checkpointDir.delete()
     sc = new SparkContext("local", "test")
     sc.setCheckpointDir(checkpointDir.toString)
@@ -42,9 +43,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
 
   override def afterEach() {
     super.afterEach()
-    if (checkpointDir != null) {
-      checkpointDir.delete()
-    }
+    Utils.deleteRecursively(checkpointDir)
   }
 
   test("basic checkpointing") {
@@ -168,26 +167,28 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     })
   }
 
-  test("ZippedRDD") {
-    testRDD(rdd => new ZippedRDD(sc, rdd, rdd.map(x => x)))
-    testRDDPartitions(rdd => new ZippedRDD(sc, rdd, rdd.map(x => x)))
+  test("ZippedPartitionsRDD") {
+    testRDD(rdd => rdd.zip(rdd.map(x => x)))
+    testRDDPartitions(rdd => rdd.zip(rdd.map(x => x)))
 
-    // Test that the ZippedPartition updates parent partitions
-    // after the parent RDD has been checkpointed and parent partitions have been changed.
-    // Note that this test is very specific to the current implementation of ZippedRDD.
+    // Test that ZippedPartitionsRDD updates parent partitions after parent RDDs have
+    // been checkpointed and parent partitions have been changed.
+    // Note that this test is very specific to the implementation of ZippedPartitionsRDD.
     val rdd = generateFatRDD()
-    val zippedRDD = new ZippedRDD(sc, rdd, rdd.map(x => x))
+    val zippedRDD = rdd.zip(rdd.map(x => x)).asInstanceOf[ZippedPartitionsRDD2[_, _, _]]
     zippedRDD.rdd1.checkpoint()
     zippedRDD.rdd2.checkpoint()
     val partitionBeforeCheckpoint =
-      serializeDeserialize(zippedRDD.partitions.head.asInstanceOf[ZippedPartition[_, _]])
+      serializeDeserialize(zippedRDD.partitions.head.asInstanceOf[ZippedPartitionsPartition])
     zippedRDD.count()
     val partitionAfterCheckpoint =
-      serializeDeserialize(zippedRDD.partitions.head.asInstanceOf[ZippedPartition[_, _]])
+      serializeDeserialize(zippedRDD.partitions.head.asInstanceOf[ZippedPartitionsPartition])
     assert(
-      partitionAfterCheckpoint.partition1.getClass != partitionBeforeCheckpoint.partition1.getClass &&
-        partitionAfterCheckpoint.partition2.getClass != partitionBeforeCheckpoint.partition2.getClass,
-      "ZippedRDD.partition1 and ZippedRDD.partition2 not updated after parent RDD is checkpointed"
+      partitionAfterCheckpoint.partitions(0).getClass !=
+        partitionBeforeCheckpoint.partitions(0).getClass &&
+      partitionAfterCheckpoint.partitions(1).getClass !=
+        partitionBeforeCheckpoint.partitions(1).getClass,
+      "ZippedPartitionsRDD partition 0 (or 1) not updated after parent RDDs are checkpointed"
     )
   }
 

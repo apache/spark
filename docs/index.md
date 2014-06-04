@@ -4,40 +4,53 @@ title: Spark Overview
 ---
 
 Apache Spark is a fast and general-purpose cluster computing system.
-It provides high-level APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html) that make parallel jobs easy to write, and an optimized engine that supports general computation graphs.
-It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
+It provides high-level APIs in Java, Scala and Python,
+and an optimized engine that supports general execution graphs.
+It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [Spark SQL](sql-programming-guide.html) for structured data, [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
 
 # Downloading
 
-Get Spark by visiting the [downloads page](http://spark.apache.org/downloads.html) of the Apache Spark site. This documentation is for Spark version {{site.SPARK_VERSION}}.
+Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. The downloads page 
+contains Spark packages for many popular HDFS versions. If you'd like to build Spark from 
+scratch, visit [building Spark with Maven](building-with-maven.html).
 
-Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). All you need to run it is to have `java` to installed on your system `PATH`, or the `JAVA_HOME` environment variable pointing to a Java installation.
+Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy to run
+locally on one machine --- all you need is to have `java` installed on your system `PATH`,
+or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-# Building
-
-Spark uses [Simple Build Tool](http://www.scala-sbt.org), which is bundled with it. To compile the code, go into the top-level Spark directory and run
-
-    sbt/sbt assembly
-
-For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_BINARY_VERSION}}. If you write applications in Scala, you will need to use a compatible Scala version (e.g. {{site.SCALA_BINARY_VERSION}}.X) -- newer major versions may not work. You can get the right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
+Spark runs on Java 6+ and Python 2.6+. For the Scala API, Spark {{site.SPARK_VERSION}} uses
+Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version 
+({{site.SCALA_BINARY_VERSION}}.x).
 
 # Running the Examples and Shell
 
-Spark comes with several sample programs.  Scala and Java examples are in the `examples` directory, and Python examples are in `python/examples`.
-To run one of the Java or Scala sample programs, use `./bin/run-example <class> <params>` in the top-level Spark directory
-(the `bin/run-example` script sets up the appropriate paths and launches that program).
-For example, try `./bin/run-example org.apache.spark.examples.SparkPi local`.
-To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try `./bin/pyspark ./python/examples/pi.py local`.
+Spark comes with several sample programs.  Scala, Java and Python examples are in the
+`examples/src/main` directory. To run one of the Java or Scala sample programs, use
+`bin/run-example <class> [params]` in the top-level Spark directory. (Behind the scenes, this
+invokes the more general
+[`spark-submit` script](submitting-applications.html) for
+launching applications). For example,
 
-Each example prints usage help when run with no parameters.
+    ./bin/run-example SparkPi 10
 
-Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
-to connect to. This can be a [URL for a distributed cluster](scala-programming-guide.html#master-urls),
-or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
-`local` for testing.
+You can also run Spark interactively through a modified version of the Scala shell. This is a
+great way to learn the framework.
 
-Finally, you can run Spark interactively through modified versions of the Scala shell (`./bin/spark-shell`) or
-Python interpreter (`./bin/pyspark`). These are a great way to learn the framework.
+    ./bin/spark-shell --master local[2]
+
+The `--master` option specifies the
+[master URL for a distributed cluster](submitting-applications.html#master-urls), or `local` to run
+locally with one thread, or `local[N]` to run locally with N threads. You should start by using
+`local` for testing. For a full list of options, run Spark shell with the `--help` option.
+
+Spark also provides a Python API. To run Spark interactively in a Python interpreter, use
+`bin/pyspark`:
+
+    ./bin/pyspark --master local[2]
+
+Example applications are also provided in Python. For example,
+
+    ./bin/spark-submit examples/src/main/python/pi.py 10
 
 # Launching on a Cluster
 
@@ -50,36 +63,19 @@ options for deployment:
 * [Apache Mesos](running-on-mesos.html)
 * [Hadoop YARN](running-on-yarn.html)
 
-# A Note About Hadoop Versions
-
-Spark uses the Hadoop-client library to talk to HDFS and other Hadoop-supported
-storage systems. Because the HDFS protocol has changed in different versions of
-Hadoop, you must build Spark against the same version that your cluster uses.
-By default, Spark links to Hadoop 1.0.4. You can change this by setting the
-`SPARK_HADOOP_VERSION` variable when compiling:
-
-    SPARK_HADOOP_VERSION=2.2.0 sbt/sbt assembly
-
-In addition, if you wish to run Spark on [YARN](running-on-yarn.html), set
-`SPARK_YARN` to `true`:
-
-    SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
-
-Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.
-
 # Where to Go from Here
 
-**Programming guides:**
+**Programming Guides:**
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [Spark Programming Guide](scala-programming-guide.html): an overview of Spark concepts, and details on the Scala API
-  * [Java Programming Guide](java-programming-guide.html): using Spark from Java
-  * [Python Programming Guide](python-programming-guide.html): using Spark from Python
-* [Spark Streaming](streaming-programming-guide.html): Spark's API for processing data streams
-* [Spark SQL](sql-programming-guide.html): Support for running relational queries on Spark
-* [MLlib (Machine Learning)](mllib-guide.html): Spark's built-in machine learning library
-* [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model
-* [GraphX (Graphs on Spark)](graphx-programming-guide.html): Spark's new API for graphs
+* [Spark Programming Guide](programming-guide.html): detailed overview of Spark
+  in all supported languages (Scala, Java, Python)
+* Modules built on Spark:
+  * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
+  * [Spark SQL](sql-programming-guide.html): support for structured data and relational queries
+  * [MLlib](mllib-guide.html): built-in machine learning library
+  * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
+  * [Bagel (Pregel on Spark)](bagel-programming-guide.html): older, simple graph processing model
 
 **API Docs:**
 
@@ -87,37 +83,41 @@ Note that on Windows, you need to set the environment variables on separate line
 * [Spark Java API (Javadoc)](api/java/index.html)
 * [Spark Python API (Epydoc)](api/python/index.html)
 
-**Deployment guides:**
+**Deployment Guides:**
 
 * [Cluster Overview](cluster-overview.html): overview of concepts and components when running on a cluster
-* [Amazon EC2](ec2-scripts.html): scripts that let you launch a cluster on EC2 in about 5 minutes
-* [Standalone Deploy Mode](spark-standalone.html): launch a standalone cluster quickly without a third-party cluster manager
-* [Mesos](running-on-mesos.html): deploy a private cluster using
-    [Apache Mesos](http://mesos.apache.org)
-* [YARN](running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
+* [Submitting Applications](submitting-applications.html): packaging and deploying applications
+* Deployment modes:
+  * [Amazon EC2](ec2-scripts.html): scripts that let you launch a cluster on EC2 in about 5 minutes
+  * [Standalone Deploy Mode](spark-standalone.html): launch a standalone cluster quickly without a third-party cluster manager
+  * [Mesos](running-on-mesos.html): deploy a private cluster using
+      [Apache Mesos](http://mesos.apache.org)
+  * [YARN](running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
 
-**Other documents:**
+**Other Documents:**
 
 * [Configuration](configuration.html): customize Spark via its configuration system
+* [Monitoring](monitoring.html): track the behavior of your applications
 * [Tuning Guide](tuning.html): best practices to optimize performance and memory use
+* [Job Scheduling](job-scheduling.html): scheduling resources across and within Spark applications
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
-* [Job Scheduling](job-scheduling.html): scheduling resources across and within Spark applications
+* [3<sup>rd</sup> Party Hadoop Distributions](hadoop-third-party-distributions.html): using common Hadoop distributions
 * [Building Spark with Maven](building-with-maven.html): build Spark using the Maven system
 * [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
 
-**External resources:**
+**External Resources:**
 
 * [Spark Homepage](http://spark.apache.org)
 * [Shark](http://shark.cs.berkeley.edu): Apache Hive over Spark
 * [Mailing Lists](http://spark.apache.org/mailing-lists.html): ask questions about Spark here
 * [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
-  exercises about Spark, Shark, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/agenda-2012),
-  [slides](http://ampcamp.berkeley.edu/agenda-2012) and [exercises](http://ampcamp.berkeley.edu/exercises-2012) are
+  exercises about Spark, Shark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/3/),
+  [slides](http://ampcamp.berkeley.edu/3/) and [exercises](http://ampcamp.berkeley.edu/3/exercises/) are
   available online for free.
-* [Code Examples](http://spark.apache.org/examples.html): more are also available in the [examples subfolder](https://github.com/apache/spark/tree/master/examples/src/main/scala/) of Spark
-* [Paper Describing Spark](http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf)
-* [Paper Describing Spark Streaming](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf)
+* [Code Examples](http://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
+ [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
+ [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python))
 
 # Community
 
