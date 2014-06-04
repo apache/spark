@@ -882,21 +882,21 @@ private[spark] object Utils extends Logging {
 
        files:   |==== file 1 ====|====== file 2 ======|===== file 3 =====|
 
-                    |   case B  .       case C       .    case D    |
-       range 2:     |___________.____________________.______________|
+                     |   case B  .       case C       .    case D    |
+       range 2:      |___________.____________________.______________|
        */
 
       if (startIndex <= startIndexOfFile  && endIndex >= endIndexOfFile) {
         // Case C: read the whole file
         stringBuffer.append(offsetBytes(file.getAbsolutePath, 0, fileToLength(file)))
       } else if (startIndex > startIndexOfFile && startIndex < endIndexOfFile) {
-        // Case A and B: read from startIndex to min(endIndex, endIndexOfFile)
+        // Case A and B: read from [start of required range] to [end of file / end of range]
         val effectiveStartIndex = startIndex - startIndexOfFile
         val effectiveEndIndex = math.min(endIndex - startIndexOfFile, fileToLength(file))
         stringBuffer.append(Utils.offsetBytes(
           file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
       } else if (endIndex > startIndexOfFile && endIndex < endIndexOfFile) {
-        // Case D: read from startIndex to min(endIndex, endIndexOfFile)
+        // Case D: read from [start of file] to [end of require range]
         val effectiveStartIndex = math.max(startIndex - startIndexOfFile, 0)
         val effectiveEndIndex = endIndex - startIndexOfFile
         stringBuffer.append(Utils.offsetBytes(
