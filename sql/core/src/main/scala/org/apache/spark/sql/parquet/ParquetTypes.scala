@@ -33,6 +33,8 @@ import parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
 import org.apache.spark.sql.catalyst.types._
+import com.google.common.io.BaseEncoding
+import org.apache.spark.sql.execution.SparkSqlSerializer
 
 // Implicits
 import scala.collection.JavaConversions._
@@ -289,6 +291,16 @@ private[parquet] object ParquetTypesConverter {
     new MessageType("root", fields)
   }
 
+  def convertFromString(string: String): Seq[Attribute] = {
+    val decoded: Array[Byte] = BaseEncoding.base64().decode(string)
+    SparkSqlSerializer.deserialize(decoded)
+  }
+
+  def convertToString(schema: Seq[Attribute]): String = {
+    val serialized: Array[Byte] = SparkSqlSerializer.serialize(schema)
+    BaseEncoding.base64().encode(serialized)
+  }
+
   def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration) {
     if (origPath == null) {
       throw new IllegalArgumentException("Unable to write Parquet metadata: path is null")
@@ -313,6 +325,7 @@ private[parquet] object ParquetTypesConverter {
     }
     val extraMetadata = new java.util.HashMap[String, String]()
     extraMetadata.put("path", path.toString)
+    extraMetadata.put(RowReadSupport.SPARK_METADATA_KEY, ParquetTypesConverter.convertToString(attributes))
     // TODO: add extra data, e.g., table name, date, etc.?
 
     val parquetSchema: MessageType =

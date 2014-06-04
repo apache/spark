@@ -29,6 +29,8 @@ import parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.execution.SparkSqlSerializer
+import com.google.common.io.BaseEncoding
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
@@ -38,8 +40,8 @@ import org.apache.spark.sql.catalyst.types._
 private[parquet] class RowRecordMaterializer(root: CatalystConverter)
   extends RecordMaterializer[Row] {
 
-  def this(parquetSchema: MessageType) =
-    this(CatalystConverter.createRootConverter(parquetSchema))
+  def this(parquetSchema: MessageType, attributes: Seq[Attribute]) =
+    this(CatalystConverter.createRootConverter(parquetSchema, attributes))
 
   override def getCurrentRecord: Row = root.getCurrentRecord
 
@@ -57,25 +59,62 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[Row] = {
     log.debug(s"preparing for read with file schema $fileSchema")
-    new RowRecordMaterializer(readContext.getRequestedSchema)
+    //new RowRecordMaterializer(readContext.getRequestedSchema)
+    val parquetSchema = readContext.getRequestedSchema
+    var schema: Seq[Attribute] =
+      if (readContext.getReadSupportMetadata != null &&
+          readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY) != null) {
+        ParquetTypesConverter.convertFromString(
+          readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY))
+      } else {
+        // fall back to converting from Parquet schema
+        ParquetTypesConverter.convertToAttributes(parquetSchema)
+      }
+    new RowRecordMaterializer(parquetSchema, schema)
   }
 
   override def init(
       configuration: Configuration,
       keyValueMetaData: java.util.Map[String, String],
       fileSchema: MessageType): ReadContext = {
-    val requested_schema_string =
+    /*val requested_schema_string =
       configuration.get(RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA, fileSchema.toString)
     val requested_schema =
       MessageTypeParser.parseMessageType(requested_schema_string)
     log.debug(s"read support initialized for requested schema $requested_schema")
     ParquetRelation.enableLogForwarding()
-    new ReadContext(requested_schema, keyValueMetaData)
+    new ReadContext(requested_schema, keyValueMetaData) */
+
+    // GO ON HERE.. figure out why Avro distinguishes between requested read and read schema
+    // try to figure out what when needs to be written to metadata
+
+    var parquetSchema: MessageType = fileSchema
+    var metadata: java.util.Map[String, String] = null
+    val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)
+
+    if (requestedAttributes != null) {
+      parquetSchema = ParquetTypesConverter.convertFromAttributes(requestedAttributes)
+    }
+
+    val origAttributesStr: String = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
+
+    if (origAttributesStr != null) {
+      metadata = new java.util.HashMap[String, String]()
+      metadata.put(RowReadSupport.SPARK_METADATA_KEY, origAttributesStr)
+    }
+
+    return new ReadSupport.ReadContext(parquetSchema, metadata)
   }
 }
 
 private[parquet] object RowReadSupport {
-  val PARQUET_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
+  val SPARK_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
+  val SPARK_METADATA_KEY = "org.apache.spark.sql.parquet.row.metadata"
+
+  private def getRequestedSchema(configuration: Configuration): Seq[Attribute] = {
+    val schemaString = configuration.get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
+    if (schemaString == null) null else ParquetTypesConverter.convertFromString(schemaString)
+  }
 }
 
 /**
@@ -83,24 +122,29 @@ private[parquet] object RowReadSupport {
  */
 private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 
-
-  def setSchema(schema: Seq[Attribute], configuration: Configuration) {
+  /*def setSchema(schema: Seq[Attribute], configuration: Configuration) {
     configuration.set(
       RowWriteSupport.PARQUET_ROW_SCHEMA,
       StructType.fromAttributes(schema).toString)
     configuration.set(
       ParquetOutputFormat.WRITER_VERSION,
       ParquetProperties.WriterVersion.PARQUET_1_0.toString)
-  }
+  } */
 
+  private[parquet] var schema: MessageType = null
   private[parquet] var writer: RecordConsumer = null
   private[parquet] var attributes: Seq[Attribute] = null
 
   override def init(configuration: Configuration): WriteSupport.WriteContext = {
-    attributes = DataType(configuration.get(RowWriteSupport.PARQUET_ROW_SCHEMA)) match {
-      case s: StructType => s.toAttributes
-      case other => sys.error(s"Can convert $attributes to row")
-    }
+    //attributes = DataType(configuration.get(RowWriteSupport.PARQUET_ROW_SCHEMA))
+    attributes = if (attributes == null) {
+      RowWriteSupport.getSchema(configuration) match {
+        case s: StructType => s.toAttributes
+        case other => sys.error(s"Can convert $attributes to row")
+      }
+    } else attributes
+    schema = if (schema == null) ParquetTypesConverter.convertFromAttributes(attributes) else schema
+    // ParquetTypesConverter.convertToAttributes(schema)
     log.debug(s"write support initialized for requested schema $attributes")
     ParquetRelation.enableLogForwarding()
     new WriteSupport.WriteContext(
@@ -275,6 +319,22 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
 }
 
 private[parquet] object RowWriteSupport {
-  val PARQUET_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.schema"
+  val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
+
+  def getSchema(configuration: Configuration): Seq[Attribute] = {
+    val schemaString = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
+    if (schemaString == null) {
+      throw new RuntimeException("Missing schema!")
+    }
+    ParquetTypesConverter.convertFromString(schemaString)
+  }
+
+  def setSchema(schema: Seq[Attribute], configuration: Configuration) {
+    val encoded = ParquetTypesConverter.convertToString(schema)
+    configuration.set(SPARK_ROW_SCHEMA, encoded)
+    configuration.set(
+      ParquetOutputFormat.WRITER_VERSION,
+      ParquetProperties.WriterVersion.PARQUET_1_0.toString)
+  }
 }
 
