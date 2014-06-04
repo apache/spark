@@ -269,8 +269,6 @@ private[spark] abstract class ApplicationHistoryProvider {
    * This method should return a list of applications available for the history server to
    * show.
    *
-   * The listing is assumed to be in descending end time order.
-   *
    * @return List of all know applications.
    */
   def getListing(): Seq[ApplicationHistoryInfo]
