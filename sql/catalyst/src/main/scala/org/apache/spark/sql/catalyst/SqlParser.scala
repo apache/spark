@@ -41,10 +41,18 @@ import org.apache.spark.sql.catalyst.types._
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
 class SqlParser extends StandardTokenParsers with PackratParsers {
+
   def apply(input: String): LogicalPlan = {
-    phrase(query)(new lexical.Scanner(input)) match {
-      case Success(r, x) => r
-      case x => sys.error(x.toString)
+    // Special-case out set commands since the value fields can be
+    // complex to handle without RegexParsers.
+    if (input.toLowerCase.startsWith("set")) {
+      val kvPair = input.drop(3).split("=")
+      SetCommand(kvPair(0).trim, if (kvPair.size > 1) kvPair(1).trim else "")
+    } else {
+      phrase(query)(new lexical.Scanner(input)) match {
+        case Success(r, x) => r
+        case x => sys.error(x.toString)
+      }
     }
   }
 
@@ -170,21 +178,12 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   }
 
   protected lazy val query: Parser[LogicalPlan] = (
-      setCommand
-    | select * (
+    select * (
         UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
         UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
     | insert
   )
-
-  protected lazy val setCommand: Parser[LogicalPlan] = {
-    // Comma needed for values such as "table1,table2".
-    val keyVal = ident | numericLit | stringLit
-    (SET ~> keyVal <~ "=") ~ rep1sep(keyVal, ",") <~ opt(";") ^^ {
-      case key ~ value => SetCommand(key, value.mkString(","))
-    }
-  }
 
   protected lazy val select: Parser[LogicalPlan] =
     SELECT ~> opt(DISTINCT) ~ projections ~

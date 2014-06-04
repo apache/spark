@@ -209,7 +209,7 @@ private[hive] object HiveQl {
     try {
       if (sql.toLowerCase.startsWith("set")) {
         val kvPair = sql.drop(3).split("=")
-        SetCommand(kvPair(0).trim, kvPair(1).trim)
+        SetCommand(kvPair(0).trim, if (kvPair.size > 1) kvPair(1).trim else "")
       } else if (sql.toLowerCase.startsWith("add jar")) {
         AddJar(sql.drop(8))
       } else if (sql.toLowerCase.startsWith("add file")) {

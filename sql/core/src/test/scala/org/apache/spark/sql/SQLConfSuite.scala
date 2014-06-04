@@ -49,7 +49,7 @@ class SQLConfSuite extends QueryTest {
     conf.clear()
   }
 
-  test("SQLConf picks up SQL set commands") {
+  test("parse SQL set commands") {
     sql(s"set $testKey=$testVal")
     assert(conf.get(testKey, testVal + "_") == testVal)
     assert(TestSQLContext.sqlConf.get(testKey, testVal + "_") == testVal)
@@ -59,11 +59,13 @@ class SQLConfSuite extends QueryTest {
     sql("set mapred.reduce.tasks = 40")
     assert(conf.get("mapred.reduce.tasks", "0") == "40")
 
-
     val key = "spark.sql.key"
     val vs = "val0,val_1,val2.3,my_table"
     sql(s"set $key=$vs")
     assert(conf.get(key, "0") == vs)
+
+    sql(s"set$key=")
+    assert(conf.get(key, "0") == "")
 
     conf.clear()
   }
