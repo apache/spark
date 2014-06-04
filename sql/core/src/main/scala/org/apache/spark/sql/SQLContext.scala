@@ -282,7 +282,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       logical match {
         case SetCommand(key, value) =>
           sqlConf.set(key, value)
-          emptyResult // TODO: should this return something else?
+          emptyResult // TODO: should this return something else? Single row consisting of one 0?
         case _ => executedPlan.execute()
       }
     }

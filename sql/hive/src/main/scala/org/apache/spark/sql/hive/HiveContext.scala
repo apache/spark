@@ -258,7 +258,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
       analyzed match {
         case SetCommand(key, value) =>
-          logger.debug("inside Hive's toRdd -- matched SetCommand")
           // Record the set command inside SQLConf, as well as have Hive execute it.
           sqlConf.set(key, value)
           processCmd(s"set $key=$value")
