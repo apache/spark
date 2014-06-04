@@ -213,7 +213,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         case None => data
       }
     }
-    graph.outerJoinVerticesConserve(table)(uf)
+    graph.outerJoinVertices(table)(uf)
   }
 
   /**

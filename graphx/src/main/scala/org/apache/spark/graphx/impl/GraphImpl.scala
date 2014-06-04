@@ -101,17 +101,18 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def mapVertices[VD2: ClassTag](f: (VertexId, VD) => VD2): Graph[VD2, ED] = {
-    // The map does not conserve type, so we must re-replicate all vertices
-    GraphImpl(vertices.mapVertexPartitions(_.map(f)), replicatedVertexView.edges)
-  }
-
-  override def mapVerticesConserve(f: (VertexId, VD) => VD): Graph[VD, ED] = {
-    vertices.cache()
-    // The map conserves type, so we can use incremental replication
-    val newVerts = vertices.mapVertexPartitions(_.map(f)).cache()
-    val changedVerts = vertices.diff(newVerts)
-    val newReplicatedVertexView = replicatedVertexView.updateVertices(changedVerts)
-    new GraphImpl(newVerts, newReplicatedVertexView)
+    if (classTag[VD] equals classTag[VD2]) {
+      vertices.cache()
+      // The map preserves type, so we can use incremental replication
+      val newVerts = vertices.mapVertexPartitions(_.map(f)).cache()
+      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
+      val newReplicatedVertexView = replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2, ED]]
+        .updateVertices(changedVerts)
+      new GraphImpl(newVerts, newReplicatedVertexView)
+    } else {
+      // The map does not preserve type, so we must re-replicate all vertices
+      GraphImpl(vertices.mapVertexPartitions(_.map(f)), replicatedVertexView.edges)
+    }
   }
 
   override def mapEdges[ED2: ClassTag](
@@ -228,20 +229,19 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   override def outerJoinVertices[U: ClassTag, VD2: ClassTag]
       (other: RDD[(VertexId, U)])
       (updateF: (VertexId, VD, Option[U]) => VD2): Graph[VD2, ED] = {
-    // updateF does not conserve type, so we must re-replicate all vertices
-    val newVerts = vertices.leftJoin(other)(updateF)
-    GraphImpl(newVerts, replicatedVertexView.edges)
-  }
-
-  override def outerJoinVerticesConserve[U: ClassTag]
-      (other: RDD[(VertexId, U)])
-      (updateF: (VertexId, VD, Option[U]) => VD): Graph[VD, ED] = {
-    vertices.cache()
-    // updateF conserves type, so we can use incremental replication
-    val newVerts = vertices.leftJoin(other)(updateF).cache()
-    val changedVerts = vertices.diff(newVerts)
-    val newReplicatedVertexView = replicatedVertexView.updateVertices(changedVerts)
-    new GraphImpl(newVerts, newReplicatedVertexView)
+    if (classTag[VD] equals classTag[VD2]) {
+      vertices.cache()
+      // updateF preserves type, so we can use incremental replication
+      val newVerts = vertices.leftJoin(other)(updateF).cache()
+      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
+      val newReplicatedVertexView = replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2, ED]]
+        .updateVertices(changedVerts)
+      new GraphImpl(newVerts, newReplicatedVertexView)
+    } else {
+      // updateF does not preserve type, so we must re-replicate all vertices
+      val newVerts = vertices.leftJoin(other)(updateF)
+      GraphImpl(newVerts, replicatedVertexView.edges)
+    }
   }
 
   /** Test whether the closure accesses the the attribute with name `attrName`. */

@@ -150,46 +150,12 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark { sc =>
       val n = 5
       val star = starGraph(sc, n)
-      // mapVertices conserving type
+      // mapVertices preserving type
       val mappedVAttrs = star.mapVertices((vid, attr) => attr + "2")
       assert(mappedVAttrs.vertices.collect.toSet === (0 to n).map(x => (x: VertexId, "v2")).toSet)
       // mapVertices changing type
       val mappedVAttrs2 = star.mapVertices((vid, attr) => attr.length)
       assert(mappedVAttrs2.vertices.collect.toSet === (0 to n).map(x => (x: VertexId, 1)).toSet)
-    }
-  }
-
-  test("mapVertices changing type with same erased type") {
-    withSpark { sc =>
-      val vertices = sc.parallelize(Array[(Long, Option[java.lang.Integer])](
-        (1L, Some(1)),
-        (2L, Some(2)),
-        (3L, Some(3))
-      ))
-      val edges = sc.parallelize(Array(
-        Edge(1L, 2L, 0),
-        Edge(2L, 3L, 0),
-        Edge(3L, 1L, 0)
-      ))
-      val graph0 = Graph(vertices, edges)
-      // Trigger initial vertex replication
-      graph0.triplets.foreach(x => {})
-      // Change type of replicated vertices, but conserve erased type
-      val graph1 = graph0.mapVertices {
-        case (vid, integerOpt) => integerOpt.map((x: java.lang.Integer) => (x.toDouble): java.lang.Double)
-      }
-      // Access replicated vertices, exposing the erased type
-      val graph2 = graph1.mapTriplets(t => t.srcAttr.get)
-      assert(graph2.edges.map(_.attr).collect.toSet === Set[java.lang.Double](1.0, 2.0, 3.0))
-    }
-  }
-
-  test("mapVerticesConserve") {
-    withSpark { sc =>
-      val n = 5
-      val star = starGraph(sc, n)
-      val mappedVAttrs = star.mapVerticesConserve((vid, attr) => attr + "2")
-      assert(mappedVAttrs.vertices.collect.toSet === (0 to n).map(x => (x: VertexId, "v2")).toSet)
     }
   }
 
@@ -331,7 +297,6 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark { sc =>
       val n = 5
       val reverseStar = starGraph(sc, n).reverse.cache()
-
       // outerJoinVertices changing type
       val reverseStarDegrees =
         reverseStar.outerJoinVertices(reverseStar.outDegrees) { (vid, a, bOpt) => bOpt.getOrElse(0) }
@@ -339,23 +304,10 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         et => Iterator((et.srcId, et.dstAttr), (et.dstId, et.srcAttr)),
         (a: Int, b: Int) => a + b).collect.toSet
       assert(neighborDegreeSums === Set((0: VertexId, n)) ++ (1 to n).map(x => (x: VertexId, 0)))
-
-      // outerJoinVertices conserving type
+      // outerJoinVertices preserving type
       val messages = reverseStar.vertices.mapValues { (vid, attr) => vid.toString }
       val newReverseStar =
         reverseStar.outerJoinVertices(messages) { (vid, a, bOpt) => a + bOpt.getOrElse("") }
-      assert(newReverseStar.vertices.map(_._2).collect.toSet ===
-        (0 to n).map(x => "v%d".format(x)).toSet)
-    }
-  }
-
-  test("outerJoinVerticesConserve") {
-    withSpark { sc =>
-      val n = 5
-      val reverseStar = starGraph(sc, n).reverse.cache()
-      val messages = reverseStar.vertices.mapValues { (vid, attr) => vid.toString }
-      val newReverseStar =
-        reverseStar.outerJoinVerticesConserve(messages) { (vid, a, bOpt) => a + bOpt.getOrElse("") }
       assert(newReverseStar.vertices.map(_._2).collect.toSet ===
         (0 to n).map(x => "v%d".format(x)).toSet)
     }

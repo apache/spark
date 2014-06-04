@@ -119,7 +119,7 @@ object Pregel extends Logging {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] =
   {
-    var g = graph.mapVerticesConserve((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
+    var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
     // compute the messages
     var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
     var activeMessages = messages.count()
@@ -131,7 +131,7 @@ object Pregel extends Logging {
       val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
       // Update the graph with the new vertices.
       prevG = g
-      g = g.outerJoinVerticesConserve(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }
+      g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }
       g.cache()
 
       val oldMessages = messages

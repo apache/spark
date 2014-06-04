@@ -48,9 +48,9 @@ object StronglyConnectedComponents {
       iter += 1
       do {
         numVertices = sccWorkGraph.numVertices
-        sccWorkGraph = sccWorkGraph.outerJoinVerticesConserve(sccWorkGraph.outDegrees) {
+        sccWorkGraph = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
           (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
-        }.outerJoinVerticesConserve(sccWorkGraph.inDegrees) {
+        }.outerJoinVertices(sccWorkGraph.inDegrees) {
           (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
         }.cache()
 
@@ -60,16 +60,14 @@ object StronglyConnectedComponents {
             .mapValues { (vid, data) => data._1}
 
         // write values to sccGraph
-        sccGraph = sccGraph.outerJoinVerticesConserve(finalVertices) {
+        sccGraph = sccGraph.outerJoinVertices(finalVertices) {
           (vid, scc, opt) => opt.getOrElse(scc)
         }
         // only keep vertices that are not final
         sccWorkGraph = sccWorkGraph.subgraph(vpred = (vid, data) => !data._2).cache()
       } while (sccWorkGraph.numVertices < numVertices)
 
-      sccWorkGraph = sccWorkGraph.mapVerticesConserve {
-        case (vid, (color, isFinal)) => (vid, isFinal)
-      }
+      sccWorkGraph = sccWorkGraph.mapVertices{ case (vid, (color, isFinal)) => (vid, isFinal) }
 
       // collect min of all my neighbor's scc values, update if it's smaller than mine
       // then notify any neighbors with scc values larger than mine
