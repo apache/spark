@@ -48,7 +48,11 @@ private[sql] trait SchemaRDDLike {
    */
   @transient
   @DeveloperApi
-  lazy val queryExecution = sqlContext.executePlan(logicalPlan)
+  lazy val queryExecution =
+    logicalPlan match {
+      case ExplainCommand(plan) => sqlContext.executePlan(plan)
+      case plan: LogicalPlan => sqlContext.executePlan(plan)
+    }
 
   override def toString =
     s"""${super.toString}
