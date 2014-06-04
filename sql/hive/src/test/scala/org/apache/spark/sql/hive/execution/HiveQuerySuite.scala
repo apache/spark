@@ -175,7 +175,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql(s"set $testKey=$testVal")
     assert(sqlConf.get(testKey, "0") == testVal)
 
-    hql(s"set$testKey=")
+    hql(s"set $testKey=")
     assert(sqlConf.get(testKey, "0") == "")
 
     sqlConf.clear()

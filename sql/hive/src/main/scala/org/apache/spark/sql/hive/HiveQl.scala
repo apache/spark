@@ -208,8 +208,16 @@ private[hive] object HiveQl {
   def parseSql(sql: String): LogicalPlan = {
     try {
       if (sql.toLowerCase.startsWith("set")) {
+        // Keep this part the same as SqlParser#apply().
         val kvPair = sql.drop(3).split("=")
-        SetCommand(kvPair(0).trim, if (kvPair.size > 1) kvPair(1).trim else "")
+        if (kvPair(0).trim == "") { // "set"
+          SetCommand(None, None)
+        } else if (!sql.contains("=")) { // "set key"
+          SetCommand(Some(kvPair(0).trim), None)
+        } else { // "set key=val"
+        val valStr = if (kvPair.size > 1) kvPair(1).trim else ""
+          SetCommand(Some(kvPair(0).trim), Some(valStr))
+        }
       } else if (sql.toLowerCase.startsWith("add jar")) {
         AddJar(sql.drop(8))
       } else if (sql.toLowerCase.startsWith("add file")) {

@@ -44,10 +44,18 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
 
   def apply(input: String): LogicalPlan = {
     // Special-case out set commands since the value fields can be
-    // complex to handle without RegexParsers.
+    // complex to handle without RegexParsers. Also this approach
+    // is clearer for the several possible cases of set commands.
     if (input.toLowerCase.startsWith("set")) {
       val kvPair = input.drop(3).split("=")
-      SetCommand(kvPair(0).trim, if (kvPair.size > 1) kvPair(1).trim else "")
+      if (kvPair(0).trim == "") { // "set"
+        SetCommand(None, None)
+      } else if (!input.contains("=")) { // "set key"
+        SetCommand(Some(kvPair(0).trim), None)
+      } else { // "set key=val"
+        val valStr = if (kvPair.size > 1) kvPair(1).trim else ""
+        SetCommand(Some(kvPair(0).trim), Some(valStr))
+      }
     } else {
       phrase(query)(new lexical.Scanner(input)) match {
         case Success(r, x) => r
