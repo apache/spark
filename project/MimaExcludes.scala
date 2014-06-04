@@ -16,7 +16,6 @@
  */
 
 import com.typesafe.tools.mima.core._
-import com.typesafe.tools.mima.core.ProblemFilters._
 
 /**
  * Additional excludes for checking of Spark's binary compatibility.
@@ -35,8 +34,27 @@ object MimaExcludes {
     val excludes =
       SparkBuild.SPARK_VERSION match {
         case v if v.startsWith("1.1") =>
+          Seq(MimaBuild.excludeSparkPackage("graphx")) ++
           Seq(
-            MimaBuild.excludeSparkPackage("graphx"))
+            // We made a mistake earlier (ed06500d3) in the Java API to use default parameter values
+            // for countApproxDistinct* functions, which does not work in Java. We later removed
+            // them, and use the following to tell Mima to not care about them.
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.api.java.JavaPairRDD.countApproxDistinctByKey"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.api.java.JavaPairRDD.countApproxDistinctByKey"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaPairRDD.countApproxDistinct$default$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaPairRDD.countApproxDistinctByKey$default$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDD.countApproxDistinct$default$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.countApproxDistinct$default$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1")
+          ) ++
+          MimaBuild.excludeSparkClass("util.SerializableHyperLogLog")
         case v if v.startsWith("1.0") =>
           Seq(
             MimaBuild.excludeSparkPackage("api.java"),
