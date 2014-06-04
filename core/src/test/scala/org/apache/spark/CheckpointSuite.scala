@@ -167,13 +167,13 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     })
   }
 
-  test("ZippedRDD") {
+  test("ZippedPartitionsRDD") {
     testRDD(rdd => rdd.zip(rdd.map(x => x)))
     testRDDPartitions(rdd => rdd.zip(rdd.map(x => x)))
 
-    // Test that the ZippedPartition updates parent partitions
-    // after the parent RDD has been checkpointed and parent partitions have been changed.
-    // Note that this test is very specific to the current implementation of ZippedRDD.
+    // Test that ZippedPartitionsRDD updates parent partitions after parent RDDs have
+    // been checkpointed and parent partitions have been changed.
+    // Note that this test is very specific to the implementation of ZippedPartitionsRDD.
     val rdd = generateFatRDD()
     val zippedRDD = rdd.zip(rdd.map(x => x)).asInstanceOf[ZippedPartitionsRDD2[_, _, _]]
     zippedRDD.rdd1.checkpoint()
@@ -188,7 +188,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
         partitionBeforeCheckpoint.partitions(0).getClass &&
       partitionAfterCheckpoint.partitions(1).getClass !=
         partitionBeforeCheckpoint.partitions(1).getClass,
-      "Zipped RDD partition(0) or partition(1) not updated after parent RDDs are checkpointed"
+      "ZippedPartitionsRDD partition 0 (or 1) not updated after parent RDDs are checkpointed"
     )
   }
 
