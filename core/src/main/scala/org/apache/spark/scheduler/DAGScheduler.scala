@@ -1206,7 +1206,7 @@ class DAGScheduler(
     taskScheduler.stop()
   }
 
-  //select a waiting stage to pre-start
+  // Select a waiting stage to pre-start
   private def getPreStartableStage(stage: Stage): Option[Stage] = {
     //select a stage not ready to run
     for (waitingStage <- waitingStages) {
@@ -1217,6 +1217,19 @@ class DAGScheduler(
       }
     }
     None
+  }
+
+  // Check if the given stageId is a pre-started stage
+  def isPreStartStage(stageId: Int): Boolean = {
+    if (stageIdToStage.contains(stageId)) {
+      val stage = stageIdToStage(stageId)
+      for (preStartedStages <- dependantStagePreStarted.values) {
+        if (preStartedStages.contains(stage)) {
+          return true
+        }
+      }
+    }
+    false
   }
 }
 

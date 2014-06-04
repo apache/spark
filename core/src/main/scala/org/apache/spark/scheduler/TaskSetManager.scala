@@ -742,4 +742,7 @@ private[spark] class TaskSetManager(
     logDebug("Valid locality levels for " + taskSet + ": " + levels.mkString(", "))
     levels.toArray
   }
+
+  // Test if this stage is in pre-start state
+  def isPreStart() = sched.dagScheduler.isPreStartStage(stageId)
 }
