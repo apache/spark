@@ -83,7 +83,7 @@ def parse_args():
              "between zones applies)")
     parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
     parser.add_option(
-        "-v", "--spark-version", default="0.9.1",
+        "-v", "--spark-version", default="1.0.0",
         help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
     parser.add_option(
         "--spark-git-repo",
@@ -191,14 +191,14 @@ def is_active(instance):
 # Return correct versions of Spark and Shark, given the supplied Spark version
 def get_spark_shark_version(opts):
     spark_shark_map = {
-        "0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0", "0.9.1": "0.9.1"
+        "0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0", "0.9.1": "0.9.1",
+        "1.0.0": "1.0.0"
     }
     version = opts.spark_version.replace("v", "")
     if version not in spark_shark_map:
         print >> stderr, "Don't know about Spark version: %s" % version
         sys.exit(1)
     return (version, spark_shark_map[version])
-
 
 # Attempt to resolve an appropriate AMI given the architecture and
 # region of the request.
