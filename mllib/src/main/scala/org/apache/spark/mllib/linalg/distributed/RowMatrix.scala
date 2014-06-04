@@ -19,7 +19,8 @@ package org.apache.spark.mllib.linalg.distributed
 
 import java.util
 
-import breeze.linalg.{Vector => BV, DenseMatrix => BDM, DenseVector => BDV, svd => brzSvd}
+import breeze.linalg.{Vector => BV, DenseMatrix => BDM, DenseVector => BDV, SparseVector => BSV}
+import breeze.linalg.{svd => brzSvd, axpy => brzAxpy}
 import breeze.numerics.{sqrt => brzSqrt}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
@@ -201,16 +202,28 @@ class RowMatrix(
   }
 
   /**
-   * Multiply the Gramian matrix `A^T A` by a Vector on the right.
+   * Multiply the Gramian matrix `A^T A` by a DenseVector on the right.
    *
-   * @param v a local vector whose length must match the number of columns of this matrix
-   * @return a local DenseVector representing the product
+   * @param v a local DenseVector whose length must match the number of columns of this matrix.
+   * @return a local DenseVector representing the product.
    */
-  private[mllib] def multiplyGramianMatrix(v: Vector): Vector = {
-    val bv = rows.map{
-      row => row.toBreeze * row.toBreeze.dot(v.toBreeze)
-    }.reduce( (x: BV[Double], y: BV[Double]) => x + y )
-    Vectors.fromBreeze(bv)
+  private[mllib] def multiplyGramianMatrix(v: DenseVector): DenseVector = {
+    val n = numCols().toInt
+
+    val bv = rows.aggregate(BDV.zeros[Double](n))(
+      seqOp = (U, r) => {
+        val rBrz = r.toBreeze
+        val a = rBrz.dot(v.toBreeze)
+        rBrz match {
+          case _: BDV[_] => brzAxpy(a, rBrz.asInstanceOf[BDV[Double]], U)
+          case _: BSV[_] => brzAxpy(a, rBrz.asInstanceOf[BSV[Double]], U)
+        }
+        U
+      },
+      combOp = (U1, U2) => U1 += U2
+    )
+
+    new DenseVector(bv.data)
   }
 
   /**
@@ -243,7 +256,7 @@ class RowMatrix(
    *
    * The decomposition is computed by providing a function that multiples a vector with A'A to
    * ARPACK, and iteratively invoking ARPACK-dsaupd on master node, from which we recover S and V.
-   * Then we compute U via easy matrix multiplication as U =  A * (V * S-1).
+   * Then we compute U via easy matrix multiplication as U =  A * (V * S^{-1}).
    * Note that this approach requires `O(nnz(A))` time.
    *
    * When the requested eigenvalues k = n, a non-sparse implementation will be used, which requires

@@ -36,15 +36,16 @@ object EigenValueDecomposition {
    * The caller needs to ensure that the input matrix is real symmetric. This function requires
    * memory for `n*(4*k+4)` doubles.
    *
-   * @param mul a function that multiplies the symmetric matrix with a Vector.
+   * @param mul a function that multiplies the symmetric matrix with a DenseVector.
    * @param n dimension of the square matrix (maximum Int.MaxValue).
    * @param k number of leading eigenvalues required.
    * @param tol tolerance of the eigs computation.
    * @return a dense vector of eigenvalues in descending order and a dense matrix of eigenvectors
    *         (columns of the matrix). The number of computed eigenvalues might be smaller than k.
    */
-  private[mllib] def symmetricEigs(mul: Vector => Vector, n: Int, k: Int, tol: Double)
+  private[mllib] def symmetricEigs(mul: DenseVector => DenseVector, n: Int, k: Int, tol: Double)
     : (BDV[Double], BDM[Double]) = {
+    // TODO: remove this function and use eigs in breeze when switching breeze version
     require(n > k, s"Number of required eigenvalues $k must be smaller than matrix dimension $n")
 
     val arpack = ARPACK.getInstance()
@@ -84,7 +85,7 @@ object EigenValueDecomposition {
       val outputOffset = ipntr(1) - 1
       val x = w(inputOffset until inputOffset + n)
       val y = w(outputOffset until outputOffset + n)
-      y := BDV(mul(Vectors.fromBreeze(x)).toArray)
+      y := BDV(mul(Vectors.fromBreeze(x).asInstanceOf[DenseVector]).toArray)
       // call ARPACK
       arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr,
         workd, workl, workl.length, info)
