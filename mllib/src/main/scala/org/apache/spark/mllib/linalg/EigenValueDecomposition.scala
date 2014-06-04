@@ -100,21 +100,22 @@ object EigenValueDecomposition {
 
     val computed = iparam(4)
 
-    val s = BDV(d)(0 until computed)
-    val U = new BDM(n, computed, z)
+    val eigenPairs = java.util.Arrays.copyOfRange(d, 0, computed).zipWithIndex.map{
+      r => (r._1, java.util.Arrays.copyOfRange(z, r._2 * n, r._2 * n + n))
+    }
 
-    val sortedEigenValuesWithIndex = s.toArray.zipWithIndex.sortBy(-1 * _._1).zipWithIndex
-
-    val sorteds = BDV(sortedEigenValuesWithIndex.map(_._1._1))
-    val sortedU = BDM.zeros[Double](n, computed)
+    val sortedEigenPairs = eigenPairs.sortBy(-1 * _._1)
 
     // copy eigenvectors in descending order of eigenvalues
-    sortedEigenValuesWithIndex.map{
+    val sortedU = BDM.zeros[Double](n, computed)
+    sortedEigenPairs.zipWithIndex.map{
       r => {
-        sortedU(::, r._2) := U(::, r._1._2)
+        for (i <- 0 until n) {
+          sortedU.data(r._2 * n + i) = r._1._2(i)
+        }
       }
     }
 
-    (sorteds, sortedU)
+    (BDV(sortedEigenPairs.map(_._1)), sortedU)
   }
 }
