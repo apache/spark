@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Running with Cloudera and HortonWorks
+title: Third-Party Hadoop Distributions
 ---
 
 Spark can run against all versions of Cloudera's Distribution Including Apache Hadoop (CDH) and
