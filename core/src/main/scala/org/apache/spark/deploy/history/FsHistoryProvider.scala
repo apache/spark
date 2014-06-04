@@ -86,11 +86,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     logCheckingThread.start()
   }
 
-  override def getListing(offset: Int, count: Int) = {
-    val list = appList
-    val theOffset = if (offset < list.size) offset else 0
-    (list.slice(theOffset, Math.min(theOffset + count, list.size)), theOffset, list.size)
-  }
+  override def getListing() = appList
 
   override def getAppInfo(appId: String): ApplicationHistoryInfo = {
     try {
@@ -137,7 +133,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         }
       }
 
-      appList = newApps.sortBy { info => -info.lastUpdated }
+      appList = newApps.sortBy { info => -info.endTime }
     } catch {
       case t: Throwable => logError("Exception in checking for event log updates", t)
     }

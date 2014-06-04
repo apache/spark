@@ -151,16 +151,11 @@ class HistoryServer(
   }
 
   /**
-   * Returns a list of available applications, in descending order according to their last
-   * updated time.
+   * Returns a list of available applications, in descending order according to their end time.
    *
-   * @param offset Starting offset for returned objects.
-   * @param count Max number of objects to return.
-   * @return 3-tuple (requested app list, adjusted offset, count of all available apps)
+   * @return List of all known applications.
    */
-  def getApplicationList(offset: Int, count: Int) = {
-    provider.getListing(offset, count)
-  }
+  def getApplicationList() = provider.getListing()
 
 }
 
@@ -272,16 +267,13 @@ private[spark] abstract class ApplicationHistoryProvider {
 
   /**
    * This method should return a list of applications available for the history server to
-   * show. The listing is assumed to be in descending time order.
+   * show.
    *
-   * An adjusted offset should be returned if the app list has changed and the request
-   * references an invalid start offset. Otherwise, the provided offset should be returned.
+   * The listing is assumed to be in descending end time order.
    *
-   * @param offset Starting offset for returned objects.
-   * @param count Max number of objects to return.
-   * @return 3-tuple (requested app list, adjusted offset, count of all available apps)
+   * @return List of all know applications.
    */
-  def getListing(offset: Int, count: Int): (Seq[ApplicationHistoryInfo], Int, Int)
+  def getListing(): Seq[ApplicationHistoryInfo]
 
   /**
    * This method should return the application information, including a rendered SparkUI.
