@@ -49,8 +49,6 @@ class SQLConfSuite extends QueryTest {
     conf.clear()
   }
 
-  // TODO: this is more suitable for a "SetCommandSuite"? Or put them inside the query suite?
-
   test("parse SQL set commands") {
     sql(s"set $testKey=$testVal")
     assert(conf.get(testKey, testVal + "_") == testVal)
@@ -70,22 +68,6 @@ class SQLConfSuite extends QueryTest {
     assert(conf.get(key, "0") == "")
 
     conf.clear()
-  }
-
-  test("set itself returns all config variables currently specified in Hive or SQLConf") {
-    def fromRows(row: Array[Row]): Array[String] = row.map(_.getString(0))
-
-    assert(sql("set").collect().size == 0)
-
-    sql(s"SET $testKey=$testVal")
-    assert(fromRows(sql("set").collect()) sameElements Array(s"$testKey=$testVal"))
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(fromRows(sql("set").collect()) sameElements
-      Array(
-        s"$testKey=$testVal",
-        s"${testKey + testKey}=${testVal + testVal}"
-      ))
   }
 
 }
