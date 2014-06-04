@@ -736,10 +736,13 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val wrappedConf = new SerializableWritable(job.getConfiguration)
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
+    val env = SparkEnv.get
 
     if (jobFormat.isInstanceOf[NewFileOutputFormat[_, _]]) {
       // FileOutputFormat ignores the filesystem parameter
-      jobFormat.checkOutputSpecs(job)
+      if(env.conf.getBoolean("spark.hadoop.checkoutputspec", true)) { 
+        jobFormat.checkOutputSpecs(job)
+      }
     }
 
     def writeShard(context: TaskContext, iter: Iterator[(K,V)]): Int = {
@@ -789,6 +792,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val outputFormatInstance = conf.getOutputFormat
     val keyClass = conf.getOutputKeyClass
     val valueClass = conf.getOutputValueClass
+    val env = SparkEnv.get
     if (outputFormatInstance == null) {
       throw new SparkException("Output format class not set")
     }
@@ -805,8 +809,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     if (outputFormatInstance.isInstanceOf[FileOutputFormat[_, _]]) {
       // FileOutputFormat ignores the filesystem parameter
-      val ignoredFs = FileSystem.get(conf)
-      conf.getOutputFormat.checkOutputSpecs(ignoredFs, conf)
+      if(env.conf.getBoolean("spark.hadoop.checkoutputspec", true)) { 
+        val ignoredFs = FileSystem.get(conf)
+        conf.getOutputFormat.checkOutputSpecs(ignoredFs, conf)
+      }
     }
 
     val writer = new SparkHadoopWriter(conf)
