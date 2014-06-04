@@ -70,4 +70,16 @@ class SQLConfSuite extends QueryTest {
     conf.clear()
   }
 
+  test("set itself returns all config variables currently specified in Hive or SQLConf") {
+    assert(sql("set").collect() === Seq(""))
+
+    sql(s"SET $testKey=$testVal")
+    assert(sql("set").collect() === Seq(s"$testKey=$testVal"))
+
+    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    // TODO: should this be 1-elem Seq or 2-elem?
+    assert(sql("set").collect() ===
+      Seq(s"$testKey=$testVal\n${testKey + testKey}=${testVal + testVal}"))
+  }
+
 }
