@@ -212,7 +212,7 @@ private[spark] class TaskSchedulerImpl(
     SparkEnv.set(sc.env)
 
     // Mark each slave as alive and remember its hostname
-    //also track if new executor is added
+    // Also track if new executor is added
     var newExecAvail = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
@@ -232,15 +232,15 @@ private[spark] class TaskSchedulerImpl(
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
+      if (delaySchedule && newExecAvail) {
+        taskSet.reAddPendingTasks()
+      }
     }
 
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     var launchedTask = false
     for (taskSet <- sortedTaskSets; maxLocality <- TaskLocality.values) {
-      if (delaySchedule && newExecAvail) {
-        taskSet.reAddPendingTasks()
-      }
       do {
         launchedTask = false
         for (i <- 0 until shuffledOffers.size) {

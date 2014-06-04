@@ -196,8 +196,7 @@ private[spark] class TaskSetManager(
       }
     }
 
-    if (tasks(index).preferredLocations.isEmpty ||
-      (!delaySchedule && !hadAliveLocations)) {
+    if (tasks(index).preferredLocations.isEmpty || (!delaySchedule && !hadAliveLocations)) {
       // Even though the task might've had preferred locations, all of those hosts or executors
       // are dead; put it in the no-prefs list so we can schedule it elsewhere right away.
       addTo(pendingTasksWithNoPrefs)
@@ -744,7 +743,8 @@ private[spark] class TaskSetManager(
   //Re-compute the pending lists. This should be called when new executor is added
   def reAddPendingTasks() {
     logInfo("Re-computing pending task lists.")
-    for (i <- (0 until numTasks).reverse.filter(index => copiesRunning(index) == 0 && !successful(index))) {
+    for (i <- (0 until numTasks).reverse.filter(index => copiesRunning(index) == 0
+      && !successful(index))) {
       addPendingTask(i, readding = true)
     }
   }
