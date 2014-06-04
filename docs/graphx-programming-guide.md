@@ -320,6 +320,7 @@ class Graph[VD, ED] {
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
   // Transform vertex and edge attributes ==========================================================
   def mapVertices[VD2](map: (VertexID, VD) => VD2): Graph[VD2, ED]
+  def mapVerticesConserve(map: (VertexID, VD) => VD): Graph[VD, ED]
   def mapEdges[ED2](map: Edge[ED] => ED2): Graph[VD, ED2]
   def mapEdges[ED2](map: (PartitionID, Iterator[Edge[ED]]) => Iterator[ED2]): Graph[VD, ED2]
   def mapTriplets[ED2](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
@@ -338,6 +339,9 @@ class Graph[VD, ED] {
   def outerJoinVertices[U, VD2](other: RDD[(VertexID, U)])
       (mapFunc: (VertexID, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
+  def outerJoinVerticesConserve[U](other: RDD[(VertexID, U)])
+      (mapFunc: (VertexID, VD, Option[U]) => VD)
+    : Graph[VD, ED]
   // Aggregate information about adjacent triplets =================================================
   def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexID]]
   def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexID, VD)]]
@@ -369,6 +373,7 @@ graph contains the following:
 {% highlight scala %}
 class Graph[VD, ED] {
   def mapVertices[VD2](map: (VertexId, VD) => VD2): Graph[VD2, ED]
+  def mapVerticesConserve(map: (VertexId, VD) => VD): Graph[VD, ED]
   def mapEdges[ED2](map: Edge[ED] => ED2): Graph[VD, ED2]
   def mapTriplets[ED2](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
 }
@@ -391,6 +396,10 @@ val newGraph = graph.mapVertices((id, attr) => mapUdf(id, attr))
 {% endhighlight %}
 
 [Graph.mapVertices]: api/scala/index.html#org.apache.spark.graphx.Graph@mapVertices[VD2]((VertexId,VD)⇒VD2)(ClassTag[VD2]):Graph[VD2,ED]
+
+When a call to `mapVertices` would not change the vertex attribute type, use the
+`mapVerticesConserve` operator for better performance. This version of the operator avoids moving
+unchanged vertex attributes when updating the triplets view.
 
 These operators are often used to initialize the graph for a particular computation or project away
 unnecessary properties.  For example, given a graph with the out-degrees as the vertex properties
@@ -506,6 +515,8 @@ class Graph[VD, ED] {
     : Graph[VD, ED]
   def outerJoinVertices[U, VD2](table: RDD[(VertexId, U)])(map: (VertexId, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
+  def outerJoinVerticesConserve[U](table: RDD[(VertexId, U)])(map: (VertexId, VD, Option[U]) => VD)
+    : Graph[VD, ED]
 }
 {% endhighlight %}
 
@@ -532,6 +543,10 @@ except that the user defined `map` function is applied to all vertices and can c
 property type.  Because not all vertices may have a matching value in the input RDD the `map`
 function takes an `Option` type.  For example, we can setup a graph for PageRank by initializing
 vertex properties with their `outDegree`.
+
+Similarly to `mapVerticesConserve`, when a call to `outerJoinVertices` would not change the vertex
+attribute type, use the `outerJoinVerticesConserve` operator for better performance. This version of
+the operator avoids moving unchanged vertex attributes when updating the triplets view.
 
 [Graph.outerJoinVertices]: api/scala/index.html#org.apache.spark.graphx.Graph@outerJoinVertices[U,VD2](RDD[(VertexId,U)])((VertexId,VD,Option[U])⇒VD2)(ClassTag[U],ClassTag[VD2]):Graph[VD2,ED]
 
@@ -748,7 +763,7 @@ class GraphOps[VD, ED] {
       // Run the vertex program on all vertices that receive messages
       val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
       // Merge the new vertex values back into the graph
-      g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }.cache()
+      g = g.outerJoinVerticesConserve(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }.cache()
       // Send Messages: ------------------------------------------------------------------------------
       // Vertices that didn't receive a message above don't appear in newVerts and therefore don't
       // get to send messages.  More precisely the map phase of mapReduceTriplets is only invoked

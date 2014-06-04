@@ -131,6 +131,19 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def mapVertices[VD2: ClassTag](map: (VertexId, VD) => VD2): Graph[VD2, ED]
 
   /**
+   * Transforms each vertex attribute in the graph using the map function. Like [[mapVertices]], but
+   * since the type is conserved, is able to avoid moving unchanged vertex attributes when updating
+   * the triplets view.
+   *
+   * @note The new graph has the same structure.  As a consequence the underlying index structures
+   * can be reused.
+   *
+   * @param map the function from a vertex object to a new vertex value of the same type
+   *
+   */
+  def mapVerticesConserve(map: (VertexId, VD) => VD): Graph[VD, ED]
+
+  /**
    * Transforms each edge attribute in the graph using the map function.  The map function is not
    * passed the vertex value for the vertices adjacent to the edge.  If vertex values are desired,
    * use `mapTriplets`.
@@ -340,6 +353,25 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def outerJoinVertices[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
       (mapFunc: (VertexId, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
+
+  /**
+   * Joins the vertices with entries in the `table` RDD and merges the results using `mapFunc`. Like
+   * [[outerJoinVertices]], but since the type is conserved, is able to avoid moving unchanged
+   * vertex attributes when updating the triplets view.
+   *
+   * The input table should contain at most one entry for each vertex.  If no entry in `other` is
+   * provided for a particular vertex in the graph, the map function receives `None`.
+   *
+   * @tparam U the type of entry in the table of updates
+   *
+   * @param other the table to join with the vertices in the graph.
+   *              The table should contain at most one entry for each vertex.
+   * @param mapFunc the function used to compute the new vertex values. The map function is invoked
+   * for all vertices, even those that do not have a corresponding entry in the table. It must
+   * conserve the original vertex attribute type.
+   */
+  def outerJoinVerticesConserve[U: ClassTag](other: RDD[(VertexId, U)])
+      (mapFunc: (VertexId, VD, Option[U]) => VD): Graph[VD, ED]
 
   /**
    * The associated [[GraphOps]] object.

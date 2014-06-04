@@ -78,7 +78,7 @@ object SVDPlusPlus {
       et => Iterator((et.srcId, (1L, et.attr)), (et.dstId, (1L, et.attr))),
         (g1: (Long, Double), g2: (Long, Double)) => (g1._1 + g2._1, g1._2 + g2._2))
 
-    g = g.outerJoinVertices(t0) {
+    g = g.outerJoinVerticesConserve(t0) {
       (vid: VertexId, vd: (DoubleMatrix, DoubleMatrix, Double, Double),
        msg: Option[(Long, Double)]) =>
         (vd._1, vd._2, msg.get._2 / msg.get._1, 1.0 / scala.math.sqrt(msg.get._1))
@@ -112,7 +112,7 @@ object SVDPlusPlus {
       val t1 = g.mapReduceTriplets(
         et => Iterator((et.srcId, et.dstAttr._2)),
         (g1: DoubleMatrix, g2: DoubleMatrix) => g1.addColumnVector(g2))
-      g = g.outerJoinVertices(t1) {
+      g = g.outerJoinVerticesConserve(t1) {
         (vid: VertexId, vd: (DoubleMatrix, DoubleMatrix, Double, Double),
          msg: Option[DoubleMatrix]) =>
           if (msg.isDefined) (vd._1, vd._1
@@ -125,7 +125,7 @@ object SVDPlusPlus {
         mapTrainF(conf, u),
         (g1: (DoubleMatrix, DoubleMatrix, Double), g2: (DoubleMatrix, DoubleMatrix, Double)) =>
           (g1._1.addColumnVector(g2._1), g1._2.addColumnVector(g2._2), g1._3 + g2._3))
-      g = g.outerJoinVertices(t2) {
+      g = g.outerJoinVerticesConserve(t2) {
         (vid: VertexId,
          vd: (DoubleMatrix, DoubleMatrix, Double, Double),
          msg: Option[(DoubleMatrix, DoubleMatrix, Double)]) =>
@@ -149,7 +149,7 @@ object SVDPlusPlus {
     }
     g.cache()
     val t3 = g.mapReduceTriplets(mapTestF(conf, u), (g1: Double, g2: Double) => g1 + g2)
-    g = g.outerJoinVertices(t3) {
+    g = g.outerJoinVerticesConserve(t3) {
       (vid: VertexId, vd: (DoubleMatrix, DoubleMatrix, Double, Double), msg: Option[Double]) =>
         if (msg.isDefined) (vd._1, vd._2, vd._3, msg.get) else vd
     }
