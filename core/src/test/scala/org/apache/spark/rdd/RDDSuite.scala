@@ -350,6 +350,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     intercept[IllegalArgumentException] {
       nums.zip(sc.parallelize(1 to 4, 1)).collect()
     }
+
+    intercept[SparkException] {
+      nums.zip(sc.parallelize(1 to 5, 2)).collect()
+    }
   }
 
   test("partition pruning") {
