@@ -114,9 +114,11 @@ object PartitionStrategy {
    */
   case object CanonicalRandomVertexCut extends PartitionStrategy {
     override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
-      val lower = math.min(src, dst)
-      val higher = math.max(src, dst)
-      math.abs((lower, higher).hashCode()) % numParts
+      if (src < dst) {
+        math.abs((src, dst).hashCode()) % numParts
+      } else {
+        math.abs((dst, src).hashCode()) % numParts
+      }
     }
   }
 
