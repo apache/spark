@@ -121,6 +121,8 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
      */
     val p = 20
     val sp = 0
+    // When p = 20, the relative accuracy is about 0.001. So with high probability, the
+    // relative error should be smaller than the threshold 0.005 we use here.
     val relativeSD = 0.01
 
     // For each value i, there are i tuples with first element equal to i.
