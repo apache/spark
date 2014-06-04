@@ -32,6 +32,23 @@ import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
+import org.apache.spark.api.python.Converter
+
+class CassandraCQLKeyConverter extends Converter {
+  import collection.JavaConversions._
+  override def convert(obj: Any) = {
+    val result = obj.asInstanceOf[java.util.Map[String, ByteBuffer]]
+    mapAsJavaMap(result.mapValues(bb => ByteBufferUtil.toInt(bb)))
+  }
+}
+
+class CassandraCQLValueConverter extends Converter {
+  import collection.JavaConversions._
+  override def convert(obj: Any) = {
+    val result = obj.asInstanceOf[java.util.Map[String, ByteBuffer]]
+    mapAsJavaMap(result.mapValues(bb => ByteBufferUtil.string(bb)))
+  }
+}
 
 /*
   Need to create following keyspace and column family in cassandra before running this example
