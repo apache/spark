@@ -17,10 +17,11 @@
 
 package org.apache.spark.mllib.linalg
 
-import org.apache.spark.annotation.Experimental
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
-import org.netlib.util.{intW, doubleW}
 import com.github.fommil.netlib.ARPACK
+import org.netlib.util.{intW, doubleW}
+
+import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
@@ -46,11 +47,11 @@ object EigenValueDecomposition {
     : (BDV[Double], BDM[Double]) = {
     require(n > k, s"Number of required eigenvalues $k must be smaller than matrix dimension $n")
 
-    val arpack  = ARPACK.getInstance()
+    val arpack = ARPACK.getInstance()
 
     val tolW = new doubleW(tol)
     val nev = new intW(k)
-    val ncv = scala.math.min(2*k,n)
+    val ncv = scala.math.min(2 * k, n)
 
     val bmat = "I"
     val which = "LM"
@@ -63,9 +64,9 @@ object EigenValueDecomposition {
     var ido = new intW(0)
     var info = new intW(0)
     var resid:Array[Double] = new Array[Double](n)
-    var v = new Array[Double](n*ncv)
-    var workd = new Array[Double](3*n)
-    var workl = new Array[Double](ncv*(ncv+8))
+    var v = new Array[Double](n * ncv)
+    var workd = new Array[Double](n * 3)
+    var workl = new Array[Double](ncv * (ncv + 8))
     var ipntr = new Array[Int](11)
 
     // first call to ARPACK
@@ -74,9 +75,10 @@ object EigenValueDecomposition {
 
     val w = BDV(workd)
 
-    while(ido.`val` !=99) {
-      if (ido.`val` != -1 && ido.`val` != 1)
+    while(ido.`val` != 99) {
+      if (ido.`val` != -1 && ido.`val` != 1) {
         throw new IllegalStateException("ARPACK returns ido = " + ido.`val`)
+      }
       // multiply working vector with the matrix
       val inputOffset = ipntr(0) - 1
       val outputOffset = ipntr(1) - 1
@@ -88,8 +90,9 @@ object EigenValueDecomposition {
         workd, workl, workl.length, info)
     }
 
-    if (info.`val` != 0)
+    if (info.`val` != 0) {
       throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val`)
+    }
 
     val d = new Array[Double](nev.`val`)
     val select = new Array[Boolean](ncv)
