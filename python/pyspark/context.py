@@ -271,6 +271,20 @@ class SparkContext(object):
         jrdd = readRDDFromFile(self._jsc, tempFile.name, numSlices)
         return RDD(jrdd, self, serializer)
 
+    def pickleFile(self, name, minPartitions=None):
+        """
+        Load an RDD previously saved using L{RDD.saveAsPickleFile} method.
+
+        >>> tmpFile = NamedTemporaryFile(delete=True)
+        >>> tmpFile.close()
+        >>> sc.parallelize(range(10)).saveAsPickleFile(tmpFile.name, 5)
+        >>> sorted(sc.pickleFile(tmpFile.name, 3).collect())
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        """
+        minPartitions = minPartitions or self.defaultMinPartitions
+        return RDD(self._jsc.objectFile(name, minPartitions), self,
+                   BatchedSerializer(PickleSerializer()))
+
     def textFile(self, name, minPartitions=None):
         """
         Read a text file from HDFS, a local file system (available on all
