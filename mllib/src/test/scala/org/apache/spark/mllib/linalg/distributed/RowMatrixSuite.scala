@@ -99,7 +99,7 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
       val localMat = mat.toBreeze()
       val (localU, localSigma, localVt) = brzSvd(localMat)
       val localV: BDM[Double] = localVt.t.toDenseMatrix
-      for (k <- 1 to n) {
+      for (k <- 1 to (n - 1)) {
         val svd = mat.computeSVD(k, computeU = true)
         val U = svd.U
         val s = svd.s
@@ -113,19 +113,19 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
         assertColumnEqualUpToSign(V.toBreeze.asInstanceOf[BDM[Double]], localV, k)
         assert(closeToZero(s.toBreeze.asInstanceOf[BDV[Double]] - localSigma(0 until k)))
       }
-      val svdWithoutU = mat.computeSVD(n)
+      val svdWithoutU = mat.computeSVD(n - 1)
       assert(svdWithoutU.U === null)
     }
   }
 
   test("svd of a low-rank matrix") {
-    val rows = sc.parallelize(Array.fill(4)(Vectors.dense(1.0, 1.0)), 2)
-    val mat = new RowMatrix(rows, 4, 2)
+    val rows = sc.parallelize(Array.fill(4)(Vectors.dense(1.0, 1.0, 1.0)), 2)
+    val mat = new RowMatrix(rows, 4, 3)
     val svd = mat.computeSVD(2, computeU = true)
     assert(svd.s.size === 1, "should not return zero singular values")
     assert(svd.U.numRows() === 4)
     assert(svd.U.numCols() === 1)
-    assert(svd.V.numRows === 2)
+    assert(svd.V.numRows === 3)
     assert(svd.V.numCols === 1)
   }
 

@@ -201,6 +201,19 @@ class RowMatrix(
   }
 
   /**
+   * Multiply the Gramian matrix `A^T A` by a Vector on the right.
+   *
+   * @param v a local vector whose length must match the number of columns of this matrix
+   * @return a local DenseVector representing the product
+   */
+  private[mllib] def multiplyGramianMatrix(v: Vector): Vector = {
+    val bv = rows.map{
+      row => row.toBreeze * row.toBreeze.dot(v.toBreeze)
+    }.reduce( (x: BV[Double], y: BV[Double]) => x + y )
+    Vectors.fromBreeze(bv)
+  }
+
+  /**
    * Computes the Gramian matrix `A^T A`.
    */
   def computeGramianMatrix(): Matrix = {
@@ -221,15 +234,17 @@ class RowMatrix(
 
   /**
    * Computes the singular value decomposition of this matrix.
-   * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A = U * S * V'.
+   * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A ~= U * S * V',
+   * where S contains the leading singular values, U and V contain the corresponding singular
+   * vectors.
    *
-   * There is no restriction on m, but we require `n^2` doubles to fit in memory.
-   * Further, n should be less than m.
-
-   * The decomposition is computed by first computing A'A = V S^2 V',
-   * computing svd locally on that (since n x n is small), from which we recover S and V.
-   * Then we compute U via easy matrix multiplication as U =  A * (V * S^-1).
-   * Note that this approach requires `O(n^3)` time on the master node.
+   * There is no restriction on m, but we require `n*(6*k+4)` doubles to fit in memory on the master
+   * node. Further, n should be less than m.
+   *
+   * The decomposition is computed by providing a function that multiples a vector with A'A to
+   * ARPACK, and iteratively invoking ARPACK-dsaupd on master node, from which we recover S and V.
+   * Then we compute U via easy matrix multiplication as U =  A * (V * S-1).
+   * Note that this approach requires `O(nnz(A))` time.
    *
    * At most k largest non-zero singular values and associated vectors are returned.
    * If there are k such values, then the dimensions of the return will be:
@@ -243,20 +258,19 @@ class RowMatrix(
    * @param computeU whether to compute U
    * @param rCond the reciprocal condition number. All singular values smaller than rCond * sigma(0)
    *              are treated as zero, where sigma(0) is the largest singular value.
+   * @param tol the tolerance of the svd computation.
    * @return SingularValueDecomposition(U, s, V)
    */
   def computeSVD(
       k: Int,
       computeU: Boolean = false,
-      rCond: Double = 1e-9): SingularValueDecomposition[RowMatrix, Matrix] = {
+      rCond: Double = 1e-9,
+      tol: Double = 1e-6): SingularValueDecomposition[RowMatrix, Matrix] = {
     val n = numCols().toInt
     require(k > 0 && k <= n, s"Request up to n singular values k=$k n=$n.")
 
-    val G = computeGramianMatrix()
-
-    // TODO: Use sparse SVD instead.
-    val (u: BDM[Double], sigmaSquares: BDV[Double], v: BDM[Double]) =
-      brzSvd(G.toBreeze.asInstanceOf[BDM[Double]])
+    val (sigmaSquares: BDV[Double], u: BDM[Double]) =
+      EigenValueDecomposition.symmetricEigs(multiplyGramianMatrix, n, k, tol)
     val sigmas: BDV[Double] = brzSqrt(sigmaSquares)
 
     // Determine effective rank.
