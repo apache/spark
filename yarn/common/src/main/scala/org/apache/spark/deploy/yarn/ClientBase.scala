@@ -220,10 +220,21 @@ trait ClientBase extends Logging {
       }
     }
 
+    def getArg(arg: String, envVar: String, sysProp: String): String = {
+      if (arg != null && !arg.isEmpty) {
+        arg
+      } else if (System.getenv(envVar) != null && !System.getenv(envVar).isEmpty) {
+        System.getenv(envVar)
+      } else {
+        sparkConf.getOption(sysProp).orNull
+      }
+    }
     var cachedSecondaryJarLinks = ListBuffer.empty[String]
-    val fileLists = List( (args.addJars, LocalResourceType.FILE, true),
-      (args.files, LocalResourceType.FILE, false),
-      (args.archives, LocalResourceType.ARCHIVE, false) )
+    val fileLists = List((args.addJars, LocalResourceType.FILE, true),
+      (getArg(args.files, "SPARK_YARN_DIST_FILES", "spark.yarn.dist.files"),
+        LocalResourceType.FILE, false),
+      (getArg(args.archives, "SPARK_YARN_DIST_ARCHIVES", "spark.yarn.dist.archives"),
+        LocalResourceType.ARCHIVE, false))
     fileLists.foreach { case (flist, resType, addToClasspath) =>
       if (flist != null && !flist.isEmpty()) {
         flist.split(',').foreach { case file: String =>
