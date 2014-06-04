@@ -124,7 +124,16 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     }
 
     // Global defaults. These should be keep to minimum to avoid confusing behavior.
-    master = Option(master).getOrElse("local[*]")
+    master = Option(master).getOrElse {
+      if (System.getenv("SPARK_MASTER_IP") != null) {
+        val host = System.getenv("SPARK_MASTER_IP")
+        val port = Option(System.getenv("SPARK_MASTER_PORT")).getOrElse("7077").toInt
+        s"spark://$host:$port"
+      }
+      else {
+        "local[*]"
+      }
+    }
 
     // Set name from main class if not given
     name = Option(name).orElse(Option(mainClass)).orNull
