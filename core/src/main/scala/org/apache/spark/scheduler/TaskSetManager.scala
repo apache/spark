@@ -740,7 +740,7 @@ private[spark] class TaskSetManager(
     levels.toArray
   }
 
-  //Re-compute the pending lists. This should be called when new executor is added
+  // Re-compute the pending lists. This should be called when new executor is added
   def reAddPendingTasks() {
     logInfo("Re-computing pending task lists.")
     for (i <- (0 until numTasks).reverse.filter(index => copiesRunning(index) == 0
