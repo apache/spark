@@ -214,6 +214,11 @@ def get_spark_ami(opts):
         "m2.xlarge":   "pvm",
         "m2.2xlarge":  "pvm",
         "m2.4xlarge":  "pvm",
+        "r3.large":    "hvm",
+        "r3.xlarge":   "hvm",
+        "r3.2xlarge":  "hvm",
+        "r3.4xlarge":  "hvm",
+        "r3.8xlarge":  "hvm",
         "cc1.4xlarge": "hvm",
         "cc2.8xlarge": "hvm",
         "cg1.4xlarge": "hvm",
@@ -538,7 +543,12 @@ def get_num_disks(instance_type):
         "c3.xlarge":   2,
         "c3.2xlarge":  2,
         "c3.4xlarge":  2,
-        "c3.8xlarge":  2
+        "c3.8xlarge":  2,
+        "r3.large":    1,
+        "r3.xlarge":   1,
+        "r3.xlarge":   1,
+        "r3.2xlarge":  1,
+        "r3.8xlarge":  2
     }
     if instance_type in disks_by_instance:
         return disks_by_instance[instance_type]
