@@ -67,20 +67,17 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     "Last Updated")
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    val appName = if (info.started) info.name else info.id
     val uiAddress = "/history/" + info.id
-    val startTime = if (info.started) UIUtils.formatDate(info.startTime) else "Not started"
-    val endTime = if (info.completed) UIUtils.formatDate(info.endTime) else "Not completed"
-    val difference = if (info.started && info.completed) info.endTime - info.startTime else -1L
-    val duration = if (difference > 0) UIUtils.formatDuration(difference) else "---"
-    val sparkUser = if (info.started) info.sparkUser else "Unknown user"
+    val startTime = UIUtils.formatDate(info.startTime)
+    val endTime = UIUtils.formatDate(info.endTime)
+    val duration = UIUtils.formatDuration(info.endTime - info.startTime)
     val lastUpdated = UIUtils.formatDate(info.lastUpdated)
     <tr>
-      <td><a href={uiAddress}>{appName}</a></td>
+      <td><a href={uiAddress}>{info.name}</a></td>
       <td>{startTime}</td>
       <td>{endTime}</td>
       <td>{duration}</td>
-      <td>{sparkUser}</td>
+      <td>{info.sparkUser}</td>
       <td>{lastUpdated}</td>
     </tr>
   }

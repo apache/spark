@@ -307,6 +307,4 @@ private[spark] case class ApplicationHistoryInfo(
     sparkUser: String,
     viewAcls: String,
     ui: SparkUI) {
-  def started = startTime != -1
-  def completed = endTime != -1
 }
