@@ -335,6 +335,16 @@ class TestInputFormat(PySparkTestCase):
             "org.apache.hadoop.io.IntWritable",
             "org.apache.hadoop.io.Text"))
 
+    def test_converter(self):
+        basepath = self.tempdir.name
+        maps = sorted(self.sc.sequenceFile(
+            basepath + "/sftestdata/sfmap/",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.MapWritable",
+            valueConverter="org.apache.spark.api.python.TestConverter").collect())
+        em = [(1, [2.0]), (1, [3.0]), (2, [1.0]), (2, [1.0]), (2, [3.0]), (3, [2.0])]
+        self.assertEqual(maps, em)
+
 
 class TestDaemon(unittest.TestCase):
     def connect(self, port):

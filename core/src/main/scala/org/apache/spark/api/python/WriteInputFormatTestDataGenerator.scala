@@ -54,6 +54,14 @@ case class TestWritable(var str: String, var int: Int, var double: Double) exten
   }
 }
 
+class TestConverter extends Converter {
+  import collection.JavaConversions._
+  override def convert(obj: Any) = {
+    val m = obj.asInstanceOf[MapWritable]
+    seqAsJavaList(m.keySet.map(w => w.asInstanceOf[DoubleWritable].get()).toSeq)
+  }
+}
+
 /**
  * This object contains method to generate SequenceFile test data and write it to a
  * given directory (probably a temp directory)

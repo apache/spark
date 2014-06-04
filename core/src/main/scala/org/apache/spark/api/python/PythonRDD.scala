@@ -353,17 +353,20 @@ private[spark] object PythonRDD extends Logging {
   def sequenceFile[K, V](
       sc: JavaSparkContext,
       path: String,
-      keyClass: String,
-      valueClass: String,
+      keyClassMaybeNull: String,
+      valueClassMaybeNull: String,
       keyConverter: String,
       valueConverter: String,
       minSplits: Int) = {
+    val keyClass = Option(keyClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
+    val valueClass = Option(valueClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
     implicit val kcm = ClassTag(Class.forName(keyClass)).asInstanceOf[ClassTag[K]]
     implicit val vcm = ClassTag(Class.forName(valueClass)).asInstanceOf[ClassTag[V]]
     val kc = kcm.runtimeClass.asInstanceOf[Class[K]]
     val vc = vcm.runtimeClass.asInstanceOf[Class[V]]
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
-    val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
+    val converted = PythonHadoopUtil.convertRDD[K, V](
+      rdd, keyClass, Option(keyConverter), valueClass, Option(valueConverter))
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
@@ -386,7 +389,8 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
-    val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
+    val converted = PythonHadoopUtil.convertRDD[K, V](
+      rdd, keyClass, Option(keyConverter), valueClass, Option(valueConverter))
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
@@ -407,7 +411,8 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClass, keyClass, valueClass, conf)
-    val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
+    val converted = PythonHadoopUtil.convertRDD[K, V](
+      rdd, keyClass, Option(keyConverter), valueClass, Option(valueConverter))
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
@@ -451,7 +456,8 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
-    val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
+    val converted = PythonHadoopUtil.convertRDD[K, V](
+      rdd, keyClass, Option(keyConverter), valueClass, Option(valueConverter))
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
@@ -472,7 +478,8 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClass, keyClass, valueClass, conf)
-    val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
+    val converted = PythonHadoopUtil.convertRDD[K, V](
+      rdd, keyClass, Option(keyConverter), valueClass, Option(valueConverter))
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
