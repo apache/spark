@@ -118,8 +118,8 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
     // Test whether FileAppender.apply() returns the right type of the FileAppender based
     // on SparkConf settings.
 
-    def testAppenderSelection[ExpectedAppender: ClassTag](
-        properties: Seq[(String, String)]): FileAppender = {
+    def testAppenderSelection[ExpectedAppender: ClassTag, ExpectedRollingPolicy](
+        properties: Seq[(String, String)], expectedRollingPolicyParam: Long = -1): FileAppender = {
 
       // Set spark conf properties
       val conf = new SparkConf
@@ -133,38 +133,50 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
       assert(appender.isInstanceOf[ExpectedAppender])
       assert(appender.getClass.getSimpleName ===
         classTag[ExpectedAppender].runtimeClass.getSimpleName)
+      if (appender.isInstanceOf[RollingFileAppender]) {
+        val rollingPolicy = appender.asInstanceOf[RollingFileAppender].rollingPolicy
+        rollingPolicy.isInstanceOf[ExpectedRollingPolicy]
+        val policyParam = if (rollingPolicy.isInstanceOf[TimeBasedRollingPolicy]) {
+          rollingPolicy.asInstanceOf[TimeBasedRollingPolicy].rolloverIntervalMillis
+        } else {
+          rollingPolicy.asInstanceOf[SizeBasedRollingPolicy].rolloverSizeBytes
+        }
+        assert(policyParam === expectedRollingPolicyParam)
+      }
       appender
     }
 
     import RollingFileAppender._
 
-    val enableRolling = Seq(ENABLE_PROPERTY -> "true")
     def rollingSize(size: String) = Seq(SIZE_PROPERTY -> size)
     def rollingInterval(interval: String) = Seq(INTERVAL_PROPERTY -> interval)
 
-    testAppenderSelection[FileAppender](Seq.empty)
-    testAppenderSelection[DailyRollingFileAppender](enableRolling)
-    testAppenderSelection[DailyRollingFileAppender](enableRolling ++ rollingInterval("daily"))
-    testAppenderSelection[HourlyRollingFileAppender](enableRolling ++ rollingInterval("hourly"))
-    testAppenderSelection[MinutelyRollingFileAppender](
-      enableRolling ++ rollingInterval("minutely"))
+    val msInDay = 24 * 60 * 60 * 1000L
+    val msInHour = 60 * 60 * 1000L
+    val msInMinute = 60 * 1000L
 
-    val appender1 = testAppenderSelection[RollingFileAppender](
-      enableRolling ++ rollingInterval("1000"))
-    val rollingPolicy1 = appender1.asInstanceOf[RollingFileAppender].rollingPolicy
-    assert(rollingPolicy1.isInstanceOf[TimeBasedRollingPolicy])
-    assert(rollingPolicy1.asInstanceOf[TimeBasedRollingPolicy].rolloverIntervalMillis == 1000)
+    testAppenderSelection[FileAppender, Any](Seq.empty)
 
-    val appender2 = testAppenderSelection[RollingFileAppender](
-      enableRolling ++ rollingSize("1000"))
-    val rollingPolicy2 = appender2.asInstanceOf[RollingFileAppender].rollingPolicy
-    assert(rollingPolicy2.isInstanceOf[SizeBasedRollingPolicy])
-    assert(rollingPolicy2.asInstanceOf[SizeBasedRollingPolicy].rolloverSizeBytes == 1000)
+    testAppenderSelection[RollingFileAppender, TimeBasedRollingPolicy](
+      rollingInterval("daily"), msInDay)
+
+    testAppenderSelection[RollingFileAppender, TimeBasedRollingPolicy](
+      rollingInterval("hourly"), msInHour)
+
+    testAppenderSelection[RollingFileAppender, TimeBasedRollingPolicy](
+      rollingInterval("minutely"), msInMinute)
+
+    testAppenderSelection[RollingFileAppender, TimeBasedRollingPolicy](
+      rollingInterval("1234"), 1234 * 1000L)
+
+    testAppenderSelection[RollingFileAppender, SizeBasedRollingPolicy](
+      rollingSize("3456"), 3456)
 
     // Illegal configurations, should default to non-rolling file appender
-    testAppenderSelection[FileAppender](enableRolling ++ rollingInterval("xyz"))
-    testAppenderSelection[FileAppender](enableRolling ++ rollingSize("xyz"))
-    testAppenderSelection[FileAppender](enableRolling ++ rollingInterval("xyz") ++ rollingSize("xyz"))
+    testAppenderSelection[FileAppender, Any](rollingInterval("xyz"))
+    testAppenderSelection[FileAppender, Any](rollingSize("xyz"))
+    testAppenderSelection[FileAppender, Any](
+      rollingInterval("xyz") ++ rollingSize("xyz"))
   }
 
   /**

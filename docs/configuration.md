@@ -738,6 +738,34 @@ Apart from these, the following properties are also available, and may be useful
     Set a special library path to use when launching executor JVM's.
   </td>
 </tr>
+<tr>
+  <td><code>spark.executor.rollingLogs.interval</code></td>
+  <td>(none)</td>
+  <td>
+    Set the time interval by which the executor logs will be rolled over.
+    Rolling is disabled by default. Valid values are `daily`, `hourly`, `minutely` or
+    any interval in seconds. Cannot be set along with `spark.executor.rollingLogs.size`.
+    See `spark.executor.rollingLogs.keepLastN` for automatic cleaning of old logs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.rollingLogs.size</code></td>
+  <td>(none)</td>
+  <td>
+    Set the size of the logs file by which the executor logs will be rolled over.
+    Rolling is disabled by default. Value is set in terms of bytes.
+    Cannot be set along with `spark.executor.rollingLogs.interval`.
+    See `spark.executor.rollingLogs.keepLastN` for automatic cleaning of old logs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.rollingLogs.keepLastN</code></td>
+  <td>(none)</td>
+  <td>
+    Sets the number of latest rolling log files that are going to be retained by the system.
+    Older log files will be deleted. Disabled by default.
+  </td>
+</tr>
 
 </table>
 

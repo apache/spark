@@ -120,62 +120,59 @@ private[spark] object FileAppender extends Logging {
 
     import RollingFileAppender._
 
-    val rolloverEnabled = conf.getBoolean(ENABLE_PROPERTY, false)
-    logDebug("Log rollover enabled = " + rolloverEnabled)
-    if (rolloverEnabled) {
+    val rolloverSizeOption = conf.getOption(SIZE_PROPERTY)
+    val rolloverIntervalOption = conf.getOption(INTERVAL_PROPERTY)
 
-      val rolloverSizeOption = conf.getOption(SIZE_PROPERTY)
-      val rolloverIntervalOption = conf.getOption(INTERVAL_PROPERTY)
+    (rolloverIntervalOption, rolloverSizeOption) match {
 
-      (rolloverIntervalOption, rolloverSizeOption) match {
+      case (Some(rolloverInterval), Some(rolloverSize)) =>
+        // if both size and interval have been set
+        logWarning(s"Rollover interval [$rolloverInterval] and size [$rolloverSize] " +
+          s"both set for executor logs, rolling logs not enabled")
+        new FileAppender(inputStream, file)
 
-        case (Some(rolloverInterval), Some(rolloverSize)) =>              // if both size and interval have been set
-          logWarning(s"Rollover interval [$rolloverInterval] and size [$rolloverSize] " +
-            s"both set for executor logs, rolling logs not enabled")
+      case (Some(rolloverInterval), None) =>  // if interval has been set
+        val validatedParams: Option[(Long, String)] = rolloverInterval match {
+          case "daily" =>
+            logInfo(s"Rolling executor logs enabled for $file with daily rolling")
+            Some(24 * 60 * 60 * 1000L, s"--YYYY-MM-dd")
+          case "hourly" =>
+            logInfo(s"Rolling executor logs enabled for $file with hourly rolling")
+            Some(60 * 60 * 1000L, s"--YYYY-MM-dd--HH")
+          case "minutely" =>
+            logInfo(s"Rolling executor logs enabled for $file with rolling every minute")
+            Some(60 * 1000L, s"--YYYY-MM-dd--HH-mm")
+          case IntParam(seconds) =>
+            logInfo(s"Rolling executor logs enabled for $file with rolling $seconds seconds")
+            Some(seconds * 1000L, s"--YYYY-MM-dd--HH-mm-ss")
+          case _ =>
+            logWarning(s"Illegal interval for rolling executor logs [$rolloverInterval], " +
+                s"rolling logs not enabled")
+            None
+        }
+        validatedParams.map {
+          case (interval, pattern) =>
+            new RollingFileAppender(
+              inputStream, file, new TimeBasedRollingPolicy(interval),pattern, conf)
+        }.getOrElse {
           new FileAppender(inputStream, file)
+        }
 
-        case (Some(rolloverInterval), None) =>  // if interval has been set
-          rolloverInterval match {
-            case "daily" =>
-              logInfo(s"Rolling executor logs enabled for $file with daily rolling")
-              new DailyRollingFileAppender(inputStream, file, conf)
-            case "hourly" =>
-              logInfo(s"Rolling executor logs enabled for $file with hourly rolling")
-              new HourlyRollingFileAppender(inputStream, file, conf)
-            case "minutely" =>
-              logInfo(s"Rolling executor logs enabled for $file with rolling every minute")
-              new MinutelyRollingFileAppender(inputStream, file, conf)
-            case IntParam(millis) =>
-              logInfo(s"Rolling executor logs enabled for $file with rolling every minute")
-              new RollingFileAppender(inputStream, file, new TimeBasedRollingPolicy(millis),
-                s"--YYYY-MM-dd--HH-mm-ss-SSSS", conf)
-            case _ =>
-              logWarning(
-                s"Illegal interval for rolling executor logs [$rolloverInterval], " +
-                  s"rolling logs not enabled")
-              new FileAppender(inputStream, file)
-          }
+      case (None, Some(rolloverSize)) =>    // if size has been set
+        rolloverSize match {
+          case IntParam(bytes) =>
+            logInfo(s"Rolling executor logs enabled for $file with rolling every $bytes bytes")
+            new RollingFileAppender(inputStream, file, new SizeBasedRollingPolicy(bytes),
+              s"--YYYY-MM-dd--HH-mm-ss-SSSS", conf)
+          case _ =>
+            logWarning(
+              s"Illegal size for rolling executor logs [$rolloverSize], " +
+                s"rolling logs not enabled")
+            new FileAppender(inputStream, file)
+        }
 
-        case (None, Some(rolloverSize)) =>    // if size has been set
-          rolloverSize match {
-            case IntParam(bytes) =>
-              logInfo(s"Rolling executor logs enabled for $file with rolling every $bytes bytes")
-              new RollingFileAppender(inputStream, file, new SizeBasedRollingPolicy(bytes),
-                s"--YYYY-MM-dd--HH-mm-ss-SSSS", conf)
-            case _ =>
-              logWarning(
-                s"Illegal size for rolling executor logs [$rolloverSize], " +
-                  s"rolling logs not enabled")
-              new FileAppender(inputStream, file)
-          }
-
-        case (None, None) =>                // if neither size nor interval has been set
-          logWarning(s"Interval and size for rolling executor logs not set, " +
-            s"rolling logs enabled with daily rolling.")
-          new DailyRollingFileAppender(inputStream, file, conf)
-      }
-    } else {
-      new FileAppender(inputStream, file)
+      case (None, None) =>                // if neither size nor interval has been set
+        new FileAppender(inputStream, file)
     }
   }
 }
@@ -385,48 +382,8 @@ private[spark] class RollingFileAppender(
  * names of configurations that configure rolling file appenders.
  */
 private[spark] object RollingFileAppender {
-  val ENABLE_PROPERTY = "spark.executor.rollingLogs.enabled"
   val INTERVAL_PROPERTY = "spark.executor.rollingLogs.interval"
   val SIZE_PROPERTY = "spark.executor.rollingLogs.size"
   val KEEP_LAST_PROPERTY = "spark.executor.rollingLogs.keepLastN"
 
 }
-
-/** RollingFileAppender that rolls over every minute */
-private[spark] class MinutelyRollingFileAppender(
-    inputStream: InputStream,
-    file: File,
-    conf: SparkConf
-  ) extends RollingFileAppender(
-    inputStream,
-    file,
-    new TimeBasedRollingPolicy(60 * 1000),
-    s"--YYYY-MM-dd--HH-mm",
-    conf
-  )
-
-/** RollingFileAppender that rolls over every hour */
-private[spark] class HourlyRollingFileAppender(
-    inputStream: InputStream,
-    file: File,
-    conf: SparkConf
-  ) extends RollingFileAppender(
-    inputStream,
-    file,
-    new TimeBasedRollingPolicy(60 * 60 * 1000),
-    s"--YYYY-MM-dd--HH",
-    conf
-  )
-
-/** RollingFileAppender that rolls over every day */
-private[spark] class DailyRollingFileAppender(
-    inputStream: InputStream,
-    file: File,
-    conf: SparkConf
-  ) extends RollingFileAppender(
-    inputStream,
-    file,
-    new TimeBasedRollingPolicy(24 * 60 * 60 * 1000),
-    s"--YYYY-MM-dd",
-    conf
-  )
