@@ -18,19 +18,22 @@
  */
 package org.apache.spark.streaming.flume
 
-import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingContext}
-import org.apache.spark.storage.StorageLevel
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
-import org.apache.spark.streaming.util.ManualClock
-import org.apache.flume.channel.MemoryChannel
-import org.apache.flume.Context
-import org.apache.flume.conf.Configurables
-import org.apache.spark.flume.sink.{SparkSinkConfig, SparkSink}
-import scala.collection.JavaConversions._
-import org.apache.flume.event.EventBuilder
-import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import java.net.InetSocketAddress
 import java.util.concurrent.{Callable, ExecutorCompletionService, Executors}
+
+import scala.collection.JavaConversions._
+import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+
+import org.apache.flume.Context
+import org.apache.flume.channel.MemoryChannel
+import org.apache.flume.conf.Configurables
+import org.apache.flume.event.EventBuilder
+
+import org.apache.spark.flume.sink.{SparkSinkConfig, SparkSink}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.util.ManualClock
+import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingContext}
 
 class FlumePollingReceiverSuite extends TestSuiteBase {
 

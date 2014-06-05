@@ -17,11 +17,13 @@
 
 package org.apache.spark.streaming.flume
 
+import java.net.InetSocketAddress
+
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import java.net.InetSocketAddress
+
 
 object FlumeUtils {
   /**

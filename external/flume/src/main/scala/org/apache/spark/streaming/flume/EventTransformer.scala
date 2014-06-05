@@ -18,8 +18,10 @@
 package org.apache.spark.streaming.flume
 
 import java.io.{ObjectOutput, ObjectInput}
-import org.apache.spark.util.Utils
+
 import scala.collection.JavaConversions._
+
+import org.apache.spark.util.Utils
 import org.apache.spark.Logging
 
 /**

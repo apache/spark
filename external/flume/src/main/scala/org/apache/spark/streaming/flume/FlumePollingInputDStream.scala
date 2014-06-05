@@ -16,23 +16,29 @@
  */
 package org.apache.spark.streaming.flume
 
-import scala.reflect.ClassTag
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.Logging
-import java.net.InetSocketAddress
-import java.util.concurrent.{TimeUnit, Executors}
-import org.apache.avro.ipc.NettyTransceiver
-import org.apache.avro.ipc.specific.SpecificRequestor
-import org.apache.spark.flume.{SparkSinkEvent, SparkFlumeProtocol}
-import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
-import com.google.common.util.concurrent.ThreadFactoryBuilder
+
 import java.io.{ObjectOutput, ObjectInput, Externalizable}
+import java.net.InetSocketAddress
 import java.nio.ByteBuffer
+import java.util.concurrent.{TimeUnit, Executors}
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable
+import scala.reflect.ClassTag
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.avro.ipc.NettyTransceiver
+import org.apache.avro.ipc.specific.SpecificRequestor
+import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
+
+import org.apache.spark.Logging
+import org.apache.spark.flume.{SparkSinkEvent, SparkFlumeProtocol}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.receiver.Receiver
+
+
 
 class FlumePollingInputDStream[T: ClassTag](
   @transient ssc_ : StreamingContext,
