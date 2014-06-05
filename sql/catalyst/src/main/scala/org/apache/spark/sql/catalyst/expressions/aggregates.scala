@@ -214,10 +214,10 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
   override def toString = s"AVG($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialSum = Alias(Sum(child), "PartialSum")()
-    val partialCount = Alias(Count(child), "PartialCount")()
-    val castedSum = Cast(Sum(partialSum.toAttribute), dataType)
-    val castedCount = Cast(Sum(partialCount.toAttribute), dataType)
+    val partialSum = Alias(Sum(Cast(child, dataType)), "PartialSum")()
+    val partialCount = Alias(Cast(Count(child), dataType), "PartialCount")()
+    val castedSum = Sum(partialSum.toAttribute)
+    val castedCount = Sum(partialCount.toAttribute)
 
     SplitEvaluation(
       Divide(castedSum, castedCount),

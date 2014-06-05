@@ -30,6 +30,17 @@ object TestData {
     (1 to 100).map(i => TestData(i, i.toString)))
   testData.registerAsTable("testData")
 
+  case class TestData1(a: Int, b: Int)
+  val testData1: SchemaRDD =
+  	TestSQLContext.sparkContext.parallelize(
+  	  TestData1(2147483644, 1) ::
+      TestData1(1, 2) ::
+      TestData1(2147483645, 1) ::
+      TestData1(2, 2) ::
+      TestData1(2147483646, 1) ::
+      TestData1(3, 2) :: Nil)
+  testData1.registerAsTable("testData1")
+  
   case class TestData2(a: Int, b: Int)
   val testData2: SchemaRDD =
     TestSQLContext.sparkContext.parallelize(
