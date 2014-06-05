@@ -50,7 +50,8 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
-    sqlConf.set("javax.jdo.option.ConnectionURL", s"jdbc:derby:;databaseName=$metastorePath;create=true")
+    sqlConf.set("javax.jdo.option.ConnectionURL",
+      s"jdbc:derby:;databaseName=$metastorePath;create=true")
     sqlConf.set("hive.metastore.warehouse.dir", warehousePath)
   }
 
