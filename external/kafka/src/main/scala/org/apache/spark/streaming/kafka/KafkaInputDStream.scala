@@ -126,7 +126,7 @@ class KafkaReceiver[
   }
 
   // Handles Kafka Messages
-  private class MessageHandler(stream: KafkaStream[K, V])
+  private class MessageHandler[K: ClassTag, V: ClassTag](stream: KafkaStream[K, V])
     extends Runnable {
     def run() {
       logInfo("Starting MessageHandler.")
