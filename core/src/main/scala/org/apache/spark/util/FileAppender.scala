@@ -181,7 +181,7 @@ private[spark] object FileAppender extends Logging {
 }
 
 /**
- * Defines the policy based on which [[org.apache.log4j.RollingFileAppender]] will
+ * Defines the policy based on which [[org.apache.spark.util.RollingFileAppender]] will
  * generate rolling files.
  */
 private[spark] trait RollingPolicy {
@@ -222,13 +222,16 @@ private[spark] class TimeBasedRollingPolicy(val rolloverIntervalMillis: Long)
 
   private def calculateNextRolloverTime(): Long = {
     val now = System.currentTimeMillis()
-    val targetTime = math.ceil(now.toDouble / rolloverIntervalMillis) * rolloverIntervalMillis
-    targetTime.toLong + 1  // +1 to make sure this falls in the next interval
+    val targetTime = (
+      math.ceil(now.toDouble / rolloverIntervalMillis) * rolloverIntervalMillis
+    ).toLong
+    logDebug(s"Next rollover time is $targetTime")
+    targetTime
   }
 }
 
 /**
- * Defines a [[org.apache.spark.util.RollingPolicy]] bywhich files will be rolled
+ * Defines a [[org.apache.spark.util.RollingPolicy]] b ywhich files will be rolled
  * over after reaching a particular size.
  */
 private[spark] class SizeBasedRollingPolicy(val rolloverSizeBytes: Long)
