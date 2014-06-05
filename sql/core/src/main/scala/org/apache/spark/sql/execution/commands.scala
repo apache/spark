@@ -26,12 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class SetCommandPhysical(
-    key: Option[String],
-    value: Option[String],
-    context: SQLContext)
-  extends LeafNode {
-
+case class SetCommandPhysical(key: Option[String], value: Option[String])
+                             (@transient context: SQLContext) extends LeafNode {
    def execute(): RDD[Row] = (key, value) match {
      case (Some(k), Some(v)) => context.emptyResult
      case (Some(k), None) =>
