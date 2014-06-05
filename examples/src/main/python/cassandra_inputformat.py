@@ -71,8 +71,8 @@ if __name__ == "__main__":
         "org.apache.cassandra.hadoop.cql3.CqlPagingInputFormat",
         "java.util.Map",
         "java.util.Map",
-        keyConverter="org.apache.spark.examples.CassandraCQLKeyConverter",
-        valueConverter="org.apache.spark.examples.CassandraCQLValueConverter",
+        keyConverter="org.apache.spark.examples.pythonconverters.CassandraCQLKeyConverter",
+        valueConverter="org.apache.spark.examples.pythonconverters.CassandraCQLValueConverter",
         conf=conf)
     output = cass_rdd.collect()
     for (k, v) in output:

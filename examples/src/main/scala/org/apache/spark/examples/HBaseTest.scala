@@ -17,21 +17,12 @@
 
 package org.apache.spark.examples
 
-import org.apache.hadoop.hbase.client.{Result, HBaseAdmin}
+import org.apache.hadoop.hbase.client.HBaseAdmin
 import org.apache.hadoop.hbase.{HBaseConfiguration, HTableDescriptor}
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 
 import org.apache.spark._
-import org.apache.spark.rdd.NewHadoopRDD
-import org.apache.spark.api.python.Converter
-import org.apache.hadoop.hbase.util.Bytes
 
-class HBaseConverter extends Converter {
-  override def convert(obj: Any) = {
-    val result = obj.asInstanceOf[Result]
-    Bytes.toStringBinary(result.value())
-  }
-}
 
 object HBaseTest {
   def main(args: Array[String]) {

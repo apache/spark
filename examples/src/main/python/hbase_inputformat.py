@@ -61,11 +61,12 @@ if __name__ == "__main__":
     sc = SparkContext(appName="HBaseInputFormat")
 
     conf = {"hbase.zookeeper.quorum": host, "hbase.mapreduce.inputtable": table}
-    hbase_rdd = sc.newAPIHadoopRDD("org.apache.hadoop.hbase.mapreduce.TableInputFormat",
-                                   "org.apache.hadoop.hbase.io.ImmutableBytesWritable",
-                                   "org.apache.hadoop.hbase.client.Result",
-                                   valueConverter="org.apache.spark.examples.HBaseConverter",
-                                   conf=conf)
+    hbase_rdd = sc.newAPIHadoopRDD(
+        "org.apache.hadoop.hbase.mapreduce.TableInputFormat",
+        "org.apache.hadoop.hbase.io.ImmutableBytesWritable",
+        "org.apache.hadoop.hbase.client.Result",
+        valueConverter="org.apache.spark.examples.pythonconverters.HBaseConverter",
+        conf=conf)
     output = hbase_rdd.collect()
     for (k, v) in output:
         print (k, v)
