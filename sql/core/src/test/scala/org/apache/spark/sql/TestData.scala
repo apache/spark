@@ -106,4 +106,12 @@ object TestData {
       NullInts(null) :: Nil
     )
   nullInts.registerAsTable("nullInts")
+
+  case class NullStrings(n: Int, s: String)
+  val nullStrings =
+    TestSQLContext.sparkContext.parallelize(
+      NullStrings(1, "abc") ::
+      NullStrings(2, "ABC") ::
+      NullStrings(3, null) :: Nil)
+  nullStrings.registerAsTable("nullStrings")
 }
