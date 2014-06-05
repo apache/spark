@@ -200,25 +200,24 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 
     logInfo("Allocating " + args.numExecutors + " executors.")
     // Wait until all containers have finished
-    // TODO: This is a bit ugly. Can we make it nicer?
-    // TODO: Handle container failure
-
     yarnAllocator.addResourceRequests(args.numExecutors)
-    val startTime = System.currentTimeMillis()
-    var usedTime = 0L
-    while (((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed))
-      && (usedTime < 1000L * 60 * 10)) {
+    while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
       yarnAllocator.allocateResources()
-      val numExecutorsFailed = yarnAllocator.getNumExecutorsFailed
-      if (numExecutorsFailed > 0) {
-        yarnAllocator.addResourceRequests(numExecutorsFailed)
-      }
+      allocateMissingExecutor()
       Thread.sleep(100)
-      usedTime = System.currentTimeMillis() - startTime
     }
 
     logInfo("All executors have launched.")
+  }
 
+  private def allocateMissingExecutor() {
+    val missingExecutorCount = args.numExecutors - yarnAllocator.getNumExecutorsRunning -
+      yarnAllocator.getNumPendingAllocate
+    if (missingExecutorCount > 0) {
+      logInfo("Allocating %d containers to make up for (potentially) lost containers".
+        format(missingExecutorCount))
+      yarnAllocator.addResourceRequests(missingExecutorCount)
+    }
   }
 
   // TODO: We might want to extend this to allocate more containers in case they die !
@@ -228,13 +227,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     val t = new Thread {
       override def run() {
         while (!driverClosed) {
-          val missingExecutorCount = args.numExecutors - yarnAllocator.getNumExecutorsRunning -
-            yarnAllocator.getNumPendingAllocate
-          if (missingExecutorCount > 0) {
-            logInfo("Allocating %d containers to make up for (potentially) lost containers".
-              format(missingExecutorCount))
-            yarnAllocator.addResourceRequests(missingExecutorCount)
-          }
+          allocateMissingExecutor()
           sendProgress()
           Thread.sleep(sleepTime)
         }
