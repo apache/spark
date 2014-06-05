@@ -24,6 +24,7 @@ import java.util.concurrent.{Executors, ThreadFactory}
 
 import org.apache.commons.io.FileUtils
 import org.apache.spark.{Logging, SparkConf}
+import RollingFileAppender._
 
 /**
  * Continuously appends the data from an input stream into the given file.
@@ -197,10 +198,17 @@ private[spark] trait RollingPolicy {
  * Defines a [[org.apache.spark.util.RollingPolicy]] by which files will be rolled
  * over at a fixed interval.
  */
-private[spark] class TimeBasedRollingPolicy(val rolloverIntervalMillis: Long)
-  extends RollingPolicy with Logging {
+private[spark] class TimeBasedRollingPolicy(
+    var rolloverIntervalMillis: Long,
+    checkIntervalConstraint: Boolean = true   // set to false while testing
+  ) extends RollingPolicy with Logging {
 
-  require(rolloverIntervalMillis >= 100)
+  import TimeBasedRollingPolicy._
+  if (checkIntervalConstraint && rolloverIntervalMillis < MINIMUM_INTERVAL_SECONDS * 1000L) {
+    logWarning(s"Rolling interval [${rolloverIntervalMillis/1000L} seconds] is too small. " +
+      s"Setting the interval to the acceptable minimum of $MINIMUM_INTERVAL_SECONDS seconds.")
+    rolloverIntervalMillis = MINIMUM_INTERVAL_SECONDS * 1000L
+  }
 
   @volatile private var nextRolloverTime = calculateNextRolloverTime()
 
@@ -227,14 +235,25 @@ private[spark] class TimeBasedRollingPolicy(val rolloverIntervalMillis: Long)
   }
 }
 
+private[spark] object TimeBasedRollingPolicy {
+  val MINIMUM_INTERVAL_SECONDS = 60L  // 1 minute
+}
+
 /**
- * Defines a [[org.apache.spark.util.RollingPolicy]] b ywhich files will be rolled
+ * Defines a [[org.apache.spark.util.RollingPolicy]] by which files will be rolled
  * over after reaching a particular size.
  */
-private[spark] class SizeBasedRollingPolicy(val rolloverSizeBytes: Long)
-  extends RollingPolicy with Logging {
+private[spark] class SizeBasedRollingPolicy(
+    var rolloverSizeBytes: Long,
+    checkSizeConstraint: Boolean = true     // set to false while testing
+  ) extends RollingPolicy with Logging {
 
-  require(rolloverSizeBytes >= 1000)
+  import SizeBasedRollingPolicy._
+  if (checkSizeConstraint && rolloverSizeBytes < MINIMUM_SIZE_BYTES) {
+    logWarning(s"Rolling size [$rolloverSizeBytes bytes] is too small. " +
+      s"Setting the size to the acceptable minimum of $MINIMUM_SIZE_BYTES bytes.")
+    rolloverSizeBytes = MINIMUM_SIZE_BYTES * 1000L
+  }
 
   @volatile private var bytesWrittenTillNow = 0L
 
@@ -253,6 +272,11 @@ private[spark] class SizeBasedRollingPolicy(val rolloverSizeBytes: Long)
     bytesWrittenTillNow += bytes
   }
 }
+
+private[spark] object SizeBasedRollingPolicy {
+  val MINIMUM_SIZE_BYTES = RollingFileAppender.DEFAULT_BUFFER_SIZE * 10
+}
+
 
 /**
  * Continuously appends data from input stream into the given file, and rolls
@@ -273,10 +297,8 @@ private[spark] class RollingFileAppender(
     val rollingPolicy: RollingPolicy,
     rollingFilePattern: String,
     conf: SparkConf,
-    bufferSize: Int = 8192
+    bufferSize: Int = DEFAULT_BUFFER_SIZE
   ) extends FileAppender(inputStream, activeFile, bufferSize) {
-
-  import RollingFileAppender._
 
   private val retainCount = conf.getInt(KEEP_LAST_PROPERTY, -1)
   private val formatter = new SimpleDateFormat(rollingFilePattern)
@@ -385,4 +407,5 @@ private[spark] object RollingFileAppender {
   val INTERVAL_PROPERTY = "spark.executor.rollingLogs.interval"
   val SIZE_PROPERTY = "spark.executor.rollingLogs.size"
   val KEEP_LAST_PROPERTY = "spark.executor.rollingLogs.keepLastN"
+  val DEFAULT_BUFFER_SIZE = 8192
 }
