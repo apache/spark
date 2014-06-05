@@ -22,13 +22,24 @@ import org.apache.spark.{Logging, SparkContext}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
 import scala.util.{Failure, Success, Try}
+import org.apache.spark.annotation.Experimental
 
 
+/**
+ * :: Experimental ::
+ * A trait for use with reading custom classes in PySpark. Implement this trait and add custom
+ * transformation code by overriding the convert method.
+ */
+@Experimental
 trait Converter {
   def convert(obj: Any): Any
 }
 
-object DefaultConverter extends Converter {
+/**
+ * A converter that handles conversion of common [[org.apache.hadoop.io.Writable]] objects.
+ * Other objects are passed through without conversion.
+ */
+private[python] object DefaultConverter extends Converter {
 
   /**
    * Converts a [[org.apache.hadoop.io.Writable]] to the underlying primitive, String or
@@ -63,7 +74,11 @@ object DefaultConverter extends Converter {
   }
 }
 
-class ConverterRegistry extends Logging {
+/**
+ * The converter registry holds a key and value converter, so that they are only instantiated
+ * once per RDD partition.
+ */
+private[python] class ConverterRegistry extends Logging {
 
   var keyConverter: Converter = DefaultConverter
   var valueConverter: Converter = DefaultConverter
@@ -92,7 +107,6 @@ class ConverterRegistry extends Logging {
         logError(s"Failed to register converter: $converterClass")
         throw err
     }
-
   }
 }
 
