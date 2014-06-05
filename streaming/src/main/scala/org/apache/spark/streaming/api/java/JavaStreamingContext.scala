@@ -142,11 +142,11 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    */
   def this(path: String, hadoopConf: Configuration) = this(new StreamingContext(path, hadoopConf))
 
-  @deprecated("use sparkContext", "0.9.0")
-  val sc: JavaSparkContext = sparkContext
-
   /** The underlying SparkContext */
   val sparkContext = new JavaSparkContext(ssc.sc)
+
+  @deprecated("use sparkContext", "0.9.0")
+  val sc: JavaSparkContext = sparkContext
 
   /**
    * Create an input stream from network source hostname:port. Data is received using

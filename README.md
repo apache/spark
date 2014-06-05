@@ -9,12 +9,13 @@ You can find the latest Spark documentation, including a programming
 guide, on the project webpage at <http://spark.apache.org/documentation.html>.
 This README file only contains basic setup instructions.
 
-
 ## Building Spark
 
 Spark is built on Scala 2.10. To build Spark and its example programs, run:
 
     ./sbt/sbt assembly
+
+(You do not need to do this if you downloaded a pre-built package.)
 
 ## Interactive Scala Shell
 
@@ -41,9 +42,9 @@ And run the following command, which should also return 1000:
 Spark also comes with several sample programs in the `examples` directory.
 To run one of them, use `./bin/run-example <class> [params]`. For example:
 
-    ./bin/run-example org.apache.spark.examples.SparkLR
+    ./bin/run-example SparkPi
 
-will run the Logistic Regression example locally.
+will run the Pi example locally.
 
 You can set the MASTER environment variable when running examples to submit
 examples to a cluster. This can be a mesos:// or spark:// URL, 

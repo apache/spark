@@ -233,6 +233,11 @@ private[hive] object HiveQl {
       }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
+      case e: NotImplementedError => sys.error(
+        s"""
+          |Unsupported language features in query: $sql
+          |${dumpTree(getAst(sql))}
+        """.stripMargin)
     }
   }
 
@@ -776,6 +781,10 @@ private[hive] object HiveQl {
   val COUNT = "(?i)COUNT".r
   val AVG = "(?i)AVG".r
   val SUM = "(?i)SUM".r
+  val MAX = "(?i)MAX".r
+  val MIN = "(?i)MIN".r
+  val UPPER = "(?i)UPPER".r
+  val LOWER = "(?i)LOWER".r
   val RAND = "(?i)RAND".r
   val AND = "(?i)AND".r
   val OR = "(?i)OR".r
@@ -812,7 +821,13 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) => CountDistinct(args.map(nodeToExpr))
     case Token("TOK_FUNCTION", Token(SUM(), Nil) :: arg :: Nil) => Sum(nodeToExpr(arg))
     case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
-
+    case Token("TOK_FUNCTION", Token(MAX(), Nil) :: arg :: Nil) => Max(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(MIN(), Nil) :: arg :: Nil) => Min(nodeToExpr(arg))
+    
+    /* System functions about string operations */
+    case Token("TOK_FUNCTION", Token(UPPER(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(LOWER(), Nil) :: arg :: Nil) => Lower(nodeToExpr(arg))
+    
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), StringType)
@@ -865,6 +880,17 @@ private[hive] object HiveQl {
       IsNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("IN", Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
+    case Token("TOK_FUNCTION",
+           Token("between", Nil) ::
+           Token("KW_FALSE", Nil) ::
+           target ::
+           minValue ::
+           maxValue :: Nil) =>
+
+      val targetExpression = nodeToExpr(target)
+      And(
+        GreaterThanOrEqual(targetExpression, nodeToExpr(minValue)),
+        LessThanOrEqual(targetExpression, nodeToExpr(maxValue)))
 
     /* Boolean Logic */
     case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))

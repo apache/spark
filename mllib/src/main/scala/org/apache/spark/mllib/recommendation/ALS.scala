@@ -32,6 +32,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
+import org.apache.spark.mllib.optimization.NNLS
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
@@ -156,6 +157,18 @@ class ALS private (
     this
   }
 
+  /** If true, do alternating nonnegative least squares. */
+  private var nonnegative = false
+
+  /**
+   * Set whether the least-squares problems solved at each iteration should have
+   * nonnegativity constraints.
+   */
+  def setNonnegative(b: Boolean): ALS = {
+    this.nonnegative = b
+    this
+  }
+
   /**
    * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
    * Returns a MatrixFactorizationModel with feature vectors for each user and product.
@@ -188,6 +201,10 @@ class ALS private (
     val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock, partitioner)
     val (productInLinks, productOutLinks) =
         makeLinkRDDs(numBlocks, ratingsByProductBlock, partitioner)
+    userInLinks.setName("userInLinks")
+    userOutLinks.setName("userOutLinks")
+    productInLinks.setName("productInLinks")
+    productOutLinks.setName("productOutLinks")
 
     // Initialize user and product factors randomly, but use a deterministic seed for each
     // partition so that fault recovery works
@@ -212,14 +229,14 @@ class ALS private (
         // perform ALS update
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
         // Persist users because it will be called twice.
-        users.persist()
+        users.setName(s"users-$iter").persist()
         val YtY = Some(sc.broadcast(computeYtY(users)))
         val previousProducts = products
         products = updateFeatures(users, userOutLinks, productInLinks, partitioner, rank, lambda,
           alpha, YtY)
         previousProducts.unpersist()
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
-        products.persist()
+        products.setName(s"products-$iter").persist()
         val XtX = Some(sc.broadcast(computeYtY(products)))
         val previousUsers = users
         users = updateFeatures(products, productOutLinks, userInLinks, partitioner, rank, lambda,
@@ -232,22 +249,24 @@ class ALS private (
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
         products = updateFeatures(users, userOutLinks, productInLinks, partitioner, rank, lambda,
           alpha, YtY = None)
+        products.setName(s"products-$iter")
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         users = updateFeatures(products, productOutLinks, userInLinks, partitioner, rank, lambda,
           alpha, YtY = None)
+        users.setName(s"users-$iter")
       }
     }
 
     // The last `products` will be used twice. One to generate the last `users` and the other to
     // generate `productsOut`. So we cache it for better performance.
-    products.persist()
+    products.setName("products").persist()
 
     // Flatten and cache the two final RDDs to un-block them
     val usersOut = unblockFactors(users, userOutLinks)
     val productsOut = unblockFactors(products, productOutLinks)
 
-    usersOut.persist()
-    productsOut.persist()
+    usersOut.setName("usersOut").persist()
+    productsOut.setName("productsOut").persist()
 
     // Materialize usersOut and productsOut.
     usersOut.count()
@@ -505,6 +524,8 @@ class ALS private (
       }
     }
 
+    val ws = if (nonnegative) NNLS.createWorkspace(rank) else null
+
     // Solve the least-squares problem for each user and return the new feature vectors
     Array.range(0, numUsers).map { index =>
       // Compute the full XtX matrix from the lower-triangular part we got above
@@ -517,10 +538,23 @@ class ALS private (
       }
       // Solve the resulting matrix, which is symmetric and positive-definite
       if (implicitPrefs) {
-        Solve.solvePositive(fullXtX.addi(YtY.get.value), userXy(index)).data
+        solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws)
       } else {
-        Solve.solvePositive(fullXtX, userXy(index)).data
+        solveLeastSquares(fullXtX, userXy(index), ws)
       }
+    }
+  }
+
+  /**
+   * Given A^T A and A^T b, find the x minimising ||Ax - b||_2, possibly subject
+   * to nonnegativity constraints if `nonnegative` is true.
+   */
+  def solveLeastSquares(ata: DoubleMatrix, atb: DoubleMatrix,
+      ws: NNLS.Workspace): Array[Double] = {
+    if (!nonnegative) {
+      Solve.solvePositive(ata, atb).data
+    } else {
+      NNLS.solve(ata, atb, ws)
     }
   }
 
@@ -550,7 +584,6 @@ class ALS private (
  * Top-level methods for calling Alternating Least Squares (ALS) matrix factorization.
  */
 object ALS {
-
   /**
    * Train a matrix factorization model given an RDD of ratings given by users to some products,
    * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the

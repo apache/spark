@@ -190,6 +190,7 @@ object HiveMetastoreTypes extends RegexParsers {
     "binary" ^^^ BinaryType |
     "boolean" ^^^ BooleanType |
     "decimal" ^^^ DecimalType |
+    "timestamp" ^^^ TimestampType |
     "varchar\\((\\d+)\\)".r ^^^ StringType
 
   protected lazy val arrayType: Parser[DataType] =
@@ -201,7 +202,7 @@ object HiveMetastoreTypes extends RegexParsers {
     }
 
   protected lazy val structField: Parser[StructField] =
-    "[a-zA-Z0-9]*".r ~ ":" ~ dataType ^^ {
+    "[a-zA-Z0-9_]*".r ~ ":" ~ dataType ^^ {
       case name ~ _ ~ tpe => StructField(name, tpe, nullable = true)
     }
 
