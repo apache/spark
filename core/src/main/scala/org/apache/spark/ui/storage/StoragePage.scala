@@ -55,7 +55,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
           {rdd.name}
         </a>
       </td>
-      <td>{rdd._storageLevel.description}
+      <td>{rdd.storageLevel.description}
       </td>
       <td>{rdd.numCachedPartitions}</td>
       <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
