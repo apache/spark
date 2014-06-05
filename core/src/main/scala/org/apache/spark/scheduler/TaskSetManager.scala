@@ -752,15 +752,12 @@ private[spark] class TaskSetManager(
   }
 
   // Re-compute pendingTasksWithNoPrefs since new preferred locations may become available
-  def executorAdded(execId: String, host: String) {
+  def executorAdded() {
     def newLocAvail(index: Int): Boolean = {
       for (loc <- tasks(index).preferredLocations) {
-        if (execId.equals(loc.executorId.getOrElse(null)) || host.equals(loc.host)) {
-          return true
-        }
-        val availRack = sched.getRackForHost(host)
-        val prefRack = sched.getRackForHost(loc.host)
-        if (prefRack.isDefined && prefRack.get.equals(availRack.getOrElse(null))) {
+        if (sched.hasExecutorsAliveOnHost(loc.host) ||
+          (loc.executorId.isDefined && sched.isExecutorAlive(loc.executorId.get)) ||
+          sched.getRackForHost(loc.host).isDefined) {
           return true
         }
       }
