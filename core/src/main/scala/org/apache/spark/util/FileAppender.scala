@@ -385,5 +385,4 @@ private[spark] object RollingFileAppender {
   val INTERVAL_PROPERTY = "spark.executor.rollingLogs.interval"
   val SIZE_PROPERTY = "spark.executor.rollingLogs.size"
   val KEEP_LAST_PROPERTY = "spark.executor.rollingLogs.keepLastN"
-
 }
