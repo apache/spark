@@ -159,14 +159,6 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SELECT * FROM src").toString
   }
 
-  test("HiveContext initializes its SQLConf to pick up its HiveConf's current params") {
-    import scala.collection.JavaConversions._ // implicits for java.util.Properties
-    val hiveconfSet: Set[(String, String)] = hiveconf.getAllProperties.toSeq.toSet
-    val sqlconfSet: Set[(String, String)] = sqlConf.getAll.toSet
-    assert(sqlconfSet.intersect(hiveconfSet) === sqlconfSet)
-    assert(sqlConf.getAll.size > 0, "The two confs should not be empty")
-  }
-
   test("parse HQL set commands") {
     // Adapted from its SQL counterpart.
     val testKey = "spark.sql.key.usedfortestonly"
