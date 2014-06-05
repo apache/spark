@@ -253,4 +253,4 @@ This has been a short guide to point out the main concerns you should know about
 Spark application -- most importantly, data serialization and memory tuning. For most programs,
 switching to Kryo serialization and persisting data in serialized form will solve most common
 performance issues. Feel free to ask on the
-[Spark mailing list](http://groups.google.com/group/spark-users) about other tuning best practices.
+[Spark mailing list](https://spark.apache.org/community.html) about other tuning best practices.

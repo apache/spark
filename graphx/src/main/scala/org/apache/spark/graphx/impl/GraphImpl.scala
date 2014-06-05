@@ -61,7 +61,11 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     this
   }
 
-  override def cache(): Graph[VD, ED] = persist(StorageLevel.MEMORY_ONLY)
+  override def cache(): Graph[VD, ED] = {
+    vertices.cache()
+    replicatedVertexView.edges.cache()
+    this
+  }
 
   override def unpersistVertices(blocking: Boolean = true): Graph[VD, ED] = {
     vertices.unpersist(blocking)
@@ -70,10 +74,14 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
-    val numPartitions = replicatedVertexView.edges.partitions.size
+    partitionBy(partitionStrategy, edges.partitions.size)
+  }
+
+  override def partitionBy(
+      partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED] = {
     val edTag = classTag[ED]
     val vdTag = classTag[VD]
-    val newEdges = new EdgeRDD(replicatedVertexView.edges.map { e =>
+    val newEdges = edges.withPartitionsRDD(edges.map { e =>
       val part: PartitionID = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
 
       // Should we be using 3-tuple or an optimized class
@@ -256,24 +264,33 @@ object GraphImpl {
   /** Create a graph from edges, setting referenced vertices to `defaultVertexAttr`. */
   def apply[VD: ClassTag, ED: ClassTag](
       edges: RDD[Edge[ED]],
-      defaultVertexAttr: VD): GraphImpl[VD, ED] = {
-    fromEdgeRDD(createEdgeRDD(edges), defaultVertexAttr)
+      defaultVertexAttr: VD,
+      edgeStorageLevel: StorageLevel,
+      vertexStorageLevel: StorageLevel): GraphImpl[VD, ED] = {
+    fromEdgeRDD(EdgeRDD.fromEdges(edges), defaultVertexAttr, edgeStorageLevel, vertexStorageLevel)
   }
 
   /** Create a graph from EdgePartitions, setting referenced vertices to `defaultVertexAttr`. */
   def fromEdgePartitions[VD: ClassTag, ED: ClassTag](
       edgePartitions: RDD[(PartitionID, EdgePartition[ED, VD])],
-      defaultVertexAttr: VD): GraphImpl[VD, ED] = {
-    fromEdgeRDD(new EdgeRDD(edgePartitions), defaultVertexAttr)
+      defaultVertexAttr: VD,
+      edgeStorageLevel: StorageLevel,
+      vertexStorageLevel: StorageLevel): GraphImpl[VD, ED] = {
+    fromEdgeRDD(EdgeRDD.fromEdgePartitions(edgePartitions), defaultVertexAttr, edgeStorageLevel,
+      vertexStorageLevel)
   }
 
   /** Create a graph from vertices and edges, setting missing vertices to `defaultVertexAttr`. */
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: RDD[(VertexId, VD)],
       edges: RDD[Edge[ED]],
-      defaultVertexAttr: VD): GraphImpl[VD, ED] = {
-    val edgeRDD = createEdgeRDD(edges)(classTag[ED], classTag[VD]).cache()
+      defaultVertexAttr: VD,
+      edgeStorageLevel: StorageLevel,
+      vertexStorageLevel: StorageLevel): GraphImpl[VD, ED] = {
+    val edgeRDD = EdgeRDD.fromEdges(edges)(classTag[ED], classTag[VD])
+      .withTargetStorageLevel(edgeStorageLevel).cache()
     val vertexRDD = VertexRDD(vertices, edgeRDD, defaultVertexAttr)
+      .withTargetStorageLevel(vertexStorageLevel).cache()
     GraphImpl(vertexRDD, edgeRDD)
   }
 
@@ -309,23 +326,13 @@ object GraphImpl {
    */
   private def fromEdgeRDD[VD: ClassTag, ED: ClassTag](
       edges: EdgeRDD[ED, VD],
-      defaultVertexAttr: VD): GraphImpl[VD, ED] = {
-    edges.cache()
-    val vertices = VertexRDD.fromEdges(edges, edges.partitions.size, defaultVertexAttr)
-    fromExistingRDDs(vertices, edges)
-  }
-
-  /** Create an EdgeRDD from a set of edges. */
-  private def createEdgeRDD[ED: ClassTag, VD: ClassTag](
-      edges: RDD[Edge[ED]]): EdgeRDD[ED, VD] = {
-    val edgePartitions = edges.mapPartitionsWithIndex { (pid, iter) =>
-      val builder = new EdgePartitionBuilder[ED, VD]
-      iter.foreach { e =>
-        builder.add(e.srcId, e.dstId, e.attr)
-      }
-      Iterator((pid, builder.toEdgePartition))
-    }
-    new EdgeRDD(edgePartitions)
+      defaultVertexAttr: VD,
+      edgeStorageLevel: StorageLevel,
+      vertexStorageLevel: StorageLevel): GraphImpl[VD, ED] = {
+    val edgesCached = edges.withTargetStorageLevel(edgeStorageLevel).cache()
+    val vertices = VertexRDD.fromEdges(edgesCached, edgesCached.partitions.size, defaultVertexAttr)
+      .withTargetStorageLevel(vertexStorageLevel)
+    fromExistingRDDs(vertices, edgesCached)
   }
 
 } // end of object GraphImpl

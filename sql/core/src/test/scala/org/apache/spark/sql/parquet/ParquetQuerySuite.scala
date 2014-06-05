@@ -201,7 +201,7 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
   }
 
   test("insert (appending) to same table via Scala API") {
-    sql("INSERT INTO testsource SELECT * FROM testsource").collect()
+    sql("INSERT INTO testsource SELECT * FROM testsource")
     val double_rdd = sql("SELECT * FROM testsource").collect()
     assert(double_rdd != null)
     assert(double_rdd.size === 30)
