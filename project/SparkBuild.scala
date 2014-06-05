@@ -32,7 +32,7 @@ import scala.collection.JavaConversions._
 // import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
-  val SPARK_VERSION = "1.0.0"
+  val SPARK_VERSION = "1.0.1-SNAPSHOT"
   val SPARK_VERSION_SHORT = SPARK_VERSION.replaceAll("-SNAPSHOT", "")
 
   // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
