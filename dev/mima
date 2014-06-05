@@ -31,4 +31,5 @@ if [ $ret_val != 0 ]; then
   echo "NOTE: Exceptions to binary compatibility can be added in project/MimaExcludes.scala"
 fi
 
+rm -f .generated-mima-excludes
 exit $ret_val
