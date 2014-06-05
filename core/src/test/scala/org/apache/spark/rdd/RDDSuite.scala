@@ -73,10 +73,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val size = 100
     val uniformDistro = for (i <- 1 to 100000) yield i % size
     val simpleRdd = sc.makeRDD(uniformDistro)
-    assert(error(simpleRdd.countApproxDistinct(0.2), size) < 0.2)
-    assert(error(simpleRdd.countApproxDistinct(0.05), size) < 0.05)
-    assert(error(simpleRdd.countApproxDistinct(0.01), size) < 0.01)
-    assert(error(simpleRdd.countApproxDistinct(0.001), size) < 0.001)
+    assert(error(simpleRdd.countApproxDistinct(4, 0), size) < 0.4)
+    assert(error(simpleRdd.countApproxDistinct(8, 0), size) < 0.1)
   }
 
   test("SparkContext.union") {
@@ -351,6 +349,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     intercept[IllegalArgumentException] {
       nums.zip(sc.parallelize(1 to 4, 1)).collect()
+    }
+
+    intercept[SparkException] {
+      nums.zip(sc.parallelize(1 to 5, 2)).collect()
     }
   }
 
