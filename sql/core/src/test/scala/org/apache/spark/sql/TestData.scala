@@ -32,8 +32,8 @@ object TestData {
 
   case class TestData1(a: Int, b: Int)
   val testData1: SchemaRDD =
-  	TestSQLContext.sparkContext.parallelize(
-  	  TestData1(2147483644, 1) ::
+    TestSQLContext.sparkContext.parallelize(
+      TestData1(2147483644, 1) ::
       TestData1(1, 2) ::
       TestData1(2147483645, 1) ::
       TestData1(2, 2) ::
