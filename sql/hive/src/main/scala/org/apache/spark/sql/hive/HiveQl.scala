@@ -207,16 +207,14 @@ private[hive] object HiveQl {
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {
     try {
-      if (sql.toLowerCase.startsWith("set")) {
-        // Keep this part the same as SqlParser#apply().
-        val kvPair = sql.drop(3).split("=")
-        if (kvPair(0).trim == "") { // "set"
-          SetCommand(None, None)
-        } else if (!sql.contains("=")) { // "set key"
-          SetCommand(Some(kvPair(0).trim), None)
-        } else { // "set key=val"
-        val valStr = if (kvPair.size > 1) kvPair(1).trim else ""
-          SetCommand(Some(kvPair(0).trim), Some(valStr))
+      if (sql.trim.toLowerCase.startsWith("set")) {
+        sql.trim.drop(3).split("=", 2).map(_.trim) match {
+          case Array("") => // "set"
+            SetCommand(None, None)
+          case Array(key) => // "set key"
+            SetCommand(Some(key), None)
+          case Array(key, value) => // "set key=value"
+            SetCommand(Some(key), Some(value))
         }
       } else if (sql.toLowerCase.startsWith("add jar")) {
         AddJar(sql.drop(8))
