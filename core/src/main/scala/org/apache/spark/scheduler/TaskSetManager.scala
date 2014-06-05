@@ -54,7 +54,14 @@ private[spark] class TaskSetManager(
     clock: Clock = SystemClock)
   extends Schedulable with Logging
 {
+  // Remember when this TaskSetManager is created
+  val creationTime = clock.getTime()
   val conf = sched.sc.conf
+
+  // The period we wait for new executors to come up
+  // After this period, tasks in pendingTasksWithNoPrefs will be considered as PROCESS_LOCAL
+  private val WAIT_NEW_EXEC_TIMEOUT = conf.getLong("spark.scheduler.waitNewExecutorTime", 3000L)
+  private var waitingNewExec = true
 
   /*
    * Sometimes if an executor is dead or in an otherwise invalid state, the driver
@@ -118,7 +125,7 @@ private[spark] class TaskSetManager(
   private val pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
 
   // Set containing pending tasks with no locality preferences.
-  val pendingTasksWithNoPrefs = new ArrayBuffer[Int]
+  var pendingTasksWithNoPrefs = new ArrayBuffer[Int]
 
   // Set containing all pending tasks (also used as a stack, as above).
   val allPendingTasks = new ArrayBuffer[Int]
@@ -148,7 +155,6 @@ private[spark] class TaskSetManager(
 
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
-  val delaySchedule = conf.getBoolean("spark.schedule.delaySchedule", true)
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i)
   }
@@ -183,20 +189,21 @@ private[spark] class TaskSetManager(
     for (loc <- tasks(index).preferredLocations) {
       for (execId <- loc.executorId) {
         if (sched.isExecutorAlive(execId)) {
-          addTo(pendingTasksForExecutor.getOrElseUpdate(execId, new ArrayBuffer))
           hadAliveLocations = true
         }
+        addTo(pendingTasksForExecutor.getOrElseUpdate(execId, new ArrayBuffer))
       }
       if (sched.hasExecutorsAliveOnHost(loc.host)) {
-        addTo(pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer))
-        for (rack <- sched.getRackForHost(loc.host)) {
-          addTo(pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer))
-        }
+        hadAliveLocations = true
+      }
+      addTo(pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer))
+      for (rack <- sched.getRackForHost(loc.host)) {
+        addTo(pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer))
         hadAliveLocations = true
       }
     }
 
-    if (tasks(index).preferredLocations.isEmpty || (!delaySchedule && !hadAliveLocations)) {
+    if (!hadAliveLocations) {
       // Even though the task might've had preferred locations, all of those hosts or executors
       // are dead; put it in the no-prefs list so we can schedule it elsewhere right away.
       addTo(pendingTasksWithNoPrefs)
@@ -362,7 +369,8 @@ private[spark] class TaskSetManager(
     }
 
     // Look for no-pref tasks after rack-local tasks since they can run anywhere.
-    for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)) {
+    for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)
+         if (!waitingNewExec || tasks(index).preferredLocations.isEmpty)) {
       return Some((index, TaskLocality.PROCESS_LOCAL))
     }
 
@@ -391,6 +399,9 @@ private[spark] class TaskSetManager(
       var allowedLocality = getAllowedLocalityLevel(curTime)
       if (allowedLocality > maxLocality) {
         allowedLocality = maxLocality   // We're not allowed to search for farther-away tasks
+      }
+      if (waitingNewExec && curTime - creationTime > WAIT_NEW_EXEC_TIMEOUT) {
+        waitingNewExec = false
       }
 
       findTask(execId, host, allowedLocality) match {
@@ -740,12 +751,22 @@ private[spark] class TaskSetManager(
     levels.toArray
   }
 
-  // Re-compute the pending lists. This should be called when new executor is added
-  def reAddPendingTasks() {
-    logInfo("Re-computing pending task lists.")
-    for (i <- (0 until numTasks).reverse.filter(index => copiesRunning(index) == 0
-      && !successful(index))) {
-      addPendingTask(i, readding = true)
+  // Re-compute pendingTasksWithNoPrefs since new preferred locations may become available
+  def executorAdded(execId: String, host: String) {
+    def newLocAvail(index: Int): Boolean = {
+      for (loc <- tasks(index).preferredLocations) {
+        if (execId.equals(loc.executorId.getOrElse(null)) || host.equals(loc.host)) {
+          return true
+        }
+        val availRack = sched.getRackForHost(host)
+        val prefRack = sched.getRackForHost(loc.host)
+        if (prefRack.isDefined && prefRack.get.equals(availRack.getOrElse(null))) {
+          return true
+        }
+      }
+      false
     }
+    logInfo("Re-computing pending task lists.")
+    pendingTasksWithNoPrefs = pendingTasksWithNoPrefs.filter(!newLocAvail(_))
   }
 }

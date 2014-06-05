@@ -111,7 +111,6 @@ private[spark] class TaskSchedulerImpl(
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
 
-  private val delaySchedule = conf.getBoolean("spark.schedule.delaySchedule", true)
 
   override def setDAGScheduler(dagScheduler: DAGScheduler) {
     this.dagScheduler = dagScheduler
@@ -211,15 +210,16 @@ private[spark] class TaskSchedulerImpl(
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     SparkEnv.set(sc.env)
 
+    val sortedTaskSets = rootPool.getSortedTaskSetQueue
     // Mark each slave as alive and remember its hostname
-    // Also track if new executor is added
-    var newExecAvail = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
-        newExecAvail = true
+        for (taskSet <- sortedTaskSets) {
+          taskSet.executorAdded(o.executorId, o.host)
+        }
       }
     }
 
@@ -228,13 +228,9 @@ private[spark] class TaskSchedulerImpl(
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
-    val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
-      if (delaySchedule && newExecAvail) {
-        taskSet.reAddPendingTasks()
-      }
     }
 
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
