@@ -18,11 +18,11 @@
 package org.apache.spark.sql
 package hive
 
-import scala.language.implicitConversions
-
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.util.{ArrayList => JArrayList}
 
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.hive.conf.HiveConf
@@ -32,21 +32,12 @@ import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.catalyst.types.StructType
-import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
-import org.apache.spark.sql.catalyst.plans.logical.ExplainCommand
-import org.apache.spark.sql.catalyst.types.ArrayType
-import org.apache.spark.sql.catalyst.plans.logical.LowerCaseSchema
-import org.apache.spark.sql.catalyst.types.MapType
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 /**
  * Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
