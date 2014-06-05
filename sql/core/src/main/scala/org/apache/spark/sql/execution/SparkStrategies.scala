@@ -177,8 +177,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    // TODO: Set
-    val numPartitions = 200
+    def numPartitions = sqlConf.get("spark.sql.shufflePartitions", "200").toInt
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Distinct(child) =>
         execution.Aggregate(
