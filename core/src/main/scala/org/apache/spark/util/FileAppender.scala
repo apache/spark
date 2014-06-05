@@ -315,7 +315,6 @@ private[spark] class RollingFileAppender(
   /** Stop the appender */
   override def stop() {
     super.stop()
-    //cleanupTask.cancel(true)
     executor.shutdownNow()
   }
 
