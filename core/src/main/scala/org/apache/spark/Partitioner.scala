@@ -101,7 +101,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   private var ordering = implicitly[Ordering[K]]
 
   // An array of upper bounds for the first (partitions - 1) partitions
-  private var rangeBounds: Array[K] = {
+  var rangeBounds: Array[K] = {
     if (partitions == 1) {
       Array()
     } else {
@@ -155,13 +155,14 @@ class RangePartitioner[K : Ordering : ClassTag, V](
           ordering = ds.readObject[Ordering[K]]()
           implicit val classTag = ds.readObject[ClassTag[Array[K]]]()
           rangeBounds = ds.readObject[Array[K]]()(classTag)
+          binarySearch = CollectionsUtils.makeBinarySearch[K]
         }
     }
   }
 
   def numPartitions = partitions
 
-  private val binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
+  private var binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
 
   def getPartition(key: Any): Int = {
     val k = key.asInstanceOf[K]

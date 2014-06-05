@@ -18,45 +18,55 @@
 
 package org.apache.spark.examples.terasort
 
-import org.apache.hadoop.io.BytesWritable
-
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.ShuffledRDD
+
+
+class RecordWrapper(val bytes: Array[Byte]) extends Product2[Array[Byte], Array[Byte]] {
+  override def _1 = bytes
+  override def _2 = bytes
+  override def canEqual(that: Any): Boolean = ???
+}
 
 
 object TeraSort {
-
 
   def main(args: Array[String]) {
 
     if (args.length < 3) {
       println("usage:")
-      println("MASTER=[spark-master] bin/run-example org.apache.spark.examples.terasort.GenSort " +
-        " [num-parts] [records-per-part] [output-parts]")
+      println("MASTER=[spark-master] TeraSort " +
+        " [num-records] [input-parts] [output-parts]")
       System.exit(0)
     }
 
     // Process command line arguments
     val master = sys.env.getOrElse("MASTER", "local")
-    val parts = args(0).toInt
-    val recordsPerPartition = args(1).toInt
-    val numRecords = parts.toLong * recordsPerPartition.toLong
+    val numRecords = args(0).toLong
+    val parts = args(1).toInt
+    val recordsPerPartition = numRecords / parts.toLong
     val outputParts = args(2).toInt
 
+    println("===========================================================================")
+    println("===========================================================================")
     println(s"Total number of records: $numRecords")
     println(s"Number of input partitions: $parts")
     println(s"Number of output partitions: $outputParts")
+    println("Number of records/input partition: " + (numRecords / parts))
+    println("Number of records/output partition: " + (numRecords / outputParts))
     println("Total sorting size: " + (numRecords * 100) + " bytes")
+    println("===========================================================================")
+    println("===========================================================================")
+
+    assert(recordsPerPartition < Int.MaxValue, s"records per partition > ${Int.MaxValue}")
 
     val conf = new SparkConf().setMaster(master).setAppName(s"TeraSort ($numRecords records)")
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator", "org.apache.spark.examples.terasort.TeraSortKryoRegistrator")
     val sc = new SparkContext(conf)
 
     // Generate the data on the fly.
     val dataset = sc.parallelize(1 to parts, parts).mapPartitionsWithIndex { case (index, _) =>
       val one = new Unsigned16(1)
-      val firstRecordNumber = new Unsigned16(index * recordsPerPartition)
+      val firstRecordNumber = new Unsigned16(index.toLong * recordsPerPartition.toLong)
       val recordsToGenerate = new Unsigned16(recordsPerPartition)
 
       val recordNumber = new Unsigned16(firstRecordNumber)
@@ -66,30 +76,47 @@ object TeraSort {
       val rand = Random16.skipAhead(firstRecordNumber)
       val row: Array[Byte] = new Array[Byte](100)
 
-      Iterator.tabulate(recordsPerPartition) { offset =>
+      Iterator.tabulate(recordsPerPartition.toInt) { offset =>
         Random16.nextRand(rand)
         generateRecord(row, rand, recordNumber)
         recordNumber.add(one)
-        row
+        new RecordWrapper(row)
       }
     }
 
+    val partitioner = new TeraSortPartitioner(outputParts)
+    val output = new ShuffledRDD[Array[Byte], Array[Byte], RecordWrapper](dataset, partitioner)
+    output.setSerializer(new TeraSortSerializer)
+
+    println("Number of records after sorting: " + output.count())
+
     // Convert the data to key, value pair to be sorted
-    val pairs = dataset.map { row =>
-      val key = new BytesWritable
-      val value = new Array[Byte](90)
-      key.set(row, 0, 10)
-      System.arraycopy(row, 10, value, 0, 90)
-      (key, value)
-    }
+//    val pairs = dataset.map { row =>
+//      val key = new Array[Byte](10)
+//      val value = new Array[Byte](90)
+//      System.arraycopy(row, 0, key, 0, 10)
+//      System.arraycopy(row, 10, value, 0, 90)
+//      (key, value)
+//    }
 
-    // Now sort the data, and count the number of records after sorting.
-    implicit val ordering = new Ordering[BytesWritable] {
-      override def compare(x: BytesWritable, y: BytesWritable): Int = x.compareTo(y)
-    }
+//    val p = new TeraSortPartitioner(100)
+//    pairs.map { case (key, value) =>
+//      p.getPartition(key)
+//    }.countByValue().foreach(println)
+//
+//    // Now sort the data, and count the number of records after sorting.
+//    implicit val ordering = new Ordering[BytesWritable] {
+//      override def compare(x: BytesWritable, y: BytesWritable): Int = x.compareTo(y)
+//    }
+//
+//    val sorted = pairs.sortByKey(ascending = true, numPartitions = outputParts)
+//
+//    println("ranges: " + sorted.partitioner.get.asInstanceOf[RangePartitioner[_, _]].rangeBounds.toSeq)
+//
+//    val finalCount = sorted.count()
+//    println("Number of records after sorting: " + finalCount)
 
-    val finalCount = pairs.sortByKey(ascending = true, numPartitions = outputParts).count()
-    println("Number of records after sorting: " + finalCount)
+    Thread.sleep(10* 3600 * 1000)
   }
 
   /**
