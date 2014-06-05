@@ -38,7 +38,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CallSite, Utils}
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -211,7 +211,7 @@ class DAGScheduler(
       numTasks: Int,
       shuffleDep: Option[ShuffleDependency[_,_]],
       jobId: Int,
-      callSite: Option[String] = None)
+      callSite: Option[CallSite] = None)
     : Stage =
   {
     val id = nextStageId.getAndIncrement()
@@ -234,7 +234,7 @@ class DAGScheduler(
       numTasks: Int,
       shuffleDep: ShuffleDependency[_,_],
       jobId: Int,
-      callSite: Option[String] = None)
+      callSite: Option[CallSite] = None)
     : Stage =
   {
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId, callSite)
@@ -412,7 +412,7 @@ class DAGScheduler(
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
-      callSite: String,
+      callSite: CallSite,
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
       properties: Properties = null): JobWaiter[U] =
@@ -442,7 +442,7 @@ class DAGScheduler(
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
-      callSite: String,
+      callSite: CallSite,
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
       properties: Properties = null)
@@ -451,7 +451,7 @@ class DAGScheduler(
     waiter.awaitResult() match {
       case JobSucceeded => {}
       case JobFailed(exception: Exception) =>
-        logInfo("Failed to run " + callSite)
+        logInfo("Failed to run " + callSite.short)
         throw exception
     }
   }
@@ -460,7 +460,7 @@ class DAGScheduler(
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
-      callSite: String,
+      callSite: CallSite,
       timeout: Long,
       properties: Properties = null)
     : PartialResult[R] =
@@ -665,7 +665,7 @@ class DAGScheduler(
       func: (TaskContext, Iterator[_]) => _,
       partitions: Array[Int],
       allowLocal: Boolean,
-      callSite: String,
+      callSite: CallSite,
       listener: JobListener,
       properties: Properties = null)
   {
@@ -684,7 +684,7 @@ class DAGScheduler(
       val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
       clearCacheLocs()
       logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".format(
-        job.jobId, callSite, partitions.length, allowLocal))
+        job.jobId, callSite.short, partitions.length, allowLocal))
       logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
       logInfo("Parents of final stage: " + finalStage.parents)
       logInfo("Missing parents: " + getMissingParentStages(finalStage))

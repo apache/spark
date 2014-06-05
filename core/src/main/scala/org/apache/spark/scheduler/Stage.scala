@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.CallSite
 
 /**
  * A stage is a set of independent tasks all computing the same function that need to run as part
@@ -43,7 +44,7 @@ private[spark] class Stage(
     val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
     val jobId: Int,
-    callSite: Option[String])
+    callSite: Option[CallSite])
   extends Logging {
 
   val isShuffleMap = shuffleDep.isDefined
@@ -100,7 +101,8 @@ private[spark] class Stage(
     id
   }
 
-  val name = callSite.getOrElse(rdd.getCreationSite)
+  val name = callSite.map(_.short).getOrElse(rdd.getCreationSite)
+  val details = callSite.map(_.long).getOrElse("")
 
   override def toString = "Stage " + id
 
