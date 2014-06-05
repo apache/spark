@@ -20,11 +20,12 @@ package org.apache.spark.examples.terasort
 
 import org.apache.hadoop.io.BytesWritable
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 
 
 object TeraSort {
+
 
   def main(args: Array[String]) {
 
@@ -35,6 +36,7 @@ object TeraSort {
       System.exit(0)
     }
 
+    // Process command line arguments
     val master = sys.env.getOrElse("MASTER", "local")
     val parts = args(0).toInt
     val recordsPerPartition = args(1).toInt
@@ -46,8 +48,12 @@ object TeraSort {
     println(s"Number of output partitions: $outputParts")
     println("Total sorting size: " + (numRecords * 100) + " bytes")
 
-    val sc = new SparkContext(master, s"TeraSort ($numRecords records)")
+    val conf = new SparkConf().setMaster(master).setAppName(s"TeraSort ($numRecords records)")
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator", "org.apache.spark.examples.terasort.TeraSortKryoRegistrator")
+    val sc = new SparkContext(conf)
 
+    // Generate the data on the fly.
     val dataset = sc.parallelize(1 to parts, parts).mapPartitionsWithIndex { case (index, _) =>
       val one = new Unsigned16(1)
       val firstRecordNumber = new Unsigned16(index * recordsPerPartition)
@@ -68,6 +74,7 @@ object TeraSort {
       }
     }
 
+    // Convert the data to key, value pair to be sorted
     val pairs = dataset.map { row =>
       val key = new BytesWritable
       val value = new Array[Byte](90)
@@ -76,10 +83,13 @@ object TeraSort {
       (key, value)
     }
 
+    // Now sort the data, and count the number of records after sorting.
     implicit val ordering = new Ordering[BytesWritable] {
       override def compare(x: BytesWritable, y: BytesWritable): Int = x.compareTo(y)
     }
-    pairs.sortByKey(ascending = true, numPartitions = outputParts).count()
+
+    val finalCount = pairs.sortByKey(ascending = true, numPartitions = outputParts).count()
+    println("Number of records after sorting: " + finalCount)
   }
 
   /**
