@@ -272,6 +272,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected abstract class QueryExecution {
     def logical: LogicalPlan
 
+    def eagerlyProcess(plan: LogicalPlan): RDD[Row] = plan match {
+      case SetCommand(key, value) =>
+        // Only this case needs to be executed eagerly. The other cases will
+        // be taken care of when the actual results are being extracted.
+        // In the case of HiveContext, sqlConf is overridden to also pass the
+        // pair into its HiveConf.
+        if (key.isDefined && value.isDefined) {
+          sqlConf.set(key.get, value.get)
+        }
+        // It doesn't matter what we return here, since this is only used
+        // to force the evaluation to happen eagerly.  To query the results,
+        // one must use SchemaRDD operations to extract them.
+        emptyResult
+      case _ => executedPlan.execute()
+    }
+
     lazy val analyzed = analyzer(logical)
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
@@ -281,14 +297,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     /** Internal version of the RDD. Avoids copies and has no schema */
     lazy val toRdd: RDD[Row] = {
       logical match {
-        case SetCommand(key, value) =>
-          if (key.isDefined && value.isDefined) {
-            sqlConf.set(key.get, value.get)
-          }
-          // It doesn't matter what we return here, since toRdd is used
-          // to force the evaluation happen eagerly.  To query the results,
-          // one must use SchemaRDD operations to extract them.
-          emptyResult
+        case s: SetCommand => eagerlyProcess(s)
         case _ => executedPlan.execute()
       }
     }

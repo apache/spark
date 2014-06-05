@@ -257,7 +257,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       optimizer(catalog.PreInsertionCasts(catalog.CreateTables(analyzed)))
 
     override lazy val toRdd: RDD[Row] = {
-
       def processCmd(cmd: String): RDD[Row] = {
         val output = runSqlHive(cmd)
         if (output.size == 0) {
@@ -268,21 +267,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }
       }
 
-      analyzed match {
-        case SetCommand(key, value) =>
-          // Record the set command inside SQLConf, as well as have Hive execute it.
-          if (key.isDefined && value.isDefined) {
-            sqlConf.set(key.get, value.get)
-            processCmd(s"SET $key=$value")
-          }
-          // Only the above case needs to be executed in Hive eagerly (i.e. now).
-          // The other cases will be taken care of when the actual results are
-          // being extracted.
-          emptyResult
-        case NativeCommand(cmd) =>
-          processCmd(cmd)
-        case _ =>
-          executedPlan.execute().map(_.copy())
+      logical match {
+        case s: SetCommand => eagerlyProcess(s)
+        case _ => analyzed match {
+          case NativeCommand(cmd) => processCmd(cmd)
+          case _ => executedPlan.execute().map(_.copy())
+        }
       }
     }
 
