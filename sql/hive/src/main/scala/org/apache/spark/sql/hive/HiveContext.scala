@@ -59,10 +59,8 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
-    // TODO: refactor this so we can work with other databases.
-    runSqlHive(
-      s"set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$metastorePath;create=true")
-    runSqlHive("set hive.metastore.warehouse.dir=" + warehousePath)
+    sqlConf.set("javax.jdo.option.ConnectionURL", s"jdbc:derby:;databaseName=$metastorePath;create=true")
+    sqlConf.set("hive.metastore.warehouse.dir", warehousePath)
   }
 
   configure() // Must be called before initializing the catalog below.
@@ -134,12 +132,19 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   /**
-   * Contract: after initialization of this HiveContext, these two confs should
-   * contain exactly the same key-value pairs throughout the life time of `this`.
+   * Any properties set by sqlConf.set() or a SET command inside hql() or sql()
+   * will be set in the SQLConf, *as well as* getting set in the HiveConf.  In
+   * other words, the SQLConf properties will be a subset of the HiveConf properties
+   * throughout the life time of this session.
    */
   @transient protected[hive] lazy val hiveconf = new HiveConf(classOf[SessionState])
-  @transient override lazy val sqlConf: SQLConf = new SQLConf(hiveconf.getAllProperties)
-
+  @transient override lazy val sqlConf: SQLConf = new SQLConf(hiveconf.getAllProperties) {
+    override def set(key: String, value: String): SQLConf = {
+      hiveconf.set(key, value)
+      settings(key) = value
+      this
+    }
+  }
   @transient protected[hive] lazy val sessionState = new SessionState(hiveconf)
 
   sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")

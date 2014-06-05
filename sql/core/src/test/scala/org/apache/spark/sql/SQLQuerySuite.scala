@@ -336,7 +336,7 @@ class SQLQuerySuite extends QueryTest {
         (6, "f")))
   }
 
-  test("SET commands using sql()") {
+  test("SET commands semantics using sql()") {
     sqlConf.clear()
     val testKey = "test.key.0"
     val testVal = "test.val.0"
@@ -345,6 +345,7 @@ class SQLQuerySuite extends QueryTest {
     // "set" itself returns all config variables currently specified in SQLConf.
     assert(sql("set").collect().size == 0)
 
+    // "set key=val"
     sql(s"SET $testKey=$testVal")
     checkAnswer(
       sql("SET"),

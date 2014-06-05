@@ -33,8 +33,7 @@ case class SetCommandPhysical(
   extends LeafNode {
 
    def execute(): RDD[Row] = (key, value) match {
-     case (Some(k), Some(v)) =>
-       context.emptyResult
+     case (Some(k), Some(v)) => context.emptyResult
      case (Some(k), None) =>
        val resultString = context.sqlConf.getOption(k) match {
          case Some(v) => s"$k=$v"
@@ -48,8 +47,7 @@ case class SetCommandPhysical(
        }.toSeq
        // Assume config parameters can fit into one split (machine) ;)
        context.sparkContext.parallelize(rows, 1)
-     case _ =>
-       context.emptyResult
+     case _ => context.emptyResult
    }
 
    def output: Seq[Attribute] = Seq.empty // TODO: right thing?

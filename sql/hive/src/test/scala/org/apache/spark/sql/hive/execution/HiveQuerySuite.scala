@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.Row
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -158,10 +159,17 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SELECT * FROM src").toString
   }
 
+  test("HiveContext initializes its SQLConf to pick up its HiveConf's current params") {
+    import scala.collection.JavaConversions._ // implicits for java.util.Properties
+    val hiveconfSet: Set[(String, String)] = hiveconf.getAllProperties.toSeq.toSet
+    val sqlconfSet: Set[(String, String)] = sqlConf.getAll.toSet
+    assert(sqlconfSet.intersect(hiveconfSet) === sqlconfSet)
+    assert(sqlConf.getAll.size > 0, "The two confs should not be empty")
+  }
+
   test("parse HQL set commands") {
-    // Adapted from SQLConfSuite.
-    sqlConf.clear()
-    val testKey = "spark.sql.key"
+    // Adapted from its SQL counterpart.
+    val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "val0,val_1,val2.3,my_table"
 
     hql(s"set $testKey=$testVal")
@@ -177,8 +185,60 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     hql(s"set $testKey=")
     assert(sqlConf.get(testKey, "0") == "")
+  }
+
+  test("SET commands semantics for a HiveContext") {
+    // Adapted from its SQL counterpart.
+    val testKey = "spark.sql.key.usedfortestonly"
+    var testVal = "test.val.0"
+    val nonexistentKey = "nonexistent"
+    def fromRows(row: Array[Row]): Array[String] = row.map(_.getString(0))
 
     sqlConf.clear()
+
+    // "set" itself returns all config variables currently specified in SQLConf.
+    assert(hql("set").collect().size == 0)
+
+    // "set key=val"
+    hql(s"SET $testKey=$testVal")
+    assert(fromRows(hql("SET").collect()) sameElements Array(s"$testKey=$testVal"))
+    assert(hiveconf.get(testKey, "") == testVal)
+
+    hql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    assert(fromRows(hql("SET").collect()) sameElements
+      Array(
+        s"$testKey=$testVal",
+        s"${testKey + testKey}=${testVal + testVal}"))
+    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+
+    // "set key"
+    assert(fromRows(hql(s"SET $testKey").collect()) sameElements
+      Array(s"$testKey=$testVal"))
+    assert(fromRows(hql(s"SET $nonexistentKey").collect()) sameElements
+      Array(s"$nonexistentKey is undefined"))
+
+    // Assert that sql() should have the same effects as hql() by repeating the above using sql().
+    sqlConf.clear()
+    assert(sql("set").collect().size == 0)
+
+    sql(s"SET $testKey=$testVal")
+    assert(fromRows(sql("SET").collect()) sameElements Array(s"$testKey=$testVal"))
+    assert(hiveconf.get(testKey, "") == testVal)
+
+    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    assert(fromRows(sql("SET").collect()) sameElements
+      Array(
+        s"$testKey=$testVal",
+        s"${testKey + testKey}=${testVal + testVal}"))
+    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+
+    assert(fromRows(sql(s"SET $testKey").collect()) sameElements
+      Array(s"$testKey=$testVal"))
+    assert(fromRows(sql(s"SET $nonexistentKey").collect()) sameElements
+      Array(s"$nonexistentKey is undefined"))
   }
+
+  // Put tests that depend on specific Hive settings before these last two test,
+  // since they modify /clear stuff.
 
 }

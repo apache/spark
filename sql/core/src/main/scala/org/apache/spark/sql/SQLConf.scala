@@ -26,7 +26,7 @@ import scala.collection.mutable
  */
 class SQLConf {
 
-  private val settings = new mutable.HashMap[String, String]()
+  protected val settings = new mutable.HashMap[String, String]()
 
   private[spark] def clear() {
     settings.clear()
