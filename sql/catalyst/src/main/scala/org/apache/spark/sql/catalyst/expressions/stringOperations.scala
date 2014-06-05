@@ -81,8 +81,12 @@ trait CaseConversionExpression {
   def dataType: DataType = StringType
 
   override def eval(input: Row): Any = {
-    val converted = child.eval(input)
-    convert(converted.toString)
+    val evaluated = child.eval(input)
+    if (evaluated == null) {
+      null
+    } else {
+      convert(evaluated.toString)
+    }
   }
 }
 

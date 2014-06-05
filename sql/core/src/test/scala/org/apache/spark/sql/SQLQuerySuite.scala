@@ -322,6 +322,13 @@ class SQLQuerySuite extends QueryTest {
         (2, "B"),
         (3, "C"),
         (4, "D")))
+
+    checkAnswer(
+      sql("SELECT n, UPPER(s) FROM nullStrings"),
+      Seq(
+        (1, "ABC"),
+        (2, "ABC"),
+        (3, null)))
   }
     
   test("system function lower()") {
@@ -334,6 +341,13 @@ class SQLQuerySuite extends QueryTest {
         (4, "d"),
         (5, "e"),
         (6, "f")))
+
+    checkAnswer(
+      sql("SELECT n, LOWER(s) FROM nullStrings"),
+      Seq(
+        (1, "abc"),
+        (2, "abc"),
+        (3, null)))
   }  
   
 }
