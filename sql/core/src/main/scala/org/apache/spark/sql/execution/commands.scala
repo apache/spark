@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class SetCommandPhysical(key: Option[String], value: Option[String])
+case class SetCommandPhysical(key: Option[String], value: Option[String], output: Seq[Attribute])
                              (@transient context: SQLContext) extends LeafNode {
    def execute(): RDD[Row] = (key, value) match {
      // Set value for key k; the action itself would
@@ -50,6 +50,4 @@ case class SetCommandPhysical(key: Option[String], value: Option[String])
      // The only other case is invalid semantics and is impossible.
      case _ => context.emptyResult
    }
-
-   def output: Seq[Attribute] = Seq.empty // TODO: right thing?
 }

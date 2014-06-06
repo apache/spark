@@ -25,16 +25,16 @@ import scala.collection.JavaConverters._
  * SQLConf holds mutable config parameters and hints.  These can be set and
  * queried either by passing SET commands into Spark SQL's DSL
  * functions (sql(), hql(), etc.), or by programmatically using setters and
- * getters of this class.
+ * getters of this class.  This class is thread-safe.
  */
 class SQLConf {
 
+  /** Number of partitions to use for shuffle operators. */
+  def numShufflePartitions(default: Int): Int = getOption("spark.sql.shuffle.partitions")
+    .map(_.toInt).getOrElse(default)
+
   private val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
-
-  private[spark] def clear() {
-    settings.clear()
-  }
 
   def this(props: Properties) = {
     this()
@@ -71,6 +71,10 @@ class SQLConf {
     settings.synchronized {
       settings.asScala.toArray.sorted.map{ case (k, v) => s"$k=$v" }.mkString("\n")
     }
+  }
+
+  private[spark] def clear() {
+    settings.clear()
   }
 
 }

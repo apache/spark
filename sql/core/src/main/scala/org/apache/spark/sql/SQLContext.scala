@@ -261,7 +261,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
-      Batch("Add exchange", Once, AddExchange) ::
+      Batch("Add exchange", Once, AddExchange(self)) ::
       Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
   }
 

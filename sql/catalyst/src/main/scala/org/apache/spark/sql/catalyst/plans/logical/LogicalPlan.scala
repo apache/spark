@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.catalyst.types.{StringType, StructType}
 import org.apache.spark.sql.catalyst.trees
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
@@ -101,7 +101,7 @@ abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
  */
 abstract class Command extends LeafNode {
   self: Product =>
-  def output = Seq.empty
+  def output: Seq[Attribute] = Seq.empty // TODO: Is Seq.empty the right thing to do?
 }
 
 /**
@@ -113,7 +113,12 @@ case class NativeCommand(cmd: String) extends Command
 /**
  * Commands of the form "SET (key) (= value)".
  */
-case class SetCommand(key: Option[String], value: Option[String]) extends Command
+case class SetCommand(key: Option[String], value: Option[String]) extends Command {
+  override def output = Seq(
+    AttributeReference("key", StringType, nullable = false)(),
+    AttributeReference("value", StringType, nullable = false)()
+  )
+}
 
 /**
  * Returned by a parser when the users only wants to see what query plan would be executed, without
