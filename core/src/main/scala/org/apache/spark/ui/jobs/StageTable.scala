@@ -91,7 +91,7 @@ private[ui] class StageTableBase(
         {s.name}
       </a>
 
-    val details = (
+    val details = if (s.details.nonEmpty) (
       <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')" class="expand-details">
         +show details
       </span>
