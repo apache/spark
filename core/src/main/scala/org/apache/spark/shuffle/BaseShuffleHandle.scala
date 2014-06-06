@@ -25,6 +25,6 @@ import org.apache.spark.serializer.Serializer
  */
 private[spark] class BaseShuffleHandle[K, V, C](
     shuffleId: Int,
-    numMaps: Int,
-    dependency: ShuffleDependency[K, V, C])
+    val numMaps: Int,
+    val dependency: ShuffleDependency[K, V, C])
   extends ShuffleHandle(shuffleId)

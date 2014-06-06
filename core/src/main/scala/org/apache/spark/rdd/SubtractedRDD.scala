@@ -56,8 +56,9 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
 
   private var serializer: Option[Serializer] = None
 
+  /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): SubtractedRDD[K, V, W] = {
-    this.serializer = Some(serializer)
+    this.serializer = Option(serializer)
     this
   }
 

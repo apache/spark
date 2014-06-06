@@ -22,4 +22,4 @@ package org.apache.spark.shuffle
  *
  * @param shuffleId ID of the shuffle
  */
-private[spark] abstract class ShuffleHandle(val shuffleId: Int) {}
+private[spark] abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}

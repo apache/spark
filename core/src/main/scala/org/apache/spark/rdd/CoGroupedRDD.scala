@@ -77,8 +77,9 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
   private var serializer: Option[Serializer] = None
 
+  /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): CoGroupedRDD[K] = {
-    this.serializer = Some(serializer)
+    this.serializer = Option(serializer)
     this
   }
 

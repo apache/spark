@@ -27,7 +27,7 @@ import org.apache.spark.util.CompletionIterator
 import org.apache.spark._
 import org.apache.spark.storage.ShuffleBlockId
 
-private[hash] class BlockStoreShuffleFetcher extends Logging {
+private[hash] object BlockStoreShuffleFetcher extends Logging {
   def fetch[T](
       shuffleId: Int,
       reduceId: Int,

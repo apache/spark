@@ -17,6 +17,26 @@
 
 package org.apache.spark.shuffle.hash
 
-class HashShuffleReader {
+import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
+import org.apache.spark.TaskContext
 
+class HashShuffleReader[K, C](
+    handle: BaseShuffleHandle[K, _, C],
+    startPartition: Int,
+    endPartition: Int,
+    context: TaskContext)
+  extends ShuffleReader[K, C]
+{
+  require(endPartition == startPartition + 1,
+    "Hash shuffle currently only supports fetching one partition")
+
+  /** Read the combined key-values for this reduce task */
+  override def read(): Iterator[Product2[K, C]] = {
+    BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context,
+      Serializer.getSerializer(handle.dependency.serializer))
+  }
+
+  /** Close this reader */
+  override def stop(): Unit = ???
 }
