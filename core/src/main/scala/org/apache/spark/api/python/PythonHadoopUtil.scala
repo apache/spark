@@ -31,15 +31,15 @@ import org.apache.spark.annotation.Experimental
  * transformation code by overriding the convert method.
  */
 @Experimental
-trait Converter {
-  def convert(obj: Any): Any
+trait Converter[T, U] {
+  def convert(obj: T): U
 }
 
 /**
  * A converter that handles conversion of common [[org.apache.hadoop.io.Writable]] objects.
  * Other objects are passed through without conversion.
  */
-private[python] object DefaultConverter extends Converter {
+private[python] object DefaultConverter extends Converter[Any, Any] {
 
   /**
    * Converts a [[org.apache.hadoop.io.Writable]] to the underlying primitive, String or
@@ -80,8 +80,8 @@ private[python] object DefaultConverter extends Converter {
  */
 private[python] class ConverterRegistry extends Logging {
 
-  var keyConverter: Converter = DefaultConverter
-  var valueConverter: Converter = DefaultConverter
+  var keyConverter: Converter[Any, Any] = DefaultConverter
+  var valueConverter: Converter[Any, Any] = DefaultConverter
 
   def convertKey(obj: Any): Any = keyConverter.convert(obj)
 
@@ -97,9 +97,9 @@ private[python] class ConverterRegistry extends Logging {
     logInfo(s"Loaded and registered value converter ($converterClass)")
   }
 
-  private def register(converterClass: String): Converter = {
+  private def register(converterClass: String): Converter[Any, Any] = {
     Try {
-      val converter = Class.forName(converterClass).newInstance().asInstanceOf[Converter]
+      val converter = Class.forName(converterClass).newInstance().asInstanceOf[Converter[Any, Any]]
       converter
     } match {
       case Success(s) => s

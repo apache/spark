@@ -54,7 +54,7 @@ case class TestWritable(var str: String, var int: Int, var double: Double) exten
   }
 }
 
-class TestConverter extends Converter {
+class TestConverter extends Converter[Any, Any] {
   import collection.JavaConversions._
   override def convert(obj: Any) = {
     val m = obj.asInstanceOf[MapWritable]

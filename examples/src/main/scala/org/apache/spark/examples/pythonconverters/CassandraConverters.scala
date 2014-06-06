@@ -6,15 +6,23 @@ import org.apache.cassandra.utils.ByteBufferUtil
 import collection.JavaConversions.{mapAsJavaMap, mapAsScalaMap}
 
 
-class CassandraCQLKeyConverter extends Converter {
-  override def convert(obj: Any) = {
+/**
+ * Implementation of [[org.apache.spark.api.python.Converter]] that converts Cassandra
+ * output to a Map[String, Int]
+ */
+class CassandraCQLKeyConverter extends Converter[Any, java.util.Map[String, Int]] {
+  override def convert(obj: Any): java.util.Map[String, Int] = {
     val result = obj.asInstanceOf[java.util.Map[String, ByteBuffer]]
     mapAsJavaMap(result.mapValues(bb => ByteBufferUtil.toInt(bb)))
   }
 }
 
-class CassandraCQLValueConverter extends Converter {
-  override def convert(obj: Any) = {
+/**
+ * Implementation of [[org.apache.spark.api.python.Converter]] that converts Cassandra
+ * output to a Map[String, String]
+ */
+class CassandraCQLValueConverter extends Converter[Any, java.util.Map[String, String]] {
+  override def convert(obj: Any): java.util.Map[String, String] = {
     val result = obj.asInstanceOf[java.util.Map[String, ByteBuffer]]
     mapAsJavaMap(result.mapValues(bb => ByteBufferUtil.string(bb)))
   }
