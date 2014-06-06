@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 import org.apache.spark.graphx.impl.EdgePartition
+import org.apache.spark.graphx.impl.EdgePartitionBuilder
 
 /**
  * `EdgeRDD[ED, VD]` extends `RDD[Edge[ED]]` by storing the edges in columnar format on each
@@ -32,7 +33,8 @@ import org.apache.spark.graphx.impl.EdgePartition
  * `impl.ReplicatedVertexView`.
  */
 class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
-    val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])])
+    val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],
+    val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   extends RDD[Edge[ED]](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
   partitionsRDD.setName("EdgeRDD")
@@ -58,6 +60,10 @@ class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
 
   override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect()
 
+  /**
+   * Persists the edge partitions at the specified storage level, ignoring any existing target
+   * storage level.
+   */
   override def persist(newLevel: StorageLevel): this.type = {
     partitionsRDD.persist(newLevel)
     this
@@ -68,9 +74,15 @@ class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
     this
   }
 
+  /** Persists the vertex partitions using `targetStorageLevel`, which defaults to MEMORY_ONLY. */
+  override def cache(): this.type = {
+    partitionsRDD.persist(targetStorageLevel)
+    this
+  }
+
   private[graphx] def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag](
       f: (PartitionID, EdgePartition[ED, VD]) => EdgePartition[ED2, VD2]): EdgeRDD[ED2, VD2] = {
-    new EdgeRDD[ED2, VD2](partitionsRDD.mapPartitions({ iter =>
+    this.withPartitionsRDD[ED2, VD2](partitionsRDD.mapPartitions({ iter =>
       if (iter.hasNext) {
         val (pid, ep) = iter.next()
         Iterator(Tuple2(pid, f(pid, ep)))
@@ -118,11 +130,60 @@ class EdgeRDD[@specialized ED: ClassTag, VD: ClassTag](
       (f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3, VD] = {
     val ed2Tag = classTag[ED2]
     val ed3Tag = classTag[ED3]
-    new EdgeRDD[ED3, VD](partitionsRDD.zipPartitions(other.partitionsRDD, true) {
+    this.withPartitionsRDD[ED3, VD](partitionsRDD.zipPartitions(other.partitionsRDD, true) {
       (thisIter, otherIter) =>
         val (pid, thisEPart) = thisIter.next()
         val (_, otherEPart) = otherIter.next()
         Iterator(Tuple2(pid, thisEPart.innerJoin(otherEPart)(f)(ed2Tag, ed3Tag)))
     })
+  }
+
+  /** Replaces the vertex partitions while preserving all other properties of the VertexRDD. */
+  private[graphx] def withPartitionsRDD[ED2: ClassTag, VD2: ClassTag](
+      partitionsRDD: RDD[(PartitionID, EdgePartition[ED2, VD2])]): EdgeRDD[ED2, VD2] = {
+    new EdgeRDD(partitionsRDD, this.targetStorageLevel)
+  }
+
+  /**
+   * Changes the target storage level while preserving all other properties of the
+   * EdgeRDD. Operations on the returned EdgeRDD will preserve this storage level.
+   *
+   * This does not actually trigger a cache; to do this, call
+   * [[org.apache.spark.graphx.EdgeRDD#cache]] on the returned EdgeRDD.
+   */
+  private[graphx] def withTargetStorageLevel(
+      targetStorageLevel: StorageLevel): EdgeRDD[ED, VD] = {
+    new EdgeRDD(this.partitionsRDD, targetStorageLevel)
+  }
+
+}
+
+object EdgeRDD {
+  /**
+   * Creates an EdgeRDD from a set of edges.
+   *
+   * @tparam ED the edge attribute type
+   * @tparam VD the type of the vertex attributes that may be joined with the returned EdgeRDD
+   */
+  def fromEdges[ED: ClassTag, VD: ClassTag](edges: RDD[Edge[ED]]): EdgeRDD[ED, VD] = {
+    val edgePartitions = edges.mapPartitionsWithIndex { (pid, iter) =>
+      val builder = new EdgePartitionBuilder[ED, VD]
+      iter.foreach { e =>
+        builder.add(e.srcId, e.dstId, e.attr)
+      }
+      Iterator((pid, builder.toEdgePartition))
+    }
+    EdgeRDD.fromEdgePartitions(edgePartitions)
+  }
+
+  /**
+   * Creates an EdgeRDD from already-constructed edge partitions.
+   *
+   * @tparam ED the edge attribute type
+   * @tparam VD the type of the vertex attributes that may be joined with the returned EdgeRDD
+   */
+  def fromEdgePartitions[ED: ClassTag, VD: ClassTag](
+      edgePartitions: RDD[(Int, EdgePartition[ED, VD])]): EdgeRDD[ED, VD] = {
+    new EdgeRDD(edgePartitions)
   }
 }

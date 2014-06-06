@@ -41,7 +41,7 @@ object LabelPropagation {
    *
    * @return a graph with vertex attributes containing the label of community affiliation
    */
-  def run[ED: ClassTag](graph: Graph[_, ED], maxSteps: Int): Graph[VertexId, ED] = {
+  def run[VD, ED: ClassTag](graph: Graph[VD, ED], maxSteps: Int): Graph[VertexId, ED] = {
     val lpaGraph = graph.mapVertices { case (vid, _) => vid }
     def sendMessage(e: EdgeTriplet[VertexId, ED]) = {
       Iterator((e.srcId, Map(e.dstAttr -> 1L)), (e.dstId, Map(e.srcAttr -> 1L)))

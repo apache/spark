@@ -933,7 +933,7 @@ def _change_cell_value(cell, newval):
 Note: These can never be renamed due to client compatibility issues"""
 
 def _getobject(modname, attribute):
-    mod = __import__(modname)
+    mod = __import__(modname, fromlist=[attribute])
     return mod.__dict__[attribute]
 
 def _generateImage(size, mode, str_rep):

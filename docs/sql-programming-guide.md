@@ -170,7 +170,9 @@ A schema can be applied to an existing RDD by calling `applySchema` and providin
 for the JavaBean.
 
 {% highlight java %}
-JavaSQLContext ctx = new org.apache.spark.sql.api.java.JavaSQLContext(sc)
+
+JavaSparkContext ctx = ...; // An existing JavaSparkContext.
+JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(ctx)
 
 // Load a text file and convert each line to a JavaBean.
 JavaRDD<Person> people = ctx.textFile("examples/src/main/resources/people.txt").map(

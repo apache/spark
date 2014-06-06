@@ -781,12 +781,20 @@ private[hive] object HiveQl {
   val COUNT = "(?i)COUNT".r
   val AVG = "(?i)AVG".r
   val SUM = "(?i)SUM".r
+  val MAX = "(?i)MAX".r
+  val MIN = "(?i)MIN".r
+  val UPPER = "(?i)UPPER".r
+  val LOWER = "(?i)LOWER".r
   val RAND = "(?i)RAND".r
   val AND = "(?i)AND".r
   val OR = "(?i)OR".r
   val NOT = "(?i)NOT".r
   val TRUE = "(?i)TRUE".r
   val FALSE = "(?i)FALSE".r
+  val LIKE = "(?i)LIKE".r
+  val RLIKE = "(?i)RLIKE".r
+  val REGEXP = "(?i)REGEXP".r
+  val IN = "(?i)IN".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -817,7 +825,13 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) => CountDistinct(args.map(nodeToExpr))
     case Token("TOK_FUNCTION", Token(SUM(), Nil) :: arg :: Nil) => Sum(nodeToExpr(arg))
     case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
-
+    case Token("TOK_FUNCTION", Token(MAX(), Nil) :: arg :: Nil) => Max(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(MIN(), Nil) :: arg :: Nil) => Min(nodeToExpr(arg))
+    
+    /* System functions about string operations */
+    case Token("TOK_FUNCTION", Token(UPPER(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(LOWER(), Nil) :: arg :: Nil) => Lower(nodeToExpr(arg))
+    
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), StringType)
@@ -861,14 +875,14 @@ private[hive] object HiveQl {
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
-    case Token("LIKE", left :: right:: Nil) => Like(nodeToExpr(left), nodeToExpr(right))
-    case Token("RLIKE", left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
-    case Token("REGEXP", left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
+    case Token(LIKE(), left :: right:: Nil) => Like(nodeToExpr(left), nodeToExpr(right))
+    case Token(RLIKE(), left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
+    case Token(REGEXP(), left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
     case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) =>
       IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) =>
       IsNull(nodeToExpr(child))
-    case Token("TOK_FUNCTION", Token("IN", Nil) :: value :: list) =>
+    case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
     case Token("TOK_FUNCTION",
            Token("between", Nil) ::
