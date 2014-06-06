@@ -458,25 +458,31 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>1.9.1</version>
+        <version>2.1.5</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.easymock</groupId>
-        <artifactId>easymock</artifactId>
+        <artifactId>easymockclassextension</artifactId>
         <version>3.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-all</artifactId>
-        <version>1.8.5</version>
+        <version>1.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.10.0</version>
+        <version>1.11.3</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>junit</groupId>
+        <artifactId>junit</artifactId>
+        <version>4.10</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -778,6 +784,7 @@
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
               <arg>-feature</arg>
+              <arg>-language:postfixOps</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
