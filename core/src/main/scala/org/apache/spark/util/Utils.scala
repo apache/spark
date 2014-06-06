@@ -840,9 +840,10 @@ private[spark] object Utils extends Logging {
         userCallStack += el.toString
       }
     }
+    val userCallStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
     CallSite(
       short = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
-      long = userCallStack.mkString("\n"))
+      long = userCallStack.take(userCallStackDepth).mkString("\n"))
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
