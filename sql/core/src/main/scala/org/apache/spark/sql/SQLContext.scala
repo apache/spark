@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
 
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.json._
 
 /**
  * :: AlphaComponent ::
@@ -96,6 +97,41 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def parquetFile(path: String): SchemaRDD =
     new SchemaRDD(this, parquet.ParquetRelation(path))
+
+  /**
+   * Loads a JSON file, returning the result as a [[SchemaRDD]].
+   * Right now, we only do eager schema resolution.
+   */
+  def jsonFile(
+      path: String,
+      mode: SchemaResolutionMode = EAGER_SCHEMA_RESOLUTION): SchemaRDD = {
+    logger.info(s"Loads a JSON file $path.")
+    val json = sparkContext.textFile(path)
+    jsonRDD(json, mode)
+  }
+
+  /**
+   * Loads a RDD[String] storing JSON objects (one object per record),
+   * returning the result as a [[SchemaRDD]].
+   * Right now, we only do eager schema resolution.
+   */
+  def jsonRDD(
+      json: RDD[String],
+      mode: SchemaResolutionMode = EAGER_SCHEMA_RESOLUTION): SchemaRDD = {
+    mode match {
+      case EAGER_SCHEMA_RESOLUTION =>
+        logger.info(s"Eagerly resolve the schema without sampling.")
+        val logicalPlan = JsonTable.inferSchema(json)
+        logicalPlanToSparkQuery(logicalPlan)
+      case EAGER_SCHEMA_RESOLUTION_WITH_SAMPLING(fraction) =>
+        logger.info(s"Eagerly resolve the schema with sampling " +
+          s"(sampling fraction: $fraction).")
+        val logicalPlan = JsonTable.inferSchema(json, Some(fraction))
+        logicalPlanToSparkQuery(logicalPlan)
+      case LAZY_SCHEMA_RESOLUTION =>
+        throw new UnsupportedOperationException("Lazy schema resolution has not been implemented.")
+    }
+  }
 
   /**
    * :: Experimental ::

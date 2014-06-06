@@ -45,6 +45,10 @@ class QueryTest extends FunSuite {
           s"""
             |Exception thrown while executing query:
             |${rdd.logicalPlan}
+            |== Analyzed Plan ==
+            |${rdd.queryExecution.analyzed}
+            |== Physical Plan ==
+            |${rdd.queryExecution.executedPlan}
             |== Exception ==
             |$e
           """.stripMargin)

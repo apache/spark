@@ -108,6 +108,9 @@ trait HiveTypeCoercion {
    *
    * Additionally, all types when UNION-ed with strings will be promoted to strings.
    * Other string conversions are handled by PromoteStrings.
+   *
+   * A widening conversion of a value with IntegerType and LongType to FloatType,
+   * or of a value with LongType to DoubleType, may result in loss of precision.
    */
   object WidenTypes extends Rule[LogicalPlan] {
     // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
