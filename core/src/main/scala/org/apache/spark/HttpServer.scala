@@ -46,12 +46,14 @@ private[spark] class HttpServer(
     securityManager: SecurityManager,
     requestedPort: Int = 0,
     serverName: String = "HTTP server")
-  extends Logging {
+  extends Logging  with Lifecycle {
 
   private var server: Server = null
   private var port: Int = requestedPort
 
-  def start() {
+  def conf = securityManager.sparkConf
+
+  override protected def doStart() {
     if (server != null) {
       throw new ServerStateException("Server is already started")
     } else {
@@ -137,7 +139,7 @@ private[spark] class HttpServer(
     sh
   }
 
-  def stop() {
+  override protected def doStop() {
     if (server == null) {
       throw new ServerStateException("Server is already stopped")
     } else {

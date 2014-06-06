@@ -60,7 +60,7 @@ import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, Metadat
  *   this config overrides the default configs as well as system properties.
  */
 
-class SparkContext(config: SparkConf) extends Logging {
+class SparkContext(config: SparkConf) extends Logging with Lifecycle {
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
   // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
@@ -154,9 +154,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
     this(master, appName, sparkHome, jars, Map(), Map())
 
-  private[spark] val conf = config.clone()
+  val conf = config.clone()
   conf.validateSettings()
-
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
    * changed at runtime.
@@ -987,8 +986,23 @@ class SparkContext(config: SparkConf) extends Logging {
     addedJars.clear()
   }
 
+  override def start() {
+    if (stopped) {
+      throw new SparkException("SparkContext has already been stopped")
+    }
+    super.start()
+  }
+
+  override  protected def doStart() {}
+
+  start()
+
   /** Shut down the SparkContext. */
-  def stop() {
+  override def stop() {
+    if (started) super.stop()
+  }
+
+  override protected def doStop() {
     postApplicationEnd()
     ui.stop()
     // Do this only if not stopped already - best case effort.

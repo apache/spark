@@ -25,7 +25,7 @@ import scala.xml.Node
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.json4s.JsonAST.{JNothing, JValue}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Lifecycle, Logging, SecurityManager, SparkConf}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
 
@@ -41,7 +41,7 @@ private[spark] abstract class WebUI(
     conf: SparkConf,
     basePath: String = "",
     name: String = "")
-  extends Logging {
+  extends Logging with Lifecycle {
 
   protected val tabs = ArrayBuffer[WebUITab]()
   protected val handlers = ArrayBuffer[ServletContextHandler]()
@@ -92,12 +92,10 @@ private[spark] abstract class WebUI(
     }
   }
 
-  /** Initialize all components of the server. */
-  def initialize()
-
   /** Bind to the HTTP server behind this web interface. */
   def bind() {
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
+    super.start()
     try {
       serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf, name))
       logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
@@ -112,11 +110,12 @@ private[spark] abstract class WebUI(
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
   /** Stop the server behind this web interface. Only valid after bind(). */
-  def stop() {
+  override protected def doStop() {
     assert(serverInfo.isDefined,
       "Attempted to stop %s before binding to a server!".format(className))
     serverInfo.get.server.stop()
   }
+  override protected def doStart() { }
 }
 
 

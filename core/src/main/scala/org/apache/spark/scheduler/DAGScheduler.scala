@@ -65,7 +65,7 @@ class DAGScheduler(
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv,
     clock: Clock = SystemClock)
-  extends Logging {
+  extends Logging with Lifecycle{
 
   import DAGScheduler._
 
@@ -112,6 +112,8 @@ class DAGScheduler(
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
 
+  def conf = env.conf
+
   private val dagSchedulerActorSupervisor =
     env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
 
@@ -134,7 +136,11 @@ class DAGScheduler(
       asInstanceOf[ActorRef]
   }
 
-  initializeEventProcessActor()
+  override protected def doStart() {
+    initializeEventProcessActor()
+  }
+
+  start()
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -1314,7 +1320,7 @@ class DAGScheduler(
     Nil
   }
 
-  def stop() {
+  override protected def doStop() {
     logInfo("Stopping DAGScheduler")
     dagSchedulerActorSupervisor ! PoisonPill
     taskScheduler.stop()

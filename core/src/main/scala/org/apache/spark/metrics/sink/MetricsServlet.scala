@@ -54,9 +54,11 @@ private[spark] class MetricsServlet(val property: Properties, val registry: Metr
     mapper.writeValueAsString(registry)
   }
 
-  override def start() { }
-
-  override def stop() { }
+  def conf = securityMgr.sparkConf
 
   override def report() { }
+
+  override protected def doStart() { }
+
+  override protected def doStop() { }
 }

@@ -15,10 +15,46 @@
  * limitations under the License.
  */
 
-package org.apache.spark.metrics.sink
+package org.apache.spark
 
-import org.apache.spark.Lifecycle
+trait Service extends java.io.Closeable {
 
-private[spark] trait Sink extends Lifecycle {
-def report(): Unit
+  /**
+   * Service states
+   */
+  object State extends Enumeration {
+
+    /**
+     * Constructed but not initialized
+     */
+    val Uninitialized = Value(0, "Uninitialized")
+
+    /**
+     * Initialized but not started or stopped
+     */
+    val Initialized = Value(1, "Initialized")
+
+    /**
+     * started and not stopped
+     */
+    val Started = Value(2, "Started")
+
+    /**
+     * stopped. No further state transitions are permitted
+     */
+    val Stopped = Value(3, "Stopped")
+
+    type State = Value
+  }
+
+  def conf: SparkConf
+
+  def initialize(): Unit
+
+  def start(): Unit
+
+  def stop(): Unit
+
+  def state: State.State
+
 }

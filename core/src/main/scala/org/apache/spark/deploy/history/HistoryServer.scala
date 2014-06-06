@@ -41,7 +41,7 @@ import org.apache.spark.util.SignalLogger
  * EventLoggingListener.
  */
 class HistoryServer(
-    conf: SparkConf,
+    val conf: SparkConf,
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
@@ -101,7 +101,6 @@ class HistoryServer(
     }
   }
 
-  initialize()
 
   /**
    * Initialize the history server.
@@ -109,7 +108,7 @@ class HistoryServer(
    * This starts a background thread that periodically synchronizes information displayed on
    * this UI with the event logs in the provided base directory.
    */
-  def initialize() {
+  override def doInitialize() {
     attachPage(new HistoryPage(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
@@ -125,8 +124,8 @@ class HistoryServer(
   }
 
   /** Stop the server and close the file system. */
-  override def stop() {
-    super.stop()
+  override protected def doStop() {
+    super.doStop()
     provider.stop()
   }
 

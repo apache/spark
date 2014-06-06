@@ -19,7 +19,7 @@ package org.apache.spark.streaming
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
+import org.apache.spark._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
@@ -108,11 +108,11 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register
 
-    assert(ssc.state === ssc.StreamingContextState.Initialized)
+    assert(ssc.uninitialized)
     ssc.start()
-    assert(ssc.state === ssc.StreamingContextState.Started)
+    assert(ssc.started)
     ssc.stop()
-    assert(ssc.state === ssc.StreamingContextState.Stopped)
+    assert(ssc.stopped)
   }
 
   test("start multiple times") {
