@@ -795,6 +795,8 @@ private[hive] object HiveQl {
   val RLIKE = "(?i)RLIKE".r
   val REGEXP = "(?i)REGEXP".r
   val IN = "(?i)IN".r
+  val DIV = "(?i)DIV".r
+  val BETWEEN = "(?i)BETWEEN".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -864,7 +866,7 @@ private[hive] object HiveQl {
     case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
     case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
-    case Token("DIV", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+    case Token(DIV(), left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
 
     /* Comparisons */
@@ -885,7 +887,7 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
     case Token("TOK_FUNCTION",
-           Token("between", Nil) ::
+           Token(BETWEEN(), Nil) ::
            Token("KW_FALSE", Nil) ::
            target ::
            minValue ::
