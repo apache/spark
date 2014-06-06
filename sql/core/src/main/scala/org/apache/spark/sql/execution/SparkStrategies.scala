@@ -217,4 +217,15 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
   }
+
+  // TODO: this should be merged with SPARK-1508's SetCommandStrategy
+  case class CommandStrategy(context: SQLContext) extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.ExplainCommand(child) =>
+        val qe = context.mkQueryExecution(child)
+        Seq(execution.ExplainCommandPhysical(qe.executedPlan)(context))
+      case _ => Nil
+    }
+  }
+
 }

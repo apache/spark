@@ -159,4 +159,5 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SHOW TABLES").toString
     hql("SELECT * FROM src").toString
   }
+
 }
