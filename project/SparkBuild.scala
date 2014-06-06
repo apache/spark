@@ -322,6 +322,7 @@ object SparkBuild extends Build {
   val excludeJruby = ExclusionRule(organization = "org.jruby")
   val excludeThrift = ExclusionRule(organization = "org.apache.thrift")
   val excludeServletApi = ExclusionRule(organization = "javax.servlet", artifact = "servlet-api")
+  val excludeJUnit = ExclusionRule(organization = "junit")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "1.0.0", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
@@ -466,7 +467,7 @@ object SparkBuild extends Build {
     previousArtifact := sparkPreviousArtifact("spark-mllib"),
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % jblasVersion,
-      "org.scalanlp" %% "breeze" % "0.7"
+      "org.scalanlp" %% "breeze" % "0.7" excludeAll(excludeJUnit)
     )
   )
 

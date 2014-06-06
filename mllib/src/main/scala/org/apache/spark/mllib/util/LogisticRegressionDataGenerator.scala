@@ -79,7 +79,8 @@ object LogisticRegressionDataGenerator {
     val sc = new SparkContext(sparkMaster, "LogisticRegressionDataGenerator")
     val data = generateLogisticRDD(sc, nexamples, nfeatures, eps, parts)
 
-    MLUtils.saveLabeledData(data, outputPath)
+    data.saveAsTextFile(outputPath)
+
     sc.stop()
   }
 }
