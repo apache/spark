@@ -94,7 +94,7 @@ private[yarn] class YarnAllocationHandler(
     sparkConf.getOption("spark.yarn.container.memoryOverhead").foreach { s =>
       defaultMemoryOverhead = s.toInt
     }
-    sparkConf.getOption(s"spark.yarn.executor.memoryOverhead").foreach { s =>
+    sparkConf.getOption("spark.yarn.executor.memoryOverhead").foreach { s =>
       defaultMemoryOverhead = s.toInt
     }
     defaultMemoryOverhead
