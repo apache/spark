@@ -67,7 +67,7 @@ trait ClientBase extends Logging {
 
   // Additional memory overhead - in mb.
   protected def memoryOverhead: Int = {
-    var defaultMemoryOverhead = (args.amMemory * 0.25D).ceil.toInt
+    var defaultMemoryOverhead = YarnAllocationHandler.MEMORY_OVERHEAD
     sparkConf.getOption("spark.yarn.container.memoryOverhead").foreach { s =>
       defaultMemoryOverhead = s.toInt
     }
