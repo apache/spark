@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.{Aggregator, Partitioner}
+import org.apache.spark.{ShuffleDependency, Aggregator, Partitioner}
 import org.apache.spark.serializer.Serializer
 
 /**
@@ -26,8 +26,5 @@ import org.apache.spark.serializer.Serializer
 private[spark] class BaseShuffleHandle[K, V, C](
     shuffleId: Int,
     numMaps: Int,
-    partitioner: Partitioner,
-    serializer: Option[Serializer],
-    keyOrdering: Option[Ordering[K]],
-    aggregator: Option[Aggregator[K, V, C]])
+    dependency: ShuffleDependency[K, V, C])
   extends ShuffleHandle(shuffleId)

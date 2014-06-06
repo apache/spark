@@ -37,7 +37,7 @@ private[spark] object ShuffleMapTask {
   // expensive on the master node if it needs to launch thousands of tasks.
   private val serializedInfoCache = new HashMap[Int, Array[Byte]]
 
-  def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_]): Array[Byte] = {
+  def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_, _, _]): Array[Byte] = {
     synchronized {
       val old = serializedInfoCache.get(stageId).orNull
       if (old != null) {
@@ -56,12 +56,12 @@ private[spark] object ShuffleMapTask {
     }
   }
 
-  def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], ShuffleDependency[_,_]) = {
+  def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], ShuffleDependency[_, _, _]) = {
     val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val objIn = ser.deserializeStream(in)
     val rdd = objIn.readObject().asInstanceOf[RDD[_]]
-    val dep = objIn.readObject().asInstanceOf[ShuffleDependency[_,_]]
+    val dep = objIn.readObject().asInstanceOf[ShuffleDependency[_, _, _]]
     (rdd, dep)
   }
 
@@ -99,7 +99,7 @@ private[spark] object ShuffleMapTask {
 private[spark] class ShuffleMapTask(
     stageId: Int,
     var rdd: RDD[_],
-    var dep: ShuffleDependency[_,_],
+    var dep: ShuffleDependency[_, _, _],
     _partitionId: Int,
     @transient private var locs: Seq[TaskLocation])
   extends Task[MapStatus](stageId, _partitionId)
@@ -151,7 +151,7 @@ private[spark] class ShuffleMapTask(
 
     try {
       // Obtain all the block writers for shuffle blocks.
-      val ser = Serializer.getSerializer(dep.serializer)
+      val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
       shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, partitionId, numOutputSplits, ser)
 
       // Write the map output to its associated buckets.

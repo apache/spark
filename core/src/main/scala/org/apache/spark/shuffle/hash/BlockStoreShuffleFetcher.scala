@@ -26,18 +26,15 @@ import org.apache.spark.storage.{BlockId, BlockManagerId}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark._
 import org.apache.spark.storage.ShuffleBlockId
-import scala.Some
 
-private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
-
-  override def fetch[T](
+private[hash] class BlockStoreShuffleFetcher extends Logging {
+  def fetch[T](
       shuffleId: Int,
       reduceId: Int,
       context: TaskContext,
       serializer: Serializer)
     : Iterator[T] =
   {
-
     logDebug("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
     val blockManager = SparkEnv.get.blockManager
 

@@ -17,8 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.{Aggregator, Partitioner}
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.{TaskContext, ShuffleDependency}
 
 /**
  * Pluggable interface for shuffle systems. A ShuffleManager is created in SparkEnv on both the
@@ -31,27 +30,24 @@ import org.apache.spark.serializer.Serializer
 private[spark] trait ShuffleManager {
   /**
    * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
-   *
-   * The key ordering None for non-sortable data, and the aggregator can be None for shuffles
-   * that do not need to do combining. The serializer can be None to use just spark.serializer.
    */
   def registerShuffle[K, V, C](
       shuffleId: Int,
       numMaps: Int,
-      partitioner: Partitioner,
-      serializer: Option[Serializer],
-      keyOrdering: Option[Ordering[K]],
-      aggregator: Option[Aggregator[K, V, C]]): ShuffleHandle
+      dependency: ShuffleDependency[K, V, C]): ShuffleHandle
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
-  def getWriter[K, V](handle: ShuffleHandle, mapId: Int): ShuffleWriter[K, V]
+  def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext): ShuffleWriter[K, V]
 
   /**
    * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
    * Called on executors by reduce tasks.
    */
-  def getReader[K, C](handle: ShuffleHandle, startPartition: Int, endPartition: Int)
-      : ShuffleReader[K, C]
+  def getReader[K, C](
+      handle: ShuffleHandle,
+      startPartition: Int,
+      endPartition: Int,
+      context: TaskContext): ShuffleReader[K, C]
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   def unregisterShuffle(shuffleId: Int)

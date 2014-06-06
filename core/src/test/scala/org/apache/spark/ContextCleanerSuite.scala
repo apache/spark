@@ -211,8 +211,8 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
 
     // Get all the shuffle dependencies
     val shuffleDeps = getAllDependencies(rdd)
-      .filter(_.isInstanceOf[ShuffleDependency[_, _]])
-      .map(_.asInstanceOf[ShuffleDependency[_, _]])
+      .filter(_.isInstanceOf[ShuffleDependency[_, _, _]])
+      .map(_.asInstanceOf[ShuffleDependency[_, _, _]])
     (rdd, shuffleDeps)
   }
 

@@ -37,7 +37,6 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.{AkkaUtils, Utils}
-import org.apache.spark.shuffle.hash.ShuffleFetcher
 
 /**
  * :: DeveloperApi ::
@@ -58,7 +57,7 @@ class SparkEnv (
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
     val mapOutputTracker: MapOutputTracker,
-    val shuffleFetcher: ShuffleFetcher,
+    val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
@@ -66,7 +65,6 @@ class SparkEnv (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    val shuffleManager: ShuffleManager,
     val conf: SparkConf) extends Logging {
 
   // A mapping of thread ID to amount of memory used for shuffle in bytes
@@ -83,12 +81,11 @@ class SparkEnv (
     pythonWorkers.foreach { case(key, worker) => worker.stop() }
     httpFileServer.stop()
     mapOutputTracker.stop()
-    shuffleFetcher.stop()
+    shuffleManager.stop()
     broadcastManager.stop()
     blockManager.stop()
     blockManager.master.stop()
     metricsSystem.stop()
-    shuffleManager.stop()
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
@@ -171,7 +168,7 @@ object SparkEnv extends Logging {
       // SparkConf, then one taking no arguments
       try {
         cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)
-          .newInstance(conf, isDriver)
+          .newInstance(conf, new java.lang.Boolean(isDriver))
           .asInstanceOf[T]
       } catch {
         case _: NoSuchMethodException =>
@@ -230,9 +227,6 @@ object SparkEnv extends Logging {
 
     val cacheManager = new CacheManager(blockManager)
 
-    val shuffleFetcher = instantiateClass[ShuffleFetcher](
-      "spark.shuffle.fetcher", "org.apache.spark.BlockStoreShuffleFetcher")
-
     val httpFileServer = new HttpFileServer(securityManager)
     httpFileServer.initialize()
     conf.set("spark.fileserver.uri",  httpFileServer.serverUri)
@@ -269,7 +263,7 @@ object SparkEnv extends Logging {
       closureSerializer,
       cacheManager,
       mapOutputTracker,
-      shuffleFetcher,
+      shuffleManager,
       broadcastManager,
       blockManager,
       connectionManager,
@@ -277,7 +271,6 @@ object SparkEnv extends Logging {
       httpFileServer,
       sparkFilesDir,
       metricsSystem,
-      shuffleManager,
       conf)
   }
 
