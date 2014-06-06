@@ -47,7 +47,7 @@ object SparkSubmit {
   private val PYSPARK_SHELL = "pyspark-shell"
 
   def main(args: Array[String]) {
-    val appArgs = new SparkSubmitArguments(args)
+    val appArgs = new SparkSubmitArguments(args, sys.env)
     if (appArgs.verbose) {
       printStream.println(appArgs)
     }

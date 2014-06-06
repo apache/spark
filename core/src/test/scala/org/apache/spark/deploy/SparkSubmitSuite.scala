@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, OutputStream, PrintStream}
+import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -264,6 +264,21 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     runSparkSubmit(args)
   }
 
+  test("SPARK_CONF_DIR overrides spark-defaults.conf") {
+    forConfDir(Map("spark.executor.memory" -> "2.3g")) { path =>
+      val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+      val args = Seq(
+        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local",
+        unusedJar.toString)
+      val appArgs = new SparkSubmitArguments(args, Map("SPARK_CONF_DIR" -> path))
+      assert(appArgs.propertiesFile != null)
+      assert(appArgs.propertiesFile.startsWith(path))
+      appArgs.executorMemory should  be ("2.3g")
+    }
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   def runSparkSubmit(args: Seq[String]): String = {
     val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
@@ -271,6 +286,24 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+  }
+
+  def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
+    val tmpDir = new File("TMP_SPARK_CONF_DIR")
+    tmpDir.mkdir()
+
+    val defaultsConf = new File(tmpDir.getAbsolutePath, "spark-defaults.conf")
+    val writer = new OutputStreamWriter(new FileOutputStream(defaultsConf))
+    for ((key, value) <- defaults) writer.write(key + " " + value)
+    writer.flush()
+    writer.close()
+
+    try {
+      f(tmpDir.getAbsolutePath)
+    } finally {
+      defaultsConf.delete()
+      tmpDir.delete()
+    }
   }
 }
 

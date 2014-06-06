@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 /**
  * Parses and encapsulates arguments from the spark-submit script.
  */
-private[spark] class SparkSubmitArguments(args: Seq[String]) {
+private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env) {
   var master: String = null
   var deployMode: String = null
   var executorMemory: String = null
@@ -83,9 +83,12 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
     // Use common defaults file, if not specified by user
     if (propertiesFile == null) {
-      sys.env.get("SPARK_HOME").foreach { sparkHome =>
-        val sep = File.separator
-        val defaultPath = s"${sparkHome}${sep}conf${sep}spark-defaults.conf"
+      val sep = File.separator
+      val sparkHomeConfig = env.get("SPARK_HOME").map(sparkHome => s"${sparkHome}${sep}conf")
+
+      // give preference to user defined conf over the one in spark home
+      env.get("SPARK_CONF_DIR").orElse(sparkHomeConfig).foreach { configPath =>
+        val defaultPath = s"${configPath}${sep}spark-defaults.conf"
         val file = new File(defaultPath)
         if (file.exists()) {
           propertiesFile = file.getAbsolutePath
@@ -161,7 +164,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     }
 
     if (master.startsWith("yarn")) {
-      val hasHadoopEnv = sys.env.contains("HADOOP_CONF_DIR") || sys.env.contains("YARN_CONF_DIR")
+      val hasHadoopEnv = env.contains("HADOOP_CONF_DIR") || env.contains("YARN_CONF_DIR")
       if (!hasHadoopEnv && !Utils.isTesting) {
         throw new Exception(s"When running with master '$master' " +
           "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
