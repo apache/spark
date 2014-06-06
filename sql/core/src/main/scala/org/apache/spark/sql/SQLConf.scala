@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
-import scala.collection.mutable
+import scala.collection.JavaConverters._
 
 /**
  * SQLConf holds mutable config parameters and hints.  These can be set and
@@ -29,7 +29,8 @@ import scala.collection.mutable
  */
 class SQLConf {
 
-  protected val settings = new mutable.HashMap[String, String]()
+  private val settings = java.util.Collections.synchronizedMap(
+    new java.util.HashMap[String, String]())
 
   private[spark] def clear() {
     settings.clear()
@@ -37,35 +38,39 @@ class SQLConf {
 
   def this(props: Properties) = {
     this()
-    import scala.collection.JavaConversions._ // implicits for java.util.Properties
-    props.foreach { case (k, v) => this.settings(k) = v }
+    props.asScala.foreach { case (k, v) => this.settings.put(k, v) }
   }
 
   def set(key: String, value: String): SQLConf = {
     require(key != null, "key cannot be null")
     require(value != null, s"value cannot be null for ${key}")
-    settings(key) = value
+    settings.put(key, value)
     this
   }
 
   def get(key: String): String = {
-    settings.getOrElse(key, throw new NoSuchElementException(key))
-  }
-
-  def get(key: String, defaultValue: String): String = {
-    settings.getOrElse(key, defaultValue)
-  }
-
-  def getAll: Array[(String, String)] = settings.clone().toArray
-
-  def getOption(key: String): Option[String] = {
+    if (!settings.containsKey(key)) {
+      throw new NoSuchElementException(key)
+    }
     settings.get(key)
   }
 
-  def contains(key: String): Boolean = settings.contains(key)
+  def get(key: String, defaultValue: String): String = {
+    if (!settings.containsKey(key)) defaultValue else settings.get(key)
+  }
+
+  def getAll: Array[(String, String)] = settings.asScala.toArray
+
+  def getOption(key: String): Option[String] = {
+    if (!settings.containsKey(key)) None else Some(settings.get(key))
+  }
+
+  def contains(key: String): Boolean = settings.containsKey(key)
 
   def toDebugString: String = {
-    settings.toArray.sorted.map{ case (k, v) => s"$k=$v" }.mkString("\n")
+    settings.synchronized {
+      settings.asScala.toArray.sorted.map{ case (k, v) => s"$k=$v" }.mkString("\n")
+    }
   }
 
 }
