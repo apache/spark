@@ -146,7 +146,6 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val OUTER = Keyword("OUTER")
   protected val RIGHT = Keyword("RIGHT")
   protected val SELECT = Keyword("SELECT")
-  protected val SET = Keyword("SET")
   protected val STRING = Keyword("STRING")
   protected val SUM = Keyword("SUM")
   protected val TRUE = Keyword("TRUE")
