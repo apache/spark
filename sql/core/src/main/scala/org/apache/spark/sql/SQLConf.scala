@@ -22,7 +22,10 @@ import java.util.Properties
 import scala.collection.mutable
 
 /**
- * SQLConf holds potentially query-dependent, mutable config parameters and hints.
+ * SQLConf holds mutable config parameters and hints.  These can be set and
+ * queried either by passing SET commands into Spark SQL's DSL
+ * functions (sql(), hql(), etc.), or by programmatically using setters and
+ * getters of this class.
  */
 class SQLConf {
 
@@ -39,12 +42,8 @@ class SQLConf {
   }
 
   def set(key: String, value: String): SQLConf = {
-    if (key == null) {
-      throw new NullPointerException("null key")
-    }
-    if (value == null) {
-      throw new NullPointerException("null value")
-    }
+    require(key != null, "key cannot be null")
+    require(value != null, s"value cannot be null for ${key}")
     settings(key) = value
     this
   }

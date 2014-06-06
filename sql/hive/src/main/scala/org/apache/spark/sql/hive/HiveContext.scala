@@ -133,8 +133,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient override lazy val sqlConf: SQLConf = new SQLConf(hiveconf.getAllProperties) {
     override def set(key: String, value: String): SQLConf = {
       runSqlHive(s"SET $key=$value")
-      settings(key) = value
-      this
+      super.set(key, value)
     }
   }
   @transient protected[hive] lazy val sessionState = new SessionState(hiveconf)

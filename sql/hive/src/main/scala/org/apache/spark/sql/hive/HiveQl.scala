@@ -208,6 +208,8 @@ private[hive] object HiveQl {
   def parseSql(sql: String): LogicalPlan = {
     try {
       if (sql.trim.toLowerCase.startsWith("set")) {
+        // Split in two parts since we treat the part before the first "="
+        // as key, and the part after as value, which may contain other "=" signs.
         sql.trim.drop(3).split("=", 2).map(_.trim) match {
           case Array("") => // "set"
             SetCommand(None, None)

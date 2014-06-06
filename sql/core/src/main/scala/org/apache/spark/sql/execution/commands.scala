@@ -29,13 +29,17 @@ import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
 case class SetCommandPhysical(key: Option[String], value: Option[String])
                              (@transient context: SQLContext) extends LeafNode {
    def execute(): RDD[Row] = (key, value) match {
+     // Set value for key k; the action itself would
+     // have been performed in QueryExecution eagerly.
      case (Some(k), Some(v)) => context.emptyResult
+     // Query the value bound to key k.
      case (Some(k), None) =>
        val resultString = context.sqlConf.getOption(k) match {
          case Some(v) => s"$k=$v"
          case None => s"$k is undefined"
        }
        context.sparkContext.parallelize(Seq(new GenericRow(Array[Any](resultString))), 1)
+     // Query all key-value pairs that are set in the SQLConf of the context.
      case (None, None) =>
        val pairs = context.sqlConf.getAll
        val rows = pairs.map { case (k, v) =>
@@ -43,6 +47,7 @@ case class SetCommandPhysical(key: Option[String], value: Option[String])
        }.toSeq
        // Assume config parameters can fit into one split (machine) ;)
        context.sparkContext.parallelize(rows, 1)
+     // The only other case is invalid semantics and is impossible.
      case _ => context.emptyResult
    }
 
