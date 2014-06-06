@@ -114,4 +114,7 @@ object TestData {
       NullStrings(2, "ABC") ::
       NullStrings(3, null) :: Nil)
   nullStrings.registerAsTable("nullStrings")
+
+  case class TableName(tableName: String)
+  TestSQLContext.sparkContext.parallelize(TableName("test") :: Nil).registerAsTable("tableName")
 }

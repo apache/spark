@@ -28,6 +28,12 @@ class SQLQuerySuite extends QueryTest {
   // Make sure the tables are loaded.
   TestData
 
+  test("SPARK-2041 column name equals tablename") {
+    checkAnswer(
+      sql("SELECT tableName FROM tableName"),
+      "test")
+  }
+
   test("index into array") {
     checkAnswer(
       sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
