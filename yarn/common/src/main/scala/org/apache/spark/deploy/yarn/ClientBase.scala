@@ -213,9 +213,18 @@ trait ClientBase extends Logging {
 
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
 
+    val oldLog4jConf = Option(System.getenv("SPARK_LOG4J_CONF"))
+    if (oldLog4jConf.isDefined) {
+      logWarning(
+        "SPARK_LOG4J_CONF detected in the system environment. This variable has been " +
+        "deprecated. Please refer to the \"Launching Spark on YARN\" documentation " +
+        "for alternatives.")
+    }
+
     List(
       (ClientBase.SPARK_JAR, ClientBase.sparkJar(sparkConf), ClientBase.CONF_SPARK_JAR),
-      (ClientBase.APP_JAR, args.userJar, ClientBase.CONF_SPARK_USER_JAR)
+      (ClientBase.APP_JAR, args.userJar, ClientBase.CONF_SPARK_USER_JAR),
+      ("log4j.properties", oldLog4jConf.getOrElse(null), null)
     ).foreach { case(destName, _localPath, confKey) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
       if (! localPath.isEmpty()) {
@@ -225,7 +234,7 @@ trait ClientBase extends Logging {
           val destPath = copyRemoteFile(dst, qualifyForLocal(localURI), replication, setPermissions)
           distCacheMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE,
             destName, statCache)
-        } else {
+        } else if (confKey != null) {
           sparkConf.set(confKey, localPath)
         }
       }
@@ -348,20 +357,13 @@ trait ClientBase extends Logging {
       sparkConf.set("spark.driver.extraJavaOptions", opts)
     }
 
+    // Forward the Spark configuration to the application master / executors.
     // TODO: it might be nicer to pass these as an internal environment variable rather than
     // as Java options, due to complications with string parsing of nested quotes.
-    if (args.amClass == classOf[ExecutorLauncher].getName) {
-      // If we are being launched in client mode, forward the spark-conf options
-      // onto the executor launcher
-      for ((k, v) <- sparkConf.getAll) {
-        javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
-      }
-    } else {
-      // If we are being launched in standalone mode, capture and forward any spark
-      // system properties (e.g. set by spark-class).
-      for ((k, v) <- sys.props.filterKeys(_.startsWith("spark"))) {
-        javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
-      }
+    for ((k, v) <- sparkConf.getAll) {
+      javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
+    }
+    if (args.amClass == classOf[ApplicationMaster].getName) {
       sys.props.get("spark.driver.extraJavaOptions").foreach(opts => javaOpts += opts)
       sys.props.get("spark.driver.libraryPath").foreach(p => javaOpts += s"-Djava.library.path=$p")
     }
@@ -522,11 +524,10 @@ object ClientBase extends Logging {
         }
       }
     } else {
-      val userJar = conf.getOption(CONF_SPARK_USER_JAR).getOrElse(null)
+      val userJar = conf.get(CONF_SPARK_USER_JAR, null)
       addFileToClasspath(userJar, APP_JAR, env)
 
-      val cachedSecondaryJarLinks =
-        conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",")
+      val cachedSecondaryJarLinks = conf.get(CONF_SPARK_YARN_SECONDARY_JARS, "").split(",")
       cachedSecondaryJarLinks.foreach(jar => addFileToClasspath(jar, null, env))
     }
   }

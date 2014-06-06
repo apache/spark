@@ -165,7 +165,20 @@ all environment variables used for launching each container. This process is use
 classpath problems in particular. (Note that enabling this requires admin privileges on cluster
 settings and a restart of all node managers. Thus, this is not applicable to hosted clusters).
 
-# Important Notes
+To use a custom log4j configuration for the application master or executors, there are two options:
+
+- upload a custom log4j.properties using spark-submit, by adding it to the "--files" list of files
+  to be uploaded with the application.
+- add "-Dlog4j.configuration=<location of configuration file>" to "spark.driver.extraJavaOptions"
+  (for the driver) or "spark.executor.extraJavaOptions" (for executors). Note that if using a file,
+  the "file:" protocol should be explicitly provided, and the file needs to exist locally on all
+  the nodes.
+
+Note that for the first option, both executors and the application master will share the same
+log4j configuration, which may cause issues when they run on the same node (e.g. trying to write
+to the same log file).
+
+# Important notes
 
 - Before Hadoop 2.2, YARN does not support cores in container resource requests. Thus, when running against an earlier version, the numbers of cores given via command line arguments cannot be passed to YARN.  Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
 - The local directories used by Spark executors will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored.
