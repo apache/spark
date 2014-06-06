@@ -67,6 +67,7 @@ object JsonTable extends Serializable with Logging {
       json: RDD[String], sampleSchema: Option[Double] = None): LogicalPlan = {
     val schemaData = sampleSchema.map(json.sample(false, _, 1)).getOrElse(json)
     val allKeys = parseJson(schemaData).map(getAllKeysWithValueTypes).reduce(_ ++ _)
+
     // Resolve type conflicts
     val resolved = allKeys.groupBy {
       case (key, dataType) => key
@@ -79,7 +80,14 @@ object JsonTable extends Serializable with Logging {
           case (_, dataType) => dataType
         }.reduce((type1: DataType, type2: DataType) => getCompatibleType(type1, type2))
 
-        (fieldName, dataType)
+        // Finally, we replace all NullType to StringType. We do not need to take care
+        // StructType because all fields with a StructType are represented by a placeholder
+        // StructType(Nil).
+        dataType match {
+          case NullType => (fieldName, StringType)
+          case ArrayType(NullType) => (fieldName, ArrayType(StringType))
+          case other => (fieldName, other)
+        }
       }
     }
 

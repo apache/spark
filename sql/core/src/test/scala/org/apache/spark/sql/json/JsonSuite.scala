@@ -65,7 +65,7 @@ class JsonSuite extends QueryTest {
       AttributeReference("double", DoubleType, true)() ::
       AttributeReference("integer", IntegerType, true)() ::
       AttributeReference("long", LongType, true)() ::
-      AttributeReference("null", NullType, true)() ::
+      AttributeReference("null", StringType, true)() ::
       AttributeReference("string", StringType, true)() :: Nil
 
     checkSchema(expectedSchema, jsonSchemaRDD.logicalPlan.output)
@@ -95,7 +95,7 @@ class JsonSuite extends QueryTest {
       AttributeReference("arrayOfDouble", ArrayType(DoubleType), true)() ::
       AttributeReference("arrayOfInteger", ArrayType(IntegerType), true)() ::
       AttributeReference("arrayOfLong", ArrayType(LongType), true)() ::
-      AttributeReference("arrayOfNull", ArrayType(NullType), true)() ::
+      AttributeReference("arrayOfNull", ArrayType(StringType), true)() ::
       AttributeReference("arrayOfString", ArrayType(StringType), true)() ::
       AttributeReference("arrayOfStruct", ArrayType(
         StructType(StructField("field1", BooleanType, true) ::
