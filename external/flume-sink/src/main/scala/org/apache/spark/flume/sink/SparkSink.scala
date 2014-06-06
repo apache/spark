@@ -16,23 +16,29 @@
  */
 package org.apache.spark.flume.sink
 
-import org.apache.flume.sink.AbstractSink
-import java.util.concurrent.locks.ReentrantLock
-import org.apache.flume.Sink.Status
-import org.apache.spark.flume.{SparkSinkEvent, EventBatch, SparkFlumeProtocol}
-import scala.util.control.Breaks
+
+import java.net.InetSocketAddress
 import java.nio.ByteBuffer
-import org.apache.flume.{FlumeException, Context}
-import org.slf4j.LoggerFactory
-import java.util.concurrent.atomic.AtomicLong
-import org.apache.commons.lang.RandomStringUtils
-import java.util.concurrent._
 import java.util
-import org.apache.flume.conf.{ConfigurationException, Configurable}
+import java.util.concurrent._
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
+
+import scala.util.control.Breaks
+
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.avro.ipc.NettyServer
 import org.apache.avro.ipc.specific.SpecificResponder
-import java.net.InetSocketAddress
+import org.apache.commons.lang.RandomStringUtils
+import org.apache.flume.Sink.Status
+import org.apache.flume.conf.{ConfigurationException, Configurable}
+import org.apache.flume.sink.AbstractSink
+import org.apache.flume.{FlumeException, Context}
+
+import org.apache.spark.flume.{SparkSinkEvent, EventBatch, SparkFlumeProtocol}
+import org.slf4j.LoggerFactory
+
+
 
 class SparkSink extends AbstractSink with Configurable {
   private val LOG = LoggerFactory.getLogger(this.getClass)
