@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-graphx_2.10</artifactId>
+  <artifactId>spark-graphx_${scala.binary.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project GraphX</name>
   <url>http://spark.apache.org/</url>

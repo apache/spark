@@ -26,7 +26,7 @@
 
   <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-ganglia-lgpl_2.10</artifactId>
+  <artifactId>spark-ganglia-lgpl_${scala.binary.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Ganglia Integration</name>
   

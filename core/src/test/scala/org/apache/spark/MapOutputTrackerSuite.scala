@@ -167,7 +167,7 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val masterTracker = new MapOutputTrackerMaster(conf)
     val actorSystem = ActorSystem("test")
     val actorRef = TestActorRef[MapOutputTrackerMasterActor](
-      new MapOutputTrackerMasterActor(masterTracker, newConf))(actorSystem)
+      Props(new MapOutputTrackerMasterActor(masterTracker, newConf)))(actorSystem)
     val masterActor = actorRef.underlyingActor
 
     // Frame size should be ~123B, and no exception should be thrown
@@ -184,8 +184,8 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
 
     val masterTracker = new MapOutputTrackerMaster(conf)
     val actorSystem = ActorSystem("test")
-    val actorRef = TestActorRef[MapOutputTrackerMasterActor](
-      new MapOutputTrackerMasterActor(masterTracker, newConf))(actorSystem)
+    val actorRef = TestActorRef[MapOutputTrackerMasterActor](Props(
+      new MapOutputTrackerMasterActor(masterTracker, newConf)))(actorSystem)
     val masterActor = actorRef.underlyingActor
 
     // Frame size should be ~1.1MB, and MapOutputTrackerMasterActor should throw exception.

@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-mqtt_2.10</artifactId>
+  <artifactId>spark-streaming-mqtt_${scala.binary.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project External MQTT</name>
   <url>http://spark.apache.org/</url>

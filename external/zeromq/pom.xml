@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-zeromq_2.10</artifactId>
+  <artifactId>spark-streaming-zeromq_${scala.binary.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project External ZeroMQ</name>
   <url>http://spark.apache.org/</url>

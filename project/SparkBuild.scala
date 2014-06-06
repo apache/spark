@@ -297,7 +297,7 @@ object SparkBuild extends Build {
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
   ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings ++ genjavadocSettings
 
-  val akkaVersion = "2.2.3-shaded-protobuf"
+  val akkaVersion = "2.3.3"
   val chillVersion = "0.3.6"
   val codahaleMetricsVersion = "3.0.0"
   val jblasVersion = "1.2.3"
@@ -344,9 +344,9 @@ object SparkBuild extends Build {
         "commons-daemon"             % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
         "com.ning"                   % "compress-lzf"     % "1.0.0",
         "org.xerial.snappy"          % "snappy-java"      % "1.0.5",
-        "org.spark-project.akka"    %% "akka-remote"      % akkaVersion,
-        "org.spark-project.akka"    %% "akka-slf4j"       % akkaVersion,
-        "org.spark-project.akka"    %% "akka-testkit"     % akkaVersion % "test",
+        "com.typesafe.akka"         %% "akka-remote"      % akkaVersion,
+        "com.typesafe.akka"         %% "akka-slf4j"       % akkaVersion,
+        "com.typesafe.akka"         %% "akka-testkit"     % akkaVersion % "test",
         "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
         "colt"                       % "colt"             % "1.2.0",
         "org.apache.mesos"           % "mesos"            % "0.18.1" classifier("shaded-protobuf") exclude("com.google.protobuf", "protobuf-java"),
@@ -631,7 +631,7 @@ object SparkBuild extends Build {
     name := "spark-streaming-zeromq",
     previousArtifact := sparkPreviousArtifact("spark-streaming-zeromq"),
     libraryDependencies ++= Seq(
-      "org.spark-project.akka" %% "akka-zeromq" % akkaVersion
+      "com.typesafe.akka" %% "akka-zeromq" % akkaVersion
     )
   )
 
