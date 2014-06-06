@@ -188,9 +188,6 @@ private[spark] class TaskSetManager(
     var hadAliveLocations = false
     for (loc <- tasks(index).preferredLocations) {
       for (execId <- loc.executorId) {
-        if (sched.isExecutorAlive(execId)) {
-          hadAliveLocations = true
-        }
         addTo(pendingTasksForExecutor.getOrElseUpdate(execId, new ArrayBuffer))
       }
       if (sched.hasExecutorsAliveOnHost(loc.host)) {
@@ -756,7 +753,6 @@ private[spark] class TaskSetManager(
     def newLocAvail(index: Int): Boolean = {
       for (loc <- tasks(index).preferredLocations) {
         if (sched.hasExecutorsAliveOnHost(loc.host) ||
-          (loc.executorId.isDefined && sched.isExecutorAlive(loc.executorId.get)) ||
           sched.getRackForHost(loc.host).isDefined) {
           return true
         }
