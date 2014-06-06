@@ -15,22 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.shuffle.hash
 
-import org.apache.spark.serializer.Serializer
+class HashShuffleReader {
 
-private[spark] abstract class ShuffleFetcher {
-
-  /**
-   * Fetch the shuffle outputs for a given ShuffleDependency.
-   * @return An iterator over the elements of the fetched shuffle outputs.
-   */
-  def fetch[T](
-      shuffleId: Int,
-      reduceId: Int,
-      context: TaskContext,
-      serializer: Serializer = SparkEnv.get.serializer): Iterator[T]
-
-  /** Stop the fetcher */
-  def stop() {}
 }
