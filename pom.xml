@@ -209,14 +209,14 @@
     <repository>
       <id>spring-releases</id>
       <name>Spring Release Repository</name>
-      <url>http://repo.spring.io/libs-release</url> 
+      <url>http://repo.spring.io/libs-release</url>
       <releases>
         <enabled>true</enabled>
       </releases>
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
-    </repository> 
+    </repository>
   </repositories>
 
   <dependencyManagement>
@@ -980,11 +980,15 @@
           <artifactId>avro</artifactId>
         </dependency>
       </dependencies>
+      <properties>
+        <hadoop.version>0.23.10</hadoop.version>
+      </properties>
     </profile>
 
     <profile>
       <id>hadoop-2.2</id>
       <properties>
+        <hadoop.version>2.2.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
       </properties>
     </profile>
@@ -992,6 +996,7 @@
     <profile>
       <id>hadoop-2.3</id>
       <properties>
+        <hadoop.version>2.3.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
       </properties>
@@ -1000,6 +1005,7 @@
     <profile>
       <id>hadoop-2.4</id>
       <properties>
+        <hadoop.version>2.4.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
       </properties>
