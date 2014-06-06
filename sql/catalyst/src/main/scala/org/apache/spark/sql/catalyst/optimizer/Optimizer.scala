@@ -36,7 +36,8 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
       ConstantFolding,
       BooleanSimplification,
       SimplifyFilters,
-      SimplifyCasts) ::
+      SimplifyCasts,
+      SimplifyCaseConversionExpressions) ::
     Batch("Filter Pushdown", FixedPoint(100),
       CombineFilters,
       PushPredicateThroughProject,
@@ -158,6 +159,10 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e: StringRegexExpression => e.children match {
         case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: CaseConversionExpression => e.children match {
+        case Literal(null, _) :: Nil => Literal(null, e.dataType)
         case _ => e
       }
     }
@@ -373,5 +378,20 @@ object CombineLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ll @ Limit(le, nl @ Limit(ne, grandChild)) =>
       Limit(If(LessThan(ne, le), ne, le), grandChild)
+  }
+}
+
+/**
+ * Removes the inner [[catalyst.expressions.CaseConversionExpression]] that are unnecessary because
+ * the inner conversion is overwritten by the outer one.
+ */
+object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case Upper(Upper(child)) => Upper(child)
+      case Upper(Lower(child)) => Upper(child)
+      case Lower(Upper(child)) => Lower(child)
+      case Lower(Lower(child)) => Lower(child)
+    }
   }
 }
