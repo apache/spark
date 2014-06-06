@@ -111,4 +111,10 @@ private[sql] trait SchemaRDDLike {
   @Experimental
   def saveAsTable(tableName: String): Unit =
     sqlContext.executePlan(InsertIntoCreatedTable(None, tableName, logicalPlan)).toRdd
+
+
+  /**
+   * Print the schema of this SchemaRDD.
+   */
+  def printSchema = queryExecution.analyzed.printSchema()
 }
