@@ -77,13 +77,13 @@ private[streaming] class FlumePollingReceiver(
   private var connections = Array.empty[FlumeConnection] // temporarily empty, filled in later
 
   override def onStart(): Unit = {
-    val connectionBuilder = new mutable.ArrayBuilder.ofRef[FlumeConnection]()
-    addresses.map(host => {
+    // Create the connections to each Flume agent.
+    connections = addresses.map(host => {
       val transceiver = new NettyTransceiver(host, channelFactory)
       val client = SpecificRequestor.getClient(classOf[SparkFlumeProtocol.Callback], transceiver)
-      connectionBuilder += new FlumeConnection(transceiver, client)
-    })
-    connections = connectionBuilder.result()
+      new FlumeConnection(transceiver, client)
+    }).toArray
+
     val dataReceiver = new Runnable {
       override def run(): Unit = {
         var counter = 0
@@ -93,14 +93,18 @@ private[streaming] class FlumePollingReceiver(
           counter += 1
           val batch = client.getEventBatch(maxBatchSize)
           val seq = batch.getSequenceNumber
-          val events: java.util.List[SparkSinkEvent] = batch.getEventBatch
+          val events: java.util.List[SparkSinkEvent] = batch.getEvents
           logDebug("Received batch of " + events.size() + " events with sequence number: " + seq)
           try {
             events.foreach(event => store(SparkPollingEvent.fromSparkSinkEvent(event)))
             client.ack(seq)
           } catch {
             case e: Throwable =>
-              client.nack(seq)
+              try {
+                client.nack(seq) // If the agent is down, even this could fail and throw
+              } catch {
+                case e: Throwable => logError("Sending Nack also failed. A Flume agent is down.")
+              }
               TimeUnit.SECONDS.sleep(2L) // for now just leave this as a fixed 2 seconds.
               logWarning("Error while attempting to store events", e)
           }

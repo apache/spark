@@ -28,7 +28,7 @@ protocol SparkFlumeProtocol {
 
   record EventBatch {
     string sequenceNumber;
-    array<SparkSinkEvent> eventBatch;
+    array<SparkSinkEvent> events;
   }
 
   EventBatch getEventBatch (int n);
