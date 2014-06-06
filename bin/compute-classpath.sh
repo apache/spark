@@ -30,6 +30,11 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH:$FWDIR/conf"
 
+# If SPARK_CONF_DIR is defined give it preference over default conf in spark home
+if [ -n "${SPARK_CONF_DIR}" ]; then
+  CLASSPATH="$SPARK_CONF_DIR:$CLASSPATH"
+fi
+
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
 
 if [ -n "$JAVA_HOME" ]; then
