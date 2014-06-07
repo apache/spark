@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
 case class ExplainCommandPhysical(child: SparkPlan)
                                  (@transient context: SQLContext) extends UnaryNode {
   def execute(): RDD[Row] = {
-    val lines = child.toString.split("\n").map(s => new GenericRow(Array[Any](s)))
-    context.sparkContext.parallelize(lines)
+    val planString = new GenericRow(Array[Any](child.toString))
+    context.sparkContext.parallelize(Seq(planString))
   }
 
   def output: Seq[Attribute] = child.output // right thing to do?
