@@ -259,8 +259,9 @@ class RowMatrix(
    * Then we compute U via easy matrix multiplication as U =  A * (V * S^{-1}).
    * Note that this approach requires `O(nnz(A))` time.
    *
-   * When the requested eigenvalues k = n, a non-sparse implementation will be used, which requires
-   * `n^2` doubles to fit in memory and `O(n^3)` time on the master node.
+   * ARPACK requires k to be strictly less than n. Thus when the requested eigenvalues k = n, a
+   * non-sparse implementation will be used, which requires `n^2` doubles to fit in memory and
+   * `O(n^3)` time on the master node.
    *
    * At most k largest non-zero singular values and associated vectors are returned.
    * If there are k such values, then the dimensions of the return will be:
@@ -274,7 +275,8 @@ class RowMatrix(
    * @param computeU whether to compute U
    * @param rCond the reciprocal condition number. All singular values smaller than rCond * sigma(0)
    *              are treated as zero, where sigma(0) is the largest singular value.
-   * @param tol the tolerance of the svd computation.
+   * @param tol the numerical tolerance of svd computation. Larger tolerance means fewer iterations,
+   *            but less accurate result.
    * @return SingularValueDecomposition(U, s, V)
    */
   def computeSVD(

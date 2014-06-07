@@ -50,16 +50,26 @@ object EigenValueDecomposition {
 
     val arpack = ARPACK.getInstance()
 
+    // tolerance used in stopping criterion
     val tolW = new doubleW(tol)
+    // number of desired eigenvalues, 0 < nev < n
     val nev = new intW(k)
+    // nev Lanczos vectors are generated are generated in the first iteration
+    // ncv-nev Lanczos vectors are generated are generated in each subsequent iteration
+    // ncv must be smaller than n
     val ncv = scala.math.min(2 * k, n)
 
+    // "I" for standard eigenvalue problem, "G" for generalized eigenvalue problem
     val bmat = "I"
+    // "LM" : compute the NEV largest (in magnitude) eigenvalues
     val which = "LM"
 
     var iparam = new Array[Int](11)
+    // use exact shift in each iteration
     iparam(0) = 1
+    // maximum number of Arnoldi update iterations, or the actual number of iterations on output
     iparam(2) = 300
+    // Mode 1: A*x = lambda*x, A symmetric
     iparam(6) = 1
 
     var ido = new intW(0)
@@ -70,15 +80,17 @@ object EigenValueDecomposition {
     var workl = new Array[Double](ncv * (ncv + 8))
     var ipntr = new Array[Int](11)
 
-    // first call to ARPACK
+    // call ARPACK's reverse communication, first iteration with ido = 0
     arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr, workd,
       workl, workl.length, info)
 
     val w = BDV(workd)
 
-    while(ido.`val` != 99) {
+    // ido = 99 : done flag in reverse communication
+    while (ido.`val` != 99) {
       if (ido.`val` != -1 && ido.`val` != 1) {
-        throw new IllegalStateException("ARPACK returns ido = " + ido.`val`)
+        throw new IllegalStateException("ARPACK returns ido = " + ido.`val` +
+            " This flag is not compatible with Mode 1: A*x = lambda*x, A symmetric.")
       }
       // multiply working vector with the matrix
       val inputOffset = ipntr(0) - 1
@@ -86,28 +98,40 @@ object EigenValueDecomposition {
       val x = w(inputOffset until inputOffset + n)
       val y = w(outputOffset until outputOffset + n)
       y := BDV(mul(Vectors.fromBreeze(x).asInstanceOf[DenseVector]).toArray)
-      // call ARPACK
+      // call ARPACK's reverse communication
       arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr,
         workd, workl, workl.length, info)
     }
 
     if (info.`val` != 0) {
-      throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val`)
+      info.`val` match {
+        case 1 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
+            " Maximum number of iterations taken. (Refer ARPACK user guide for details)")
+        case 2 => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
+            " No shifts could be applied. Try to increase NCV. " +
+            "(Refer ARPACK user guide for details)")
+        case _ => throw new IllegalStateException("ARPACK returns non-zero info = " + info.`val` +
+            " Please refer ARPACK user guide for error message.")
+      }
     }
 
     val d = new Array[Double](nev.`val`)
     val select = new Array[Boolean](ncv)
+    // copy the Ritz vectors
     val z = java.util.Arrays.copyOfRange(v, 0, nev.`val` * n)
 
+    // call ARPACK's post-processing for eigenvectors
     arpack.dseupd(true, "A", select, d, z, n, 0.0, bmat, n, which, nev, tol, resid, ncv, v, n,
       iparam, ipntr, workd, workl, workl.length, info)
 
+    // number of computed eigenvalues, might be smaller than k
     val computed = iparam(4)
 
     val eigenPairs = java.util.Arrays.copyOfRange(d, 0, computed).zipWithIndex.map{
       r => (r._1, java.util.Arrays.copyOfRange(z, r._2 * n, r._2 * n + n))
     }
 
+    // sort the eigen-pairs in descending order
     val sortedEigenPairs = eigenPairs.sortBy(-1 * _._1)
 
     // copy eigenvectors in descending order of eigenvalues
