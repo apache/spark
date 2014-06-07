@@ -17,45 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-
-/**
- * :: DeveloperApi ::
- */
-//@DeveloperApi
-//case class SetCommandPhysical(
-//    key: Option[String],
-//    value: Option[String],
-//    context: SQLContext)
-//  extends LeafNode {
-//
-//  "hi".split("=", 2)
-//
-//   def execute(): RDD[Row] = (key, value) match {
-//     case (Some(k), Some(v)) => context.emptyResult
-//     case (Some(k), None) =>
-//       val resultString = context.sqlConf.getOption(k) match {
-//         case Some(v) => s"$k=$v"
-//         case None => s"$k is undefined"
-//       }
-//       context.sparkContext.parallelize(Seq(new GenericRow(Array[Any](resultString))), 1)
-//     case (None, None) =>
-//       val pairs = context.sqlConf.getAll
-//       val rows = pairs.map { case (k, v) =>
-//         new GenericRow(Array[Any](s"$k=$v"))
-//       }.toSeq
-//       // Assume config parameters can fit into one split (machine) ;)
-//       context.sparkContext.parallelize(rows, 1)
-//     case _ => context.emptyResult
-//   }
-//
-//   def output: Seq[Attribute] = Seq.empty // TODO: right thing?
-//}
-
 
 case class ExplainCommandPhysical(child: SparkPlan)
                                  (@transient context: SQLContext) extends UnaryNode {
