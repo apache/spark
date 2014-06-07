@@ -21,14 +21,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
 
-case class ExplainCommandPhysical(child: SparkPlan)
+case class ExplainCommandPhysical(child: SparkPlan, output: Seq[Attribute])
                                  (@transient context: SQLContext) extends UnaryNode {
   def execute(): RDD[Row] = {
     val planString = new GenericRow(Array[Any](child.toString))
     context.sparkContext.parallelize(Seq(planString))
   }
-
-  def output: Seq[Attribute] = child.output // right thing to do?
 
   override def otherCopyArgs = context :: Nil
 }

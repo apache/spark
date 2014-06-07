@@ -223,7 +223,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.ExplainCommand(child) =>
         val qe = context.mkQueryExecution(child)
-        Seq(execution.ExplainCommandPhysical(qe.executedPlan)(context))
+        Seq(execution.ExplainCommandPhysical(qe.executedPlan, plan.output)(context))
       case _ => Nil
     }
   }
