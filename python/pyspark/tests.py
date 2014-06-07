@@ -303,18 +303,17 @@ class TestInputFormat(PySparkTestCase):
 
     def test_newolderror(self):
         basepath = self.tempdir.name
-        newFromOld = self.sc.hadoopFile(
+        self.assertRaises(Exception, lambda: self.sc.hadoopFile(
             basepath + "/sftestdata/sfint/",
             "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
             "org.apache.hadoop.io.IntWritable",
-            "org.apache.hadoop.io.Text")
-        self.assertRaises(Exception, lambda: newFromOld.collect())
+            "org.apache.hadoop.io.Text"))
 
-        oldFromNew = self.sc.newAPIHadoopFile(basepath + "/sftestdata/sfint/",
-                                              "org.apache.hadoop.mapred.SequenceFileInputFormat",
-                                              "org.apache.hadoop.io.IntWritable",
-                                              "org.apache.hadoop.io.Text")
-        self.assertRaises(Exception, lambda: oldFromNew.collect())
+        self.assertRaises(Exception, lambda: self.sc.newAPIHadoopFile(
+            basepath + "/sftestdata/sfint/",
+            "org.apache.hadoop.mapred.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text"))
 
     def test_bad_inputs(self):
         basepath = self.tempdir.name

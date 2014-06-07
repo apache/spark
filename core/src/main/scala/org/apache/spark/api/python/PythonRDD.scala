@@ -349,14 +349,19 @@ private[spark] object PythonRDD extends Logging {
     }
   }
 
-  /** Create an RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]] */
+  /**
+   * Create an RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]],
+   * key and value class.
+   * A key and/or value converter class can optionally be passed in
+   * (see [[org.apache.spark.api.python.Converter]])
+   */
   def sequenceFile[K, V](
       sc: JavaSparkContext,
       path: String,
       keyClassMaybeNull: String,
       valueClassMaybeNull: String,
-      keyConverter: String,
-      valueConverter: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
       minSplits: Int) = {
     val keyClass = Option(keyClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
     val valueClass = Option(valueClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
@@ -364,15 +369,19 @@ private[spark] object PythonRDD extends Logging {
     implicit val vcm = ClassTag(Class.forName(valueClass)).asInstanceOf[ClassTag[V]]
     val kc = kcm.runtimeClass.asInstanceOf[Class[K]]
     val vc = vcm.runtimeClass.asInstanceOf[Class[V]]
+
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
-    val converted = PythonHadoopUtil.convertRDD[K, V](
-      rdd, keyClass, Option(keyConverter), valueClass, Option(valueConverter))
+    val keyConverter = Converter.getInstance(Option(keyConverterClass))
+    val valueConverter = Converter.getInstance(Option(valueConverterClass))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd, keyConverter, valueConverter)
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
   /**
    * Create an RDD from a file path, using an arbitrary [[org.apache.hadoop.mapreduce.InputFormat]],
-   * key and value class
+   * key and value class.
+   * A key and/or value converter class can optionally be passed in
+   * (see [[org.apache.spark.api.python.Converter]])
    */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
       sc: JavaSparkContext,
@@ -380,8 +389,8 @@ private[spark] object PythonRDD extends Logging {
       inputFormatClass: String,
       keyClass: String,
       valueClass: String,
-      keyConverter: String,
-      valueConverter: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
       confAsMap: java.util.HashMap[String, String]) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
     val baseConf = sc.hadoopConfiguration()
@@ -389,30 +398,34 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
-    val converted = PythonHadoopUtil.convertRDD[K, V](
-      rdd, keyClass, Option(keyConverter), valueClass, Option(valueConverter))
+    val keyConverter = Converter.getInstance(Option(keyConverterClass))
+    val valueConverter = Converter.getInstance(Option(valueConverterClass))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd, keyConverter, valueConverter)
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
   /**
    * Create an RDD from a [[org.apache.hadoop.conf.Configuration]] converted from a map that is
    * passed in from Python, using an arbitrary [[org.apache.hadoop.mapreduce.InputFormat]],
-   * key and value class
+   * key and value class.
+   * A key and/or value converter class can optionally be passed in
+   * (see [[org.apache.spark.api.python.Converter]])
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
       sc: JavaSparkContext,
       inputFormatClass: String,
       keyClass: String,
       valueClass: String,
-      keyConverter: String,
-      valueConverter: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
       confAsMap: java.util.HashMap[String, String]) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClass, keyClass, valueClass, conf)
-    val converted = PythonHadoopUtil.convertRDD[K, V](
-      rdd, keyClass, Option(keyConverter), valueClass, Option(valueConverter))
+    val keyConverter = Converter.getInstance(Option(keyConverterClass))
+    val valueConverter = Converter.getInstance(Option(valueConverterClass))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd, keyConverter, valueConverter)
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
@@ -439,7 +452,9 @@ private[spark] object PythonRDD extends Logging {
 
   /**
    * Create an RDD from a file path, using an arbitrary [[org.apache.hadoop.mapred.InputFormat]],
-   * key and value class
+   * key and value class.
+   * A key and/or value converter class can optionally be passed in
+   * (see [[org.apache.spark.api.python.Converter]])
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](
       sc: JavaSparkContext,
@@ -447,8 +462,8 @@ private[spark] object PythonRDD extends Logging {
       inputFormatClass: String,
       keyClass: String,
       valueClass: String,
-      keyConverter: String,
-      valueConverter: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
       confAsMap: java.util.HashMap[String, String]) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
     val baseConf = sc.hadoopConfiguration()
@@ -456,8 +471,9 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
-    val converted = PythonHadoopUtil.convertRDD[K, V](
-      rdd, keyClass, Option(keyConverter), valueClass, Option(valueConverter))
+    val keyConverter = Converter.getInstance(Option(keyConverterClass))
+    val valueConverter = Converter.getInstance(Option(valueConverterClass))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd, keyConverter, valueConverter)
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
@@ -465,21 +481,24 @@ private[spark] object PythonRDD extends Logging {
    * Create an RDD from a [[org.apache.hadoop.conf.Configuration]] converted from a map
    * that is passed in from Python, using an arbitrary [[org.apache.hadoop.mapred.InputFormat]],
    * key and value class
+   * A key and/or value converter class can optionally be passed in
+   * (see [[org.apache.spark.api.python.Converter]])
    */
   def hadoopRDD[K, V, F <: InputFormat[K, V]](
       sc: JavaSparkContext,
       inputFormatClass: String,
       keyClass: String,
       valueClass: String,
-      keyConverter: String,
-      valueConverter: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
       confAsMap: java.util.HashMap[String, String]) = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClass, keyClass, valueClass, conf)
-    val converted = PythonHadoopUtil.convertRDD[K, V](
-      rdd, keyClass, Option(keyConverter), valueClass, Option(valueConverter))
+    val keyConverter = Converter.getInstance(Option(keyConverterClass))
+    val valueConverter = Converter.getInstance(Option(valueConverterClass))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd, keyConverter, valueConverter)
     JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 

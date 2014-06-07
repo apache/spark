@@ -18,7 +18,7 @@
 package org.apache.spark.api.python
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.Logging
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
 import scala.util.{Failure, Success, Try}
@@ -31,15 +31,33 @@ import org.apache.spark.annotation.Experimental
  * transformation code by overriding the convert method.
  */
 @Experimental
-trait Converter[T, U] {
+trait Converter[T, U] extends Serializable {
   def convert(obj: T): U
+}
+
+private[python] object Converter extends Logging {
+
+  def getInstance(converterClass: Option[String]): Converter[Any, Any] = {
+    converterClass.map { cc =>
+      Try {
+        val c = Class.forName(cc).newInstance().asInstanceOf[Converter[Any, Any]]
+        logInfo(s"Loaded converter: $cc")
+        c
+      } match {
+        case Success(c) => c
+        case Failure(err) =>
+          logError(s"Failed to load converter: $cc")
+          throw err
+      }
+    }.getOrElse { new DefaultConverter }
+  }
 }
 
 /**
  * A converter that handles conversion of common [[org.apache.hadoop.io.Writable]] objects.
  * Other objects are passed through without conversion.
  */
-private[python] object DefaultConverter extends Converter[Any, Any] {
+private[python] class DefaultConverter extends Converter[Any, Any] {
 
   /**
    * Converts a [[org.apache.hadoop.io.Writable]] to the underlying primitive, String or
@@ -48,16 +66,16 @@ private[python] object DefaultConverter extends Converter[Any, Any] {
   private def convertWritable(writable: Writable): Any = {
     import collection.JavaConversions._
     writable match {
-      case iw: IntWritable => SparkContext.intWritableConverter().convert(iw)
-      case dw: DoubleWritable => SparkContext.doubleWritableConverter().convert(dw)
-      case lw: LongWritable => SparkContext.longWritableConverter().convert(lw)
-      case fw: FloatWritable => SparkContext.floatWritableConverter().convert(fw)
-      case t: Text => SparkContext.stringWritableConverter().convert(t)
-      case bw: BooleanWritable => SparkContext.booleanWritableConverter().convert(bw)
-      case byw: BytesWritable => SparkContext.bytesWritableConverter().convert(byw)
+      case iw: IntWritable => iw.get()
+      case dw: DoubleWritable => dw.get()
+      case lw: LongWritable => lw.get()
+      case fw: FloatWritable => fw.get()
+      case t: Text => t.toString
+      case bw: BooleanWritable => bw.get()
+      case byw: BytesWritable => byw.getBytes
       case n: NullWritable => null
       case aw: ArrayWritable => aw.get().map(convertWritable(_))
-      case mw: MapWritable => mapAsJavaMap(mw.map{ case (k, v) =>
+      case mw: MapWritable => mapAsJavaMap(mw.map { case (k, v) =>
         (convertWritable(k), convertWritable(v))
       }.toMap)
       case other => other
@@ -74,43 +92,7 @@ private[python] object DefaultConverter extends Converter[Any, Any] {
   }
 }
 
-/**
- * The converter registry holds a key and value converter, so that they are only instantiated
- * once per RDD partition.
- */
-private[python] class ConverterRegistry extends Logging {
-
-  var keyConverter: Converter[Any, Any] = DefaultConverter
-  var valueConverter: Converter[Any, Any] = DefaultConverter
-
-  def convertKey(obj: Any): Any = keyConverter.convert(obj)
-
-  def convertValue(obj: Any): Any = valueConverter.convert(obj)
-
-  def registerKeyConverter(converterClass: String) = {
-    keyConverter = register(converterClass)
-    logInfo(s"Loaded and registered key converter ($converterClass)")
-  }
-
-  def registerValueConverter(converterClass: String) = {
-    valueConverter = register(converterClass)
-    logInfo(s"Loaded and registered value converter ($converterClass)")
-  }
-
-  private def register(converterClass: String): Converter[Any, Any] = {
-    Try {
-      val converter = Class.forName(converterClass).newInstance().asInstanceOf[Converter[Any, Any]]
-      converter
-    } match {
-      case Success(s) => s
-      case Failure(err) =>
-        logError(s"Failed to register converter: $converterClass")
-        throw err
-    }
-  }
-}
-
-/** Utilities for working with Python objects -> Hadoop-related objects */
+/** Utilities for working with Python objects <-> Hadoop-related objects */
 private[python] object PythonHadoopUtil {
 
   /**
@@ -139,18 +121,9 @@ private[python] object PythonHadoopUtil {
    * [[org.apache.hadoop.io.Writable]], into an RDD[(K, V)]
    */
   def convertRDD[K, V](rdd: RDD[(K, V)],
-                       keyClass: String,
-                       keyConverter: Option[String],
-                       valueClass: String,
-                       valueConverter: Option[String]) = {
-    rdd.mapPartitions { case iter =>
-      val registry = new ConverterRegistry
-      keyConverter.foreach(registry.registerKeyConverter(_))
-      valueConverter.foreach(registry.registerValueConverter(_))
-      iter.map { case (k, v) =>
-        (registry.convertKey(k).asInstanceOf[K], registry.convertValue(v).asInstanceOf[V])
-      }
-    }
+                       keyConverter: Converter[Any, Any],
+                       valueConverter: Converter[Any, Any]): RDD[(Any, Any)] = {
+    rdd.map { case (k, v) => (keyConverter.convert(k), valueConverter.convert(v)) }
   }
 
 }
