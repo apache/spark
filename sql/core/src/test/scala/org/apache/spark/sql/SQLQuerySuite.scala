@@ -34,6 +34,13 @@ class SQLQuerySuite extends QueryTest {
       arrayData.map(d => (d.data, d.data(0), d.data(0) + d.data(1), d.data(1))).collect().toSeq)
   }
 
+  test("left semi greater than predicate") {
+    checkAnswer(
+      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
+      Seq((3,1), (3,2))
+    )
+  }
+
   test("index into array of arrays") {
     checkAnswer(
       sql(
