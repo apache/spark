@@ -455,7 +455,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def textFile(path: String, minPartitions: Int = defaultMinPartitions): RDD[String] = {
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
-      minPartitions).map(pair => pair._2.toString)
+      minPartitions).map(pair => pair._2.toString).setName(path)
   }
 
   /**
@@ -496,7 +496,7 @@ class SparkContext(config: SparkConf) extends Logging {
       classOf[String],
       classOf[String],
       updateConf,
-      minPartitions)
+      minPartitions).setName(path)
   }
 
   /**
@@ -551,7 +551,7 @@ class SparkContext(config: SparkConf) extends Logging {
       inputFormatClass,
       keyClass,
       valueClass,
-      minPartitions)
+      minPartitions).setName(path)
   }
 
   /**
@@ -623,7 +623,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
-    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf)
+    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
   }
 
   /**
