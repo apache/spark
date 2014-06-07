@@ -54,14 +54,7 @@ private[spark] class TaskSetManager(
     clock: Clock = SystemClock)
   extends Schedulable with Logging
 {
-  // Remember when this TaskSetManager is created
-  val creationTime = clock.getTime()
   val conf = sched.sc.conf
-
-  // The period we wait for new executors to come up
-  // After this period, tasks in pendingTasksWithNoPrefs will be considered as PROCESS_LOCAL
-  private val WAIT_NEW_EXEC_TIMEOUT = conf.getLong("spark.scheduler.waitNewExecutorTime", 3000L)
-  private var waitingNewExec = true
 
   /*
    * Sometimes if an executor is dead or in an otherwise invalid state, the driver
@@ -366,8 +359,7 @@ private[spark] class TaskSetManager(
     }
 
     // Look for no-pref tasks after rack-local tasks since they can run anywhere.
-    for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)
-         if (!waitingNewExec || tasks(index).preferredLocations.isEmpty)) {
+    for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)) {
       return Some((index, TaskLocality.PROCESS_LOCAL))
     }
 
@@ -396,9 +388,6 @@ private[spark] class TaskSetManager(
       var allowedLocality = getAllowedLocalityLevel(curTime)
       if (allowedLocality > maxLocality) {
         allowedLocality = maxLocality   // We're not allowed to search for farther-away tasks
-      }
-      if (waitingNewExec && curTime - creationTime > WAIT_NEW_EXEC_TIMEOUT) {
-        waitingNewExec = false
       }
 
       findTask(execId, host, allowedLocality) match {
