@@ -29,4 +29,6 @@ case class ExplainCommandPhysical(child: SparkPlan)
   }
 
   def output: Seq[Attribute] = child.output // right thing to do?
+
+  override def otherCopyArgs = context :: Nil
 }
