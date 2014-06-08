@@ -132,6 +132,7 @@
     <codahale.metrics.version>3.0.0</codahale.metrics.version>
     <avro.version>1.7.6</avro.version>
     <jets3t.version>0.7.1</jets3t.version>
+    <swift.version>2.3.0</swift.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
@@ -586,6 +587,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-openstack</artifactId>
+        <version>${swift.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-api</artifactId>
         <version>${yarn.version}</version>
         <exclusions>
@@ -1024,6 +1030,11 @@
           <artifactId>hadoop-client</artifactId>
           <scope>provided</scope>
         </dependency>
+   <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-openstack</artifactId>
+      <scope>provided</scope>
+    </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-yarn-api</artifactId>
