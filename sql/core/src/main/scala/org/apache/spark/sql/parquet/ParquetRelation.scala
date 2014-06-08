@@ -55,11 +55,7 @@ private[sql] case class ParquetRelation(val path: String)
       .getSchema
 
   /** Attributes */
-  // TODO: THIS POTENTIALLY LOOSES TYPE INFORMATION!!!!
-  // e.g. short <-> INT32 and byte <-> INT32
-  override val output =
-    ParquetTypesConverter
-      .convertToAttributes(parquetSchema)
+  override val output = ParquetTypesConverter.readSchemaFromFile(new Path(path))
 
   override def newInstance = ParquetRelation(path).asInstanceOf[this.type]
 

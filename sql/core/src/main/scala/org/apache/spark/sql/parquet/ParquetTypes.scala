@@ -26,20 +26,19 @@ import org.apache.hadoop.mapreduce.Job
 import parquet.hadoop.{ParquetFileReader, Footer, ParquetFileWriter}
 import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData}
 import parquet.hadoop.util.ContextUtil
-import parquet.schema.{Type => ParquetType, PrimitiveType => ParquetPrimitiveType, MessageType, MessageTypeParser}
+import parquet.schema.{Type => ParquetType, PrimitiveType => ParquetPrimitiveType, MessageType}
 import parquet.schema.{GroupType => ParquetGroupType, OriginalType => ParquetOriginalType, ConversionPatterns}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 import parquet.schema.Type.Repetition
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
 import org.apache.spark.sql.catalyst.types._
-import com.google.common.io.BaseEncoding
-import org.apache.spark.sql.execution.SparkSqlSerializer
 
 // Implicits
 import scala.collection.JavaConversions._
 
-private[parquet] object ParquetTypesConverter {
+private[parquet] object ParquetTypesConverter extends Logging {
   def isPrimitiveType(ctype: DataType): Boolean =
     classOf[PrimitiveType] isAssignableFrom ctype.getClass
 
@@ -62,7 +61,7 @@ private[parquet] object ParquetTypesConverter {
    * Converts a given Parquet `Type` into the corresponding
    * [[org.apache.spark.sql.catalyst.types.DataType]].
    *
-   * Note that we apply the following conversion rules:
+   * We apply the following conversion rules:
    * <ul>
    *   <li> Primitive types are converter to the corresponding primitive type.</li>
    *   <li> Group types that have a single field that is itself a group, which has repetition
@@ -97,6 +96,7 @@ private[parquet] object ParquetTypesConverter {
           keyValueGroup.getFields.apply(1).getName == CatalystConverter.MAP_VALUE_SCHEMA_NAME
       }
     }
+
     def correspondsToArray(groupType: ParquetGroupType): Boolean = {
       groupType.getFieldCount == 1 &&
         groupType.getFieldName(0) == CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME &&
@@ -188,7 +188,7 @@ private[parquet] object ParquetTypesConverter {
    *   <li> Primitive types are converted into Parquet's primitive types.</li>
    *   <li> [[org.apache.spark.sql.catalyst.types.StructType]]s are converted
    *        into Parquet's `GroupType` with the corresponding field types.</li>
-   *   <li> [[org.apache.spark.sql.catalyst.types.ArrayType]]s are converterd
+   *   <li> [[org.apache.spark.sql.catalyst.types.ArrayType]]s are converted
    *        into a 2-level nested group, where the outer group has the inner
    *        group as sole field. The inner group has name `values` and
    *        repetition level `REPEATED` and has the element type of
@@ -269,9 +269,6 @@ private[parquet] object ParquetTypesConverter {
     }
   }
 
-  def getSchema(schemaString: String) : MessageType =
-    MessageTypeParser.parseMessageType(schemaString)
-
   def convertToAttributes(parquetSchema: ParquetType): Seq[Attribute] = {
     parquetSchema
       .asGroupType()
@@ -302,7 +299,7 @@ private[parquet] object ParquetTypesConverter {
     StructType.fromAttributes(schema).toString
   }
 
-  def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration) {
+  def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration): Unit = {
     if (origPath == null) {
       throw new IllegalArgumentException("Unable to write Parquet metadata: path is null")
     }
@@ -383,6 +380,30 @@ private[parquet] object ParquetTypesConverter {
         throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path")
       }
       footers(0).getParquetMetadata
+    }
+  }
+
+  /**
+   * Reads in Parquet Metadata from the given path and tries to extract the schema
+   * (Catalyst attributes) from the application-specific key-value map. If this
+   * is empty it falls back to converting from the Parquet file schema which
+   * may lead to an upcast of types (e.g., {byte, short} to int).
+   *
+   * @param origPath The path at which we expect one (or more) Parquet files.
+   * @return A list of attributes that make up the schema.
+   */
+  def readSchemaFromFile(origPath: Path): Seq[Attribute] = {
+    val keyValueMetadata: java.util.Map[String, String] =
+      readMetaData(origPath)
+        .getFileMetaData
+        .getKeyValueMetaData
+    if (keyValueMetadata.get(RowReadSupport.SPARK_METADATA_KEY) != null) {
+      convertFromString(keyValueMetadata.get(RowReadSupport.SPARK_METADATA_KEY))
+    } else {
+      val attributes = convertToAttributes(
+        readMetaData(origPath).getFileMetaData.getSchema)
+      log.warn(s"Falling back to schema conversion from Parquet types; result: $attributes")
+      attributes
     }
   }
 }

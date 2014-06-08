@@ -65,10 +65,13 @@ case class ParquetTableScan(
       NewFileInputFormat.addInputPath(job, path)
     }
 
-    // Store Parquet schema in `Configuration`
+    // Store both requested and original schema in `Configuration`
     conf.set(
       RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
       ParquetTypesConverter.convertToString(output))
+    conf.set(
+      RowWriteSupport.SPARK_ROW_SCHEMA,
+      ParquetTypesConverter.convertToString(relation.output))
 
     // Store record filtering predicate in `Configuration`
     // Note 1: the input format ignores all predicates that cannot be expressed

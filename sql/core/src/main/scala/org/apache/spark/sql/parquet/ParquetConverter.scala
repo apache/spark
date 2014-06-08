@@ -93,13 +93,29 @@ private[sql] object CatalystConverter {
             fieldIndex,
             parent)
       }
-      case ctype: NativeType => {
-        // note: for some reason matching for StringType fails so use this ugly if instead
-        if (ctype == StringType) {
-          new CatalystPrimitiveStringConverter(parent, fieldIndex)
-        } else {
-          new CatalystPrimitiveConverter(parent, fieldIndex)
+      // Strings, Shorts and Bytes do not have a corresponding type in Parquet
+      // so we need to treat them separately
+      case StringType => {
+        new CatalystPrimitiveConverter(parent, fieldIndex) {
+          override def addBinary(value: Binary): Unit =
+            parent.updateString(fieldIndex, value)
         }
+      }
+      case ShortType => {
+        new CatalystPrimitiveConverter(parent, fieldIndex) {
+          override def addInt(value: Int): Unit =
+            parent.updateShort(fieldIndex, value.asInstanceOf[ShortType.JvmType])
+        }
+      }
+      case ByteType => {
+        new CatalystPrimitiveConverter(parent, fieldIndex) {
+          override def addInt(value: Int): Unit =
+            parent.updateByte(fieldIndex, value.asInstanceOf[ByteType.JvmType])
+        }
+      }
+      // All other primitive types use the default converter
+      case ctype: NativeType => { // note: need the type tag here!
+        new CatalystPrimitiveConverter(parent, fieldIndex)
       }
       case _ => throw new RuntimeException(
         s"unable to convert datatype ${field.dataType.toString} in CatalystConverter")
@@ -151,6 +167,12 @@ private[parquet] trait CatalystConverter {
     updateField(fieldIndex, value)
 
   protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
+    updateField(fieldIndex, value)
+
+  protected[parquet] def updateShort(fieldIndex: Int, value: Short): Unit =
+    updateField(fieldIndex, value)
+
+  protected[parquet] def updateByte(fieldIndex: Int, value: Byte): Unit =
     updateField(fieldIndex, value)
 
   protected[parquet] def updateDouble(fieldIndex: Int, value: Double): Unit =
@@ -309,6 +331,12 @@ private[parquet] class CatalystPrimitiveRowConverter(
   override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
     current.setLong(fieldIndex, value)
 
+  override protected[parquet] def updateShort(fieldIndex: Int, value: Short): Unit =
+    current.setShort(fieldIndex, value)
+
+  override protected[parquet] def updateByte(fieldIndex: Int, value: Byte): Unit =
+    current.setByte(fieldIndex, value)
+
   override protected[parquet] def updateDouble(fieldIndex: Int, value: Double): Unit =
     current.setDouble(fieldIndex, value)
 
@@ -348,21 +376,6 @@ private[parquet] class CatalystPrimitiveConverter(
 
   override def addLong(value: Long): Unit =
     parent.updateLong(fieldIndex, value)
-}
-
-/**
- * A `parquet.io.api.PrimitiveConverter` that converts Parquet strings (fixed-length byte arrays)
- * into Catalyst Strings.
- *
- * @param parent The parent group converter.
- * @param fieldIndex The index inside the record.
- */
-private[parquet] class CatalystPrimitiveStringConverter(
-    parent: CatalystConverter,
-    fieldIndex: Int)
-  extends CatalystPrimitiveConverter(parent, fieldIndex) {
-  override def addBinary(value: Binary): Unit =
-    parent.updateString(fieldIndex, value)
 }
 
 object CatalystArrayConverter {
@@ -481,6 +494,18 @@ private[parquet] class CatalystNativeArrayConverter(
   }
 
   override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit = {
+    checkGrowBuffer()
+    buffer(elements) = value.asInstanceOf[NativeType]
+    elements += 1
+  }
+
+  override protected[parquet] def updateShort(fieldIndex: Int, value: Short): Unit = {
+    checkGrowBuffer()
+    buffer(elements) = value.asInstanceOf[NativeType]
+    elements += 1
+  }
+
+  override protected[parquet] def updateByte(fieldIndex: Int, value: Byte): Unit = {
     checkGrowBuffer()
     buffer(elements) = value.asInstanceOf[NativeType]
     elements += 1

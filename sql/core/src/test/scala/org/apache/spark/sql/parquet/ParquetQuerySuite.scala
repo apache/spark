@@ -111,10 +111,23 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
   }
 
   test("Read/Write All Types") {
-    val data = AllDataTypes("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true)
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
-    sparkContext.parallelize(data :: Nil).saveAsParquetFile(tempDir)
-    assert(parquetFile(tempDir).collect().head === data)
+    val range = (0 to 255)
+    TestSQLContext.sparkContext.parallelize(range)
+      .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0))
+      .saveAsParquetFile(tempDir)
+    val result = parquetFile(tempDir).collect()
+    range.foreach {
+      i =>
+        assert(result(i).getString(0) == s"$i", s"row $i String field did not match, got ${result(i).getString(0)}")
+        assert(result(i).getInt(1) === i)
+        assert(result(i).getLong(2) === i.toLong)
+        assert(result(i).getFloat(3) === i.toFloat)
+        assert(result(i).getDouble(4) === i.toDouble)
+        assert(result(i).getShort(5) === i.toShort)
+        assert(result(i).getByte(6) === i.toByte)
+        assert(result(i).getBoolean(7) === (i % 2 == 0))
+    }
   }
 
   test("self-join parquet files") {
