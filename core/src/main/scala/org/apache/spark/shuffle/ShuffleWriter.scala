@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle
 
+import org.apache.spark.scheduler.MapStatus
+
 /**
  * Obtained inside a map task to write out records to the shuffle system.
  */
@@ -25,5 +27,5 @@ private[spark] trait ShuffleWriter[K, V] {
   def write(record: Product2[K, V]): Unit
 
   /** Close this writer, passing along whether the map completed */
-  def stop(success: Boolean)
+  def stop(success: Boolean): Option[MapStatus]
 }

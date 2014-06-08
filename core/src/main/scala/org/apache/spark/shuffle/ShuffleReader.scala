@@ -25,5 +25,5 @@ private[spark] trait ShuffleReader[K, C] {
   def read(): Iterator[Product2[K, C]]
 
   /** Close this reader */
-  def stop()
+  def stop(): Unit
 }

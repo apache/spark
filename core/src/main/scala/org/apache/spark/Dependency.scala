@@ -20,6 +20,7 @@ package org.apache.spark
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.ShuffleHandle
 
 /**
  * :: DeveloperApi ::
@@ -65,7 +66,7 @@ class ShuffleDependency[K, V, C](
 
   val shuffleId: Int = rdd.context.newShuffleId()
 
-  val shuffleHandle = rdd.context.env.shuffleManager.registerShuffle(
+  val shuffleHandle: ShuffleHandle = rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, rdd.partitions.size, this)
 
   rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))

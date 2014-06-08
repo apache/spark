@@ -53,5 +53,5 @@ private[spark] trait ShuffleManager {
   def unregisterShuffle(shuffleId: Int)
 
   /** Shut down this ShuffleManager. */
-  def stop()
+  def stop(): Unit
 }

@@ -17,6 +17,97 @@
 
 package org.apache.spark.shuffle.hash
 
-class HashShuffleWriter {
+import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
+import org.apache.spark.{Logging, MapOutputTracker, SparkEnv, TaskContext}
+import org.apache.spark.storage.{BlockObjectWriter, ShuffleWriterGroup}
+import org.apache.spark.serializer.Serializer
+import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.scheduler.MapStatus
 
+class HashShuffleWriter[K, V](
+    handle: BaseShuffleHandle[K, V, _],
+    mapId: Int,
+    context: TaskContext)
+  extends ShuffleWriter[K, V] with Logging {
+
+  private val dep = handle.dependency
+  private val numOutputSplits = dep.partitioner.numPartitions
+  private val metrics = context.taskMetrics
+  private var success = false
+  private var stopping = false
+
+  private val blockManager = SparkEnv.get.blockManager
+  private val shuffleBlockManager = blockManager.shuffleBlockManager
+  private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
+  private val shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, mapId, numOutputSplits, ser)
+
+  /** Write a record to this task's output */
+  override def write(record: Product2[K, V]): Unit = {
+    val pair = record.asInstanceOf[Product2[Any, Any]]
+    val bucketId = dep.partitioner.getPartition(pair._1)
+    shuffle.writers(bucketId).write(pair)
+  }
+
+  /** Close this writer, passing along whether the map completed */
+  override def stop(success: Boolean): Option[MapStatus] = {
+    try {
+      if (stopping) {
+        return None
+      }
+      stopping = true
+      if (success) {
+        try {
+          return Some(commitWritesAndBuildStatus())
+        } catch {
+          case e: Exception =>
+            revertWrites()
+            throw e
+        }
+      } else {
+        revertWrites()
+        return None
+      }
+    } finally {
+      // Release the writers back to the shuffle block manager.
+      if (shuffle != null && shuffle.writers != null) {
+        try {
+          shuffle.releaseWriters(success)
+        } catch {
+          case e: Exception => logError("Failed to release shuffle writers", e)
+        }
+      }
+    }
+  }
+
+  private def commitWritesAndBuildStatus(): MapStatus = {
+    // Commit the writes. Get the size of each bucket block (total block size).
+    var totalBytes = 0L
+    var totalTime = 0L
+    val compressedSizes = shuffle.writers.map { writer: BlockObjectWriter =>
+      writer.commit()
+      writer.close()
+      val size = writer.fileSegment().length
+      totalBytes += size
+      totalTime += writer.timeWriting()
+      MapOutputTracker.compressSize(size)
+    }
+
+    // Update shuffle metrics.
+    val shuffleMetrics = new ShuffleWriteMetrics
+    shuffleMetrics.shuffleBytesWritten = totalBytes
+    shuffleMetrics.shuffleWriteTime = totalTime
+    metrics.shuffleWriteMetrics = Some(shuffleMetrics)
+
+    success = true
+    new MapStatus(blockManager.blockManagerId, compressedSizes)
+  }
+
+  private def revertWrites(): Unit = {
+    if (shuffle != null && shuffle.writers != null) {
+      for (writer <- shuffle.writers) {
+        writer.revertPartialWrites()
+        writer.close()
+      }
+    }
+  }
 }
