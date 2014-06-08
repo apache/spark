@@ -83,6 +83,8 @@ class HashPartitioner(partitions: Int) extends Partitioner {
     case _ =>
       false
   }
+
+  override def hashCode: Int = numPartitions
 }
 
 /**
@@ -119,7 +121,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     }
   }
 
-  def numPartitions = partitions
+  def numPartitions = rangeBounds.length + 1
 
   private val binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
 
@@ -154,5 +156,18 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       r.rangeBounds.sameElements(rangeBounds) && r.ascending == ascending
     case _ =>
       false
+  }
+
+
+  override def hashCode(): Int = {
+    val prime = 31
+    var result = 1
+    var i = 0
+    while (i < rangeBounds.length) {
+      result = prime * result + rangeBounds(i).hashCode
+      i += 1
+    }
+    result = prime * result + ascending.hashCode
+    result
   }
 }
