@@ -178,7 +178,6 @@ case class InsertIntoParquetTable(
     ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
 
     val conf = ContextUtil.getConfiguration(job)
-    //conf.set(RowWriteSupport.PARQUET_ROW_SCHEMA, StructType.fromAttributes(relation.output).toString)
     RowWriteSupport.setSchema(relation.output, conf)
 
     val fspath = new Path(relation.path)

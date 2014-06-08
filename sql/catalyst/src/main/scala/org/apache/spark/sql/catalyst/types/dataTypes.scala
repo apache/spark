@@ -233,7 +233,7 @@ object StructType {
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
   }
 
-  //def apply(fields: Seq[StructField]) = new StructType(fields.toIndexedSeq)
+  // def apply(fields: Seq[StructField]) = new StructType(fields.toIndexedSeq)
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {

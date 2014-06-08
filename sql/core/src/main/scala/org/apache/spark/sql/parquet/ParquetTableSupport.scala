@@ -111,24 +111,12 @@ private[parquet] object RowReadSupport {
  */
 private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 
-  /*def setSchema(schema: Seq[Attribute], configuration: Configuration) {
-    configuration.set(
-      RowWriteSupport.PARQUET_ROW_SCHEMA,
-      StructType.fromAttributes(schema).toString)
-    configuration.set(
-      ParquetOutputFormat.WRITER_VERSION,
-      ParquetProperties.WriterVersion.PARQUET_1_0.toString)
-  } */
-
-  private[parquet] var schema: MessageType = null
   private[parquet] var writer: RecordConsumer = null
   private[parquet] var attributes: Seq[Attribute] = null
 
   override def init(configuration: Configuration): WriteSupport.WriteContext = {
-    //attributes = DataType(configuration.get(RowWriteSupport.PARQUET_ROW_SCHEMA))
     attributes = if (attributes == null) RowWriteSupport.getSchema(configuration) else attributes
-    schema = if (schema == null) ParquetTypesConverter.convertFromAttributes(attributes) else schema
-    // ParquetTypesConverter.convertToAttributes(schema)
+    
     log.debug(s"write support initialized for requested schema $attributes")
     ParquetRelation.enableLogForwarding()
     new WriteSupport.WriteContext(
