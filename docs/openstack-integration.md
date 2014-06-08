@@ -60,7 +60,7 @@ Create core-sites.xml and place it under /spark/conf directory. Configure core-s
 	      <value>true</value>
 	  </property>
 
-We left with `fs.swift.service.<PROVIDER>.tenant`, `fs.swift.service.<PROVIDER>.username`, `fs.swift.service.<PROVIDER>.password`. The best way is to provide them to SparkContext in run time, which seems to be impossible yet.
+We left with `fs.swift.service.<PROVIDER>.tenant`, `fs.swift.service.<PROVIDER>.username`, `fs.swift.service.<PROVIDER>.password`. The best way to provide those parameters to SparkContext in run time, which seems to be impossible yet.
 Another approach is to change Hadoop Swift FS driver to provide them via system environment variables. For now we provide them via core-sites.xml 
 
 	   <property>
