@@ -15,19 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.mllib.util
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.FunSuite
 
-class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
+import org.apache.spark.SparkException
 
-  // This test suite should run all tests in ShuffleSuite with Netty shuffle mode.
+class NumericParserSuite extends FunSuite {
 
-  override def beforeAll() {
-    System.setProperty("spark.shuffle.use.netty", "true")
-  }
+  test("parser") {
+    val s = "((1.0,2e3),-4,[5e-6,7.0E8],+9)"
+    val parsed = NumericParser.parse(s).asInstanceOf[Seq[_]]
+    assert(parsed(0).asInstanceOf[Seq[_]] === Seq(1.0, 2.0e3))
+    assert(parsed(1).asInstanceOf[Double] === -4.0)
+    assert(parsed(2).asInstanceOf[Array[Double]] === Array(5.0e-6, 7.0e8))
+    assert(parsed(3).asInstanceOf[Double] === 9.0)
 
-  override def afterAll() {
-    System.setProperty("spark.shuffle.use.netty", "false")
+    val malformatted = Seq("a", "[1,,]", "0.123.4", "1 2", "3+4")
+    malformatted.foreach { s =>
+      intercept[SparkException] {
+        NumericParser.parse(s)
+        println(s"Didn't detect malformatted string $s.")
+      }
+    }
   }
 }
