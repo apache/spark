@@ -359,8 +359,7 @@ Apart from text files, Spark's Java API also supports several other data formats
 
 <div data-lang="python"  markdown="1">
 
-PySpark can create distributed datasets from any file system supported by Hadoop, including your local file system, HDFS, KFS, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc.
-The current API is limited to text files, but support for binary Hadoop InputFormats is expected in future versions.
+PySpark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
 Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3n://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
@@ -383,8 +382,10 @@ Apart from reading files as a collection of lines,
 
 ### SequenceFile and Hadoop InputFormats
 
-In addition to reading text files, PySpark supports reading [SequenceFile](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html) 
-and any arbitrary [InputFormat](http://hadoop.apache.org/docs/current/api/org/apache/hadoop/mapred/InputFormat.html).
+In addition to reading text files, PySpark supports reading ```SequenceFile``` 
+and any arbitrary ```InputFormat```.
+
+**Note** this feature is currently marked ```Experimental``` and is intended for advanced users. It may be replaced in future with read/write support based on SparkSQL, in which case SparkSQL is the preferred approach.
 
 #### Writable Support
 
@@ -409,7 +410,7 @@ PySpark SequenceFile support loads an RDD within Java, and pickles the resulting
 #### Loading SequenceFiles
 
 Similarly to text files, SequenceFiles can be loaded by specifying the path. The key and value
-classes can be specified, but for standard Writables it should work without requiring this.
+classes can be specified, but for standard Writables this is not required.
 
 {% highlight python %}
 >>> rdd = sc.sequenceFile("path/to/sequencefile/of/doubles")
@@ -422,7 +423,7 @@ classes can be specified, but for standard Writables it should work without requ
  (1.0, u'aa')]
 {% endhighlight %}
 
-#### Loading Arbitrary Hadoop InputFormats
+#### Loading Other Hadoop InputFormats
 
 PySpark can also read any Hadoop InputFormat, for both 'new' and 'old' Hadoop APIs. If required,
 a Hadoop configuration can be passed in as a Python dict. Here is an example using the
@@ -444,19 +445,19 @@ Note that, if the InputFormat simply depends on a Hadoop configuration and/or in
 the key and value classes can easily be converted according to the above table,
 then this approach should work well for such cases.
 
-If you have custom serialized binary data (like pulling data from Cassandra / HBase) or custom
+If you have custom serialized binary data (such as loading data from Cassandra / HBase) or custom
 classes that don't conform to the JavaBean requirements, then you will first need to 
 transform that data on the Scala/Java side to something which can be handled by Pyrolite's pickler.
 A [Converter](api/scala/index.html#org.apache.spark.api.python.Converter) trait is provided 
 for this. Simply extend this trait and implement your transformation code in the ```convert``` 
-method. The ensure this class is packaged into your Spark job jar and included on the PySpark 
+method. Remember to ensure that this class, along with any dependencies required to access your ```InputFormat```, are packaged into your Spark job jar and included on the PySpark 
 classpath.
 
 See the [Python examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python) and 
 the [Converter examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/pythonconverters) 
-for examples using HBase and Cassandra.
+for examples of using HBase and Cassandra ```InputFormat```.
 
-Future support for writing data out as SequenceFileOutputFormat and other OutputFormats, 
+Future support for writing data out as ```SequenceFileOutputFormat``` and other ```OutputFormats```, 
 is forthcoming.
 
 </div>
