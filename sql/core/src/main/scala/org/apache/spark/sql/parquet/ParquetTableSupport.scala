@@ -65,12 +65,15 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
 
     if (readContext.getReadSupportMetadata != null) {
       // first try to find the read schema inside the metadata (can result from projections)
-      if (readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA) != null) {
+      if (
+        readContext
+          .getReadSupportMetadata
+          .get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA) != null) {
         schema = ParquetTypesConverter.convertFromString(
           readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
       } else {
-        // if unavailable, try the schema that was read originally from the file or provided during the
-        // creation of the Parquet relation
+        // if unavailable, try the schema that was read originally from the file or provided
+        // during the creation of the Parquet relation
         if (readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY) != null) {
           schema = ParquetTypesConverter.convertFromString(
             readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY))
@@ -96,7 +99,9 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
 
     if (requestedAttributes != null) {
       parquetSchema = ParquetTypesConverter.convertFromAttributes(requestedAttributes)
-      metadata.put(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA, ParquetTypesConverter.convertToString(requestedAttributes))
+      metadata.put(
+        RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+        ParquetTypesConverter.convertToString(requestedAttributes))
     }
 
     val origAttributesStr: String = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
