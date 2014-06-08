@@ -77,7 +77,7 @@ case class AllDataTypes(
     byteField: Byte,
     booleanField: Boolean)
 
-class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
+class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   import TestData._
   TestData // Load test data tables.
 
@@ -264,14 +264,24 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
     assert(rdd_copy1.size === 100)
     assert(rdd_copy1(0).apply(0) === 1)
     assert(rdd_copy1(0).apply(1) === "val_1")
-    sql("INSERT INTO dest SELECT * FROM source").collect()
+    // TODO: why does collecting break things? It seems InsertIntoParquet::execute() is
+    // executed twice otherwise?!
+    sql("INSERT INTO dest SELECT * FROM source")
     val rdd_copy2 = sql("SELECT * FROM dest").collect()
     assert(rdd_copy2.size === 200)
+    assert(rdd_copy2(0).apply(0) === 1)
+    assert(rdd_copy2(0).apply(1) === "val_1")
+    assert(rdd_copy2(99).apply(0) === 100)
+    assert(rdd_copy2(99).apply(1) === "val_100")
+    assert(rdd_copy2(100).apply(0) === 1)
+    assert(rdd_copy2(100).apply(1) === "val_1")
     Utils.deleteRecursively(dirname)
   }
 
   test("Insert (appending) to same table via Scala API") {
-    sql("INSERT INTO testsource SELECT * FROM testsource").collect()
+    // TODO: why does collecting break things? It seems InsertIntoParquet::execute() is
+    // executed twice otherwise?!
+    sql("INSERT INTO testsource SELECT * FROM testsource")
     val double_rdd = sql("SELECT * FROM testsource").collect()
     assert(double_rdd != null)
     assert(double_rdd.size === 30)

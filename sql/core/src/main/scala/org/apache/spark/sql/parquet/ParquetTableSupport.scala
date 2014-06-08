@@ -58,18 +58,31 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
       stringMap: java.util.Map[String, String],
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[Row] = {
-    log.debug(s"preparing for read with file schema $fileSchema")
+    log.debug(s"preparing for read with Parquet file schema $fileSchema")
     // Note: this very much imitates AvroParquet
     val parquetSchema = readContext.getRequestedSchema
-    var schema: Seq[Attribute] =
-      if (readContext.getReadSupportMetadata != null &&
-          readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY) != null) {
-        ParquetTypesConverter.convertFromString(
-          readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY))
+    var schema: Seq[Attribute] = null
+
+    if (readContext.getReadSupportMetadata != null) {
+      // first try to find the read schema inside the metadata (can result from projections)
+      if (readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA) != null) {
+        schema = ParquetTypesConverter.convertFromString(
+          readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
       } else {
-        // fall back to converting from Parquet schema
-        ParquetTypesConverter.convertToAttributes(parquetSchema)
+        // if unavailable, try the schema that was read originally from the file or provided during the
+        // creation of the Parquet relation
+        if (readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY) != null) {
+          schema = ParquetTypesConverter.convertFromString(
+            readContext.getReadSupportMetadata.get(RowReadSupport.SPARK_METADATA_KEY))
+        }
       }
+    }
+    // if both unavailable, fall back to deducing the schema from the given Parquet schema
+    if (schema == null)  {
+      log.debug("falling back to Parquet read schema")
+      schema = ParquetTypesConverter.convertToAttributes(parquetSchema)
+    }
+    log.debug(s"list of attributes that will be read: $schema")
     new RowRecordMaterializer(parquetSchema, schema)
   }
 
@@ -78,17 +91,16 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
       keyValueMetaData: java.util.Map[String, String],
       fileSchema: MessageType): ReadContext = {
     var parquetSchema: MessageType = fileSchema
-    var metadata: java.util.Map[String, String] = null
+    var metadata: java.util.Map[String, String] = new java.util.HashMap[String, String]()
     val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)
 
     if (requestedAttributes != null) {
       parquetSchema = ParquetTypesConverter.convertFromAttributes(requestedAttributes)
+      metadata.put(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA, ParquetTypesConverter.convertToString(requestedAttributes))
     }
 
     val origAttributesStr: String = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
-
     if (origAttributesStr != null) {
-      metadata = new java.util.HashMap[String, String]()
       metadata.put(RowReadSupport.SPARK_METADATA_KEY, origAttributesStr)
     }
 
