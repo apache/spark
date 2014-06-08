@@ -112,7 +112,7 @@ private[spark] class YarnClientSchedulerBackend(
 
   override def stop() {
     super.stop()
-    client.stop()
+    client.stop
     logInfo("Stopped")
   }
 
