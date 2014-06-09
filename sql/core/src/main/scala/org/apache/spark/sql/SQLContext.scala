@@ -281,11 +281,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
       """.stripMargin.trim
-
-    /**
-     * Runs the query after interposing operators that print the result of each intermediate step.
-     */
-    def debugExec() = DebugQuery(executedPlan).execute().collect()
   }
 
   /**
