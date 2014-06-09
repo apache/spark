@@ -19,7 +19,7 @@ package org.apache.spark.util.random
 
 import org.apache.commons.math3.distribution.{PoissonDistribution, NormalDistribution}
 
-private[random] object PoissonBounds {
+private[spark] object PoissonBounds {
 
   val delta = 1e-4 / 3.0
   val phi = new NormalDistribution().cumulativeProbability(1.0 - delta)
