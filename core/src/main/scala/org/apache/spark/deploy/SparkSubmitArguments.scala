@@ -360,6 +360,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |
+        |  --help, -h                  Show this help message and exit
+        |  --verbose, -v               Print additional debug output
+        |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
         |  --supervise                 If given, restarts the driver on failure.
