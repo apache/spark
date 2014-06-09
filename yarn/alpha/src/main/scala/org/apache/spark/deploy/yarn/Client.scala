@@ -505,7 +505,7 @@ object Client {
         Path.SEPARATOR + APP_JAR)
       cachedSecondaryJarLinks.foreach(jarLink =>
         Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-        Path.SEPARATOR + jarLink))
+          Path.SEPARATOR + jarLink))
     }
     Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
       Path.SEPARATOR + SPARK_JAR)
