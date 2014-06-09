@@ -137,6 +137,38 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(result.toSet === Set(("a", 6), ("b", 2), ("c", 5)))
   }
 
+  test("aggregateWithContext") {
+    val data = Array(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3))
+    val numPartitions = 2
+    val pairs = sc.makeRDD(data, numPartitions)
+    //determine the partitionId for each pair
+    type StringMap = HashMap[String, Int]
+    val partitions = pairs.collectPartitions()
+    val offSets = new StringMap
+    for (i <- 0 to numPartitions-1) {
+      partitions(i).foreach( {case (k, v) => offSets.put(k, offSets.getOrElse(k, 0) + i)})
+    }
+    val emptyMap = new StringMap {
+      override def default(key: String): Int = 0
+    }
+    val mergeElement: ((TaskContext, StringMap), (String, Int)) => StringMap = (arg1, pair) => {
+      val stringMap = arg1._2
+      val tc = arg1._1
+      stringMap(pair._1) += pair._2 + tc.partitionId
+      stringMap
+    }
+    val mergeMaps: (StringMap, StringMap) => StringMap = (map1, map2) => {
+      for ((key, value) <- map2) {
+        map1(key) += value
+      }
+      map1
+    }
+    val result = pairs.aggregateWithContext(emptyMap)(mergeElement, mergeMaps)
+    val expected = Set(("a", 6), ("b", 2), ("c", 5))
+      .map({case(k, v) => (k -> (offSets.getOrElse(k, 0) + v))})
+    assert(result.toSet === expected)
+  }
+
   test("basic caching") {
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
     assert(rdd.collect().toList === List(1, 2, 3, 4))

@@ -881,6 +881,24 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * A version of {@link #aggregate()} that passes the TaskContext to the function that does
+   * aggregation for each partition.
+   */
+  def aggregateWithContext[U: ClassTag](zeroValue: U)(seqOp: ((TaskContext, U), T) => U, combOp: (U, U) => U): U = {
+    // Clone the zero value since we will also be serializing it as part of tasks
+    var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
+    //pad seqOp and combOp with taskContext to conform to aggregate's signature in TraversableOnce
+    val paddedSeqOp = (arg1: (TaskContext, U), item: T) => (arg1._1, seqOp(arg1, item))
+    val paddedcombOp = (arg1 : (TaskContext, U), arg2: (TaskContext, U)) => (arg1._1, combOp(arg1._2, arg1._2))
+    val cleanSeqOp = sc.clean(paddedSeqOp)
+    val cleanCombOp = sc.clean(paddedcombOp)
+    val aggregatePartition = (tc: TaskContext, it: Iterator[T]) => (it.aggregate(tc, zeroValue)(cleanSeqOp, cleanCombOp))._2
+    val mergeResult = (index: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
+    sc.runJob(this, aggregatePartition, mergeResult)
+    jobResult
+  }
+
+  /**
    * Return the number of elements in the RDD.
    */
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum

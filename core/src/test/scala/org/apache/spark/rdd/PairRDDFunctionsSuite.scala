@@ -17,6 +17,8 @@
 
 package org.apache.spark.rdd
 
+import java.util.Random
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 import scala.util.Random
@@ -68,6 +70,90 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     assert(valuesFor1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
     assert(valuesFor2.toList.sorted === List(1))
+  }
+
+  test("sampleByKey") {
+    def stratifier (fractionPositive: Double) = {
+      (x: Int) => if (x % 10 < (10 * fractionPositive).toInt) "1" else "0"
+    }
+
+    // Without replacement validation
+    def takeSampleAndValidateBernoulli(stratifiedData: RDD[(String, Int)], samplingRate: Double,
+        seed: Long, n: Long) = {
+      val expectedSampleSize = stratifiedData.countByKey().mapValues(count =>
+        math.ceil(count * samplingRate).toInt)
+      val sample = stratifiedData.sampleByKey(false, samplingRate, seed)
+      val sampleCounts = sample.countByKey()
+      val takeSample = sample.collect()
+      assert(sampleCounts.forall({case(k,v) => (expectedSampleSize.get(k).get == v)}))
+      assert(takeSample.size === takeSample.toSet.size)
+      assert(takeSample.forall(x => 1 <= x._2 && x._2 <= n), s"elements not in [1, $n]")
+    }
+
+    // With replacement validation
+    def takeSampleAndValidatePoisson(stratifiedData: RDD[(String, Int)], samplingRate: Double,
+                                        seed: Long, n: Long) = {
+      val expectedSampleSize = stratifiedData.countByKey().mapValues(count =>
+        math.ceil(count * samplingRate).toInt)
+      val sample = stratifiedData.sampleByKey(true, samplingRate, seed)
+      val sampleCounts = sample.countByKey()
+      val takeSample = sample.collect()
+      assert(sampleCounts.forall({case(k,v) => (expectedSampleSize.get(k).get == v)}))
+      val groupedByKey = takeSample.groupBy({case(k, v) => k})
+      for ((key, entry) <- groupedByKey) {
+        if (expectedSampleSize.get(key).get >= 100 && samplingRate >= 0.1) {
+          // sample large enough for there to be repeats with high likelihood
+          assert(entry.toSet.size < expectedSampleSize.get(key).get)
+        } else {
+          assert(entry.toSet.size <= expectedSampleSize.get(key).get)
+        }
+      }
+      assert(takeSample.forall(x => 1 <= x._2 && x._2 <= n), s"elements not in [1, $n]")
+    }
+
+    //vary RDD size
+    for (n <- List(100, 1000, 1000000)) {
+      val data = sc.parallelize(1 to n, 2)
+      val fractionPositive = 0.3
+      val stratifiedData = data.keyBy(stratifier(fractionPositive))
+
+      val samplingRate = 0.1
+      val seed =  1L
+      takeSampleAndValidateBernoulli(stratifiedData, samplingRate, seed, n)
+      takeSampleAndValidatePoisson(stratifiedData, samplingRate, seed, n)
+    }
+
+    //vary fractionPositive
+    for (fractionPositive <- List(0.1, 0.3, 0.5, 0.7, 0.9)) {
+      val n = 100
+      val data = sc.parallelize(1 to n, 2)
+      val stratifiedData = data.keyBy(stratifier(fractionPositive))
+
+      val samplingRate = 0.1
+      val seed =  1L
+      takeSampleAndValidateBernoulli (stratifiedData, samplingRate, seed, n)
+      takeSampleAndValidatePoisson(stratifiedData, samplingRate, seed, n)
+    }
+
+    //Use the same data for the rest of the tests
+    val fractionPositive = 0.3
+    val n = 100
+    val data = sc.parallelize(1 to n, 2)
+    val stratifiedData = data.keyBy(stratifier(fractionPositive))
+
+    //vary seed
+    for (seed <- 1 to 5) {
+      val samplingRate = 0.1
+      takeSampleAndValidateBernoulli (stratifiedData, samplingRate, seed, n)
+      takeSampleAndValidatePoisson(stratifiedData, samplingRate, seed, n)
+    }
+
+    //vary sampling rate
+    for (samplingRate <- List(0.01, 0.05, 0.1, 0.5)) {
+      val seed = 1L
+      takeSampleAndValidateBernoulli (stratifiedData, samplingRate, seed, n)
+      takeSampleAndValidatePoisson(stratifiedData, samplingRate, seed, n)
+    }
   }
 
   test("reduceByKey") {
@@ -130,7 +216,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       case(k, count) => assert(error(count, k) < relativeSD)
     }
 
-    val rnd = new Random()
+    val rnd = new scala.util.Random()
 
     // The expected count for key num would be num
     val randStacked = (1 to 100).flatMap { i =>
