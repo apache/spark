@@ -1024,7 +1024,7 @@ private[spark] class BlockManager(
     if (blockId.isShuffle) {
       // Reducer may need to read many local shuffle blocks and will wrap them into Iterators
       // at the beginning. The wrapping will cost some memory (compression instance
-      // initialization, etc.). Reducer read shuffle blocks one by one so we could do the
+      // initialization, etc.). Reducer reads shuffle blocks one by one so we could do the
       // wrapping lazily to save memory.
       class LazyProxyIterator(f: => Iterator[Any]) extends Iterator[Any] {
         lazy val proxy = f
