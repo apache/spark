@@ -35,7 +35,7 @@ class FilterPushdownSuite extends OptimizerTest {
       Batch("Filter Pushdown", Once,
         CombineFilters,
         PushPredicateThroughProject,
-        PushPredicateThroughInnerJoin) :: Nil
+        PushPredicateThroughJoin) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
