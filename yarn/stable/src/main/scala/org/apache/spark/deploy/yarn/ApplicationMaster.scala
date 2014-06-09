@@ -253,11 +253,12 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       logInfo("Allocating " + args.numExecutors + " executors.")
       // Wait until all containers have finished
       yarnAllocator.addResourceRequests(args.numExecutors)
+      yarnAllocator.allocateResources()
       // Exits the loop if the user thread exits.
       while (yarnAllocator.getNumExecutorsRunning < args.numExecutors && userThread.isAlive) {
-        yarnAllocator.allocateResources()
         checkNumExecutorsFailed()
         allocateMissingExecutor()
+        yarnAllocator.allocateResources()
         ApplicationMaster.incrementAllocatorLoop(1)
         Thread.sleep(100)
       }
