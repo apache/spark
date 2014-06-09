@@ -791,6 +791,12 @@ private[hive] object HiveQl {
   val NOT = "(?i)NOT".r
   val TRUE = "(?i)TRUE".r
   val FALSE = "(?i)FALSE".r
+  val LIKE = "(?i)LIKE".r
+  val RLIKE = "(?i)RLIKE".r
+  val REGEXP = "(?i)REGEXP".r
+  val IN = "(?i)IN".r
+  val DIV = "(?i)DIV".r
+  val BETWEEN = "(?i)BETWEEN".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -860,7 +866,7 @@ private[hive] object HiveQl {
     case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
     case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
-    case Token("DIV", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+    case Token(DIV(), left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
 
     /* Comparisons */
@@ -871,17 +877,17 @@ private[hive] object HiveQl {
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
-    case Token("LIKE", left :: right:: Nil) => Like(nodeToExpr(left), nodeToExpr(right))
-    case Token("RLIKE", left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
-    case Token("REGEXP", left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
+    case Token(LIKE(), left :: right:: Nil) => Like(nodeToExpr(left), nodeToExpr(right))
+    case Token(RLIKE(), left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
+    case Token(REGEXP(), left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
     case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) =>
       IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) =>
       IsNull(nodeToExpr(child))
-    case Token("TOK_FUNCTION", Token("IN", Nil) :: value :: list) =>
+    case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
     case Token("TOK_FUNCTION",
-           Token("between", Nil) ::
+           Token(BETWEEN(), Nil) ::
            Token("KW_FALSE", Nil) ::
            target ::
            minValue ::

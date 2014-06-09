@@ -128,8 +128,9 @@ def merge_pr(pr_num, target_ref):
 
     merge_message_flags = []
 
-    for p in [title, body]:
-        merge_message_flags += ["-m", p]
+    merge_message_flags += ["-m", title]
+    if body != None:
+        merge_message_flags += ["-m", body]
 
     authors = "\n".join(["Author: %s" % a for a in distinct_authors])
 

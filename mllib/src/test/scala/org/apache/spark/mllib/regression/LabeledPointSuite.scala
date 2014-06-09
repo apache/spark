@@ -15,19 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.mllib.regression
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.FunSuite
 
-class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
+import org.apache.spark.mllib.linalg.Vectors
 
-  // This test suite should run all tests in ShuffleSuite with Netty shuffle mode.
+class LabeledPointSuite extends FunSuite {
 
-  override def beforeAll() {
-    System.setProperty("spark.shuffle.use.netty", "true")
+  test("parse labeled points") {
+    val points = Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
+      LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))))
+    points.foreach { p =>
+      assert(p === LabeledPointParser.parse(p.toString))
+    }
   }
 
-  override def afterAll() {
-    System.setProperty("spark.shuffle.use.netty", "false")
+  test("parse labeled points with v0.9 format") {
+    val point = LabeledPointParser.parse("1.0,1.0 0.0 -2.0")
+    assert(point === LabeledPoint(1.0, Vectors.dense(1.0, 0.0, -2.0)))
   }
 }
