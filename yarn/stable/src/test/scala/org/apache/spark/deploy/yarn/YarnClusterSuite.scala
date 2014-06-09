@@ -1,0 +1,141 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.deploy.yarn
+
+import java.io.File
+
+import scala.collection.JavaConversions._
+import scala.collection.mutable.HashMap
+
+import com.google.common.base.Charsets
+import com.google.common.io.Files
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+
+import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.server.MiniYARNCluster
+
+import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.util.Utils
+
+class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers {
+
+  private val oldConf = new HashMap[String, String]()
+  private var yarnCluster: MiniYARNCluster = _
+  private var tempDir: File = _
+  private var fakeSparkJar: File = _
+
+  override def beforeAll() {
+    tempDir = Utils.createTempDir()
+
+    yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1, 1, false)
+    yarnCluster.init(new YarnConfiguration())
+    yarnCluster.start()
+
+    val sysProps = sys.props.map { case (k, v) => (k, v) }
+    sysProps.foreach { case (k, v) =>
+      if (k.startsWith("spark.")) {
+        oldConf += (k -> v)
+        sys.props -= k
+      }
+    }
+
+    yarnCluster.getConfig().foreach { e =>
+      sys.props += ("spark.hadoop." + e.getKey() -> e.getValue())
+    }
+
+    fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
+    sys.props += ("spark.yarn.jar" -> ("local:" + fakeSparkJar.getAbsolutePath()))
+    sys.props += ("spark.executor.instances" -> "1")
+    sys.props += ("spark.driver.extraClassPath" -> sys.props("java.class.path"))
+    sys.props += ("spark.executor.extraClassPath" -> sys.props("java.class.path"))
+
+    super.beforeAll()
+  }
+
+  override def afterAll() {
+    yarnCluster.stop()
+
+    val sysProps = sys.props.map { case (k, v) => (k, v) }
+    sysProps.foreach { case (k, v) =>
+      if (k.startsWith("spark.")) {
+        sys.props -= k
+      }
+    }
+
+    oldConf.foreach { case (k, v) => sys.props += (k -> v) }
+
+    super.afterAll()
+  }
+
+  test("run Spark in yarn-client mode") {
+    var result = File.createTempFile("result", null, tempDir)
+    YarnClusterDriver.main(Array("yarn-client", result.getAbsolutePath()))
+    checkResult(result)
+  }
+
+  test("run Spark in yarn-cluster mode") {
+    val main = YarnClusterDriver.getClass.getName().stripSuffix("$")
+    var result = File.createTempFile("result", null, tempDir)
+
+    // The Client object will call System.exit() after the job is done, and we don't want
+    // that because it messes up the scalatest monitoring. So replicate some of what main()
+    // does here.
+    val args = Array("--class", main,
+      "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
+      "--arg", "yarn-cluster",
+      "--arg", result.getAbsolutePath(),
+      "--num-executors", "4")
+    val sparkConf = new SparkConf()
+    val yarnConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val clientArgs = new ClientArguments(args, sparkConf)
+    new Client(clientArgs, yarnConf, sparkConf).run()
+    checkResult(result)
+  }
+
+  /**
+   * This is a workaround for an issue with yarn-cluster mode: the Client class will not provide
+   * any sort of error when the job process finishes successfully, but the job itself fails. So
+   * the tests enforce that something is written to a file after everything is ok to indicate
+   * that the job succeeded.
+   */
+  private def checkResult(result: File) = {
+    var resultString = Files.toString(result, Charsets.UTF_8)
+    resultString should be ("success")
+  }
+
+}
+
+private object YarnClusterDriver extends Logging with Matchers {
+
+  def main(args: Array[String]) = {
+    val sc = new SparkContext(new SparkConf().setMaster(args(0))
+      .setAppName("yarn \"test app\" 'with quotes'"))
+    val status = new File(args(1))
+    var result = "failure"
+    try {
+      val data = sc.parallelize(1 to 4).map(i => i).collect().toSet
+      data should be (Set(1, 2, 3, 4))
+      result = "success"
+    } finally {
+      sc.stop()
+      Files.write(result, status, Charsets.UTF_8)
+    }
+  }
+
+}
