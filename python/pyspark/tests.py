@@ -198,7 +198,7 @@ class TestRDDFunctions(PySparkTestCase):
             x |= y
             return x
           
-        sets = dict(pairs.aggregateByKey(set(), seqOp, combOp).collect())
+        sets = dict(data.aggregateByKey(set(), seqOp, combOp).collect())
         self.assertEqual(3, len(sets))
         self.assertEqual(set([1]), sets[1])
         self.assertEqual(set([2]), sets[3])
