@@ -74,7 +74,11 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
-    val numPartitions = edges.partitions.size
+    partitionBy(partitionStrategy, edges.partitions.size)
+  }
+
+  override def partitionBy(
+      partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED] = {
     val edTag = classTag[ED]
     val vdTag = classTag[VD]
     val newEdges = edges.withPartitionsRDD(edges.map { e =>
@@ -100,8 +104,11 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     new GraphImpl(vertices.reverseRoutingTables(), replicatedVertexView.reverse())
   }
 
-  override def mapVertices[VD2: ClassTag](f: (VertexId, VD) => VD2): Graph[VD2, ED] = {
-    if (classTag[VD] equals classTag[VD2]) {
+  override def mapVertices[VD2: ClassTag]
+    (f: (VertexId, VD) => VD2)(implicit eq: VD =:= VD2 = null): Graph[VD2, ED] = {
+    // The implicit parameter eq will be populated by the compiler if VD and VD2 are equal, and left
+    // null if not
+    if (eq != null) {
       vertices.cache()
       // The map preserves type, so we can use incremental replication
       val newVerts = vertices.mapVertexPartitions(_.map(f)).cache()
@@ -228,8 +235,11 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   override def outerJoinVertices[U: ClassTag, VD2: ClassTag]
       (other: RDD[(VertexId, U)])
-      (updateF: (VertexId, VD, Option[U]) => VD2): Graph[VD2, ED] = {
-    if (classTag[VD] equals classTag[VD2]) {
+      (updateF: (VertexId, VD, Option[U]) => VD2)
+      (implicit eq: VD =:= VD2 = null): Graph[VD2, ED] = {
+    // The implicit parameter eq will be populated by the compiler if VD and VD2 are equal, and left
+    // null if not
+    if (eq != null) {
       vertices.cache()
       // updateF preserves type, so we can use incremental replication
       val newVerts = vertices.leftJoin(other)(updateF).cache()
