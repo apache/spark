@@ -30,8 +30,7 @@ import scala.collection.JavaConverters._
 class SQLConf {
 
   /** Number of partitions to use for shuffle operators. */
-  def numShufflePartitions(default: Int = 150): Int = getOption("spark.sql.shuffle.partitions")
-    .map(_.toInt).getOrElse(default)
+  private[spark] def numShufflePartitions: Int = get("spark.sql.shuffle.partitions", "200").toInt
 
   private val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
