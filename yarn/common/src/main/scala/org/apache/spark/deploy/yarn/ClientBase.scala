@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
+import scala.util.{Try, Success, Failure}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -378,7 +379,7 @@ trait ClientBase extends Logging {
   }
 }
 
-object ClientBase {
+object ClientBase extends Logging {
   val SPARK_JAR: String = "__spark__.jar"
   val APP_JAR: String = "__app__.jar"
   val LOG4J_PROP: String = "log4j.properties"
@@ -388,37 +389,47 @@ object ClientBase {
 
   def getSparkJar = sys.env.get("SPARK_JAR").getOrElse(SparkContext.jarOfClass(this.getClass).head)
 
-  // Based on code from org.apache.hadoop.mapreduce.v2.util.MRApps
-  def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) {
-    val classpathEntries = Option(conf.getStrings(
-      YarnConfiguration.YARN_APPLICATION_CLASSPATH)).getOrElse(
-        getDefaultYarnApplicationClasspath())
-    if (classpathEntries != null) {
-      for (c <- classpathEntries) {
-        YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
-          File.pathSeparator)
-      }
+  def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) = {
+    val classPathElementsToAdd = getYarnAppClasspath(conf) ++ getMRAppClasspath(conf)
+    for (c <- classPathElementsToAdd.flatten) {
+      YarnSparkHadoopUtil.addToEnvironment(
+        env,
+        Environment.CLASSPATH.name,
+        c.trim,
+        File.pathSeparator)
     }
-
-    val mrClasspathEntries = Option(conf.getStrings(
-      "mapreduce.application.classpath")).getOrElse(
-        getDefaultMRApplicationClasspath())
-    if (mrClasspathEntries != null) {
-      for (c <- mrClasspathEntries) {
-        YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
-          File.pathSeparator)
-      }
-    }
+    classPathElementsToAdd
   }
 
-  def getDefaultYarnApplicationClasspath(): Array[String] = {
-    try {
-      val field = classOf[MRJobConfig].getField("DEFAULT_YARN_APPLICATION_CLASSPATH")
-      field.get(null).asInstanceOf[Array[String]]
-    } catch {
-      case err: NoSuchFieldError => null
-      case err: NoSuchFieldException => null
+  private def getYarnAppClasspath(conf: Configuration): Option[Seq[String]] =
+    Option(conf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH)) match {
+      case Some(s) => Some(s.toSeq)
+      case None => getDefaultYarnApplicationClasspath
+  }
+
+  private def getMRAppClasspath(conf: Configuration): Option[Seq[String]] =
+    Option(conf.getStrings("mapreduce.application.classpath")) match {
+      case Some(s) => Some(s.toSeq)
+      case None => getDefaultMRApplicationClasspath
     }
+
+  def getDefaultYarnApplicationClasspath: Option[Seq[String]] = {
+    val triedDefault = Try[Seq[String]] {
+      val field = classOf[YarnConfiguration].getField("DEFAULT_YARN_APPLICATION_CLASSPATH")
+      val value = field.get(null).asInstanceOf[Array[String]]
+      value.toSeq
+    } recoverWith {
+      case e: NoSuchFieldException => Success(Seq.empty[String])
+    }
+
+    triedDefault match {
+      case f: Failure[_] =>
+        logError("Unable to obtain the default YARN Application classpath.", f.exception)
+      case s: Success[_] =>
+        logDebug(s"Using the default YARN application classpath: ${s.get.mkString(",")}")
+    }
+
+    triedDefault.toOption
   }
 
   /**
@@ -426,19 +437,29 @@ object ClientBase {
    * classpath.  In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
    * So we need to use reflection to retrieve it.
    */
-  def getDefaultMRApplicationClasspath(): Array[String] = {
-    try {
+  def getDefaultMRApplicationClasspath: Option[Seq[String]] = {
+    val triedDefault = Try[Seq[String]] {
       val field = classOf[MRJobConfig].getField("DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH")
-      if (field.getType == classOf[String]) {
-        StringUtils.getStrings(field.get(null).asInstanceOf[String])
+      val value = if (field.getType == classOf[String]) {
+        StringUtils.getStrings(field.get(null).asInstanceOf[String]).toArray
       } else {
         field.get(null).asInstanceOf[Array[String]]
       }
-    } catch {
-      case err: NoSuchFieldError => null
-      case err: NoSuchFieldException => null
+      value.toSeq
+    } recoverWith {
+      case e: NoSuchFieldException => Success(Seq.empty[String])
     }
+
+    triedDefault match {
+      case f: Failure[_] =>
+        logError("Unable to obtain the default MR Application classpath.", f.exception)
+      case s: Success[_] =>
+        logDebug(s"Using the default MR application classpath: ${s.get.mkString(",")}")
+    }
+
+    triedDefault.toOption
   }
+
 
   /**
    * Returns the java command line argument for setting up log4j. If there is a log4j.properties
