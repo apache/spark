@@ -176,9 +176,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
           val mainArgs = new Array[String](args.userArgs.size)
           args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size)
           mainMethod.invoke(null, mainArgs)
-          // Some job scripts have "System.exit(0)" at the end, for example SparkPi and SparkLR.
-          // userThread will stop here unless it has uncaught exception thrown out
-          // It need shutdown hook to set SUCCEEDED
+          // Some apps have "System.exit(0)" at the end.  The user thread will stop here unless
+          // it has an uncaught exception thrown out.  It needs a shutdown hook to set SUCCEEDED.
           succeeded = true
         } finally {
           logDebug("Finishing main")
@@ -191,6 +190,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         }
       }
     }
+    t.setName("Driver")
     t.start()
     t
   }
