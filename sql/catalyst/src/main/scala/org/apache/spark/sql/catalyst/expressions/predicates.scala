@@ -202,3 +202,81 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   override def toString = s"if ($predicate) $trueValue else $falseValue"
 }
+
+// TODO: is it a good idea to put this class in this file?
+// CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END
+// When a = true, returns b; when c = true, return d; else return e
+case class Case(key: Option[Expression], branches: Seq[Expression]) extends Expression {
+  // Branches are considered in consecutive pairs (cond, val), and the last element
+  // is the val for the default catch-all case (w/o a companion condition, that is).
+
+  def children = key.toSeq ++ branches
+
+  override def nullable = branches
+    .sliding(2, 2)
+    .map {
+      case Seq(cond, value) => value.nullable
+      case Seq(elseValue) => elseValue.nullable
+    }
+    .reduce(_ || _)
+
+  def references = children.flatMap(_.references).toSet
+
+  override lazy val resolved = {
+    val allBranchesEqual = branches.sliding(2, 2).map {
+      case Seq(cond, value) => value.dataType
+      case Seq(elseValue) => elseValue.dataType
+    }.reduce(_ == _)
+    childrenResolved && allBranchesEqual
+  }
+
+  def dataType = {
+    if (!resolved) {
+      throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")
+    }
+    branches(1).dataType
+  }
+
+  type EvaluatedType = Any
+
+  override def eval(input: Row): Any = {
+    def slidingCheck(expectedVal: Any): Any = {
+      branches.sliding(2, 2).foldLeft(None.asInstanceOf[Option[Any]]) {
+        case (Some(x), _) =>
+          Some(x)
+        case (None, Seq(cond, value)) =>
+          if (cond.eval(input) == true) Some(value.eval(input)) else None
+        case (None, Seq(elseValue)) =>
+          Some(elseValue.eval(input))
+      }.getOrElse(null)
+      // If all branches fail and an elseVal is not provided, the whole statement
+      // evaluates to null, according to Hive's semantics.
+    }
+    // Check if any branch's cond evaluates either to the key (if provided), or to true.
+    if (key.isDefined) {
+      slidingCheck(key.get.eval(input))
+    } else {
+      slidingCheck(true)
+    }
+  }
+
+  override def toString = {
+    var firstBranch = ""
+    var otherBranches = ""
+    if (key.isDefined) {
+      val keyString = key.get.toString
+      firstBranch = s"if ($keyString == ${branches(0)}) { ${branches(1)} }"
+      otherBranches = branches.sliding(2, 2).drop(1).map {
+        case Seq(cond, value) => s"\nelse if ($keyString == $cond) { $value }"
+        case Seq(elseValue) => s"\nelse { $elseValue }"
+      }.mkString
+    } else {
+      firstBranch = s"if (${branches(0)}) { ${branches(1)} }"
+      otherBranches = branches.sliding(2, 2).drop(1).map {
+        case Seq(cond, value) => s"\nelse if ($cond) { $value }"
+        case Seq(elseValue) => s"\nelse { $elseValue }"
+      }.mkString
+    }
+    firstBranch ++ otherBranches
+  }
+}

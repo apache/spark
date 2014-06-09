@@ -35,7 +35,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   /**
    * Checks for three-valued-logic.  Based on:
    * http://en.wikipedia.org/wiki/Null_(SQL)#Comparisons_with_NULL_and_the_three-valued_logic_.283VL.29
-   *
+   * I.e. in flat cpo "False -> Unknown -> True", OR is lowest upper bound, AND is greatest lower bound.
    * p       q       p OR q  p AND q  p = q
    * True    True    True    True     True
    * True    False   True    False    False

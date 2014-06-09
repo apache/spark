@@ -48,8 +48,9 @@ private[hive] case class AddJar(jarPath: String) extends Command
 
 private[hive] case class AddFile(filePath: String) extends Command
 
+// FIXME: add back private
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
-private[hive] object HiveQl {
+object HiveQl {
   protected val nativeCommands = Seq(
     "TOK_DESCFUNCTION",
     "TOK_DESCTABLE",
@@ -798,6 +799,8 @@ private[hive] object HiveQl {
   val IN = "(?i)IN".r
   val DIV = "(?i)DIV".r
   val BETWEEN = "(?i)BETWEEN".r
+  val WHEN = "(?i)WHEN".r
+  val CASE = "(?i)CASE".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -903,6 +906,12 @@ private[hive] object HiveQl {
     case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
     case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
     case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
+
+    /* Case statements */
+    case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>
+      Case(None, branches.map(nodeToExpr))
+    case Token("TOK_FUNCTION", Token(CASE(), Nil) :: branches) =>
+      Case(Some(nodeToExpr(branches(0))), branches.drop(1).map(nodeToExpr))
 
     /* Complex datatype manipulation */
     case Token("[", child :: ordinal :: Nil) =>
