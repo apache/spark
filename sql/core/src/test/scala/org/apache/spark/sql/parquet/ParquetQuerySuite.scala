@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
 
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.mapreduce.Job
@@ -56,7 +56,7 @@ case class OptionalReflectData(
     doubleField: Option[Double],
     booleanField: Option[Boolean])
 
-class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
+class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   import TestData._
   TestData // Load test data tables.
 

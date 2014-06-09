@@ -105,7 +105,8 @@ class TimeStampedHashMapSuite extends FunSuite {
     map("k1") = strongRef
     map("k2") = "v2"
     map("k3") = "v3"
-    assert(map("k1") === strongRef)
+    val isEquals = map("k1") == strongRef
+    assert(isEquals)
 
     // clear strong reference to "k1"
     strongRef = null
