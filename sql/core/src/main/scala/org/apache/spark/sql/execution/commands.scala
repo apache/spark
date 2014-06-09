@@ -34,14 +34,14 @@ case class SetCommandPhysical(key: Option[String], value: Option[String], output
      case (Some(k), Some(v)) => context.emptyResult
      // Query the value bound to key k.
      case (Some(k), None) =>
-       val resultString = context.sqlConf.getOption(k) match {
+       val resultString = context.getOption(k) match {
          case Some(v) => s"$k=$v"
          case None => s"$k is undefined"
        }
        context.sparkContext.parallelize(Seq(new GenericRow(Array[Any](resultString))), 1)
      // Query all key-value pairs that are set in the SQLConf of the context.
      case (None, None) =>
-       val pairs = context.sqlConf.getAll
+       val pairs = context.getAll
        val rows = pairs.map { case (k, v) =>
          new GenericRow(Array[Any](s"$k=$v"))
        }.toSeq

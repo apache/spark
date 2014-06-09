@@ -52,13 +52,11 @@ import org.apache.spark.sql.parquet.ParquetRelation
 @AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
   extends Logging
+  with SQLConf
   with dsl.ExpressionConversions
   with Serializable {
 
   self =>
-
-  @transient
-  lazy val sqlConf: SQLConf = new SQLConf
 
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog
@@ -193,7 +191,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext = self.sparkContext
 
-    val sqlConf = self.sqlConf
+    def numPartitions = self.numShufflePartitions
 
     val strategies: Seq[Strategy] =
       SetCommandStrategy(self) ::
@@ -279,7 +277,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         // In the case of HiveContext, sqlConf is overridden to also pass the
         // pair into its HiveConf.
         if (key.isDefined && value.isDefined) {
-          sqlConf.set(key.get, value.get)
+          set(key.get, value.get)
         }
         // It doesn't matter what we return here, since this is only used
         // to force the evaluation to happen eagerly.  To query the results,

@@ -50,9 +50,9 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
-    sqlConf.set("javax.jdo.option.ConnectionURL",
+    set("javax.jdo.option.ConnectionURL",
       s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    sqlConf.set("hive.metastore.warehouse.dir", warehousePath)
+    set("hive.metastore.warehouse.dir", warehousePath)
   }
 
   configure() // Must be called before initializing the catalog below.
@@ -124,23 +124,25 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   /**
-   * Any properties set by sqlConf.set() or a SET command inside hql() or sql()
-   * will be set in the SQLConf, *as well as* getting set in the HiveConf.  In
-   * other words, the SQLConf properties will be a subset of the HiveConf properties
-   * throughout the life time of this session.
+   * SQLConf and HiveConf contracts: when the hive session is first initialized, params in
+   * HiveConf will get picked up by the SQLConf.  Additionally, any properties set by
+   * set() or a SET command inside hql() or sql() will be set in the SQLConf *as well as*
+   * in the HiveConf.
    */
   @transient protected[hive] lazy val hiveconf = new HiveConf(classOf[SessionState])
-  @transient override lazy val sqlConf: SQLConf = new SQLConf(hiveconf.getAllProperties) {
-    override def set(key: String, value: String): SQLConf = {
-      super.set(key, value)
-      runSqlHive(s"SET $key=$value")
-      this
-    }
+  @transient protected[hive] lazy val sessionState = {
+    val ss = new SessionState(hiveconf)
+    set(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
+    ss
   }
-  @transient protected[hive] lazy val sessionState = new SessionState(hiveconf)
 
   sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
   sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
+
+  override def set(key: String, value: String): Unit = {
+    super.set(key, value)
+    runSqlHive(s"SET $key=$value")
+  }
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient

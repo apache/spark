@@ -27,24 +27,23 @@ import scala.collection.JavaConverters._
  * functions (sql(), hql(), etc.), or by programmatically using setters and
  * getters of this class.  This class is thread-safe.
  */
-class SQLConf {
+trait SQLConf {
 
   /** Number of partitions to use for shuffle operators. */
   private[spark] def numShufflePartitions: Int = get("spark.sql.shuffle.partitions", "200").toInt
 
+  @transient
   private val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
 
-  def this(props: Properties) = {
-    this()
+  def set(props: Properties): Unit = {
     props.asScala.foreach { case (k, v) => this.settings.put(k, v) }
   }
 
-  def set(key: String, value: String): SQLConf = {
+  def set(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
     require(value != null, s"value cannot be null for ${key}")
     settings.put(key, value)
-    this
   }
 
   def get(key: String): String = {

@@ -165,18 +165,18 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testVal = "val0,val_1,val2.3,my_table"
 
     hql(s"set $testKey=$testVal")
-    assert(sqlConf.get(testKey, testVal + "_") == testVal)
+    assert(get(testKey, testVal + "_") == testVal)
 
     hql("set mapred.reduce.tasks=20")
-    assert(sqlConf.get("mapred.reduce.tasks", "0") == "20")
+    assert(get("mapred.reduce.tasks", "0") == "20")
     hql("set mapred.reduce.tasks = 40")
-    assert(sqlConf.get("mapred.reduce.tasks", "0") == "40")
+    assert(get("mapred.reduce.tasks", "0") == "40")
 
     hql(s"set $testKey=$testVal")
-    assert(sqlConf.get(testKey, "0") == testVal)
+    assert(get(testKey, "0") == testVal)
 
     hql(s"set $testKey=")
-    assert(sqlConf.get(testKey, "0") == "")
+    assert(get(testKey, "0") == "")
   }
 
   test("SET commands semantics for a HiveContext") {
@@ -186,7 +186,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     val nonexistentKey = "nonexistent"
     def fromRows(row: Array[Row]): Array[String] = row.map(_.getString(0))
 
-    sqlConf.clear()
+    clear()
 
     // "set" itself returns all config variables currently specified in SQLConf.
     assert(hql("set").collect().size == 0)
@@ -210,7 +210,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       Array(s"$nonexistentKey is undefined"))
 
     // Assert that sql() should have the same effects as hql() by repeating the above using sql().
-    sqlConf.clear()
+    clear()
     assert(sql("set").collect().size == 0)
 
     sql(s"SET $testKey=$testVal")
