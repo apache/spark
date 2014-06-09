@@ -65,7 +65,7 @@ private[spark] class Worker(
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
 
-  val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", true)
+  val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
   // How often worker will clean up old app folders
   val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
@@ -166,14 +166,16 @@ private[spark] class Worker(
     var retries = 0
     registrationRetryTimer = Some {
       context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
-        retries += 1
-        if (registered) {
-          registrationRetryTimer.foreach(_.cancel())
-        } else if (retries >= REGISTRATION_RETRIES) {
-          logError("All masters are unresponsive! Giving up.")
-          System.exit(1)
-        } else {
-          tryRegisterAllMasters()
+        Utils.tryOrExit {
+          retries += 1
+          if (registered) {
+            registrationRetryTimer.foreach(_.cancel())
+          } else if (retries >= REGISTRATION_RETRIES) {
+            logError("All masters are unresponsive! Giving up.")
+            System.exit(1)
+          } else {
+            tryRegisterAllMasters()
+          }
         }
       }
     }
@@ -261,14 +263,20 @@ private[spark] class Worker(
       }
       val fullId = appId + "/" + execId
       if (ExecutorState.isFinished(state)) {
-        val executor = executors(fullId)
-        logInfo("Executor " + fullId + " finished with state " + state +
-          message.map(" message " + _).getOrElse("") +
-          exitStatus.map(" exitStatus " + _).getOrElse(""))
-        executors -= fullId
-        finishedExecutors(fullId) = executor
-        coresUsed -= executor.cores
-        memoryUsed -= executor.memory
+        executors.get(fullId) match {
+          case Some(executor) => 
+            logInfo("Executor " + fullId + " finished with state " + state +
+              message.map(" message " + _).getOrElse("") +
+              exitStatus.map(" exitStatus " + _).getOrElse(""))
+            executors -= fullId
+            finishedExecutors(fullId) = executor
+            coresUsed -= executor.cores
+            memoryUsed -= executor.memory
+          case None =>
+            logInfo("Unknown Executor " + fullId + " finished with state " + state +
+              message.map(" message " + _).getOrElse("") +
+              exitStatus.map(" exitStatus " + _).getOrElse(""))
+        }
       }
 
     case KillExecutor(masterUrl, appId, execId) =>
@@ -309,10 +317,14 @@ private[spark] class Worker(
       state match {
         case DriverState.ERROR =>
           logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+        case DriverState.FAILED =>
+          logWarning(s"Driver $driverId exited with failure")
         case DriverState.FINISHED =>
           logInfo(s"Driver $driverId exited successfully")
         case DriverState.KILLED =>
           logInfo(s"Driver $driverId was killed by user")
+        case _ =>
+          logDebug(s"Driver $driverId changed state to $state")
       }
       masterLock.synchronized {
         master ! DriverStateChanged(driverId, state, exception)

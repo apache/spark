@@ -83,11 +83,17 @@ class HashPartitioner(partitions: Int) extends Partitioner {
     case _ =>
       false
   }
+
+  override def hashCode: Int = numPartitions
 }
 
 /**
  * A [[org.apache.spark.Partitioner]] that partitions sortable records by range into roughly
  * equal ranges. The ranges are determined by sampling the content of the RDD passed in.
+ *
+ * Note that the actual number of partitions created by the RangePartitioner might not be the same
+ * as the `partitions` parameter, in the case where the number of sampled records is less than
+ * the value of `partitions`.
  */
 class RangePartitioner[K : Ordering : ClassTag, V](
     partitions: Int,
@@ -119,7 +125,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     }
   }
 
-  def numPartitions = partitions
+  def numPartitions = rangeBounds.length + 1
 
   private val binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
 
@@ -154,5 +160,17 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       r.rangeBounds.sameElements(rangeBounds) && r.ascending == ascending
     case _ =>
       false
+  }
+
+  override def hashCode(): Int = {
+    val prime = 31
+    var result = 1
+    var i = 0
+    while (i < rangeBounds.length) {
+      result = prime * result + rangeBounds(i).hashCode
+      i += 1
+    }
+    result = prime * result + ascending.hashCode
+    result
   }
 }

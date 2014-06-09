@@ -28,6 +28,12 @@ class SQLQuerySuite extends QueryTest {
   // Make sure the tables are loaded.
   TestData
 
+  test("SPARK-2041 column name equals tablename") {
+    checkAnswer(
+      sql("SELECT tableName FROM tableName"),
+      "test")
+  }
+
   test("index into array") {
     checkAnswer(
       sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
@@ -85,6 +91,36 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"),
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
+
+    checkAnswer(
+      sql("SELECT * FROM arrayData ORDER BY data[0] ASC"),
+      arrayData.collect().sortBy(_.data(0)).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM arrayData ORDER BY data[0] DESC"),
+      arrayData.collect().sortBy(_.data(0)).reverse.toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData ORDER BY data[1] ASC"),
+      mapData.collect().sortBy(_.data(1)).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData ORDER BY data[1] DESC"),
+      mapData.collect().sortBy(_.data(1)).reverse.toSeq)
+  }
+
+  test("limit") {
+    checkAnswer(
+      sql("SELECT * FROM testData LIMIT 10"),
+      testData.take(10).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM arrayData LIMIT 1"),
+      arrayData.collect().take(1).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData LIMIT 1"),
+      mapData.collect().take(1).toSeq)
   }
 
   test("average") {
@@ -283,4 +319,41 @@ class SQLQuerySuite extends QueryTest {
         (3, "C"),
         (4, "D")))
   }
+  
+  test("system function upper()") {
+    checkAnswer(
+      sql("SELECT n,UPPER(l) FROM lowerCaseData"),
+      Seq(
+        (1, "A"),
+        (2, "B"),
+        (3, "C"),
+        (4, "D")))
+
+    checkAnswer(
+      sql("SELECT n, UPPER(s) FROM nullStrings"),
+      Seq(
+        (1, "ABC"),
+        (2, "ABC"),
+        (3, null)))
+  }
+    
+  test("system function lower()") {
+    checkAnswer(
+      sql("SELECT N,LOWER(L) FROM upperCaseData"),
+      Seq(
+        (1, "a"),
+        (2, "b"),
+        (3, "c"),
+        (4, "d"),
+        (5, "e"),
+        (6, "f")))
+
+    checkAnswer(
+      sql("SELECT n, LOWER(s) FROM nullStrings"),
+      Seq(
+        (1, "abc"),
+        (2, "abc"),
+        (3, null)))
+  }  
+  
 }

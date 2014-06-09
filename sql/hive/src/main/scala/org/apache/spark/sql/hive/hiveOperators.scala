@@ -18,15 +18,17 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Hive}
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
-import org.apache.hadoop.hive.serde2.Serializer
+import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveDecimalObjectInspector
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveVarcharObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.primitive._
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
+import org.apache.hadoop.hive.serde2.{ColumnProjectionUtils, Serializer}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 
@@ -37,6 +39,7 @@ import org.apache.spark.sql.catalyst.types.{BooleanType, DataType}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive._
 import org.apache.spark.{TaskContext, SparkException}
+import org.apache.spark.util.MutablePair
 
 /* Implicits */
 import scala.collection.JavaConversions._
@@ -91,18 +94,29 @@ case class HiveTableScan(
     attributes.map { a =>
       val ordinal = relation.partitionKeys.indexOf(a)
       if (ordinal >= 0) {
+        val dataType = relation.partitionKeys(ordinal).dataType
         (_: Any, partitionKeys: Array[String]) => {
-          val value = partitionKeys(ordinal)
-          val dataType = relation.partitionKeys(ordinal).dataType
-          castFromString(value, dataType)
+          castFromString(partitionKeys(ordinal), dataType)
         }
       } else {
         val ref = objectInspector.getAllStructFieldRefs
           .find(_.getFieldName == a.name)
           .getOrElse(sys.error(s"Can't find attribute $a"))
+        val fieldObjectInspector = ref.getFieldObjectInspector
+
+        val unwrapHiveData = fieldObjectInspector match {
+          case _: HiveVarcharObjectInspector =>
+            (value: Any) => value.asInstanceOf[HiveVarchar].getValue
+          case _: HiveDecimalObjectInspector =>
+            (value: Any) => BigDecimal(value.asInstanceOf[HiveDecimal].bigDecimalValue())
+          case _ =>
+            identity[Any] _
+        }
+
         (row: Any, _: Array[String]) => {
           val data = objectInspector.getStructFieldData(row, ref)
-          unwrapData(data, ref.getFieldObjectInspector)
+          val hiveData = unwrapData(data, fieldObjectInspector)
+          if (hiveData != null) unwrapHiveData(hiveData) else null
         }
       }
     }
@@ -111,6 +125,38 @@ case class HiveTableScan(
   private def castFromString(value: String, dataType: DataType) = {
     Cast(Literal(value), dataType).eval(null)
   }
+
+  private def addColumnMetadataToConf(hiveConf: HiveConf) {
+    // Specifies IDs and internal names of columns to be scanned.
+    val neededColumnIDs = attributes.map(a => relation.output.indexWhere(_.name == a.name): Integer)
+    val columnInternalNames = neededColumnIDs.map(HiveConf.getColumnInternalName(_)).mkString(",")
+
+    if (attributes.size == relation.output.size) {
+      ColumnProjectionUtils.setFullyReadColumns(hiveConf)
+    } else {
+      ColumnProjectionUtils.appendReadColumnIDs(hiveConf, neededColumnIDs)
+    }
+
+    ColumnProjectionUtils.appendReadColumnNames(hiveConf, attributes.map(_.name))
+
+    // Specifies types and object inspectors of columns to be scanned.
+    val structOI = ObjectInspectorUtils
+      .getStandardObjectInspector(
+        relation.tableDesc.getDeserializer.getObjectInspector,
+        ObjectInspectorCopyOption.JAVA)
+      .asInstanceOf[StructObjectInspector]
+
+    val columnTypeNames = structOI
+      .getAllStructFieldRefs
+      .map(_.getFieldObjectInspector)
+      .map(TypeInfoUtils.getTypeInfoFromObjectInspector(_).getTypeName)
+      .mkString(",")
+
+    hiveConf.set(serdeConstants.LIST_COLUMN_TYPES, columnTypeNames)
+    hiveConf.set(serdeConstants.LIST_COLUMNS, columnInternalNames)
+  }
+
+  addColumnMetadataToConf(sc.hiveconf)
 
   @transient
   def inputRdd = if (!relation.hiveQlTable.isPartitioned) {
@@ -143,20 +189,42 @@ case class HiveTableScan(
   }
 
   def execute() = {
-    inputRdd.map { row =>
-      val values = row match {
-        case Array(deserializedRow: AnyRef, partitionKeys: Array[String]) =>
-          attributeFunctions.map(_(deserializedRow, partitionKeys))
-        case deserializedRow: AnyRef =>
-          attributeFunctions.map(_(deserializedRow, Array.empty))
+    inputRdd.mapPartitions { iterator =>
+      if (iterator.isEmpty) {
+        Iterator.empty
+      } else {
+        val mutableRow = new GenericMutableRow(attributes.length)
+        val mutablePair = new MutablePair[Any, Array[String]]()
+        val buffered = iterator.buffered
+
+        // NOTE (lian): Critical path of Hive table scan, unnecessary FP style code and pattern
+        // matching are avoided intentionally.
+        val rowsAndPartitionKeys = buffered.head match {
+          // With partition keys
+          case _: Array[Any] =>
+            buffered.map { case array: Array[Any] =>
+              val deserializedRow = array(0)
+              val partitionKeys = array(1).asInstanceOf[Array[String]]
+              mutablePair.update(deserializedRow, partitionKeys)
+            }
+
+          // Without partition keys
+          case _ =>
+            val emptyPartitionKeys = Array.empty[String]
+            buffered.map { deserializedRow =>
+              mutablePair.update(deserializedRow, emptyPartitionKeys)
+            }
+        }
+
+        rowsAndPartitionKeys.map { pair =>
+          var i = 0
+          while (i < attributes.length) {
+            mutableRow(i) = attributeFunctions(i)(pair._1, pair._2)
+            i += 1
+          }
+          mutableRow: Row
+        }
       }
-      buildRow(values.map {
-        case n: String if n.toLowerCase == "null" => null
-        case varchar: org.apache.hadoop.hive.common.`type`.HiveVarchar => varchar.getValue
-        case decimal: org.apache.hadoop.hive.common.`type`.HiveDecimal =>
-          BigDecimal(decimal.bigDecimalValue)
-        case other => other
-      })
     }
   }
 

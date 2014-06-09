@@ -23,7 +23,7 @@ from pyspark.mllib._common import \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
     _linear_predictor_typecheck, _have_scipy, _scipy_issparse
-from pyspark.mllib.linalg import SparseVector
+from pyspark.mllib.linalg import SparseVector, Vectors
 
 
 class LabeledPoint(object):
@@ -43,6 +43,9 @@ class LabeledPoint(object):
             self.features = array(features)
         else:
             raise TypeError("Expected NumPy array, list, SparseVector, or scipy.sparse matrix")
+
+    def __str__(self):
+        return "(" + ",".join((str(self.label), Vectors.stringify(self.features))) + ")"
 
 
 class LinearModel(object):
@@ -113,10 +116,9 @@ class LinearRegressionWithSGD(object):
               miniBatchFraction=1.0, initialWeights=None):
         """Train a linear regression model on the given data."""
         sc = data.context
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-                        d._jrdd, iterations, step, miniBatchFraction, i),
-                LinearRegressionModel, data, initialWeights)
+        train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
+            d._jrdd, iterations, step, miniBatchFraction, i)
+        return _regression_train_wrapper(sc, train_f, LinearRegressionModel, data, initialWeights)
 
 
 class LassoModel(LinearRegressionModelBase):
@@ -157,10 +159,9 @@ class LassoWithSGD(object):
               miniBatchFraction=1.0, initialWeights=None):
         """Train a Lasso regression model on the given data."""
         sc = data.context
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainLassoModelWithSGD(d._jrdd,
-                        iterations, step, regParam, miniBatchFraction, i),
-                LassoModel, data, initialWeights)
+        train_f = lambda d, i: sc._jvm.PythonMLLibAPI().trainLassoModelWithSGD(
+            d._jrdd, iterations, step, regParam, miniBatchFraction, i)
+        return _regression_train_wrapper(sc, train_f, LassoModel, data, initialWeights)
 
 
 class RidgeRegressionModel(LinearRegressionModelBase):
@@ -201,18 +202,16 @@ class RidgeRegressionWithSGD(object):
               miniBatchFraction=1.0, initialWeights=None):
         """Train a ridge regression model on the given data."""
         sc = data.context
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainRidgeModelWithSGD(d._jrdd,
-                        iterations, step, regParam, miniBatchFraction, i),
-                RidgeRegressionModel, data, initialWeights)
+        train_func = lambda d, i: sc._jvm.PythonMLLibAPI().trainRidgeModelWithSGD(
+            d._jrdd, iterations, step, regParam, miniBatchFraction, i)
+        return _regression_train_wrapper(sc, train_func, RidgeRegressionModel, data, initialWeights)
 
 
 def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs,
-            optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

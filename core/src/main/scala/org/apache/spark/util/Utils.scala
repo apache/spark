@@ -40,6 +40,7 @@ import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /**
@@ -781,6 +782,18 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Execute a block of code that evaluates to Unit, forwarding any uncaught exceptions to the
+   * default UncaughtExceptionHandler
+   */
+  def tryOrExit(block: => Unit) {
+    try {
+      block
+    } catch {
+      case t: Throwable => ExecutorUncaughtExceptionHandler.uncaughtException(t)
+    }
+  }
+
+  /**
    * A regular expression to match classes of the "core" Spark API that we want to skip when
    * finding the call site of a method.
    */
@@ -1073,9 +1086,19 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return true if this is Windows.
+   * Whether the underlying operating system is Windows.
    */
-  def isWindows = SystemUtils.IS_OS_WINDOWS
+  val isWindows = SystemUtils.IS_OS_WINDOWS
+
+  /**
+   * Pattern for matching a Windows drive, which contains only a single alphabet character.
+   */
+  val windowsDrive = "([a-zA-Z])".r
+
+  /**
+   * Format a Windows path such that it can be safely passed to a URI.
+   */
+  def formatWindowsPath(path: String): String = path.replace("\\", "/")
 
   /**
    * Indicates whether Spark is currently running unit tests.
@@ -1088,7 +1111,7 @@ private[spark] object Utils extends Logging {
    * Strip the directory from a path name
    */
   def stripDirectory(path: String): String = {
-    path.split(File.separator).last
+    new File(path).getName
   }
 
   /**
@@ -1136,6 +1159,8 @@ private[spark] object Utils extends Logging {
     try {
       f
     } catch {
+      case ct: ControlThrowable =>
+        throw ct
       case t: Throwable =>
         logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
         throw t
@@ -1151,4 +1176,61 @@ private[spark] object Utils extends Logging {
         true
     }
   }
+
+  /**
+   * Return a well-formed URI for the file described by a user input string.
+   *
+   * If the supplied path does not contain a scheme, or is a relative path, it will be
+   * converted into an absolute path with a file:// scheme.
+   */
+  def resolveURI(path: String, testWindows: Boolean = false): URI = {
+
+    // In Windows, the file separator is a backslash, but this is inconsistent with the URI format
+    val windows = isWindows || testWindows
+    val formattedPath = if (windows) formatWindowsPath(path) else path
+
+    val uri = new URI(formattedPath)
+    if (uri.getPath == null) {
+      throw new IllegalArgumentException(s"Given path is malformed: $uri")
+    }
+    uri.getScheme match {
+      case windowsDrive(d) if windows =>
+        new URI("file:/" + uri.toString.stripPrefix("/"))
+      case null =>
+        // Preserve fragments for HDFS file name substitution (denoted by "#")
+        // For instance, in "abc.py#xyz.py", "xyz.py" is the name observed by the application
+        val fragment = uri.getFragment
+        val part = new File(uri.getPath).toURI
+        new URI(part.getScheme, part.getPath, fragment)
+      case _ =>
+        uri
+    }
+  }
+
+  /** Resolve a comma-separated list of paths. */
+  def resolveURIs(paths: String, testWindows: Boolean = false): String = {
+    if (paths == null || paths.trim.isEmpty) {
+      ""
+    } else {
+      paths.split(",").map { p => Utils.resolveURI(p, testWindows) }.mkString(",")
+    }
+  }
+
+  /** Return all non-local paths from a comma-separated list of paths. */
+  def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
+    val windows = isWindows || testWindows
+    if (paths == null || paths.trim.isEmpty) {
+      Array.empty
+    } else {
+      paths.split(",").filter { p =>
+        val formattedPath = if (windows) formatWindowsPath(p) else p
+        new URI(formattedPath).getScheme match {
+          case windowsDrive(d) if windows => false
+          case "local" | "file" | null => false
+          case _ => true
+        }
+      }
+    }
+  }
+
 }

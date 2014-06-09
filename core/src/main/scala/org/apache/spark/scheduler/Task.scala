@@ -33,7 +33,7 @@ import org.apache.spark.util.ByteBufferInputStream
  * - [[org.apache.spark.scheduler.ResultTask]]
  *
  * A Spark job consists of one or more stages. The very last stage in a job consists of multiple
- * ResultTask's, while earlier stages consist of ShuffleMapTasks. A ResultTask executes the task
+ * ResultTasks, while earlier stages consist of ShuffleMapTasks. A ResultTask executes the task
  * and sends the task output back to the driver application. A ShuffleMapTask executes the task
  * and divides the task output to multiple buckets (based on the task's partitioner).
  *

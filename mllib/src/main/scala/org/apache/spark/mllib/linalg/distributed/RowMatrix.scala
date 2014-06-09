@@ -416,7 +416,7 @@ class RowMatrix(
     mat
   }
 
-  /** Updates or verfires the number of rows. */
+  /** Updates or verifies the number of rows. */
   private def updateNumRows(m: Long) {
     if (nRows <= 0) {
       nRows == m
@@ -440,7 +440,7 @@ object RowMatrix {
     val n = v.size
     v match {
       case dv: DenseVector =>
-        blas.dspr("U", n, 1.0, dv.values, 1, U)
+        blas.dspr("U", n, alpha, dv.values, 1, U)
       case sv: SparseVector =>
         val indices = sv.indices
         val values = sv.values

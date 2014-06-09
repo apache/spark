@@ -169,7 +169,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "archive_corrupt",
 
     // No support for case sensitivity is resolution using hive properties atm.
-    "case_sensitivity"
+    "case_sensitivity",
+
+    // Flaky test, Hive sometimes returns different set of 10 rows.
+    "lateral_view_outer"
   )
 
   /**
@@ -476,7 +479,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "join_view",
     "lateral_view",
     "lateral_view_cp",
-    "lateral_view_outer",
     "lateral_view_ppd",
     "lineage1",
     "literal_double",

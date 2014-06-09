@@ -124,9 +124,6 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0, conf = conf,
       securityManager = new SecurityManager(conf))
 
-    // Will be cleared by LocalSparkContext
-    System.setProperty("spark.driver.port", boundPort.toString)
-
     val masterTracker = new MapOutputTrackerMaster(conf)
     masterTracker.trackerActor = actorSystem.actorOf(
       Props(new MapOutputTrackerMasterActor(masterTracker, conf)), "MapOutputTracker")
