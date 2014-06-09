@@ -497,29 +497,6 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(sortedTopK === nums.sorted(ord).take(5))
   }
 
-  test("computeFraction") {
-    // test that the computed fraction guarantees enough datapoints
-    // in the sample with a failure rate <= 0.0001
-    val data = new EmptyRDD[Int](sc)
-    val n = 100000
-
-    for (s <- 1 to 15) {
-      val frac = data.computeFraction(s, n, true)
-      val poisson = new PoissonDistribution(frac * n)
-      assert(poisson.inverseCumulativeProbability(0.0001) >= s, "Computed fraction is too low")
-    }
-    for (s <- List(20, 100, 1000)) {
-      val frac = data.computeFraction(s, n, true)
-      val poisson = new PoissonDistribution(frac * n)
-      assert(poisson.inverseCumulativeProbability(0.0001) >= s, "Computed fraction is too low")
-    }
-    for (s <- List(1, 10, 100, 1000)) {
-      val frac = data.computeFraction(s, n, false)
-      val binomial = new BinomialDistribution(n, frac)
-      assert(binomial.inverseCumulativeProbability(0.0001)*n >= s, "Computed fraction is too low")
-    }
-  }
-
   test("takeSample") {
     val n = 1000000
     val data = sc.parallelize(1 to n, 2)

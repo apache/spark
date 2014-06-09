@@ -43,7 +43,7 @@ import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{BoundedPriorityQueue, SerializableHyperLogLog, Utils}
 import org.apache.spark.util.collection.OpenHashMap
-import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
+import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -400,12 +400,21 @@ abstract class RDD[T: ClassTag](
       throw new IllegalArgumentException("Negative number of elements requested")
     }
 
+    if (!withReplacement && num > initialCount) {
+      throw new IllegalArgumentException("Cannot create sample larger than the original when " +
+        "sampling without replacement")
+    }
+
     if (initialCount == 0) {
       return new Array[T](0)
     }
 
     if (initialCount > Integer.MAX_VALUE - 1) {
-      maxSelected = Integer.MAX_VALUE - 1
+      maxSelected = Integer.MAX_VALUE - (5.0 * math.sqrt(Integer.MAX_VALUE)).toInt
+      if (num > maxSelected) {
+        throw new IllegalArgumentException("Cannot support a sample size > Integer.MAX_VALUE - " +
+          "5.0 * math.sqrt(Integer.MAX_VALUE)")
+      }
     } else {
       maxSelected = initialCount.toInt
     }
@@ -415,7 +424,7 @@ abstract class RDD[T: ClassTag](
       total = maxSelected
       fraction = multiplier * (maxSelected + 1) / initialCount
     } else {
-      fraction = computeFraction(num, initialCount, withReplacement)
+      fraction = SamplingUtils.computeFraction(num, initialCount, withReplacement)
       total = num
     }
 
@@ -429,35 +438,6 @@ abstract class RDD[T: ClassTag](
     }
 
     Utils.randomizeInPlace(samples, rand).take(total)
-  }
-
-  /**
-   * Let p = num / total, where num is the sample size and total is the total number of
-   * datapoints in the RDD. We're trying to compute q > p such that
-   *   - when sampling with replacement, we're drawing each datapoint with prob_i ~ Pois(q),
-   *     where we want to guarantee Pr[s < num] < 0.0001 for s = sum(prob_i for i from 0 to total),
-   *     i.e. the failure rate of not having a sufficiently large sample < 0.0001.
-   *     Setting q = p + 5 * sqrt(p/total) is sufficient to guarantee 0.9999 success rate for
-   *     num > 12, but we need a slightly larger q (9 empirically determined).
-   *   - when sampling without replacement, we're drawing each datapoint with prob_i
-   *     ~ Binomial(total, fraction) and our choice of q guarantees 1-delta, or 0.9999 success
-   *     rate, where success rate is defined the same as in sampling with replacement.
-   *
-   * @param num sample size
-   * @param total size of RDD
-   * @param withReplacement whether sampling with replacement
-   * @return a sampling rate that guarantees sufficient sample size with 99.99% success rate
-   */
-  private[rdd] def computeFraction(num: Int, total: Long, withReplacement: Boolean): Double = {
-    val fraction = num.toDouble / total
-    if (withReplacement) {
-      val numStDev = if (num < 12) 9 else 5
-      fraction + numStDev * math.sqrt(fraction / total)
-    } else {
-      val delta = 1e-4
-      val gamma = - math.log(delta) / total
-      math.min(1, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction))
-    }
   }
 
   /**
