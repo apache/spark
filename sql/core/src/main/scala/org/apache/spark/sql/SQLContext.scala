@@ -191,6 +191,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val sparkContext = self.sparkContext
 
     val strategies: Seq[Strategy] =
+      CommandStrategy(self) ::
       TakeOrdered ::
       PartialAggregation ::
       LeftSemiJoin ::
@@ -250,6 +251,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val batches =
       Batch("Add exchange", Once, AddExchange) ::
       Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
+  }
+
+  // TODO: or should we make QueryExecution protected[sql]?
+  protected[sql] def mkQueryExecution(plan: LogicalPlan) = new QueryExecution {
+    val logical = plan
   }
 
   /**
