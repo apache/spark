@@ -266,10 +266,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     }
 
     val combOp = (r1: Result, r2: Result) => {
-      //take union of both key sets in case one partion doesn't contain all keys
+      // take union of both key sets in case one partion doesn't contain all keys
       val keyUnion = r1.resultMap.keys.toSet.union(r2.resultMap.keys.toSet)
 
-      //Use r2 to keep the combined result since r1 is usual empty
+      // Use r2 to keep the combined result since r1 is usual empty
       for (key <- keyUnion) {
         val entry1 = r1.resultMap.get(key)
         val entry2 = r2.resultMap.get(key)
@@ -286,7 +286,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     val zeroU = new Result(Map[K, Stratum]())
 
-    //determine threshold for each stratum and resample
+    // determine threshold for each stratum and resample
     val finalResult = self.aggregateWithContext(zeroU)(seqOp, combOp).resultMap
     val thresholdByKey = new mutable.HashMap[K, Double]()
     for ((key, stratum) <- finalResult) {
@@ -330,7 +330,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       // Bernoulli sampler
       self.mapPartitionsWithIndex((idx: Int, iter: Iterator[(K, V)]) => {
         val random = new RandomDataGenerator
-        random.reSeed(seed+idx)
+        random.reSeed(seed + idx)
         iter.filter(t => random.nextUniform(0.0, 1.0) < thresholdByKey.get(t._1).get)
       }, preservesPartitioning = true)
     }
