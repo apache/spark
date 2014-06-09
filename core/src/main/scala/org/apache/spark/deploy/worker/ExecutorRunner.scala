@@ -26,7 +26,7 @@ import com.google.common.io.Files
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
-import org.apache.spark.util.FileAppender
+import org.apache.spark.util.logging.FileAppender
 
 /**
  * Manages the execution of one executor process.

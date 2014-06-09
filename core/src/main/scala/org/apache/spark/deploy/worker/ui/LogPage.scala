@@ -25,6 +25,7 @@ import scala.xml.Node
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 import org.apache.spark.Logging
+import org.apache.spark.util.logging.{FileAppender, RollingFileAppender}
 
 private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {
   private val worker = parent.worker
@@ -130,10 +131,7 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") w
       byteLength: Int
     ): (String, Long, Long, Long) = {
     try {
-      val files = new File(logDirectory).listFiles.filter { file =>
-        val fileName = file.getName
-        fileName.startsWith(logType) && fileName != logType
-      }.sorted ++ Seq(new File(logDirectory, logType))
+      val files = RollingFileAppender.getSortedRolledOverFiles(logDirectory, logType)
       logDebug(s"Sorted log files of type $logType in $logDirectory:\n${files.mkString("\n")}")
 
       val totalLength = files.map { _.length }.sum
