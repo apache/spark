@@ -61,7 +61,7 @@ private[recommendation] case class InLinkBlock(
  * A more compact class to represent a rating than Tuple3[Int, Int, Double].
  */
 @Experimental
-case class Rating(val user: Int, val product: Int, val rating: Double)
+case class Rating(user: Int, product: Int, rating: Double)
 
 /**
  * Alternating Least Squares matrix factorization.
@@ -110,12 +110,28 @@ class ALS private (
   def this() = this(-1, -1, 10, 10, 0.01, false, 1.0)
 
   /**
-   * Set the number of blocks to parallelize the computation into; pass -1 for an auto-configured
-   * number of blocks. Default: -1.
+   * Set the number of blocks for both user blocks and product blocks to parallelize the computation
+   * into; pass -1 for an auto-configured number of blocks. Default: -1.
    */
   def setBlocks(numBlocks: Int): ALS = {
     this.numUserBlocks = numBlocks
     this.numProductBlocks = numBlocks
+    this
+  }
+
+  /**
+   * Set the number of user blocks to parallelize the computation.
+   */
+  def setUserBlocks(numUserBlocks: Int): ALS = {
+    this.numUserBlocks = numUserBlocks
+    this
+  }
+
+  /**
+   * Set the number of product blocks to parallelize the computation.
+   */
+  def setProductBlocks(numProductBlocks: Int): ALS = {
+    this.numProductBlocks = numProductBlocks
     this
   }
 
@@ -179,46 +195,31 @@ class ALS private (
     val sc = ratings.context
 
     val numUserBlocks = if (this.numUserBlocks == -1) {
-      math.max(sc.defaultParallelism, ratings.partitions.size / 2) + 1
+      math.max(sc.defaultParallelism, ratings.partitions.size / 2)
     } else {
       this.numUserBlocks
     }
-    val numProductBlocks = if (this.numUserBlocks == -1) {
-      math.max(sc.defaultParallelism, ratings.partitions.size / 2) + 1
+    val numProductBlocks = if (this.numProductBlocks == -1) {
+      math.max(sc.defaultParallelism, ratings.partitions.size / 2)
     } else {
       this.numProductBlocks
     }
 
-    val userPartitioner = new Partitioner {
-      val numPartitions = numUserBlocks
+    val userPartitioner = new ALSPartitioner(numUserBlocks)
+    val productPartitioner = new ALSPartitioner(numProductBlocks)
 
-      def getPartition(x: Any): Int = {
-        Utils.nonNegativeMod(byteswap32(x.asInstanceOf[Int]), numPartitions)
-      }
-    }
-
-    val productPartitioner = new Partitioner {
-      val numPartitions = numProductBlocks
-
-      def getPartition(x: Any): Int = {
-        Utils.nonNegativeMod(byteswap32(x.asInstanceOf[Int]), numPartitions)
-      }
-    }
-
-    val ratingsByUserBlock = ratings.map{ rating =>
+    val ratingsByUserBlock = ratings.map { rating =>
       (userPartitioner.getPartition(rating.user), rating)
     }
-    val ratingsByProductBlock = ratings.map{ rating =>
+    val ratingsByProductBlock = ratings.map { rating =>
       (productPartitioner.getPartition(rating.product),
         Rating(rating.product, rating.user, rating.rating))
     }
 
     val (userInLinks, userOutLinks) =
-      makeLinkRDDs(numUserBlocks, numProductBlocks, ratingsByUserBlock,
-        userPartitioner, productPartitioner)
+      makeLinkRDDs(numUserBlocks, numProductBlocks, ratingsByUserBlock, productPartitioner)
     val (productInLinks, productOutLinks) =
-      makeLinkRDDs(numProductBlocks, numUserBlocks, ratingsByProductBlock,
-        productPartitioner, userPartitioner)
+      makeLinkRDDs(numProductBlocks, numUserBlocks, ratingsByProductBlock, userPartitioner)
     userInLinks.setName("userInLinks")
     userOutLinks.setName("userOutLinks")
     productInLinks.setName("productInLinks")
@@ -358,9 +359,10 @@ class ALS private (
   /**
    * Flatten out blocked user or product factors into an RDD of (id, factor vector) pairs
    */
-  private def unblockFactors(blockedFactors: RDD[(Int, Array[Array[Double]])],
-                     outLinks: RDD[(Int, OutLinkBlock)]) = {
-    blockedFactors.join(outLinks).flatMap{ case (b, (factors, outLinkBlock)) =>
+  private def unblockFactors(
+      blockedFactors: RDD[(Int, Array[Array[Double]])],
+      outLinks: RDD[(Int, OutLinkBlock)]): RDD[(Int, Array[Double])] = {
+    blockedFactors.join(outLinks).flatMap { case (b, (factors, outLinkBlock)) =>
       for (i <- 0 until factors.length) yield (outLinkBlock.elementIds(i), factors(i))
     }
   }
@@ -388,7 +390,6 @@ class ALS private (
   private def makeInLinkBlock(numProductBlocks: Int, ratings: Array[Rating],
       productPartitioner: Partitioner): InLinkBlock = {
     val userIds = ratings.map(_.user).distinct.sorted
-    val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
     // Split out our ratings by product block
     val blockRatings = Array.fill(numProductBlocks)(new ArrayBuffer[Rating])
@@ -418,13 +419,14 @@ class ALS private (
    * the users (or (blockId, (p, u, r)) for the products). We create these simultaneously to avoid
    * having to shuffle the (blockId, (u, p, r)) RDD twice, or to cache it.
    */
-  private def makeLinkRDDs(numUserBlocks: Int, numProductBlocks: Int, ratings: RDD[(Int, Rating)],
-    userPartitioner: Partitioner, productPartitioner: Partitioner)
-    : (RDD[(Int, InLinkBlock)], RDD[(Int, OutLinkBlock)]) =
-  {
-    val grouped = ratings.partitionBy(new HashPartitioner(numUserBlocks))
+  private def makeLinkRDDs(
+      numUserBlocks: Int,
+      numProductBlocks: Int,
+      ratingsByUserBlock: RDD[(Int, Rating)],
+      productPartitioner: Partitioner): (RDD[(Int, InLinkBlock)], RDD[(Int, OutLinkBlock)]) = {
+    val grouped = ratingsByUserBlock.partitionBy(new HashPartitioner(numUserBlocks))
     val links = grouped.mapPartitionsWithIndex((blockId, elements) => {
-      val ratings = elements.map{_._2}.toArray
+      val ratings = elements.map(_._2).toArray
       val inLinkBlock = makeInLinkBlock(numProductBlocks, ratings, productPartitioner)
       val outLinkBlock = makeOutLinkBlock(numProductBlocks, ratings, productPartitioner)
       Iterator.single((blockId, (inLinkBlock, outLinkBlock)))
@@ -466,10 +468,7 @@ class ALS private (
       rank: Int,
       lambda: Double,
       alpha: Double,
-      YtY: Option[Broadcast[DoubleMatrix]])
-    : RDD[(Int, Array[Array[Double]])] =
-  {
-    val numProductBlocks = products.partitions.size
+      YtY: Option[Broadcast[DoubleMatrix]]): RDD[(Int, Array[Array[Double]])] = {
     productOutLinks.join(products).flatMap { case (bid, (outLinkBlock, factors)) =>
         val toSend = Array.fill(numUserBlocks)(new ArrayBuffer[Array[Double]])
         for (p <- 0 until outLinkBlock.elementIds.length; userBlock <- 0 until numUserBlocks) {
@@ -599,6 +598,23 @@ class ALS private (
   }
 }
 
+/**
+ * Partitioner for ALS.
+ */
+private[this] class ALSPartitioner(override val numPartitions: Int) extends Partitioner {
+  override def getPartition(key: Any): Int = {
+    Utils.nonNegativeMod(byteswap32(key.asInstanceOf[Int]), numPartitions)
+  }
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case p: ALSPartitioner =>
+        this.numPartitions == p.numPartitions
+      case _ =>
+        false
+    }
+  }
+}
 
 /**
  * Top-level methods for calling Alternating Least Squares (ALS) matrix factorization.
