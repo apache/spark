@@ -777,27 +777,38 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.rollingLogs.interval</code></td>
+  <td><code>spark.executor.logs.rolling.strategy</code></td>
   <td>(none)</td>
+  <td>
+    Set the strategy of rolling of executor logs. By default it is disabled. It can
+    be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
+    use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
+    For "size", use <code>spark.executor.logs.rolling.size.maxBytes</code> to set
+    the maximum file size for rolling.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.time.interval</code></td>
+  <td>daily</td>
   <td>
     Set the time interval by which the executor logs will be rolled over.
     Rolling is disabled by default. Valid values are `daily`, `hourly`, `minutely` or
-    any interval in seconds. Cannot be set along with `spark.executor.rollingLogs.size`.
-    See `spark.executor.rollingLogs.keepLastN` for automatic cleaning of old logs.
+    any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.rollingLogs.size</code></td>
+  <td><code>spark.executor.logs.rolling.size.maxBytes</code></td>
   <td>(none)</td>
   <td>
-    Set the size of the logs file by which the executor logs will be rolled over.
+    Set the max size of the file by which the executor logs will be rolled over.
     Rolling is disabled by default. Value is set in terms of bytes.
-    Cannot be set along with `spark.executor.rollingLogs.interval`.
-    See `spark.executor.rollingLogs.keepLastN` for automatic cleaning of old logs.
+    See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.rollingLogs.keepLastN</code></td>
+  <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
   <td>(none)</td>
   <td>
     Sets the number of latest rolling log files that are going to be retained by the system.

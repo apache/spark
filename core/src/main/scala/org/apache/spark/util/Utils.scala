@@ -862,7 +862,14 @@ private[spark] object Utils extends Logging {
     Source.fromBytes(buff).mkString
   }
 
+  /**
+   * Return a string containing data across a set of files. The `startIndex`
+   * and `endIndex` is based on the cumulative size of all the files take in
+   * the given order. See figure below for more details.
+   */
   def offsetBytes(files: Seq[File], startIndex: Long, endIndex: Long): String = {
+    assert(startIndex >= 0)
+    assert(endIndex >= startIndex)
     val fileLengths = files.map { _.length }
     val fileToLength = files.zip(fileLengths).toMap
     logDebug("Log files: \n" + fileToLength.mkString("\n"))
