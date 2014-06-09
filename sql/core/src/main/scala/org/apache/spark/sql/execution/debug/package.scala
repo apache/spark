@@ -76,6 +76,11 @@ package object debug {
       }
     }
 
+    /**
+     * A collection of stats for each column of output.
+     * @param elementTypes the actual runtime types for the output.  Useful when there are bugs
+     *        causing the wrong data to be projected.
+     */
     case class ColumnStat(
         elementTypes: Accumulator[HashSet[String]] = sparkContext.accumulator(HashSet.empty))
     val tupleCount = sparkContext.accumulator[Int](0)
