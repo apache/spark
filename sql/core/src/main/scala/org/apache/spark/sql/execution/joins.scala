@@ -142,6 +142,137 @@ case class HashJoin(
 
 /**
  * :: DeveloperApi ::
+ * Build the right table's join keys into a HashSet, and iteratively go through the left
+ * table, to find the if join keys are in the Hash set.
+ */
+@DeveloperApi
+case class LeftSemiJoinHash(
+    leftKeys: Seq[Expression],
+    rightKeys: Seq[Expression],
+    left: SparkPlan,
+    right: SparkPlan) extends BinaryNode {
+
+  override def outputPartitioning: Partitioning = left.outputPartitioning
+
+  override def requiredChildDistribution =
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+
+  val (buildPlan, streamedPlan) = (right, left)
+  val (buildKeys, streamedKeys) = (rightKeys, leftKeys)
+
+  def output = left.output
+
+  @transient lazy val buildSideKeyGenerator = new Projection(buildKeys, buildPlan.output)
+  @transient lazy val streamSideKeyGenerator =
+    () => new MutableProjection(streamedKeys, streamedPlan.output)
+
+  def execute() = {
+
+    buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
+      val hashTable = new java.util.HashSet[Row]()
+      var currentRow: Row = null
+
+      // Create a Hash set of buildKeys
+      while (buildIter.hasNext) {
+        currentRow = buildIter.next()
+        val rowKey = buildSideKeyGenerator(currentRow)
+        if(!rowKey.anyNull) {
+          val keyExists = hashTable.contains(rowKey)
+          if (!keyExists) {
+            hashTable.add(rowKey)
+          }
+        }
+      }
+
+      new Iterator[Row] {
+        private[this] var currentStreamedRow: Row = _
+        private[this] var currentHashMatched: Boolean = false
+
+        private[this] val joinKeys = streamSideKeyGenerator()
+
+        override final def hasNext: Boolean =
+          streamIter.hasNext && fetchNext()
+
+        override final def next() = {
+          currentStreamedRow
+        }
+
+        /**
+         * Searches the streamed iterator for the next row that has at least one match in hashtable.
+         *
+         * @return true if the search is successful, and false the streamed iterator runs out of
+         *         tuples.
+         */
+        private final def fetchNext(): Boolean = {
+          currentHashMatched = false
+          while (!currentHashMatched && streamIter.hasNext) {
+            currentStreamedRow = streamIter.next()
+            if (!joinKeys(currentStreamedRow).anyNull) {
+              currentHashMatched = hashTable.contains(joinKeys.currentValue)
+            }
+          }
+          currentHashMatched
+        }
+      }
+    }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Using BroadcastNestedLoopJoin to calculate left semi join result when there's no join keys
+ * for hash join.
+ */
+@DeveloperApi
+case class LeftSemiJoinBNL(
+    streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression])
+    (@transient sc: SparkContext)
+  extends BinaryNode {
+  // TODO: Override requiredChildDistribution.
+
+  override def outputPartitioning: Partitioning = streamed.outputPartitioning
+
+  override def otherCopyArgs = sc :: Nil
+
+  def output = left.output
+
+  /** The Streamed Relation */
+  def left = streamed
+  /** The Broadcast relation */
+  def right = broadcast
+
+  @transient lazy val boundCondition =
+    InterpretedPredicate(
+      condition
+        .map(c => BindReferences.bindReference(c, left.output ++ right.output))
+        .getOrElse(Literal(true)))
+
+
+  def execute() = {
+    val broadcastedRelation = sc.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+
+    streamed.execute().mapPartitions { streamedIter =>
+      val joinedRow = new JoinedRow
+
+      streamedIter.filter(streamedRow => {
+        var i = 0
+        var matched = false
+
+        while (i < broadcastedRelation.value.size && !matched) {
+          val broadcastedRow = broadcastedRelation.value(i)
+          if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
+            matched = true
+          }
+          i += 1
+        }
+        matched
+      })
+    }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
  */
 @DeveloperApi
 case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {

@@ -44,7 +44,7 @@ class QueryTest extends FunSuite {
         fail(
           s"""
             |Exception thrown while executing query:
-            |${rdd.logicalPlan}
+            |${rdd.queryExecution}
             |== Exception ==
             |$e
           """.stripMargin)
