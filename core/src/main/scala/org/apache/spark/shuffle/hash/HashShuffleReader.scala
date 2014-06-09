@@ -33,8 +33,11 @@ class HashShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context,
+    val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context,
       Serializer.getSerializer(handle.dependency.serializer))
+    val a = handle.dependency.aggregator.get
+    handle.dependency.aggregator.map(_.combineCombinersByKey(iter, context))
+      .getOrElse(iter)
   }
 
   /** Close this reader */

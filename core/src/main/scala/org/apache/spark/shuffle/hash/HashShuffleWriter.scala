@@ -40,11 +40,26 @@ class HashShuffleWriter[K, V](
   private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
   private val shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, mapId, numOutputSplits, ser)
 
-  /** Write a record to this task's output */
-  override def write(record: Product2[K, V]): Unit = {
-    val pair = record.asInstanceOf[Product2[Any, Any]]
-    val bucketId = dep.partitioner.getPartition(pair._1)
-    shuffle.writers(bucketId).write(pair)
+  /** Write a bunch of record to this task's output */
+  override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
+    val iter = if (dep.aggregator.isDefined) {
+      if (dep.mapSideCombine) {
+        val a = dep.aggregator.get.combineValuesByKey(records, context)
+        a
+      } else {
+        records
+      }
+    } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
+      throw new IllegalStateException("Aggregator is empty for map-side combine")
+    } else {
+      records
+    }
+
+    for (elem <- iter) {
+      val pair = elem.asInstanceOf[Product2[Any, Any]]
+      val bucketId = dep.partitioner.getPartition(pair._1)
+      shuffle.writers(bucketId).write(pair)
+    }
   }
 
   /** Close this writer, passing along whether the map completed */
