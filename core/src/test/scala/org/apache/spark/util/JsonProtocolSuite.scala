@@ -260,10 +260,10 @@ class JsonProtocolSuite extends FunSuite {
         assertEquals(e1.environmentDetails, e2.environmentDetails)
       case (e1: SparkListenerBlockManagerAdded, e2: SparkListenerBlockManagerAdded) =>
         assert(e1.maxMem === e2.maxMem)
-        assert(e1.time == e2.time)
+        assert(e1.time === e2.time)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerBlockManagerRemoved, e2: SparkListenerBlockManagerRemoved) =>
-        assert(e1.time == e2.time)
+        assert(e1.time === e2.time)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerUnpersistRDD, e2: SparkListenerUnpersistRDD) =>
         assert(e1.rddId == e2.rddId)
