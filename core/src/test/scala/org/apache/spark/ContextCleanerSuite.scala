@@ -25,7 +25,7 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.{PatienceConfiguration, Eventually}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
@@ -76,7 +76,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     tester.assertCleanup()
 
     // Verify that shuffles can be re-executed after cleaning up
-    assert(rdd.collect().toList === collected)
+    assert(rdd.collect().toList.equals(collected))
   }
 
   test("cleanup broadcast") {
@@ -285,7 +285,7 @@ class CleanerTester(
   sc.cleaner.get.attachListener(cleanerListener)
 
   /** Assert that all the stuff has been cleaned up */
-  def assertCleanup()(implicit waitTimeout: Eventually.Timeout) {
+  def assertCleanup()(implicit waitTimeout: PatienceConfiguration.Timeout) {
     try {
       eventually(waitTimeout, interval(100 millis)) {
         assert(isAllCleanedUp)

@@ -124,11 +124,14 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val OVERWRITE = Keyword("OVERWRITE")
   protected val LIKE = Keyword("LIKE")
   protected val RLIKE = Keyword("RLIKE")
+  protected val UPPER = Keyword("UPPER")
+  protected val LOWER = Keyword("LOWER")
   protected val REGEXP = Keyword("REGEXP")
   protected val ORDER = Keyword("ORDER")
   protected val OUTER = Keyword("OUTER")
   protected val RIGHT = Keyword("RIGHT")
   protected val SELECT = Keyword("SELECT")
+  protected val SEMI = Keyword("SEMI")
   protected val STRING = Keyword("STRING")
   protected val SUM = Keyword("SUM")
   protected val TRUE = Keyword("TRUE")
@@ -239,6 +242,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
 
    protected lazy val joinType: Parser[JoinType] =
      INNER ^^^ Inner |
+     LEFT ~ SEMI ^^^ LeftSemi |
      LEFT ~ opt(OUTER) ^^^ LeftOuter |
      RIGHT ~ opt(OUTER) ^^^ RightOuter |
      FULL ~ opt(OUTER) ^^^ FullOuter
@@ -329,6 +333,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     AVG ~> "(" ~> expression <~ ")" ^^ { case exp => Average(exp) } |
     MIN ~> "(" ~> expression <~ ")" ^^ { case exp => Min(exp) } |
     MAX ~> "(" ~> expression <~ ")" ^^ { case exp => Max(exp) } |
+    UPPER ~> "(" ~> expression <~ ")" ^^ { case exp => Upper(exp) } |
+    LOWER ~> "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) } |
     IF ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case c ~ "," ~ t ~ "," ~ f => If(c,t,f)
     } |

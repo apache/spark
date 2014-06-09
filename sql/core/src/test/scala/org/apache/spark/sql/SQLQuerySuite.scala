@@ -28,10 +28,23 @@ class SQLQuerySuite extends QueryTest {
   // Make sure the tables are loaded.
   TestData
 
+  test("SPARK-2041 column name equals tablename") {
+    checkAnswer(
+      sql("SELECT tableName FROM tableName"),
+      "test")
+  }
+
   test("index into array") {
     checkAnswer(
       sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
       arrayData.map(d => (d.data, d.data(0), d.data(0) + d.data(1), d.data(1))).collect().toSeq)
+  }
+
+  test("left semi greater than predicate") {
+    checkAnswer(
+      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
+      Seq((3,1), (3,2))
+    )
   }
 
   test("index into array of arrays") {
@@ -313,4 +326,41 @@ class SQLQuerySuite extends QueryTest {
         (3, "C"),
         (4, "D")))
   }
+  
+  test("system function upper()") {
+    checkAnswer(
+      sql("SELECT n,UPPER(l) FROM lowerCaseData"),
+      Seq(
+        (1, "A"),
+        (2, "B"),
+        (3, "C"),
+        (4, "D")))
+
+    checkAnswer(
+      sql("SELECT n, UPPER(s) FROM nullStrings"),
+      Seq(
+        (1, "ABC"),
+        (2, "ABC"),
+        (3, null)))
+  }
+    
+  test("system function lower()") {
+    checkAnswer(
+      sql("SELECT N,LOWER(L) FROM upperCaseData"),
+      Seq(
+        (1, "a"),
+        (2, "b"),
+        (3, "c"),
+        (4, "d"),
+        (5, "e"),
+        (6, "f")))
+
+    checkAnswer(
+      sql("SELECT n, LOWER(s) FROM nullStrings"),
+      Seq(
+        (1, "abc"),
+        (2, "abc"),
+        (3, null)))
+  }  
+  
 }
