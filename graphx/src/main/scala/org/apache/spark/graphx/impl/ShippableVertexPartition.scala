@@ -48,7 +48,9 @@ private[graphx] object ShippableVertexPartition {
   def apply[VD: ClassTag](
       iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD)
     : ShippableVertexPartition[VD] = {
-    val fullIter = iter ++ routingTable.iterator.map(vid => (vid, defaultVal))
+    // The default merge function in IndexedRDDPartition.apply will overwrite earlier values with
+    // later ones, so we put the real vertex values last
+    val fullIter = routingTable.iterator.map(vid => (vid, defaultVal)) ++ iter
     val p = IndexedRDDPartition(fullIter)
     new ShippableVertexPartition(p.index, p.values, p.mask, routingTable)
   }

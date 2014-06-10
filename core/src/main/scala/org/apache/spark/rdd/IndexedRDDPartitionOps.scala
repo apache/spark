@@ -176,7 +176,7 @@ private[spark] trait IndexedRDDPartitionOps[V, Self[X] <: IndexedRDDPartitionBas
   }
 
   /**
-   * Similar effect as aggregateUsingIndex((a, b) => a)
+   * Similar effect as aggregateUsingIndex((a, b) => b)
    */
   def createUsingIndex[V2: ClassTag](iter: Iterator[Product2[Id, V2]])
     : Self[V2] = {

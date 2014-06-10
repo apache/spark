@@ -56,7 +56,7 @@ import org.apache.spark.graphx.impl.VertexRDDFunctions._
  * @tparam VD the vertex attribute associated with each vertex in the set.
  */
 class VertexRDD[@specialized(Long, Int, Double) VD](
-    val partitionsRDD: RDD[ShippableVertexPartition[VD]]
+    val partitionsRDD: RDD[ShippableVertexPartition[VD]],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
    (implicit val vTag: ClassTag[VD])
   extends RDD[(VertexId, VD)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD)))

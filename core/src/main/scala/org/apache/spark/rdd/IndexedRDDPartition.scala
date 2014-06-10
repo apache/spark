@@ -30,6 +30,7 @@ import IndexedRDDPartition.Index
 private[spark] object IndexedRDDPartition {
   type Index = OpenHashSet[Id]
 
+  // Same as apply(iter, (a, b) => b)
   def apply[V: ClassTag](iter: Iterator[(Id, V)]): IndexedRDDPartition[V] = {
     val map = new PrimitiveKeyOpenHashMap[Id, V]
     iter.foreach { pair =>
