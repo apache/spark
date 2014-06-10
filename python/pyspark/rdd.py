@@ -366,27 +366,25 @@ class RDD(object):
 
         fraction = 0.0
         total = 0
-        multiplier = 3.0
+        numStDev = 10.0
         initialCount = self.count()
-        maxSelected = 0
 
-        if (num < 0):
+        if num < 0:
             raise ValueError
 
-        if (initialCount == 0):
+        if initialCount == 0:
             return list()
 
-        if initialCount > sys.maxint - 1:
-            maxSelected = sys.maxint - 1
-        else:
-            maxSelected = initialCount
+        if (not withReplacement) and num > initialCount:
+            raise ValueError
 
-        if num > initialCount and not withReplacement:
-            total = maxSelected
-            fraction = multiplier * (maxSelected + 1) / initialCount
-        else:
-            fraction = self._computeFraction(num, initialCount, withReplacement)
-            total = num
+        if initialCount > sys.maxint - 1:
+            maxSelected = sys.maxint  - int(numStDev * sqrt(sys.maxint))
+            if num > maxSelected:
+                raise ValueError
+
+        fraction = self._computeFraction(num, initialCount, withReplacement)
+        total = num
 
         samples = self.sample(withReplacement, fraction, seed).collect()
 

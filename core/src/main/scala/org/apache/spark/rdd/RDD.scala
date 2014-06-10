@@ -391,6 +391,7 @@ abstract class RDD[T: ClassTag](
       seed: Long = Utils.random.nextLong): Array[T] = {
     var fraction = 0.0
     var total = 0
+    val numStDev =  10.0
     val initialCount = this.count()
 
     if (num < 0) {
@@ -406,15 +407,15 @@ abstract class RDD[T: ClassTag](
         "sampling without replacement")
     }
 
-    if (initialCount > Integer.MAX_VALUE - 1) {
-      val maxSelected = Integer.MAX_VALUE - (5.0 * math.sqrt(Integer.MAX_VALUE)).toInt
+    if (initialCount > Int.MaxValue - 1) {
+      val maxSelected = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
       if (num > maxSelected) {
-        throw new IllegalArgumentException("Cannot support a sample size > Integer.MAX_VALUE - " +
-          "5.0 * math.sqrt(Integer.MAX_VALUE)")
+        throw new IllegalArgumentException("Cannot support a sample size > Int.MaxValue - " +
+          s"$numStDev * math.sqrt(Int.MaxValue)")
       }
     }
 
-    fraction = SamplingUtils.computeFraction(num, initialCount, withReplacement)
+    fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount, withReplacement)
     total = num
 
     val rand = new Random(seed)

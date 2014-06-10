@@ -31,15 +31,15 @@ private[spark] object SamplingUtils {
    *     ~ Binomial(total, fraction) and our choice of q guarantees 1-delta, or 0.9999 success
    *     rate, where success rate is defined the same as in sampling with replacement.
    *
-   * @param num sample size
+   * @param sampleSizeLowerBound sample size
    * @param total size of RDD
    * @param withReplacement whether sampling with replacement
    * @return a sampling rate that guarantees sufficient sample size with 99.99% success rate
    */
-  def computeFraction(num: Int, total: Long, withReplacement: Boolean): Double = {
-    val fraction = num.toDouble / total
+  def computeFractionForSampleSize(sampleSizeLowerBound: Int, total: Long, withReplacement: Boolean): Double = {
+    val fraction = sampleSizeLowerBound.toDouble / total
     if (withReplacement) {
-      val numStDev = if (num < 12) 9 else 5
+      val numStDev = if (sampleSizeLowerBound < 12) 9 else 5
       fraction + numStDev * math.sqrt(fraction / total)
     } else {
       val delta = 1e-4
