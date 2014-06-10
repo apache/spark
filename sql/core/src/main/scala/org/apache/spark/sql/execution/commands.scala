@@ -17,29 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-private[sql] object DebugQuery {
-  def apply(plan: SparkPlan): SparkPlan = {
-    val visited = new collection.mutable.HashSet[Long]()
-    plan transform {
-      case s: SparkPlan if !visited.contains(s.id) =>
-        visited += s.id
-        DebugNode(s)
-    }
-  }
-}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
 
-private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
-  def references = Set.empty
-  def output = child.output
-  def execute() = {
-    val childRdd = child.execute()
-    println(
-      s"""
-        |=========================
-        |${child.simpleString}
-        |=========================
-      """.stripMargin)
-    childRdd.foreach(println(_))
-    childRdd
+case class ExplainCommandPhysical(child: SparkPlan, output: Seq[Attribute])
+                                 (@transient context: SQLContext) extends UnaryNode {
+  def execute(): RDD[Row] = {
+    val planString = new GenericRow(Array[Any](child.toString))
+    context.sparkContext.parallelize(Seq(planString))
   }
+
+  override def otherCopyArgs = context :: Nil
 }
