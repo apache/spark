@@ -32,7 +32,8 @@ rm -f unit-tests.log
 rm -rf metastore warehouse
 
 function run_test() {
-    SPARK_TESTING=0 $FWDIR/bin/pyspark $1 2>&1 | tee -a > unit-tests.log
+    echo "Running test: $1"
+    SPARK_TESTING=1 $FWDIR/bin/pyspark $1 2>&1 | tee -a > unit-tests.log
     FAILED=$((PIPESTATUS[0]||$FAILED))
 
     # Fail and exit on the first test failure.
@@ -46,15 +47,17 @@ function run_test() {
 
 }
 
+echo "Running PySpark tests. Output is in python/unit-tests.log."
+
 run_test "pyspark/rdd.py"
 run_test "pyspark/context.py"
 run_test "pyspark/conf.py"
 if [ -n "$_RUN_SQL_TESTS" ]; then
   run_test "pyspark/sql.py"
 fi
-run_test "-m doctest pyspark/broadcast.py"
-run_test "-m doctest pyspark/accumulators.py"
-run_test "-m doctest pyspark/serializers.py"
+run_test "pyspark/broadcast.py"
+run_test "pyspark/accumulators.py"
+run_test "pyspark/serializers.py"
 run_test "pyspark/tests.py"
 run_test "pyspark/mllib/_common.py"
 run_test "pyspark/mllib/classification.py"
