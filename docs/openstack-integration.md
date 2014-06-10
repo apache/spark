@@ -10,9 +10,7 @@ URI of the form `swift://<container.service_provider>/path`. You will also need 
 Swift security credentials, through `SparkContext.hadoopConfiguration`. 
 
 #Configuring Hadoop to use Openstack Swift
-Openstack Swift driver was merged in Hadoop verion 2.3.0 ([Swift driver]
-(https://issues.apache.org/jira/browse/HADOOP-8545)).  Users that wish to use previous 
-Hadoop versions will need to configure Swift driver manually. Current Swift driver 
+Openstack Swift driver was merged in Hadoop verion 2.3.0 ([Swift driver](https://issues.apache.org/jira/browse/HADOOP-8545)).  Users that wish to use previous Hadoop versions will need to configure Swift driver manually. Current Swift driver 
 requieres Swift to use Keystone authentication method. There are recent efforts to support 
 also temp auth [Hadoop-10420](https://issues.apache.org/jira/browse/HADOOP-10420).
 To configure Hadoop to work with Swift one need to modify core-sites.xml of Hadoop and 
