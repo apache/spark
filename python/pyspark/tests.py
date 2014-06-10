@@ -367,7 +367,7 @@ class SciPyTests(PySparkTestCase):
     """General PySpark tests that depend on scipy """
 
     def test_serialize(self):
-        if _not_have_scipy: 
+        if not _have_scipy: 
             return
         from scipy.special import gammaln
         x = range(1, 5)
