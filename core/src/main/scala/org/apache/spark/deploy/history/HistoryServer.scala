@@ -50,21 +50,16 @@ class HistoryServer(
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
-  // set whether to enable or disable view acls for all applications
-  private val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
-
   private val localHost = Utils.localHostName()
 
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
-      val info = provider.getAppInfo(key)
-      if (info == null) {
+      val ui = provider.getAppUI(key)
+      if (ui == null) {
         throw new NoSuchElementException()
       }
-      info.ui.getSecurityManager.setUIAcls(uiAclsEnabled)
-      info.ui.getSecurityManager.setViewAcls(info.sparkUser, info.viewAcls)
-      attachSparkUI(info.ui)
-      info.ui
+      attachSparkUI(ui)
+      ui
     }
   }
 

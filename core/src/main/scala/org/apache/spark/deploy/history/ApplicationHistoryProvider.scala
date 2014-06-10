@@ -25,9 +25,7 @@ private[spark] case class ApplicationHistoryInfo(
     startTime: Long,
     endTime: Long,
     lastUpdated: Long,
-    sparkUser: String,
-    viewAcls: String,
-    ui: SparkUI) {
+    sparkUser: String) {
 }
 
 private[spark] abstract class ApplicationHistoryProvider {
@@ -41,12 +39,12 @@ private[spark] abstract class ApplicationHistoryProvider {
   def getListing(): Seq[ApplicationHistoryInfo]
 
   /**
-   * This method should return the application information, including a rendered SparkUI.
+   * This method should return the application UI.
    *
    * @param appId The application ID.
-   * @return The app info, or null if not found.
+   * @return The application's UI, or null if application is not found.
    */
-  def getAppInfo(appId: String): ApplicationHistoryInfo
+  def getAppUI(appId: String): SparkUI
 
   /**
    * Called when the server is shutting down.

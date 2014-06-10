@@ -89,10 +89,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   override def getListing() = appList
 
-  override def getAppInfo(appId: String): ApplicationHistoryInfo = {
+  override def getAppUI(appId: String): SparkUI = {
     try {
       val appLogDir = fs.getFileStatus(new Path(logDir, appId))
-      loadAppInfo(appLogDir, true)
+      loadAppInfo(appLogDir, true)._2
     } catch {
       case e: FileNotFoundException => null
     }
@@ -128,7 +128,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         val curr = currentApps.getOrElse(dir.getPath().getName(), null)
         if (curr == null || curr.lastUpdated < getModificationTime(dir)) {
           try {
-            newApps += loadAppInfo(dir, false)
+            newApps += loadAppInfo(dir, false)._1
           } catch {
             case e: Exception => logError(s"Failed to load app info from directory $dir.")
           }
@@ -152,10 +152,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
    * clicks on a specific application.
    *
    * @param logDir Directory with application's log files.
-   * @param renderUI Whether to create the SparkUI for the application. If false, the "ui"
-   *                 attribute of the returned object will be null.
+   * @param renderUI Whether to create the SparkUI for the application.
+   * @return A 2-tuple `(app info, ui)`. `ui` will be null if `renderUI` is false.
    */
-  private def loadAppInfo(logDir: FileStatus, renderUI: Boolean): ApplicationHistoryInfo = {
+  private def loadAppInfo(logDir: FileStatus, renderUI: Boolean) = {
     val elogInfo = EventLoggingListener.parseLoggingInfo(logDir.getPath(), fs)
     val path = logDir.getPath
     val appId = path.getName
@@ -173,14 +173,19 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       }
 
     replayBus.replay()
-    ApplicationHistoryInfo(appId,
+    val appInfo = ApplicationHistoryInfo(appId,
       appListener.appName,
       appListener.startTime,
       appListener.endTime,
       getModificationTime(logDir),
-      appListener.sparkUser,
-      if (renderUI) appListener.viewAcls else null,
-      ui)
+      appListener.sparkUser)
+
+    if (ui != null) {
+      val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
+      ui.getSecurityManager.setUIAcls(uiAclsEnabled)
+      ui.getSecurityManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
+    }
+    (appInfo, ui)
   }
 
   /** Return when this directory was last modified. */
