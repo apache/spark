@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.types.BooleanType
 
 
@@ -203,13 +202,17 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def toString = s"if ($predicate) $trueValue else $falseValue"
 }
 
-// TODO: is it a good idea to put this class in this file?
-// CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END
-// When a = true, returns b; when c = true, return d; else return e
+/**
+ * Two types of Case statements: either "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END"
+ * or "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END", depending on whether `key` is defined.
+ * Refer to this link for the corresponding semantics:
+ * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
+ *
+ * Note that branches are considered in consecutive pairs (cond, val), and the last element is the
+ * val for the default catch-all case (if provided). Hence, `branches` consist of at least two
+ * elements, and can have an odd or even length.
+ */
 case class Case(key: Option[Expression], branches: Seq[Expression]) extends Expression {
-  // Branches are considered in consecutive pairs (cond, val), and the last element
-  // is the val for the default catch-all case (w/o a companion condition, that is).
-
   def children = key.toSeq ++ branches
 
   override def nullable = branches
@@ -223,11 +226,13 @@ case class Case(key: Option[Expression], branches: Seq[Expression]) extends Expr
   def references = children.flatMap(_.references).toSet
 
   override lazy val resolved = {
-    val allBranchesEqual = branches.sliding(2, 2).map {
-      case Seq(cond, value) => value.dataType
-      case Seq(elseValue) => elseValue.dataType
-    }.reduce(_ == _)
-    childrenResolved && allBranchesEqual
+    lazy val dataTypes = branches.sliding(2, 2)
+      .map {
+        case Seq(cond, value) => value.dataType
+        case Seq(elseValue) => elseValue.dataType
+      }.toSeq
+    lazy val dataTypesEqual = dataTypes.drop(1).map(_ == dataTypes(0)).reduce(_ && _)
+    childrenResolved && dataTypesEqual
   }
 
   def dataType = {
