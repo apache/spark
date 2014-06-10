@@ -164,7 +164,7 @@ object SparkEnv extends Logging {
     def instantiateClass[T](propertyName: String, defaultClassName: String): T = {
       val name = conf.get(propertyName,  defaultClassName)
       val cls = Class.forName(name, true, Utils.getContextOrSparkClassLoader)
-      // Look for a constructor taking a SparkConf and a boolean isDriver, than one taking just
+      // Look for a constructor taking a SparkConf and a boolean isDriver, then one taking just
       // SparkConf, then one taking no arguments
       try {
         cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)

@@ -21,7 +21,8 @@ import org.apache.spark._
 import org.apache.spark.shuffle._
 
 /**
- * A ShuffleManager using the hash-based implementation available up to and including Spark 1.0.
+ * A ShuffleManager using hashing, that creates one output file per reduce partition on each
+ * mapper (possibly reusing these across waves of tasks).
  */
 class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
   /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
