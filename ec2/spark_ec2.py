@@ -418,6 +418,12 @@ def launch_cluster(conn, opts, cluster_name):
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
+    # Give the instances descriptive names
+    for master in master_nodes:
+        master.add_tag(key='Name', value='spark-{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+    for slave in slave_nodes:
+        slave.add_tag(key='Name', value='spark-{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+
     # Return all the instances
     return (master_nodes, slave_nodes)
 
