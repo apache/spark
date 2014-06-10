@@ -36,7 +36,8 @@ private[spark] object SamplingUtils {
    * @param withReplacement whether sampling with replacement
    * @return a sampling rate that guarantees sufficient sample size with 99.99% success rate
    */
-  def computeFractionForSampleSize(sampleSizeLowerBound: Int, total: Long, withReplacement: Boolean): Double = {
+  def computeFractionForSampleSize(sampleSizeLowerBound: Int, total: Long,
+      withReplacement: Boolean): Double = {
     val fraction = sampleSizeLowerBound.toDouble / total
     if (withReplacement) {
       val numStDev = if (sampleSizeLowerBound < 12) 9 else 5
