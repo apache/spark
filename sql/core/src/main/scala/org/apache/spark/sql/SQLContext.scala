@@ -28,8 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, InsertIntoCreatedTable}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, WriteToFile}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
