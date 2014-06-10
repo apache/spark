@@ -35,7 +35,11 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private val UPDATE_INTERVAL_MS = conf.getInt("spark.history.fs.updateInterval",
     conf.getInt("spark.history.updateInterval", 10)) * 1000
 
-  private val logDir = conf.get("spark.history.fs.logDirectory")
+  private val logDir = conf.get("spark.history.fs.logDirectory", null)
+  if (logDir == null) {
+    throw new IllegalArgumentException("Logging directory must be specified.")
+  }
+
   private val fs = Utils.getHadoopFileSystem(logDir)
 
   // A timestamp of when the disk was last accessed to check for log updates
