@@ -142,18 +142,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def sql(sqlText: String): SchemaRDD = {
-    val result = new SchemaRDD(this, parseSql(sqlText))
-    result.logicalPlan match {
-      // We force query optimization to happen right away instead of letting it happen lazily like
-      // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-      // generates the RDD lineage for DML queries, but do not perform any execution.
-      case _: Command | _: InsertIntoTable | _: InsertIntoCreatedTable | _: WriteToFile =>
-        result.queryExecution.toRdd
-      case _ =>
-    }
-    result
-  }
+  def sql(sqlText: String): SchemaRDD = new SchemaRDD(this, parseSql(sqlText))
 
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =

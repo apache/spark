@@ -75,18 +75,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /**
    * Executes a query expressed in HiveQL using Spark, returning the result as a SchemaRDD.
    */
-  def hiveql(hqlQuery: String): SchemaRDD = {
-    val result = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
-    result.logicalPlan match {
-      // We force query optimization to happen right away instead of letting it happen lazily like
-      // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-      // generates the RDD lineage for DML queries, but do not perform any execution.
-      case _: Command | _: InsertIntoTable | _: InsertIntoCreatedTable | _: WriteToFile =>
-        result.queryExecution.toRdd
-      case _ =>
-    }
-    result
-  }
+  def hiveql(hqlQuery: String): SchemaRDD = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
 
   /** An alias for `hiveql`. */
   def hql(hqlQuery: String): SchemaRDD = hiveql(hqlQuery)
