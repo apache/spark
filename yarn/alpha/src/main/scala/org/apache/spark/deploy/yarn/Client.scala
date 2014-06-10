@@ -21,8 +21,7 @@ import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.Map
+import scala.collection.mutable.{HashMap, ListBuffer, Map}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileContext, FileStatus, FileSystem, Path, FileUtil}
@@ -264,6 +263,7 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     }
 
     // handle any add jars
+    val cachedSecondaryJarLinks = ListBuffer.empty[String]
     if ((args.addJars != null) && (!args.addJars.isEmpty())){
       args.addJars.split(',').foreach { case file: String =>
         val localURI = new URI(file.trim())
@@ -271,9 +271,11 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
         val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
         val destPath = copyRemoteFile(dst, localPath, replication)
         distCacheMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE,
-          linkname, statCache, true)
+          linkname, statCache)
+        cachedSecondaryJarLinks += linkname
       }
     }
+    sparkConf.set(Client.CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
 
     // handle any distributed cache files
     if ((args.files != null) && (!args.files.isEmpty())){
@@ -462,9 +464,10 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
 }
 
 object Client {
-  val SPARK_JAR: String = "spark.jar"
-  val APP_JAR: String = "app.jar"
+  val SPARK_JAR: String = "__spark__.jar"
+  val APP_JAR: String = "__app__.jar"
   val LOG4J_PROP: String = "log4j.properties"
+  val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
 
   def main(argStrings: Array[String]) {
     // Set an env variable indicating we are running in YARN mode.
@@ -491,11 +494,19 @@ object Client {
       Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
         Path.SEPARATOR + LOG4J_PROP)
     }
+
+    val cachedSecondaryJarLinks =
+      sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",")
+        .filter(_.nonEmpty)
+
     // Normally the users app.jar is last in case conflicts with spark jars
     val userClasspathFirst = sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean
     if (userClasspathFirst) {
       Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
         Path.SEPARATOR + APP_JAR)
+      cachedSecondaryJarLinks.foreach(jarLink =>
+        Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
+          Path.SEPARATOR + jarLink))
     }
     Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
       Path.SEPARATOR + SPARK_JAR)
@@ -504,6 +515,9 @@ object Client {
     if (!userClasspathFirst) {
       Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
         Path.SEPARATOR + APP_JAR)
+      cachedSecondaryJarLinks.foreach(jarLink =>
+        Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
+          Path.SEPARATOR + jarLink))
     }
     Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
       Path.SEPARATOR + "*")
