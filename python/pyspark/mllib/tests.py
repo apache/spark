@@ -158,7 +158,6 @@ class ListTests(PySparkTestCase):
         self.assertTrue(rr_model.predict(features[3]) > 0)
 
 
-@unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
     """
     Test both vector operations and MLlib algorithms with SciPy sparse matrices,
@@ -166,6 +165,8 @@ class SciPyTests(PySparkTestCase):
     """
 
     def test_serialize(self):
+        if not _have_scipy:
+            return
         from scipy.sparse import lil_matrix
         lil = lil_matrix((4, 1))
         lil[1, 0] = 1
@@ -182,6 +183,8 @@ class SciPyTests(PySparkTestCase):
         self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil.todok())))
 
     def test_dot(self):
+        if not _have_scipy:
+            return
         from scipy.sparse import lil_matrix
         lil = lil_matrix((4, 1))
         lil[1, 0] = 1
@@ -196,6 +199,8 @@ class SciPyTests(PySparkTestCase):
         self.assertTrue(array_equal(array([3., 6., 9., 12.]), _dot(lil, mat)))
 
     def test_squared_distance(self):
+        if not _have_scipy:
+            return
         from scipy.sparse import lil_matrix
         lil = lil_matrix((4, 1))
         lil[1, 0] = 3
@@ -208,6 +213,8 @@ class SciPyTests(PySparkTestCase):
         self.assertEquals(15.0, _squared_distance(sv, lil))
 
     def scipy_matrix(self, size, values):
+        if not _have_scipy:
+            return
         """Create a column SciPy matrix from a dictionary of values"""
         from scipy.sparse import lil_matrix
         lil = lil_matrix((size, 1))
@@ -216,6 +223,8 @@ class SciPyTests(PySparkTestCase):
         return lil
 
     def test_clustering(self):
+        if not _have_scipy:
+            return
         from pyspark.mllib.clustering import KMeans
         data = [
             self.scipy_matrix(3, {1: 1.0}),
@@ -228,6 +237,8 @@ class SciPyTests(PySparkTestCase):
         self.assertEquals(clusters.predict(data[2]), clusters.predict(data[3]))
 
     def test_classification(self):
+        if not _have_scipy:
+            return
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
         data = [
             LabeledPoint(0.0, self.scipy_matrix(2, {0: 1.0})),
@@ -257,6 +268,8 @@ class SciPyTests(PySparkTestCase):
         self.assertTrue(nb_model.predict(features[3]) > 0)
 
     def test_regression(self):
+        if not _have_scipy:
+            return
         from pyspark.mllib.regression import LinearRegressionWithSGD, LassoWithSGD, \
             RidgeRegressionWithSGD
         data = [

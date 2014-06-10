@@ -508,11 +508,12 @@ class TestSparkSubmit(unittest.TestCase):
         self.assertIn("[2, 4, 6]", out)
 
 
-@unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
     """General PySpark tests that depend on scipy """
 
     def test_serialize(self):
+        if not _have_scipy: 
+            return
         from scipy.special import gammaln
         x = range(1, 5)
         expected = map(gammaln, x)
