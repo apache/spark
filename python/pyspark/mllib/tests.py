@@ -19,8 +19,13 @@
 Fuller unit tests for Python MLlib.
 """
 
+import sys
 from numpy import array, array_equal
-import unittest
+
+if sys.version_info[:2] <= (2, 6):
+    import unittest2 as unittest
+else:
+    import unittest
 
 from pyspark.mllib._common import _convert_vector, _serialize_double_vector, \
     _deserialize_double_vector, _dot, _squared_distance

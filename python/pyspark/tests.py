@@ -28,8 +28,12 @@ import subprocess
 import sys
 import tempfile
 import time
-import unittest
 import zipfile
+
+if sys.version_info[:2] <= (2, 6):
+    import unittest2 as unittest
+else:
+    import unittest
 
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
