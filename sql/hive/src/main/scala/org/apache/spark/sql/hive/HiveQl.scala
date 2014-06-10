@@ -685,6 +685,7 @@ private[hive] object HiveQl {
         case "TOK_RIGHTOUTERJOIN" => RightOuter
         case "TOK_LEFTOUTERJOIN" => LeftOuter
         case "TOK_FULLOUTERJOIN" => FullOuter
+        case "TOK_LEFTSEMIJOIN" => LeftSemi
       }
       assert(other.size <= 1, "Unhandled join clauses.")
       Join(nodeToRelation(relation1),
