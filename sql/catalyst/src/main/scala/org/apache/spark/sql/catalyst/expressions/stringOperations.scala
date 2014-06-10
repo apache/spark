@@ -76,7 +76,8 @@ trait CaseConversionExpression {
   type EvaluatedType = Any
 
   def convert(v: String): String
-  
+
+  override def foldable: Boolean = child.foldable
   def nullable: Boolean = child.nullable
   def dataType: DataType = StringType
 
