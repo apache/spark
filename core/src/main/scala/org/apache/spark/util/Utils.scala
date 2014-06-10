@@ -867,11 +867,10 @@ private[spark] object Utils extends Logging {
    * and `endIndex` is based on the cumulative size of all the files take in
    * the given order. See figure below for more details.
    */
-  def offsetBytes(files: Seq[File], startIndex: Long, endIndex: Long): String = {
-    assert(startIndex >= 0)
-    assert(endIndex >= startIndex)
+  def offsetBytes(files: Seq[File], start: Long, end: Long): String = {
     val fileLengths = files.map { _.length }
-    assert(endIndex <= fileLengths.sum)
+    val startIndex = math.max(start, 0)
+    val endIndex = math.min(end, fileLengths.sum)
     val fileToLength = files.zip(fileLengths).toMap
     logDebug("Log files: \n" + fileToLength.mkString("\n"))
 
