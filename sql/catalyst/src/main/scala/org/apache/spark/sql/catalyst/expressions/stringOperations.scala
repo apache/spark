@@ -143,6 +143,8 @@ case class RLike(left: Expression, right: Expression)
 case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
   
   override def convert(v: String): String = v.toUpperCase()
+
+  override def toString() = s"Upper($child)"
 }
 
 /**
@@ -151,4 +153,6 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
 case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
   
   override def convert(v: String): String = v.toLowerCase()
+
+  override def toString() = s"Lower($child)"
 }
