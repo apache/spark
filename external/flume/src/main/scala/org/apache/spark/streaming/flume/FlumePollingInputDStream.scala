@@ -23,7 +23,6 @@ import java.nio.ByteBuffer
 import java.util.concurrent.{TimeUnit, Executors}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -38,8 +37,16 @@ import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.receiver.Receiver
 
-
-
+/**
+ * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running
+ * [[org.apache.spark.flume.sink.SparkSink]]s.
+ * @param ssc_ Streaming context that will execute this input stream
+ * @param addresses List of addresses at which SparkSinks are listening
+ * @param maxBatchSize Maximum size of a batch
+ * @param parallelism Number of parallel connections to open
+ * @param storageLevel The storage level to use.
+ * @tparam T Class type of the object of this stream
+ */
 class FlumePollingInputDStream[T: ClassTag](
   @transient ssc_ : StreamingContext,
   val addresses: Seq[InetSocketAddress],
@@ -84,6 +91,7 @@ private[streaming] class FlumePollingReceiver(
       new FlumeConnection(transceiver, client)
     }).toArray
 
+    // Threads that pull data from Flume.
     val dataReceiver = new Runnable {
       override def run(): Unit = {
         var counter = 0
@@ -96,11 +104,14 @@ private[streaming] class FlumePollingReceiver(
           val events: java.util.List[SparkSinkEvent] = batch.getEvents
           logDebug("Received batch of " + events.size() + " events with sequence number: " + seq)
           try {
+            // Convert each Flume event to a serializable SparkPollingEvent
             events.foreach(event => store(SparkPollingEvent.fromSparkSinkEvent(event)))
+            // Send an ack to Flume so that Flume discards the events from its channels.
             client.ack(seq)
           } catch {
             case e: Throwable =>
               try {
+                // Let Flume know that the events need to be pushed back into the channel.
                 client.nack(seq) // If the agent is down, even this could fail and throw
               } catch {
                 case e: Throwable => logError("Sending Nack also failed. A Flume agent is down.")
@@ -111,6 +122,7 @@ private[streaming] class FlumePollingReceiver(
         }
       }
     }
+    // Create multiple threads and start all of them.
     for (i <- 0 until parallelism) {
       logInfo("Starting Flume Polling Receiver worker threads starting..")
       receiverExecutor.submit(dataReceiver)
@@ -129,13 +141,18 @@ private[streaming] class FlumePollingReceiver(
     logInfo("Shutting down Flume Polling Receiver")
     receiverExecutor.shutdownNow()
     connections.map(connection => {
-      connection.tranceiver.close()
+      connection.transceiver.close()
     })
     channelFactory.releaseExternalResources()
   }
 }
 
-private class FlumeConnection(val tranceiver: NettyTransceiver,
+/**
+ * A wrapper around the transceiver and the Avro IPC API. 
+ * @param transceiver The transceiver to use for communication with Flume
+ * @param client The client that the callbacks are received on.
+ */
+private class FlumeConnection(val transceiver: NettyTransceiver,
                               val client: SparkFlumeProtocol.Callback)
 
 private[streaming] object SparkPollingEvent {
