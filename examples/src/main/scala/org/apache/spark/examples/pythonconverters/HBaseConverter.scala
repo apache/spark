@@ -15,31 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.examples.pythonconverters
 
-private[sql] object DebugQuery {
-  def apply(plan: SparkPlan): SparkPlan = {
-    val visited = new collection.mutable.HashSet[Long]()
-    plan transform {
-      case s: SparkPlan if !visited.contains(s.id) =>
-        visited += s.id
-        DebugNode(s)
-    }
-  }
-}
+import org.apache.spark.api.python.Converter
+import org.apache.hadoop.hbase.client.Result
+import org.apache.hadoop.hbase.util.Bytes
 
-private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
-  def references = Set.empty
-  def output = child.output
-  def execute() = {
-    val childRdd = child.execute()
-    println(
-      s"""
-        |=========================
-        |${child.simpleString}
-        |=========================
-      """.stripMargin)
-    childRdd.foreach(println(_))
-    childRdd
+/**
+ * Implementation of [[org.apache.spark.api.python.Converter]] that converts a HBase Result
+ * to a String
+ */
+class HBaseConverter extends Converter[Any, String] {
+  override def convert(obj: Any): String = {
+    val result = obj.asInstanceOf[Result]
+    Bytes.toStringBinary(result.value())
   }
 }
