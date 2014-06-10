@@ -220,7 +220,7 @@ trait ClientBase extends Logging {
       }
     }
 
-    var cachedSecondaryJarLinks = ListBuffer.empty[String]
+    val cachedSecondaryJarLinks = ListBuffer.empty[String]
     val fileLists = List( (args.addJars, LocalResourceType.FILE, true),
       (args.files, LocalResourceType.FILE, false),
       (args.archives, LocalResourceType.ARCHIVE, false) )
@@ -486,7 +486,7 @@ object ClientBase {
     extraClassPath.foreach(addClasspathEntry)
 
     val cachedSecondaryJarLinks =
-      sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",")
+      sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",").filter(_.nonEmpty)
     // Normally the users app.jar is last in case conflicts with spark jars
     if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
       addPwdClasspathEntry(APP_JAR)
