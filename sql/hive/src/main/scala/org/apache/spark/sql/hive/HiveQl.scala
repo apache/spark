@@ -218,6 +218,10 @@ private[hive] object HiveQl {
           case Array(key, value) => // "set key=value"
             SetCommand(Some(key), Some(value))
         }
+      } else if (sql.toLowerCase.startsWith("cache table")) {
+        CacheCommand(sql.drop(12).trim, true)
+      } else if (sql.toLowerCase.startsWith("uncache table")) {
+        CacheCommand(sql.drop(14).trim, false)
       } else if (sql.toLowerCase.startsWith("add jar")) {
         AddJar(sql.drop(8))
       } else if (sql.toLowerCase.startsWith("add file")) {
@@ -839,11 +843,11 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(MAX(), Nil) :: arg :: Nil) => Max(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(MIN(), Nil) :: arg :: Nil) => Min(nodeToExpr(arg))
-    
+
     /* System functions about string operations */
     case Token("TOK_FUNCTION", Token(UPPER(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(LOWER(), Nil) :: arg :: Nil) => Lower(nodeToExpr(arg))
-    
+
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), StringType)

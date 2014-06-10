@@ -56,4 +56,18 @@ class CachedTableSuite extends HiveComparisonTest {
       TestHive.uncacheTable("src")
     }
   }
+
+  test("'CACHE TABLE' and 'UNCACHE TABLE' HiveQL statement") {
+    TestHive.hql("CACHE TABLE src")
+    TestHive.table("src").queryExecution.executedPlan match {
+      case _: InMemoryColumnarTableScan => // Found evidence of caching
+      case _ => fail(s"Table 'src' should be cached")
+    }
+
+    TestHive.hql("UNCACHE TABLE src")
+    TestHive.table("src").queryExecution.executedPlan match {
+      case _: InMemoryColumnarTableScan => fail(s"Table 'src' should not be cached")
+      case _ => // Found evidence of uncaching
+    }
+  }
 }

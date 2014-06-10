@@ -130,6 +130,11 @@ case class ExplainCommand(plan: LogicalPlan) extends Command {
 }
 
 /**
+ * Returned for the "CACHE TABLE tableName" and "UNCACHE TABLE tableName" command.
+ */
+case class CacheCommand(tableName: String, doCache: Boolean) extends Command
+
+/**
  * A logical plan node with single child.
  */
 abstract class UnaryNode extends LogicalPlan with trees.UnaryNode[LogicalPlan] {

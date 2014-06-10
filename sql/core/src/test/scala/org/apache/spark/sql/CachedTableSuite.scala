@@ -70,4 +70,18 @@ class CachedTableSuite extends QueryTest {
     TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key")
     TestSQLContext.uncacheTable("testData")
   }
+
+  test("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
+    TestSQLContext.sql("CACHE TABLE testData")
+    TestSQLContext.table("testData").queryExecution.executedPlan match {
+      case _: InMemoryColumnarTableScan => // Found evidence of caching
+      case _ => fail(s"Table 'testData' should be cached")
+    }
+
+    TestSQLContext.sql("UNCACHE TABLE testData")
+    TestSQLContext.table("testData").queryExecution.executedPlan match {
+      case _: InMemoryColumnarTableScan => fail(s"Table 'testData' should not be cached")
+      case _ => // Found evidence of uncaching
+    }
+  }
 }
