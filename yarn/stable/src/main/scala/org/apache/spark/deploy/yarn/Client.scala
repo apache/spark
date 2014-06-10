@@ -510,11 +510,10 @@ object Client {
     }
 
     val cachedSecondaryJarLinks =
-      sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",")
+      sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",").filter(_.nonEmpty)
 
     // Normally the users app.jar is last in case conflicts with spark jars
-    val userClasspathFirst = sparkConf.get("spark.yarn.user.classpath.first", "false")
-      .toBoolean
+    val userClasspathFirst = sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean
     if (userClasspathFirst) {
       Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
         Path.SEPARATOR + APP_JAR)

@@ -263,7 +263,7 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     }
 
     // handle any add jars
-    var cachedSecondaryJarLinks = ListBuffer.empty[String]
+    val cachedSecondaryJarLinks = ListBuffer.empty[String]
     if ((args.addJars != null) && (!args.addJars.isEmpty())){
       args.addJars.split(',').foreach { case file: String =>
         val localURI = new URI(file.trim())
@@ -496,7 +496,7 @@ object Client {
     }
 
     val cachedSecondaryJarLinks =
-      sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",")
+      sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",").filter(_.nonEmpty)
 
     // Normally the users app.jar is last in case conflicts with spark jars
     val userClasspathFirst = sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean
