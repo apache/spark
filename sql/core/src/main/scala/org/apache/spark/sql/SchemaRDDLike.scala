@@ -50,6 +50,15 @@ private[sql] trait SchemaRDDLike {
   @DeveloperApi
   lazy val queryExecution = sqlContext.executePlan(logicalPlan)
 
+  logicalPlan match {
+    // We force query optimization to happen right away instead of letting it happen lazily like
+    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
+    // generates the RDD lineage for DML queries, but do not perform any execution.
+    case _: Command | _: InsertIntoTable | _: InsertIntoCreatedTable | _: WriteToFile =>
+      queryExecution.toRdd
+    case _ =>
+  }
+
   override def toString =
     s"""${super.toString}
        |== Query Plan ==

@@ -25,20 +25,15 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
-
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.{Subquery, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
-
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.SparkStrategies
-
 import org.apache.spark.sql.parquet.ParquetRelation
 
 /**
@@ -146,14 +141,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def sql(sqlText: String): SchemaRDD = {
-    val result = new SchemaRDD(this, parseSql(sqlText))
-    // We force query optimization to happen right away instead of letting it happen lazily like
-    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-    // generates the RDD lineage for DML queries, but do not perform any execution.
-    result.queryExecution.toRdd
-    result
-  }
+  def sql(sqlText: String): SchemaRDD = new SchemaRDD(this, parseSql(sqlText))
 
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =
