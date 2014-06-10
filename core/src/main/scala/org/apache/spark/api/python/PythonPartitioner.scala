@@ -50,4 +50,6 @@ private[spark] class PythonPartitioner(
     case _ =>
       false
   }
+
+  override def hashCode: Int = 31 * numPartitions + pyPartitionFunctionId.hashCode
 }

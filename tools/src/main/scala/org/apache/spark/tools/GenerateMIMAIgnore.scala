@@ -23,6 +23,7 @@ import java.util.jar.JarFile
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.reflect.runtime.universe.runtimeMirror
+import scala.reflect.runtime.{universe => unv}
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
@@ -42,7 +43,7 @@ object GenerateMIMAIgnore {
   private def classesPrivateWithin(packageName: String): Set[String] = {
 
     val classes = getClasses(packageName)
-    val privateClasses = mutable.HashSet[String]()
+    val ignoredClasses = mutable.HashSet[String]()
 
     def isPackagePrivate(className: String) = {
       try {
@@ -70,8 +71,21 @@ object GenerateMIMAIgnore {
       }
     }
 
+    def isDeveloperApi(className: String) = {
+      try {
+        val clazz = mirror.classSymbol(Class.forName(className, false, classLoader))
+        clazz.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
+      } catch {
+        case _: Throwable => {
+          println("Error determining Annotations: " + className)
+          false
+        }
+      }
+    }
+
     for (className <- classes) {
       val directlyPrivateSpark = isPackagePrivate(className)
+      val developerApi = isDeveloperApi(className)
 
       /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
@@ -83,15 +97,17 @@ object GenerateMIMAIgnore {
           false
         }
       }
-      if (directlyPrivateSpark || indirectlyPrivateSpark) privateClasses += className
+      if (directlyPrivateSpark || indirectlyPrivateSpark || developerApi) {
+        ignoredClasses += className
+      }
     }
-    privateClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet
+    ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet
   }
 
   def main(args: Array[String]) {
-    scala.tools.nsc.io.File(".mima-excludes").
+    scala.tools.nsc.io.File(".generated-mima-excludes").
       writeAll(classesPrivateWithin("org.apache.spark").mkString("\n"))
-    println("Created : .mima-excludes in current directory.")
+    println("Created : .generated-mima-excludes in current directory.")
   }
 
 

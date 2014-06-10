@@ -47,6 +47,8 @@ object TestData {
       (1, null) ::
       (2, 2) :: Nil)
 
+  val emptyTableData = logical.LocalRelation('a.int, 'b.int)
+
   case class UpperCaseData(N: Int, L: String)
   val upperCaseData =
     TestSQLContext.sparkContext.parallelize(
@@ -104,4 +106,15 @@ object TestData {
       NullInts(null) :: Nil
     )
   nullInts.registerAsTable("nullInts")
+
+  case class NullStrings(n: Int, s: String)
+  val nullStrings =
+    TestSQLContext.sparkContext.parallelize(
+      NullStrings(1, "abc") ::
+      NullStrings(2, "ABC") ::
+      NullStrings(3, null) :: Nil)
+  nullStrings.registerAsTable("nullStrings")
+
+  case class TableName(tableName: String)
+  TestSQLContext.sparkContext.parallelize(TableName("test") :: Nil).registerAsTable("tableName")
 }

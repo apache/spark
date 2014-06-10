@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, execution}
+import org.apache.spark.sql.{SQLConf, SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -27,6 +27,22 @@ import org.apache.spark.sql.parquet._
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
+
+  object LeftSemiJoin extends Strategy with PredicateHelper {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // Find left semi joins where at least some predicates can be evaluated by matching hash
+      // keys using the HashFilteredJoin pattern.
+      case HashFilteredJoin(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
+        val semiJoin = execution.LeftSemiJoinHash(
+          leftKeys, rightKeys, planLater(left), planLater(right))
+        condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
+      // no predicate can be evaluated by matching hash keys
+      case logical.Join(left, right, LeftSemi, condition) =>
+        execution.LeftSemiJoinBNL(
+          planLater(left), planLater(right), condition)(sparkContext) :: Nil
+      case _ => Nil
+    }
+  }
 
   object HashJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -141,14 +157,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child), overwrite)(sparkContext) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) => {
-        val remainingFilters =
+        val prunePushedDownFilters =
           if (sparkContext.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
-            filters.filter {
-              // Note: filters cannot be pushed down to Parquet if they contain more complex
-              // expressions than simple "Attribute cmp Literal" comparisons. Here we remove
-              // all filters that have been pushed down. Note that a predicate such as
-              // "(A AND B) OR C" can result in "A OR C" being pushed down.
-              filter =>
+            (filters: Seq[Expression]) => {
+              filters.filter { filter =>
+                // Note: filters cannot be pushed down to Parquet if they contain more complex
+                // expressions than simple "Attribute cmp Literal" comparisons. Here we remove
+                // all filters that have been pushed down. Note that a predicate such as
+                // "(A AND B) OR C" can result in "A OR C" being pushed down.
                 val recordFilter = ParquetFilters.createFilter(filter)
                 if (!recordFilter.isDefined) {
                   // First case: the pushdown did not result in any record filter.
@@ -159,13 +175,15 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                   // still want to keep "A AND B" in the higher-level filter, not just "B".
                   !ParquetFilters.findExpression(recordFilter.get, filter).isDefined
                 }
+              }
             }
           } else {
-            filters
+            identity[Seq[Expression]] _
           }
         pruneFilterProject(
           projectList,
-          remainingFilters,
+          filters,
+          prunePushedDownFilters,
           ParquetTableScan(_, relation, filters)(sparkContext)) :: Nil
       }
 
@@ -175,8 +193,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    // TODO: Set
-    val numPartitions = 200
+    def numPartitions = self.numPartitions
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Distinct(child) =>
         execution.Aggregate(
@@ -215,4 +233,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
   }
+
+  case class CommandStrategy(context: SQLContext) extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.SetCommand(key, value) =>
+        Seq(execution.SetCommandPhysical(key, value, plan.output)(context))
+      case logical.ExplainCommand(child) =>
+        val qe = context.executePlan(child)
+        Seq(execution.ExplainCommandPhysical(qe.executedPlan, plan.output)(context))
+      case _ => Nil
+    }
+  }
+
 }
