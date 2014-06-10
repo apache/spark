@@ -188,6 +188,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
   }
 
+  def isCached(tableName: String): Boolean = {
+    val relation = catalog.lookupRelation(None, tableName)
+    EliminateAnalysisOperators(relation) match {
+      case SparkLogicalPlan(_: InMemoryColumnarTableScan) => true
+      case _ => false
+    }
+  }
+
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext = self.sparkContext
 

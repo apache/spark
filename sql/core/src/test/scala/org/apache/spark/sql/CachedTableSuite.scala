@@ -77,11 +77,13 @@ class CachedTableSuite extends QueryTest {
       case _: InMemoryColumnarTableScan => // Found evidence of caching
       case _ => fail(s"Table 'testData' should be cached")
     }
+    assert(TestSQLContext.isCached("testData"), "Table 'testData' should be cached")
 
     TestSQLContext.sql("UNCACHE TABLE testData")
     TestSQLContext.table("testData").queryExecution.executedPlan match {
       case _: InMemoryColumnarTableScan => fail(s"Table 'testData' should not be cached")
       case _ => // Found evidence of uncaching
     }
+    assert(!TestSQLContext.isCached("testData"), "Table 'testData' should not be cached")
   }
 }
