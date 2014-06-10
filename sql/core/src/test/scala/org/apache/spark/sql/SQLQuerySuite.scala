@@ -361,6 +361,41 @@ class SQLQuerySuite extends QueryTest {
         (1, "abc"),
         (2, "abc"),
         (3, null)))
-  }  
-  
+  }
+
+  test("SET commands semantics using sql()") {
+    clear()
+    val testKey = "test.key.0"
+    val testVal = "test.val.0"
+    val nonexistentKey = "nonexistent"
+
+    // "set" itself returns all config variables currently specified in SQLConf.
+    assert(sql("SET").collect().size == 0)
+
+    // "set key=val"
+    sql(s"SET $testKey=$testVal")
+    checkAnswer(
+      sql("SET"),
+      Seq(Seq(s"$testKey=$testVal"))
+    )
+
+    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    checkAnswer(
+      sql("set"),
+      Seq(
+        Seq(s"$testKey=$testVal"),
+        Seq(s"${testKey + testKey}=${testVal + testVal}"))
+    )
+
+    // "set key"
+    checkAnswer(
+      sql(s"SET $testKey"),
+      Seq(Seq(s"$testKey=$testVal"))
+    )
+    checkAnswer(
+      sql(s"SET $nonexistentKey"),
+      Seq(Seq(s"$nonexistentKey is undefined"))
+    )
+  }
+
 }

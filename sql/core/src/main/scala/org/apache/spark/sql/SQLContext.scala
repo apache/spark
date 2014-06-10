@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.{Subquery, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{SetCommand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
@@ -52,6 +52,7 @@ import org.apache.spark.sql.parquet.ParquetRelation
 @AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
   extends Logging
+  with SQLConf
   with dsl.ExpressionConversions
   with Serializable {
 
@@ -190,6 +191,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext = self.sparkContext
 
+    def numPartitions = self.numShufflePartitions
+
     val strategies: Seq[Strategy] =
       CommandStrategy(self) ::
       TakeOrdered ::
@@ -246,6 +249,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val planner = new SparkPlanner
 
+  @transient
+  protected[sql] lazy val emptyResult =
+    sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
+
   /**
    * Prepares a planned SparkPlan for execution by binding references to specific ordinals, and
    * inserting shuffle operations as needed.
@@ -253,13 +260,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
-      Batch("Add exchange", Once, AddExchange) ::
+      Batch("Add exchange", Once, AddExchange(self)) ::
       Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
-  }
-
-  // TODO: or should we make QueryExecution protected[sql]?
-  protected[sql] def mkQueryExecution(plan: LogicalPlan) = new QueryExecution {
-    val logical = plan
   }
 
   /**
@@ -269,6 +271,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected abstract class QueryExecution {
     def logical: LogicalPlan
 
+    def eagerlyProcess(plan: LogicalPlan): RDD[Row] = plan match {
+      case SetCommand(key, value) =>
+        // Only this case needs to be executed eagerly. The other cases will
+        // be taken care of when the actual results are being extracted.
+        // In the case of HiveContext, sqlConf is overridden to also pass the
+        // pair into its HiveConf.
+        if (key.isDefined && value.isDefined) {
+          set(key.get, value.get)
+        }
+        // It doesn't matter what we return here, since this is only used
+        // to force the evaluation to happen eagerly.  To query the results,
+        // one must use SchemaRDD operations to extract them.
+        emptyResult
+      case _ => executedPlan.execute()
+    }
+
     lazy val analyzed = analyzer(logical)
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
@@ -276,7 +294,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
     lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
-    lazy val toRdd: RDD[Row] = executedPlan.execute()
+    lazy val toRdd: RDD[Row] = {
+      logical match {
+        case s: SetCommand => eagerlyProcess(s)
+        case _ => executedPlan.execute()
+      }
+    }
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
