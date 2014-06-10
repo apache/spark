@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.catalyst.types.{StringType, StructType}
 import org.apache.spark.sql.catalyst.trees
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
@@ -64,7 +64,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
     // struct fields.
     val options = children.flatMap(_.output).flatMap { option =>
       // If the first part of the desired name matches a qualifier for this possible match, drop it.
-      val remainingParts = if (option.qualifiers contains parts.head) parts.drop(1) else parts
+      val remainingParts =
+        if (option.qualifiers.contains(parts.head) && parts.size > 1) parts.drop(1) else parts
       if (option.name == remainingParts.head) (option, remainingParts.tail.toList) :: Nil else Nil
     }
 
@@ -101,7 +102,7 @@ abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
  */
 abstract class Command extends LeafNode {
   self: Product =>
-  def output = Seq.empty
+  def output: Seq[Attribute] = Seq.empty
 }
 
 /**
@@ -114,7 +115,9 @@ case class NativeCommand(cmd: String) extends Command
  * Returned by a parser when the users only wants to see what query plan would be executed, without
  * actually performing the execution.
  */
-case class ExplainCommand(plan: LogicalPlan) extends Command
+case class ExplainCommand(plan: LogicalPlan) extends Command {
+  override def output = Seq(AttributeReference("plan", StringType, nullable = false)())
+}
 
 /**
  * A logical plan node with single child.
