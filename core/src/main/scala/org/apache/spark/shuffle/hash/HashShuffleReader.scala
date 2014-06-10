@@ -31,13 +31,24 @@ class HashShuffleReader[K, C](
   require(endPartition == startPartition + 1,
     "Hash shuffle currently only supports fetching one partition")
 
+  private val dep = handle.dependency
+
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
     val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context,
-      Serializer.getSerializer(handle.dependency.serializer))
-    val a = handle.dependency.aggregator.get
-    handle.dependency.aggregator.map(_.combineCombinersByKey(iter, context))
-      .getOrElse(iter)
+      Serializer.getSerializer(dep.serializer))
+
+    if (dep.aggregator.isDefined) {
+      if (dep.mapSideCombine) {
+        dep.aggregator.get.combineCombinersByKey(iter, context)
+      } else {
+        dep.aggregator.get.combineValuesByKey(iter, context)
+      }
+    } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
+      throw new IllegalStateException("Aggregator is empty for reduce-side combine")
+    } else {
+      iter
+    }
   }
 
   /** Close this reader */

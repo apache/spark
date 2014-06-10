@@ -56,8 +56,11 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     }
     // If the Kryo serializer is not used correctly, the shuffle would fail because the
     // default Java serializer cannot handle the non serializable class.
-    val c = new ShuffledRDD[Int, NonJavaSerializableClass, (Int, NonJavaSerializableClass)](
-      b, new HashPartitioner(NUM_BLOCKS)).setSerializer(new KryoSerializer(conf))
+    val c = new ShuffledRDD[Int,
+      NonJavaSerializableClass,
+      NonJavaSerializableClass,
+      (Int, NonJavaSerializableClass)](b, new HashPartitioner(NUM_BLOCKS))
+      .setSerializer(new KryoSerializer(conf))
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
 
     assert(c.count === 10)
@@ -78,7 +81,8 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     }
     // If the Kryo serializer is not used correctly, the shuffle would fail because the
     // default Java serializer cannot handle the non serializable class.
-    val c = new ShuffledRDD[Int, NonJavaSerializableClass, (Int, NonJavaSerializableClass)](
+    val c = new ShuffledRDD[Int, NonJavaSerializableClass, NonJavaSerializableClass,
+      (Int, NonJavaSerializableClass)](
       b, new HashPartitioner(3)).setSerializer(new KryoSerializer(conf))
     assert(c.count === 10)
   }
@@ -94,7 +98,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
     // NOTE: The default Java serializer doesn't create zero-sized blocks.
     //       So, use Kryo
-    val c = new ShuffledRDD[Int, Int, (Int, Int)](b, new HashPartitioner(10))
+    val c = new ShuffledRDD[Int, Int, Int, (Int, Int)](b, new HashPartitioner(10))
       .setSerializer(new KryoSerializer(conf))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
@@ -120,7 +124,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     val b = a.map(x => (x, x*2))
 
     // NOTE: The default Java serializer should create zero-sized blocks
-    val c = new ShuffledRDD[Int, Int, (Int, Int)](b, new HashPartitioner(10))
+    val c = new ShuffledRDD[Int, Int, Int, (Int, Int)](b, new HashPartitioner(10))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
     assert(c.count === 4)
@@ -141,7 +145,8 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
     val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
-    val results = new ShuffledRDD[Int, Int, MutablePair[Int, Int]](pairs, new HashPartitioner(2))
+    val results = new ShuffledRDD[Int, Int, Int, MutablePair[Int, Int]](pairs,
+      new HashPartitioner(2))
       .collect()
 
     data.foreach { pair => results should contain (pair) }

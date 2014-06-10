@@ -44,8 +44,7 @@ class HashShuffleWriter[K, V](
   override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
     val iter = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
-        val a = dep.aggregator.get.combineValuesByKey(records, context)
-        a
+        dep.aggregator.get.combineValuesByKey(records, context)
       } else {
         records
       }
@@ -56,9 +55,8 @@ class HashShuffleWriter[K, V](
     }
 
     for (elem <- iter) {
-      val pair = elem.asInstanceOf[Product2[Any, Any]]
-      val bucketId = dep.partitioner.getPartition(pair._1)
-      shuffle.writers(bucketId).write(pair)
+      val bucketId = dep.partitioner.getPartition(elem._1)
+      shuffle.writers(bucketId).write(elem)
     }
   }
 

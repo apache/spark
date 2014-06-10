@@ -63,12 +63,13 @@ class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
     this
   }
 
-  /** set aggregator for RDD's shuffle write or read */
+  /** set aggregator for RDD's shuffle. */
   def setAggregator(aggregator: Aggregator[K, V, C]): ShuffledRDD[K, V, C, P] = {
     this.aggregator = Option(aggregator)
     this
   }
 
+  /** set mapSideCombine flag for RDD's shuffle. */
   def setMapSideCombine(mapSideCombine: Boolean): ShuffledRDD[K, V, C, P] = {
     this.mapSideCombine = mapSideCombine
     this
