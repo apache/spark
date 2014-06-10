@@ -89,8 +89,8 @@ object FlumeUtils {
     maxBatchSize: Int = 100,
     parallelism: Int = 5,
     storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-  ): ReceiverInputDStream[SparkPollingEvent] = {
-    new FlumePollingInputDStream[SparkPollingEvent](ssc, addresses, maxBatchSize,
+  ): ReceiverInputDStream[SparkFlumePollingEvent] = {
+    new FlumePollingInputDStream[SparkFlumePollingEvent](ssc, addresses, maxBatchSize,
       parallelism, storageLevel)
   }
 
@@ -111,8 +111,8 @@ object FlumeUtils {
     maxBatchSize: Int = 100,
     parallelism: Int = 5,
     storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-  ): JavaReceiverInputDStream[SparkPollingEvent] = {
-    new FlumePollingInputDStream[SparkPollingEvent](ssc, addresses, maxBatchSize,
+  ): JavaReceiverInputDStream[SparkFlumePollingEvent] = {
+    new FlumePollingInputDStream[SparkFlumePollingEvent](ssc, addresses, maxBatchSize,
       parallelism, storageLevel)
   }
 }

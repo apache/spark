@@ -42,11 +42,11 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
   test("flume polling test") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
-    val flumeStream: ReceiverInputDStream[SparkPollingEvent] =
+    val flumeStream: ReceiverInputDStream[SparkFlumePollingEvent] =
       FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", testPort)), 100, 5,
         StorageLevel.MEMORY_AND_DISK)
-    val outputBuffer = new ArrayBuffer[Seq[SparkPollingEvent]]
-      with SynchronizedBuffer[Seq[SparkPollingEvent]]
+    val outputBuffer = new ArrayBuffer[Seq[SparkFlumePollingEvent]]
+      with SynchronizedBuffer[Seq[SparkFlumePollingEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)
     outputStream.register()
 
@@ -73,12 +73,12 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
   test("flume polling test multiple hosts") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
-    val flumeStream: ReceiverInputDStream[SparkPollingEvent] =
+    val flumeStream: ReceiverInputDStream[SparkFlumePollingEvent] =
       FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", testPort),
         new InetSocketAddress("localhost", testPort + 1)), 100, 5,
         StorageLevel.MEMORY_AND_DISK)
-    val outputBuffer = new ArrayBuffer[Seq[SparkPollingEvent]]
-      with SynchronizedBuffer[Seq[SparkPollingEvent]]
+    val outputBuffer = new ArrayBuffer[Seq[SparkFlumePollingEvent]]
+      with SynchronizedBuffer[Seq[SparkFlumePollingEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)
     outputStream.register()
 
@@ -114,7 +114,7 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
   }
 
   def writeAndVerify(channels: Seq[MemoryChannel], ssc: StreamingContext,
-                     outputBuffer: ArrayBuffer[Seq[SparkPollingEvent]]) {
+                     outputBuffer: ArrayBuffer[Seq[SparkFlumePollingEvent]]) {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val executor = Executors.newCachedThreadPool()
     val executorCompletion = new ExecutorCompletionService[Void](executor)

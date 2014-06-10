@@ -53,13 +53,13 @@ class FlumePollingInputDStream[T: ClassTag](
   val maxBatchSize: Int,
   val parallelism: Int,
   storageLevel: StorageLevel
-) extends ReceiverInputDStream[SparkPollingEvent](ssc_) {
+) extends ReceiverInputDStream[SparkFlumePollingEvent](ssc_) {
   /**
    * Gets the receiver object that will be sent to the worker nodes
    * to receive data. This method needs to defined by any specific implementation
    * of a NetworkInputDStream.
    */
-  override def getReceiver(): Receiver[SparkPollingEvent] = {
+  override def getReceiver(): Receiver[SparkFlumePollingEvent] = {
     new FlumePollingReceiver(addresses, maxBatchSize, parallelism, storageLevel)
   }
 }
@@ -69,7 +69,7 @@ private[streaming] class FlumePollingReceiver(
   maxBatchSize: Int,
   parallelism: Int,
   storageLevel: StorageLevel
-) extends Receiver[SparkPollingEvent](storageLevel) with Logging {
+) extends Receiver[SparkFlumePollingEvent](storageLevel) with Logging {
 
   lazy val channelFactoryExecutor =
     Executors.newCachedThreadPool(new ThreadFactoryBuilder().setDaemon(true).
@@ -105,7 +105,7 @@ private[streaming] class FlumePollingReceiver(
           logDebug("Received batch of " + events.size() + " events with sequence number: " + seq)
           try {
             // Convert each Flume event to a serializable SparkPollingEvent
-            events.foreach(event => store(SparkPollingEvent.fromSparkSinkEvent(event)))
+            events.foreach(event => store(SparkFlumePollingEvent.fromSparkSinkEvent(event)))
             // Send an ack to Flume so that Flume discards the events from its channels.
             client.ack(seq)
           } catch {
@@ -129,7 +129,7 @@ private[streaming] class FlumePollingReceiver(
     }
   }
 
-  override def store(dataItem: SparkPollingEvent) {
+  override def store(dataItem: SparkFlumePollingEvent) {
     // Not entirely sure store is thread-safe for all storage levels - so wrap it in synchronized
     // This takes a performance hit, since the parallelism is useful only for pulling data now.
     this.synchronized {
@@ -155,9 +155,9 @@ private[streaming] class FlumePollingReceiver(
 private class FlumeConnection(val transceiver: NettyTransceiver,
                               val client: SparkFlumeProtocol.Callback)
 
-private[streaming] object SparkPollingEvent {
-  def fromSparkSinkEvent(in: SparkSinkEvent): SparkPollingEvent = {
-    val event = new SparkPollingEvent()
+private[streaming] object SparkFlumePollingEvent {
+  def fromSparkSinkEvent(in: SparkSinkEvent): SparkFlumePollingEvent = {
+    val event = new SparkFlumePollingEvent()
     event.event = in
     event
   }
@@ -167,7 +167,7 @@ private[streaming] object SparkPollingEvent {
  * SparkSinkEvent is identical to AvroFlumeEvent, we need to create a new class and a wrapper
  * around that to make it externalizable.
  */
-class SparkPollingEvent() extends Externalizable with Logging {
+class SparkFlumePollingEvent() extends Externalizable with Logging {
   var event : SparkSinkEvent = new SparkSinkEvent()
 
   /* De-serialize from bytes. */
