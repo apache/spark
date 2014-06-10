@@ -136,6 +136,12 @@ class SQLQuerySuite extends QueryTest {
       2.0)
   }
 
+  test("average overflow test") {
+    checkAnswer(
+      sql("SELECT AVG(a),b FROM testData1 group by b"),
+      Seq((2147483645.0,1),(2.0,2)))
+  }
+  
   test("count") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM testData2"),
