@@ -280,7 +280,7 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     }
 
     // Handle jars local to the ApplicationMaster.
-    var cachedSecondaryJarLinks = ListBuffer.empty[String]
+    val cachedSecondaryJarLinks = ListBuffer.empty[String]
     if ((args.addJars != null) && (!args.addJars.isEmpty())){
       args.addJars.split(',').foreach { case file: String =>
         val localURI = new URI(file.trim())
