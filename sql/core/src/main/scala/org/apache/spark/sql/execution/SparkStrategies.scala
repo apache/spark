@@ -28,6 +28,22 @@ import org.apache.spark.sql.parquet._
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
+  object LeftSemiJoin extends Strategy with PredicateHelper {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // Find left semi joins where at least some predicates can be evaluated by matching hash
+      // keys using the HashFilteredJoin pattern.
+      case HashFilteredJoin(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
+        val semiJoin = execution.LeftSemiJoinHash(
+          leftKeys, rightKeys, planLater(left), planLater(right))
+        condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
+      // no predicate can be evaluated by matching hash keys
+      case logical.Join(left, right, LeftSemi, condition) =>
+        execution.LeftSemiJoinBNL(
+          planLater(left), planLater(right), condition)(sparkContext) :: Nil
+      case _ => Nil
+    }
+  }
+
   object HashJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Find inner joins where at least some predicates can be evaluated by matching hash keys
@@ -218,10 +234,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  case class SetCommandStrategy(context: SQLContext) extends Strategy {
+  case class CommandStrategy(context: SQLContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.SetCommand(key, value) =>
         Seq(execution.SetCommandPhysical(key, value, plan.output)(context))
+      case logical.ExplainCommand(child) =>
+        val qe = context.mkQueryExecution(child)
+        Seq(execution.ExplainCommandPhysical(qe.executedPlan, plan.output)(context))
       case _ => Nil
     }
   }

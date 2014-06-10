@@ -15,31 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.mllib.regression
 
-private[sql] object DebugQuery {
-  def apply(plan: SparkPlan): SparkPlan = {
-    val visited = new collection.mutable.HashSet[Long]()
-    plan transform {
-      case s: SparkPlan if !visited.contains(s.id) =>
-        visited += s.id
-        DebugNode(s)
+import org.scalatest.FunSuite
+
+import org.apache.spark.mllib.linalg.Vectors
+
+class LabeledPointSuite extends FunSuite {
+
+  test("parse labeled points") {
+    val points = Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
+      LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))))
+    points.foreach { p =>
+      assert(p === LabeledPointParser.parse(p.toString))
     }
   }
-}
 
-private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
-  def references = Set.empty
-  def output = child.output
-  def execute() = {
-    val childRdd = child.execute()
-    println(
-      s"""
-        |=========================
-        |${child.simpleString}
-        |=========================
-      """.stripMargin)
-    childRdd.foreach(println(_))
-    childRdd
+  test("parse labeled points with v0.9 format") {
+    val point = LabeledPointParser.parse("1.0,1.0 0.0 -2.0")
+    assert(point === LabeledPoint(1.0, Vectors.dense(1.0, 0.0, -2.0)))
   }
 }

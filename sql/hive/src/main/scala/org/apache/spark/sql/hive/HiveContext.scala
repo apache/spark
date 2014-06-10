@@ -227,13 +227,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     val hiveContext = self
 
     override val strategies: Seq[Strategy] = Seq(
-      SetCommandStrategy(self),
+      CommandStrategy(self),
       TakeOrdered,
       ParquetOperations,
       HiveTableScans,
       DataSinks,
       Scripts,
       PartialAggregation,
+      LeftSemiJoin,
       HashJoin,
       BasicOperators,
       CartesianProduct,
@@ -314,7 +315,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
      */
     def stringResult(): Seq[String] = analyzed match {
       case NativeCommand(cmd) => runSqlHive(cmd)
-      case ExplainCommand(plan) => new QueryExecution { val logical = plan }.toString.split("\n")
+      case ExplainCommand(plan) => mkQueryExecution(plan).toString.split("\n")
       case query =>
         val result: Seq[Seq[Any]] = toRdd.collect().toSeq
         // We need the types so we can output struct field names

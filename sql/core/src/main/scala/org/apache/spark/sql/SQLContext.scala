@@ -194,9 +194,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def numPartitions = self.numShufflePartitions
 
     val strategies: Seq[Strategy] =
-      SetCommandStrategy(self) ::
+      CommandStrategy(self) ::
       TakeOrdered ::
       PartialAggregation ::
+      LeftSemiJoin ::
       HashJoin ::
       ParquetOperations ::
       BasicOperators ::
@@ -263,6 +264,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
       Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
   }
 
+  // TODO: or should we make QueryExecution protected[sql]?
+  protected[sql] def mkQueryExecution(plan: LogicalPlan) = new QueryExecution {
+    val logical = plan
+  }
+
   /**
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
    * access to the intermediate phases of query execution for developers.
@@ -313,11 +319,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
       """.stripMargin.trim
-
-    /**
-     * Runs the query after interposing operators that print the result of each intermediate step.
-     */
-    def debugExec() = DebugQuery(executedPlan).execute().collect()
   }
 
   /**
