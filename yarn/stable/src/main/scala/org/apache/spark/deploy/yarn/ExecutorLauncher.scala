@@ -201,9 +201,10 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     logInfo("Allocating " + args.numExecutors + " executors.")
     // Wait until all containers have finished
     yarnAllocator.addResourceRequests(args.numExecutors)
+    yarnAllocator.allocateResources()
     while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
-      yarnAllocator.allocateResources()
       allocateMissingExecutor()
+      yarnAllocator.allocateResources()
       Thread.sleep(100)
     }
 
