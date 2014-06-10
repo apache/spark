@@ -250,7 +250,7 @@ case class Case(key: Option[Expression], branches: Seq[Expression]) extends Expr
         case (Some(x), _) =>
           Some(x)
         case (None, Seq(cond, value)) =>
-          if (cond.eval(input) == true) Some(value.eval(input)) else None
+          if (cond.eval(input) == expectedVal) Some(value.eval(input)) else None
         case (None, Seq(elseValue)) =>
           Some(elseValue.eval(input))
       }.getOrElse(null)
@@ -272,14 +272,14 @@ case class Case(key: Option[Expression], branches: Seq[Expression]) extends Expr
       val keyString = key.get.toString
       firstBranch = s"if ($keyString == ${branches(0)}) { ${branches(1)} }"
       otherBranches = branches.sliding(2, 2).drop(1).map {
-        case Seq(cond, value) => s"\nelse if ($keyString == $cond) { $value }"
-        case Seq(elseValue) => s"\nelse { $elseValue }"
+        case Seq(cond, value) => s" else if ($keyString == $cond) { $value }"
+        case Seq(elseValue) => s" else { $elseValue }"
       }.mkString
     } else {
       firstBranch = s"if (${branches(0)}) { ${branches(1)} }"
       otherBranches = branches.sliding(2, 2).drop(1).map {
-        case Seq(cond, value) => s"\nelse if ($cond) { $value }"
-        case Seq(elseValue) => s"\nelse { $elseValue }"
+        case Seq(cond, value) => s" else if ($cond) { $value }"
+        case Seq(elseValue) => s" else { $elseValue }"
       }.mkString
     }
     firstBranch ++ otherBranches
