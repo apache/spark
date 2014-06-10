@@ -41,10 +41,25 @@ import org.apache.spark.sql.catalyst.types._
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
 class SqlParser extends StandardTokenParsers with PackratParsers {
+
   def apply(input: String): LogicalPlan = {
-    phrase(query)(new lexical.Scanner(input)) match {
-      case Success(r, x) => r
-      case x => sys.error(x.toString)
+    // Special-case out set commands since the value fields can be
+    // complex to handle without RegexParsers. Also this approach
+    // is clearer for the several possible cases of set commands.
+    if (input.trim.toLowerCase.startsWith("set")) {
+      input.trim.drop(3).split("=", 2).map(_.trim) match {
+        case Array("") => // "set"
+          SetCommand(None, None)
+        case Array(key) => // "set key"
+          SetCommand(Some(key), None)
+        case Array(key, value) => // "set key=value"
+          SetCommand(Some(key), Some(value))
+      }
+    } else {
+      phrase(query)(new lexical.Scanner(input)) match {
+        case Success(r, x) => r
+        case x => sys.error(x.toString)
+      }
     }
   }
 
@@ -169,11 +184,13 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     }
   }
 
-  protected lazy val query: Parser[LogicalPlan] =
+  protected lazy val query: Parser[LogicalPlan] = (
     select * (
-      UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
-      UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
-    ) | insert
+        UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
+        UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
+      )
+    | insert
+  )
 
   protected lazy val select: Parser[LogicalPlan] =
     SELECT ~> opt(DISTINCT) ~ projections ~

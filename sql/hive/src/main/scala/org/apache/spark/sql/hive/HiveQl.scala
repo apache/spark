@@ -207,8 +207,17 @@ private[hive] object HiveQl {
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {
     try {
-      if (sql.toLowerCase.startsWith("set")) {
-        NativeCommand(sql)
+      if (sql.trim.toLowerCase.startsWith("set")) {
+        // Split in two parts since we treat the part before the first "="
+        // as key, and the part after as value, which may contain other "=" signs.
+        sql.trim.drop(3).split("=", 2).map(_.trim) match {
+          case Array("") => // "set"
+            SetCommand(None, None)
+          case Array(key) => // "set key"
+            SetCommand(Some(key), None)
+          case Array(key, value) => // "set key=value"
+            SetCommand(Some(key), Some(value))
+        }
       } else if (sql.toLowerCase.startsWith("add jar")) {
         AddJar(sql.drop(8))
       } else if (sql.toLowerCase.startsWith("add file")) {

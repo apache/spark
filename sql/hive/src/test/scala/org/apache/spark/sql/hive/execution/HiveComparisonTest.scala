@@ -138,6 +138,9 @@ abstract class HiveComparisonTest
 
     val orderedAnswer = hiveQuery.logical match {
       // Clean out non-deterministic time schema info.
+      // Hack: Hive simply prints the result of a SET command to screen,
+      // and does not return it as a query answer.
+      case _: SetCommand => Seq("0")
       case _: NativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
       case plan => if (isSorted(plan)) answer else answer.sorted

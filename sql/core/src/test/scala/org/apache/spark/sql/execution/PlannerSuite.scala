@@ -30,8 +30,8 @@ class PlannerSuite extends FunSuite {
   test("unions are collapsed") {
     val query = testData.unionAll(testData).unionAll(testData).logicalPlan
     val planned = BasicOperators(query).head
-    val logicalUnions = query collect { case u: logical.Union => u}
-    val physicalUnions = planned collect { case u: execution.Union => u}
+    val logicalUnions = query collect { case u: logical.Union => u }
+    val physicalUnions = planned collect { case u: execution.Union => u }
 
     assert(logicalUnions.size === 2)
     assert(physicalUnions.size === 1)
