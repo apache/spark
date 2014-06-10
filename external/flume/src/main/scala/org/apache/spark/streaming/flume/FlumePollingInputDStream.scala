@@ -105,7 +105,9 @@ private[streaming] class FlumePollingReceiver(
           logDebug("Received batch of " + events.size() + " events with sequence number: " + seq)
           try {
             // Convert each Flume event to a serializable SparkPollingEvent
-            events.foreach(event => store(SparkFlumePollingEvent.fromSparkSinkEvent(event)))
+            events.foreach(event => {
+              store(SparkFlumePollingEvent.fromSparkSinkEvent(event))
+            })
             // Send an ack to Flume so that Flume discards the events from its channels.
             client.ack(seq)
           } catch {
@@ -153,7 +155,7 @@ private[streaming] class FlumePollingReceiver(
  * @param client The client that the callbacks are received on.
  */
 private class FlumeConnection(val transceiver: NettyTransceiver,
-                              val client: SparkFlumeProtocol.Callback)
+  val client: SparkFlumeProtocol.Callback)
 
 private[streaming] object SparkFlumePollingEvent {
   def fromSparkSinkEvent(in: SparkSinkEvent): SparkFlumePollingEvent = {
@@ -162,13 +164,14 @@ private[streaming] object SparkFlumePollingEvent {
     event
   }
 }
+
 /*
  * Unfortunately Avro does not allow including pre-compiled classes - so even though
  * SparkSinkEvent is identical to AvroFlumeEvent, we need to create a new class and a wrapper
  * around that to make it externalizable.
  */
 class SparkFlumePollingEvent() extends Externalizable with Logging {
-  var event : SparkSinkEvent = new SparkSinkEvent()
+  var event: SparkSinkEvent = new SparkSinkEvent()
 
   /* De-serialize from bytes. */
   def readExternal(in: ObjectInput) {

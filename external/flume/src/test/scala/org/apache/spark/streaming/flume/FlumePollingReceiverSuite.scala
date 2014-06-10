@@ -114,18 +114,19 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
   }
 
   def writeAndVerify(channels: Seq[MemoryChannel], ssc: StreamingContext,
-                     outputBuffer: ArrayBuffer[Seq[SparkFlumePollingEvent]]) {
+    outputBuffer: ArrayBuffer[Seq[SparkFlumePollingEvent]]) {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val executor = Executors.newCachedThreadPool()
     val executorCompletion = new ExecutorCompletionService[Void](executor)
     channels.map(channel => {
       executorCompletion.submit(new TxnSubmitter(channel, clock))
     })
-    for(i <- 0 until channels.size) {
+    for (i <- 0 until channels.size) {
       executorCompletion.take()
     }
     val startTime = System.currentTimeMillis()
-    while (outputBuffer.size < 5 * channels.size && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
+    while (outputBuffer.size < 5 * channels.size &&
+      System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
       logInfo("output.size = " + outputBuffer.size)
       Thread.sleep(100)
     }
@@ -164,7 +165,8 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
         val tx = channel.getTransaction
         tx.begin()
         for (j <- 0 until 5) {
-          channel.put(EventBuilder.withBody((channel.getName + " - " + String.valueOf(t)).getBytes("utf-8"),
+          channel.put(EventBuilder.withBody((channel.getName + " - " + String.valueOf(t)).getBytes(
+            "utf-8"),
             Map[String, String]("test-" + t.toString -> "header")))
           t += 1
         }
@@ -176,4 +178,5 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
       null
     }
   }
+
 }

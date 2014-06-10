@@ -35,6 +35,7 @@ import org.apache.flume.{Channel, Transaction, FlumeException, Context}
 import org.slf4j.LoggerFactory
 
 import org.apache.spark.flume.{SparkSinkEvent, EventBatch, SparkFlumeProtocol}
+
 /**
  * A sink that uses Avro RPC to run a server that can be polled by Spark's
  * FlumePollingInputDStream. This sink has the following configuration parameters:
