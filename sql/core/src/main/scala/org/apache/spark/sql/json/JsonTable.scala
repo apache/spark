@@ -57,7 +57,7 @@ object JsonTable extends Logging {
    * */
   @DeveloperApi
   def inferSchema(json: RDD[String], samplingRatio: Double = 1.0): LogicalPlan = {
-    val schemaData = if (samplingRatio > 0.99) json.sample(false, samplingRatio, 1) else json
+    val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
     val allKeys = parseJson(schemaData).map(getAllKeysWithValueTypes).reduce(_ ++ _)
 
     // Resolve type conflicts
