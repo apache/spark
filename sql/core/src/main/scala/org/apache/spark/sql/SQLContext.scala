@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.{SetCommand, Subquery, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{SetCommand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
@@ -262,11 +262,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val batches =
       Batch("Add exchange", Once, AddExchange(self)) ::
       Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
-  }
-
-  // TODO: or should we make QueryExecution protected[sql]?
-  protected[sql] def mkQueryExecution(plan: LogicalPlan) = new QueryExecution {
-    val logical = plan
   }
 
   /**
