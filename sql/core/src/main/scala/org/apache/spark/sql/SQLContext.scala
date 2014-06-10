@@ -298,19 +298,27 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Peek at the first row of the RDD and infer its schema.
-   * TODO: We only support primitive types, add support for nested types.
    */
   private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
+    import scala.collection.JavaConversions._
+    def typeFor(obj: Any): DataType = obj match {
+      case c: java.lang.String => StringType
+      case c: java.lang.Integer => IntegerType
+      case c: java.lang.Long => LongType
+      case c: java.lang.Double => DoubleType
+      case c: java.lang.Boolean => BooleanType
+      case c: java.util.List[_] => ArrayType(typeFor(c.head))
+      case c: java.util.Set[_] => ArrayType(typeFor(c.head))
+      case c: java.util.Map[_, _] =>
+        val (key, value) = c.head
+        MapType(typeFor(key), typeFor(value))
+      case c if c.getClass.isArray =>
+        val elem = c.asInstanceOf[Array[_]].head
+        ArrayType(typeFor(elem))
+      case c => throw new Exception(s"Object of type $c cannot be used")
+    }
     val schema = rdd.first().map { case (fieldName, obj) =>
-      val dataType = obj.getClass match {
-        case c: Class[_] if c == classOf[java.lang.String] => StringType
-        case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
-        case c: Class[_] if c == classOf[java.lang.Long] => LongType
-        case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
-        case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
-        case c => throw new Exception(s"Object of type $c cannot be used")
-      }
-      AttributeReference(fieldName, dataType, true)()
+      AttributeReference(fieldName, typeFor(obj), true)()
     }.toSeq
 
     val rowRdd = rdd.mapPartitions { iter =>
