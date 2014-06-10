@@ -1236,10 +1236,10 @@ abstract class RDD[T: ClassTag](
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString: String = {
     def debugString(rdd: RDD[_], prefix: String = "", isShuffle: Boolean = true): Seq[String] = {
-      val thisParts = rdd.partitions.size
-      val partitionStr = if (isShuffle) "(" + thisParts + ") " else " "
+      val partitionStr = if (isShuffle) "(" + rdd.partitions.size + ")" else ""
+      val symbolStr = if (isShuffle) " + " else " | "
       val nextPrefix = prefix + (" " * partitionStr.length)
-      Seq(prefix + partitionStr + rdd) ++ rdd.dependencies.flatMap(
+      Seq(prefix + partitionStr + symbolStr + rdd) ++ rdd.dependencies.flatMap(
         d => debugString(d.rdd, nextPrefix, d.isInstanceOf[ShuffleDependency[_,_]]))
     }
     debugString(this).mkString("\n")
