@@ -30,9 +30,7 @@ object MimaBuild {
       ProblemFilters.exclude[MissingFieldProblem](fullName),
       ProblemFilters.exclude[IncompatibleResultTypeProblem](fullName),
       ProblemFilters.exclude[IncompatibleMethTypeProblem](fullName),
-      ProblemFilters.exclude[IncompatibleFieldTypeProblem](fullName),
-      ProblemFilters.exclude[MissingMethodProblem](fullName+"$default$1"),
-      ProblemFilters.exclude[MissingMethodProblem](fullName+"$default$2")
+      ProblemFilters.exclude[IncompatibleFieldTypeProblem](fullName)
     )
 
   // Exclude a single class and its corresponding object

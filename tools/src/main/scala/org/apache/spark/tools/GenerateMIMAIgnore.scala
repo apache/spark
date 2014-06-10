@@ -63,7 +63,7 @@ object GenerateMIMAIgnore {
     for (className <- classes) {
       try {
         val classSymbol = mirror.classSymbol(Class.forName(className, false, classLoader))
-        val moduleSymbol = mirror.staticModule(className) //TODO: see if it is necessary.
+        val moduleSymbol = mirror.staticModule(className) // TODO: see if it is necessary.
         val directlyPrivateSpark =
           isPackagePrivate(classSymbol) || isPackagePrivateModule(moduleSymbol)
         val developerApi = isDeveloperApi(classSymbol)
@@ -88,7 +88,7 @@ object GenerateMIMAIgnore {
         }
 
       } catch {
-        case _: Throwable => println("check failed for:" + className)
+        case _: Throwable => println("Unable to determine :" + className)
       }
     }
     (ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet, ignoredMembers.toSet)
@@ -96,7 +96,7 @@ object GenerateMIMAIgnore {
 
   private def getAnnotatedOrPackagePrivateMembers(classSymbol: unv.ClassSymbol) = {
     classSymbol.typeSignature.members
-      .filter(x => isPackagePrivate(x)|| isDeveloperApi(x) || isExperimental(x)).map(_.fullName)
+      .filter(x => isPackagePrivate(x) || isDeveloperApi(x) || isExperimental(x)).map(_.fullName)
   }
 
   def main(args: Array[String]) {
@@ -139,10 +139,17 @@ object GenerateMIMAIgnore {
    * Get all classes in a package from a jar file.
    */
   private def getClassesFromJar(jarPath: String, packageName: String) = {
+    import scala.collection.mutable
     val jar = new JarFile(new File(jarPath))
     val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))
-    val classes = for (entry <- enums if entry.endsWith(".class"))
-      yield Class.forName(entry.replace('/', '.').stripSuffix(".class"), false, classLoader)
+    val classes = mutable.HashSet[Class[_]]()
+    for (entry <- enums if entry.endsWith(".class")) {
+      try {
+        classes += Class.forName(entry.replace('/', '.').stripSuffix(".class"), false, classLoader)
+      } catch {
+        case _: Throwable => println("Unable to load:" + entry)
+      }
+    }
     classes
   }
 }
