@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent._
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark._
 import org.apache.spark.scheduler._
@@ -47,6 +47,8 @@ private[spark] class Executor(
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
+
+  private var isStopped = false
 
   // No ip or host:port - just hostname
   Utils.checkHost(slaveHostname, "Expected executed slave to be a hostname")
@@ -107,6 +109,8 @@ private[spark] class Executor(
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
+  startDriverHeartbeater()
+
   def launchTask(
       context: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer) {
     val tr = new TaskRunner(context, taskId, taskName, serializedTask)
@@ -141,11 +145,11 @@ private[spark] class Executor(
   }
 
   class TaskRunner(
-      execBackend: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer)
+      execBackend: ExecutorBackend, val taskId: Long, taskName: String, serializedTask: ByteBuffer)
     extends Runnable {
 
     @volatile private var killed = false
-    @volatile private var task: Task[Any] = _
+    @volatile var task: Task[Any] = _
 
     def kill(interruptThread: Boolean) {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
@@ -353,5 +357,47 @@ private[spark] class Executor(
         }
       }
     }
+  }
+
+  def stop() {
+    isStopped = true
+    threadPool.shutdown()
+  }
+
+  def startDriverHeartbeater() {
+    val interval = conf.getInt("spark.executor.heartbeatInterval", 2000)
+    val timeout = AkkaUtils.lookupTimeout(conf)
+    val retryAttempts = AkkaUtils.numRetries(conf)
+    val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
+    val heartbeatReceiverRef = AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
+
+    val t = new Thread() {
+      override def run() {
+        // Sleep a random interval so the heartbeats don't end up in sync
+        Thread.sleep(interval + (math.random * interval).asInstanceOf[Int])
+
+        while (!isStopped) {
+          val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
+          for (taskRunner <- runningTasks.values()) {
+            Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
+              tasksMetrics += ((taskRunner.taskId, metrics))
+            }
+          }
+
+          val message = Heartbeat(executorId, tasksMetrics.toArray,
+            env.blockManager.blockManagerId)
+          val reregister = !AkkaUtils.askWithReply[Boolean](message, heartbeatReceiverRef,
+            retryAttempts, retryIntervalMs, timeout)
+          if (reregister) {
+            logWarning("Told to re-register on heartbeat")
+            env.blockManager.reregister()
+          }
+          Thread.sleep(interval)
+        }
+      }
+    }
+    t.setDaemon(true)
+    t.setName("Driver Heartbeater")
+    t.start()
   }
 }

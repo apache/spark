@@ -1,5 +1,4 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
@@ -73,7 +72,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     oldArch = System.setProperty("os.arch", "amd64")
     conf.set("os.arch", "amd64")
     conf.set("spark.test.useCompressedOops", "true")
-    conf.set("spark.storage.disableBlockManagerHeartBeat", "true")
     conf.set("spark.driver.port", boundPort.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
@@ -340,23 +338,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     store = null
   }
 
-  test("reregistration on heart beat") {
-    val heartBeat = PrivateMethod[Unit]('heartBeat)
-    store = makeBlockManager(2000)
-    val a1 = new Array[Byte](400)
-
-    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
-
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
-    assert(master.getLocations("a1").size > 0, "master was not told about a1")
-
-    master.removeExecutor(store.blockManagerId.executorId)
-    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
-
-    store invokePrivate heartBeat()
-    assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
-  }
-
   test("reregistration on block update") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
       securityMgr, mapOutputTracker)
@@ -377,7 +358,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("reregistration doesn't dead lock") {
-    val heartBeat = PrivateMethod[Unit]('heartBeat)
     store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
     val a2 = List(new Array[Byte](400))
@@ -397,7 +377,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
       }
       val t3 = new Thread {
         override def run() {
-          store invokePrivate heartBeat()
+          store.reregister()
         }
       }
 

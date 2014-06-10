@@ -50,6 +50,7 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{CallSite, ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
+import akka.actor.Props
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -307,6 +308,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
+  private val heartbeatReceiver = env.actorSystem.actorOf(
+    Props(new HeartbeatReceiver(taskScheduler)), "HeartbeatReceiver")
   @volatile private[spark] var dagScheduler: DAGScheduler = _
   try {
     dagScheduler = new DAGScheduler(this)
@@ -992,6 +995,9 @@ class SparkContext(config: SparkConf) extends Logging {
     if (dagSchedulerCopy != null) {
       env.metricsSystem.report()
       metadataCleaner.cancel()
+      if (heartbeatReceiver != null) {
+        env.actorSystem.stop(heartbeatReceiver)
+      }
       cleaner.foreach(_.stop())
       dagSchedulerCopy.stop()
       taskScheduler = null

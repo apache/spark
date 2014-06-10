@@ -75,6 +75,9 @@ case class SparkListenerBlockManagerRemoved(blockManagerId: BlockManagerId)
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
+case class SparkListenerExecutorMetricsUpdate(execId: String,
+  taskMetrics: Seq[(Long, Int, TaskMetrics)]) extends SparkListenerEvent
+
 @DeveloperApi
 case class SparkListenerApplicationStart(appName: String, time: Long, sparkUser: String)
   extends SparkListenerEvent
@@ -158,6 +161,11 @@ trait SparkListener {
    * Called when the application ends
    */
   def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) { }
+
+  /**
+   * Called when the driver receives task metrics from an executor in a heartbeat.
+   */
+  def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) { }
 }
 
 /**

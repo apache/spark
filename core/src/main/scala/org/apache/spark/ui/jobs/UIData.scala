@@ -56,7 +56,7 @@ private[jobs] object UIData {
   }
 
   case class TaskUIData(
-      taskInfo: TaskInfo,
-      taskMetrics: Option[TaskMetrics] = None,
-      errorMessage: Option[String] = None)
+      var taskInfo: TaskInfo,
+      var taskMetrics: Option[TaskMetrics] = None,
+      var errorMessage: Option[String] = None)
 }

@@ -21,6 +21,8 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{SerializableBuffer, Utils}
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.storage.BlockManagerId
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
