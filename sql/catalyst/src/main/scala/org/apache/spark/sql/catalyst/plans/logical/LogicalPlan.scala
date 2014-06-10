@@ -102,7 +102,7 @@ abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
  */
 abstract class Command extends LeafNode {
   self: Product =>
-  def output: Seq[Attribute] = Seq.empty
+  def output: Seq[Attribute] = Seq.empty  // TODO: SPARK-2081 should fix this
 }
 
 /**
@@ -110,6 +110,16 @@ abstract class Command extends LeafNode {
  * commands that are passed directly to another system.
  */
 case class NativeCommand(cmd: String) extends Command
+
+/**
+ * Commands of the form "SET (key) (= value)".
+ */
+case class SetCommand(key: Option[String], value: Option[String]) extends Command {
+  override def output = Seq(
+    AttributeReference("key", StringType, nullable = false)(),
+    AttributeReference("value", StringType, nullable = false)()
+  )
+}
 
 /**
  * Returned by a parser when the users only wants to see what query plan would be executed, without

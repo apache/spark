@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, execution}
+import org.apache.spark.sql.{SQLConf, SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -193,8 +193,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    // TODO: Set
-    val numPartitions = 200
+    def numPartitions = self.numPartitions
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Distinct(child) =>
         execution.Aggregate(
@@ -234,11 +234,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  // TODO: this should be merged with SPARK-1508's SetCommandStrategy
   case class CommandStrategy(context: SQLContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.SetCommand(key, value) =>
+        Seq(execution.SetCommandPhysical(key, value, plan.output)(context))
       case logical.ExplainCommand(child) =>
-        val qe = context.mkQueryExecution(child)
+        val qe = context.executePlan(child)
         Seq(execution.ExplainCommandPhysical(qe.executedPlan, plan.output)(context))
       case _ => Nil
     }
