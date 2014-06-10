@@ -359,8 +359,7 @@ Apart from text files, Spark's Java API also supports several other data formats
 
 <div data-lang="python"  markdown="1">
 
-PySpark can create distributed datasets from any file system supported by Hadoop, including your local file system, HDFS, KFS, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc.
-The current API is limited to text files, but support for binary Hadoop InputFormats is expected in future versions.
+PySpark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
 Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3n://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
@@ -378,11 +377,90 @@ Some notes on reading files with Spark:
 
 * The `textFile` method also takes an optional second argument for controlling the number of slices of the file. By default, Spark creates one slice for each block of the file (blocks being 64MB by default in HDFS), but you can also ask for a higher number of slices by passing a larger value. Note that you cannot have fewer slices than blocks.
 
-Apart reading files as a collection of lines,
+Apart from reading files as a collection of lines,
 `SparkContext.wholeTextFiles` lets you read a directory containing multiple small text files, and returns each of them as (filename, content) pairs. This is in contrast with `textFile`, which would return one record per line in each file.
 
-</div>
+### SequenceFile and Hadoop InputFormats
 
+In addition to reading text files, PySpark supports reading ```SequenceFile``` 
+and any arbitrary ```InputFormat```.
+
+**Note** this feature is currently marked ```Experimental``` and is intended for advanced users. It may be replaced in future with read/write support based on SparkSQL, in which case SparkSQL is the preferred approach.
+
+#### Writable Support
+
+PySpark SequenceFile support loads an RDD within Java, and pickles the resulting Java objects using
+[Pyrolite](https://github.com/irmen/Pyrolite/). The following Writables are automatically converted:
+
+<table class="table">
+<tr><th>Writable Type</th><th>Python Type</th></tr>
+<tr><td>Text</td><td>unicode str</td></tr>
+<tr><td>IntWritable</td><td>int</td></tr>
+<tr><td>FloatWritable</td><td>float</td></tr>
+<tr><td>DoubleWritable</td><td>float</td></tr>
+<tr><td>BooleanWritable</td><td>bool</td></tr>
+<tr><td>BytesWritable</td><td>bytearray</td></tr>
+<tr><td>NullWritable</td><td>None</td></tr>
+<tr><td>ArrayWritable</td><td>list of primitives, or tuple of objects</td></tr>
+<tr><td>MapWritable</td><td>dict</td></tr>
+<tr><td>Custom Class conforming to Java Bean conventions</td>
+    <td>dict of public properties (via JavaBean getters and setters) + __class__ for the class type</td></tr>
+</table>
+
+#### Loading SequenceFiles
+
+Similarly to text files, SequenceFiles can be loaded by specifying the path. The key and value
+classes can be specified, but for standard Writables this is not required.
+
+{% highlight python %}
+>>> rdd = sc.sequenceFile("path/to/sequencefile/of/doubles")
+>>> rdd.collect()         # this example has DoubleWritable keys and Text values
+[(1.0, u'aa'),
+ (2.0, u'bb'),
+ (2.0, u'aa'),
+ (3.0, u'cc'),
+ (2.0, u'bb'),
+ (1.0, u'aa')]
+{% endhighlight %}
+
+#### Loading Other Hadoop InputFormats
+
+PySpark can also read any Hadoop InputFormat, for both 'new' and 'old' Hadoop APIs. If required,
+a Hadoop configuration can be passed in as a Python dict. Here is an example using the
+Elasticsearch ESInputFormat:
+
+{% highlight python %}
+$ SPARK_CLASSPATH=/path/to/elasticsearch-hadoop.jar ./bin/pyspark
+>>> conf = {"es.resource" : "index/type"}   # assume Elasticsearch is running on localhost defaults
+>>> rdd = sc.newAPIHadoopRDD("org.elasticsearch.hadoop.mr.EsInputFormat",\
+    "org.apache.hadoop.io.NullWritable", "org.elasticsearch.hadoop.mr.LinkedMapWritable", conf=conf)
+>>> rdd.first()         # the result is a MapWritable that is converted to a Python dict
+(u'Elasticsearch ID',
+ {u'field1': True,
+  u'field2': u'Some Text',
+  u'field3': 12345})
+{% endhighlight %}
+
+Note that, if the InputFormat simply depends on a Hadoop configuration and/or input path, and
+the key and value classes can easily be converted according to the above table,
+then this approach should work well for such cases.
+
+If you have custom serialized binary data (such as loading data from Cassandra / HBase) or custom
+classes that don't conform to the JavaBean requirements, then you will first need to 
+transform that data on the Scala/Java side to something which can be handled by Pyrolite's pickler.
+A [Converter](api/scala/index.html#org.apache.spark.api.python.Converter) trait is provided 
+for this. Simply extend this trait and implement your transformation code in the ```convert``` 
+method. Remember to ensure that this class, along with any dependencies required to access your ```InputFormat```, are packaged into your Spark job jar and included on the PySpark 
+classpath.
+
+See the [Python examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python) and 
+the [Converter examples]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/pythonconverters) 
+for examples of using HBase and Cassandra ```InputFormat```.
+
+Future support for writing data out as ```SequenceFileOutputFormat``` and other ```OutputFormats```, 
+is forthcoming.
+
+</div>
 
 </div>
 
