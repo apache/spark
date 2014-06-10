@@ -32,7 +32,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   with Logging {
 
   // Interval between each check for event log updates
-  private val UPDATE_INTERVAL_MS = conf.getInt("spark.history.fs.updateInterval", 10) * 1000
+  private val UPDATE_INTERVAL_MS = conf.getInt("spark.history.fs.updateInterval",
+    conf.getInt("spark.history.updateInterval", 10)) * 1000
 
   private val logDir = conf.get("spark.history.fs.logDirectory")
   private val fs = Utils.getHadoopFileSystem(logDir)
@@ -54,7 +55,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private val logCheckingThread = new Thread("LogCheckingThread") {
     override def run() = Utils.logUncaughtExceptions {
       while (true) {
-        val now = getMonotonicTime()
+        val now = getMonotonicTimeMs()
         if (now - lastLogCheckTimeMs > UPDATE_INTERVAL_MS) {
           Thread.sleep(UPDATE_INTERVAL_MS)
         } else {
@@ -97,13 +98,16 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
   }
 
+  override def getConfig(): Map[String, String] =
+    Map(("Event Log Location" -> logDir))
+
   /**
    * Builds the application list based on the current contents of the log directory.
    * Tries to reuse as much of the data already in memory as possible, by not reading
    * applications that haven't been updated since last time the logs were checked.
    */
-  def checkForLogs() = {
-    lastLogCheckTimeMs = getMonotonicTime()
+  private def checkForLogs() = {
+    lastLogCheckTimeMs = getMonotonicTimeMs()
     logDebug("Checking for logs. Time is now %d.".format(lastLogCheckTimeMs))
     try {
       val logStatus = fs.listStatus(new Path(logDir))
@@ -142,6 +146,14 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   /**
    * Parse the application's logs to find out the information we need to build the
    * listing page.
+   *
+   * When creating the listing of available apps, there is no need to load the whole UI for the
+   * application. The UI is requested by the HistoryServer (by calling getAppInfo()) when the user
+   * clicks on a specific application.
+   *
+   * @param logDir Directory with application's log files.
+   * @param renderUI Whether to create the SparkUI for the application. If false, the "ui"
+   *                 attribute of the returned object will be null.
    */
   private def loadAppInfo(logDir: FileStatus, renderUI: Boolean): ApplicationHistoryInfo = {
     val elogInfo = EventLoggingListener.parseLoggingInfo(logDir.getPath(), fs)
@@ -188,6 +200,6 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   }
 
   /** Returns the system's mononotically increasing time. */
-  private def getMonotonicTime() = System.nanoTime() / (1000 * 1000)
+  private def getMonotonicTimeMs() = System.nanoTime() / (1000 * 1000)
 
 }

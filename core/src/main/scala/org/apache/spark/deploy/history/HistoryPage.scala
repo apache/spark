@@ -25,7 +25,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
-  val pageSize = 20
+  private val pageSize = 20
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
@@ -33,16 +33,20 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
     val allApps = parent.getApplicationList()
     val actualFirst = if (requestedFirst < allApps.size) requestedFirst else 0
-    val apps = allApps.slice(actualFirst, Math.min(pageSize, allApps.size))
+    val apps = allApps.slice(actualFirst, Math.min(actualFirst + pageSize, allApps.size))
 
     val actualPage = (actualFirst / pageSize) + 1
     val last = Math.min(actualFirst + pageSize, allApps.size) - 1
     val pageCount = allApps.size / pageSize + (if (allApps.size % pageSize > 0) 1 else 0)
 
     val appTable = UIUtils.listingTable(appHeader, appRow, apps)
+    val providerConfig = parent.getProviderConfig()
     val content =
       <div class="row-fluid">
         <div class="span12">
+          <ul class="unstyled">
+            { providerConfig.map(e => <li><strong>{e._1}:</strong> {e._2}</li>) }
+          </ul>
           {
             if (allApps.size > 0) {
               <h4>

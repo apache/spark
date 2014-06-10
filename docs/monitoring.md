@@ -69,7 +69,7 @@ represents an application's event logs. This creates a web interface at
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
-    <td>spark.history.updateInterval</td>
+    <td>spark.history.fs.updateInterval</td>
     <td>10</td>
     <td>
       The period, in seconds, at which information displayed by this history server is updated.

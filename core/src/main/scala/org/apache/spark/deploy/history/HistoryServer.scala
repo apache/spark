@@ -54,7 +54,6 @@ class HistoryServer(
   private val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
 
   private val localHost = Utils.localHostName()
-  private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHost)
 
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
@@ -80,13 +79,14 @@ class HistoryServer(
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
-      val parts = req.getPathInfo().split("/")
+      val parts = Option(req.getPathInfo()).getOrElse("").split("/")
       if (parts.length < 2) {
-        res.setStatus(HttpServletResponse.SC_BAD_REQUEST)
+        res.sendError(HttpServletResponse.SC_BAD_REQUEST,
+          s"Unexpected path info in request (URI = ${req.getRequestURI()}")
         return
       }
 
-      var appId = parts(1)
+      val appId = parts(1)
 
       // Note we don't use the UI retrieved from the cache; the cache loader above will register
       // the app's UI, and all we need to do is redirect the user to the same URI that was
@@ -157,6 +157,13 @@ class HistoryServer(
    */
   def getApplicationList() = provider.getListing()
 
+  /**
+   * Returns the provider configuration to show in the listing page.
+   *
+   * @return A map with the provider's configuration.
+   */
+  def getProviderConfig() = provider.getConfig()
+
 }
 
 /**
@@ -174,7 +181,7 @@ object HistoryServer {
 
   def main(argStrings: Array[String]) {
     initSecurity()
-    parse(argStrings.toList)
+    val args = new HistoryServerArguments(conf, argStrings)
     val securityManager = new SecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")
@@ -212,89 +219,4 @@ object HistoryServer {
     }
   }
 
-  private def parse(args: List[String]): Unit = {
-    args match {
-      case ("--dir" | "-d") :: value :: tail =>
-        set("fs.logDirectory",  value)
-        parse(tail)
-
-      case ("-D") :: opt :: value :: tail =>
-        set(opt, value)
-        parse(tail)
-
-      case ("--help" | "-h") :: tail =>
-        printUsageAndExit(0)
-
-      case Nil =>
-
-      case _ =>
-        printUsageAndExit(1)
-    }
-  }
-
-  private def set(name: String, value: String) = {
-    conf.set("spark.history." + name, value)
-  }
-
-  private def printUsageAndExit(exitCode: Int) {
-    System.err.println(
-      """
-      |Usage: HistoryServer [options]
-      |
-      |Options are set by passing "-D option value" command line arguments to the class.
-      |Command line options will override JVM system properties (which should be prepended
-      |with "spark.history.").
-      |
-      |History Server options are always available; additional options depend on the provider.
-      |
-      |History Server options:
-      |
-      |  ui.port           Port where server will listen for connections (default 18080)
-      |  ui.acls.enable    Whether to enable view acls for all applications (default false)
-      |  provider          Name of history provider class (defaults to file system-based provider)
-      |
-      |FsHistoryProvider options:
-      |
-      |  fs.logDirectory   Directory where app logs are stored (required)
-      |  fs.updateInterval How often to reload log data from storage (seconds, default 10)
-      |""".stripMargin)
-    System.exit(exitCode)
-  }
-
-}
-
-private[spark] abstract class ApplicationHistoryProvider {
-
-  /**
-   * This method should return a list of applications available for the history server to
-   * show.
-   *
-   * @return List of all know applications.
-   */
-  def getListing(): Seq[ApplicationHistoryInfo]
-
-  /**
-   * This method should return the application information, including a rendered SparkUI.
-   *
-   * @param appId The application ID.
-   * @return The app info, or null if not found.
-   */
-  def getAppInfo(appId: String): ApplicationHistoryInfo
-
-  /**
-   * Called when the server is shutting down.
-   */
-  def stop(): Unit = { }
-
-}
-
-private[spark] case class ApplicationHistoryInfo(
-    id: String,
-    name: String,
-    startTime: Long,
-    endTime: Long,
-    lastUpdated: Long,
-    sparkUser: String,
-    viewAcls: String,
-    ui: SparkUI) {
 }
