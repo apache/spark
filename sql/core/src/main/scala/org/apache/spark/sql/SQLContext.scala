@@ -188,6 +188,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
   }
 
+  /** Returns true if the table is currently cached in-memory. */
   def isCached(tableName: String): Boolean = {
     val relation = catalog.lookupRelation(None, tableName)
     EliminateAnalysisOperators(relation) match {
