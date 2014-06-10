@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.types.{StructField, DataType, ArrayType, StructType}
+import org.apache.spark.sql.catalyst.types.{ArrayType, DataType, StructField, StructType}
 
 /**
  * A a collection of common abstractions for query plans as well as
@@ -29,8 +29,7 @@ package object plans {
     val builder = new StringBuilder
     builder.append("root\n")
     val prefix = " |"
-    schema.foreach {
-      attribute => {
+    schema.foreach { attribute =>
         val name = attribute.name
         val dataType = attribute.dataType
         dataType match {
@@ -44,7 +43,6 @@ package object plans {
             builder.append(s"$prefix-- $name: $ArrayType[$elementType]\n")
           case _ => builder.append(s"$prefix-- $name: $dataType\n")
         }
-      }
     }
 
     builder.toString()

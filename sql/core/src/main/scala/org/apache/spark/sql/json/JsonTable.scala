@@ -17,41 +17,24 @@
 
 package org.apache.spark.sql.json
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.SchemaRDD
-import org.apache.spark.sql.Logging
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, GetField}
+import scala.collection.JavaConversions._
+import scala.math.BigDecimal
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
-import scala.collection.JavaConversions._
-import scala.math.BigDecimal
-import org.apache.spark.sql.catalyst.expressions.GetField
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.catalyst.expressions.Alias
-import org.apache.spark.sql.catalyst.expressions.GetField
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.catalyst.expressions.Alias
-import org.apache.spark.sql.catalyst.types.StructField
-import org.apache.spark.sql.catalyst.types.StructType
-import org.apache.spark.sql.catalyst.types.ArrayType
-import org.apache.spark.sql.catalyst.expressions.GetField
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
+import org.apache.spark.sql.Logging
 
 sealed trait SchemaResolutionMode
 
-case object EAGER_SCHEMA_RESOLUTION extends SchemaResolutionMode
-case class EAGER_SCHEMA_RESOLUTION_WITH_SAMPLING(val fraction: Double) extends SchemaResolutionMode
-case object LAZY_SCHEMA_RESOLUTION extends SchemaResolutionMode
+case object EagerSchemaResolution extends SchemaResolutionMode
+case class EagerSchemaResolutionWithSampling(fraction: Double) extends SchemaResolutionMode
 
 /**
  * :: Experimental ::
@@ -62,10 +45,9 @@ case object LAZY_SCHEMA_RESOLUTION extends SchemaResolutionMode
  *    not appear in this sample will not be included in the final output.
  */
 @Experimental
-object JsonTable extends Serializable with Logging {
-  def inferSchema(
-      json: RDD[String], sampleSchema: Option[Double] = None): LogicalPlan = {
-    val schemaData = sampleSchema.map(json.sample(false, _, 1)).getOrElse(json)
+object JsonTable extends Logging {
+  def inferSchema(json: RDD[String], samplingRatio: Double = 1.0): LogicalPlan = {
+    val schemaData = if (samplingRatio > 0.99) json.sample(false, samplingRatio, 1) else json
     val allKeys = parseJson(schemaData).map(getAllKeysWithValueTypes).reduce(_ ++ _)
 
     // Resolve type conflicts
@@ -129,28 +111,16 @@ object JsonTable extends Serializable with Logging {
 
     val schema = makeStruct(resolved.keySet.toSeq, Nil)
 
-    SparkLogicalPlan(
-      ExistingRdd(
-        asAttributes(schema),
-        parseJson(json).map(asRow(_, schema))))
+    SparkLogicalPlan(ExistingRdd(asAttributes(schema), parseJson(json).map(asRow(_, schema))))
   }
-
-  // numericPrecedence and booleanPrecedence are from WidenTypes.
-  // A widening conversion of a value with IntegerType and LongType to FloatType,
-  // or of a value with LongType to DoubleType, may result in loss of precision
-  // (some of the least significant bits of the value).
-  val numericPrecedence =
-    Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
-  // Boolean is only wider than Void
-  val booleanPrecedence = Seq(NullType, BooleanType)
-  val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil
 
   /**
    * Returns the most general data type for two given data types.
    */
   protected def getCompatibleType(t1: DataType, t2: DataType): DataType = {
     // Try and find a promotion rule that contains both types in question.
-    val applicableConversion = allPromotions.find(p => p.contains(t1) && p.contains(t2))
+    val applicableConversion = HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p
+      .contains(t2))
 
     // If found return the widest common type, otherwise None
     val returnType = applicableConversion.map(_.filter(t => t == t1 || t == t2).last)
@@ -184,10 +154,8 @@ object JsonTable extends Serializable with Logging {
       case value: java.math.BigDecimal => DecimalType
       case value: java.lang.Boolean => BooleanType
       case null => NullType
-      // We comment out the following line in the development to catch bugs.
-      // We need to enable this line in future to handle
-      // unexpected data type.
-      // case _ => StringType
+      // Unexpected data type.
+      case _ => StringType
     }
   }
 
@@ -221,10 +189,10 @@ object JsonTable extends Serializable with Logging {
 
   /**
    * Figures out all key names and data types of values from a parsed JSON object
-   * (in the format of Map[Stirng, Any]). When a value of a key is an object, we
-   * only use a placeholder for a struct type (StructType(Nil)) instead of getting
-   * all fields of this struct because a field does not appear in this JSON object
-   * can appear in other JSON objects.
+   * (in the format of Map[Stirng, Any]). When the value of a key is an JSON object, we
+   * only use a placeholder (StructType(Nil)) to mark that it should be a struct
+   * instead of getting all fields of this struct because a field does not appear
+   * in this JSON object can appear in other JSON objects.
    */
   protected def getAllKeysWithValueTypes(m: Map[String, Any]): Set[(String, DataType)] = {
     m.map{
@@ -293,15 +261,15 @@ object JsonTable extends Serializable with Logging {
 
   protected def toLong(value: Any): Long = {
     value match {
-      case value: java.lang.Integer => value.asInstanceOf[Int].asInstanceOf[Long]
+      case value: java.lang.Integer => value.asInstanceOf[Int].toLong
       case value: java.lang.Long => value.asInstanceOf[Long]
     }
   }
 
   protected def toDouble(value: Any): Double = {
     value match {
-      case value: java.lang.Integer => value.asInstanceOf[Int].asInstanceOf[Double]
-      case value: java.lang.Long => value.asInstanceOf[Long].asInstanceOf[Double]
+      case value: java.lang.Integer => value.asInstanceOf[Int].toDouble
+      case value: java.lang.Long => value.asInstanceOf[Long].toDouble
       case value: java.lang.Double => value.asInstanceOf[Double]
     }
   }
@@ -316,7 +284,7 @@ object JsonTable extends Serializable with Logging {
     }
   }
 
-  protected def enforceCorrectType(value: Any, desiredType: DataType): Any ={
+  protected[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
     if (value == null) {
       null
     } else {

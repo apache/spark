@@ -104,7 +104,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def jsonFile(
       path: String,
-      mode: SchemaResolutionMode = EAGER_SCHEMA_RESOLUTION): SchemaRDD = {
+      mode: SchemaResolutionMode = EagerSchemaResolution): SchemaRDD = {
     logger.info(s"Loads a JSON file $path.")
     val json = sparkContext.textFile(path)
     jsonRDD(json, mode)
@@ -117,19 +117,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def jsonRDD(
       json: RDD[String],
-      mode: SchemaResolutionMode = EAGER_SCHEMA_RESOLUTION): SchemaRDD = {
+      mode: SchemaResolutionMode = EagerSchemaResolution): SchemaRDD = {
     mode match {
-      case EAGER_SCHEMA_RESOLUTION =>
+      case EagerSchemaResolution =>
         logger.info(s"Eagerly resolve the schema without sampling.")
         val logicalPlan = JsonTable.inferSchema(json)
         logicalPlanToSparkQuery(logicalPlan)
-      case EAGER_SCHEMA_RESOLUTION_WITH_SAMPLING(fraction) =>
+      case EagerSchemaResolutionWithSampling(fraction) =>
         logger.info(s"Eagerly resolve the schema with sampling " +
           s"(sampling fraction: $fraction).")
-        val logicalPlan = JsonTable.inferSchema(json, Some(fraction))
+        val logicalPlan = JsonTable.inferSchema(json, fraction)
         logicalPlanToSparkQuery(logicalPlan)
-      case LAZY_SCHEMA_RESOLUTION =>
-        throw new UnsupportedOperationException("Lazy schema resolution has not been implemented.")
     }
   }
 

@@ -22,6 +22,16 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types._
 
+object HiveTypeCoercion {
+  // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
+  // The conversion for integral and floating point types have a linear widening hierarchy:
+  val numericPrecedence =
+    Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
+  // Boolean is only wider than Void
+  val booleanPrecedence = Seq(NullType, BooleanType)
+  val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil
+}
+
 /**
  * A collection of [[catalyst.rules.Rule Rules]] that can be used to coerce differing types that
  * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
@@ -109,21 +119,17 @@ trait HiveTypeCoercion {
    * Additionally, all types when UNION-ed with strings will be promoted to strings.
    * Other string conversions are handled by PromoteStrings.
    *
-   * A widening conversion of a value with IntegerType and LongType to FloatType,
-   * or of a value with LongType to DoubleType, may result in loss of precision.
+   * Widening types might result in loss of precision in the following cases:
+   * - IntegerType to FloatType
+   * - LongType to FloatType
+   * - LongType to DoubleType
    */
   object WidenTypes extends Rule[LogicalPlan] {
-    // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
-    // The conversion for integral and floating point types have a linear widening hierarchy:
-    val numericPrecedence =
-      Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
-    // Boolean is only wider than Void
-    val booleanPrecedence = Seq(NullType, BooleanType)
-    val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil
 
     def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
       // Try and find a promotion rule that contains both types in question.
-      val applicableConversion = allPromotions.find(p => p.contains(t1) && p.contains(t2))
+      val applicableConversion = HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p
+        .contains(t2))
 
       // If found return the widest common type, otherwise None
       applicableConversion.map(_.filter(t => t == t1 || t == t2).last)

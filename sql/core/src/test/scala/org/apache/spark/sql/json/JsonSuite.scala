@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{ExprId, AttributeReference, At
 import org.apache.spark.sql.catalyst.plans.generateSchemaTreeString
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.json.JsonTable._
 
 class JsonSuite extends QueryTest {
   import TestJsonData._
