@@ -82,7 +82,6 @@ abstract class AggregateFunction
   override def dataType = base.dataType
 
   def update(input: Row): Unit
-  override def eval(input: Row): Any
 
   // Do we really need this?
   override def newInstance() = makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
@@ -90,7 +89,7 @@ abstract class AggregateFunction
 
 case class Min(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
-  override def nullable = child.nullable
+  override def nullable = true
   override def dataType = child.dataType
   override def toString = s"MIN($child)"
 
@@ -120,7 +119,7 @@ case class MinFunction(expr: Expression, base: AggregateExpression) extends Aggr
 
 case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
-  override def nullable = child.nullable
+  override def nullable = true
   override def dataType = child.dataType
   override def toString = s"MAX($child)"
 
@@ -166,7 +165,7 @@ case class CountDistinct(expressions: Seq[Expression]) extends AggregateExpressi
   override def children = expressions
   override def references = expressions.flatMap(_.references).toSet
   override def nullable = false
-  override def dataType = IntegerType
+  override def dataType = LongType
   override def toString = s"COUNT(DISTINCT ${expressions.mkString(",")})"
   override def newInstance() = new CountDistinctFunction(expressions, this)
 }
@@ -184,7 +183,7 @@ case class ApproxCountDistinctMerge(child: Expression, relativeSD: Double)
   extends AggregateExpression with trees.UnaryNode[Expression] {
   override def references = child.references
   override def nullable = false
-  override def dataType = IntegerType
+  override def dataType = LongType
   override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
   override def newInstance() = new ApproxCountDistinctMergeFunction(child, this, relativeSD)
 }
@@ -193,7 +192,7 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
   extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
   override def nullable = false
-  override def dataType = IntegerType
+  override def dataType = LongType
   override def toString = s"APPROXIMATE COUNT(DISTINCT $child)"
 
   override def asPartial: SplitEvaluation = {
@@ -257,7 +256,7 @@ case class SumDistinct(child: Expression)
 
 case class First(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   override def references = child.references
-  override def nullable = child.nullable
+  override def nullable = true
   override def dataType = child.dataType
   override def toString = s"FIRST($child)"
 
@@ -281,14 +280,17 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
   private val sum = MutableLiteral(zero.eval(EmptyRow))
   private val sumAsDouble = Cast(sum, DoubleType)
 
-  private val addFunction = Add(sum, Coalesce(Seq(expr, zero)))
+  private def addFunction(value: Any) = Add(sum, Literal(value))
 
   override def eval(input: Row): Any =
     sumAsDouble.eval(EmptyRow).asInstanceOf[Double] / count.toDouble
 
   override def update(input: Row): Unit = {
-    count += 1
-    sum.update(addFunction, input)
+    val evaluatedExpr = expr.eval(input)
+    if (evaluatedExpr != null) {
+      count += 1
+      sum.update(addFunction(evaluatedExpr), input)
+    }
   }
 }
 
@@ -391,7 +393,7 @@ case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpressio
     }
   }
 
-  override def eval(input: Row): Any = seen.size
+  override def eval(input: Row): Any = seen.size.toLong
 }
 
 case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {

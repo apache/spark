@@ -64,7 +64,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
     // struct fields.
     val options = children.flatMap(_.output).flatMap { option =>
       // If the first part of the desired name matches a qualifier for this possible match, drop it.
-      val remainingParts = if (option.qualifiers contains parts.head) parts.drop(1) else parts
+      val remainingParts =
+        if (option.qualifiers.contains(parts.head) && parts.size > 1) parts.drop(1) else parts
       if (option.name == remainingParts.head) (option, remainingParts.tail.toList) :: Nil else Nil
     }
 

@@ -15,31 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.hive
 
-private[sql] object DebugQuery {
-  def apply(plan: SparkPlan): SparkPlan = {
-    val visited = new collection.mutable.HashSet[Long]()
-    plan transform {
-      case s: SparkPlan if !visited.contains(s.id) =>
-        visited += s.id
-        DebugNode(s)
-    }
-  }
-}
+import org.scalatest.FunSuite
 
-private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
-  def references = Set.empty
-  def output = child.output
-  def execute() = {
-    val childRdd = child.execute()
-    println(
-      s"""
-        |=========================
-        |${child.simpleString}
-        |=========================
-      """.stripMargin)
-    childRdd.foreach(println(_))
-    childRdd
+import org.apache.spark.sql.catalyst.types.{DataType, StructType}
+
+class HiveMetastoreCatalogSuite extends FunSuite {
+
+  test("struct field should accept underscore in sub-column name") {
+    val metastr = "struct<a: int, b_1: string, c: string>"
+
+    val datatype = HiveMetastoreTypes.toDataType(metastr)
+    assert(datatype.isInstanceOf[StructType])
   }
 }

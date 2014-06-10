@@ -360,6 +360,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |
+        |  --help, -h                  Show this help message and exit
+        |  --verbose, -v               Print additional debug output
+        |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
         |  --supervise                 If given, restarts the driver on failure.
@@ -381,16 +384,19 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 object SparkSubmitArguments {
   /** Load properties present in the given file. */
   def getPropertiesFromFile(file: File): Seq[(String, String)] = {
-    require(file.exists(), s"Properties file ${file.getName} does not exist")
+    require(file.exists(), s"Properties file $file does not exist")
+    require(file.isFile(), s"Properties file $file is not a normal file")
     val inputStream = new FileInputStream(file)
-    val properties = new Properties()
     try {
+      val properties = new Properties()
       properties.load(inputStream)
+      properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
     } catch {
       case e: IOException =>
-        val message = s"Failed when loading Spark properties file ${file.getName}"
+        val message = s"Failed when loading Spark properties file $file"
         throw new SparkException(message, e)
+    } finally {
+      inputStream.close()
     }
-    properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
   }
 }

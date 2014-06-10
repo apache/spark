@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
 
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.mapreduce.Job
@@ -56,7 +56,7 @@ case class OptionalReflectData(
     doubleField: Option[Double],
     booleanField: Option[Boolean])
 
-class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
+class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   import TestData._
   TestData // Load test data tables.
 
@@ -201,7 +201,7 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
   }
 
   test("insert (appending) to same table via Scala API") {
-    sql("INSERT INTO testsource SELECT * FROM testsource").collect()
+    sql("INSERT INTO testsource SELECT * FROM testsource")
     val double_rdd = sql("SELECT * FROM testsource").collect()
     assert(double_rdd != null)
     assert(double_rdd.size === 30)
