@@ -871,6 +871,7 @@ private[spark] object Utils extends Logging {
     assert(startIndex >= 0)
     assert(endIndex >= startIndex)
     val fileLengths = files.map { _.length }
+    assert(endIndex <= fileLengths.sum)
     val fileToLength = files.zip(fileLengths).toMap
     logDebug("Log files: \n" + fileToLength.mkString("\n"))
 
