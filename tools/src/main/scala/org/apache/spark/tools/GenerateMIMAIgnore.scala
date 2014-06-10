@@ -88,7 +88,7 @@ object GenerateMIMAIgnore {
         }
 
       } catch {
-        case _: Throwable => println("Unable to determine :" + className)
+        case _: Throwable => println("Error instrumenting class::" + className)
       }
     }
     (ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet, ignoredMembers.toSet)
