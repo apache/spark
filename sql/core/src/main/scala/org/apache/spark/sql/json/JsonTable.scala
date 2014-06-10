@@ -22,7 +22,7 @@ import scala.math.BigDecimal
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
@@ -33,8 +33,11 @@ import org.apache.spark.sql.Logging
 
 sealed trait SchemaResolutionMode
 
+/** Eagerly infers the schema by scanning the entire dataset.*/
 case object EagerSchemaResolution extends SchemaResolutionMode
-case class EagerSchemaResolutionWithSampling(fraction: Double) extends SchemaResolutionMode
+/** Eagerly infers the schema by scanning a sampled subset of the dataset. The sampling ratio
+  * is defined by `samplingRatio`.*/
+case class EagerSchemaResolutionWithSampling(samplingRatio: Double) extends SchemaResolutionMode
 
 /**
  * :: Experimental ::
@@ -46,6 +49,13 @@ case class EagerSchemaResolutionWithSampling(fraction: Double) extends SchemaRes
  */
 @Experimental
 object JsonTable extends Logging {
+
+  /**
+   * Eagerly infers the schema of a given RDD `json` that stores one JSON object per record.
+   * If a sampled subset of this RDD should be used to infer the schema, `samplingRatio` can
+   * be used to specify the sampling ratio.
+   * */
+  @DeveloperApi
   def inferSchema(json: RDD[String], samplingRatio: Double = 1.0): LogicalPlan = {
     val schemaData = if (samplingRatio > 0.99) json.sample(false, samplingRatio, 1) else json
     val allKeys = parseJson(schemaData).map(getAllKeysWithValueTypes).reduce(_ ++ _)

@@ -100,8 +100,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(this, parquet.ParquetRelation(path))
 
   /**
-   * Loads a JSON file, returning the result as a [[SchemaRDD]].
-   * Right now, we only do eager schema resolution.
+   * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]]. The schema
+   * of the returned [[SchemaRDD]] is inferred based on the method specified by `mode`.
    */
   def jsonFile(
       path: String,
@@ -112,9 +112,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * Loads a RDD[String] storing JSON objects (one object per record),
-   * returning the result as a [[SchemaRDD]].
-   * Right now, we only do eager schema resolution.
+   * Loads a RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[SchemaRDD]]. The schema of the returned [[SchemaRDD]] is inferred based on the method
+   * specified by `mode`.
    */
   def jsonRDD(
       json: RDD[String],
