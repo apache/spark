@@ -72,7 +72,7 @@ object SparkBuild extends Build {
 
   lazy val catalyst = Project("catalyst", file("sql/catalyst"), settings = catalystSettings) dependsOn(core)
 
-  lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core, catalyst)
+  lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core) dependsOn(catalyst % "compile->compile;test->test")
 
   lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql)
 

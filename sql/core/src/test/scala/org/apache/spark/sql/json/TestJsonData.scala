@@ -23,52 +23,52 @@ object TestJsonData {
 
   val primitiveFieldAndType =
     TestSQLContext.sparkContext.parallelize(
-      """{"string":"this is a simple string.", """ +
-      """ "integer":10, """ +
-      """ "long":21474836470, """ +
-      """ "bigInteger":92233720368547758070, """ +
-      """ "double":1.7976931348623157E308, """ +
-      """ "boolean":true, """ +
-      """ "null":null """ +
-      """ } """ :: Nil)
+      """{"string":"this is a simple string.",
+          "integer":10,
+          "long":21474836470,
+          "bigInteger":92233720368547758070,
+          "double":1.7976931348623157E308,
+          "boolean":true,
+          "null":null
+      }"""  :: Nil)
 
   val complexFieldAndType =
     TestSQLContext.sparkContext.parallelize(
-      """{"struct":{"field1": true, "field2": 92233720368547758070}, """ +
-      """ "structWithArrayFields":{"field1":[4, 5, 6], "field2":["str1", "str2"]}, """ +
-      """ "arrayOfString":["str1", "str2"], """ +
-      """ "arrayOfInteger":[1, 2147483647, -2147483648], """ +
-      """ "arrayOfLong":[21474836470, 9223372036854775807, -9223372036854775808], """ +
-      """ "arrayOfBigInteger":[922337203685477580700, -922337203685477580800], """ +
-      """ "arrayOfDouble":[1.2, 1.7976931348623157E308, 4.9E-324, 2.2250738585072014E-308], """ +
-      """ "arrayOfBoolean":[true, false, true], """ +
-      """ "arrayOfNull":[null, null, null, null], """ +
-      """ "arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}], """ +
-      """ "arrayOfArray1":[[1, 2, 3], ["str1", "str2"]], """ +
-      """ "arrayOfArray2":[[1, 2, 3], [1.1, 2.1, 3.1]] """ +
-      """ } """ :: Nil)
+      """{"struct":{"field1": true, "field2": 92233720368547758070},
+          "structWithArrayFields":{"field1":[4, 5, 6], "field2":["str1", "str2"]},
+          "arrayOfString":["str1", "str2"],
+          "arrayOfInteger":[1, 2147483647, -2147483648],
+          "arrayOfLong":[21474836470, 9223372036854775807, -9223372036854775808],
+          "arrayOfBigInteger":[922337203685477580700, -922337203685477580800],
+          "arrayOfDouble":[1.2, 1.7976931348623157E308, 4.9E-324, 2.2250738585072014E-308],
+          "arrayOfBoolean":[true, false, true],
+          "arrayOfNull":[null, null, null, null],
+          "arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}],
+          "arrayOfArray1":[[1, 2, 3], ["str1", "str2"]],
+          "arrayOfArray2":[[1, 2, 3], [1.1, 2.1, 3.1]]
+         }"""  :: Nil)
 
   val primitiveFieldValueTypeConflict =
     TestSQLContext.sparkContext.parallelize(
-      """{"num_num_1":11, "num_num_2":null, "num_num_3": 1.1, """ +
-        """ "num_bool":true, "num_str":13.1, "str_bool":"str1"}""" ::
-      """{"num_num_1":null, "num_num_2":21474836470.9, "num_num_3": null, """ +
-        """ "num_bool":12, "num_str":null, "str_bool":true}""" ::
-      """{"num_num_1":21474836470, "num_num_2":92233720368547758070, "num_num_3": 100, """ +
-        """ "num_bool":false, "num_str":"str1", "str_bool":false}""" ::
-      """{"num_num_1":21474836570, "num_num_2":1.1, "num_num_3": 21474836470, """ +
-        """ "num_bool":null, "num_str":92233720368547758070, "str_bool":null}""" :: Nil)
+      """{"num_num_1":11, "num_num_2":null, "num_num_3": 1.1,
+          "num_bool":true, "num_str":13.1, "str_bool":"str1"}""" ::
+      """{"num_num_1":null, "num_num_2":21474836470.9, "num_num_3": null,
+          "num_bool":12, "num_str":null, "str_bool":true}""" ::
+      """{"num_num_1":21474836470, "num_num_2":92233720368547758070, "num_num_3": 100,
+          "num_bool":false, "num_str":"str1", "str_bool":false}""" ::
+      """{"num_num_1":21474836570, "num_num_2":1.1, "num_num_3": 21474836470,
+          "num_bool":null, "num_str":92233720368547758070, "str_bool":null}""" :: Nil)
 
   val complexFieldValueTypeConflict =
     TestSQLContext.sparkContext.parallelize(
-      """{"num_struct":11, "str_array":[1, 2, 3], """ +
-        """ "array":[], "struct_array":[], "struct": {}}""" ::
-      """{"num_struct":{"field":false}, "str_array":null, """ +
-        """ "array":null, "struct_array":{}, "struct": null}""" ::
-      """{"num_struct":null, "str_array":"str", """ +
-        """ "array":[4, 5, 6], "struct_array":[7, 8, 9], "struct": {"field":null}}""" ::
-      """{"num_struct":{}, "str_array":["str1", "str2", 33], """ +
-        """ "array":[7], "struct_array":{"field": true}, "struct": {"field": "str"}}""" :: Nil)
+      """{"num_struct":11, "str_array":[1, 2, 3],
+          "array":[], "struct_array":[], "struct": {}}""" ::
+      """{"num_struct":{"field":false}, "str_array":null,
+          "array":null, "struct_array":{}, "struct": null}""" ::
+      """{"num_struct":null, "str_array":"str",
+          "array":[4, 5, 6], "struct_array":[7, 8, 9], "struct": {"field":null}}""" ::
+      """{"num_struct":{}, "str_array":["str1", "str2", 33],
+          "array":[7], "struct_array":{"field": true}, "struct": {"field": "str"}}""" :: Nil)
 
   val arrayElementTypeConflict =
     TestSQLContext.sparkContext.parallelize(

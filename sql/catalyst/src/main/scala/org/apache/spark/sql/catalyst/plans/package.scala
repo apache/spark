@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.types.{ArrayType, DataType, StructField, St
  * a base logical plan representation.
  */
 package object plans {
+
   def generateSchemaTreeString(schema: Seq[Attribute]): String = {
     val builder = new StringBuilder
     builder.append("root\n")

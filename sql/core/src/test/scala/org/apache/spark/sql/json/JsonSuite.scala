@@ -17,45 +17,18 @@
 
 package org.apache.spark.sql.json
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.sql.catalyst.expressions.{ExprId, AttributeReference, Attribute}
-import org.apache.spark.sql.catalyst.plans.generateSchemaTreeString
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.json.JsonTable._
+import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.json.JsonTable.enforceCorrectType
+import org.apache.spark.sql.QueryTest
+
+protected case class Schema(output: Seq[Attribute]) extends LeafNode
 
 class JsonSuite extends QueryTest {
   import TestJsonData._
   TestJsonData
-
-  /**
-   * Since attribute references are given globally unique ids during analysis,
-   * we must normalize them to check if two different queries are identical.
-   */
-  protected def normalizeExprIds(attributes: Seq[Attribute]) = {
-    val minId = attributes.map(_.exprId.id).min
-    attributes.map {
-      case a: AttributeReference =>
-        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(a.exprId.id - minId))
-    }
-  }
-
-  protected def checkSchema(expected: Seq[Attribute], actual: Seq[Attribute]): Unit = {
-    val normalizedExpected = normalizeExprIds(expected).toSeq
-    val normalizedActual = normalizeExprIds(actual).toSeq
-    if (normalizedExpected != normalizedActual) {
-      fail(
-        s"""
-          |=== FAIL: Schemas do not match ===
-          |${sideBySide(
-              s"== Expected Schema ==\n" +
-              generateSchemaTreeString(normalizedExpected),
-              s"==  Actual Schema  ==\n" +
-              generateSchemaTreeString(normalizedActual)).mkString("\n")}
-        """.stripMargin)
-    }
-  }
 
   test("Primitive field and type inferring") {
     val jsonSchemaRDD = jsonRDD(primitiveFieldAndType)
@@ -69,7 +42,7 @@ class JsonSuite extends QueryTest {
       AttributeReference("null", StringType, true)() ::
       AttributeReference("string", StringType, true)() :: Nil
 
-    checkSchema(expectedSchema, jsonSchemaRDD.logicalPlan.output)
+    comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
 
     jsonSchemaRDD.registerAsTable("jsonTable")
 
@@ -108,7 +81,7 @@ class JsonSuite extends QueryTest {
         StructField("field1", ArrayType(IntegerType), true) ::
         StructField("field2", ArrayType(StringType), true) :: Nil), true)() :: Nil
 
-    checkSchema(expectedSchema, jsonSchemaRDD.logicalPlan.output)
+    comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
 
     jsonSchemaRDD.registerAsTable("jsonTable")
 
@@ -206,7 +179,7 @@ class JsonSuite extends QueryTest {
       AttributeReference("num_str", StringType, true)() ::
       AttributeReference("str_bool", StringType, true)() :: Nil
 
-    checkSchema(expectedSchema, jsonSchemaRDD.logicalPlan.output)
+    comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
 
     jsonSchemaRDD.registerAsTable("jsonTable")
 
@@ -225,7 +198,7 @@ class JsonSuite extends QueryTest {
     )
 
     /*
-    // Right now, the analyzer does not insert a Cast for num_bool.
+    // Right now, the analyzer does not promote strings in a boolean expreesion.
     // Number and Boolean conflict: resolve the type as boolean in this query.
     // TODO: Re-enable this test
     checkAnswer(
@@ -275,6 +248,19 @@ class JsonSuite extends QueryTest {
       sql("select num_str + 1.2 from jsonTable where num_str > 92233720368547758060"),
       BigDecimal("92233720368547758061.2")
     )
+
+    // The plan of the following DSL is
+    // Project [(CAST(num_str#65:4, DoubleType) + 1.2) AS num#78]
+    //  Filter (CAST(CAST(num_str#65:4, DoubleType), DecimalType) > 92233720368547758060)
+    //    ExistingRdd [num_bool#61,num_num_1#62L,num_num_2#63,num_num_3#64,num_str#65,str_bool#66]
+    // We should directly cast num_str to DecimalType and also need to do the right type promotion
+    // in the Project.
+    checkAnswer(
+      jsonSchemaRDD.
+        where('num_str > BigDecimal("92233720368547758060")).
+        select('num_str + 1.2 as Symbol("num")),
+      BigDecimal("92233720368547758061.2")
+    )
     */
 
     // Number and String conflict: resolve the type as number in this query.
@@ -318,7 +304,7 @@ class JsonSuite extends QueryTest {
       AttributeReference("struct", StructType(
         StructField("field", StringType, true) :: Nil), true)() :: Nil
 
-    checkSchema(expectedSchema, jsonSchemaRDD.logicalPlan.output)
+    comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
 
     jsonSchemaRDD.registerAsTable("jsonTable")
 
@@ -337,7 +323,7 @@ class JsonSuite extends QueryTest {
     val expectedSchema =
       AttributeReference("array", ArrayType(StringType), true)() :: Nil
 
-    checkSchema(expectedSchema, jsonSchemaRDD.logicalPlan.output)
+    comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
 
     jsonSchemaRDD.registerAsTable("jsonTable")
 
@@ -365,8 +351,33 @@ class JsonSuite extends QueryTest {
       AttributeReference("d", StructType(
         StructField("field", BooleanType, true) :: Nil), true)() :: Nil
 
-    checkSchema(expectedSchema, jsonSchemaRDD.logicalPlan.output)
+    comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
 
     jsonSchemaRDD.registerAsTable("jsonTable")
+  }
+
+  test("Type promotion") {
+    def checkTypePromotion(expected: Any, actual: Any) {
+      assert(expected.getClass == actual.getClass,
+        s"Failed to promote ${actual.getClass} to ${expected.getClass}.")
+      assert(expected == actual,
+        s"Promoted value ${actual}(${actual.getClass}) does not equal the expected value " +
+          s"${expected}(${expected.getClass}).")
+    }
+
+    val intNumber: Int = 2147483647
+    checkTypePromotion(intNumber, enforceCorrectType(intNumber, IntegerType))
+    checkTypePromotion(intNumber.toLong, enforceCorrectType(intNumber, LongType))
+    checkTypePromotion(intNumber.toDouble, enforceCorrectType(intNumber, DoubleType))
+    checkTypePromotion(BigDecimal(intNumber), enforceCorrectType(intNumber, DecimalType))
+
+    val longNumber: Long = 9223372036854775807L
+    checkTypePromotion(longNumber, enforceCorrectType(longNumber, LongType))
+    checkTypePromotion(longNumber.toDouble, enforceCorrectType(longNumber, DoubleType))
+    checkTypePromotion(BigDecimal(longNumber), enforceCorrectType(longNumber, DecimalType))
+
+    val doubleNumber: Double = 1.7976931348623157E308d
+    checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
+    checkTypePromotion(BigDecimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType))
   }
 }

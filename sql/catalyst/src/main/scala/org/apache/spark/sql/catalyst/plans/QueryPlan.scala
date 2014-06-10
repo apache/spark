@@ -125,7 +125,9 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }.toSeq
   }
 
-  def printSchema(): Unit = {
-    println(plans.generateSchemaTreeString(output))
-  }
+  /** Returns the output schema in the tree format. */
+  def getSchemaTreeString(): String = plans.generateSchemaTreeString(output)
+
+  /** Prints out the schema in the tree format */
+  def printSchema(): Unit = println(getSchemaTreeString)
 }
