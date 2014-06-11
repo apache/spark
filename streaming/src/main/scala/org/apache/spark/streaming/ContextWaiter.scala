@@ -39,6 +39,7 @@ private[streaming] class ContextWaiter {
     // If not already stopped, then wait
     if (!stopped) {
       if (timeout < 0) wait() else wait(timeout)
+      stopped = true
       if (error != null) throw error
     }
   }
