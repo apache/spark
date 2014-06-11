@@ -33,6 +33,7 @@ import org.apache.spark.api.java.JavaRDD
 import java.util.{Map => JMap}
 
 /**
+ * ***FALSE CHANGE***
  * :: AlphaComponent ::
  * An RDD of [[Row]] objects that has an associated schema. In addition to standard RDD functions,
  * SchemaRDDs can be used in relational queries, as shown in the examples below.
