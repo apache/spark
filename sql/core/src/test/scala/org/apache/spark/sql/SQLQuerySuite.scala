@@ -28,10 +28,23 @@ class SQLQuerySuite extends QueryTest {
   // Make sure the tables are loaded.
   TestData
 
+  test("SPARK-2041 column name equals tablename") {
+    checkAnswer(
+      sql("SELECT tableName FROM tableName"),
+      "test")
+  }
+
   test("index into array") {
     checkAnswer(
       sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
       arrayData.map(d => (d.data, d.data(0), d.data(0) + d.data(1), d.data(1))).collect().toSeq)
+  }
+
+  test("left semi greater than predicate") {
+    checkAnswer(
+      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
+      Seq((3,1), (3,2))
+    )
   }
 
   test("index into array of arrays") {
@@ -123,6 +136,12 @@ class SQLQuerySuite extends QueryTest {
       2.0)
   }
 
+  test("average overflow") {
+    checkAnswer(
+      sql("SELECT AVG(a),b FROM largeAndSmallInts group by b"),
+      Seq((2147483645.0,1),(2.0,2)))
+  }
+  
   test("count") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM testData2"),
@@ -313,4 +332,76 @@ class SQLQuerySuite extends QueryTest {
         (3, "C"),
         (4, "D")))
   }
+  
+  test("system function upper()") {
+    checkAnswer(
+      sql("SELECT n,UPPER(l) FROM lowerCaseData"),
+      Seq(
+        (1, "A"),
+        (2, "B"),
+        (3, "C"),
+        (4, "D")))
+
+    checkAnswer(
+      sql("SELECT n, UPPER(s) FROM nullStrings"),
+      Seq(
+        (1, "ABC"),
+        (2, "ABC"),
+        (3, null)))
+  }
+    
+  test("system function lower()") {
+    checkAnswer(
+      sql("SELECT N,LOWER(L) FROM upperCaseData"),
+      Seq(
+        (1, "a"),
+        (2, "b"),
+        (3, "c"),
+        (4, "d"),
+        (5, "e"),
+        (6, "f")))
+
+    checkAnswer(
+      sql("SELECT n, LOWER(s) FROM nullStrings"),
+      Seq(
+        (1, "abc"),
+        (2, "abc"),
+        (3, null)))
+  }
+
+  test("SET commands semantics using sql()") {
+    clear()
+    val testKey = "test.key.0"
+    val testVal = "test.val.0"
+    val nonexistentKey = "nonexistent"
+
+    // "set" itself returns all config variables currently specified in SQLConf.
+    assert(sql("SET").collect().size == 0)
+
+    // "set key=val"
+    sql(s"SET $testKey=$testVal")
+    checkAnswer(
+      sql("SET"),
+      Seq(Seq(s"$testKey=$testVal"))
+    )
+
+    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    checkAnswer(
+      sql("set"),
+      Seq(
+        Seq(s"$testKey=$testVal"),
+        Seq(s"${testKey + testKey}=${testVal + testVal}"))
+    )
+
+    // "set key"
+    checkAnswer(
+      sql(s"SET $testKey"),
+      Seq(Seq(s"$testKey=$testVal"))
+    )
+    checkAnswer(
+      sql(s"SET $nonexistentKey"),
+      Seq(Seq(s"$nonexistentKey is undefined"))
+    )
+  }
+
 }
