@@ -99,6 +99,12 @@ class SparkConf(object):
         self._jconf.set(key, unicode(value))
         return self
 
+    def setIfMissing(self, key, value):
+        """Set a configuration property, if not already set."""
+        if self.get(key) == None:
+            self.set(key, value)
+        return self
+
     def setMaster(self, value):
         """Set master URL to connect to."""
         self._jconf.setMaster(value)

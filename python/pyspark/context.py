@@ -102,7 +102,7 @@ class SparkContext(object):
         else:
             self.serializer = BatchedSerializer(self._unbatched_serializer,
                                                 batchSize)
-
+        self._conf.setIfMissing("spark.rdd.compress", "true")
         # Set any parameters passed directly to us on the conf
         if master:
             self._conf.setMaster(master)

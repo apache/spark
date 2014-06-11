@@ -194,10 +194,10 @@ class RDD(object):
 
     def cache(self):
         """
-        Persist this RDD with the default storage level (C{MEMORY_ONLY}).
+        Persist this RDD with the default storage level (C{MEMORY_ONLY_SER}).
         """
         self.is_cached = True
-        self._jrdd.cache()
+        self.persist(StorageLevel.MEMORY_ONLY_SER)
         return self
 
     def persist(self, storageLevel):
