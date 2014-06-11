@@ -38,8 +38,8 @@ if [ -z "$1" ]; then
 fi
 
 if [ -n "$SPARK_MEM" ]; then
-  echo "Warning: SPARK_MEM is deprecated, please use a more specific config option"
-  echo "(e.g., spark.executor.memory or SPARK_DRIVER_MEMORY)."
+  echo -e "Warning: SPARK_MEM is deprecated, please use a more specific config option" 1>&2
+  echo -e "(e.g., spark.executor.memory or SPARK_DRIVER_MEMORY)." 1>&2
 fi
 
 # Use SPARK_MEM or 512m as the default memory, to be overridden by specific options
