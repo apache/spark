@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import scala.collection.immutable.Vector
 import scala.language.higherKinds
 import scala.reflect.ClassTag
 
@@ -37,7 +38,7 @@ private[spark] trait IndexedRDDPartitionOps[
   implicit def vTag: ClassTag[V]
 
   def withIndex(index: Index): Self[V]
-  def withValues[V2: ClassTag](values: Array[V2]): Self[V2]
+  def withValues[V2: ClassTag](values: Vector[V2]): Self[V2]
   def withMask(mask: BitSet): Self[V]
 
   def map[V2: ClassTag](f: (Id, V) => V2): Self[V2] = {
@@ -48,7 +49,7 @@ private[spark] trait IndexedRDDPartitionOps[
       newValues(i) = f(self.index.getValue(i), self.values(i))
       i = self.mask.nextSetBit(i + 1)
     }
-    this.withValues(newValues)
+    this.withValues(newValues.toVector)
   }
 
   /**
@@ -111,7 +112,7 @@ private[spark] trait IndexedRDDPartitionOps[
         newValues(i) = f(self.index.getValue(i), self.values(i), otherV)
         i = self.mask.nextSetBit(i + 1)
       }
-      this.withValues(newValues)
+      this.withValues(newValues.toVector)
     }
   }
 
@@ -130,12 +131,11 @@ private[spark] trait IndexedRDDPartitionOps[
       join(createUsingIndex(other.iterator))(f)
     } else {
       val iterMask = self.mask & other.mask
-      val newValues = new Array[V](self.capacity)
-      System.arraycopy(self.values, 0, newValues, 0, newValues.length)
+      var newValues = self.values
 
       var i = iterMask.nextSetBit(0)
       while (i >= 0) {
-        newValues(i) = f(self.index.getValue(i), self.values(i), other.values(i))
+        newValues = newValues.updated(i, f(self.index.getValue(i), self.values(i), other.values(i)))
         i = iterMask.nextSetBit(i + 1)
       }
       this.withValues(newValues)
@@ -164,7 +164,7 @@ private[spark] trait IndexedRDDPartitionOps[
         newValues(i) = f(self.index.getValue(i), self.values(i), other.values(i))
         i = newMask.nextSetBit(i + 1)
       }
-      this.withValues(newValues).withMask(newMask)
+      this.withValues(newValues.toVector).withMask(newMask)
     }
   }
 
@@ -191,7 +191,7 @@ private[spark] trait IndexedRDDPartitionOps[
         newValues(pos) = pair._2
       }
     }
-    this.withValues(newValues).withMask(newMask)
+    this.withValues(newValues.toVector).withMask(newMask)
   }
 
   /**
@@ -200,13 +200,12 @@ private[spark] trait IndexedRDDPartitionOps[
    */
   def innerJoinKeepLeft(iter: Iterator[Product2[Id, V]]): Self[V] = {
     val newMask = new BitSet(self.capacity)
-    val newValues = new Array[V](self.capacity)
-    System.arraycopy(self.values, 0, newValues, 0, newValues.length)
+    var newValues = self.values
     iter.foreach { pair =>
       val pos = self.index.getPos(pair._1)
       if (pos >= 0) {
         newMask.set(pos)
-        newValues(pos) = pair._2
+        newValues = newValues.updated(pos, pair._2)
       }
     }
     this.withValues(newValues).withMask(newMask)
@@ -230,7 +229,7 @@ private[spark] trait IndexedRDDPartitionOps[
         }
       }
     }
-    this.withValues(newValues).withMask(newMask)
+    this.withValues(newValues.toVector).withMask(newMask)
   }
 
   /**
@@ -242,6 +241,7 @@ private[spark] trait IndexedRDDPartitionOps[
     for ((k, v) <- self.iterator) {
       hashMap.setMerge(k, v, arbitraryMerge)
     }
-    this.withIndex(hashMap.keySet).withValues(hashMap._values).withMask(hashMap.keySet.getBitSet)
+    this.withIndex(hashMap.keySet).withValues(hashMap._values.toVector)
+      .withMask(hashMap.keySet.getBitSet)
   }
 }

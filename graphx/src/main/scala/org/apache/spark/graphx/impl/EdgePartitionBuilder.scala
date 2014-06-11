@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx.impl
 
+import scala.collection.immutable.Vector
 import scala.reflect.ClassTag
 import scala.util.Sorting
 
@@ -66,7 +67,7 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
     val vertexIds = new OpenHashSet[VertexId]
     vidsIter.foreach(vid => vertexIds.add(vid))
     val vertices = new IndexedRDDPartition(
-      vertexIds, new Array[VD](vertexIds.capacity), vertexIds.getBitSet)
+      vertexIds, Vector.fill[VD](vertexIds.capacity)(null.asInstanceOf[VD]), vertexIds.getBitSet)
 
     new EdgePartition(srcIds, dstIds, data, index, vertices)
   }
