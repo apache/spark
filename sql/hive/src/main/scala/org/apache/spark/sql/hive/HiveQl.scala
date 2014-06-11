@@ -218,19 +218,19 @@ private[hive] object HiveQl {
           case Array(key, value) => // "set key=value"
             SetCommand(Some(key), Some(value))
         }
-      } else if (sql.toLowerCase.startsWith("cache table")) {
+      } else if (sql.trim.toLowerCase.startsWith("cache table")) {
         CacheCommand(sql.drop(12).trim, true)
-      } else if (sql.toLowerCase.startsWith("uncache table")) {
+      } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
         CacheCommand(sql.drop(14).trim, false)
-      } else if (sql.toLowerCase.startsWith("add jar")) {
+      } else if (sql.trim.toLowerCase.startsWith("add jar")) {
         AddJar(sql.drop(8))
-      } else if (sql.toLowerCase.startsWith("add file")) {
+      } else if (sql.trim.toLowerCase.startsWith("add file")) {
         AddFile(sql.drop(9))
-      } else if (sql.startsWith("dfs")) {
+      } else if (sql.trim.startsWith("dfs")) {
         DfsCommand(sql)
-      } else if (sql.startsWith("source")) {
+      } else if (sql.trim.startsWith("source")) {
         SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
-      } else if (sql.startsWith("!")) {
+      } else if (sql.trim.startsWith("!")) {
         ShellCommand(sql.drop(1))
       } else {
         val tree = getAst(sql)
