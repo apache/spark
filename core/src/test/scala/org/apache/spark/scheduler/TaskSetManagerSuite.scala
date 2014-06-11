@@ -409,9 +409,6 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.pendingTasksWithNoPrefs.size === 2)
     // Valid locality should contain NODE_LOCAL and ANY
     assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, ANY)))
-    // Offer host1, execD, at PROCESS_LOCAL level: task 0 should be chosen
-    // because PROCESS_LOCAL is not valid at the moment
-    assert(manager.resourceOffer("execD", "host1", PROCESS_LOCAL).get.index === 0)
     // Add another executor
     sched.addExecutor(("execC", "host2"))
     manager.executorAdded()
@@ -419,10 +416,6 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.pendingTasksWithNoPrefs.size === 1)
     // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL and ANY
     assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
-    // Offer host2, execC, at PROCESS_LOCAL level: task 2 should be chosen
-    assert(manager.resourceOffer("execC", "host2", PROCESS_LOCAL).get.index === 2)
-    // Offer host1, execD again at PROCESS_LOCAL level: task 3 should be chosen
-    assert(manager.resourceOffer("execD", "host1", PROCESS_LOCAL).get.index === 3)
   }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {

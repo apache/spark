@@ -386,7 +386,7 @@ private[spark] class TaskSetManager(
       val curTime = clock.getTime()
 
       var allowedLocality = getAllowedLocalityLevel(curTime)
-      if (allowedLocality > maxLocality && myLocalityLevels.contains(maxLocality)) {
+      if (allowedLocality > maxLocality) {
         allowedLocality = maxLocality   // We're not allowed to search for farther-away tasks
       }
 
