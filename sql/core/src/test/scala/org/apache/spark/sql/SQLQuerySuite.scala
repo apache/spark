@@ -402,6 +402,7 @@ class SQLQuerySuite extends QueryTest {
       sql(s"SET $nonexistentKey"),
       Seq(Seq(s"$nonexistentKey is undefined"))
     )
+    clear()
   }
 
 }
