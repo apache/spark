@@ -22,10 +22,8 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
-
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.catalyst.expressions._
@@ -33,14 +31,12 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.{SetCommand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
-
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
-
-import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.json._
+import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.SparkContext
 
 /**
  * :: AlphaComponent ::
@@ -100,36 +96,31 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(this, parquet.ParquetRelation(path))
 
   /**
-   * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]]. The schema
-   * of the returned [[SchemaRDD]] is inferred based on the method specified by `mode`.
+   * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
+   * If a sampled `json` needs to be used, `samplingRatio` can be used to specify
+   * the sampling ratio.
+   *
+   * @group userf
    */
   def jsonFile(
       path: String,
-      mode: SchemaResolutionMode = EagerSchemaResolution): SchemaRDD = {
-    logger.info(s"Loads a JSON file $path.")
+      samplingRatio: Double = 1.0): JsonTable = {
     val json = sparkContext.textFile(path)
-    jsonRDD(json, mode)
+    jsonRDD(json, samplingRatio)
   }
 
   /**
    * Loads a RDD[String] storing JSON objects (one object per record), returning the result as a
-   * [[SchemaRDD]]. The schema of the returned [[SchemaRDD]] is inferred based on the method
-   * specified by `mode`.
+   * [[SchemaRDD]]. If a sampled `json` needs to be used, `samplingRatio` can be used to specify
+   * the sampling ratio.
+   *
+   * @group userf
    */
   def jsonRDD(
       json: RDD[String],
-      mode: SchemaResolutionMode = EagerSchemaResolution): SchemaRDD = {
-    mode match {
-      case EagerSchemaResolution =>
-        logger.info(s"Eagerly resolve the schema without sampling.")
-        val logicalPlan = JsonTable.inferSchema(json)
-        logicalPlanToSparkQuery(logicalPlan)
-      case EagerSchemaResolutionWithSampling(fraction) =>
-        logger.info(s"Eagerly resolve the schema with sampling " +
-          s"(sampling fraction: $fraction).")
-        val logicalPlan = JsonTable.inferSchema(json, fraction)
-        logicalPlanToSparkQuery(logicalPlan)
-    }
+      samplingRatio: Double = 1.0): JsonTable = {
+    val jsonTable = JsonTable(json, samplingRatio, this)
+    jsonTable
   }
 
   /**
@@ -173,6 +164,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
+    rdd.tableNames += tableName
     catalog.registerTable(None, tableName, rdd.logicalPlan)
   }
 
@@ -192,7 +184,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =
-    new SchemaRDD(this, catalog.lookupRelation(None, tableName))
+    new SchemaRDD(this, catalog.lookupRelation(None, tableName), Set(tableName))
 
   /** Caches the specified table in-memory. */
   def cacheTable(tableName: String): Unit = {
@@ -302,7 +294,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
    * access to the intermediate phases of query execution for developers.
    */
-  protected abstract class QueryExecution {
+  protected[sql] abstract class QueryExecution {
     def logical: LogicalPlan
 
     def eagerlyProcess(plan: LogicalPlan): RDD[Row] = plan match {

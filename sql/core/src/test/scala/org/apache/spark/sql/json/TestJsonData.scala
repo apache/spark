@@ -77,7 +77,7 @@ object TestJsonData {
   val missingFields =
     TestSQLContext.sparkContext.parallelize(
       """{"a":true}""" ::
-      """{"b":22}""" ::
+      """{"b":21474836470}""" ::
       """{"c":[33, 44]}""" ::
       """{"d":{"field":true}}""" ::
       """{"e":"str"}""" :: Nil)

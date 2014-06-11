@@ -17,12 +17,17 @@
 
 package org.apache.spark.sql.json
 
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Attribute, AttributeReference}
+import scala.collection.mutable.HashSet
+
+import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.sql.json.JsonTable.enforceCorrectType
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext._
 
 protected case class Schema(output: Seq[Attribute]) extends LeafNode
 
@@ -310,10 +315,10 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select * from jsonTable"),
-      (Seq(), "11", "List(1, 2, 3)", "List()", Seq(null)) ::
-      (null, "Map(field -> false)", null, "Map()", null) ::
-      (Seq(4, 5, 6), null, "str", "List(7, 8, 9)", Seq(null)) ::
-      (Seq(7), "Map()","List(str1, str2, 33)", "Map(field -> true)", Seq("str")) :: Nil
+      (Seq(), "11", "[1,2,3]", "[]", Seq(null)) ::
+      (null, """{"field":false}""", null, "{}", null) ::
+      (Seq(4, 5, 6), null, "str", "[7,8,9]", Seq(null)) ::
+      (Seq(7), "{}","[str1,str2,33]", """{"field":true}""", Seq("str")) :: Nil
     )
   }
 
@@ -329,8 +334,8 @@ class JsonSuite extends QueryTest {
 
     checkAnswer(
       sql("select * from jsonTable"),
-      Seq(Seq("1", "1.1", "true", null, "List()", "Map()", "List(2, 3, 4)",
-        "Map(field -> str)")) :: Nil
+      Seq(Seq("1", "1.1", "true", null, "[]", "{}", "[2,3,4]",
+        """{"field":str}""")) :: Nil
     )
 
     // Treat an element as a number.
@@ -345,7 +350,7 @@ class JsonSuite extends QueryTest {
 
     val expectedSchema =
       AttributeReference("a", BooleanType, true)() ::
-      AttributeReference("b", IntegerType, true)() ::
+      AttributeReference("b", LongType, true)() ::
       AttributeReference("c", ArrayType(IntegerType), true)() ::
       AttributeReference("e", StringType, true)() ::
       AttributeReference("d", StructType(
@@ -379,5 +384,102 @@ class JsonSuite extends QueryTest {
     val doubleNumber: Double = 1.7976931348623157E308d
     checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
     checkTypePromotion(BigDecimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType))
+  }
+
+  test("Automatically update the schema when we have missing fields") {
+    val partialSchema =
+      StructType(StructField("b", LongType, true) :: StructField("e", StringType, true) :: Nil)
+
+    val json = missingFields
+
+    val jsonTable: JsonTable =
+      new JsonTable(TestSQLContext, partialSchema, true, json)
+
+    jsonTable.registerAsTable("jsonTable")
+
+    checkAnswer(
+      sql("select * from jsonTable"),
+      (null, null) ::
+      (21474836470L, null) ::
+      (null, null) ::
+      (null, null) ::
+      (null, "str") :: Nil
+    )
+
+    // Update the schema
+    jsonTable.adjustSchema()
+
+    val expectedSchema =
+      AttributeReference("a", BooleanType, true)() ::
+      AttributeReference("b", LongType, true)() ::
+      AttributeReference("c", ArrayType(IntegerType), true)() ::
+      AttributeReference("e", StringType, true)() ::
+      AttributeReference("d", StructType(
+        StructField("field", BooleanType, true) :: Nil), true)() :: Nil
+
+    // We should get the entire schema for this JsonTable.
+    comparePlans(Schema(expectedSchema), Schema(jsonTable.logicalPlan.output))
+
+    // The catalog should be updated.
+    comparePlans(Schema(expectedSchema),
+      Schema(TestSQLContext.catalog.lookupRelation(None, "jsonTable", None).output))
+
+    checkAnswer(
+      jsonTable.select(Star(None)),
+      (true, null, null, null, null) ::
+      (null, 21474836470L, null, null, null) ::
+      (null, null, Seq(33, 44), null, null) ::
+      (null, null, null, null, Seq(true)) ::
+      (null, null, null, "str", null) :: Nil
+    )
+  }
+
+  test("Automatically update the schema when we have a wrong type for a primitive field") {
+    val partialSchema =
+      StructType(StructField("b", IntegerType, true) :: StructField("e", StringType, true) :: Nil)
+
+    val json = missingFields
+
+    val jsonTable: JsonTable =
+      new JsonTable(TestSQLContext, partialSchema, true, json)
+
+    jsonTable.registerAsTable("jsonTable")
+
+    // Select all columns of the partial schema. The result is wrong because the type of b is
+    // IntegerType, but it should be LongType. When we have the wrong type, we return a null.
+    checkAnswer(
+      sql("select * from jsonTable"),
+      (null, null) ::
+      (null, null) ::
+      (null, null) ::
+      (null, null) ::
+      (null, "str") :: Nil
+    )
+
+    // Update the schema
+    jsonTable.adjustSchema()
+
+    val expectedSchema =
+      AttributeReference("a", BooleanType, true)() ::
+      AttributeReference("b", LongType, true)() ::
+      AttributeReference("c", ArrayType(IntegerType), true)() ::
+      AttributeReference("e", StringType, true)() ::
+      AttributeReference("d", StructType(
+        StructField("field", BooleanType, true) :: Nil), true)() :: Nil
+
+    // We should get the entire schema for this JsonTable.
+    comparePlans(Schema(expectedSchema), Schema(jsonTable.logicalPlan.output))
+    // The catalog should be updated.
+    comparePlans(Schema(expectedSchema),
+      Schema(TestSQLContext.catalog.lookupRelation(None, "jsonTable", None).output))
+
+    checkAnswer(
+      jsonTable.select(Star(None)),
+      (true, null, null, null, null) ::
+      (null, 21474836470L, null, null, null) ::
+      (null, null, Seq(33, 44), null, null) ::
+      (null, null, null, null, Seq(true)) ::
+      (null, null, null, "str", null) :: Nil
+    )
   }
 }
