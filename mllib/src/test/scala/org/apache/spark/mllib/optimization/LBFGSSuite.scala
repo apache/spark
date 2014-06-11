@@ -18,13 +18,13 @@
 package org.apache.spark.mllib.optimization
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LocalSparkContext
 
-class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
 
   val nPoints = 10000
   val A = 2.0

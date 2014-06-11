@@ -18,14 +18,14 @@
 package org.apache.spark.ui.jobs
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.{LocalSparkContext, SparkConf, Success}
 import org.apache.spark.executor.{ShuffleReadMetrics, TaskMetrics}
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
-class JobProgressListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matchers {
   test("test LRU eviction of stages") {
     val conf = new SparkConf()
     conf.set("spark.ui.retainedStages", 5.toString)
