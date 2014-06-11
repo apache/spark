@@ -54,6 +54,8 @@ run_test "pyspark/conf.py"
 if [ -n "$_RUN_SQL_TESTS" ]; then
   run_test "pyspark/sql.py"
 fi
+# These tests are included in the module-level docs, and so must
+# be handled on a higher level rather than within the python file.
 export PYSPARK_DOC_TEST=1
 run_test "pyspark/broadcast.py"
 run_test "pyspark/accumulators.py"
