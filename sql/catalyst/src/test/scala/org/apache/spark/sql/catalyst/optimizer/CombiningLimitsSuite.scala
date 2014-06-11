@@ -40,10 +40,10 @@ class CombiningLimitsSuite extends OptimizerTest {
     val originalQuery =
       testRelation
         .select('a)
-        .limit(10).analyze
-        .limit(5).analyze
+        .limit(10)
+        .limit(5)
 
-    val optimized = Optimize(originalQuery)
+    val optimized = Optimize(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select('a)
@@ -56,11 +56,11 @@ class CombiningLimitsSuite extends OptimizerTest {
     val originalQuery =
       testRelation
         .select('a)
-        .limit(2).analyze
-        .limit(7).analyze
-        .limit(5).analyze
+        .limit(2)
+        .limit(7)
+        .limit(5)
 
-    val optimized = Optimize(originalQuery)
+    val optimized = Optimize(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select('a)
