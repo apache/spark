@@ -28,7 +28,7 @@ import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
 import org.apache.spark.graphx._
 
 /** Stores vertex attributes to ship to an edge partition. */
-private[graphx] class VertexAttributeBlock[VD: ClassTag](
+private[graphx] class VertexAttributeBlock[@specialized(Long, Int, Double) VD: ClassTag](
     val vids: Array[VertexId],
     val attrs: Array[VD])
   extends Serializable {

@@ -27,8 +27,10 @@ import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 import IndexedRDD.Id
 import IndexedRDDPartition.Index
 
-private[spark] trait IndexedRDDPartitionOps[V, Self[X] <: IndexedRDDPartitionBase[X] with IndexedRDDPartitionOps[X, Self]]
-    extends Logging {
+private[spark] trait IndexedRDDPartitionOps[
+    @specialized(Long, Int, Double) V,
+    Self[X] <: IndexedRDDPartitionBase[X] with IndexedRDDPartitionOps[X, Self]]
+  extends Logging {
 
   def self: Self[V]
 
