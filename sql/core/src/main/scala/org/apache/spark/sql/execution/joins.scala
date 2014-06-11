@@ -184,36 +184,10 @@ case class LeftSemiJoinHash(
         }
       }
 
-      new Iterator[Row] {
-        private[this] var currentStreamedRow: Row = _
-        private[this] var currentHashMatched: Boolean = false
-
-        private[this] val joinKeys = streamSideKeyGenerator()
-
-        override final def hasNext: Boolean =
-          streamIter.hasNext && fetchNext()
-
-        override final def next() = {
-          currentStreamedRow
-        }
-
-        /**
-         * Searches the streamed iterator for the next row that has at least one match in hashtable.
-         *
-         * @return true if the search is successful, and false the streamed iterator runs out of
-         *         tuples.
-         */
-        private final def fetchNext(): Boolean = {
-          currentHashMatched = false
-          while (!currentHashMatched && streamIter.hasNext) {
-            currentStreamedRow = streamIter.next()
-            if (!joinKeys(currentStreamedRow).anyNull) {
-              currentHashMatched = hashTable.contains(joinKeys.currentValue)
-            }
-          }
-          currentHashMatched
-        }
-      }
+      streamIter.filter(current => {
+        val joinKeys = streamSideKeyGenerator()
+        !joinKeys(current).anyNull && hashTable.contains(joinKeys.currentValue)
+      })
     }
   }
 }
