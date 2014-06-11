@@ -39,6 +39,8 @@ import org.apache.spark.sql.{Logging, SchemaRDD, SQLContext}
  *
  * {{{
  *  val sc: SparkContext // An existing spark context.
+ *
+ *  import org.apache.spark.sql.SQLContext
  *  val sqlContext = new SQLContext(sc)
  *
  *  // Importing the SQL context gives access to all the SQL functions and implicit conversions.
@@ -47,8 +49,10 @@ import org.apache.spark.sql.{Logging, SchemaRDD, SQLContext}
  *  // Create a JsonTable from a text file. To infer the schema using the sampled dataset, use
  *  // jsonFile("examples/src/main/resources/people.json", samplingRatio)
  *  val jsonTable1 = jsonFile("examples/src/main/resources/people.json")
- *  rdd.registerAsTable("jsonTable1")
- *  sql("SELECT * FROM jsonTable2").collect().foreach(println)
+ *  // Print out the schema
+ *  jsonTable1.printSchema
+ *  jsonTable1.registerAsTable("jsonTable1")
+ *  sql("SELECT * FROM jsonTable1").collect().foreach(println)
  *
  *  // Check if the schema has been updated. Only needed when the initial schema is inferred based
  *  // on a sampled dataset.
@@ -58,7 +62,7 @@ import org.apache.spark.sql.{Logging, SchemaRDD, SQLContext}
  *  // Create a JsonTable from a RDD[String]. To infer the schema using the sampled dataset, use
  *  // jsonRDD(rdd, samplingRatio)
  *  val jsonTable2 = jsonRDD(rdd)
- *  rdd.registerAsTable("jsonTable2")
+ *  jsonTable2.registerAsTable("jsonTable2")
  *  sql("SELECT * FROM jsonTable2").collect().foreach(println)
  *
  *  // Check if the schema has been updated. Only needed when the initial schema is inferred based
