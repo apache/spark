@@ -22,9 +22,9 @@ import java.util.NoSuchElementException
 import scala.collection.mutable.Buffer
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
-class NextIteratorSuite extends FunSuite with ShouldMatchers {
+class NextIteratorSuite extends FunSuite with Matchers {
   test("one iteration") {
     val i = new StubIterator(Buffer(1))
     i.hasNext should be === true
