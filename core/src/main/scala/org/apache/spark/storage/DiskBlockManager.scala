@@ -40,9 +40,9 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   private val subDirsPerLocalDir = shuffleManager.conf.getInt("spark.diskStore.subDirectories", 64)
 
-  // Create one local directory for each path mentioned in spark.local.dir; then, inside this
-  // directory, create multiple subdirectories that we will hash files into, in order to avoid
-  // having really large inodes at the top level.
+  /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
+   * directory, create multiple subdirectories that we will hash files into, in order to avoid
+   * having really large inodes at the top level. */
   private val localDirs: Array[File] = createLocalDirs()
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
   private var shuffleSender : ShuffleSender = null
@@ -175,7 +175,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
 
   private[storage] def startShuffleBlockSender(port: Int): Int = {
     shuffleSender = new ShuffleSender(port, this)
-    logInfo("Created ShuffleSender binding to port : " + shuffleSender.port)
+    logInfo("Created ShuffleSender binding to port: " + shuffleSender.port)
     shuffleSender.port
   }
 }

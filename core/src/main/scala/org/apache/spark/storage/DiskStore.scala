@@ -39,7 +39,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     diskManager.getBlockLocation(blockId).length
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel) : PutResult = {
+  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
@@ -53,25 +53,23 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     channel.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
-      file.getName, Utils.bytesToString(bytes.limit), (finishTime - startTime)))
-    return PutResult(bytes.limit(), Right(bytes.duplicate()))
+      file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
+    PutResult(bytes.limit(), Right(bytes.duplicate()))
   }
 
   override def putValues(
       blockId: BlockId,
       values: ArrayBuffer[Any],
       level: StorageLevel,
-      returnValues: Boolean)
-  : PutResult = {
-    return putValues(blockId, values.toIterator, level, returnValues)
+      returnValues: Boolean): PutResult = {
+    putValues(blockId, values.toIterator, level, returnValues)
   }
 
   override def putValues(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      returnValues: Boolean)
-    : PutResult = {
+      returnValues: Boolean): PutResult = {
 
     logDebug("Attempting to write values for block " + blockId)
     val startTime = System.currentTimeMillis
