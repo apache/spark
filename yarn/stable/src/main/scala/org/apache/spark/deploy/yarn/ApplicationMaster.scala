@@ -252,15 +252,12 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     try {
       logInfo("Allocating " + args.numExecutors + " executors.")
       // Wait until all containers have finished
-      // TODO: This is a bit ugly. Can we make it nicer?
-      // TODO: Handle container failure
       yarnAllocator.addResourceRequests(args.numExecutors)
+      yarnAllocator.allocateResources()
       // Exits the loop if the user thread exits.
       while (yarnAllocator.getNumExecutorsRunning < args.numExecutors && userThread.isAlive) {
-        if (yarnAllocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
-          finishApplicationMaster(FinalApplicationStatus.FAILED,
-            "max number of executor failures reached")
-        }
+        checkNumExecutorsFailed()
+        allocateMissingExecutor()
         yarnAllocator.allocateResources()
         ApplicationMaster.incrementAllocatorLoop(1)
         Thread.sleep(100)
@@ -289,23 +286,31 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     }
   }
 
+  private def allocateMissingExecutor() {
+    val missingExecutorCount = args.numExecutors - yarnAllocator.getNumExecutorsRunning -
+      yarnAllocator.getNumPendingAllocate
+    if (missingExecutorCount > 0) {
+      logInfo("Allocating %d containers to make up for (potentially) lost containers".
+        format(missingExecutorCount))
+      yarnAllocator.addResourceRequests(missingExecutorCount)
+    }
+  }
+
+  private def checkNumExecutorsFailed() {
+    if (yarnAllocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
+      finishApplicationMaster(FinalApplicationStatus.FAILED,
+        "max number of executor failures reached")
+    }
+  }
+
   private def launchReporterThread(_sleepTime: Long): Thread = {
     val sleepTime = if (_sleepTime <= 0) 0 else _sleepTime
 
     val t = new Thread {
       override def run() {
         while (userThread.isAlive) {
-          if (yarnAllocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
-            finishApplicationMaster(FinalApplicationStatus.FAILED,
-              "max number of executor failures reached")
-          }
-          val missingExecutorCount = args.numExecutors - yarnAllocator.getNumExecutorsRunning -
-            yarnAllocator.getNumPendingAllocate
-          if (missingExecutorCount > 0) {
-            logInfo("Allocating %d containers to make up for (potentially) lost containers".
-              format(missingExecutorCount))
-            yarnAllocator.addResourceRequests(missingExecutorCount)
-          }
+          checkNumExecutorsFailed()
+          allocateMissingExecutor()
           sendProgress()
           Thread.sleep(sleepTime)
         }

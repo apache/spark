@@ -313,6 +313,15 @@ class RDD(object):
             "use mapPartitionsWithIndex instead", DeprecationWarning, stacklevel=2)
         return self.mapPartitionsWithIndex(f, preservesPartitioning)
 
+    def getNumPartitions(self):
+      """
+      Returns the number of partitions in RDD
+      >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
+      >>> rdd.getNumPartitions()
+      2
+      """
+      return self._jrdd.splits().size()
+
     def filter(self, f):
         """
         Return a new RDD containing only the elements that satisfy a predicate.

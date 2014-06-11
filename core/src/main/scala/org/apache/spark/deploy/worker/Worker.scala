@@ -239,7 +239,7 @@ private[spark] class Worker(
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
             self, workerId, host,
             new File(sparkHome.getAbsolutePath),
-            workDir, akkaUrl, ExecutorState.RUNNING)
+            workDir, akkaUrl, conf, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_

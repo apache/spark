@@ -80,6 +80,10 @@ else
   if [[ "$IPYTHON" = "1" ]]; then
     exec ipython "$@"
   else
-    exec "$PYSPARK_PYTHON"
+    if [[ -n $SPARK_TESTING ]]; then
+      exec "$PYSPARK_PYTHON" -m doctest
+    else
+      exec "$PYSPARK_PYTHON"
+    fi
   fi
 fi
