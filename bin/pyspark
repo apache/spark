@@ -45,7 +45,7 @@ fi
 . $FWDIR/bin/load-spark-env.sh
 
 # Figure out which Python executable to use
-if [ -z "$PYSPARK_PYTHON" ] ; then
+if [[ -z "$PYSPARK_PYTHON" ]]; then
   PYSPARK_PYTHON="python"
 fi
 export PYSPARK_PYTHON
@@ -59,7 +59,7 @@ export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
 export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
 
 # If IPython options are specified, assume user wants to run IPython
-if [ -n "$IPYTHON_OPTS" ]; then
+if [[ -n "$IPYTHON_OPTS" ]]; then
   IPYTHON=1
 fi
 
@@ -76,6 +76,16 @@ for i in "$@"; do
 done
 export PYSPARK_SUBMIT_ARGS
 
+# For pyspark tests
+if [[ -n "$SPARK_TESTING" ]]; then
+  if [[ -n "$PYSPARK_DOC_TEST" ]]; then
+    exec "$PYSPARK_PYTHON" -m doctest $1
+  else
+    exec "$PYSPARK_PYTHON" $1
+  fi
+  exit
+fi
+
 # If a python file is provided, directly run spark-submit.
 if [[ "$1" =~ \.py$ ]]; then
   echo -e "\nWARNING: Running python applications through ./bin/pyspark is deprecated as of Spark 1.0." 1>&2
@@ -86,10 +96,6 @@ else
   if [[ "$IPYTHON" = "1" ]]; then
     exec ipython $IPYTHON_OPTS
   else
-    if [[ -n $SPARK_TESTING ]]; then
-      exec "$PYSPARK_PYTHON" -m doctest
-    else
-      exec "$PYSPARK_PYTHON"
-    fi
+    exec "$PYSPARK_PYTHON"
   fi
 fi
