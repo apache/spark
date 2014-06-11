@@ -53,7 +53,7 @@ class ShuffledRDD[K, V, P <: Product2[K, V] : ClassTag](
     List(new ShuffleDependency(prev, part, serializer))
   }
 
-  @transient override val getPartitioner = Some(part)
+  @transient override val partitioner = Some(part)
 
   override def getPartitions: Array[Partition] = {
     Array.tabulate[Partition](part.numPartitions)(i => new ShuffledRDDPartition(i))

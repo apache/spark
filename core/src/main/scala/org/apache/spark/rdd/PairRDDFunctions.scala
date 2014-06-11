@@ -569,6 +569,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def lookup(key: K): Seq[V] = {
     self.partitioner match {
+      case null => throw new SparkException("Actions on RDDs inside of another RDD operation are " +
+          "not supported")
       case Some(p) =>
         val index = p.getPartition(key)
         def process(it: Iterator[(K, V)]): Seq[V] = {

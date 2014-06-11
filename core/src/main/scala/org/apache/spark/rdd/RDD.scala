@@ -112,22 +112,12 @@ abstract class RDD[T: ClassTag](
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
   /** Optionally overridden by subclasses to specify how they are partitioned.
-   * Please override getPartitioner instead.
    */
-  def partitioner: Option[Partitioner] = {
-    Option(getPartitioner).getOrElse(throw new SparkException("Actions on RDDs inside of another " +
-      "RDD operation are not supported"))
-    }
+  @transient val partitioner: Option[Partitioner] = None
 
   // =======================================================================
   // Methods and fields available on all RDDs
   // =======================================================================
-
-  /** Accessor method which throws a runtime exception if null. This lets us have
-   * a clearer error method when attempting to perform operations on an RDD inside of
-   * a parallel operation as the partitioner is marked as transient.
-   */
-  protected def getPartitioner: Option[Partitioner] = None
 
   /** The SparkContext that created this RDD. */
   def sparkContext: SparkContext = {
