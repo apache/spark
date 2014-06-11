@@ -63,8 +63,7 @@ class LogisticRegressionModel(LinearModel):
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
         margin = _dot(x, self._coeff) + self._intercept
-        prob = 1/(1 + exp(-margin))
-        return 1 if prob > 0.5 else 0
+        return 1 if margin > 0 else 0
 
 
 class LogisticRegressionWithSGD(object):
