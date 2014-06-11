@@ -204,6 +204,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def toString = s"if ($predicate) $trueValue else $falseValue"
 }
 
+// scalastyle:off
 /**
  * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END".
  * Refer to this link for the corresponding semantics:
@@ -213,6 +214,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
  * is the val for the default catch-all case (if provided). Hence, `branches` consist of at least
  * two elements, and can have an odd or even length.
  */
+// scalastyle:on
 case class CaseWhen(branches: Seq[Expression]) extends Expression {
   type EvaluatedType = Any
   def children = branches
