@@ -50,8 +50,6 @@ class HistoryServer(
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
-  private val localHost = Utils.localHostName()
-
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
       val ui = provider.getAppUI(key)
@@ -192,10 +190,10 @@ object HistoryServer {
     server.bind()
 
     Runtime.getRuntime().addShutdownHook(new Thread("HistoryServerStopper") {
-        override def run() = {
-          server.stop()
-        }
-      })
+      override def run() = {
+        server.stop()
+      }
+    })
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }

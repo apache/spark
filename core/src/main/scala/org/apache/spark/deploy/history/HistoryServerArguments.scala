@@ -57,17 +57,19 @@ private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]
       |
       |History Server options:
       |
-      |  spark.history.ui.port      Port where server will listen for connections (default 18080)
-      |  spark.history.acls.enable  Whether to enable view acls for all applications (default false)
-      |  spark.history.provider     Name of history provider class (defaults to file system-based
-      |                             provider)
+      |  spark.history.ui.port              Port where server will listen for connections
+      |                                     (default 18080)
+      |  spark.history.acls.enable          Whether to enable view acls for all applications
+      |                                     (default false)
+      |  spark.history.provider             Name of history provider class (defaults to
+      |                                     file system-based provider)
       |  spark.history.retainedApplications Max number of application UIs to keep loaded in memory
-      |                             (default 50)
+      |                                     (default 50)
       |FsHistoryProvider options:
       |
-      |  spark.history.fs.logDirectory    Directory where app logs are stored (required)
-      |  spark.history.fs.updateInterval  How often to reload log data from storage (seconds,
-      |                                   default 10)
+      |  spark.history.fs.logDirectory      Directory where app logs are stored (required)
+      |  spark.history.fs.updateInterval    How often to reload log data from storage (in seconds,
+      |                                     default 10)
       |""".stripMargin)
     System.exit(exitCode)
   }

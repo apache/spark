@@ -116,10 +116,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     try {
       val logStatus = fs.listStatus(new Path(logDir))
       val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
-      val logInfos = logDirs
-        .filter {
-            dir => fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))
-          }
+      val logInfos = logDirs.filter {
+        dir => fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))
+      }
 
       val currentApps = Map[String, ApplicationHistoryInfo](
         appList.map(app => (app.id -> app)):_*)
@@ -177,7 +176,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       }
 
     replayBus.replay()
-    val appInfo = ApplicationHistoryInfo(appId,
+    val appInfo = ApplicationHistoryInfo(
+      appId,
       appListener.appName,
       appListener.startTime,
       appListener.endTime,

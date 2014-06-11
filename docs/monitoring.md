@@ -38,9 +38,9 @@ You can start a the history server by executing:
     ./sbin/start-history-server.sh
 
 When using the file-system provider class (see spark.history.provider below), the base logging
-directory must be supplied in the "spark.history.fs.logDirectory" configuration option, and should
-contain sub-directories that each represents an application's event logs. This creates a web
-interface at `http://<server-url>:18080` by default. The history server can be configured as
+directory must be supplied in the <code>spark.history.fs.logDirectory</code> configuration option,
+and should contain sub-directories that each represents an application's event logs. This creates a
+web interface at `http://<server-url>:18080` by default. The history server can be configured as
 follows:
 
 <table class="table">
@@ -74,7 +74,8 @@ follows:
     <td>spark.history.provider</td>
     <td>org.apache.spark.deploy.history.FsHistoryProvider</td>
     <td>Name of the class implementing the application history backend. Currently there is only
-    one implementation provided by Spark, which matches the default value.</td>
+    one implementation, provided by Spark, which looks for application logs stored in the
+    file system.</td>
   </tr>
   <tr>
     <td>spark.history.fs.updateInterval</td>
