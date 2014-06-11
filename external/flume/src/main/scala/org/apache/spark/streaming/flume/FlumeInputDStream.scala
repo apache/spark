@@ -71,12 +71,12 @@ class SparkFlumeEvent() extends Externalizable {
     for (i <- 0 until numHeaders) {
       val keyLength = in.readInt()
       val keyBuff = new Array[Byte](keyLength)
-      in.read(keyBuff)
+      in.readFully(keyBuff)
       val key : String = Utils.deserialize(keyBuff)
 
       val valLength = in.readInt()
       val valBuff = new Array[Byte](valLength)
-      in.read(valBuff)
+      in.readFully(valBuff)
       val value : String = Utils.deserialize(valBuff)
 
       headers.put(key, value)
