@@ -112,6 +112,9 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Average(Literal(c, _)) if c == 0 => Literal(0.0, e.dataType)
       case e @ IsNull(c) if c.nullable == false => Literal(false, BooleanType)
       case e @ IsNotNull(c) if c.nullable == false => Literal(true, BooleanType)
+      case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
+      case e @ GetItem(_, Literal(null, _)) => Literal(null, e.dataType)
+      case e @ GetField(Literal(null, _), _) => Literal(null, e.dataType)
       case e @ Coalesce(children) => {
         val newChildren = children.filter(c => c match {
           case Literal(null, _) => false
@@ -131,6 +134,21 @@ object NullPropagation extends Rule[LogicalPlan] {
           case _ => false
         })) => Literal(true, BooleanType)
       // Put exceptional cases above if any
+      case e: BinaryArithmetic => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: BinaryComparison => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
+      case e: StringRegexExpression => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
     }
   }
 }
