@@ -29,6 +29,8 @@ import org.apache.spark.sql.catalyst.types._
 
 object Optimizer extends RuleExecutor[LogicalPlan] {
   val batches =
+    Batch("LimitFolding", FixedPoint(100),
+      CombineLimits) ::
     Batch("ConstantFolding", FixedPoint(100),
       NullPropagation,
       ConstantFolding,
@@ -360,5 +362,15 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Cast(e, dataType) if e.dataType == dataType => e
+  }
+}
+
+/**
+ * Combines two adjacent [[catalyst.plans.logical.Limit Limit]] operators into one, merging the
+ * expressions into one single expression.
+ */
+object CombineLimits extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case ll @ Limit(le, nl @ Limit(ne, grandChild)) => Limit(If(LessThan(ne, le), ne, le), grandChild)
   }
 }
