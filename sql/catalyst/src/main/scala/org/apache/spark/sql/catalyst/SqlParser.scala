@@ -111,6 +111,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val APPROXIMATE = Keyword("APPROXIMATE")
   protected val AVG = Keyword("AVG")
   protected val BY = Keyword("BY")
+  protected val CACHE = Keyword("CACHE")
   protected val CAST = Keyword("CAST")
   protected val COUNT = Keyword("COUNT")
   protected val DESC = Keyword("DESC")
@@ -149,7 +150,9 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val SEMI = Keyword("SEMI")
   protected val STRING = Keyword("STRING")
   protected val SUM = Keyword("SUM")
+  protected val TABLE = Keyword("TABLE")
   protected val TRUE = Keyword("TRUE")
+  protected val UNCACHE = Keyword("UNCACHE")
   protected val UNION = Keyword("UNION")
   protected val WHERE = Keyword("WHERE")
 
@@ -189,7 +192,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
         UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
         UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
-    | insert
+    | insert | cache
   )
 
   protected lazy val select: Parser[LogicalPlan] =
@@ -218,6 +221,11 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
       case o ~ r ~ s =>
         val overwrite: Boolean = o.getOrElse("") == "OVERWRITE"
         InsertIntoTable(r, Map[String, Option[String]](), s, overwrite)
+    }
+
+  protected lazy val cache: Parser[LogicalPlan] =
+    (CACHE ^^^ true | UNCACHE ^^^ false) ~ TABLE ~ ident ^^ {
+      case doCache ~ _ ~ tableName => CacheCommand(tableName, doCache)
     }
 
   protected lazy val projections: Parser[Seq[Expression]] = repsep(projection, ",")
