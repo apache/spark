@@ -25,9 +25,9 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, Test
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
-class SparkSubmitSuite extends FunSuite with ShouldMatchers {
+class SparkSubmitSuite extends FunSuite with Matchers {
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }
