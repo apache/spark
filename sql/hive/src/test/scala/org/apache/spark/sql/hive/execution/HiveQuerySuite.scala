@@ -18,8 +18,9 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.catalyst.plans.logical.ExplainCommand
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHive._
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -166,7 +167,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
     val rdd = hql("explain select key, count(value) from src group by key")
     assert(rdd.collect().size == 1)
-    assert(rdd.toString.contains("ExplainCommand"))
+    assert(rdd.toString.contains(ExplainCommand.getClass.getSimpleName))
     assert(rdd.filter(row => row.toString.contains("ExplainCommand")).collect().size == 0,
       "actual contents of the result should be the plans of the query to be explained")
     TestHive.reset()
@@ -195,9 +196,11 @@ class HiveQuerySuite extends HiveComparisonTest {
   test("SET commands semantics for a HiveContext") {
     // Adapted from its SQL counterpart.
     val testKey = "spark.sql.key.usedfortestonly"
-    var testVal = "test.val.0"
+    val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
-    def fromRows(row: Array[Row]): Array[String] = row.map(_.getString(0))
+    def rowsToPairs(rows: Array[Row]) = rows.map { case Row(key: String, value: String) =>
+      key -> value
+    }
 
     clear()
 
@@ -206,41 +209,51 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     // "set key=val"
     hql(s"SET $testKey=$testVal")
-    assert(fromRows(hql("SET").collect()) sameElements Array(s"$testKey=$testVal"))
     assert(hiveconf.get(testKey, "") == testVal)
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql("SET").collect())
+    }
 
     hql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(fromRows(hql("SET").collect()) sameElements
-      Array(
-        s"$testKey=$testVal",
-        s"${testKey + testKey}=${testVal + testVal}"))
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      rowsToPairs(hql("SET").collect())
+    }
 
     // "set key"
-    assert(fromRows(hql(s"SET $testKey").collect()) sameElements
-      Array(s"$testKey=$testVal"))
-    assert(fromRows(hql(s"SET $nonexistentKey").collect()) sameElements
-      Array(s"$nonexistentKey is undefined"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql(s"SET $testKey").collect())
+    }
+
+    assertResult(Array(testKey -> "<undefined>")) {
+      rowsToPairs(hql(s"SET $nonexistentKey").collect())
+    }
 
     // Assert that sql() should have the same effects as hql() by repeating the above using sql().
     clear()
     assert(sql("set").collect().size == 0)
 
     sql(s"SET $testKey=$testVal")
-    assert(fromRows(sql("SET").collect()) sameElements Array(s"$testKey=$testVal"))
     assert(hiveconf.get(testKey, "") == testVal)
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql("SET").collect())
+    }
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(fromRows(sql("SET").collect()) sameElements
-      Array(
-        s"$testKey=$testVal",
-        s"${testKey + testKey}=${testVal + testVal}"))
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      rowsToPairs(sql("SET").collect())
+    }
 
-    assert(fromRows(sql(s"SET $testKey").collect()) sameElements
-      Array(s"$testKey=$testVal"))
-    assert(fromRows(sql(s"SET $nonexistentKey").collect()) sameElements
-      Array(s"$nonexistentKey is undefined"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql(s"SET $testKey").collect())
+    }
+
+    assertResult(Array(testKey -> "<undefined>")) {
+      rowsToPairs(sql(s"SET $nonexistentKey").collect())
+    }
+
+    clear()
   }
 
   // Put tests that depend on specific Hive settings before these last two test,

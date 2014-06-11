@@ -161,7 +161,7 @@ class FilterPushdownSuite extends OptimizerTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   test("joins: push down left outer join #1") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
