@@ -28,8 +28,6 @@ abstract class Expression extends TreeNode[Expression] {
   /** The narrowest possible type that is produced when this expression is evaluated. */
   type EvaluatedType <: Any
 
-  def dataType: DataType
-
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
    * executed.
@@ -58,6 +56,9 @@ abstract class Expression extends TreeNode[Expression] {
    * the resolution of its children.
    */
   lazy val resolved: Boolean = childrenResolved
+
+  /** This is invalid to query if `resolved` is false. */
+  def dataType: DataType
 
   /**
    * Returns true if  all the children of this expression have been resolved to a specific schema

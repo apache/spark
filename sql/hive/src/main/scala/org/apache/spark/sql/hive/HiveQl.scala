@@ -909,9 +909,9 @@ object HiveQl {
 
     /* Case statements */
     case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>
-      CaseWhen(None, branches.map(nodeToExpr))
+      CaseWhen(branches.map(nodeToExpr))
     case Token("TOK_FUNCTION", Token(CASE(), Nil) :: branches) =>
-      CaseWhen(Some(nodeToExpr(branches(0))), branches.drop(1).map(nodeToExpr))
+      CaseKeyWhen(nodeToExpr(branches(0)), branches.drop(1).map(nodeToExpr))
 
     /* Complex datatype manipulation */
     case Token("[", child :: ordinal :: Nil) =>
