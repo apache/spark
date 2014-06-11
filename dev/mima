@@ -23,6 +23,9 @@ set -o pipefail
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd $FWDIR
 
+echo -e "q\n" | sbt/sbt oldDeps/update
+
+export SPARK_CLASSPATH=`find lib_managed \( -name '*spark*jar' -a -type f \) -printf "%p:" `
 ./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
 echo -e "q\n" | sbt/sbt mima-report-binary-issues | grep -v -e "info.*Resolving"
 ret_val=$?
@@ -31,5 +34,5 @@ if [ $ret_val != 0 ]; then
   echo "NOTE: Exceptions to binary compatibility can be added in project/MimaExcludes.scala"
 fi
 
-rm -f .generated-mima-excludes
+rm -f .generated-mima*
 exit $ret_val
