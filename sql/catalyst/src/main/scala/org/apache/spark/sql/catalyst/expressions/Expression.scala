@@ -51,13 +51,13 @@ abstract class Expression extends TreeNode[Expression] {
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
-   * and `false` if it is still contains any unresolved placeholders. Implementations of expressions
+   * and `false` if it still contains any unresolved placeholders. Implementations of expressions
    * should override this if the resolution of this type of expression involves more than just
    * the resolution of its children.
    */
   lazy val resolved: Boolean = childrenResolved
 
-  /** This is invalid to query if `resolved` is false. */
+  /** Generally, this is invalid to query if `resolved` is false. */
   def dataType: DataType
 
   /**

@@ -215,27 +215,9 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
  */
 case class CaseWhen(branches: Seq[Expression]) extends Expression {
   // TODO: need to check each branch's condition has Boolean type?
-
+  type EvaluatedType = Any
   def children = branches
-
-  override def nullable = branches.sliding(2, 2).map {
-      case Seq(cond, value) => value.nullable
-      case Seq(elseValue) => elseValue.nullable
-    }.reduce(_ || _)
-
   def references = children.flatMap(_.references).toSet
-
-  // TODO: fix resolved for identity function
-  override lazy val resolved = {
-    lazy val dataTypes = branches.sliding(2, 2)
-      .map {
-        case Seq(cond, value) => value.dataType
-        case Seq(elseValue) => elseValue.dataType
-      }.toSeq
-    lazy val dataTypesEqual = dataTypes.drop(1).map(_ == dataTypes(0)).reduce(_ && _)
-    if (dataTypes.size == 1) true else childrenResolved && dataTypesEqual
-  }
-
   def dataType = {
     if (!resolved) {
       throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")
@@ -243,7 +225,21 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     branches(1).dataType
   }
 
-  type EvaluatedType = Any
+  override def nullable = branches.sliding(2, 2).map {
+      case Seq(cond, value) => value.nullable
+      case Seq(elseValue) => elseValue.nullable
+    }.reduce(_ || _)
+
+
+  override lazy val resolved = {
+    lazy val dataTypes = branches.sliding(2, 2).map {
+      case Seq(cond, value) => value.dataType
+      case Seq(elseValue) => elseValue.dataType
+    }.toSeq
+    lazy val dataTypesEqual =
+      if (dataTypes.size <= 1) true else dataTypes.drop(1).map(_ == dataTypes(0)).reduce(_ && _)
+    if (!childrenResolved) false else dataTypesEqual
+  }
 
   override def eval(input: Row): Any = {
     val branchesArr = branches.toArray
@@ -255,7 +251,7 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     while (i < len - 1) {
       if (branches(i).eval(input) == true) {
         res = branches(i + 1).eval(input)
-        break
+        return res
       }
       i += 2
     }
@@ -281,24 +277,9 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
  * approach avoids branching (based on whether or not the key is provided) in eval().
  */
 case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends Expression {
+  type EvaluatedType = Any
   def children = key +: branches
-
-  override def nullable = branches.sliding(2, 2).map {
-    case Seq(cond, value) => value.nullable
-    case Seq(elseValue) => elseValue.nullable
-  }.reduce(_ || _)
-
   def references = children.flatMap(_.references).toSet
-
-  override lazy val resolved = {
-    lazy val dataTypes = branches.sliding(2, 2).map {
-      case Seq(cond, value) => value.dataType
-      case Seq(elseValue) => elseValue.dataType
-    }.toSeq
-    lazy val dataTypesEqual = dataTypes.drop(1).map(_ == dataTypes(0)).reduce(_ && _)
-    if (dataTypes.size == 1) true else childrenResolved && dataTypesEqual
-  }
-
   def dataType = {
     if (!resolved) {
       throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")
@@ -306,7 +287,21 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends Expre
     branches(1).dataType
   }
 
-  type EvaluatedType = Any
+  override def nullable = branches.sliding(2, 2).map {
+    case Seq(cond, value) => value.nullable
+    case Seq(elseValue) => elseValue.nullable
+  }.reduce(_ || _)
+
+
+  override lazy val resolved = {
+    lazy val dataTypes = branches.sliding(2, 2).map {
+      case Seq(cond, value) => value.dataType
+      case Seq(elseValue) => elseValue.dataType
+    }.toSeq
+    lazy val dataTypesEqual =
+      if (dataTypes.size <= 1) true else dataTypes.drop(1).map(_ == dataTypes(0)).reduce(_ && _)
+    if (!childrenResolved) false else dataTypesEqual
+  }
 
   override def eval(input: Row): Any = {
     val evaledKey = key.eval(input)
@@ -319,7 +314,7 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends Expre
     while (i < len - 1) {
       if (branches(i).eval(input) == evaledKey) {
         res = branches(i + 1).eval(input)
-        break
+        return res
       }
       i += 2
     }
