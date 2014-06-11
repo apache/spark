@@ -54,7 +54,12 @@ object GenerateMIMAIgnore {
   private def isPackagePrivateModule(moduleSymbol: unv.ModuleSymbol) =
     !moduleSymbol.privateWithin.fullName.startsWith("<none>")
 
-  private def classesPrivateWithin(packageName: String): (Set[String], Set[String]) = {
+  /**
+   * For every class checks via scala reflection if the class itself or contained members
+   * have DeveloperApi or Experimental annotations or they are package private.
+   * Returns the tuple of such classes and members.
+   */
+  private def privateWithin(packageName: String): (Set[String], Set[String]) = {
 
     val classes = getClasses(packageName)
     val ignoredClasses = mutable.HashSet[String]()
@@ -88,7 +93,7 @@ object GenerateMIMAIgnore {
         }
 
       } catch {
-        case _: Throwable => println("Error instrumenting class::" + className)
+        case _: Throwable => println("Error instrumenting class:" + className)
       }
     }
     (ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet, ignoredMembers.toSet)
@@ -100,12 +105,12 @@ object GenerateMIMAIgnore {
   }
 
   def main(args: Array[String]) {
-    val privateWithin = classesPrivateWithin("org.apache.spark")
+    val (privateClasses, privateMembers) = privateWithin("org.apache.spark")
     scala.tools.nsc.io.File(".generated-mima-class-excludes").
-      writeAll(privateWithin._1.mkString("\n"))
+      writeAll(privateClasses.mkString("\n"))
     println("Created : .generated-mima-class-excludes in current directory.")
     scala.tools.nsc.io.File(".generated-mima-member-excludes").
-      writeAll(privateWithin._2.mkString("\n"))
+      writeAll(privateMembers.mkString("\n"))
     println("Created : .generated-mima-member-excludes in current directory.")
   }
 
