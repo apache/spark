@@ -83,6 +83,17 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
     // Use common defaults file, if not specified by user
     if (propertiesFile == null) {
+      sys.env.get("SPARK_CONF_DIR").foreach { sparkConfDir =>
+        val sep = File.separator
+        val defaultPath = s"${sparkConfDir}${sep}spark-defaults.conf"
+        val file = new File(defaultPath)
+        if (file.exists()) {
+          propertiesFile = file.getAbsolutePath
+        }
+      }
+    }
+
+    if (propertiesFile == null) {
       sys.env.get("SPARK_HOME").foreach { sparkHome =>
         val sep = File.separator
         val defaultPath = s"${sparkHome}${sep}conf${sep}spark-defaults.conf"
