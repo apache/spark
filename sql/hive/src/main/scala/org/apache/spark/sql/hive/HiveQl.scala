@@ -48,9 +48,8 @@ private[hive] case class AddJar(jarPath: String) extends Command
 
 private[hive] case class AddFile(filePath: String) extends Command
 
-// FIXME: add back private
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
-object HiveQl {
+private[hive] object HiveQl {
   protected val nativeCommands = Seq(
     "TOK_DESCFUNCTION",
     "TOK_DESCTABLE",
