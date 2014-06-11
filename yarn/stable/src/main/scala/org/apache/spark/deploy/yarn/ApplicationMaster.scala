@@ -19,13 +19,12 @@ package org.apache.spark.deploy.yarn
 
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -33,8 +32,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.ipc.YarnRPC
-import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
+import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
@@ -77,17 +75,18 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     // than user specified and /tmp.
     System.setProperty("spark.local.dir", getLocalDirs())
 
-    // set the web ui port to be ephemeral for yarn so we don't conflict with
+    // Set the web ui port to be ephemeral for yarn so we don't conflict with
     // other spark processes running on the same box
     System.setProperty("spark.ui.port", "0")
 
-    // when running the AM, the Spark master is always "yarn-cluster"
+    // When running the AM, the Spark master is always "yarn-cluster"
     System.setProperty("spark.master", "yarn-cluster")
 
-    // Use priority 30 as it's higher then HDFS. It's same priority as MapReduce is using.
+    // Use priority 30 as it's higher than HDFS. It's the same priority MapReduce is using.
     ShutdownHookManager.get().addShutdownHook(new AppMasterShutdownHook(this), 30)
 
-    appAttemptId = getApplicationAttemptId()
+    appAttemptId = ApplicationMaster.getApplicationAttemptId()
+    logInfo("ApplicationAttemptId: " + appAttemptId)
     isLastAMRetry = appAttemptId.getAttemptId() >= maxAppAttempts
     amClient = AMRMClient.createAMRMClient()
     amClient.init(yarnConf)
@@ -99,7 +98,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     ApplicationMaster.register(this)
 
     // Call this to force generation of secret so it gets populated into the
-    // hadoop UGI. This has to happen before the startUserClass which does a
+    // Hadoop UGI. This has to happen before the startUserClass which does a
     // doAs in order for the credentials to be passed on to the executor containers.
     val securityMgr = new SecurityManager(sparkConf)
 
@@ -121,7 +120,10 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     // Allocate all containers
     allocateExecutors()
 
-    // Wait for the user class to Finish
+    // Launch thread that will heartbeat to the RM so it won't think the app has died.
+    launchReporterThread()
+
+    // Wait for the user class to finish
     userThread.join()
 
     System.exit(0)
@@ -141,7 +143,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params", params)
   }
 
-  /** Get the Yarn approved local directories. */
+  // Get the Yarn approved local directories.
   private def getLocalDirs(): String = {
     // Hadoop 0.23 and 2.x have different Environment variable names for the
     // local dirs, so lets check both. We assume one of the 2 is set.
@@ -150,18 +152,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       .orElse(Option(System.getenv("LOCAL_DIRS")))
  
     localDirs match {
-      case None => throw new Exception("Yarn Local dirs can't be empty")
+      case None => throw new Exception("Yarn local dirs can't be empty")
       case Some(l) => l
     }
-  } 
-
-  private def getApplicationAttemptId(): ApplicationAttemptId = {
-    val envs = System.getenv()
-    val containerIdString = envs.get(ApplicationConstants.Environment.CONTAINER_ID.name())
-    val containerId = ConverterUtils.toContainerId(containerIdString)
-    val appAttemptId = containerId.getApplicationAttemptId()
-    logInfo("ApplicationAttemptId: " + appAttemptId)
-    appAttemptId
   }
 
   private def registerApplicationMaster(): RegisterApplicationMasterResponse = {
@@ -173,25 +166,23 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     logInfo("Starting the user JAR in a separate Thread")
     val mainMethod = Class.forName(
       args.userClass,
-      false /* initialize */ ,
+      false,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
     val t = new Thread {
       override def run() {
-
-      var successed = false
+        var succeeded = false
         try {
           // Copy
-          var mainArgs: Array[String] = new Array[String](args.userArgs.size)
+          val mainArgs = new Array[String](args.userArgs.size)
           args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size)
           mainMethod.invoke(null, mainArgs)
-          // some job script has "System.exit(0)" at the end, for example SparkPi, SparkLR
-          // userThread will stop here unless it has uncaught exception thrown out
-          // It need shutdown hook to set SUCCEEDED
-          successed = true
+          // Some apps have "System.exit(0)" at the end.  The user thread will stop here unless
+          // it has an uncaught exception thrown out.  It needs a shutdown hook to set SUCCEEDED.
+          succeeded = true
         } finally {
-          logDebug("finishing main")
+          logDebug("Finishing main")
           isLastAMRetry = true
-          if (successed) {
+          if (succeeded) {
             ApplicationMaster.this.finishApplicationMaster(FinalApplicationStatus.SUCCEEDED)
           } else {
             ApplicationMaster.this.finishApplicationMaster(FinalApplicationStatus.FAILED)
@@ -199,11 +190,12 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         }
       }
     }
+    t.setName("Driver")
     t.start()
     t
   }
 
-  // This need to happen before allocateExecutors()
+  // This needs to happen before allocateExecutors()
   private def waitForSparkContextInitialized() {
     logInfo("Waiting for Spark context initialization")
     try {
@@ -231,7 +223,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
             sparkContext.preferredNodeLocationData,
             sparkContext.getConf)
         } else {
-          logWarning("Unable to retrieve SparkContext inspite of waiting for %d, maxNumTries = %d".
+          logWarning("Unable to retrieve SparkContext in spite of waiting for %d, maxNumTries = %d".
             format(numTries * waitTime, maxNumTries))
           this.yarnAllocator = YarnAllocationHandler.newAllocator(
             yarnConf,
@@ -242,48 +234,37 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         }
       }
     } finally {
-      // In case of exceptions, etc - ensure that count is at least ALLOCATOR_LOOP_WAIT_COUNT :
-      // so that the loop (in ApplicationMaster.sparkContextInitialized) breaks.
-      ApplicationMaster.incrementAllocatorLoop(ApplicationMaster.ALLOCATOR_LOOP_WAIT_COUNT)
+      // In case of exceptions, etc - ensure that the loop in
+      // ApplicationMaster#sparkContextInitialized() breaks.
+      ApplicationMaster.doneWithInitialAllocations()
     }
   }
 
   private def allocateExecutors() {
     try {
-      logInfo("Allocating " + args.numExecutors + " executors.")
-      // Wait until all containers have finished
+      logInfo("Requesting" + args.numExecutors + " executors.")
+      // Wait until all containers have launched
       yarnAllocator.addResourceRequests(args.numExecutors)
       yarnAllocator.allocateResources()
       // Exits the loop if the user thread exits.
+
+      var iters = 0
       while (yarnAllocator.getNumExecutorsRunning < args.numExecutors && userThread.isAlive) {
         checkNumExecutorsFailed()
         allocateMissingExecutor()
         yarnAllocator.allocateResources()
-        ApplicationMaster.incrementAllocatorLoop(1)
-        Thread.sleep(100)
+        if (iters == ApplicationMaster.ALLOCATOR_LOOP_WAIT_COUNT) {
+          ApplicationMaster.doneWithInitialAllocations()
+        }
+        Thread.sleep(ApplicationMaster.ALLOCATE_HEARTBEAT_INTERVAL)
+        iters += 1
       }
     } finally {
-      // In case of exceptions, etc - ensure that count is at least ALLOCATOR_LOOP_WAIT_COUNT,
-      // so that the loop in ApplicationMaster#sparkContextInitialized() breaks.
-      ApplicationMaster.incrementAllocatorLoop(ApplicationMaster.ALLOCATOR_LOOP_WAIT_COUNT)
+      // In case of exceptions, etc - ensure that the loop in
+      // ApplicationMaster#sparkContextInitialized() breaks.
+      ApplicationMaster.doneWithInitialAllocations()
     }
     logInfo("All executors have launched.")
-
-    // Launch a progress reporter thread, else the app will get killed after expiration
-    // (def: 10mins) timeout.
-    if (userThread.isAlive) {
-      // Ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapses.
-      val timeoutInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
-
-      // we want to be reasonably responsive without causing too many requests to RM.
-      val schedulerInterval =
-        sparkConf.getLong("spark.yarn.scheduler.heartbeat.interval-ms", 5000)
-
-      // must be <= timeoutInterval / 2.
-      val interval = math.min(timeoutInterval / 2, schedulerInterval)
-
-      launchReporterThread(interval)
-    }
   }
 
   private def allocateMissingExecutor() {
@@ -303,46 +284,34 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     }
   }
 
-  private def launchReporterThread(_sleepTime: Long): Thread = {
-    val sleepTime = if (_sleepTime <= 0) 0 else _sleepTime
+  private def launchReporterThread(): Thread = {
+    // Ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapses.
+    val expiryInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
+
+    // we want to be reasonably responsive without causing too many requests to RM.
+    val schedulerInterval =
+      sparkConf.getLong("spark.yarn.scheduler.heartbeat.interval-ms", 5000)
+
+    // must be <= timeoutInterval / 2.
+    val interval = math.max(0, math.min(expiryInterval / 2, schedulerInterval))
 
     val t = new Thread {
       override def run() {
         while (userThread.isAlive) {
           checkNumExecutorsFailed()
           allocateMissingExecutor()
-          sendProgress()
-          Thread.sleep(sleepTime)
+          logDebug("Sending progress")
+          yarnAllocator.allocateResources()
+          Thread.sleep(interval)
         }
       }
     }
     // Setting to daemon status, though this is usually not a good idea.
     t.setDaemon(true)
     t.start()
-    logInfo("Started progress reporter thread - sleep time : " + sleepTime)
+    logInfo("Started progress reporter thread - heartbeat interval : " + interval)
     t
   }
-
-  private def sendProgress() {
-    logDebug("Sending progress")
-    // Simulated with an allocate request with no nodes requested.
-    yarnAllocator.allocateResources()
-  }
-
-  /*
-  def printContainers(containers: List[Container]) = {
-    for (container <- containers) {
-      logInfo("Launching shell command on a new container."
-        + ", containerId=" + container.getId()
-        + ", containerNode=" + container.getNodeId().getHost()
-        + ":" + container.getNodeId().getPort()
-        + ", containerNodeURI=" + container.getNodeHttpAddress()
-        + ", containerState" + container.getState()
-        + ", containerResourceMemory"
-        + container.getResource().getMemory())
-    }
-  }
-  */
 
   def finishApplicationMaster(status: FinalApplicationStatus, diagnostics: String = "") {
     synchronized {
@@ -351,7 +320,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       }
       isFinished = true
 
-      logInfo("finishApplicationMaster with " + status)
+      logInfo("Unregistering ApplicationMaster with " + status)
       if (registered) {
         val trackingUrl = sparkConf.get("spark.yarn.historyServer.address", "")
         amClient.unregisterApplicationMaster(status, diagnostics, trackingUrl)
@@ -386,7 +355,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
     def run() {
       logInfo("AppMaster received a signal.")
-      // we need to clean up staging dir before HDFS is shut down
+      // We need to clean up staging dir before HDFS is shut down
       // make sure we don't delete it until this is the last AM
       if (appMaster.isLastAMRetry) appMaster.cleanupStagingDir()
     }
@@ -401,21 +370,24 @@ object ApplicationMaster {
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
   private val ALLOCATOR_LOOP_WAIT_COUNT = 30
+  private val ALLOCATE_HEARTBEAT_INTERVAL = 100
 
   private val applicationMasters = new CopyOnWriteArrayList[ApplicationMaster]()
 
   val sparkContextRef: AtomicReference[SparkContext] =
-    new AtomicReference[SparkContext](null /* initialValue */)
+    new AtomicReference[SparkContext](null)
 
-  val yarnAllocatorLoop: AtomicInteger = new AtomicInteger(0)
+  // Variable used to notify the YarnClusterScheduler that it should stop waiting
+  // for the initial set of executors to be started and get on with its business.
+  val doneWithInitialAllocationsMonitor = new Object()
 
-  def incrementAllocatorLoop(by: Int) {
-    val count = yarnAllocatorLoop.getAndAdd(by)
-    if (count >= ALLOCATOR_LOOP_WAIT_COUNT) {
-      yarnAllocatorLoop.synchronized {
-        // to wake threads off wait ...
-        yarnAllocatorLoop.notifyAll()
-      }
+  @volatile var isDoneWithInitialAllocations = false
+
+  def doneWithInitialAllocations() {
+    isDoneWithInitialAllocations = true
+    doneWithInitialAllocationsMonitor.synchronized {
+      // to wake threads off wait ...
+      doneWithInitialAllocationsMonitor.notifyAll()
     }
   }
 
@@ -423,7 +395,10 @@ object ApplicationMaster {
     applicationMasters.add(master)
   }
 
-  // TODO(harvey): See whether this should be discarded - it isn't used anywhere atm...
+  /**
+   * Called from YarnClusterScheduler to notify the AM code that a SparkContext has been
+   * initialized in the user code.
+   */
   def sparkContextInitialized(sc: SparkContext): Boolean = {
     var modified = false
     sparkContextRef.synchronized {
@@ -431,7 +406,7 @@ object ApplicationMaster {
       sparkContextRef.notifyAll()
     }
 
-    // Add a shutdown hook - as a best case effort in case users do not call sc.stop or do
+    // Add a shutdown hook - as a best effort in case users do not call sc.stop or do
     // System.exit.
     // Should not really have to do this, but it helps YARN to evict resources earlier.
     // Not to mention, prevent the Client from declaring failure even though we exited properly.
@@ -454,13 +429,29 @@ object ApplicationMaster {
       })
     }
 
-    // Wait for initialization to complete and atleast 'some' nodes can get allocated.
-    yarnAllocatorLoop.synchronized {
-      while (yarnAllocatorLoop.get() <= ALLOCATOR_LOOP_WAIT_COUNT) {
-        yarnAllocatorLoop.wait(1000L)
+    // Wait for initialization to complete and at least 'some' nodes to get allocated.
+    modified
+  }
+
+  /**
+   * Returns when we've either
+   *  1) received all the requested executors,
+   *  2) waited ALLOCATOR_LOOP_WAIT_COUNT * ALLOCATE_HEARTBEAT_INTERVAL ms,
+   *  3) hit an error that causes us to terminate trying to get containers.
+   */
+  def waitForInitialAllocations() {
+    doneWithInitialAllocationsMonitor.synchronized {
+      while (!isDoneWithInitialAllocations) {
+        doneWithInitialAllocationsMonitor.wait(1000L)
       }
     }
-    modified
+  }
+
+  def getApplicationAttemptId(): ApplicationAttemptId = {
+    val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
+    val containerId = ConverterUtils.toContainerId(containerIdString)
+    val appAttemptId = containerId.getApplicationAttemptId()
+    appAttemptId
   }
 
   def main(argStrings: Array[String]) {
