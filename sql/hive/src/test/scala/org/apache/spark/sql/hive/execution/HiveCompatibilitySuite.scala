@@ -597,6 +597,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "select_unquote_and",
     "select_unquote_not",
     "select_unquote_or",
+    "semijoin",
     "serde_regex",
     "serde_reported_schema",
     "set_variable_sub",
