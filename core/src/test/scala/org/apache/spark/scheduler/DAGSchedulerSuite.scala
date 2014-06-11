@@ -23,7 +23,7 @@ import scala.language.reflectiveCalls
 
 import akka.actor._
 import akka.testkit.{ImplicitSender, TestKit, TestActorRef}
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.{BeforeAndAfter, FunSuiteLike}
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -38,7 +38,7 @@ class BuggyDAGEventProcessActor extends Actor {
   }
 }
 
-class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuite
+class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuiteLike
   with ImplicitSender with BeforeAndAfter with LocalSparkContext {
 
   val conf = new SparkConf

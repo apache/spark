@@ -59,6 +59,10 @@ object SparkBuild extends Build {
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
+  /** Following project only exists to pull previous artifacts of Spark for generating
+    Mima ignores. For more information see: SPARK 2071 */
+  lazy val oldDeps = Project("oldDeps", file("dev"), settings = oldDepsSettings)
+
   def replDependencies = Seq[ProjectReference](core, graphx, bagel, mllib, sql) ++ maybeHiveRef
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
@@ -270,16 +274,17 @@ object SparkBuild extends Build {
     */
 
     libraryDependencies ++= Seq(
-        "io.netty"          % "netty-all"      % "4.0.17.Final",
-        "org.eclipse.jetty" % "jetty-server"   % jettyVersion,
-        "org.eclipse.jetty" % "jetty-util"     % jettyVersion,
-        "org.eclipse.jetty" % "jetty-plus"     % jettyVersion,
-        "org.eclipse.jetty" % "jetty-security" % jettyVersion,
-        "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
-        "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
-        "com.novocode"      % "junit-interface" % "0.10"   % "test",
-        "org.easymock"      % "easymock"        % "3.1"    % "test",
-        "org.mockito"       % "mockito-all"     % "1.8.5"  % "test"
+        "io.netty"          % "netty-all"              % "4.0.17.Final",
+        "org.eclipse.jetty" % "jetty-server"           % jettyVersion,
+        "org.eclipse.jetty" % "jetty-util"             % jettyVersion,
+        "org.eclipse.jetty" % "jetty-plus"             % jettyVersion,
+        "org.eclipse.jetty" % "jetty-security"         % jettyVersion,
+        "org.scalatest"    %% "scalatest"              % "2.1.5"  % "test",
+        "org.scalacheck"   %% "scalacheck"             % "1.11.3" % "test",
+        "com.novocode"      % "junit-interface"        % "0.10"   % "test",
+        "org.easymock"      % "easymockclassextension" % "3.1"    % "test",
+        "org.mockito"       % "mockito-all"            % "1.9.0"  % "test",
+        "junit"             % "junit"                  % "4.10"   % "test"
     ),
 
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
@@ -322,6 +327,7 @@ object SparkBuild extends Build {
   val excludeJruby = ExclusionRule(organization = "org.jruby")
   val excludeThrift = ExclusionRule(organization = "org.apache.thrift")
   val excludeServletApi = ExclusionRule(organization = "javax.servlet", artifact = "servlet-api")
+  val excludeJUnit = ExclusionRule(organization = "junit")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "1.0.0", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
@@ -466,7 +472,7 @@ object SparkBuild extends Build {
     previousArtifact := sparkPreviousArtifact("spark-mllib"),
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % jblasVersion,
-      "org.scalanlp" %% "breeze" % "0.7"
+      "org.scalanlp" %% "breeze" % "0.7" excludeAll(excludeJUnit)
     )
   )
 
@@ -477,7 +483,6 @@ object SparkBuild extends Build {
     // this non-deterministically.  TODO: FIX THIS.
     parallelExecution in Test := false,
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "1.9.1" % "test",
       "com.typesafe" %% "scalalogging-slf4j" % "1.0.1"
     )
   )
@@ -595,6 +600,17 @@ object SparkBuild extends Build {
       case "reference.conf"                                    => MergeStrategy.concat
       case _                                                   => MergeStrategy.first
     }
+  )
+
+  def oldDepsSettings() = Defaults.defaultSettings ++ Seq(
+    name := "old-deps",
+    scalaVersion := "2.10.4",
+    retrieveManaged := true,
+    retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
+    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq", 
+      "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
+      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx", 
+      "spark-core").map(sparkPreviousArtifact(_).get intransitive())
   )
 
   def twitterSettings() = sharedSettings ++ Seq(

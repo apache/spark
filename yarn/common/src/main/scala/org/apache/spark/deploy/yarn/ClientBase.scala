@@ -19,10 +19,10 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
-import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
+import scala.util.{Try, Success, Failure}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -36,7 +36,7 @@ import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.util.{Apps, Records}
+import org.apache.hadoop.yarn.util.Records
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
 /**
@@ -168,14 +168,13 @@ trait ClientBase extends Logging {
     destPath
   }
 
-  def qualifyForLocal(localURI: URI): Path = {
+  private def qualifyForLocal(localURI: URI): Path = {
     var qualifiedURI = localURI
-    // If not specified assume these are in the local filesystem to keep behavior like Hadoop
+    // If not specified, assume these are in the local filesystem to keep behavior like Hadoop
     if (qualifiedURI.getScheme() == null) {
       qualifiedURI = new URI(FileSystem.getLocal(conf).makeQualified(new Path(qualifiedURI)).toString)
     }
-    val qualPath = new Path(qualifiedURI)
-    qualPath
+    new Path(qualifiedURI)
   }
 
   def prepareLocalResources(appStagingDir: String): HashMap[String, LocalResource] = {
@@ -220,7 +219,7 @@ trait ClientBase extends Logging {
       }
     }
 
-    var cachedSecondaryJarLinks = ListBuffer.empty[String]
+    val cachedSecondaryJarLinks = ListBuffer.empty[String]
     val fileLists = List( (args.addJars, LocalResourceType.FILE, true),
       (args.files, LocalResourceType.FILE, false),
       (args.archives, LocalResourceType.ARCHIVE, false) )
@@ -304,13 +303,13 @@ trait ClientBase extends Logging {
 
     val amMemory = calculateAMMemory(newApp)
 
-    val JAVA_OPTS = ListBuffer[String]()
+    val javaOpts = ListBuffer[String]()
 
     // Add Xmx for AM memory
-    JAVA_OPTS += "-Xmx" + amMemory + "m"
+    javaOpts += "-Xmx" + amMemory + "m"
 
     val tmpDir = new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
-    JAVA_OPTS += "-Djava.io.tmpdir=" + tmpDir
+    javaOpts += "-Djava.io.tmpdir=" + tmpDir
 
     // TODO: Remove once cpuset version is pushed out.
     // The context is, default gc for server class machines ends up using all cores to do gc -
@@ -324,11 +323,11 @@ trait ClientBase extends Logging {
     if (useConcurrentAndIncrementalGC) {
       // In our expts, using (default) throughput collector has severe perf ramifications in
       // multi-tenant machines
-      JAVA_OPTS += "-XX:+UseConcMarkSweepGC"
-      JAVA_OPTS += "-XX:+CMSIncrementalMode"
-      JAVA_OPTS += "-XX:+CMSIncrementalPacing"
-      JAVA_OPTS += "-XX:CMSIncrementalDutyCycleMin=0"
-      JAVA_OPTS += "-XX:CMSIncrementalDutyCycle=10"
+      javaOpts += "-XX:+UseConcMarkSweepGC"
+      javaOpts += "-XX:+CMSIncrementalMode"
+      javaOpts += "-XX:+CMSIncrementalPacing"
+      javaOpts += "-XX:CMSIncrementalDutyCycleMin=0"
+      javaOpts += "-XX:CMSIncrementalDutyCycle=10"
     }
 
     // SPARK_JAVA_OPTS is deprecated, but for backwards compatibility:
@@ -343,22 +342,22 @@ trait ClientBase extends Logging {
       // If we are being launched in client mode, forward the spark-conf options
       // onto the executor launcher
       for ((k, v) <- sparkConf.getAll) {
-        JAVA_OPTS += "-D" + k + "=" + "\\\"" + v + "\\\""
+        javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
       }
     } else {
       // If we are being launched in standalone mode, capture and forward any spark
       // system properties (e.g. set by spark-class).
       for ((k, v) <- sys.props.filterKeys(_.startsWith("spark"))) {
-        JAVA_OPTS += "-D" + k + "=" + "\\\"" + v + "\\\""
+        javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
       }
-      sys.props.get("spark.driver.extraJavaOptions").foreach(opts => JAVA_OPTS += opts)
-      sys.props.get("spark.driver.libraryPath").foreach(p => JAVA_OPTS += s"-Djava.library.path=$p")
+      sys.props.get("spark.driver.extraJavaOptions").foreach(opts => javaOpts += opts)
+      sys.props.get("spark.driver.libraryPath").foreach(p => javaOpts += s"-Djava.library.path=$p")
     }
-    JAVA_OPTS += ClientBase.getLog4jConfiguration(localResources)
+    javaOpts += ClientBase.getLog4jConfiguration(localResources)
 
     // Command for the ApplicationMaster
     val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
-      JAVA_OPTS ++
+      javaOpts ++
       Seq(args.amClass, "--class", args.userClass, "--jar ", args.userJar,
         userArgsToString(args),
         "--executor-memory", args.executorMemory.toString,
@@ -378,7 +377,7 @@ trait ClientBase extends Logging {
   }
 }
 
-object ClientBase {
+object ClientBase extends Logging {
   val SPARK_JAR: String = "__spark__.jar"
   val APP_JAR: String = "__app__.jar"
   val LOG4J_PROP: String = "log4j.properties"
@@ -388,37 +387,47 @@ object ClientBase {
 
   def getSparkJar = sys.env.get("SPARK_JAR").getOrElse(SparkContext.jarOfClass(this.getClass).head)
 
-  // Based on code from org.apache.hadoop.mapreduce.v2.util.MRApps
-  def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) {
-    val classpathEntries = Option(conf.getStrings(
-      YarnConfiguration.YARN_APPLICATION_CLASSPATH)).getOrElse(
-        getDefaultYarnApplicationClasspath())
-    if (classpathEntries != null) {
-      for (c <- classpathEntries) {
-        YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
-          File.pathSeparator)
-      }
+  def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) = {
+    val classPathElementsToAdd = getYarnAppClasspath(conf) ++ getMRAppClasspath(conf)
+    for (c <- classPathElementsToAdd.flatten) {
+      YarnSparkHadoopUtil.addToEnvironment(
+        env,
+        Environment.CLASSPATH.name,
+        c.trim,
+        File.pathSeparator)
     }
-
-    val mrClasspathEntries = Option(conf.getStrings(
-      "mapreduce.application.classpath")).getOrElse(
-        getDefaultMRApplicationClasspath())
-    if (mrClasspathEntries != null) {
-      for (c <- mrClasspathEntries) {
-        YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
-          File.pathSeparator)
-      }
-    }
+    classPathElementsToAdd
   }
 
-  def getDefaultYarnApplicationClasspath(): Array[String] = {
-    try {
-      val field = classOf[MRJobConfig].getField("DEFAULT_YARN_APPLICATION_CLASSPATH")
-      field.get(null).asInstanceOf[Array[String]]
-    } catch {
-      case err: NoSuchFieldError => null
-      case err: NoSuchFieldException => null
+  private def getYarnAppClasspath(conf: Configuration): Option[Seq[String]] =
+    Option(conf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH)) match {
+      case Some(s) => Some(s.toSeq)
+      case None => getDefaultYarnApplicationClasspath
+  }
+
+  private def getMRAppClasspath(conf: Configuration): Option[Seq[String]] =
+    Option(conf.getStrings("mapreduce.application.classpath")) match {
+      case Some(s) => Some(s.toSeq)
+      case None => getDefaultMRApplicationClasspath
     }
+
+  def getDefaultYarnApplicationClasspath: Option[Seq[String]] = {
+    val triedDefault = Try[Seq[String]] {
+      val field = classOf[YarnConfiguration].getField("DEFAULT_YARN_APPLICATION_CLASSPATH")
+      val value = field.get(null).asInstanceOf[Array[String]]
+      value.toSeq
+    } recoverWith {
+      case e: NoSuchFieldException => Success(Seq.empty[String])
+    }
+
+    triedDefault match {
+      case f: Failure[_] =>
+        logError("Unable to obtain the default YARN Application classpath.", f.exception)
+      case s: Success[_] =>
+        logDebug(s"Using the default YARN application classpath: ${s.get.mkString(",")}")
+    }
+
+    triedDefault.toOption
   }
 
   /**
@@ -426,19 +435,29 @@ object ClientBase {
    * classpath.  In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
    * So we need to use reflection to retrieve it.
    */
-  def getDefaultMRApplicationClasspath(): Array[String] = {
-    try {
+  def getDefaultMRApplicationClasspath: Option[Seq[String]] = {
+    val triedDefault = Try[Seq[String]] {
       val field = classOf[MRJobConfig].getField("DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH")
-      if (field.getType == classOf[String]) {
-        StringUtils.getStrings(field.get(null).asInstanceOf[String])
+      val value = if (field.getType == classOf[String]) {
+        StringUtils.getStrings(field.get(null).asInstanceOf[String]).toArray
       } else {
         field.get(null).asInstanceOf[Array[String]]
       }
-    } catch {
-      case err: NoSuchFieldError => null
-      case err: NoSuchFieldException => null
+      value.toSeq
+    } recoverWith {
+      case e: NoSuchFieldException => Success(Seq.empty[String])
     }
+
+    triedDefault match {
+      case f: Failure[_] =>
+        logError("Unable to obtain the default MR Application classpath.", f.exception)
+      case s: Success[_] =>
+        logDebug(s"Using the default MR application classpath: ${s.get.mkString(",")}")
+    }
+
+    triedDefault.toOption
   }
+
 
   /**
    * Returns the java command line argument for setting up log4j. If there is a log4j.properties
@@ -481,12 +500,14 @@ object ClientBase {
     def addClasspathEntry(path: String) = YarnSparkHadoopUtil.addToEnvironment(env,
       Environment.CLASSPATH.name, path, File.pathSeparator)
     /** Add entry to the classpath. Interpreted as a path relative to the working directory. */
-    def addPwdClasspathEntry(entry: String) = addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + entry)
+    def addPwdClasspathEntry(entry: String) =
+      addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + entry)
 
     extraClassPath.foreach(addClasspathEntry)
 
     val cachedSecondaryJarLinks =
       sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",")
+        .filter(_.nonEmpty)
     // Normally the users app.jar is last in case conflicts with spark jars
     if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
       addPwdClasspathEntry(APP_JAR)

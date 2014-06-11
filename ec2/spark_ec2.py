@@ -200,6 +200,7 @@ def get_spark_shark_version(opts):
         sys.exit(1)
     return (version, spark_shark_map[version])
 
+
 # Attempt to resolve an appropriate AMI given the architecture and
 # region of the request.
 def get_spark_ami(opts):
@@ -230,7 +231,12 @@ def get_spark_ami(opts):
         "c3.xlarge":   "pvm",
         "c3.2xlarge":  "pvm",
         "c3.4xlarge":  "pvm",
-        "c3.8xlarge":  "pvm"
+        "c3.8xlarge":  "pvm",
+        "r3.large":    "hvm",
+        "r3.xlarge":   "hvm",
+        "r3.2xlarge":  "hvm",
+        "r3.4xlarge":  "hvm",
+        "r3.8xlarge":  "hvm"
     }
     if opts.instance_type in instance_types:
         instance_type = instance_types[opts.instance_type]
@@ -413,6 +419,16 @@ def launch_cluster(conn, opts, cluster_name):
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
+    # Give the instances descriptive names
+    for master in master_nodes:
+        master.add_tag(
+            key='Name',
+            value='spark-{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+    for slave in slave_nodes:
+        slave.add_tag(
+            key='Name',
+            value='spark-{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+
     # Return all the instances
     return (master_nodes, slave_nodes)
 
@@ -538,7 +554,12 @@ def get_num_disks(instance_type):
         "c3.xlarge":   2,
         "c3.2xlarge":  2,
         "c3.4xlarge":  2,
-        "c3.8xlarge":  2
+        "c3.8xlarge":  2,
+        "r3.large":    1,
+        "r3.xlarge":   1,
+        "r3.2xlarge":  1,
+        "r3.4xlarge":  1,
+        "r3.8xlarge":  2
     }
     if instance_type in disks_by_instance:
         return disks_by_instance[instance_type]
