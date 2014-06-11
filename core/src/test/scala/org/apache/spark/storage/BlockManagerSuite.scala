@@ -28,7 +28,7 @@ import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
-import org.scalatest.matchers.ShouldMatchers._
+import org.scalatest.Matchers
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
@@ -39,7 +39,8 @@ import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, U
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
-class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
+class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
+  with PrivateMethodTester {
   private val conf = new SparkConf(false)
   var store: BlockManager = null
   var store2: BlockManager = null

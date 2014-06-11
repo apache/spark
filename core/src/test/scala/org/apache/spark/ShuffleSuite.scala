@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
@@ -26,7 +26,7 @@ import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.MutablePair
 
-class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
+class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
 
   val conf = new SparkConf(loadDefaults = false)
 

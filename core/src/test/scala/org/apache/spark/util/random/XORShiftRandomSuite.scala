@@ -18,13 +18,13 @@
 package org.apache.spark.util.random
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.util.Utils.times
 
 import scala.language.reflectiveCalls
 
-class XORShiftRandomSuite extends FunSuite with ShouldMatchers {
+class XORShiftRandomSuite extends FunSuite with Matchers {
 
   def fixture = new {
     val seed = 1L
