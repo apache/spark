@@ -202,6 +202,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def toString = s"if ($predicate) $trueValue else $falseValue"
 }
 
+// TODO: break this down into two cases to eliminate branching during eval().
+
 /**
  * Two types of Case statements: either "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END"
  * or "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END", depending on whether `key` is defined.
@@ -212,7 +214,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
  * val for the default catch-all case (if provided). Hence, `branches` consist of at least two
  * elements, and can have an odd or even length.
  */
-case class Case(key: Option[Expression], branches: Seq[Expression]) extends Expression {
+case class CaseWhen(key: Option[Expression], branches: Seq[Expression]) extends Expression {
   def children = key.toSeq ++ branches
 
   override def nullable = branches
@@ -232,7 +234,7 @@ case class Case(key: Option[Expression], branches: Seq[Expression]) extends Expr
         case Seq(elseValue) => elseValue.dataType
       }.toSeq
     lazy val dataTypesEqual = dataTypes.drop(1).map(_ == dataTypes(0)).reduce(_ && _)
-    childrenResolved && dataTypesEqual
+    if (dataTypes.size == 1) true else childrenResolved && dataTypesEqual
   }
 
   def dataType = {
@@ -243,6 +245,8 @@ case class Case(key: Option[Expression], branches: Seq[Expression]) extends Expr
   }
 
   type EvaluatedType = Any
+
+  // TODO: change eval() to use while, etc.
 
   override def eval(input: Row): Any = {
     def slidingCheck(expectedVal: Any): Any = {

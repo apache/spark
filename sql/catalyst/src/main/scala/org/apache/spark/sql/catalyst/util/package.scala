@@ -115,7 +115,7 @@ package object util {
   }
 
   /* FIX ME
-  implicit class debugLogging(a: AnyRef) {
+  implicit class debugLogging(a: Any) {
     def debugLogging() {
       org.apache.log4j.Logger.getLogger(a.getClass.getName).setLevel(org.apache.log4j.Level.DEBUG)
     }

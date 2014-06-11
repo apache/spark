@@ -23,11 +23,33 @@ import org.apache.spark.sql.hive.test.TestHive._
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
+  // TODO: test case when (bool)
 
-  createQueryTest("case statements",
+  createQueryTest("case statements with key #1",
     "SELECT (CASE 1 WHEN 2 THEN 3 END) FROM src")
 
-//  createQueryTest("between",
+  createQueryTest("case statements with key #2",
+    "SELECT (CASE key WHEN 2 THEN 3 ELSE 0 END) FROM src")
+
+//  createQueryTest("case statements with key #3",
+//    "SELECT (CASE key WHEN 2 THEN 3 WHEN NULL THEN 4 END) FROM src")  // FIXME: add golden; this is NULL
+//
+//  createQueryTest("case statements with key #4",
+//    "SELECT (CASE key WHEN 2 THEN 3 WHEN NULL THEN 4 ELSE 0 END) FROM src")  // FIXME: add golden; this is NULL
+//
+//  createQueryTest("case statements without key #1",
+//    "SELECT (CASE WHEN key > 2 THEN 3 END) FROM src")  // FIXME: add golden; this is NULL
+//
+//  createQueryTest("case statements without key #2",
+//    "SELECT (CASE WHEN key > 2 THEN 3 ELSE 4 END) FROM src")  // FIXME: add golden; this is NULL
+//
+//  createQueryTest("case statements without key #3",
+//    "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 END) FROM src")  // FIXME: add golden; this is NULL
+//
+//  createQueryTest("case statements without key #4",
+//    "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 ELSE 0 END) FROM src")  // FIXME: add golden; this is NULL
+
+  //  createQueryTest("between",
 //    "SELECT * FROM src WHERE key Between 1 and 2")
 //
 //  createQueryTest("div",
