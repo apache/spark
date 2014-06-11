@@ -374,6 +374,9 @@ class SchemaRDD(
 
   override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
 
+  override def take(num: Int): Array[Row] =
+    new SchemaRDD(sqlContext, Limit(Literal(num), logicalPlan)).collect()
+
   // =======================================================================
   // Base RDD functions that do NOT change schema
   // =======================================================================
