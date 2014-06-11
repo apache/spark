@@ -45,7 +45,7 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
       shuffleId, reduceId, System.currentTimeMillis - startTime))
 
     val blockFetcherItr = if (statuses.exists(_._1 == null)) {
-      if (!blockManager.conf.getBoolean("spark.schedule.removeStageBarrier", false)) {
+      if (!blockManager.conf.getBoolean("spark.scheduler.removeStageBarrier", false)) {
         throw new FetchFailedException(null, shuffleId, -1, reduceId,
           new Exception("Map statuses contain null, while stage overlap is not enabled."))
       }

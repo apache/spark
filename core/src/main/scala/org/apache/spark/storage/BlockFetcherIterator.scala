@@ -390,7 +390,7 @@ object BlockFetcherIterator {
           throw new SparkException("All blocks have been delegated for reduceId " + reduceId)
         }
         logInfo("Waiting for new map outputs for reduceId " + reduceId + " ---lirui")
-        Thread.sleep(5000 + 2000 * trialCount)
+        Thread.sleep(2000 + 1000 * trialCount)
         updateStatuses()
         trialCount += 1
       }
