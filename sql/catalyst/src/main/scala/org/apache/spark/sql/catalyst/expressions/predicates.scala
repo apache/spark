@@ -214,7 +214,6 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
  * two elements, and can have an odd or even length.
  */
 case class CaseWhen(branches: Seq[Expression]) extends Expression {
-  // TODO: need to check each branch's condition has Boolean type?
   type EvaluatedType = Any
   def children = branches
   def references = children.flatMap(_.references).toSet
@@ -230,17 +229,21 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
       case Seq(elseValue) => elseValue.nullable
     }.reduce(_ || _)
 
-
   override lazy val resolved = {
+    lazy val allCondBooleans = branches.sliding(2, 2).map {
+      case Seq(cond, value) => cond.dataType == BooleanType
+      case _ => true
+    }.reduce(_ && _)
     lazy val dataTypes = branches.sliding(2, 2).map {
       case Seq(cond, value) => value.dataType
       case Seq(elseValue) => elseValue.dataType
     }.toSeq
     lazy val dataTypesEqual =
       if (dataTypes.size <= 1) true else dataTypes.drop(1).map(_ == dataTypes(0)).reduce(_ && _)
-    if (!childrenResolved) false else dataTypesEqual
+    if (!childrenResolved) false else allCondBooleans && dataTypesEqual
   }
 
+  /** Written in imperative fashion for performance considerations.  Same for CaseKeyWhen. */
   override def eval(input: Row): Any = {
     val branchesArr = branches.toArray
     val len = branchesArr.length
