@@ -56,6 +56,8 @@ class HiveUdfSuite extends HiveComparisonTest {
   TestHive.hql("CREATE TEMPORARY FUNCTION testUdf AS '%s'".format(classOf[PairUdf].getName))
 
   TestHive.hql("SELECT testUdf(pair) FROM hiveUdfTestTable")
+
+  TestHive.hql("DROP TEMPORARY FUNCTION IF EXISTS testUdf")
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
