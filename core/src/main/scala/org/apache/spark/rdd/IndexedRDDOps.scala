@@ -59,6 +59,7 @@ trait IndexedRDDOps[
    */
   def multiget(ks: Array[Id]): Map[Id, V] = {
     val ksByPartition = ks.groupBy(k => self.partitioner.get.getPartition(k))
+    val partitions = ksByPartition.keys.toSeq
     def unionMaps(maps: TraversableOnce[LongMap[V]]): LongMap[V] = {
       maps.foldLeft(LongMap.empty[V]) {
         (accum, map) => accum.unionWith(map, (id, a, b) => a)
@@ -66,13 +67,13 @@ trait IndexedRDDOps[
     }
     // TODO: avoid sending all keys to all partitions, maybe by creating and zipping an RDD of keys
     val results: Array[LongMap[V]] = self.context.runJob(self.partitionsRDD,
-      (context, partIter: Iterator[P[V]]) => {
+      (context: TaskContext, partIter: Iterator[P[V]]) => {
         val partitionResults = for {
           part <- partIter
           ksForPartition <- ksByPartition.get(context.partitionId)
         } yield part.multiget(ksForPartition)
         unionMaps(partitionResults)
-      })
+      }, partitions, allowLocal = true)
     unionMaps(results)
   }
 
