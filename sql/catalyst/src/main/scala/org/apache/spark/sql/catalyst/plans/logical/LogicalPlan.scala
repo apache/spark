@@ -97,27 +97,6 @@ abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
 }
 
 /**
- * A logical node that represents a non-query command to be executed by the system.  For example,
- * commands can be used by parsers to represent DDL operations.
- */
-abstract class Command extends LeafNode {
-  self: Product =>
-  def output = Seq.empty
-}
-
-/**
- * Returned for commands supported by a given parser, but not catalyst.  In general these are DDL
- * commands that are passed directly to another system.
- */
-case class NativeCommand(cmd: String) extends Command
-
-/**
- * Returned by a parser when the users only wants to see what query plan would be executed, without
- * actually performing the execution.
- */
-case class ExplainCommand(plan: LogicalPlan) extends Command
-
-/**
  * A logical plan node with single child.
  */
 abstract class UnaryNode extends LogicalPlan with trees.UnaryNode[LogicalPlan] {

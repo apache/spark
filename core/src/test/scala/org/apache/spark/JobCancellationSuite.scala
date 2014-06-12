@@ -25,7 +25,7 @@ import scala.concurrent.duration._
 import scala.concurrent.future
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
@@ -35,7 +35,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
  * (e.g. count) as well as multi-job action (e.g. take). We test the local and cluster schedulers
  * in both FIFO and fair scheduling modes.
  */
-class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
+class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
   with LocalSparkContext {
 
   override def afterEach() {

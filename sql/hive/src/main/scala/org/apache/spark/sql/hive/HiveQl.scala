@@ -207,17 +207,30 @@ private[hive] object HiveQl {
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {
     try {
-      if (sql.toLowerCase.startsWith("set")) {
-        NativeCommand(sql)
-      } else if (sql.toLowerCase.startsWith("add jar")) {
+      if (sql.trim.toLowerCase.startsWith("set")) {
+        // Split in two parts since we treat the part before the first "="
+        // as key, and the part after as value, which may contain other "=" signs.
+        sql.trim.drop(3).split("=", 2).map(_.trim) match {
+          case Array("") => // "set"
+            SetCommand(None, None)
+          case Array(key) => // "set key"
+            SetCommand(Some(key), None)
+          case Array(key, value) => // "set key=value"
+            SetCommand(Some(key), Some(value))
+        }
+      } else if (sql.trim.toLowerCase.startsWith("cache table")) {
+        CacheCommand(sql.drop(12).trim, true)
+      } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
+        CacheCommand(sql.drop(14).trim, false)
+      } else if (sql.trim.toLowerCase.startsWith("add jar")) {
         AddJar(sql.drop(8))
-      } else if (sql.toLowerCase.startsWith("add file")) {
+      } else if (sql.trim.toLowerCase.startsWith("add file")) {
         AddFile(sql.drop(9))
-      } else if (sql.startsWith("dfs")) {
+      } else if (sql.trim.startsWith("dfs")) {
         DfsCommand(sql)
-      } else if (sql.startsWith("source")) {
+      } else if (sql.trim.startsWith("source")) {
         SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
-      } else if (sql.startsWith("!")) {
+      } else if (sql.trim.startsWith("!")) {
         ShellCommand(sql.drop(1))
       } else {
         val tree = getAst(sql)
@@ -830,11 +843,11 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(MAX(), Nil) :: arg :: Nil) => Max(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(MIN(), Nil) :: arg :: Nil) => Min(nodeToExpr(arg))
-    
+
     /* System functions about string operations */
     case Token("TOK_FUNCTION", Token(UPPER(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(LOWER(), Nil) :: arg :: Nil) => Lower(nodeToExpr(arg))
-    
+
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), StringType)

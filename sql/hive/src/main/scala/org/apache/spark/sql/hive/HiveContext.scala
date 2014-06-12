@@ -18,11 +18,11 @@
 package org.apache.spark.sql
 package hive
 
-import scala.language.implicitConversions
-
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.util.{ArrayList => JArrayList}
 
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.hive.conf.HiveConf
@@ -30,19 +30,14 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
-import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand, ExplainCommand}
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution._
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 /**
  * Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
@@ -55,10 +50,9 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
-    // TODO: refactor this so we can work with other databases.
-    runSqlHive(
-      s"set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$metastorePath;create=true")
-    runSqlHive("set hive.metastore.warehouse.dir=" + warehousePath)
+    set("javax.jdo.option.ConnectionURL",
+      s"jdbc:derby:;databaseName=$metastorePath;create=true")
+    set("hive.metastore.warehouse.dir", warehousePath)
   }
 
   configure() // Must be called before initializing the catalog below.
@@ -129,11 +123,26 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
+  /**
+   * SQLConf and HiveConf contracts: when the hive session is first initialized, params in
+   * HiveConf will get picked up by the SQLConf.  Additionally, any properties set by
+   * set() or a SET command inside hql() or sql() will be set in the SQLConf *as well as*
+   * in the HiveConf.
+   */
   @transient protected[hive] lazy val hiveconf = new HiveConf(classOf[SessionState])
-  @transient protected[hive] lazy val sessionState = new SessionState(hiveconf)
+  @transient protected[hive] lazy val sessionState = {
+    val ss = new SessionState(hiveconf)
+    set(hiveconf.getAllProperties)  // Have SQLConf pick up the initial set of HiveConf.
+    ss
+  }
 
   sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
   sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
+
+  override def set(key: String, value: String): Unit = {
+    super.set(key, value)
+    runSqlHive(s"SET $key=$value")
+  }
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
@@ -218,6 +227,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     val hiveContext = self
 
     override val strategies: Seq[Strategy] = Seq(
+      CommandStrategy(self),
       TakeOrdered,
       ParquetOperations,
       HiveTableScans,
@@ -235,30 +245,31 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient
   override protected[sql] val planner = hivePlanner
 
-  @transient
-  protected lazy val emptyResult =
-    sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
-
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
     // TODO: Create mixin for the analyzer instead of overriding things here.
     override lazy val optimizedPlan =
       optimizer(catalog.PreInsertionCasts(catalog.CreateTables(analyzed)))
 
-    override lazy val toRdd: RDD[Row] =
-      analyzed match {
-        case NativeCommand(cmd) =>
-          val output = runSqlHive(cmd)
-
-          if (output.size == 0) {
-            emptyResult
-          } else {
-            val asRows = output.map(r => new GenericRow(r.split("\t").asInstanceOf[Array[Any]]))
-            sparkContext.parallelize(asRows, 1)
-          }
-        case _ =>
-          executedPlan.execute().map(_.copy())
+    override lazy val toRdd: RDD[Row] = {
+      def processCmd(cmd: String): RDD[Row] = {
+        val output = runSqlHive(cmd)
+        if (output.size == 0) {
+          emptyResult
+        } else {
+          val asRows = output.map(r => new GenericRow(r.split("\t").asInstanceOf[Array[Any]]))
+          sparkContext.parallelize(asRows, 1)
+        }
       }
+
+      logical match {
+        case s: SetCommand => eagerlyProcess(s)
+        case _ => analyzed match {
+          case NativeCommand(cmd) => processCmd(cmd)
+          case _ => executedPlan.execute().map(_.copy())
+        }
+      }
+    }
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
@@ -304,7 +315,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
      */
     def stringResult(): Seq[String] = analyzed match {
       case NativeCommand(cmd) => runSqlHive(cmd)
-      case ExplainCommand(plan) => new QueryExecution { val logical = plan }.toString.split("\n")
+      case ExplainCommand(plan) => executePlan(plan).toString.split("\n")
       case query =>
         val result: Seq[Seq[Any]] = toRdd.collect().toSeq
         // We need the types so we can output struct field names
@@ -317,6 +328,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override def simpleString: String =
       logical match {
         case _: NativeCommand => "<Executed by Hive>"
+        case _: SetCommand => "<Set Command: Executed by Hive, and noted by SQLContext>"
         case _ => executedPlan.toString
       }
   }
