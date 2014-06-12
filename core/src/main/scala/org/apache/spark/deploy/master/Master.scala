@@ -41,13 +41,14 @@ import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{SystemClock, Clock, AkkaUtils, Utils}
 
 private[spark] class Master(
     host: String,
     port: Int,
     webUiPort: Int,
-    val securityMgr: SecurityManager)
+    val securityMgr: SecurityManager,
+    clock: Clock = SystemClock)
   extends Actor with Logging {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
@@ -330,7 +331,7 @@ private[spark] class Master(
     case Heartbeat(workerId) => {
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
-          workerInfo.lastHeartbeat = System.currentTimeMillis()
+          workerInfo.lastHeartbeat = clock.getTime()
         case None =>
           logWarning("Got heartbeat from unregistered worker " + workerId)
       }
@@ -600,7 +601,7 @@ private[spark] class Master(
   }
 
   def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
-    val now = System.currentTimeMillis()
+    val now = clock.getTime()
     val date = new Date(now)
     new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
   }
@@ -703,7 +704,7 @@ private[spark] class Master(
   /** Check for, and remove, any timed-out workers */
   def timeOutDeadWorkers() {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
-    val currentTime = System.currentTimeMillis()
+    val currentTime = clock.getTime()
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - WORKER_TIMEOUT).toArray
     for (worker <- toRemove) {
       if (worker.state != WorkerState.DEAD) {
@@ -725,7 +726,7 @@ private[spark] class Master(
   }
 
   def createDriver(desc: DriverDescription): DriverInfo = {
-    val now = System.currentTimeMillis()
+    val now = clock.getTime()
     val date = new Date(now)
     new DriverInfo(now, newDriverId(date), desc, date)
   }
