@@ -327,7 +327,7 @@ private[spark] class BlockManager(
    */
   def getLocalFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
     diskStore.getValues(blockId, serializer).orElse {
-      throw new SparkException(s"Block $blockId not found on disk, though it should be")
+      throw new BlockException(blockId, s"Block $blockId not found on disk, though it should be")
     }
   }
 
@@ -351,7 +351,8 @@ private[spark] class BlockManager(
         case Some(bytes) =>
           Some(bytes)
         case None =>
-          throw new SparkException(s"Block $blockId not found on disk, though it should be")
+          throw new BlockException(
+            blockId, s"Block $blockId not found on disk, though it should be")
       }
     } else {
       doGetLocal(blockId, asValues = false).asInstanceOf[Option[ByteBuffer]]
@@ -412,7 +413,8 @@ private[spark] class BlockManager(
           val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
             case Some(b) => b
             case None =>
-              throw new SparkException(s"Block $blockId not found on disk, though it should be")
+              throw new BlockException(
+                blockId, s"Block $blockId not found on disk, though it should be")
           }
           assert(0 == bytes.position())
 
@@ -662,8 +664,8 @@ private[spark] class BlockManager(
             (level.replication > 1, diskStore)
           } else {
             assert(level == StorageLevel.NONE)
-            throw new SparkException(
-              s"Attempted to put block $blockId without specifying storage level!")
+            throw new BlockException(
+              blockId, s"Attempted to put block $blockId without specifying storage level!")
           }
         }
 
