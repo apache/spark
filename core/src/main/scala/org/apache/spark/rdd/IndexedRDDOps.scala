@@ -76,21 +76,23 @@ trait IndexedRDDOps[
     unionMaps(results)
   }
 
-  // /**
-  //  * Unconditionally updates the key k to have value v, returning a new IndexedRDD.
-  //  * Implemented in terms of multiput.
-  //  */
-  // def put(k: Id, v: V): IndexedRDD[V]
-
-  // /**
-  //  * Unconditionally updates keys ks to have values vs, returning a new IndexedRDD.
-  //  * Implemented by looking up the partition for each k and sending only the relevant values to each partition.
-  //  */
-  // def multiput(ks: Array[Id], vs: Array[Id]): IndexedRDD[V]
+  /**
+   * Unconditionally updates the key k to have value v, returning a new IndexedRDD.
+   * Implemented in terms of multiput.
+   */
+  def put(k: Id, v: V): Self[V] = multiput(Map(k -> v))
 
   /**
-   * Updates keys ks to have values vs, running `merge` on old and new values if necessary, and returning a new IndexedRDD.
-   * Implemented by looking up the partition for each k and sending only the relevant values to each partition.
+   * Unconditionally updates the keys in `kvs` to their corresponding values, running `merge` on old
+   * and new values if necessary.  Implemented by looking up the partition for each k and sending
+   * only the relevant values to each partition.
+   */
+  def multiput(kvs: Map[Id, V]): Self[V] = multiput(kvs, (id, a, b) => b)
+
+  /**
+   * Updates the keys in `kvs` to their corresponding values, running `merge` on old and new values
+   * if necessary.  Implemented by looking up the partition for each k and sending only the relevant
+   * values to each partition.
    */
   def multiput(kvs: Map[Id, V], merge: (Id, V, V) => V): Self[V] = {
     val updates = self.context.parallelize(kvs.toSeq).partitionBy(self.partitioner.get)

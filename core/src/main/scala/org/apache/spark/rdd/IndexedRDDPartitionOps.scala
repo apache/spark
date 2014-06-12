@@ -67,8 +67,8 @@ private[spark] trait IndexedRDDPartitionOps[
       // Pure updates can be implemented more efficiently
       join(kvs.iterator)(merge)
     } else {
-      val hashMap = new PrimitiveKeyOpenHashMap[Id, V](self.index, self.values.toArray)
-      for ((k, v) <- kvs) {
+      val hashMap = new PrimitiveKeyOpenHashMap[Id, V]
+      for ((k, v) <- self.iterator ++ kvs) {
         hashMap.setMerge(k, v, (a, b) => merge(k, a, b))
       }
       this.withIndex(hashMap.keySet).withValues(hashMap._values.toVector)

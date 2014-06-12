@@ -45,13 +45,19 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     assert(evens.get(97L) === None)
   }
 
-  test("multiput") {
+  test("put, multiput") {
     val n = 100
     val ps = pairs(sc, n).cache()
     assert(ps.multiput(Map(0L -> 1, 1L -> 1), SumFunction).collect.toSet ===
       Set(0L -> 1, 1L -> 2) ++ (2 to n).map(x => (x.toLong, x)).toSet)
     assert(ps.multiput(Map(-1L -> -1, 0L -> 1), SumFunction).collect.toSet ===
       Set(-1L -> -1, 0L -> 1) ++ (1 to n).map(x => (x.toLong, x)).toSet)
+    assert(ps.multiput(Map(-1L -> -1, 0L -> 1, 1L -> 1)).collect.toSet ===
+      Set(-1L -> -1, 0L -> 1, 1L -> 1) ++ (2 to n).map(x => (x.toLong, x)).toSet)
+    assert(ps.put(-1L, -1).collect.toSet ===
+      Set(-1L -> -1) ++ (0 to n).map(x => (x.toLong, x)).toSet)
+    assert(ps.put(0L, 1).collect.toSet ===
+      Set(0L -> 1) ++ (1 to n).map(x => (x.toLong, x)).toSet)
   }
 
   test("filter") {
