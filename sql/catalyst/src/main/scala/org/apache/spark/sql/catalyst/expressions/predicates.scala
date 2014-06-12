@@ -208,6 +208,9 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
  * Refer to this link for the corresponding semantics:
  * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
  *
+ * The other form of case statements "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END" gets
+ * translated to this form at parsing time i.e. CASE WHEN a=b THEN c ...).
+ *
  * Note that branches are considered in consecutive pairs (cond, val), and the optional last element
  * is the val for the default catch-all case (if provided). Hence, `branches` consist of at least
  * two elements, and can have an odd or even length.
@@ -269,71 +272,6 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     val firstBranch = s"if (${branches(0)} == true) { ${branches(1)} }"
     val otherBranches = branches.sliding(2, 2).drop(1).map {
       case Seq(cond, value) => s" else if ($cond == true) { $value }"
-      case Seq(elseValue) => s" else { $elseValue }"
-    }.mkString
-    firstBranch ++ otherBranches
-  }
-}
-
-/**
- * Case statements of the form "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END".  This type
- * of case statements is separated out from the other type mainly due to performance reason: this
- * approach avoids branching (based on whether or not the key is provided) in eval().
- */
-case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends Expression {
-  type EvaluatedType = Any
-  def children = key +: branches
-  def references = children.flatMap(_.references).toSet
-  def dataType = {
-    if (!resolved) {
-      throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")
-    }
-    branches(1).dataType
-  }
-
-  override def nullable = branches.sliding(2, 2).map {
-    case Seq(cond, value) => value.nullable
-    case Seq(elseValue) => elseValue.nullable
-  }.reduce(_ || _)
-
-
-  override lazy val resolved = {
-    lazy val dataTypes = branches.sliding(2, 2).map {
-      case Seq(cond, value) => value.dataType
-      case Seq(elseValue) => elseValue.dataType
-    }.toSeq
-    lazy val dataTypesEqual =
-      if (dataTypes.size <= 1) true else dataTypes.drop(1).map(_ == dataTypes(0)).reduce(_ && _)
-    if (!childrenResolved) false else dataTypesEqual
-  }
-
-  private lazy val branchesArr = branches.toArray
-
-  override def eval(input: Row): Any = {
-    val evaledKey = key.eval(input)
-    val len = branchesArr.length
-    var i = 0
-    // If all branches fail and an elseVal is not provided, the whole statement
-    // defaults to null, according to Hive's semantics.
-    var res: Any = null
-    while (i < len - 1) {
-      if (branchesArr(i).eval(input) == evaledKey) {
-        res = branchesArr(i + 1).eval(input)
-        return res
-      }
-      i += 2
-    }
-    if (i == len - 1) {
-      res = branchesArr(i).eval(input)
-    }
-    res
-  }
-
-  override def toString = {
-    val keyString = key.toString
-    val firstBranch = s"if ($keyString == ${branches(0)}) { ${branches(1)} }"
-    val otherBranches = branches.sliding(2, 2).drop(1).map {
-      case Seq(cond, value) => s" else if ($keyString == $cond) { $value }"
       case Seq(elseValue) => s" else { $elseValue }"
     }.mkString
     firstBranch ++ otherBranches

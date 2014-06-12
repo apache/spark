@@ -923,7 +923,14 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>
       CaseWhen(branches.map(nodeToExpr))
     case Token("TOK_FUNCTION", Token(CASE(), Nil) :: branches) =>
-      CaseKeyWhen(nodeToExpr(branches(0)), branches.drop(1).map(nodeToExpr))
+      val transformed = branches.drop(1).sliding(2, 2).map {
+        case Seq(condVal, value) =>
+          // FIXME?: the key will get evaluated for multiple times in CaseWhen's eval(). Optimize?
+          Seq(Equals(nodeToExpr(branches(0)), nodeToExpr(condVal)),
+              nodeToExpr(value))
+        case Seq(elseVal) => Seq(nodeToExpr(elseVal))
+      }.toSeq.reduce(_ ++ _)
+      CaseWhen(transformed)
 
     /* Complex datatype manipulation */
     case Token("[", child :: ordinal :: Nil) =>
