@@ -90,7 +90,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         new OneToOneDependency(rdd)
       } else {
         logDebug("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency[K, Any, Seq[Seq[_]]](rdd, part, serializer)
+        new ShuffleDependency[K, Any, CoGroupCombiner](rdd, part, serializer)
       }
     }
   }

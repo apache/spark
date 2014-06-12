@@ -19,7 +19,7 @@ package org.apache.spark.shuffle.hash
 
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
 import org.apache.spark.{Logging, MapOutputTracker, SparkEnv, TaskContext}
-import org.apache.spark.storage.{BlockObjectWriter, ShuffleWriterGroup}
+import org.apache.spark.storage.{BlockObjectWriter}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
@@ -33,7 +33,6 @@ class HashShuffleWriter[K, V](
   private val dep = handle.dependency
   private val numOutputSplits = dep.partitioner.numPartitions
   private val metrics = context.taskMetrics
-  private var success = false
   private var stopping = false
 
   private val blockManager = SparkEnv.get.blockManager
@@ -98,7 +97,6 @@ class HashShuffleWriter[K, V](
     shuffleMetrics.shuffleWriteTime = totalTime
     metrics.shuffleWriteMetrics = Some(shuffleMetrics)
 
-    success = true
     new MapStatus(blockManager.blockManagerId, compressedSizes)
   }
 
