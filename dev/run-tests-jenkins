@@ -24,15 +24,10 @@
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd $FWDIR
 
-# For backwards compatbility, just pass this through if we aren't on the
-# Jenkins environment.
-if [ -z "$AMPLAB_JENKINS" ]; then
-  ./dev/run-tests
-fi
-
 github_message="QA results for PR $ghprbPullId:<br>"
 
-test_result=$(./dev/run-spark-tests)
+./dev/run-tests
+test_result="$?"
 if [ "$test_result" -eq "0" ]; then
   github_message="$github_message- This patch PASSES unit tests.<br>"
 else
@@ -55,10 +50,10 @@ else
     github_message="$github_message- This patch adds no public classes<br>"
   else
     github_message="$github_message- This patch adds the following public classes (experimental):<br>"
-    github_message="<br>$github_message$new_public_classes"
+    github_message="$github_message<br>$new_public_classes"
   fi
 fi
-github_message="<br>${github_message}For more information see $BUILD_URL"
+github_message="${github_message}<br>For more information see $BUILD_URL"
 
 DEST_URL="https://api.github.com/repos/apache/spark/issues/$ghprbPullId/comments"
 
@@ -68,4 +63,6 @@ echo "$DATA"
 
 curl -D- -u x-oauth-basic:$GITHUB_OAUTH_KEY -X POST --data "$DATA" -H \
   "Content-Type: application/json" \
-  $DEST_URL
+  $DEST_URL | head -n 8
+
+exit $test_result
