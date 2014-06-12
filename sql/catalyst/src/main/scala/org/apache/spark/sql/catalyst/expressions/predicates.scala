@@ -233,17 +233,20 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     }.reduce(_ || _)
 
   override lazy val resolved = {
-    lazy val allCondBooleans = branches.sliding(2, 2).map {
-      case Seq(cond, value) => cond.dataType == BooleanType
-      case _ => true
-    }.reduce(_ && _)
-    lazy val dataTypes = branches.sliding(2, 2).map {
-      case Seq(cond, value) => value.dataType
-      case Seq(elseValue) => elseValue.dataType
-    }.toSeq
-    lazy val dataTypesEqual =
-      if (dataTypes.size <= 1) true else dataTypes.drop(1).map(_ == dataTypes(0)).reduce(_ && _)
-    if (!childrenResolved) false else allCondBooleans && dataTypesEqual
+    if (!childrenResolved) {
+      false
+    } else {
+      val allCondBooleans = branches.sliding(2, 2).map {
+        case Seq(cond, value) => cond.dataType == BooleanType
+        case _ => true
+      }.reduce(_ && _)
+      val dataTypes = branches.sliding(2, 2).map {
+        case Seq(cond, value) => value.dataType
+        case Seq(elseValue) => elseValue.dataType
+      }.toSeq
+      val dataTypesEqual = dataTypes.distinct.size <= 1
+      allCondBooleans && dataTypesEqual
+    }
   }
 
   private lazy val branchesArr = branches.toArray
