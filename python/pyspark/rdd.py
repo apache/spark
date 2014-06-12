@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from base64 import standard_b64encode as b64enc
+import copy
 from collections import defaultdict
 from collections import namedtuple
 from itertools import chain, ifilter, imap
