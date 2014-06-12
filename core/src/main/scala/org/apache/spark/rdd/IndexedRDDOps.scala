@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import scala.collection.immutable.LongMap
 import scala.language.higherKinds
 import scala.reflect.{classTag, ClassTag}
 
@@ -52,11 +53,28 @@ trait IndexedRDDOps[
   //  */
   // def get(k: Id): Option[V]
 
-  // /**
-  //  * Gets the values corresponding to keys ks. Runs at most one task per partition.
-  //  * Implemented by looking up the partition for each k and sending only the relevant keys to each partition.
-  //  */
-  // def multiget(ks: Array[Id]): Array[Option[V]]
+  /**
+   * Gets the values corresponding to keys ks. Runs at most one task per partition.
+   * Implemented by looking up the partition for each k and getting only the relevant values from each partition.
+   */
+  def multiget(ks: Array[Id]): Map[Id, V] = {
+    val ksByPartition = ks.groupBy(k => self.partitioner.get.getPartition(k))
+    def unionMaps(maps: TraversableOnce[LongMap[V]]): LongMap[V] = {
+      maps.foldLeft(LongMap.empty[V]) {
+        (accum, map) => accum.unionWith(map, (id, a, b) => a)
+      }
+    }
+    // TODO: avoid sending all keys to all partitions, maybe by creating and zipping an RDD of keys
+    val results: Array[LongMap[V]] = self.context.runJob(self.partitionsRDD,
+      (context, partIter: Iterator[P[V]]) => {
+        val partitionResults = for {
+          part <- partIter
+          ksForPartition <- ksByPartition.get(context.partitionId)
+        } yield part.multiget(ksForPartition)
+        unionMaps(partitionResults)
+      })
+    unionMaps(results)
+  }
 
   // /**
   //  * Unconditionally updates the key k to have value v, returning a new IndexedRDD.

@@ -62,6 +62,13 @@ private[spark] trait IndexedRDDPartitionBase[@specialized(Long, Int, Double) V] 
   /** Return the value for the given key. */
   def apply(k: Id): V = values(index.getPos(k))
 
+  // /** Return the value for the given key, or None if it is not defined. */
+  // def get(k: Id): Option[V] = {
+  //   val pos = index.getPos(k)
+  //   if (pos != -1 && mask.get(pos)) Some(values(pos))
+  //   else None
+  // }
+
   def isDefined(k: Id): Boolean = {
     val pos = index.getPos(k)
     pos >= 0 && mask.get(pos)

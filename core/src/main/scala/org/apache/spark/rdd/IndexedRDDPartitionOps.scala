@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import scala.collection.immutable.LongMap
 import scala.collection.immutable.Vector
 import scala.language.higherKinds
 import scala.reflect.ClassTag
@@ -40,6 +41,22 @@ private[spark] trait IndexedRDDPartitionOps[
   def withIndex(index: Index): Self[V]
   def withValues[V2: ClassTag](values: Vector[V2]): Self[V2]
   def withMask(mask: BitSet): Self[V]
+
+  /**
+   * Gets the values corresponding to keys ks.
+   */
+  def multiget(ks: Array[Id]): LongMap[V] = {
+    var result = LongMap.empty[V]
+    var i = 0
+    while (i < ks.length) {
+      val k = ks(i)
+      if (self.isDefined(k)) {
+        result = result.updated(k, self(k))
+      }
+      i += 1
+    }
+    result
+  }
 
   def map[V2: ClassTag](f: (Id, V) => V2): Self[V2] = {
     // Construct a view of the map transformation

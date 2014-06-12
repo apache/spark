@@ -17,6 +17,8 @@
 
 package org.apache.spark.rdd
 
+import scala.collection.immutable.LongMap
+
 import org.scalatest.FunSuite
 
 import org.apache.spark._
@@ -29,6 +31,13 @@ class IndexedRDDPartitionSuite extends FunSuite {
     assert(!vp.isDefined(1))
     assert(!vp.isDefined(2))
     assert(!vp.isDefined(-1))
+  }
+
+  test("multiget") {
+    val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1)))
+    assert(vp.multiget(Array(-1L, 0L, 1L, 2L)) === LongMap(0L -> 1, 1L -> 1))
+    val vpFiltered = vp.filter { (vid, attr) => vid == 0 }
+    assert(vpFiltered.multiget(Array(-1L, 0L, 1L, 2L)) === LongMap(0L -> 1))
   }
 
   test("map") {

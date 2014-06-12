@@ -17,6 +17,8 @@
 
 package org.apache.spark.rdd
 
+import scala.collection.immutable.LongMap
+
 import org.scalatest.FunSuite
 
 import org.apache.spark._
@@ -25,6 +27,14 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
 
   def pairs(sc: SparkContext, n: Int) = {
     IndexedRDD(sc.parallelize((0 to n).map(x => (x.toLong, x)), 5))
+  }
+
+  test("multiget") {
+    val n = 100
+    val ps = pairs(sc, n)
+    assert(ps.multiget(Array(-1L, 0L, 1L, 98L)) === LongMap(0L -> 0, 1L -> 1, 98L -> 98))
+    val evens = ps.filter(q => ((q._2 % 2) == 0))
+    assert(evens.multiget(Array(-1L, 0L, 1L, 98L)) === LongMap(0L -> 0, 98L -> 98))
   }
 
   test("filter") {
