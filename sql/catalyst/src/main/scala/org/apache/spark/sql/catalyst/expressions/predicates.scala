@@ -228,10 +228,10 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     branches(1).dataType
   }
 
-  private lazy val branchesArr = branches.toArray
-  @transient private lazy val predicates = branches
+  private[this] lazy val branchesArr = branches.toArray
+  @transient private[this] lazy val predicates = branches
     .sliding(2, 2).collect { case Seq(cond, _) => cond }.toSeq
-  @transient private lazy val values = branches
+  @transient private[this] lazy val values = branches
     .sliding(2, 2).collect { case Seq(_, value) => value }.toSeq
 
   override def nullable = {
