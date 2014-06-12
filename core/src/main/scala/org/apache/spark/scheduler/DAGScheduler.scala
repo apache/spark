@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import akka.actor._

@@ -18,7 +18,6 @@
 package org.apache.spark.streaming
 
 import scala.io.Source
-import scala.language.postfixOps
 
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._

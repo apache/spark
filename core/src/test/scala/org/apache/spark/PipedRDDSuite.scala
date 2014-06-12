@@ -26,7 +26,6 @@ import org.apache.hadoop.mapred.{JobConf, TextInputFormat, FileSplit}
 import org.apache.hadoop.fs.Path
 
 import scala.collection.Map
-import scala.language.postfixOps
 import scala.sys.process._
 import scala.util.Try
 
