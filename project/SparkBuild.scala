@@ -90,7 +90,16 @@ object SparkBuild extends Build {
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
     .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeHive: _*) dependsOn(maybeGanglia: _*)
 
-  lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
+  lazy val assembleDepsTask = TaskKey[Unit]("assemble-deps")
+  lazy val assembleDeps = assembleDepsTask := {
+    println()
+    println("**** NOTE ****")
+    println("'sbt/sbt assemble-deps' is no longer supported.")
+    println("Instead create a normal assembly and:")
+    println("  export SPARK_PREPEND_CLASSES=1 (toggle on)")
+    println("  unset SPARK_PREPEND_CLASSES (toggle off)")
+    println()
+  }
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -373,6 +382,7 @@ object SparkBuild extends Build {
         "net.sf.py4j"                % "py4j"             % "0.8.1"
       ),
     libraryDependencies ++= maybeAvro,
+    assembleDeps,
     previousArtifact := sparkPreviousArtifact("spark-core")
   )
 
@@ -584,9 +594,7 @@ object SparkBuild extends Build {
 
   def assemblyProjSettings = sharedSettings ++ Seq(
     name := "spark-assembly",
-    assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
-    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
-    jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" }
+    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" }
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(
