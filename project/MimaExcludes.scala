@@ -54,7 +54,18 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.storage.MemoryStore.Entry")
+              "org.apache.spark.storage.MemoryStore.Entry"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$"
+                + "createZero$1")
+          ) ++
+          Seq( // Ignore some private methods in ALS.
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateFeatures"),
+            ProblemFilters.exclude[MissingMethodProblem]( // The only public constructor is the one without arguments.
+              "org.apache.spark.mllib.recommendation.ALS.this"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$<init>$default$7")
           ) ++
           MimaBuild.excludeSparkClass("rdd.ZippedRDD") ++
           MimaBuild.excludeSparkClass("rdd.ZippedPartition") ++
