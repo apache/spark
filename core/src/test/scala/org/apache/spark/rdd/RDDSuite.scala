@@ -22,12 +22,8 @@ import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
 
-import org.apache.commons.math3.distribution.BinomialDistribution
-import org.apache.commons.math3.distribution.PoissonDistribution
-
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd._
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
