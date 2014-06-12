@@ -24,14 +24,14 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.util.{SizeEstimator, Utils}
 
+private case class Entry(value: Any, size: Long, deserialized: Boolean)
+
 /**
  * Stores blocks in memory, either as ArrayBuffers of deserialized Java objects or as
  * serialized ByteBuffers.
  */
 private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   extends BlockStore(blockManager) {
-
-  private case class Entry(value: Any, size: Long, deserialized: Boolean)
 
   private val entries = new LinkedHashMap[BlockId, Entry](32, 0.75f, true)
   @volatile private var currentMemory = 0L
