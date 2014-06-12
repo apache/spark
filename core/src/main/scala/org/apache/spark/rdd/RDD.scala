@@ -421,9 +421,7 @@ abstract class RDD[T: ClassTag](
     // this shouldn't happen often because we use a big multiplier for the initial size
     var numIters = 0
     while (samples.length < num) {
-      if (numIters > 0) {
-        logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
-      }
+      logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
       samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
       numIters += 1
     }
