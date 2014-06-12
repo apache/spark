@@ -80,7 +80,7 @@ case class ExplainCommandPhysical(
   extends UnaryNode with PhysicalCommand {
 
   // Actually "EXPLAIN" command doesn't cause any side effect.
-  override protected[sql] lazy val sideEffectResult: Seq[String] = child.toString.split("\n")
+  override protected[sql] lazy val sideEffectResult: Seq[String] = this.toString.split("\n")
 
   def execute(): RDD[Row] = {
     val explanation = sideEffectResult.mkString("\n")

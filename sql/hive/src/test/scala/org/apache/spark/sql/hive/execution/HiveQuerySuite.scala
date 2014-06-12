@@ -21,6 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical.ExplainCommand
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.execution.ExplainCommandPhysical
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -165,11 +166,16 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
     hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+
     val rdd = hql("explain select key, count(value) from src group by key")
-    assert(rdd.collect().size == 1)
-    assert(rdd.toString.contains(ExplainCommand.getClass.getSimpleName))
-    assert(rdd.filter(row => row.toString.contains("ExplainCommand")).collect().size == 0,
-      "actual contents of the result should be the plans of the query to be explained")
+    val explanation = rdd.select('plan).collect().map {
+      case Row(plan: String) => plan
+    }
+    assert(explanation.size == 1)
+
+    val explainCommandClassName = classOf[ExplainCommandPhysical].getSimpleName.stripSuffix("$")
+    assert(explanation.head.contains(explainCommandClassName))
+
     TestHive.reset()
   }
 
@@ -225,13 +231,13 @@ class HiveQuerySuite extends HiveComparisonTest {
       rowsToPairs(hql(s"SET $testKey").collect())
     }
 
-    assertResult(Array(testKey -> "<undefined>")) {
+    assertResult(Array(nonexistentKey -> "<undefined>")) {
       rowsToPairs(hql(s"SET $nonexistentKey").collect())
     }
 
     // Assert that sql() should have the same effects as hql() by repeating the above using sql().
     clear()
-    assert(sql("set").collect().size == 0)
+    assert(sql("SET").collect().size == 0)
 
     sql(s"SET $testKey=$testVal")
     assert(hiveconf.get(testKey, "") == testVal)
@@ -249,7 +255,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       rowsToPairs(sql(s"SET $testKey").collect())
     }
 
-    assertResult(Array(testKey -> "<undefined>")) {
+    assertResult(Array(nonexistentKey -> "<undefined>")) {
       rowsToPairs(sql(s"SET $nonexistentKey").collect())
     }
 
