@@ -29,12 +29,15 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     IndexedRDD(sc.parallelize((0 to n).map(x => (x.toLong, x)), 5))
   }
 
-  test("multiget") {
+  test("get, multiget") {
     val n = 100
-    val ps = pairs(sc, n)
+    val ps = pairs(sc, n).cache()
     assert(ps.multiget(Array(-1L, 0L, 1L, 98L)) === LongMap(0L -> 0, 1L -> 1, 98L -> 98))
-    val evens = ps.filter(q => ((q._2 % 2) == 0))
+    assert(ps.get(-1L) === None)
+    assert(ps.get(97L) === Some(97))
+    val evens = ps.filter(q => ((q._2 % 2) == 0)).cache()
     assert(evens.multiget(Array(-1L, 0L, 1L, 98L)) === LongMap(0L -> 0, 98L -> 98))
+    assert(evens.get(97L) === None)
   }
 
   test("filter") {

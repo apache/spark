@@ -47,15 +47,14 @@ trait IndexedRDDOps[
    */
   def reindex(): Self[V] = withPartitionsRDD(self.partitionsRDD.map(_.reindex()))
 
-  // /**
-  //  * Gets the value corresponding to key k, if any. Only runs one task.
-  //  * Implemented in terms of multiget.
-  //  */
-  // def get(k: Id): Option[V]
+  /**
+   * Gets the value corresponding to key k, if any. Only runs one task.
+   */
+  def get(k: Id): Option[V] = multiget(Array(k)).get(k)
 
   /**
-   * Gets the values corresponding to keys ks. Runs at most one task per partition.
-   * Implemented by looking up the partition for each k and getting only the relevant values from each partition.
+   * Gets the values corresponding to keys ks. Runs at most one task per partition.  Implemented by
+   * looking up the partition for each k and getting only the relevant values from each partition.
    */
   def multiget(ks: Array[Id]): Map[Id, V] = {
     val ksByPartition = ks.groupBy(k => self.partitioner.get.getPartition(k))
