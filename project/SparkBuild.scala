@@ -84,6 +84,17 @@ object SparkBuild extends Build {
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
     .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeHive: _*) dependsOn(maybeGanglia: _*)
 
+  lazy val assembleDepsTask = TaskKey[Unit]("assemble-deps")
+  lazy val assembleDeps = assembleDepsTask := {
+    println()
+    println("**** NOTE ****")
+    println("'sbt/sbt assemble-deps' is no longer supported.")
+    println("Instead create a normal assembly and:")
+    println("  export SPARK_PREPEND_CLASSES=1 (toggle on)")
+    println("  unset SPARK_PREPEND_CLASSES (toggle off)")
+    println()
+  }
+
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
@@ -360,7 +371,8 @@ object SparkBuild extends Build {
         "org.spark-project"          % "pyrolite"         % "2.0.1",
         "net.sf.py4j"                % "py4j"             % "0.8.1"
       ),
-    libraryDependencies ++= maybeAvro
+    libraryDependencies ++= maybeAvro,
+    assembleDeps
   )
 
   // Create a colon-separate package list adding "org.apache.spark" in front of all of them,
