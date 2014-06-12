@@ -57,7 +57,10 @@ abstract class Expression extends TreeNode[Expression] {
    */
   lazy val resolved: Boolean = childrenResolved
 
-  /** Generally, this is invalid to query if `resolved` is false. */
+  /**
+   * Returns the [[types.DataType DataType]] of the result of evaluating this expression.  It is
+   * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
+   */
   def dataType: DataType
 
   /**
