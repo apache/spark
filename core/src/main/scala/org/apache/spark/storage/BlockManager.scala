@@ -169,11 +169,11 @@ private[spark] class BlockManager(
    * will be made then.
    */
   private def reportAllBlocks(): Unit = {
-    logInfo("Reporting " + blockInfo.size + " blocks to the master.")
+    logInfo(s"Reporting ${blockInfo.size} blocks to the master.")
     for ((blockId, info) <- blockInfo) {
       val status = getCurrentBlockStatus(blockId, info)
       if (!tryToReportBlockStatus(blockId, info, status)) {
-        logError("Failed to report " + blockId + " to master; giving up.")
+        logError(s"Failed to report $blockId to master; giving up.")
         return
       }
     }
@@ -256,11 +256,11 @@ private[spark] class BlockManager(
       droppedMemorySize: Long = 0L): Unit = {
     val needReregister = !tryToReportBlockStatus(blockId, info, status, droppedMemorySize)
     if (needReregister) {
-      logInfo("Got told to re-register updating block " + blockId)
+      logInfo(s"Got told to re-register updating block $blockId")
       // Re-registering will report our new block for free.
       asyncReregister()
     }
-    logDebug("Told master about block " + blockId)
+    logDebug(s"Told master about block $blockId")
   }
 
   /**
@@ -316,7 +316,7 @@ private[spark] class BlockManager(
   private def getLocationBlockIds(blockIds: Array[BlockId]): Array[Seq[BlockManagerId]] = {
     val startTimeMs = System.currentTimeMillis
     val locations = master.getLocations(blockIds).toArray
-    logDebug("Got multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
+    logDebug(s"Got multiple block location in ${Utils.getUsedTimeMs(startTimeMs)}")
     locations
   }
 
@@ -326,15 +326,16 @@ private[spark] class BlockManager(
    * never deletes (recent) items.
    */
   def getLocalFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    diskStore.getValues(blockId, serializer).orElse(
-      sys.error("Block " + blockId + " not found on disk, though it should be"))
+    diskStore.getValues(blockId, serializer).orElse {
+      throw new SparkException(s"Block $blockId not found on disk, though it should be")
+    }
   }
 
   /**
    * Get block from local block manager.
    */
   def getLocal(blockId: BlockId): Option[Iterator[Any]] = {
-    logDebug("Getting local block " + blockId)
+    logDebug(s"Getting local block $blockId")
     doGetLocal(blockId, asValues = true).asInstanceOf[Option[Iterator[Any]]]
   }
 
@@ -342,7 +343,7 @@ private[spark] class BlockManager(
    * Get block from the local block manager as serialized bytes.
    */
   def getLocalBytes(blockId: BlockId): Option[ByteBuffer] = {
-    logDebug("Getting local block " + blockId + " as bytes")
+    logDebug(s"Getting local block $blockId as bytes")
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
     if (blockId.isShuffle) {
@@ -350,7 +351,7 @@ private[spark] class BlockManager(
         case Some(bytes) =>
           Some(bytes)
         case None =>
-          throw new SparkException("Block " + blockId + " not found on disk, though it should be")
+          throw new SparkException(s"Block $blockId not found on disk, though it should be")
       }
     } else {
       doGetLocal(blockId, asValues = false).asInstanceOf[Option[ByteBuffer]]
@@ -365,16 +366,16 @@ private[spark] class BlockManager(
         // If another thread is writing the block, wait for it to become ready.
         if (!info.waitForReady()) {
           // If we get here, the block write failed.
-          logWarning("Block " + blockId + " was marked as failure.")
+          logWarning(s"Block $blockId was marked as failure.")
           return None
         }
 
         val level = info.level
-        logDebug("Level for block " + blockId + " is " + level)
+        logDebug(s"Level for block $blockId is $level")
 
         // Look for the block in memory
         if (level.useMemory) {
-          logDebug("Getting block " + blockId + " from memory")
+          logDebug(s"Getting block $blockId from memory")
           val result = if (asValues) {
             memoryStore.getValues(blockId)
           } else {
@@ -384,13 +385,13 @@ private[spark] class BlockManager(
             case Some(values) =>
               return Some(values)
             case None =>
-              logDebug("Block " + blockId + " not found in memory")
+              logDebug(s"Block $blockId not found in memory")
           }
         }
 
         // Look for the block in Tachyon
         if (level.useOffHeap) {
-          logDebug("Getting block " + blockId + " from tachyon")
+          logDebug(s"Getting block $blockId from tachyon")
           if (tachyonStore.contains(blockId)) {
             tachyonStore.getBytes(blockId) match {
               case Some(bytes) =>
@@ -400,19 +401,18 @@ private[spark] class BlockManager(
                   return Some(dataDeserialize(blockId, bytes))
                 }
               case None =>
-                logDebug("Block " + blockId + " not found in tachyon")
+                logDebug(s"Block $blockId not found in tachyon")
             }
           }
         }
 
         // Look for block on disk, potentially storing it back in memory if required
         if (level.useDisk) {
-          logDebug("Getting block " + blockId + " from disk")
+          logDebug(s"Getting block $blockId from disk")
           val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
             case Some(b) => b
             case None =>
-              throw new SparkException(
-                "Block " + blockId + " not found on disk, though it should be")
+              throw new SparkException(s"Block $blockId not found on disk, though it should be")
           }
           assert(0 == bytes.position())
 
@@ -458,7 +458,7 @@ private[spark] class BlockManager(
         }
       }
     } else {
-      logDebug("Block " + blockId + " not registered locally")
+      logDebug(s"Block $blockId not registered locally")
     }
     None
   }
@@ -467,7 +467,7 @@ private[spark] class BlockManager(
    * Get block from remote block managers.
    */
   def getRemote(blockId: BlockId): Option[Iterator[Any]] = {
-    logDebug("Getting remote block " + blockId)
+    logDebug(s"Getting remote block $blockId")
     doGetRemote(blockId, asValues = true).asInstanceOf[Option[Iterator[Any]]]
   }
 
@@ -475,7 +475,7 @@ private[spark] class BlockManager(
    * Get block from remote block managers as serialized bytes.
    */
   def getRemoteBytes(blockId: BlockId): Option[ByteBuffer] = {
-    logDebug("Getting remote block " + blockId + " as bytes")
+    logDebug(s"Getting remote block $blockId as bytes")
     doGetRemote(blockId, asValues = false).asInstanceOf[Option[ByteBuffer]]
   }
 
@@ -483,7 +483,7 @@ private[spark] class BlockManager(
     require(blockId != null, "BlockId is null")
     val locations = Random.shuffle(master.getLocations(blockId))
     for (loc <- locations) {
-      logDebug("Getting remote block " + blockId + " from " + loc)
+      logDebug(s"Getting remote block $blockId from $loc")
       val data = BlockManagerWorker.syncGetBlock(
         GetBlock(blockId), ConnectionManagerId(loc.host, loc.port))
       if (data != null) {
@@ -493,9 +493,9 @@ private[spark] class BlockManager(
           return Some(data)
         }
       }
-      logDebug("The value of block " + blockId + " is null")
+      logDebug(s"The value of block $blockId is null")
     }
-    logDebug("Block " + blockId + " not found")
+    logDebug(s"Block $blockId not found")
     None
   }
 
@@ -505,12 +505,12 @@ private[spark] class BlockManager(
   def get(blockId: BlockId): Option[Iterator[Any]] = {
     val local = getLocal(blockId)
     if (local.isDefined) {
-      logInfo("Found block %s locally".format(blockId))
+      logInfo(s"Found block $blockId locally")
       return local
     }
     val remote = getRemote(blockId)
     if (remote.isDefined) {
-      logInfo("Found block %s remotely".format(blockId))
+      logInfo(s"Found block $blockId remotely")
       return remote
     }
     None
@@ -606,7 +606,7 @@ private[spark] class BlockManager(
       val oldBlockOpt = blockInfo.putIfAbsent(blockId, tinfo)
       if (oldBlockOpt.isDefined) {
         if (oldBlockOpt.get.waitForReady()) {
-          logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
+          logWarning(s"Block $blockId already exists on this machine; not re-adding it")
           return updatedBlocks
         }
         // TODO: So the block info exists - but previous attempt to load it (?) failed.
@@ -642,8 +642,8 @@ private[spark] class BlockManager(
     }
 
     putBlockInfo.synchronized {
-      logTrace("Put for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
-        + " to get into synchronized block")
+      logTrace(s"Putting block $blockId took ${Utils.getUsedTimeMs(startTimeMs)} " +
+        "to get into synchronized block")
 
       var marked = false
       try {
@@ -711,11 +711,11 @@ private[spark] class BlockManager(
           // could've inserted a new BlockInfo before we remove it.
           blockInfo.remove(blockId)
           putBlockInfo.markFailure()
-          logWarning("Putting block " + blockId + " failed")
+          logWarning(s"Putting block $blockId failed")
         }
       }
     }
-    logDebug("Put block " + blockId + " locally took " + Utils.getUsedTimeMs(startTimeMs))
+    logDebug(s"Put block $blockId locally took ${Utils.getUsedTimeMs(startTimeMs)}")
 
     // Either we're storing bytes and we asynchronously started replication, or we're storing
     // values and need to serialize and replicate them now:
@@ -736,18 +736,16 @@ private[spark] class BlockManager(
             bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
           }
           replicate(blockId, bytesAfterPut, level)
-          logDebug("Put block " + blockId + " remotely took " +
-            Utils.getUsedTimeMs(remoteStartTime))
+          logDebug(s"Put block $blockId remotely took ${Utils.getUsedTimeMs(remoteStartTime)}")
       }
     }
 
     BlockManager.dispose(bytesAfterPut)
 
     if (level.replication > 1) {
-      logDebug("Put for block " + blockId + " with replication took " +
-        Utils.getUsedTimeMs(startTimeMs))
+      logDebug(s"Putting block $blockId with replication took ${Utils.getUsedTimeMs(startTimeMs)}")
     } else {
-      logDebug("Put for block " + blockId + " without replication took " +
+      logDebug(s"Putting block $blockId without replication took " +
         Utils.getUsedTimeMs(startTimeMs))
     }
 
@@ -767,17 +765,16 @@ private[spark] class BlockManager(
     for (peer: BlockManagerId <- cachedPeers) {
       val start = System.nanoTime
       data.rewind()
-      logDebug("Try to replicate BlockId " + blockId + " once; The size of the data is "
-        + data.limit() + " Bytes. To node: " + peer)
+      logDebug(s"Try to replicate $blockId once; The size of the data is ${data.limit()} Bytes. " +
+        s"To node: $peer")
       val syncPutBlockSuccess = BlockManagerWorker.syncPutBlock(
         PutBlock(blockId, data, tLevel),
         new ConnectionManagerId(peer.host, peer.port))
       if (!syncPutBlockSuccess) {
-        logError("Failed to call syncPutBlock to " + peer)
+        logError(s"Failed to call syncPutBlock to $peer")
       }
-      logDebug("Replicated BlockId " + blockId + " once used " +
-        (System.nanoTime - start) / 1e6 + " s; The size of the data is " +
-        data.limit() + " bytes.")
+      logDebug(s"Replicating BlockId $blockId once used ${(System.nanoTime - start) / 1e6}s; " +
+        s"The size of the data is ${data.limit()} bytes.")
     }
   }
 
@@ -809,7 +806,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       data: Either[ArrayBuffer[Any], ByteBuffer]): Option[BlockStatus] = {
 
-    logInfo("Dropping block " + blockId + " from memory")
+    logInfo(s"Dropping block $blockId from memory")
     val info = blockInfo.get(blockId).orNull
 
     // If the block has not already been dropped
@@ -819,7 +816,7 @@ private[spark] class BlockManager(
         // But in case this changes in future, adding for consistency sake.
         if (!info.waitForReady()) {
           // If we get here, the block write failed.
-          logWarning("Block " + blockId + " was marked as failure. Nothing to drop")
+          logWarning(s"Block $blockId was marked as failure. Nothing to drop")
           return None
         }
 
@@ -828,7 +825,7 @@ private[spark] class BlockManager(
 
         // Drop to disk, if storage level requires
         if (level.useDisk && !diskStore.contains(blockId)) {
-          logInfo("Writing block " + blockId + " to disk")
+          logInfo(s"Writing block $blockId to disk")
           data match {
             case Left(elements) =>
               diskStore.putValues(blockId, elements, level, returnValues = false)
@@ -845,7 +842,7 @@ private[spark] class BlockManager(
         if (blockIsRemoved) {
           blockIsUpdated = true
         } else {
-          logWarning("Block " + blockId + " could not be dropped from memory as it does not exist")
+          logWarning(s"Block $blockId could not be dropped from memory as it does not exist")
         }
 
         val status = getCurrentBlockStatus(blockId, info)
@@ -870,7 +867,7 @@ private[spark] class BlockManager(
    */
   def removeRdd(rddId: Int): Int = {
     // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
-    logInfo("Removing RDD " + rddId)
+    logInfo(s"Removing RDD $rddId")
     val blocksToRemove = blockInfo.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
@@ -880,7 +877,7 @@ private[spark] class BlockManager(
    * Remove all blocks belonging to the given broadcast.
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
-    logInfo("Removing broadcast " + broadcastId)
+    logInfo(s"Removing broadcast $broadcastId")
     val blocksToRemove = blockInfo.keys.collect {
       case bid @ BroadcastBlockId(`broadcastId`, _) => bid
     }
@@ -892,7 +889,7 @@ private[spark] class BlockManager(
    * Remove a block from both memory and disk.
    */
   def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
-    logInfo("Removing block " + blockId)
+    logInfo(s"Removing block $blockId")
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
@@ -901,7 +898,7 @@ private[spark] class BlockManager(
         val removedFromDisk = diskStore.remove(blockId)
         val removedFromTachyon = if (tachyonInitialized) tachyonStore.remove(blockId) else false
         if (!removedFromMemory && !removedFromDisk && !removedFromTachyon) {
-          logWarning("Block " + blockId + " could not be removed as it was not found in either " +
+          logWarning(s"Block $blockId could not be removed as it was not found in either " +
             "the disk, memory, or tachyon store")
         }
         blockInfo.remove(blockId)
@@ -912,17 +909,17 @@ private[spark] class BlockManager(
       }
     } else {
       // The block has already been removed; do nothing.
-      logWarning("Asked to remove block " + blockId + ", which does not exist")
+      logWarning(s"Asked to remove block $blockId, which does not exist")
     }
   }
 
   private def dropOldNonBroadcastBlocks(cleanupTime: Long): Unit = {
-    logInfo("Dropping non broadcast blocks older than " + cleanupTime)
+    logInfo(s"Dropping non broadcast blocks older than $cleanupTime")
     dropOldBlocks(cleanupTime, !_.isBroadcast)
   }
 
   private def dropOldBroadcastBlocks(cleanupTime: Long): Unit = {
-    logInfo("Dropping broadcast blocks older than " + cleanupTime)
+    logInfo(s"Dropping broadcast blocks older than $cleanupTime")
     dropOldBlocks(cleanupTime, _.isBroadcast)
   }
 
@@ -938,7 +935,7 @@ private[spark] class BlockManager(
           if (level.useDisk) { diskStore.remove(id) }
           if (level.useOffHeap) { tachyonStore.remove(id) }
           iterator.remove()
-          logInfo("Dropped block " + id)
+          logInfo(s"Dropped block $id")
         }
         val status = getCurrentBlockStatus(id, info)
         reportBlockStatus(id, info, status)
@@ -1065,7 +1062,7 @@ private[spark] object BlockManager extends Logging {
    */
   def dispose(buffer: ByteBuffer): Unit = {
     if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
-      logTrace("Unmapping " + buffer)
+      logTrace(s"Unmapping $buffer")
       if (buffer.asInstanceOf[DirectBuffer].cleaner() != null) {
         buffer.asInstanceOf[DirectBuffer].cleaner().clean()
       }
