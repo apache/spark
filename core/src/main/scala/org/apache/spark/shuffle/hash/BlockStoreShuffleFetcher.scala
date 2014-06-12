@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.shuffle.hash
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
@@ -24,17 +24,16 @@ import org.apache.spark.executor.ShuffleReadMetrics
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.CompletionIterator
+import org.apache.spark._
 
-private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
-
-  override def fetch[T](
+private[hash] object BlockStoreShuffleFetcher extends Logging {
+  def fetch[T](
       shuffleId: Int,
       reduceId: Int,
       context: TaskContext,
       serializer: Serializer)
     : Iterator[T] =
   {
-
     logDebug("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
     val blockManager = SparkEnv.get.blockManager
 
