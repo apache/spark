@@ -366,35 +366,37 @@ class RDD(object):
         [4, 2, 1, 8, 2, 7, 0, 4, 1, 4]
         """
 
-        #TODO remove
-        logging.basicConfig(level=logging.INFO)
         numStDev = 10.0
         initialCount = self.count()
 
         if num < 0:
             raise ValueError
 
-        if initialCount == 0:
+        if initialCount == 0 or num == 0:
             return list()
 
-        if (not withReplacement) and num > initialCount:
-            raise ValueError
-
-        maxSampleSize = sys.maxint  - int(numStDev * sqrt(sys.maxint))
-        if num > maxSampleSize:
-            raise ValueError
-
-        fraction = self._computeFractionForSampleSize(num, initialCount, withReplacement)
-        
-        samples = self.sample(withReplacement, fraction, seed).collect()
-
-        # If the first sample didn't turn out large enough, keep trying to take samples;
-        # this shouldn't happen often because we use a big multiplier for their initial size.
-        # See: scala/spark/RDD.scala
         rand = Random(seed)
-        while len(samples) < num:
-            #TODO add log warning for when more than one iteration was run
-            samples = self.sample(withReplacement, fraction, rand.randint(0, sys.maxint)).collect()
+        if (not withReplacement) and num > initialCount:
+            # shuffle current RDD and return
+            samples = self.collect()
+            fraction = float(num) / initialCount
+            num = initialCount
+        else:
+            maxSampleSize = sys.maxint  - int(numStDev * sqrt(sys.maxint))
+            if num > maxSampleSize:
+                raise ValueError
+
+            fraction = self._computeFractionForSampleSize(num, initialCount, withReplacement)
+
+            samples = self.sample(withReplacement, fraction, seed).collect()
+
+            # If the first sample didn't turn out large enough, keep trying to take samples;
+            # this shouldn't happen often because we use a big multiplier for their initial size.
+            # See: scala/spark/RDD.scala
+            while len(samples) < num:
+                #TODO add log warning for when more than one iteration was run
+                seed = rand.randint(0, sys.maxint)
+                samples = self.sample(withReplacement, fraction, seed).collect()
 
         sampler = RDDSampler(withReplacement, fraction, rand.randint(0, sys.maxint))
         sampler.shuffle(samples)

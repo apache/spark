@@ -396,13 +396,8 @@ abstract class RDD[T: ClassTag](
       throw new IllegalArgumentException("Negative number of elements requested")
     }
 
-    if (initialCount == 0) {
+    if (initialCount == 0 || num == 0) {
       return new Array[T](0)
-    }
-
-    if (!withReplacement && num > initialCount) {
-      throw new IllegalArgumentException("Cannot create sample larger than the original when " +
-        "sampling without replacement")
     }
 
     val maxSampleSize = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
@@ -411,10 +406,14 @@ abstract class RDD[T: ClassTag](
         s"$numStDev * math.sqrt(Int.MaxValue)")
     }
 
+    val rand = new Random(seed)
+    if (!withReplacement && num > initialCount) {
+      return Utils.randomizeInPlace(this.collect(), rand)
+    }
+
     val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
       withReplacement)
 
-    val rand = new Random(seed)
     var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
 
     // If the first sample didn't turn out large enough, keep trying to take samples;
