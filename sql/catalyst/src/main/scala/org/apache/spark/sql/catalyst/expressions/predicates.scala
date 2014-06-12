@@ -243,9 +243,10 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     if (!childrenResolved) false else allCondBooleans && dataTypesEqual
   }
 
+  private lazy val branchesArr = branches.toArray
+
   /** Written in imperative fashion for performance considerations.  Same for CaseKeyWhen. */
   override def eval(input: Row): Any = {
-    val branchesArr = branches.toArray
     val len = branchesArr.length
     var i = 0
     // If all branches fail and an elseVal is not provided, the whole statement
@@ -306,9 +307,10 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends Expre
     if (!childrenResolved) false else dataTypesEqual
   }
 
+  private lazy val branchesArr = branches.toArray
+
   override def eval(input: Row): Any = {
     val evaledKey = key.eval(input)
-    val branchesArr = branches.toArray
     val len = branchesArr.length
     var i = 0
     // If all branches fail and an elseVal is not provided, the whole statement
