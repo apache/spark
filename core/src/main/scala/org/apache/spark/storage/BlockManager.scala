@@ -316,7 +316,7 @@ private[spark] class BlockManager(
   private def getLocationBlockIds(blockIds: Array[BlockId]): Array[Seq[BlockManagerId]] = {
     val startTimeMs = System.currentTimeMillis
     val locations = master.getLocations(blockIds).toArray
-    logDebug(s"Got multiple block location in ${Utils.getUsedTimeMs(startTimeMs)}")
+    logDebug("Got multiple block location in %s".format(Utils.getUsedTimeMs(startTimeMs)))
     locations
   }
 
@@ -642,8 +642,8 @@ private[spark] class BlockManager(
     }
 
     putBlockInfo.synchronized {
-      logTrace(s"Putting block $blockId took ${Utils.getUsedTimeMs(startTimeMs)} " +
-        "to get into synchronized block")
+      logTrace("Put for block %s took %s to get into synchronized block"
+        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
       var marked = false
       try {
@@ -715,7 +715,7 @@ private[spark] class BlockManager(
         }
       }
     }
-    logDebug(s"Put block $blockId locally took ${Utils.getUsedTimeMs(startTimeMs)}")
+    logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
     // Either we're storing bytes and we asynchronously started replication, or we're storing
     // values and need to serialize and replicate them now:
@@ -736,17 +736,19 @@ private[spark] class BlockManager(
             bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
           }
           replicate(blockId, bytesAfterPut, level)
-          logDebug(s"Put block $blockId remotely took ${Utils.getUsedTimeMs(remoteStartTime)}")
+          logDebug("Put block %s remotely took %s"
+            .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
       }
     }
 
     BlockManager.dispose(bytesAfterPut)
 
     if (level.replication > 1) {
-      logDebug(s"Putting block $blockId with replication took ${Utils.getUsedTimeMs(startTimeMs)}")
+      logDebug("Putting block %s with replication took %s"
+        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     } else {
-      logDebug(s"Putting block $blockId without replication took " +
-        Utils.getUsedTimeMs(startTimeMs))
+      logDebug("Putting block %s without replication took %s"
+        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     }
 
     updatedBlocks
@@ -773,8 +775,8 @@ private[spark] class BlockManager(
       if (!syncPutBlockSuccess) {
         logError(s"Failed to call syncPutBlock to $peer")
       }
-      logDebug(s"Replicating BlockId $blockId once used ${(System.nanoTime - start) / 1e6}s; " +
-        s"The size of the data is ${data.limit()} bytes.")
+      logDebug("Replicating BlockId %s once used %fs; The size of the data is %d bytes."
+        .format(blockId, (System.nanoTime - start) / 1e6, data.limit()))
     }
   }
 

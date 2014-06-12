@@ -79,8 +79,8 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     val length = file.length
 
     val timeTaken = System.currentTimeMillis - startTime
-    logDebug(s"Block ${file.getName} stored as a ${Utils.bytesToString(length)} " +
-      s"file on disk in $timeTaken ms")
+    logDebug("Block %s stored as %s file on disk in %d ms".format(
+      file.getName, Utils.bytesToString(length), timeTaken))
 
     if (returnValues) {
       // Return a byte buffer for the contents of the file

@@ -78,8 +78,8 @@ private class TachyonStore(
     os.write(byteBuffer.array())
     os.close()
     val finishTime = System.currentTimeMillis
-    logDebug(s"Block $blockId stored as ${Utils.bytesToString(byteBuffer.limit)} " +
-      s"file in Tachyon in ${finishTime - startTime} ms")
+    logDebug("Block %s stored as %s file in Tachyon in %d ms".format(
+      blockId, Utils.bytesToString(byteBuffer.limit), finishTime - startTime))
 
     if (returnValues) {
       PutResult(bytes.limit(), Right(bytes.duplicate()))
