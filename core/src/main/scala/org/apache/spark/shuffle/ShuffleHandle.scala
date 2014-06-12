@@ -15,22 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.shuffle
 
-import org.apache.spark.serializer.Serializer
-
-private[spark] abstract class ShuffleFetcher {
-
-  /**
-   * Fetch the shuffle outputs for a given ShuffleDependency.
-   * @return An iterator over the elements of the fetched shuffle outputs.
-   */
-  def fetch[T](
-      shuffleId: Int,
-      reduceId: Int,
-      context: TaskContext,
-      serializer: Serializer = SparkEnv.get.serializer): Iterator[T]
-
-  /** Stop the fetcher */
-  def stop() {}
-}
+/**
+ * An opaque handle to a shuffle, used by a ShuffleManager to pass information about it to tasks.
+ *
+ * @param shuffleId ID of the shuffle
+ */
+private[spark] abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}
