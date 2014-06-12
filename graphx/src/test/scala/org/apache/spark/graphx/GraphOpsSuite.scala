@@ -25,21 +25,6 @@ import org.scalatest.FunSuite
 
 class GraphOpsSuite extends FunSuite with LocalSparkContext {
 
-  test("joinVertices") {
-    withSpark { sc =>
-      val vertices =
-        sc.parallelize(Seq[(VertexId, String)]((1, "one"), (2, "two"), (3, "three")), 2)
-      val edges = sc.parallelize((Seq(Edge(1, 2, "onetwo"))))
-      val g: Graph[String, String] = Graph(vertices, edges)
-
-      val tbl = sc.parallelize(Seq[(VertexId, Int)]((1, 10), (2, 20)))
-      val g1 = g.joinVertices(tbl) { (vid: VertexId, attr: String, u: Int) => attr + u }
-
-      val v = g1.vertices.collect().toSet
-      assert(v === Set((1, "one10"), (2, "two20"), (3, "three")))
-    }
-  }
-
   test("collectNeighborIds") {
     withSpark { sc =>
       val graph = getCycleGraph(sc, 100)

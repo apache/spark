@@ -323,6 +323,21 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
     : VertexRDD[A]
 
   /**
+   * Joins the vertices with an RDD and then applies a function from the the vertex and RDD entry to
+   * a new vertex value. The RDD should contain at most one entry for each vertex. If no entry is
+   * provided, the merge function is skipped and the old value is used.
+   *
+   * @tparam U the type of entry in `other`
+   * @param other the entries to join with the vertices in the graph. There should be at most one
+   *              entry for each vertex.
+   * @param mergeF the function used to compute the new vertex values. The merge function is invoked
+   *               only for vertices with a corresponding entry in `other`, otherwise the old
+   *               vertex value is used.
+   */
+  def joinVertices[U: ClassTag](other: RDD[(VertexId, U)])(mergeF: (VertexId, VD, U) => VD)
+    : Graph[VD, ED]
+
+  /**
    * Joins the vertices with entries in the `table` RDD and merges the results using `mapFunc`.  The
    * input table should contain at most one entry for each vertex.  If no entry in `other` is
    * provided for a particular vertex in the graph, the map function receives `None`.

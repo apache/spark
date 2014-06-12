@@ -75,6 +75,21 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("join") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n).cache()
+      val evens = verts.filter(q => ((q._2 % 2) == 0)).cache()
+      // join with another VertexRDD
+      assert(verts.join(evens) { (id, a, b) => a - b }.collect.toSet ===
+        (0 to n by 2).map(x => (x.toLong, 0)).toSet ++ (1 to n by 2).map(x => (x.toLong, x)).toSet)
+      // join with an RDD
+      val evensRDD = evens.map(identity)
+      assert(verts.join(evensRDD) { (id, a, b) => a - b }.collect.toSet ===
+        (0 to n by 2).map(x => (x.toLong, 0)).toSet ++ (1 to n by 2).map(x => (x.toLong, x)).toSet)
+    }
+  }
+
   test("innerJoin") {
     withSpark { sc =>
       val n = 100

@@ -230,6 +230,14 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     vertices.aggregateUsingIndex(preAgg, reduceFunc)
   } // end of mapReduceTriplets
 
+  def joinVertices[U: ClassTag](other: RDD[(VertexId, U)])(mergeF: (VertexId, VD, U) => VD)
+    : Graph[VD, ED] = {
+    val newVerts = vertices.join(other)(mergeF).cache()
+    val changedVerts = vertices.diff(newVerts)
+    val newReplicatedVertexView = replicatedVertexView.updateVertices(changedVerts)
+    new GraphImpl(newVerts, newReplicatedVertexView)
+  }
+
   override def outerJoinVertices[U: ClassTag, VD2: ClassTag]
       (other: RDD[(VertexId, U)])
       (updateF: (VertexId, VD, Option[U]) => VD2): Graph[VD2, ED] = {

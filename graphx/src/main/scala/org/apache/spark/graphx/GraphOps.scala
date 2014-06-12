@@ -179,44 +179,6 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
-   * Join the vertices with an RDD and then apply a function from the
-   * the vertex and RDD entry to a new vertex value.  The input table
-   * should contain at most one entry for each vertex.  If no entry is
-   * provided the map function is skipped and the old value is used.
-   *
-   * @tparam U the type of entry in the table of updates
-   * @param table the table to join with the vertices in the graph.
-   * The table should contain at most one entry for each vertex.
-   * @param mapFunc the function used to compute the new vertex
-   * values.  The map function is invoked only for vertices with a
-   * corresponding entry in the table otherwise the old vertex value
-   * is used.
-   *
-   * @example This function is used to update the vertices with new
-   * values based on external data.  For example we could add the out
-   * degree to each vertex record
-   *
-   * {{{
-   * val rawGraph: Graph[Int, Int] = GraphLoader.edgeListFile(sc, "webgraph")
-   *   .mapVertices(v => 0)
-   * val outDeg: RDD[(Int, Int)] = rawGraph.outDegrees
-   * val graph = rawGraph.leftJoinVertices[Int,Int](outDeg,
-   *   (v, deg) => deg )
-   * }}}
-   *
-   */
-  def joinVertices[U: ClassTag](table: RDD[(VertexId, U)])(mapFunc: (VertexId, VD, U) => VD)
-    : Graph[VD, ED] = {
-    val uf = (id: VertexId, data: VD, o: Option[U]) => {
-      o match {
-        case Some(u) => mapFunc(id, data, u)
-        case None => data
-      }
-    }
-    graph.outerJoinVertices(table)(uf)
-  }
-
-  /**
    * Filter the graph by computing some values to filter on, and applying the predicates.
    *
    * @param preprocess a function to compute new vertex and edge data before filtering
