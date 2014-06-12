@@ -351,7 +351,7 @@ private[spark] class BlockManager(
         case Some(bytes) =>
           Some(bytes)
         case None =>
-          throw new Exception("Block " + blockId + " not found on disk, though it should be")
+          throw new SparkException("Block " + blockId + " not found on disk, though it should be")
       }
     } else {
       doGetLocal(blockId, asValues = false).asInstanceOf[Option[ByteBuffer]]
@@ -412,7 +412,8 @@ private[spark] class BlockManager(
           val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
             case Some(b) => b
             case None =>
-              throw new Exception("Block " + blockId + " not found on disk, though it should be")
+              throw new SparkException(
+                "Block " + blockId + " not found on disk, though it should be")
           }
           assert(0 == bytes.position())
 
@@ -448,7 +449,7 @@ private[spark] class BlockManager(
                     case Left(values2) =>
                       return Some(values2)
                     case _ =>
-                      throw new Exception("Memory store did not return back an iterator")
+                      throw new SparkException("Memory store did not return back an iterator")
                   }
               } else {
                 return Some(values)

@@ -102,7 +102,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
                   values.asInstanceOf[Iterator[T]]
                 case None =>
                   logInfo("Failure to store %s".format(key))
-                  throw new Exception("Block manager failed to return persisted value")
+                  throw new SparkException("Block manager failed to return persisted value")
               }
             } else {
               // In this case the RDD is cached to an array buffer. This will save the results
