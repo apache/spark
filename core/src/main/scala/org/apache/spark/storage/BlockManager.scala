@@ -647,27 +647,24 @@ private[spark] class BlockManager(
 
       var marked = false
       try {
-        // Whether to return the values put
-        var returnValues: Boolean = false
-        // The type of storage to put these values into
-        var blockStore: BlockStore = null
-
-        if (level.useMemory) {
-          // Put it in memory first, even if it also has useDisk set to true;
-          // We will drop it to disk later if the memory store can't hold it.
-          returnValues = true
-          blockStore = memoryStore
-        } else if (level.useOffHeap) {
-          returnValues = false
-          blockStore = tachyonStore
-        } else if (level.useDisk) {
-          // Don't get back the bytes unless we replicate them
-          returnValues = level.replication > 1
-          blockStore = diskStore
-        } else {
-          assert(level == StorageLevel.NONE)
-          throw new SparkException(
-            s"Attempted to put block $blockId without specifying storage level!")
+        // returnValues - Whether to return the values put
+        // blockStore - The type of storage to put these values into
+        val (returnValues, blockStore: BlockStore) = {
+          if (level.useMemory) {
+            // Put it in memory first, even if it also has useDisk set to true;
+            // We will drop it to disk later if the memory store can't hold it.
+            (true, memoryStore)
+          } else if (level.useOffHeap) {
+            // Use tachyon for off-heap storage
+            (false, tachyonStore)
+          } else if (level.useDisk) {
+            // Don't get back the bytes from put unless we replicate them
+            (level.replication > 1, diskStore)
+          } else {
+            assert(level == StorageLevel.NONE)
+            throw new SparkException(
+              s"Attempted to put block $blockId without specifying storage level!")
+          }
         }
 
         // Actually put the values
@@ -769,9 +766,9 @@ private[spark] class BlockManager(
       data.rewind()
       logDebug(s"Try to replicate $blockId once; The size of the data is ${data.limit()} Bytes. " +
         s"To node: $peer")
-      val syncPutBlockSuccess = BlockManagerWorker.syncPutBlock(
-        PutBlock(blockId, data, tLevel),
-        new ConnectionManagerId(peer.host, peer.port))
+      val putBlock = PutBlock(blockId, data, tLevel)
+      val cmId = new ConnectionManagerId(peer.host, peer.port)
+      val syncPutBlockSuccess = BlockManagerWorker.syncPutBlock(putBlock, cmId)
       if (!syncPutBlockSuccess) {
         logError(s"Failed to call syncPutBlock to $peer")
       }
