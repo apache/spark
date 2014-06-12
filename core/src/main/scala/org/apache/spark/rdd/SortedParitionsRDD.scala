@@ -52,14 +52,34 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
   }
   
   private def doSort() : Iterator[T] = {
-    val chunkList = new ArrayBuffer[Iterator[T]]()
-    chunkList += nextChunk
+    val subLists = new ArrayBuffer[Iterator[T]]()
+
+    // keep the first sub list in memory
+    subLists += nextSubList
+
     while (iter.hasNext) {
-      chunkList += nextChunk
+      // spill remaining sub lists to disk
+      var diskBuffer = new DiskBuffer[T]()
+      diskBuffer ++= nextSubList
+      subLists += diskBuffer.iterator
     }
-    merge(chunkList)
+
+    merge(subLists)
+  }
+
+  private def nextSubList() : Iterator[T] = {
+    var subList = new ArrayBuffer[T](10000)
+    while (fitsInMemory(subList) && iter.hasNext) {
+      subList += iter.next
+    }
+    return subList.sortWith(lt).iterator
   }
   
+  private def fitsInMemory(list : ArrayBuffer[T]) : Boolean = {
+    // TODO: use SizeEstimator
+    list.size < 100
+  }
+
   private def merge(list : ArrayBuffer[Iterator[T]]) : Iterator[T] = {
     if (list.size == 1) {
       return list(0)
@@ -68,14 +88,14 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
       return doMerge(list(0), list(1))
     }
     val mid = list.size >> 1
-    // sort right first since it's in memory
-    val right = merge(list.slice(mid, list.size))
     val left = merge(list.slice(0, mid))
+    val right = merge(list.slice(mid, list.size))
     doMerge(left, right)
   }
 
   private def doMerge(it1 : Iterator[T], it2 : Iterator[T]) : Iterator[T] = {
     var array = new DiskBuffer[T]()
+// for testing...
 //    var array = new ArrayBuffer[T]()
     if (!it1.hasNext) {
       array ++= it2
@@ -109,15 +129,6 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
       }
     }
     array.iterator
-  }
-
-  private def nextChunk() : Iterator[T] = {
-    var array = new ArrayBuffer[T](10000)
-    // TODO: use SizeEstimator
-    while (array.size < 1000 && iter.hasNext) {
-      array += iter.next
-    }
-    return array.sortWith(lt).iterator
   }
 }
 
