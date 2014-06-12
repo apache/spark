@@ -192,7 +192,8 @@ class HiveQuerySuite extends HiveComparisonTest {
     assert(actual === expected)
   }
 
-  // TODO: at what point in the whole pipeline should we throw an exception for this case?
+  // TODO: adopt this test when Spark SQL has the functionality / framework to report errors.
+  // See https://github.com/apache/spark/pull/1055#issuecomment-45820167 for a discussion.
   ignore("non-boolean conditions in a CaseWhen are illegal") {
     intercept[Exception] {
       hql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
