@@ -57,6 +57,9 @@ private[spark] class Worker(
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
 
+  conf.set("spark.app.name", "Worker")
+  conf.set("spark.app.uniqueName", Utils.generateUniqueName(conf.get("spark.app.name")))
+
   def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
 
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds

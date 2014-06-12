@@ -1306,4 +1306,9 @@ private[spark] object Utils extends Logging {
     s"$className: $desc\n$st"
   }
 
+  /** Generate an unique name from the input string by appending an unique identifier. */
+  def generateUniqueName(name: String): String = {
+    name + "-" + SystemClock.getTime()
+  }
+
 }

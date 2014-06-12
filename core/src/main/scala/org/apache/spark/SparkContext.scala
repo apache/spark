@@ -185,6 +185,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
+  val appUniqueName = Utils.generateUniqueName(appName.replaceAll("[ :/]", "-").toLowerCase)
+  conf.set("spark.app.uniqueName", appUniqueName)
 
   // Generate the random name for a temp folder in Tachyon
   // Add a timestamp as the suffix here to make it more safe
@@ -247,7 +249,7 @@ class SparkContext(config: SparkConf) extends Logging {
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
     if (conf.getBoolean("spark.eventLog.enabled", false)) {
-      val logger = new EventLoggingListener(appName, conf, hadoopConfiguration)
+      val logger = new EventLoggingListener(appUniqueName, conf, hadoopConfiguration)
       logger.start()
       listenerBus.addListener(logger)
       Some(logger)

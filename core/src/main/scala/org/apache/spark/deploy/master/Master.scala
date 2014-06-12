@@ -54,6 +54,8 @@ private[spark] class Master(
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
   val conf = new SparkConf
+  conf.set("spark.app.name", "Master")
+  conf.set("spark.app.uniqueName", Utils.generateUniqueName(conf.get("spark.app.name")))
 
   def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000

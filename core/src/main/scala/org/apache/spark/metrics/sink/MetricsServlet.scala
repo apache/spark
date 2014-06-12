@@ -27,11 +27,11 @@ import com.codahale.metrics.json.MetricsModule
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.SecurityManager
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.ui.JettyUtils._
 
 private[spark] class MetricsServlet(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
+    securityMgr: SecurityManager, conf: SparkConf) extends Sink {
   val SERVLET_KEY_PATH = "path"
   val SERVLET_KEY_SAMPLE = "sample"
 

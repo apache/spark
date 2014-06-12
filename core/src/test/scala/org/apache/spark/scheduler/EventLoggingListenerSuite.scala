@@ -166,7 +166,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
     // Verify logging directory exists
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val eventLogger = new EventLoggingListener(Utils.generateUniqueName("test"), conf)
     eventLogger.start()
     val logPath = new Path(eventLogger.logDir)
     assert(fileSystem.exists(logPath))
@@ -206,7 +206,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
 
     // Verify that all information is correctly parsed before stop()
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val eventLogger = new EventLoggingListener(Utils.generateUniqueName("test"), conf)
     eventLogger.start()
     var eventLoggingInfo = EventLoggingListener.parseLoggingInfo(eventLogger.logDir, fileSystem)
     assertInfoCorrect(eventLoggingInfo, loggerStopped = false)
@@ -225,7 +225,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter {
    */
   private def testEventLogging(compressionCodec: Option[String] = None) {
     val conf = getLoggingConf(logDirPath, compressionCodec)
-    val eventLogger = new EventLoggingListener("test", conf)
+    val eventLogger = new EventLoggingListener(Utils.generateUniqueName("test"), conf)
     val listenerBus = new LiveListenerBus
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", 125L, "Mickey")
     val applicationEnd = SparkListenerApplicationEnd(1000L)
