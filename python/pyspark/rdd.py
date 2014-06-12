@@ -695,7 +695,7 @@ class RDD(object):
 
     def min(self):
         """
-        Find the maximum item in this RDD.
+        Find the minimum item in this RDD.
 
         >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).min()
         1.0
