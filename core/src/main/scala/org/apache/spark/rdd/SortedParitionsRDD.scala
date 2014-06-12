@@ -19,8 +19,11 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 import scala.collection.mutable.ArrayBuffer
+import java.io.{InputStream, BufferedInputStream, FileInputStream, File, Serializable, EOFException}
 
 import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManager}
 
 private[spark] class SortedPartitionsRDD[T: ClassTag](
@@ -37,7 +40,7 @@ private[spark] class SortedPartitionsRDD[T: ClassTag](
   }
 }
 
-private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean) extends Iterator[T] {  
+private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean) extends Iterator[T] {    
   private val sorted = doSort()
   
   def hasNext : Boolean = {
@@ -72,8 +75,8 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
   }
 
   private def doMerge(it1 : Iterator[T], it2 : Iterator[T]) : Iterator[T] = {
-    // TODO: write to disk block
-    var array = new ArrayBuffer[T](100)
+    var array = new DiskBuffer[T]()
+//    var array = new ArrayBuffer[T]()
     if (!it1.hasNext) {
       array ++= it2
       return array.iterator
@@ -111,9 +114,75 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
   private def nextChunk() : Iterator[T] = {
     var array = new ArrayBuffer[T](10000)
     // TODO: use SizeEstimator
-    while (array.size < 100 && iter.hasNext) {
+    while (array.size < 1000 && iter.hasNext) {
       array += iter.next
     }
     return array.sortWith(lt).iterator
+  }
+}
+
+private class DiskBuffer[T] {
+  private val serializer = SparkEnv.get.serializer
+  private val blockManager = SparkEnv.get.blockManager
+  private val diskBlockManager = blockManager.diskBlockManager
+  private val sparkConf = SparkEnv.get.conf
+  private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
+
+  val (blockId, file) = diskBlockManager.createTempBlock()
+  var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)
+
+  def +=(elem: T): DiskBuffer.this.type = {
+    writer.write(elem)
+    this
+  }
+
+  def ++=(xs: TraversableOnce[T]): DiskBuffer.this.type = {
+    xs.foreach(writer.write(_))
+    this
+  }
+
+  def iterator : Iterator[T] = {
+    writer.close
+    val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
+    new DiskBufferIterator(file, blockId, serializer, fileBufferSize)
+  }
+}
+
+private class DiskBufferIterator[T](file: File, blockId: BlockId, serializer: Serializer, fileBufferSize : Int) extends Iterator[T] {
+  private val fileStream = new FileInputStream(file)
+  private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
+  private var compressedStream = SparkEnv.get.blockManager.wrapForCompression(blockId, bufferedStream)
+  private var deserializeStream = serializer.newInstance.deserializeStream(compressedStream)
+  private var nextItem : T = null.asInstanceOf[T]
+  
+  def hasNext : Boolean = {
+    if (nextItem == null) {
+      nextItem = doNext()
+    }
+    nextItem != null
+  }
+  
+  def next() : T = {
+    val item = if (nextItem == null) doNext else nextItem
+    if (item == null) {
+      throw new NoSuchElementException
+    }
+    nextItem = null.asInstanceOf[T]
+    item
+  }
+
+  private def doNext() : T = {
+    try {
+      deserializeStream.readObject().asInstanceOf[T]
+    } catch {
+      case e: EOFException =>
+        cleanup
+        null.asInstanceOf[T]
+    }
+  }
+
+  private def cleanup() = {
+    deserializeStream.close()
+    file.delete()
   }
 }
