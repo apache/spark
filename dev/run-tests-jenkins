@@ -39,13 +39,14 @@ if [ "$sha1" == "$ghprbActualCommit" ]; then
 else
   github_message="$github_message- This patch merges cleanly<br>"
   non_test_files=$(git diff master --name-only | grep -v "\/test" | tr "\n" " ")
-  new_public_classes=$(git diff $MASTER $non_test_files \
+  new_public_classes=$(git diff master $non_test_files \
     | grep -e "trait " -e "class " \
     | grep "{"  \
     | grep -v -e \@\@ -e private \
     | grep \+ \
     | sed "s/\+ *//" \
-    | sed "s/$/<br>/")
+    | tr "\n" "~" \
+    | sed "s/~/<br>/g")
   if [ "$new_public_classes" == "" ]; then
     github_message="$github_message- This patch adds no public classes<br>"
   else
@@ -54,7 +55,7 @@ else
   fi
 fi
 github_message="${github_message}<br>For more information see test ouptut:"
-github_message="${github_message}<br>${BUILD_URL}/consoleFull"
+github_message="${github_message}<br>${BUILD_URL}consoleFull"
 
 DEST_URL="https://api.github.com/repos/apache/spark/issues/$ghprbPullId/comments"
 
