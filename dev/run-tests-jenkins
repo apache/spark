@@ -53,7 +53,8 @@ else
     github_message="$github_message<br>$new_public_classes"
   fi
 fi
-github_message="${github_message}<br>For more information see $BUILD_URL"
+github_message="${github_message}<br>For more information see test ouptut:"
+github_message="${github_message}<br>${BUILD_URL}/consoleFull"
 
 DEST_URL="https://api.github.com/repos/apache/spark/issues/$ghprbPullId/comments"
 
