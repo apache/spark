@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.util.{SizeEstimator, Utils}
 
-private case class Entry(value: Any, size: Long, deserialized: Boolean)
+private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
 
 /**
  * Stores blocks in memory, either as ArrayBuffers of deserialized Java objects or as
@@ -33,7 +33,7 @@ private case class Entry(value: Any, size: Long, deserialized: Boolean)
 private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   extends BlockStore(blockManager) {
 
-  private val entries = new LinkedHashMap[BlockId, Entry](32, 0.75f, true)
+  private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
   @volatile private var currentMemory = 0L
   // Object used to ensure that only one thread is putting blocks and if necessary, dropping
   // blocks from the memory store.
@@ -180,7 +180,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       droppedBlocks ++= freeSpaceResult.droppedBlocks
 
       if (enoughFreeSpace) {
-        val entry = new Entry(value, size, deserialized)
+        val entry = new MemoryEntry(value, size, deserialized)
         entries.synchronized {
           entries.put(blockId, entry)
           currentMemory += size
