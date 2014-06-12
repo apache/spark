@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.util.control.Breaks._
-
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.BooleanType
@@ -254,14 +252,14 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     // defaults to null, according to Hive's semantics.
     var res: Any = null
     while (i < len - 1) {
-      if (branches(i).eval(input) == true) {
-        res = branches(i + 1).eval(input)
+      if (branchesArr(i).eval(input) == true) {
+        res = branchesArr(i + 1).eval(input)
         return res
       }
       i += 2
     }
     if (i == len - 1) {
-      res = branches(i).eval(input)
+      res = branchesArr(i).eval(input)
     }
     res
   }
@@ -317,14 +315,14 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends Expre
     // defaults to null, according to Hive's semantics.
     var res: Any = null
     while (i < len - 1) {
-      if (branches(i).eval(input) == evaledKey) {
-        res = branches(i + 1).eval(input)
+      if (branchesArr(i).eval(input) == evaledKey) {
+        res = branchesArr(i + 1).eval(input)
         return res
       }
       i += 2
     }
     if (i == len - 1) {
-      res = branches(i).eval(input)
+      res = branchesArr(i).eval(input)
     }
     res
   }
