@@ -20,6 +20,7 @@ package org.apache.spark.util.collection
 import java.io.{InputStream, BufferedInputStream, FileInputStream, File, Serializable, EOFException}
 import java.util.Comparator
 
+import scala.collection.BufferedIterator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -231,7 +232,7 @@ class ExternalAppendOnlyMap[K, V, C](
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
     private val sortedMap = currentMap.destructiveSortedIterator(comparator)
-    private val inputStreams = Seq(sortedMap) ++ spilledMaps
+    private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>
       val kcPairs = getMorePairs(it)
@@ -246,13 +247,13 @@ class ExternalAppendOnlyMap[K, V, C](
      * In the event of key hash collisions, this ensures no pairs are hidden from being merged.
      * Assume the given iterator is in sorted order.
      */
-    private def getMorePairs(it: Iterator[(K, C)]): ArrayBuffer[(K, C)] = {
+    private def getMorePairs(it: BufferedIterator[(K, C)]): ArrayBuffer[(K, C)] = {
       val kcPairs = new ArrayBuffer[(K, C)]
       if (it.hasNext) {
         var kc = it.next()
         kcPairs += kc
         val minHash = kc._1.hashCode()
-        while (it.hasNext && kc._1.hashCode() == minHash) {
+        while (it.hasNext && it.head._1.hashCode() == minHash) {
           kc = it.next()
           kcPairs += kc
         }
@@ -325,7 +326,8 @@ class ExternalAppendOnlyMap[K, V, C](
      *
      * StreamBuffers are ordered by the minimum key hash found across all of their own pairs.
      */
-    private case class StreamBuffer(iterator: Iterator[(K, C)], pairs: ArrayBuffer[(K, C)])
+    private class StreamBuffer(
+        val iterator: BufferedIterator[(K, C)], val pairs: ArrayBuffer[(K, C)])
       extends Comparable[StreamBuffer] {
 
       def isEmpty = pairs.length == 0

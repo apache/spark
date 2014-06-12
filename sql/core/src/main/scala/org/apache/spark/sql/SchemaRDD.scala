@@ -59,7 +59,7 @@ import java.util.{Map => JMap}
  *  // Importing the SQL context gives access to all the SQL functions and implicit conversions.
  *  import sqlContext._
  *
- *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_\$i")))
+ *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
  *  // Any RDD containing case classes can be registered as a table.  The schema of the table is
  *  // automatically inferred using scala reflection.
  *  rdd.registerAsTable("records")
@@ -178,14 +178,18 @@ class SchemaRDD(
   def orderBy(sortExprs: SortOrder*): SchemaRDD =
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
 
+  @deprecated("use limit with integer argument", "1.1.0")
+  def limit(limitExpr: Expression): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+
   /**
-   * Limits the results by the given expressions.
+   * Limits the results by the given integer.
    * {{{
    *   schemaRDD.limit(10)
    * }}}
    */
-  def limit(limitExpr: Expression): SchemaRDD =
-    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+  def limit(limitNum: Int): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(Literal(limitNum), logicalPlan))
 
   /**
    * Performs a grouping followed by an aggregation.
@@ -202,6 +206,20 @@ class SchemaRDD(
       case e => Alias(e, e.toString)()
     }
     new SchemaRDD(sqlContext, Aggregate(groupingExprs, aliasedExprs, logicalPlan))
+  }
+
+  /**
+   * Performs an aggregation over all Rows in this RDD.
+   * This is equivalent to a groupBy with no grouping expressions.
+   *
+   * {{{
+   *   schemaRDD.aggregate(Sum('sales) as 'totalSales)
+   * }}}
+   *
+   * @group Query
+   */
+  def aggregate(aggregateExprs: Expression*): SchemaRDD = {
+    groupBy()(aggregateExprs: _*)
   }
 
   /**
@@ -281,7 +299,7 @@ class SchemaRDD(
    * supports features such as filter pushdown.
    */
   @Experimental
-  override def count(): Long = groupBy()(Count(Literal(1))).collect().head.getLong(0)
+  override def count(): Long = aggregate(Count(Literal(1))).collect().head.getLong(0)
 
   /**
    * :: Experimental ::
@@ -353,6 +371,14 @@ class SchemaRDD(
   private def applySchema(rdd: RDD[Row]): SchemaRDD = {
     new SchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(logicalPlan.output, rdd)))
   }
+
+  // =======================================================================
+  // Overriden RDD actions
+  // =======================================================================
+
+  override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
+
+  override def take(num: Int): Array[Row] = limit(num).collect()
 
   // =======================================================================
   // Base RDD functions that do NOT change schema

@@ -23,7 +23,7 @@ import scala.language.reflectiveCalls
 
 import akka.actor._
 import akka.testkit.{ImplicitSender, TestKit, TestActorRef}
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.{BeforeAndAfter, FunSuiteLike}
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -37,7 +37,7 @@ class BuggyDAGEventProcessActor extends Actor {
   }
 }
 
-class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuite
+class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuiteLike
   with ImplicitSender with BeforeAndAfter with LocalSparkContext {
 
   val conf = new SparkConf
@@ -253,6 +253,20 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     val jobId = scheduler.nextJobId.getAndIncrement()
     runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, null, jobListener))
     assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
+  }
+
+  test("local job oom") {
+    val rdd = new MyRDD(sc, Nil) {
+      override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
+        throw new java.lang.OutOfMemoryError("test local job oom")
+      override def getPartitions = Array( new Partition { override def index = 0 } )
+      override def getPreferredLocations(split: Partition) = Nil
+      override def toString = "DAGSchedulerSuite Local RDD"
+    }
+    val jobId = scheduler.nextJobId.getAndIncrement()
+    runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, null, jobListener))
+    assert(results.size == 0)
     assertDataStructuresEmpty
   }
 

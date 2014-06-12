@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
     while tempDist > convergeDist:
         closest = data.map(
-            lambda p : (closestPoint(p, kPoints), (p, 1)))
+            lambda p: (closestPoint(p, kPoints), (p, 1)))
         pointStats = closest.reduceByKey(
             lambda (x1, y1), (x2, y2): (x1 + x2, y1 + y2))
         newPoints = pointStats.map(

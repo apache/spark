@@ -235,7 +235,7 @@ private[spark] class Worker(
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
             self, workerId, host,
             appDesc.sparkHome.map(userSparkHome => new File(userSparkHome)).getOrElse(sparkHome),
-            workDir, akkaUrl, ExecutorState.RUNNING)
+            workDir, akkaUrl, conf, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -317,10 +317,14 @@ private[spark] class Worker(
       state match {
         case DriverState.ERROR =>
           logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+        case DriverState.FAILED =>
+          logWarning(s"Driver $driverId exited with failure")
         case DriverState.FINISHED =>
           logInfo(s"Driver $driverId exited successfully")
         case DriverState.KILLED =>
           logInfo(s"Driver $driverId was killed by user")
+        case _ =>
+          logDebug(s"Driver $driverId changed state to $state")
       }
       masterLock.synchronized {
         master ! DriverStateChanged(driverId, state, exception)

@@ -108,6 +108,28 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): JavaRDD[T] =
     wrapRDD(rdd.sample(withReplacement, fraction, seed))
 
+
+  /**
+   * Randomly splits this RDD with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1
+   *
+   * @return split RDDs in an array
+   */
+  def randomSplit(weights: Array[Double]): Array[JavaRDD[T]] =
+    randomSplit(weights, Utils.random.nextLong)
+
+  /**
+   * Randomly splits this RDD with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1
+   * @param seed random seed
+   *
+   * @return split RDDs in an array
+   */
+  def randomSplit(weights: Array[Double], seed: Long): Array[JavaRDD[T]] =
+    rdd.randomSplit(weights, seed).map(wrapRDD)
+
   /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
