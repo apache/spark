@@ -389,6 +389,7 @@ class RDD(object):
         # See: scala/spark/RDD.scala
         rand = Random(seed)
         while len(samples) < num:
+            #TODO add log warning for when more than one iteration was run
             samples = self.sample(withReplacement, fraction, rand.randint(0, sys.maxint)).collect()
 
         sampler = RDDSampler(withReplacement, fraction, rand.randint(0, sys.maxint))
