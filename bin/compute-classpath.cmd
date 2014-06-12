@@ -38,7 +38,7 @@ if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
 rem Build up classpath
 set CLASSPATH=%FWDIR%conf
 
-if "x%SPARK_CONF_DIR%"=="x" (
+if "x%SPARK_CONF_DIR%"!="x" (
   rem If SPARK_CONF_DIR is defined give it preference over default conf in spark home
 
   set CLASSPATH=%SPARK_CONF_DIR%;%CLASSPATH%
