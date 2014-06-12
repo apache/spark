@@ -59,6 +59,10 @@ import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerTy
  *   this config overrides the default configs as well as system properties.
  */
 
+class PublicClass {}
+class AnotherPublicClass {}
+private[spark] class PrivateClass{}
+
 class SparkContext(config: SparkConf) extends Logging {
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
