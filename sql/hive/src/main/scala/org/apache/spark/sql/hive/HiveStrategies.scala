@@ -79,7 +79,7 @@ private[hive] trait HiveStrategies {
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.NativeCommand(sql) =>
-        NativeCommandPhysical(sql, plan.output)(context) :: Nil
+        NativeCommand(sql, plan.output)(context) :: Nil
       case _ => Nil
     }
   }

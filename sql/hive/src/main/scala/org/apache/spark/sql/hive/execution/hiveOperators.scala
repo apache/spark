@@ -434,10 +434,10 @@ case class InsertIntoHiveTable(
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class NativeCommandPhysical(
+case class NativeCommand(
     sql: String, output: Seq[Attribute])(
     @transient context: HiveContext)
-  extends LeafNode with PhysicalCommand {
+  extends LeafNode with Command {
 
   override protected[sql] lazy val sideEffectResult: Seq[String] = context.runSqlHive(sql)
 

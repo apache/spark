@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.plans.logical.ExplainCommand
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.execution.ExplainCommandPhysical
+import org.apache.spark.sql.{execution, Row}
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -173,7 +171,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
     assert(explanation.size == 1)
 
-    val explainCommandClassName = classOf[ExplainCommandPhysical].getSimpleName.stripSuffix("$")
+    val explainCommandClassName = classOf[execution.ExplainCommand].getSimpleName.stripSuffix("$")
     assert(explanation.head.contains(explainCommandClassName))
 
     TestHive.reset()

@@ -22,15 +22,15 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
 
-trait PhysicalCommand {
+trait Command {
   /**
    * A concrete command should override this lazy field to wrap up any side effects caused by the
    * command or any other computation that should be evaluated exactly once. The value of this field
    * can be used as the contents of the corresponding RDD generated from the physical plan of this
    * command.
    *
-   * The `execute()` method of all the physical command classes should reference `sideEffect` so
-   * that the command can be executed eagerly right after the command query is created.
+   * The `execute()` method of all the physical command classes should reference `sideEffectResult`
+   * so that the command can be executed eagerly right after the command query is created.
    */
   protected[sql] lazy val sideEffectResult: Seq[Any] = Seq.empty[Any]
 }
@@ -39,10 +39,10 @@ trait PhysicalCommand {
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class SetCommandPhysical(
+case class SetCommand(
     key: Option[String], value: Option[String], output: Seq[Attribute])(
     @transient context: SQLContext)
-  extends LeafNode with PhysicalCommand {
+  extends LeafNode with Command {
 
   override protected[sql] lazy val sideEffectResult: Seq[(String, String)] = (key, value) match {
     // Set value for key k.
@@ -74,10 +74,10 @@ case class SetCommandPhysical(
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class ExplainCommandPhysical(
+case class ExplainCommand(
     child: SparkPlan, output: Seq[Attribute])(
     @transient context: SQLContext)
-  extends UnaryNode with PhysicalCommand {
+  extends UnaryNode with Command {
 
   // Actually "EXPLAIN" command doesn't cause any side effect.
   override protected[sql] lazy val sideEffectResult: Seq[String] = this.toString.split("\n")
@@ -94,8 +94,8 @@ case class ExplainCommandPhysical(
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class CacheCommandPhysical(tableName: String, doCache: Boolean)(@transient context: SQLContext)
-  extends LeafNode with PhysicalCommand {
+case class CacheCommand(tableName: String, doCache: Boolean)(@transient context: SQLContext)
+  extends LeafNode with Command {
 
   override protected[sql] lazy val sideEffectResult = {
     if (doCache) {
