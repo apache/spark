@@ -40,6 +40,15 @@ class IndexedRDDPartitionSuite extends FunSuite {
     assert(vpFiltered.multiget(Array(-1L, 0L, 1L, 2L)) === LongMap(0L -> 1))
   }
 
+  test("multiput") {
+    val vp = IndexedRDDPartition(Iterator((0L, 0), (1L, 1), (2L, 2)))
+    def sum(id: IndexedRDD.Id, a: Int, b: Int) = a + b
+    assert(vp.multiput(Seq(0L -> 1, 1L -> 1), sum).iterator.toSet ===
+      Set(0L -> 1, 1L -> 2, 2L -> 2))
+    assert(vp.multiput(Seq(0L -> 1, 100L -> 1), sum).iterator.toSet ===
+      Set(0L -> 1, 1L -> 1, 2L -> 2, 100L -> 1))
+  }
+
   test("map") {
     val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1))).map { (vid, attr) => 2 }
     assert(vp(0) === 2)

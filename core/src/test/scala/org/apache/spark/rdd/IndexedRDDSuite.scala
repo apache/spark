@@ -23,6 +23,11 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 
+// Declared outside of test suite to avoid closure capture
+object SumFunction extends Function3[IndexedRDD.Id, Int, Int, Int] with Serializable {
+  def apply(id: Long, a: Int, b: Int) = a + b
+}
+
 class IndexedRDDSuite extends FunSuite with SharedSparkContext {
 
   def pairs(sc: SparkContext, n: Int) = {
@@ -38,6 +43,15 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     val evens = ps.filter(q => ((q._2 % 2) == 0)).cache()
     assert(evens.multiget(Array(-1L, 0L, 1L, 98L)) === LongMap(0L -> 0, 98L -> 98))
     assert(evens.get(97L) === None)
+  }
+
+  test("multiput") {
+    val n = 100
+    val ps = pairs(sc, n).cache()
+    assert(ps.multiput(Map(0L -> 1, 1L -> 1), SumFunction).collect.toSet ===
+      Set(0L -> 1, 1L -> 2) ++ (2 to n).map(x => (x.toLong, x)).toSet)
+    assert(ps.multiput(Map(-1L -> -1, 0L -> 1), SumFunction).collect.toSet ===
+      Set(-1L -> -1, 0L -> 1) ++ (1 to n).map(x => (x.toLong, x)).toSet)
   }
 
   test("filter") {

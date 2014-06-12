@@ -58,6 +58,24 @@ private[spark] trait IndexedRDDPartitionOps[
     result
   }
 
+  /**
+   * Updates keys ks to have values vs, running `merge` on old and new values if necessary.
+   */
+  def multiput(kvs: Seq[(Id, V)], merge: (Id, V, V) => V): Self[V] = {
+    // TODO: switch to purely functional index to avoid a full reindex on insertions
+    if (kvs.forall(kv => self.isDefined(kv._1))) {
+      // Pure updates can be implemented more efficiently
+      join(kvs.iterator)(merge)
+    } else {
+      val hashMap = new PrimitiveKeyOpenHashMap[Id, V](self.index, self.values.toArray)
+      for ((k, v) <- kvs) {
+        hashMap.setMerge(k, v, (a, b) => merge(k, a, b))
+      }
+      this.withIndex(hashMap.keySet).withValues(hashMap._values.toVector)
+        .withMask(hashMap.keySet.getBitSet)
+    }
+  }
+
   def map[V2: ClassTag](f: (Id, V) => V2): Self[V2] = {
     // Construct a view of the map transformation
     val newValues = new Array[V2](self.capacity)
@@ -163,7 +181,14 @@ private[spark] trait IndexedRDDPartitionOps[
   def join[U: ClassTag]
       (other: Iterator[(Id, U)])
       (f: (Id, V, U) => V): Self[V] = {
-    join(createUsingIndex(other))(f)
+    var newValues = self.values
+    other.foreach { kv =>
+      val id = kv._1
+      val otherValue = kv._2
+      val i = self.index.getPos(kv._1)
+      newValues = newValues.updated(i, f(id, self.values(i), otherValue))
+    }
+    this.withValues(newValues)
   }
 
   /** Inner join another IndexedRDDPartition. */
@@ -234,15 +259,15 @@ private[spark] trait IndexedRDDPartitionOps[
     val newMask = new BitSet(self.capacity)
     val newValues = new Array[V2](self.capacity)
     iter.foreach { product =>
-      val vid = product._1
-      val vdata = product._2
-      val pos = self.index.getPos(vid)
+      val id = product._1
+      val value = product._2
+      val pos = self.index.getPos(id)
       if (pos >= 0) {
         if (newMask.get(pos)) {
-          newValues(pos) = reduceFunc(newValues(pos), vdata)
+          newValues(pos) = reduceFunc(newValues(pos), value)
         } else { // otherwise just store the new value
           newMask.set(pos)
-          newValues(pos) = vdata
+          newValues(pos) = value
         }
       }
     }

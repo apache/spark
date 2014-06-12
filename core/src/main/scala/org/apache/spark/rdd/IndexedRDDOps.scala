@@ -88,11 +88,14 @@ trait IndexedRDDOps[
   //  */
   // def multiput(ks: Array[Id], vs: Array[Id]): IndexedRDD[V]
 
-  // /**
-  //  * Updates keys ks to have values vs, running `merge` on old and new values if necessary, and returning a new IndexedRDD.
-  //  * Implemented by looking up the partition for each k and sending only the relevant values to each partition.
-  //  */
-  // def multiput(ks: Array[Id], vs: Array[V], merge: (V, V) => V): IndexedRDD[V]
+  /**
+   * Updates keys ks to have values vs, running `merge` on old and new values if necessary, and returning a new IndexedRDD.
+   * Implemented by looking up the partition for each k and sending only the relevant values to each partition.
+   */
+  def multiput(kvs: Map[Id, V], merge: (Id, V, V) => V): Self[V] = {
+    val updates = self.context.parallelize(kvs.toSeq).partitionBy(self.partitioner.get)
+    zipPartitionsWithOther(updates)(new MultiputZipper(merge))
+  }
 
   /**
    * Applies a function to each partition of this IndexedRDD.
@@ -202,6 +205,15 @@ trait IndexedRDDOps[
 
   private type OtherZipPartitionsFunction[V2, V3] =
     Function2[Iterator[P[V]], Iterator[(Id, V2)], Iterator[P[V3]]]
+
+  private class MultiputZipper(merge: (Id, V, V) => V)
+      extends OtherZipPartitionsFunction[V, V] with Serializable {
+    def apply(thisIter: Iterator[P[V]], otherIter: Iterator[(Id, V)]): Iterator[P[V]] = {
+      val thisPart = thisIter.next()
+      val updates = otherIter.toSeq
+      Iterator(thisPart.multiput(updates, merge))
+    }
+  }
 
   private class DiffZipper extends ZipPartitionsFunction[V, V] with Serializable {
     def apply(thisIter: Iterator[P[V]], otherIter: Iterator[P[V]]): Iterator[P[V]] = {
