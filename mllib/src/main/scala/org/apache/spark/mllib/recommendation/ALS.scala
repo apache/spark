@@ -601,7 +601,7 @@ class ALS private (
 /**
  * Partitioner for ALS.
  */
-private[this] class ALSPartitioner(override val numPartitions: Int) extends Partitioner {
+private[recommendation] class ALSPartitioner(override val numPartitions: Int) extends Partitioner {
   override def getPartition(key: Any): Int = {
     Utils.nonNegativeMod(byteswap32(key.asInstanceOf[Int]), numPartitions)
   }
