@@ -115,8 +115,7 @@ class StorageLevel private(
   private def readResolve(): Object = StorageLevel.getCachedStorageLevel(this)
 
   override def toString: String = {
-    "StorageLevel(%b, %b, %b, %b, %d)".format(
-      useDisk, useMemory, useOffHeap, deserialized, replication)
+    s"StorageLevel($useDisk, $useMemory, $useOffHeap, $deserialized, $replication)"
   }
 
   override def hashCode(): Int = toInt * 41 + replication
@@ -127,7 +126,7 @@ class StorageLevel private(
     result += (if (useMemory) "Memory " else "")
     result += (if (useOffHeap) "Tachyon " else "")
     result += (if (deserialized) "Deserialized " else "Serialized ")
-    result += "%sx Replicated".format(replication)
+    result += s"${replication}x Replicated"
     result
   }
 }
@@ -169,7 +168,7 @@ object StorageLevel {
     case "MEMORY_AND_DISK_SER" => MEMORY_AND_DISK_SER
     case "MEMORY_AND_DISK_SER_2" => MEMORY_AND_DISK_SER_2
     case "OFF_HEAP" => OFF_HEAP
-    case _ => throw new IllegalArgumentException("Invalid StorageLevel: " + s)
+    case _ => throw new IllegalArgumentException(s"Invalid StorageLevel: $s")
   }
 
   /**

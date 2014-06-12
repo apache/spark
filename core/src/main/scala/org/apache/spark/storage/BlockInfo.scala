@@ -52,7 +52,7 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
 
   /** Mark this BlockInfo as ready (i.e. block is finished writing) */
   def markReady(sizeInBytes: Long) {
-    require(sizeInBytes >= 0, "sizeInBytes was negative: " + sizeInBytes)
+    require(sizeInBytes >= 0, s"sizeInBytes was negative: $sizeInBytes")
     assert(pending)
     size = sizeInBytes
     BlockInfo.blockInfoInitThreads.remove(this)

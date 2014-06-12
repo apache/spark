@@ -58,7 +58,7 @@ private class TachyonStore(
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    logDebug("Attempting to write values for block " + blockId)
+    logDebug(s"Attempting to write values for block $blockId")
     val bytes = blockManager.dataSerialize(blockId, values)
     putIntoTachyonStore(blockId, bytes, returnValues)
   }
@@ -71,15 +71,15 @@ private class TachyonStore(
     // duplicate does not copy buffer, so inexpensive
     val byteBuffer = bytes.duplicate()
     byteBuffer.rewind()
-    logDebug("Attempting to put block " + blockId + " into Tachyon")
+    logDebug(s"Attempting to put block $blockId into Tachyon")
     val startTime = System.currentTimeMillis
     val file = tachyonManager.getFile(blockId)
     val os = file.getOutStream(WriteType.TRY_CACHE)
     os.write(byteBuffer.array())
     os.close()
     val finishTime = System.currentTimeMillis
-    logDebug("Block %s stored as %s file in Tachyon in %d ms".format(
-      blockId, Utils.bytesToString(byteBuffer.limit), finishTime - startTime))
+    logDebug(s"Block $blockId stored as ${Utils.bytesToString(byteBuffer.limit)} " +
+      s"file in Tachyon in ${finishTime - startTime} ms")
 
     if (returnValues) {
       PutResult(bytes.limit(), Right(bytes.duplicate()))
@@ -115,14 +115,14 @@ private class TachyonStore(
         val fetchSize = is.read(bs, 0, size.asInstanceOf[Int])
         buffer = ByteBuffer.wrap(bs)
         if (fetchSize != size) {
-          logWarning("Failed to fetch the block " + blockId + " from Tachyon : Size " + size +
-            " is not equal to fetched size " + fetchSize)
+          logWarning(s"Failed to fetch the block $blockId from Tachyon: Size $size " +
+            s"is not equal to fetched size $fetchSize")
           return None
         }
       }
     } catch {
       case ioe: IOException =>
-        logWarning("Failed to fetch the block " + blockId + " from Tachyon", ioe)
+        logWarning(s"Failed to fetch the block $blockId from Tachyon", ioe)
         return None
     }
     Some(buffer)
