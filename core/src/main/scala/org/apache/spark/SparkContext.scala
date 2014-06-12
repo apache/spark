@@ -290,6 +290,9 @@ class SparkContext(config: SparkConf) extends Logging {
     value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
     executorEnvs(envKey) = value
   }
+  Option(System.getenv("SPARK_PREPEND_CLASSES")).foreach { v => 
+    executorEnvs("SPARK_PREPEND_CLASSES") = v
+  }
   // The Mesos scheduler backend relies on this environment variable to set executor memory.
   // TODO: Set this only in the Mesos scheduler.
   executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
