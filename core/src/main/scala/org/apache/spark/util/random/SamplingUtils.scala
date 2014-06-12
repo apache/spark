@@ -20,6 +20,10 @@ package org.apache.spark.util.random
 private[spark] object SamplingUtils {
 
   /**
+   * Returns a sampling rate that guarantees a sample of size >= sampleSizeLowerBound 99.99% of
+   * the time.
+   *
+   * How the sampling rate is determined:
    * Let p = num / total, where num is the sample size and total is the total number of
    * datapoints in the RDD. We're trying to compute q > p such that
    *   - when sampling with replacement, we're drawing each datapoint with prob_i ~ Pois(q),

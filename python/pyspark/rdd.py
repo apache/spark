@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from base64 import standard_b64encode as b64enc
-import copy
 from collections import defaultdict
 from collections import namedtuple
 from itertools import chain, ifilter, imap
@@ -364,8 +362,8 @@ class RDD(object):
         [4, 2, 1, 8, 2, 7, 0, 4, 1, 4]
         """
 
-        fraction = 0.0
-        total = 0
+        #TODO remove
+        logging.basicConfig(level=logging.INFO)
         numStDev = 10.0
         initialCount = self.count()
 
@@ -378,38 +376,53 @@ class RDD(object):
         if (not withReplacement) and num > initialCount:
             raise ValueError
 
-        if initialCount > sys.maxint - 1:
-            maxSelected = sys.maxint  - int(numStDev * sqrt(sys.maxint))
-            if num > maxSelected:
-                raise ValueError
+        maxSampleSize = sys.maxint  - int(numStDev * sqrt(sys.maxint))
+        if num > maxSampleSize:
+            raise ValueError
 
-        fraction = self._computeFraction(num, initialCount, withReplacement)
-        total = num
-
+        fraction = self._computeFractionForSampleSize(num, initialCount, withReplacement)
+        
         samples = self.sample(withReplacement, fraction, seed).collect()
 
         # If the first sample didn't turn out large enough, keep trying to take samples;
         # this shouldn't happen often because we use a big multiplier for their initial size.
         # See: scala/spark/RDD.scala
         rand = Random(seed)
-        while len(samples) < total:
+        while len(samples) < num:
             samples = self.sample(withReplacement, fraction, rand.randint(0, sys.maxint)).collect()
 
         sampler = RDDSampler(withReplacement, fraction, rand.randint(0, sys.maxint))
         sampler.shuffle(samples)
-        return samples[0:total]
+        return samples[0:num]
 
-    def _computeFraction(self, num, total, withReplacement):
-        fraction = float(num)/total
+    @staticmethod
+    def _computeFractionForSampleSize(sampleSizeLowerBound, total, withReplacement):
+        """
+        Returns a sampling rate that guarantees a sample of size >= sampleSizeLowerBound 99.99% of
+        the time.
+
+        How the sampling rate is determined:
+        Let p = num / total, where num is the sample size and total is the total number of
+        datapoints in the RDD. We're trying to compute q > p such that
+          - when sampling with replacement, we're drawing each datapoint with prob_i ~ Pois(q),
+            where we want to guarantee Pr[s < num] < 0.0001 for s = sum(prob_i for i from 0 to
+            total), i.e. the failure rate of not having a sufficiently large sample < 0.0001.
+            Setting q = p + 5 * sqrt(p/total) is sufficient to guarantee 0.9999 success rate for
+            num > 12, but we need a slightly larger q (9 empirically determined).
+          - when sampling without replacement, we're drawing each datapoint with prob_i
+            ~ Binomial(total, fraction) and our choice of q guarantees 1-delta, or 0.9999 success
+            rate, where success rate is defined the same as in sampling with replacement.
+        """
+        fraction = float(sampleSizeLowerBound) / total
         if withReplacement:
             numStDev = 5
-            if (num < 12):
+            if (sampleSizeLowerBound < 12):
                 numStDev = 9
-            return fraction + numStDev * sqrt(fraction/total)
+            return fraction + numStDev * sqrt(fraction / total)
         else:
             delta = 0.00005
-            gamma = - log(delta)/total
-            return min(1, fraction + gamma + sqrt(gamma * gamma + 2* gamma * fraction))
+            gamma = - log(delta) / total
+            return min(1, fraction + gamma + sqrt(gamma * gamma + 2 * gamma * fraction))
 
     def union(self, other):
         """

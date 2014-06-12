@@ -20,10 +20,10 @@ package org.apache.spark.util.random
 import org.apache.commons.math3.distribution.{BinomialDistribution, PoissonDistribution}
 import org.scalatest.FunSuite
 
-class SamplingUtilsSuite extends FunSuite{
+class SamplingUtilsSuite extends FunSuite {
 
   test("computeFraction") {
-    // test that the computed fraction guarantees enough datapoints
+    // test that the computed fraction guarantees enough data points
     // in the sample with a failure rate <= 0.0001
     val n = 100000
 

@@ -547,8 +547,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, 2*n, seed)
-      assert(sample.size === 2*n)        // Got exactly 200 elements
+      val sample = data.takeSample(withReplacement=true, 2 * n, seed)
+      assert(sample.size === 2 * n)        // Got exactly 200 elements
       // Chance of getting all distinct elements is still quite low, so test we got < 100
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }

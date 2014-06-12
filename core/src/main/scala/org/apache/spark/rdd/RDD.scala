@@ -389,8 +389,6 @@ abstract class RDD[T: ClassTag](
   def takeSample(withReplacement: Boolean,
       num: Int,
       seed: Long = Utils.random.nextLong): Array[T] = {
-    var fraction = 0.0
-    var total = 0
     val numStDev =  10.0
     val initialCount = this.count()
 
@@ -407,27 +405,30 @@ abstract class RDD[T: ClassTag](
         "sampling without replacement")
     }
 
-    if (initialCount > Int.MaxValue - 1) {
-      val maxSelected = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
-      if (num > maxSelected) {
-        throw new IllegalArgumentException("Cannot support a sample size > Int.MaxValue - " +
-          s"$numStDev * math.sqrt(Int.MaxValue)")
-      }
+    val maxSampleSize = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
+    if (num > maxSampleSize) {
+      throw new IllegalArgumentException("Cannot support a sample size > Int.MaxValue - " +
+        s"$numStDev * math.sqrt(Int.MaxValue)")
     }
 
-    fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount, withReplacement)
-    total = num
+    val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
+      withReplacement)
 
     val rand = new Random(seed)
     var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
 
     // If the first sample didn't turn out large enough, keep trying to take samples;
     // this shouldn't happen often because we use a big multiplier for the initial size
-    while (samples.length < total) {
+    var numIters = 0
+    while (samples.length < num) {
+      if (numIters > 0) {
+        logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
+      }
       samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+      numIters += 1
     }
 
-    Utils.randomizeInPlace(samples, rand).take(total)
+    Utils.randomizeInPlace(samples, rand).take(num)
   }
 
   /**
