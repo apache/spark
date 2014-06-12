@@ -383,16 +383,14 @@ object BlockFetcherIterator {
         logInfo("Still missing " + statuses.filter(_._1 == null).size + " map outputs for reduceId " + reduceId + " ---lirui")
         updateStatuses()
       }
-      var trialCount = 0
       while (!newStatusesReady) {
         if (!isPartial && delegatedStatuses.size >= statuses.size) {
           //shouldn't get here, just to avoid infinite loop
           throw new SparkException("All blocks have been delegated for reduceId " + reduceId)
         }
         logInfo("Waiting for new map outputs for reduceId " + reduceId + " ---lirui")
-        Thread.sleep(2000 + 1000 * trialCount)
+        Thread.sleep(2000)
         updateStatuses()
-        trialCount += 1
       }
       val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
       for (index <- readyStatuses if !delegatedStatuses.contains(index)) {

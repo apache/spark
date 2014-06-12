@@ -66,7 +66,7 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
       context.stop(self)
 
     case GetShuffleStatus(shuffleId: Int) =>
-      sender !(tracker.getEpoch, tracker.isShufflePartial(shuffleId))
+      sender ! tracker.completenessForShuffle(shuffleId)
   }
 }
 
@@ -229,20 +229,28 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  //clear outdated map outputs for a shuffle and sync the local epoch with master
-  //this method is intended to be followed by "getServerStatuses"
-  def clearOutdatedMapStatuses(shuffleId: Int){
+  // Clear outdated map outputs for a shuffle
+  def clearOutdatedMapStatuses(shuffleId: Int) {
     mapStatuses.synchronized {
-      //we may have cached partial map outputs, the master may have updates for us
       if (mapStatuses.get(shuffleId).isDefined) {
-        val masterShuffleStatus = askTracker(GetShuffleStatus(shuffleId)).asInstanceOf[(Long, Boolean)]
-        if (masterShuffleStatus._1 > epoch || (!masterShuffleStatus._2 && partialForShuffle.contains(shuffleId))) {
-          logInfo("Master's epoch is " + masterShuffleStatus + ", local epoch is " + epoch + ". Clear local cache. ---lirui")
+        val masterCompleteness = askTracker(GetShuffleStatus(shuffleId)).asInstanceOf[Int]
+        val diff = masterCompleteness - completenessForShuffle(shuffleId)
+        if (diff > 0) {
+          logInfo("Master is " + diff + " map statuses ahead of us. Clear local cache. ---lirui")
           mapStatuses -= shuffleId
-          epoch = masterShuffleStatus._1
         }
       }
     }
+  }
+
+  // Compute the completeness of a shuffle
+  def completenessForShuffle(shuffleId: Int): Int = {
+    mapStatuses.synchronized {
+      if (mapStatuses.get(shuffleId).isDefined) {
+        return mapStatuses.get(shuffleId).get.count(_ != null)
+      }
+    }
+    0
   }
 }
 
@@ -272,7 +280,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     if (mapStatuses.put(shuffleId, new Array[MapStatus](numMaps)).isDefined) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
-    //we allow partial output by default. should be later properly set when register map outputs
+    // We allow partial output by default. Should be later properly set when register map outputs
     partialForShuffle += shuffleId
   }
 
@@ -285,7 +293,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
 
   /** Register multiple map output information for the given shuffle */
   def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false, isPartial: Boolean = false) {
-    mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
+    mapStatuses.synchronized{
+      mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
+    }
     if (changeEpoch) {
       incrementEpoch()
     }
@@ -372,10 +382,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   private def cleanup(cleanupTime: Long) {
     mapStatuses.clearOldValues(cleanupTime)
     cachedSerializedStatuses.clearOldValues(cleanupTime)
-  }
-
-  def isShufflePartial(shuffleId: Int) = {
-    partialForShuffle.contains(shuffleId)
   }
 }
 
