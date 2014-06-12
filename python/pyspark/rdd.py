@@ -1188,7 +1188,10 @@ class RDD(object):
         for merging values between partitions. To avoid memory allocation, both of these functions are
         allowed to modify and return their first argument instead of creating a new U.
         """
-        return self.combineByKey(lambda v: seqFunc(zeroValue, v), seqFunc, combFunc, numPartitions)
+        def createZero():
+          return copy.deepcopy(zeroValue)
+        
+        return self.combineByKey(lambda v: seqFunc(createZero(), v), seqFunc, combFunc, numPartitions)
 
     def foldByKey(self, zeroValue, func, numPartitions=None):
         """
@@ -1201,7 +1204,10 @@ class RDD(object):
         >>> rdd.foldByKey(0, add).collect()
         [('a', 2), ('b', 1)]
         """
-        return self.combineByKey(lambda v: func(zeroValue, v), func, func, numPartitions)
+        def createZero():
+          return copy.deepcopy(zeroValue)
+
+        return self.combineByKey(lambda v: func(createZero(), v), func, func, numPartitions)
 
 
     # TODO: support variant with custom partitioner
