@@ -505,55 +505,56 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("takeSample") {
-    val data = sc.parallelize(1 to 100, 2)
+    val n = 1000000
+    val data = sc.parallelize(1 to n, 2)
     
     for (num <- List(5, 20, 100)) {
       val sample = data.takeSample(withReplacement=false, num=num)
       assert(sample.size === num)        // Got exactly num elements
       assert(sample.toSet.size === num)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
       assert(sample.toSet.size === 20)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=false, 200, seed)
+      val sample = data.takeSample(withReplacement=false, 100, seed)
       assert(sample.size === 100)        // Got only 100 elements
       assert(sample.toSet.size === 100)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=true, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
       val sample = data.takeSample(withReplacement=true, num=20)
       assert(sample.size === 20)        // Got exactly 100 elements
       assert(sample.toSet.size <= 20, "sampling with replacement returned all distinct elements")
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
-      val sample = data.takeSample(withReplacement=true, num=100)
-      assert(sample.size === 100)        // Got exactly 100 elements
+      val sample = data.takeSample(withReplacement=true, num=n)
+      assert(sample.size === n)        // Got exactly 100 elements
       // Chance of getting all distinct elements is astronomically low, so test we got < 100
-      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, 100, seed)
-      assert(sample.size === 100)        // Got exactly 100 elements
+      val sample = data.takeSample(withReplacement=true, n, seed)
+      assert(sample.size === n)        // Got exactly 100 elements
       // Chance of getting all distinct elements is astronomically low, so test we got < 100
-      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
+      assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, 200, seed)
-      assert(sample.size === 200)        // Got exactly 200 elements
+      val sample = data.takeSample(withReplacement=true, 2 * n, seed)
+      assert(sample.size === 2 * n)        // Got exactly 200 elements
       // Chance of getting all distinct elements is still quite low, so test we got < 100
-      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
+      assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
   }
 
