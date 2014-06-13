@@ -36,6 +36,11 @@ import org.apache.spark.util.CallSite
  * Each Stage also has a jobId, identifying the job that first submitted the stage.  When FIFO
  * scheduling is used, this allows Stages from earlier jobs to be computed first or recovered
  * faster on failure.
+ *
+ * The callSite provides a location in user code which relates to the stage. For a shuffle map
+ * stage, the callSite gives the user code that created the RDD being shuffled. For a result
+ * stage, the callSite gives the user code that executes the associated action (e.g. count()).
+ *
  */
 private[spark] class Stage(
     val id: Int,
@@ -44,7 +49,7 @@ private[spark] class Stage(
     val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
     val jobId: Int,
-    callSite: Option[CallSite])
+    val callSite: CallSite)
   extends Logging {
 
   val isShuffleMap = shuffleDep.isDefined
@@ -101,8 +106,8 @@ private[spark] class Stage(
     id
   }
 
-  val name = callSite.map(_.short).getOrElse(rdd.getCreationSite)
-  val details = callSite.map(_.long).getOrElse("")
+  val name = callSite.short
+  val details = callSite.long
 
   override def toString = "Stage " + id
 

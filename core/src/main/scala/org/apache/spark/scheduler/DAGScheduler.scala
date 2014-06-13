@@ -195,7 +195,7 @@ class DAGScheduler(
       case Some(stage) => stage
       case None =>
         val stage =
-          newOrUsedStage(shuffleDep.rdd, shuffleDep.rdd.partitions.size, shuffleDep, jobId)
+          newOrUsedStage(shuffleDep.rdd, shuffleDep.rdd.partitions.size, shuffleDep, jobId, shuffleDep.rdd.creationSite)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
         stage
     }
@@ -212,7 +212,7 @@ class DAGScheduler(
       numTasks: Int,
       shuffleDep: Option[ShuffleDependency[_,_]],
       jobId: Int,
-      callSite: Option[CallSite] = None)
+      callSite: CallSite)
     : Stage =
   {
     val id = nextStageId.getAndIncrement()
@@ -235,7 +235,7 @@ class DAGScheduler(
       numTasks: Int,
       shuffleDep: ShuffleDependency[_,_],
       jobId: Int,
-      callSite: Option[CallSite] = None)
+      callSite: CallSite)
     : Stage =
   {
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId, callSite)
@@ -674,7 +674,7 @@ class DAGScheduler(
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
-      finalStage = newStage(finalRDD, partitions.size, None, jobId, Some(callSite))
+      finalStage = newStage(finalRDD, partitions.size, None, jobId, callSite)
     } catch {
       case e: Exception =>
         logWarning("Creating new stage failed due to exception - job: " + jobId, e)
