@@ -5,8 +5,8 @@ set -e
 
 FWDIR="$(cd `dirname $0`/..; pwd)"
 export SPARK_HADOOP_VERSION="$(cat $FWDIR/SHOPIFY_HADOOP_VERSION)"
-export SBT_OPTS="-XX:MaxPermSize=2048M"
-$FWDIR/sbt/sbt clean assembly
+export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+mvn -Dhadoop.version=$SPARK_HADOOP_VERSION -DskipTests clean package
 
 DEFAULTS_CONF="$FWDIR/conf/spark-defaults.conf"
 
