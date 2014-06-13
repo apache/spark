@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLConf, SQLContext, execution}
+import org.apache.spark.sql.{SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -157,7 +157,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         InsertIntoParquetTable(relation, planLater(child), overwrite=true)(sparkContext) :: Nil
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child), overwrite)(sparkContext) :: Nil
-      case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) => {
+      case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
         val prunePushedDownFilters =
           if (sparkContext.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
             (filters: Seq[Expression]) => {
@@ -186,7 +186,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           filters,
           prunePushedDownFilters,
           ParquetTableScan(_, relation, filters)(sparkContext)) :: Nil
-      }
 
       case _ => Nil
     }
@@ -250,12 +249,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   case class CommandStrategy(context: SQLContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.SetCommand(key, value) =>
-        Seq(execution.SetCommandPhysical(key, value, plan.output)(context))
+        Seq(execution.SetCommand(key, value, plan.output)(context))
       case logical.ExplainCommand(child) =>
         val executedPlan = context.executePlan(child).executedPlan
-        Seq(execution.ExplainCommandPhysical(executedPlan, plan.output)(context))
+        Seq(execution.ExplainCommand(executedPlan, plan.output)(context))
       case logical.CacheCommand(tableName, cache) =>
-        Seq(execution.CacheCommandPhysical(tableName, cache)(context))
+        Seq(execution.CacheCommand(tableName, cache)(context))
       case _ => Nil
     }
   }

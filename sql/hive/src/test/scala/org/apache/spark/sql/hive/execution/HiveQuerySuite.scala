@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.hive.test.TestHive._
+import scala.util.Try
+
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.{SchemaRDD, execution, Row}
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -162,14 +164,58 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SELECT * FROM src").toString
   }
 
+  private val explainCommandClassName =
+    classOf[execution.ExplainCommand].getSimpleName.stripSuffix("$")
+
+  def isExplanation(result: SchemaRDD) = {
+    val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
+    explanation.size == 1 && explanation.head.startsWith(explainCommandClassName)
+  }
+
   test("SPARK-1704: Explain commands as a SchemaRDD") {
     hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+
     val rdd = hql("explain select key, count(value) from src group by key")
-    assert(rdd.collect().size == 1)
-    assert(rdd.toString.contains("ExplainCommand"))
-    assert(rdd.filter(row => row.toString.contains("ExplainCommand")).collect().size == 0,
-      "actual contents of the result should be the plans of the query to be explained")
+    assert(isExplanation(rdd))
+
     TestHive.reset()
+  }
+
+  test("Query Hive native command execution result") {
+    val tableName = "test_native_commands"
+
+    val q0 = hql(s"DROP TABLE IF EXISTS $tableName")
+    assert(q0.count() == 0)
+
+    val q1 = hql(s"CREATE TABLE $tableName(key INT, value STRING)")
+    assert(q1.count() == 0)
+
+    val q2 = hql("SHOW TABLES")
+    val tables = q2.select('result).collect().map { case Row(table: String) => table }
+    assert(tables.contains(tableName))
+
+    val q3 = hql(s"DESCRIBE $tableName")
+    assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
+      q3.select('result).collect().map { case Row(fieldDesc: String) =>
+        fieldDesc.split("\t").map(_.trim)
+      }
+    }
+
+    val q4 = hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")
+    assert(isExplanation(q4))
+
+    TestHive.reset()
+  }
+
+  test("Exactly once semantics for DDL and command statements") {
+    val tableName = "test_exactly_once"
+    val q0 = hql(s"CREATE TABLE $tableName(key INT, value STRING)")
+
+    // If the table was not created, the following assertion would fail
+    assert(Try(table(tableName)).isSuccess)
+
+    // If the CREATE TABLE command got executed again, the following assertion would fail
+    assert(Try(q0.count()).isSuccess)
   }
 
   test("parse HQL set commands") {
@@ -195,52 +241,69 @@ class HiveQuerySuite extends HiveComparisonTest {
   test("SET commands semantics for a HiveContext") {
     // Adapted from its SQL counterpart.
     val testKey = "spark.sql.key.usedfortestonly"
-    var testVal = "test.val.0"
+    val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
-    def fromRows(row: Array[Row]): Array[String] = row.map(_.getString(0))
+    def rowsToPairs(rows: Array[Row]) = rows.map { case Row(key: String, value: String) =>
+      key -> value
+    }
 
     clear()
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    assert(hql("set").collect().size == 0)
+    assert(hql("SET").collect().size == 0)
 
-    // "set key=val"
-    hql(s"SET $testKey=$testVal")
-    assert(fromRows(hql("SET").collect()) sameElements Array(s"$testKey=$testVal"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql(s"SET $testKey=$testVal").collect())
+    }
+
     assert(hiveconf.get(testKey, "") == testVal)
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql("SET").collect())
+    }
 
     hql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(fromRows(hql("SET").collect()) sameElements
-      Array(
-        s"$testKey=$testVal",
-        s"${testKey + testKey}=${testVal + testVal}"))
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      rowsToPairs(hql("SET").collect())
+    }
 
     // "set key"
-    assert(fromRows(hql(s"SET $testKey").collect()) sameElements
-      Array(s"$testKey=$testVal"))
-    assert(fromRows(hql(s"SET $nonexistentKey").collect()) sameElements
-      Array(s"$nonexistentKey is undefined"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql(s"SET $testKey").collect())
+    }
+
+    assertResult(Array(nonexistentKey -> "<undefined>")) {
+      rowsToPairs(hql(s"SET $nonexistentKey").collect())
+    }
 
     // Assert that sql() should have the same effects as hql() by repeating the above using sql().
     clear()
-    assert(sql("set").collect().size == 0)
+    assert(sql("SET").collect().size == 0)
 
-    sql(s"SET $testKey=$testVal")
-    assert(fromRows(sql("SET").collect()) sameElements Array(s"$testKey=$testVal"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql(s"SET $testKey=$testVal").collect())
+    }
+
     assert(hiveconf.get(testKey, "") == testVal)
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql("SET").collect())
+    }
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(fromRows(sql("SET").collect()) sameElements
-      Array(
-        s"$testKey=$testVal",
-        s"${testKey + testKey}=${testVal + testVal}"))
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      rowsToPairs(sql("SET").collect())
+    }
 
-    assert(fromRows(sql(s"SET $testKey").collect()) sameElements
-      Array(s"$testKey=$testVal"))
-    assert(fromRows(sql(s"SET $nonexistentKey").collect()) sameElements
-      Array(s"$nonexistentKey is undefined"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql(s"SET $testKey").collect())
+    }
+
+    assertResult(Array(nonexistentKey -> "<undefined>")) {
+      rowsToPairs(sql(s"SET $nonexistentKey").collect())
+    }
+
+    clear()
   }
 
   // Put tests that depend on specific Hive settings before these last two test,

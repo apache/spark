@@ -32,14 +32,15 @@ import org.apache.hadoop.hive.serde2.{ColumnProjectionUtils, Serializer}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 
+import org.apache.spark
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{BooleanType, DataType}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive._
-import org.apache.spark.{TaskContext, SparkException}
 import org.apache.spark.util.MutablePair
+import org.apache.spark.{TaskContext, SparkException}
 
 /* Implicits */
 import scala.collection.JavaConversions._
@@ -57,7 +58,7 @@ case class HiveTableScan(
     attributes: Seq[Attribute],
     relation: MetastoreRelation,
     partitionPruningPred: Option[Expression])(
-    @transient val sc: HiveContext)
+    @transient val context: HiveContext)
   extends LeafNode
   with HiveInspectors {
 
@@ -75,7 +76,7 @@ case class HiveTableScan(
   }
 
   @transient
-  val hadoopReader = new HadoopTableReader(relation.tableDesc, sc)
+  val hadoopReader = new HadoopTableReader(relation.tableDesc, context)
 
   /**
    * The hive object inspector for this table, which can be used to extract values from the
@@ -156,7 +157,7 @@ case class HiveTableScan(
     hiveConf.set(serdeConstants.LIST_COLUMNS, columnInternalNames)
   }
 
-  addColumnMetadataToConf(sc.hiveconf)
+  addColumnMetadataToConf(context.hiveconf)
 
   @transient
   def inputRdd = if (!relation.hiveQlTable.isPartitioned) {
@@ -427,4 +428,27 @@ case class InsertIntoHiveTable(
     // TODO: implement hive compatibility as rules.
     sc.sparkContext.makeRDD(Nil, 1)
   }
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class NativeCommand(
+    sql: String, output: Seq[Attribute])(
+    @transient context: HiveContext)
+  extends LeafNode with Command {
+
+  override protected[sql] lazy val sideEffectResult: Seq[String] = context.runSqlHive(sql)
+
+  override def execute(): RDD[spark.sql.Row] = {
+    if (sideEffectResult.size == 0) {
+      context.emptyResult
+    } else {
+      val rows = sideEffectResult.map(r => new GenericRow(Array[Any](r)))
+      context.sparkContext.parallelize(rows, 1)
+    }
+  }
+
+  override def otherCopyArgs = context :: Nil
 }

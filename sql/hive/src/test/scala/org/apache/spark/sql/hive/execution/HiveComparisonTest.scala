@@ -24,6 +24,7 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand => LogicalNativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -141,7 +142,7 @@ abstract class HiveComparisonTest
       // Hack: Hive simply prints the result of a SET command to screen,
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
-      case _: NativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
+      case _: LogicalNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
       case plan => if (isSorted(plan)) answer else answer.sorted
     }

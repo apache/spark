@@ -22,45 +22,49 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-case class SetCommandPhysical(key: Option[String], value: Option[String], output: Seq[Attribute])
-                             (@transient context: SQLContext) extends LeafNode {
-  def execute(): RDD[Row] = (key, value) match {
-    // Set value for key k; the action itself would
-    // have been performed in QueryExecution eagerly.
-    case (Some(k), Some(v)) => context.emptyResult
-    // Query the value bound to key k.
-    case (Some(k), None) =>
-      val resultString = context.getOption(k) match {
-        case Some(v) => s"$k=$v"
-        case None => s"$k is undefined"
-      }
-      context.sparkContext.parallelize(Seq(new GenericRow(Array[Any](resultString))), 1)
-    // Query all key-value pairs that are set in the SQLConf of the context.
-    case (None, None) =>
-      val pairs = context.getAll
-      val rows = pairs.map { case (k, v) =>
-        new GenericRow(Array[Any](s"$k=$v"))
-      }.toSeq
-      // Assume config parameters can fit into one split (machine) ;)
-      context.sparkContext.parallelize(rows, 1)
-    // The only other case is invalid semantics and is impossible.
-    case _ => context.emptyResult
-  }
+trait Command {
+  /**
+   * A concrete command should override this lazy field to wrap up any side effects caused by the
+   * command or any other computation that should be evaluated exactly once. The value of this field
+   * can be used as the contents of the corresponding RDD generated from the physical plan of this
+   * command.
+   *
+   * The `execute()` method of all the physical command classes should reference `sideEffectResult`
+   * so that the command can be executed eagerly right after the command query is created.
+   */
+  protected[sql] lazy val sideEffectResult: Seq[Any] = Seq.empty[Any]
 }
 
 /**
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class ExplainCommandPhysical(child: SparkPlan, output: Seq[Attribute])
-                                 (@transient context: SQLContext) extends UnaryNode {
+case class SetCommand(
+    key: Option[String], value: Option[String], output: Seq[Attribute])(
+    @transient context: SQLContext)
+  extends LeafNode with Command {
+
+  override protected[sql] lazy val sideEffectResult: Seq[(String, String)] = (key, value) match {
+    // Set value for key k.
+    case (Some(k), Some(v)) =>
+      context.set(k, v)
+      Array(k -> v)
+
+    // Query the value bound to key k.
+    case (Some(k), _) =>
+      Array(k -> context.getOption(k).getOrElse("<undefined>"))
+
+    // Query all key-value pairs that are set in the SQLConf of the context.
+    case (None, None) =>
+      context.getAll
+
+    case _ =>
+      throw new IllegalArgumentException()
+  }
+
   def execute(): RDD[Row] = {
-    val planString = new GenericRow(Array[Any](child.toString))
-    context.sparkContext.parallelize(Seq(planString))
+    val rows = sideEffectResult.map { case (k, v) => new GenericRow(Array[Any](k, v)) }
+    context.sparkContext.parallelize(rows, 1)
   }
 
   override def otherCopyArgs = context :: Nil
@@ -70,19 +74,40 @@ case class ExplainCommandPhysical(child: SparkPlan, output: Seq[Attribute])
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class CacheCommandPhysical(tableName: String, doCache: Boolean)(@transient context: SQLContext)
-  extends LeafNode {
+case class ExplainCommand(
+    child: SparkPlan, output: Seq[Attribute])(
+    @transient context: SQLContext)
+  extends UnaryNode with Command {
 
-  lazy val commandSideEffect = {
+  // Actually "EXPLAIN" command doesn't cause any side effect.
+  override protected[sql] lazy val sideEffectResult: Seq[String] = this.toString.split("\n")
+
+  def execute(): RDD[Row] = {
+    val explanation = sideEffectResult.mkString("\n")
+    context.sparkContext.parallelize(Seq(new GenericRow(Array[Any](explanation))), 1)
+  }
+
+  override def otherCopyArgs = context :: Nil
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class CacheCommand(tableName: String, doCache: Boolean)(@transient context: SQLContext)
+  extends LeafNode with Command {
+
+  override protected[sql] lazy val sideEffectResult = {
     if (doCache) {
       context.cacheTable(tableName)
     } else {
       context.uncacheTable(tableName)
     }
+    Seq.empty[Any]
   }
 
   override def execute(): RDD[Row] = {
-    commandSideEffect
+    sideEffectResult
     context.emptyResult
   }
 
