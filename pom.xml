@@ -132,7 +132,7 @@
     <codahale.metrics.version>3.0.0</codahale.metrics.version>
     <avro.version>1.7.6</avro.version>
     <jets3t.version>0.7.1</jets3t.version>
-
+    
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
   </properties>
