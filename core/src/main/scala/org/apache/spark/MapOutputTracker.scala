@@ -19,9 +19,12 @@ package org.apache.spark
 
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
+import java.util.concurrent._
+import java.util.Collections
 
 import scala.collection.mutable.{HashSet, HashMap, Map}
 import scala.concurrent.Await
+import scala.collection.JavaConversions._
 
 import akka.actor._
 import akka.pattern.ask
@@ -91,8 +94,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   //TODO: we should also record if the output for a shuffle is partial
   protected val mapStatuses: Map[Int, Array[MapStatus]]
 
-  //track if we have partial map outputs for a shuffle
-  protected val partialForShuffle = new mutable.HashSet[Int]()
+  // Track if we have partial map outputs for a shuffle
+  protected val partialForShuffle =
+    Collections.newSetFromMap[Int](new ConcurrentHashMap[Int, java.lang.Boolean]())
 
   /**
    * Incremented every time a fetch fails so that client nodes know to clear
@@ -204,7 +208,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           fetchedStatuses = fetchedResults._1
           if (fetchedResults._2) {
             logInfo("Got partial map outputs from master for shuffleId " + shuffleId + ". ---lirui")
-            partialForShuffle += shuffleId
+            if(!partialForShuffle.contains(shuffleId)){
+              partialForShuffle += shuffleId
+              new Thread(new MapStatusUpdater(shuffleId)).start()
+            }
           } else {
             logInfo("Got complete map outputs from master for shuffleId " + shuffleId + ". ---lirui")
             partialForShuffle -= shuffleId
@@ -230,7 +237,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   // Clear outdated map outputs for a shuffle
-  def clearOutdatedMapStatuses(shuffleId: Int) {
+  private def clearOutdatedMapStatuses(shuffleId: Int) {
     mapStatuses.synchronized {
       if (mapStatuses.get(shuffleId).isDefined) {
         val masterCompleteness = askTracker(GetShuffleStatus(shuffleId)).asInstanceOf[Int]
@@ -251,6 +258,19 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       }
     }
     0
+  }
+
+  // A proxy to update partial map statuses periodically
+  class MapStatusUpdater(shuffleId: Int) extends Runnable {
+    override def run() {
+      logInfo("Updater started for shuffleId "+shuffleId+". ---lirui")
+      while (partialForShuffle.contains(shuffleId)) {
+        Thread.sleep(1000)
+        clearOutdatedMapStatuses(shuffleId)
+        getMapStatusesForShuffle(shuffleId, -1)
+      }
+      logInfo("Map status for shuffleId "+shuffleId+" is now complete. Updater terminated. ---lirui")
+    }
   }
 }
 

@@ -366,10 +366,9 @@ object BlockFetcherIterator {
     //check if the map output is partial
     private def isPartial = statuses.exists(_._1 == null)
 
-    //get the updated map output
+    // Get the updated map output
     private def updateStatuses() {
       logInfo("Trying to update map statuses for reduceId "+reduceId+" ---lirui")
-      mapOutputTracker.clearOutdatedMapStatuses(shuffleId)
       statuses = mapOutputTracker.getServerStatuses(shuffleId, reduceId)
     }
 
@@ -389,7 +388,7 @@ object BlockFetcherIterator {
           throw new SparkException("All blocks have been delegated for reduceId " + reduceId)
         }
         logInfo("Waiting for new map outputs for reduceId " + reduceId + " ---lirui")
-        Thread.sleep(2000)
+        Thread.sleep(1000)
         updateStatuses()
       }
       val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
