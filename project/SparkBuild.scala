@@ -38,7 +38,7 @@ object SparkBuild extends Build {
   // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
   // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
   // through the environment variables SPARK_HADOOP_VERSION and SPARK_YARN.
-  val DEFAULT_HADOOP_VERSION = "1.0.4"
+  val DEFAULT_HADOOP_VERSION = "2.0.0-mr1-cdh4.5.0"
 
   // Whether the Hadoop version to build against is 2.2.x, or a variant of it. This can be set
   // through the SPARK_IS_NEW_HADOOP environment variable.
@@ -213,6 +213,7 @@ object SparkBuild extends Build {
       "MQTT Repository"      at "https://repo.eclipse.org/content/repositories/paho-releases/",
       "Cloudera Repository"  at "http://repository.cloudera.com/artifactory/cloudera-repos/",
       "Pivotal Repository"   at "http://repo.spring.io/libs-release/",
+      "Verizon Repository"   at "http://132.197.10.21:8081/artifactory/libs-snapshot-local/",
       // For Sonatype publishing
       // "sonatype-snapshots"   at "https://oss.sonatype.org/content/repositories/snapshots",
       // "sonatype-staging"     at "https://oss.sonatype.org/service/local/staging/deploy/maven2/",
@@ -468,6 +469,7 @@ object SparkBuild extends Build {
     previousArtifact := sparkPreviousArtifact("spark-mllib"),
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % jblasVersion,
+      "com.verizon" % "jecos" % "0.0.1-SNAPSHOT",
       "org.scalanlp" %% "breeze" % "0.7" excludeAll(excludeJUnit)
     )
   )

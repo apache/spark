@@ -46,6 +46,11 @@
       <artifactId>jblas</artifactId>
       <version>${jblas.version}</version>
     </dependency>
+     <dependency>
+            <groupId>com.verizon</groupId>
+            <artifactId>jecos</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+          </dependency>
     <dependency>
       <groupId>org.scalanlp</groupId>
       <artifactId>breeze_${scala.binary.version}</artifactId>
