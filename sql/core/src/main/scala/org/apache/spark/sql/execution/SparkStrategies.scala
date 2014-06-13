@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.parquet._
+import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
@@ -187,6 +188,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           ParquetTableScan(_, relation, filters)(sparkContext)) :: Nil
       }
 
+      case _ => Nil
+    }
+  }
+
+  object InMemoryScans extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>
+        pruneFilterProject(
+          projectList,
+          filters,
+          identity[Seq[Expression]], // No filters are pushed down.
+          InMemoryColumnarTableScan(_, mem)) :: Nil
       case _ => Nil
     }
   }

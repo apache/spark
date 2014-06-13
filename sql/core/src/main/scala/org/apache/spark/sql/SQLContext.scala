@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.{SetCommand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.columnar.InMemoryRelation
 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
@@ -166,10 +166,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val useCompression =
       sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
     val asInMemoryRelation =
-      InMemoryColumnarTableScan(
-        currentTable.output, executePlan(currentTable).executedPlan, useCompression)
+      InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
 
-    catalog.registerTable(None, tableName, SparkLogicalPlan(asInMemoryRelation))
+    catalog.registerTable(None, tableName, asInMemoryRelation)
   }
 
   /** Removes the specified table from the in-memory cache. */
@@ -177,11 +176,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     EliminateAnalysisOperators(catalog.lookupRelation(None, tableName)) match {
       // This is kind of a hack to make sure that if this was just an RDD registered as a table,
       // we reregister the RDD as a table.
-      case SparkLogicalPlan(inMem @ InMemoryColumnarTableScan(_, e: ExistingRdd, _)) =>
+      case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
         catalog.registerTable(None, tableName, SparkLogicalPlan(e))
-      case SparkLogicalPlan(inMem: InMemoryColumnarTableScan) =>
+      case inMem: InMemoryRelation =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
       case plan => throw new IllegalArgumentException(s"Table $tableName is not cached: $plan")
@@ -192,7 +191,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def isCached(tableName: String): Boolean = {
     val relation = catalog.lookupRelation(None, tableName)
     EliminateAnalysisOperators(relation) match {
-      case SparkLogicalPlan(_: InMemoryColumnarTableScan) => true
+      case _: InMemoryRelation => true
       case _ => false
     }
   }
@@ -208,6 +207,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       PartialAggregation ::
       LeftSemiJoin ::
       HashJoin ::
+      InMemoryScans ::
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
