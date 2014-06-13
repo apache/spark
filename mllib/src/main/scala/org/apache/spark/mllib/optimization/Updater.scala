@@ -59,6 +59,11 @@ abstract class Updater extends Serializable {
       stepSize: Double,
       iter: Int,
       regParam: Double): (Vector, Double)
+
+  def finalCatchup(weights:  Vector) = weights
+  def weightScale = 1.0
+  def copy(): Updater
+  def computeNorm(weights: Vector, regParam: Double): Double = 0.0
 }
 
 /**
@@ -80,6 +85,8 @@ class SimpleUpdater extends Updater {
 
     (Vectors.fromBreeze(brzWeights), 0)
   }
+
+  override def copy() = new SimpleUpdater()
 }
 
 /**
@@ -124,6 +131,8 @@ class L1Updater extends Updater {
 
     (Vectors.fromBreeze(brzWeights), brzNorm(brzWeights, 1.0) * regParam)
   }
+
+  override def copy() = new L1Updater()
 }
 
 /**
@@ -152,5 +161,71 @@ class SquaredL2Updater extends Updater {
 
     (Vectors.fromBreeze(brzWeights), 0.5 * regParam * norm * norm)
   }
+
+  override def copy() = new SquaredL2Updater()
 }
 
+object LazySquaredL2Updater {
+  val MinimumScale = 1e-14
+  val MinimumDiscount = 1e-8
+}
+
+class LazySquaredL2Updater extends Updater {
+  var scale: Double = 1.0
+
+  def finalCatchUp(weights: Vector) = {
+    val brzWeights = weights.toBreeze.toDenseVector
+    brzWeights :*= scale
+    scale = 1.0
+    Vectors.fromBreeze(brzWeights)
+  }
+
+  def weightDecay(discount: Double, weights: Vector) = {
+    val decayed = if (scale < LazySquaredL2Updater.MinimumScale) {
+      finalCatchUp(weights)
+    } else {
+      weights
+    }
+    if (discount > LazySquaredL2Updater.MinimumDiscount) {
+      scale *= discount
+    } else {
+      scale *= LazySquaredL2Updater.MinimumDiscount;
+    }
+    decayed
+  }
+
+  override def compute(
+                        weightsOld: Vector,
+                        gradient: Vector,
+                        stepSize: Double,
+                        iter: Int,
+                        regParam: Double): (Vector, Double) = {
+    // add up both updates from the gradient of the loss (= step) as well as
+    // the gradient of the regularizer (= regParam * weightsOld)
+    // w' = w - thisIterStepSize * (gradient + regParam * w)
+    // w' = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
+    // scale *= (1 - thisIterStepSize * regParam)
+    // w' = w - thisIterStepSize * gradient / scale
+    val thisIterStepSize = stepSize / math.sqrt(iter)
+    val discount = (1.0 - thisIterStepSize * regParam)
+    val decayedWeights = weightDecay(discount, weightsOld)
+    val brzWeights: BV[Double] = decayedWeights.toBreeze.toDenseVector
+
+    brzAxpy(-thisIterStepSize / scale, gradient.toBreeze, brzWeights)
+
+    (Vectors.fromBreeze(brzWeights), 0.0)
+  }
+
+  override def copy() = {
+    val n = new LazySquaredL2Updater()
+    n.scale = scale
+    n
+  }
+
+  override def computeNorm(weights: Vector, regParam: Double): Double = {
+    val brzWeights: BV[Double] = weights.toBreeze.toDenseVector
+    val norm = brzNorm(brzWeights, 2.0)
+    0.5 * regParam * norm * norm
+  }
+
+}

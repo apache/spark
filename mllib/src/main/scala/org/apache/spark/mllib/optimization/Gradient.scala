@@ -37,7 +37,7 @@ abstract class Gradient extends Serializable {
    *
    * @return (gradient: Vector, loss: Double)
    */
-  def compute(data: Vector, label: Double, weights: Vector): (Vector, Double)
+  def compute(data: Vector, label: Double, weights: Vector, weightScale: Double): (Vector, Double)
 
   /**
    * Compute the gradient and loss given the features of a single data point,
@@ -60,10 +60,10 @@ abstract class Gradient extends Serializable {
  */
 @DeveloperApi
 class LogisticGradient extends Gradient {
-  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+  override def compute(data: Vector, label: Double, weights: Vector, weightScale: Double): (Vector, Double) = {
     val brzData = data.toBreeze
     val brzWeights = weights.toBreeze
-    val margin: Double = -1.0 * brzWeights.dot(brzData)
+    val margin: Double = -1.0 * brzWeights.dot(brzData) * weightScale
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
     val gradient = brzData * gradientMultiplier
     val loss =
@@ -105,10 +105,10 @@ class LogisticGradient extends Gradient {
  */
 @DeveloperApi
 class LeastSquaresGradient extends Gradient {
-  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+  override def compute(data: Vector, label: Double, weights: Vector, weightScale: Double): (Vector, Double) = {
     val brzData = data.toBreeze
     val brzWeights = weights.toBreeze
-    val diff = brzWeights.dot(brzData) - label
+    val diff = brzWeights.dot(brzData) * weightScale - label
     val loss = diff * diff
     val gradient = brzData * (2.0 * diff)
 
@@ -138,10 +138,10 @@ class LeastSquaresGradient extends Gradient {
  */
 @DeveloperApi
 class HingeGradient extends Gradient {
-  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+  override def compute(data: Vector, label: Double, weights: Vector, weightScale: Double): (Vector, Double) = {
     val brzData = data.toBreeze
     val brzWeights = weights.toBreeze
-    val dotProduct = brzWeights.dot(brzData)
+    val dotProduct = brzWeights.dot(brzData) * weightScale
 
     // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x

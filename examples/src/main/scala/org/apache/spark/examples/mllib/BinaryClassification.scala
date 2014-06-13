@@ -21,11 +21,13 @@ import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.classification.{LogisticRegressionWithSGD, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
+import org.apache.spark.mllib.optimization.{LazySquaredL2Updater, SquaredL2Updater, L1Updater}
 import org.apache.spark.mllib.regression.LabeledPoint
+import java.util.Random
 
 /**
  * An example app for binary classification. Run with
@@ -139,7 +141,12 @@ object BinaryClassification {
       (sc.emptyRDD[LabeledPoint], examples)
     } else {
       val splits = examples.randomSplit(Array(0.8, 0.2))
-      val training = splits(0).cache()
+
+      val training = (if (params.stochastic) {
+        val rand = new Random()
+        splits(0).map(x => (rand.nextInt, x)).sortByKey(true).map { _._2 }
+      } else splits(0)).cache()
+
       val test = splits(1).cache()
       (training, test)
     }
@@ -163,7 +170,7 @@ object BinaryClassification {
     } else {
       val updater = params.regType match {
         case L1 => new L1Updater()
-        case L2 => new SquaredL2Updater()
+        case L2 => if (params.stochastic) new LazySquaredL2Updater() else new SquaredL2Updater()
       }
 
       params.algorithm match {

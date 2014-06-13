@@ -24,7 +24,6 @@ import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import java.util.Random
 
@@ -259,9 +258,6 @@ object GradientDescent extends Logging {
     // Initialize weights as a column vector
     var weights = Vectors.dense(initialWeights.toArray)
 
-    val rand = new Random()
-    val reordered = data.map(x => (rand.nextInt, x)).sortByKey(true).map { _._2 }
-
     val iters = new Array[Int](numPartitions)
     for (i <- 1 to numIterations) {
 
@@ -269,23 +265,24 @@ object GradientDescent extends Logging {
           index: Int,
           iter: Iterator[(Double, Vector)]): Iterator[(Vector, Double, Seq[(Int, Int)])] = {
 
+        val localUpdadter = updater.copy()
         var localWeights = Vectors.dense(weights.toArray)
         val startIter = iters(index)
         var localIter = startIter
         var loss = 0.0
-        var regVal = 0.0
         while (iter.hasNext) {
           val v = iter.next()
           localIter += 1
-          val (grad, l) = gradient.compute(v._2, v._1, localWeights)
+          val (grad, l) = gradient.compute(v._2, v._1, localWeights, localUpdadter.weightScale)
           loss += l
 
-          val update = updater.compute(localWeights, grad, stepSize, localIter, regParam)
-          localWeights = update._1
-          regVal = update._2
+          localWeights = localUpdadter.compute(localWeights, grad, stepSize, localIter, regParam)._1
         }
+        val regVal = localUpdadter.computeNorm(localWeights, regParam)
+
+        val finalWeights = localUpdadter.finalCatchup(localWeights)
         loss /= (localIter - startIter)
-        Iterator((localWeights, loss + regVal, Seq((index, localIter))))
+        Iterator((finalWeights, loss + regVal, Seq((index, localIter))))
       }
 
       def mergeWeights(
@@ -295,7 +292,7 @@ object GradientDescent extends Logging {
         (sumWeights, m1._2 + m2._2, m1._3 ++ m2._3)
       }
       val (newWeights, lossSum, iterIndexedSeq) =
-        reordered.mapPartitionsWithIndex(descentPartition, true)
+        data.mapPartitionsWithIndex(descentPartition, true)
           .reduce(mergeWeights)
       weights = Vectors.fromBreeze(newWeights.toBreeze :*= 1.0 / iterIndexedSeq.size)
       stochasticLossHistory.append(lossSum / iterIndexedSeq.size)
