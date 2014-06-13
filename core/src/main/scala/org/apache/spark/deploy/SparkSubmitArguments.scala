@@ -132,13 +132,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     if (name == null && primaryResource != null) {
       name = Utils.stripDirectory(primaryResource)
     }
-
-    if (master.startsWith("yarn")) {
-      archives = Option(archives).getOrElse(defaultProperties
-        .get("spark.yarn.dist.archives").map(p => Utils.resolveURIs(p)).orNull)
-      files = Option(files).getOrElse(defaultProperties
-        .get("spark.yarn.dist.files").map(p => Utils.resolveURIs(p)).orNull)
-    }
   }
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
