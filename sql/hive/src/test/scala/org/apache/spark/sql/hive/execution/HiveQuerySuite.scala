@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
+import scala.util.Try
+
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{execution, Row}
+import org.apache.spark.sql.{SchemaRDD, execution, Row}
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -162,19 +164,58 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SELECT * FROM src").toString
   }
 
+  private val explainCommandClassName =
+    classOf[execution.ExplainCommand].getSimpleName.stripSuffix("$")
+
+  def isExplanation(result: SchemaRDD) = {
+    val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
+    explanation.size == 1 && explanation.head.startsWith(explainCommandClassName)
+  }
+
   test("SPARK-1704: Explain commands as a SchemaRDD") {
     hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 
     val rdd = hql("explain select key, count(value) from src group by key")
-    val explanation = rdd.select('plan).collect().map {
-      case Row(plan: String) => plan
-    }
-    assert(explanation.size == 1)
-
-    val explainCommandClassName = classOf[execution.ExplainCommand].getSimpleName.stripSuffix("$")
-    assert(explanation.head.contains(explainCommandClassName))
+    assert(isExplanation(rdd))
 
     TestHive.reset()
+  }
+
+  test("Query Hive native command execution result") {
+    val tableName = "test_native_commands"
+
+    val q0 = hql(s"DROP TABLE IF EXISTS $tableName")
+    assert(q0.count() == 0)
+
+    val q1 = hql(s"CREATE TABLE $tableName(key INT, value STRING)")
+    assert(q1.count() == 0)
+
+    val q2 = hql("SHOW TABLES")
+    val tables = q2.select('result).collect().map { case Row(table: String) => table }
+    assert(tables.contains(tableName))
+
+    val q3 = hql(s"DESCRIBE $tableName")
+    assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
+      q3.select('result).collect().map { case Row(fieldDesc: String) =>
+        fieldDesc.split("\t").map(_.trim)
+      }
+    }
+
+    val q4 = hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")
+    assert(isExplanation(q4))
+
+    TestHive.reset()
+  }
+
+  test("Exactly once semantics for DDL and command statements") {
+    val tableName = "test_exactly_once"
+    val q0 = hql(s"CREATE TABLE $tableName(key INT, value STRING)")
+
+    // If the table was not created, the following assertion would fail
+    assert(Try(table(tableName)).isSuccess)
+
+    // If the CREATE TABLE command got executed again, the following assertion would fail
+    assert(Try(q0.count()).isSuccess)
   }
 
   test("parse HQL set commands") {
