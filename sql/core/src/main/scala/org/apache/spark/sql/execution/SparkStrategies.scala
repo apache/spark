@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, execution}
+import org.apache.spark.sql.{SQLConf, SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -27,6 +27,22 @@ import org.apache.spark.sql.parquet._
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
+
+  object LeftSemiJoin extends Strategy with PredicateHelper {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // Find left semi joins where at least some predicates can be evaluated by matching hash
+      // keys using the HashFilteredJoin pattern.
+      case HashFilteredJoin(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
+        val semiJoin = execution.LeftSemiJoinHash(
+          leftKeys, rightKeys, planLater(left), planLater(right))
+        condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
+      // no predicate can be evaluated by matching hash keys
+      case logical.Join(left, right, LeftSemi, condition) =>
+        execution.LeftSemiJoinBNL(
+          planLater(left), planLater(right), condition)(sparkContext) :: Nil
+      case _ => Nil
+    }
+  }
 
   object HashJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -177,8 +193,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    // TODO: Set
-    val numPartitions = 200
+    def numPartitions = self.numPartitions
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Distinct(child) =>
         execution.Aggregate(
@@ -214,6 +230,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
       case SparkLogicalPlan(existingPlan) => existingPlan :: Nil
+      case _ => Nil
+    }
+  }
+
+  case class CommandStrategy(context: SQLContext) extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.SetCommand(key, value) =>
+        Seq(execution.SetCommandPhysical(key, value, plan.output)(context))
+      case logical.ExplainCommand(child) =>
+        val executedPlan = context.executePlan(child).executedPlan
+        Seq(execution.ExplainCommandPhysical(executedPlan, plan.output)(context))
+      case logical.CacheCommand(tableName, cache) =>
+        Seq(execution.CacheCommandPhysical(tableName, cache)(context))
       case _ => Nil
     }
   }

@@ -178,14 +178,18 @@ class SchemaRDD(
   def orderBy(sortExprs: SortOrder*): SchemaRDD =
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
 
+  @deprecated("use limit with integer argument", "1.1.0")
+  def limit(limitExpr: Expression): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+
   /**
-   * Limits the results by the given expressions.
+   * Limits the results by the given integer.
    * {{{
    *   schemaRDD.limit(10)
    * }}}
    */
-  def limit(limitExpr: Expression): SchemaRDD =
-    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+  def limit(limitNum: Int): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(Literal(limitNum), logicalPlan))
 
   /**
    * Performs a grouping followed by an aggregation.
@@ -367,6 +371,14 @@ class SchemaRDD(
   private def applySchema(rdd: RDD[Row]): SchemaRDD = {
     new SchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(logicalPlan.output, rdd)))
   }
+
+  // =======================================================================
+  // Overriden RDD actions
+  // =======================================================================
+
+  override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
+
+  override def take(num: Int): Array[Row] = limit(num).collect()
 
   // =======================================================================
   // Base RDD functions that do NOT change schema

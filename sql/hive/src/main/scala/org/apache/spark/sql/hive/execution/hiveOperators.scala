@@ -26,8 +26,7 @@ import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveDecimalObjectInspector
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveVarcharObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 import org.apache.hadoop.hive.serde2.{ColumnProjectionUtils, Serializer}
 import org.apache.hadoop.io.Writable
@@ -95,27 +94,32 @@ case class HiveTableScan(
     attributes.map { a =>
       val ordinal = relation.partitionKeys.indexOf(a)
       if (ordinal >= 0) {
+        val dataType = relation.partitionKeys(ordinal).dataType
         (_: Any, partitionKeys: Array[String]) => {
-          val value = partitionKeys(ordinal)
-          val dataType = relation.partitionKeys(ordinal).dataType
-          unwrapHiveData(castFromString(value, dataType))
+          castFromString(partitionKeys(ordinal), dataType)
         }
       } else {
         val ref = objectInspector.getAllStructFieldRefs
           .find(_.getFieldName == a.name)
           .getOrElse(sys.error(s"Can't find attribute $a"))
+        val fieldObjectInspector = ref.getFieldObjectInspector
+
+        val unwrapHiveData = fieldObjectInspector match {
+          case _: HiveVarcharObjectInspector =>
+            (value: Any) => value.asInstanceOf[HiveVarchar].getValue
+          case _: HiveDecimalObjectInspector =>
+            (value: Any) => BigDecimal(value.asInstanceOf[HiveDecimal].bigDecimalValue())
+          case _ =>
+            identity[Any] _
+        }
+
         (row: Any, _: Array[String]) => {
           val data = objectInspector.getStructFieldData(row, ref)
-          unwrapHiveData(unwrapData(data, ref.getFieldObjectInspector))
+          val hiveData = unwrapData(data, fieldObjectInspector)
+          if (hiveData != null) unwrapHiveData(hiveData) else null
         }
       }
     }
-  }
-
-  private def unwrapHiveData(value: Any) = value match {
-    case varchar: HiveVarchar => varchar.getValue
-    case decimal: HiveDecimal => BigDecimal(decimal.bigDecimalValue)
-    case other => other
   }
 
   private def castFromString(value: String, dataType: DataType) = {

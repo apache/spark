@@ -99,7 +99,7 @@ object DecisionTreeRunner {
     val sc = new SparkContext(conf)
 
     // Load training data and cache it.
-    val examples = MLUtils.loadLabeledData(sc, params.input).cache()
+    val examples = MLUtils.loadLabeledPoints(sc, params.input).cache()
 
     val splits = examples.randomSplit(Array(0.8, 0.2))
     val training = splits(0).cache()
