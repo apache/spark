@@ -53,7 +53,7 @@ object IndexedRDDBenchmark {
     val r = new util.Random(0)
 
     println("Constructing large dataset...")
-    var large = IndexedRDD(sc.parallelize(0 until numPartitions).flatMap(p =>
+    var large = IndexedRDD(sc.parallelize(0 until numPartitions, numPartitions).flatMap(p =>
       (p * numElementsLarge / numPartitions) until ((p + 1) * numElementsLarge / numPartitions))
       .map(x => (x.toLong, x))).cache()
     val largeOrig = large
