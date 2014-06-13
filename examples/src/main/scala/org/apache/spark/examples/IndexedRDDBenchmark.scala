@@ -34,15 +34,17 @@ object IndexedRDDBenchmark {
     }
 
     var numPartitions = 1000
-    var numElementsLarge = 1000000000
+    var elemsPerPartition = 1000000
     var trials = 100
 
     options.foreach {
       case ("numPartitions", v) => numPartitions = v.toInt
-      case ("numElementsLarge", v) => numElementsLarge = v.toInt
+      case ("elemsPerPartition", v) => elemsPerPartition = v.toInt
       case ("trials", v) => trials = v.toInt
       case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
     }
+
+    val numElementsLarge = numPartitions * elemsPerPartition
 
     val conf = new SparkConf()
       .setAppName(s"IndexedRDD Benchmark")
@@ -54,7 +56,7 @@ object IndexedRDDBenchmark {
 
     println("Constructing large dataset...")
     var large = IndexedRDD(sc.parallelize(0 until numPartitions, numPartitions).flatMap(p =>
-      (p * numElementsLarge / numPartitions) until ((p + 1) * numElementsLarge / numPartitions))
+      (p * elemsPerPartition) until ((p + 1) * elemsPerPartition))
       .map(x => (x.toLong, x))).cache()
     val largeOrig = large
     println(s"Done. Generated ${large.count} elements.")
