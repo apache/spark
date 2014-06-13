@@ -18,8 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
-import org.apache.spark.sql.execution.SparkLogicalPlan
+import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 import org.apache.spark.sql.test.TestSQLContext
 
 class CachedTableSuite extends QueryTest {
@@ -34,7 +33,7 @@ class CachedTableSuite extends QueryTest {
     )
 
     TestSQLContext.table("testData").queryExecution.analyzed match {
-      case SparkLogicalPlan(_ : InMemoryColumnarTableScan) => // Found evidence of caching
+      case _ : InMemoryRelation => // Found evidence of caching
       case noCache => fail(s"No cache node found in plan $noCache")
     }
 
@@ -46,7 +45,7 @@ class CachedTableSuite extends QueryTest {
     )
 
     TestSQLContext.table("testData").queryExecution.analyzed match {
-      case cachePlan @ SparkLogicalPlan(_ : InMemoryColumnarTableScan) =>
+      case cachePlan: InMemoryRelation =>
         fail(s"Table still cached after uncache: $cachePlan")
       case noCache => // Table uncached successfully
     }
@@ -61,13 +60,17 @@ class CachedTableSuite extends QueryTest {
   test("SELECT Star Cached Table") {
     TestSQLContext.sql("SELECT * FROM testData").registerAsTable("selectStar")
     TestSQLContext.cacheTable("selectStar")
-    TestSQLContext.sql("SELECT * FROM selectStar")
+    TestSQLContext.sql("SELECT * FROM selectStar WHERE key = 1").collect()
     TestSQLContext.uncacheTable("selectStar")
   }
 
   test("Self-join cached") {
+    val unCachedAnswer =
+      TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key").collect()
     TestSQLContext.cacheTable("testData")
-    TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key")
+    checkAnswer(
+      TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key"),
+      unCachedAnswer.toSeq)
     TestSQLContext.uncacheTable("testData")
   }
 

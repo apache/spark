@@ -27,6 +27,7 @@ import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap}
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.ShuffleHandle
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
 
@@ -44,7 +45,7 @@ private[spark] case class NarrowCoGroupSplitDep(
   }
 }
 
-private[spark] case class ShuffleCoGroupSplitDep(shuffleId: Int) extends CoGroupSplitDep
+private[spark] case class ShuffleCoGroupSplitDep(handle: ShuffleHandle) extends CoGroupSplitDep
 
 private[spark] class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep])
   extends Partition with Serializable {
@@ -74,10 +75,11 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   private type CoGroupValue = (Any, Int)  // Int is dependency number
   private type CoGroupCombiner = Seq[CoGroup]
 
-  private var serializer: Serializer = null
+  private var serializer: Option[Serializer] = None
 
+  /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): CoGroupedRDD[K] = {
-    this.serializer = serializer
+    this.serializer = Option(serializer)
     this
   }
 
@@ -88,7 +90,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         new OneToOneDependency(rdd)
       } else {
         logDebug("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency[Any, Any](rdd, part, serializer)
+        new ShuffleDependency[K, Any, CoGroupCombiner](rdd, part, serializer)
       }
     }
   }
@@ -100,8 +102,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       array(i) = new CoGroupPartition(i, rdds.zipWithIndex.map { case (rdd, j) =>
         // Assume each RDD contributed a single dependency, and get it
         dependencies(j) match {
-          case s: ShuffleDependency[_, _] =>
-            new ShuffleCoGroupSplitDep(s.shuffleId)
+          case s: ShuffleDependency[_, _, _] =>
+            new ShuffleCoGroupSplitDep(s.shuffleHandle)
           case _ =>
             new NarrowCoGroupSplitDep(rdd, i, rdd.partitions(i))
         }
@@ -126,11 +128,11 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         val it = rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]]
         rddIterators += ((it, depNum))
 
-      case ShuffleCoGroupSplitDep(shuffleId) =>
+      case ShuffleCoGroupSplitDep(handle) =>
         // Read map outputs of shuffle
-        val fetcher = SparkEnv.get.shuffleFetcher
-        val ser = Serializer.getSerializer(serializer)
-        val it = fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser)
+        val it = SparkEnv.get.shuffleManager
+          .getReader(handle, split.index, split.index + 1, context)
+          .read()
         rddIterators += ((it, depNum))
     }
 
