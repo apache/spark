@@ -153,7 +153,7 @@ trait ClientBase extends Logging {
     val fs = FileSystem.get(conf)
     val remoteFs = originalPath.getFileSystem(conf)
     var newPath = originalPath
-    if (! compareFs(remoteFs, fs)) {
+    if (!compareFs(remoteFs, fs)) {
       newPath = new Path(dstDir, originalPath.getName())
       logInfo("Uploading " + originalPath + " to " + newPath)
       FileUtil.copy(remoteFs, originalPath, fs, newPath, false, conf)
