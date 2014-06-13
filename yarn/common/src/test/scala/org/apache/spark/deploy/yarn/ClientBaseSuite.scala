@@ -110,7 +110,7 @@ class ClientBaseSuite extends FunSuite {
 
     val client = spy(new DummyClient(args, conf, sparkConf, yarnConf))
     doReturn(new Path("/")).when(client).copyRemoteFile(any(classOf[Path]),
-      any(classOf[Path]), any(classOf[Short]), any(classOf[Boolean]))
+      any(classOf[Path]), anyShort(), anyBoolean())
 
     var tempDir = Files.createTempDir();
     try {
