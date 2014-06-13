@@ -38,8 +38,10 @@ else
   JAR_CMD="jar"
 fi
 
-# First check if we have a dependencies jar. If so, include binary classes with the deps jar
-if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
+# A developer option to prepend more recently compiled Spark classes
+if [ -n "$SPARK_PREPEND_CLASSES" ]; then
+  echo "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark"\
+    "classes ahead of assembly." >&2
   CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SCALA_VERSION/classes"
@@ -51,16 +53,30 @@ if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/sql/core/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/yarn/stable/target/scala-$SCALA_VERSION/classes"
-
-  ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar 2>/dev/null)
-else
-  # Else use spark-assembly jar from either RELEASE or assembly directory
-  if [ -f "$FWDIR/RELEASE" ]; then
-    ASSEMBLY_JAR=$(ls "$FWDIR"/lib/spark-assembly*hadoop*.jar 2>/dev/null)
-  else
-    ASSEMBLY_JAR=$(ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*.jar 2>/dev/null)
-  fi
 fi
+
+# Use spark-assembly jar from either RELEASE or assembly directory
+if [ -f "$FWDIR/RELEASE" ]; then
+  assembly_folder="$FWDIR"/lib
+else
+  assembly_folder="$ASSEMBLY_DIR"
+fi
+
+num_jars=$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*\.jar" | wc -l)
+if [ "$num_jars" -eq "0" ]; then
+  echo "Failed to find Spark assembly in $assembly_folder"
+  echo "You need to build Spark before running this program."
+  exit 1
+fi
+if [ "$num_jars" -gt "1" ]; then
+  jars_list=$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*.jar")
+  echo "Found multiple Spark assembly jars in $assembly_folder:"
+  echo "$jars_list"
+  echo "Please remove all but one jar."
+  exit 1
+fi
+
+ASSEMBLY_JAR=$(ls "$assembly_folder"/spark-assembly*hadoop*.jar 2>/dev/null)
 
 # Verify that versions of java used to build the jars and run Spark are compatible
 jar_error_check=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" nonexistent/class/path 2>&1)

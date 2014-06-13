@@ -65,3 +65,26 @@ case class ExplainCommandPhysical(child: SparkPlan, output: Seq[Attribute])
 
   override def otherCopyArgs = context :: Nil
 }
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class CacheCommandPhysical(tableName: String, doCache: Boolean)(@transient context: SQLContext)
+  extends LeafNode {
+
+  lazy val commandSideEffect = {
+    if (doCache) {
+      context.cacheTable(tableName)
+    } else {
+      context.uncacheTable(tableName)
+    }
+  }
+
+  override def execute(): RDD[Row] = {
+    commandSideEffect
+    context.emptyResult
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
+}
