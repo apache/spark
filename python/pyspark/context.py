@@ -669,6 +669,28 @@ class SparkContext(object):
         """
         return self._jsc.getLocalProperty(key)
 
+    def getPersistentRddIds(self):
+        """
+        Get a set of RDD IDs that have marked themselves as persistent via cache() call.
+        Note that this does not necessarily mean the caching or computation was successful.
+
+        >>> existing = len(sc.getPersistentRddIds())
+        >>> rdd = sc.parallelize(range(4)).cache()
+        >>> c = rdd.count()
+        >>> len(sc.getPersistentRddIds()) - existing
+        1
+        >>> sc.unpersistRDD(rdd.id())
+        >>> len(sc.getPersistentRddIds()) - existing
+        0
+        """
+        return self._jsc.getPersistentRddIds()
+
+    def unpersistRDD(self, rddId):
+        """
+        Unpersist an RDD from memory and/or disk storage
+        """
+        self._jsc.unpersistRDD(rddId, True)
+
     def sparkUser(self):
         """
         Get SPARK_USER for user who is running SparkContext.

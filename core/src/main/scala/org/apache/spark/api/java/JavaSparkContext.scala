@@ -559,6 +559,19 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def getLocalProperty(key: String): String = sc.getLocalProperty(key)
 
   /**
+   * Get a set of RDD IDs that have marked themselves as persistent via cache() call.
+   * Note that this does not necessarily mean the caching or computation was successful.
+   */
+  def getPersistentRddIds(): java.util.Set[Int] =
+    setAsJavaSet(sc.getPersistentRDDs.keySet)
+
+  /**
+   * Unpersist an RDD from memory and/or disk storage
+   */
+  def unpersistRDD(rddId: Int, blocking: Boolean): Unit =
+    sc.unpersistRDD(rddId, blocking)
+
+  /**
    * Assigns a group ID to all the jobs started by this thread until the group ID is set to a
    * different value or cleared.
    *
