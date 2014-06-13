@@ -76,8 +76,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * :: DeveloperApi ::
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
-   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Ca
-   * be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
+   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
+   * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
    */
   @DeveloperApi
@@ -290,6 +290,9 @@ class SparkContext(config: SparkConf) extends Logging {
     value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
     executorEnvs(envKey) = value
   }
+  Option(System.getenv("SPARK_PREPEND_CLASSES")).foreach { v => 
+    executorEnvs("SPARK_PREPEND_CLASSES") = v
+  }
   // The Mesos scheduler backend relies on this environment variable to set executor memory.
   // TODO: Set this only in the Mesos scheduler.
   executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
@@ -297,7 +300,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Set SPARK_USER for user who is running SparkContext.
   val sparkUser = Option {
-    Option(System.getProperty("user.name")).getOrElse(System.getenv("SPARK_USER"))
+    Option(System.getenv("SPARK_USER")).getOrElse(System.getProperty("user.name"))
   }.getOrElse {
     SparkContext.SPARK_UNKNOWN_USER
   }
@@ -431,12 +434,21 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Methods for creating RDDs
 
-  /** Distribute a local Scala collection to form an RDD. */
+  /** Distribute a local Scala collection to form an RDD.
+   *
+   * @note Parallelize acts lazily. If `seq` is a mutable collection and is
+   * altered after the call to parallelize and before the first action on the
+   * RDD, the resultant RDD will reflect the modified collection. Pass a copy of
+   * the argument to avoid this.
+   */
   def parallelize[T: ClassTag](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     new ParallelCollectionRDD[T](this, seq, numSlices, Map[Int, Seq[String]]())
   }
 
-  /** Distribute a local Scala collection to form an RDD. */
+  /** Distribute a local Scala collection to form an RDD.
+   *
+   * This method is identical to `parallelize`.
+   */
   def makeRDD[T: ClassTag](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     parallelize(seq, numSlices)
   }
@@ -455,7 +467,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def textFile(path: String, minPartitions: Int = defaultMinPartitions): RDD[String] = {
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
-      minPartitions).map(pair => pair._2.toString)
+      minPartitions).map(pair => pair._2.toString).setName(path)
   }
 
   /**
@@ -496,7 +508,7 @@ class SparkContext(config: SparkConf) extends Logging {
       classOf[String],
       classOf[String],
       updateConf,
-      minPartitions)
+      minPartitions).setName(path)
   }
 
   /**
@@ -551,7 +563,7 @@ class SparkContext(config: SparkConf) extends Logging {
       inputFormatClass,
       keyClass,
       valueClass,
-      minPartitions)
+      minPartitions).setName(path)
   }
 
   /**
@@ -623,7 +635,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
-    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf)
+    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
   }
 
   /**
@@ -823,9 +835,11 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * :: DeveloperApi ::
    * Return information about what RDDs are cached, if they are in mem or on disk, how much space
    * they take, etc.
    */
+  @DeveloperApi
   def getRDDStorageInfo: Array[RDDInfo] = {
     StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus, this)
   }
@@ -837,8 +851,10 @@ class SparkContext(config: SparkConf) extends Logging {
   def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
 
   /**
+   * :: DeveloperApi ::
    * Return information about blocks stored in all of the slaves
    */
+  @DeveloperApi
   def getExecutorStorageStatus: Array[StorageStatus] = {
     env.blockManager.master.getStorageStatus
   }

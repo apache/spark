@@ -7,8 +7,8 @@ title: Spark Configuration
 
 Spark provides three locations to configure the system:
 
-* [Spark properties](#spark-properties) control most application parameters and can be set by passing
-  a [SparkConf](api/core/index.html#org.apache.spark.SparkConf) object to SparkContext, or through Java
+* [Spark properties](#spark-properties) control most application parameters and can be set by using
+  a [SparkConf](api/core/index.html#org.apache.spark.SparkConf) object, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
@@ -18,8 +18,8 @@ Spark provides three locations to configure the system:
 
 Spark properties control most application settings and are configured separately for each
 application. These properties can be set directly on a
-[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) and passed as an argument to your
-SparkContext. SparkConf allows you to configure some of the common properties
+[SparkConf](api/scala/index.html#org.apache.spark.SparkConf) passed to your
+`SparkContext`. `SparkConf` allows you to configure some of the common properties
 (e.g. master URL and application name), as well as arbitrary key-value pairs through the
 `set()` method. For example, we could initialize an application as follows:
 
@@ -75,6 +75,7 @@ appear. For all other configuration properties, you can assume the default value
 Most of the properties that control internal settings have reasonable default values. Some
 of the most common options to set are:
 
+#### Application Properties
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -309,7 +310,7 @@ Apart from these, the following properties are also available, and may be useful
     Base directory in which Spark events are logged, if <code>spark.eventLog.enabled</code> is true.
     Within this base directory, Spark creates a sub-directory for each application, and logs the
     events specific to the application in this directory. Users may want to set this to
-    and HDFS directory so that history files can be read by the history server.
+    a unified location like an HDFS directory so history files can be read by the history server.
   </td>
 </tr>
 </table>
@@ -485,6 +486,14 @@ Apart from these, the following properties are also available, and may be useful
     case of Spark Streaming applications). Note that any RDD that persists in memory for more than
     this duration will be cleared as well.
   </td>
+</tr>
+<tr>
+    <td>spark.hadoop.validateOutputSpecs</td>
+    <td>true</td>
+    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists) 
+    used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing 
+    output directories. We recommend that users do not disable this except if trying to achieve compatibility with 
+    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
 </tr>
 </table>
 
@@ -775,9 +784,48 @@ Apart from these, the following properties are also available, and may be useful
     higher memory usage in Spark.
   </td>
 </tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.strategy</code></td>
+  <td>(none)</td>
+  <td>
+    Set the strategy of rolling of executor logs. By default it is disabled. It can
+    be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
+    use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
+    For "size", use <code>spark.executor.logs.rolling.size.maxBytes</code> to set
+    the maximum file size for rolling.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.time.interval</code></td>
+  <td>daily</td>
+  <td>
+    Set the time interval by which the executor logs will be rolled over.
+    Rolling is disabled by default. Valid values are `daily`, `hourly`, `minutely` or
+    any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.size.maxBytes</code></td>
+  <td>(none)</td>
+  <td>
+    Set the max size of the file by which the executor logs will be rolled over.
+    Rolling is disabled by default. Value is set in terms of bytes.
+    See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
+  <td>(none)</td>
+  <td>
+    Sets the number of latest rolling log files that are going to be retained by the system.
+    Older log files will be deleted. Disabled by default.
+  </td>
+</tr>
 </table>
 
-#### Cluster Managers (YARN, Mesos, Standalone)
+#### Cluster Managers
 Each cluster manager in Spark has additional configuration options. Configurations 
 can be found on the pages for each mode:
 
