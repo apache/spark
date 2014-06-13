@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.types.{DoubleType, IntegerType}
+import org.apache.spark.sql.catalyst.types._
 
 // For implicit conversions
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -169,6 +169,65 @@ class ConstantFoldingSuite extends OptimizerTest {
         .select(
           Rand + Literal(1.0) as Symbol("c1"),
           Sum('a) as Symbol("c2"))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Constant folding test: expressions have null literals") {
+    val originalQuery =
+      testRelation
+        .select(
+          IsNull(Literal(null)) as 'c1,
+          IsNotNull(Literal(null)) as 'c2,
+
+          GetItem(Literal(null, ArrayType(IntegerType)), 1) as 'c3,
+          GetItem(Literal(Seq(1), ArrayType(IntegerType)), Literal(null, IntegerType)) as 'c4,
+          GetField(
+            Literal(null, StructType(Seq(StructField("a", IntegerType, true)))),
+            "a") as 'c5,
+
+          UnaryMinus(Literal(null, IntegerType)) as 'c6,
+          Cast(Literal(null), IntegerType) as 'c7,
+          Not(Literal(null, BooleanType)) as 'c8,
+
+          Add(Literal(null, IntegerType), 1) as 'c9,
+          Add(1, Literal(null, IntegerType)) as 'c10,
+
+          Equals(Literal(null, IntegerType), 1) as 'c11,
+          Equals(1, Literal(null, IntegerType)) as 'c12,
+
+          Like(Literal(null, StringType), "abc") as 'c13,
+          Like("abc", Literal(null, StringType)) as 'c14,
+
+          Upper(Literal(null, StringType)) as 'c15)
+
+    val optimized = Optimize(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select(
+          Literal(true) as 'c1,
+          Literal(false) as 'c2,
+
+          Literal(null, IntegerType) as 'c3,
+          Literal(null, IntegerType) as 'c4,
+          Literal(null, IntegerType) as 'c5,
+
+          Literal(null, IntegerType) as 'c6,
+          Literal(null, IntegerType) as 'c7,
+          Literal(null, BooleanType) as 'c8,
+
+          Literal(null, IntegerType) as 'c9,
+          Literal(null, IntegerType) as 'c10,
+
+          Literal(null, BooleanType) as 'c11,
+          Literal(null, BooleanType) as 'c12,
+
+          Literal(null, BooleanType) as 'c13,
+          Literal(null, BooleanType) as 'c14,
+
+          Literal(null, StringType) as 'c15)
         .analyze
 
     comparePlans(optimized, correctAnswer)

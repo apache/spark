@@ -29,12 +29,15 @@ import org.apache.spark.sql.catalyst.types._
 
 object Optimizer extends RuleExecutor[LogicalPlan] {
   val batches =
+    Batch("Combine Limits", FixedPoint(100),
+      CombineLimits) ::
     Batch("ConstantFolding", FixedPoint(100),
       NullPropagation,
       ConstantFolding,
       BooleanSimplification,
       SimplifyFilters,
-      SimplifyCasts) ::
+      SimplifyCasts,
+      SimplifyCaseConversionExpressions) ::
     Batch("Filter Pushdown", FixedPoint(100),
       CombineFilters,
       PushPredicateThroughProject,
@@ -104,8 +107,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
 object NullPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case e @ Count(Literal(null, _)) => Literal(0, e.dataType)
-      case e @ Sum(Literal(c, _)) if c == 0 => Literal(0, e.dataType)
+      case e @ Count(Literal(null, _)) => Cast(Literal(0L), e.dataType)
+      case e @ Sum(Literal(c, _)) if c == 0 => Cast(Literal(0L), e.dataType)
       case e @ Average(Literal(c, _)) if c == 0 => Literal(0.0, e.dataType)
       case e @ IsNull(c) if c.nullable == false => Literal(false, BooleanType)
       case e @ IsNotNull(c) if c.nullable == false => Literal(true, BooleanType)
@@ -130,18 +133,6 @@ object NullPropagation extends Rule[LogicalPlan] {
           case Literal(candidate, _) if candidate == v => true
           case _ => false
         })) => Literal(true, BooleanType)
-      case e: UnaryMinus => e.child match {
-        case Literal(null, _) => Literal(null, e.dataType)
-        case _ => e
-      }
-      case e: Cast => e.child match {
-        case Literal(null, _) => Literal(null, e.dataType)
-        case _ => e
-      }
-      case e: Not => e.child match {
-        case Literal(null, _) => Literal(null, e.dataType)
-        case _ => e
-      }
       // Put exceptional cases above if any
       case e: BinaryArithmetic => e.children match {
         case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
@@ -360,5 +351,31 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Cast(e, dataType) if e.dataType == dataType => e
+  }
+}
+
+/**
+ * Combines two adjacent [[catalyst.plans.logical.Limit Limit]] operators into one, merging the
+ * expressions into one single expression.
+ */
+object CombineLimits extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case ll @ Limit(le, nl @ Limit(ne, grandChild)) =>
+      Limit(If(LessThan(ne, le), ne, le), grandChild)
+  }
+}
+
+/**
+ * Removes the inner [[catalyst.expressions.CaseConversionExpression]] that are unnecessary because
+ * the inner conversion is overwritten by the outer one.
+ */
+object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case Upper(Upper(child)) => Upper(child)
+      case Upper(Lower(child)) => Upper(child)
+      case Lower(Upper(child)) => Lower(child)
+      case Lower(Lower(child)) => Lower(child)
+    }
   }
 }
