@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.{SetCommand, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution._
@@ -176,14 +176,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def sql(sqlText: String): SchemaRDD = {
-    val result = new SchemaRDD(this, parseSql(sqlText))
-    // We force query optimization to happen right away instead of letting it happen lazily like
-    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-    // generates the RDD lineage for DML queries, but do not perform any execution.
-    result.queryExecution.toRdd
-    result
-  }
+  def sql(sqlText: String): SchemaRDD = new SchemaRDD(this, parseSql(sqlText))
 
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =
@@ -288,8 +281,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] val planner = new SparkPlanner
 
   @transient
-  protected[sql] lazy val emptyResult =
-    sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
+  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[Row], 1)
 
   /**
    * Prepares a planned SparkPlan for execution by binding references to specific ordinals, and
@@ -309,22 +301,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected abstract class QueryExecution {
     def logical: LogicalPlan
 
-    def eagerlyProcess(plan: LogicalPlan): RDD[Row] = plan match {
-      case SetCommand(key, value) =>
-        // Only this case needs to be executed eagerly. The other cases will
-        // be taken care of when the actual results are being extracted.
-        // In the case of HiveContext, sqlConf is overridden to also pass the
-        // pair into its HiveConf.
-        if (key.isDefined && value.isDefined) {
-          set(key.get, value.get)
-        }
-        // It doesn't matter what we return here, since this is only used
-        // to force the evaluation to happen eagerly.  To query the results,
-        // one must use SchemaRDD operations to extract them.
-        emptyResult
-      case _ => executedPlan.execute()
-    }
-
     lazy val analyzed = analyzer(logical)
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
@@ -332,12 +308,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
-    lazy val toRdd: RDD[Row] = {
-      logical match {
-        case s: SetCommand => eagerlyProcess(s)
-        case _ => executedPlan.execute()
-      }
-    }
+    lazy val toRdd: RDD[Row] = executedPlan.execute()
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
@@ -359,7 +330,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * TODO: We only support primitive types, add support for nested types.
    */
   private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
-    val schema = rdd.first.map { case (fieldName, obj) =>
+    val schema = rdd.first().map { case (fieldName, obj) =>
       val dataType = obj.getClass match {
         case c: Class[_] if c == classOf[java.lang.String] => StringType
         case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType

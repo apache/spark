@@ -99,7 +99,7 @@ import java.util.{Map => JMap}
 @AlphaComponent
 class SchemaRDD(
     @transient val sqlContext: SQLContext,
-    @transient protected[spark] val logicalPlan: LogicalPlan)
+    @transient val baseLogicalPlan: LogicalPlan)
   extends RDD[Row](sqlContext.sparkContext, Nil) with SchemaRDDLike {
 
   def baseSchemaRDD = this
