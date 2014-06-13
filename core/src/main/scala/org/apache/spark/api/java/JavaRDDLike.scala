@@ -43,7 +43,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def rdd: RDD[T]
 
-  @deprecated(message: String = "Use partitions instead.", since: String = "1.0.1") 
+  @deprecated("Use partitions instead.", "1.0.1") 
   def splits: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
   
   /** Set of partitions in this RDD. */
