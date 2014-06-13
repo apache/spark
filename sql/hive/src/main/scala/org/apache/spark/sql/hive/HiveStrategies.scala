@@ -70,9 +70,18 @@ private[hive] trait HiveStrategies {
         pruneFilterProject(
           projectList,
           otherPredicates,
+          identity[Seq[Expression]],
           HiveTableScan(_, relation, pruningPredicates.reduceLeftOption(And))(hiveContext)) :: Nil
       case _ =>
         Nil
+    }
+  }
+
+  case class HiveCommandStrategy(context: HiveContext) extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.NativeCommand(sql) =>
+        NativeCommand(sql, plan.output)(context) :: Nil
+      case _ => Nil
     }
   }
 }

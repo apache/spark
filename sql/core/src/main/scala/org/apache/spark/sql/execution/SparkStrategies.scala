@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLConf, SQLContext, execution}
+import org.apache.spark.sql.{SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -157,12 +157,36 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         InsertIntoParquetTable(relation, planLater(child), overwrite=true)(sparkContext) :: Nil
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child), overwrite)(sparkContext) :: Nil
-      case PhysicalOperation(projectList, filters, relation: ParquetRelation) =>
-        // TODO: Should be pushing down filters as well.
+      case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
+        val prunePushedDownFilters =
+          if (sparkContext.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
+            (filters: Seq[Expression]) => {
+              filters.filter { filter =>
+                // Note: filters cannot be pushed down to Parquet if they contain more complex
+                // expressions than simple "Attribute cmp Literal" comparisons. Here we remove
+                // all filters that have been pushed down. Note that a predicate such as
+                // "(A AND B) OR C" can result in "A OR C" being pushed down.
+                val recordFilter = ParquetFilters.createFilter(filter)
+                if (!recordFilter.isDefined) {
+                  // First case: the pushdown did not result in any record filter.
+                  true
+                } else {
+                  // Second case: a record filter was created; here we are conservative in
+                  // the sense that even if "A" was pushed and we check for "A AND B" we
+                  // still want to keep "A AND B" in the higher-level filter, not just "B".
+                  !ParquetFilters.findExpression(recordFilter.get, filter).isDefined
+                }
+              }
+            }
+          } else {
+            identity[Seq[Expression]] _
+          }
         pruneFilterProject(
           projectList,
           filters,
-          ParquetTableScan(_, relation, None)(sparkContext)) :: Nil
+          prunePushedDownFilters,
+          ParquetTableScan(_, relation, filters)(sparkContext)) :: Nil
+
       case _ => Nil
     }
   }
@@ -225,12 +249,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   case class CommandStrategy(context: SQLContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.SetCommand(key, value) =>
-        Seq(execution.SetCommandPhysical(key, value, plan.output)(context))
+        Seq(execution.SetCommand(key, value, plan.output)(context))
       case logical.ExplainCommand(child) =>
         val executedPlan = context.executePlan(child).executedPlan
-        Seq(execution.ExplainCommandPhysical(executedPlan, plan.output)(context))
+        Seq(execution.ExplainCommand(executedPlan, plan.output)(context))
       case logical.CacheCommand(tableName, cache) =>
-        Seq(execution.CacheCommandPhysical(tableName, cache)(context))
+        Seq(execution.CacheCommand(tableName, cache)(context))
       case _ => Nil
     }
   }

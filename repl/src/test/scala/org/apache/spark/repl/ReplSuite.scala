@@ -57,12 +57,14 @@ class ReplSuite extends FunSuite {
   }
 
   def assertContains(message: String, output: String) {
-    assert(output.contains(message),
+    val isContain = output.contains(message)
+    assert(isContain,
       "Interpreter output did not contain '" + message + "':\n" + output)
   }
 
   def assertDoesNotContain(message: String, output: String) {
-    assert(!output.contains(message),
+    val isContain = output.contains(message)
+    assert(!isContain,
       "Interpreter output contained '" + message + "':\n" + output)
   }
 
