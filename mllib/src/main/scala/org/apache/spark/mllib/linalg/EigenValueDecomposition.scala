@@ -30,6 +30,7 @@ import org.apache.spark.annotation.Experimental
 @Experimental
 case class EigenValueDecomposition[VType](s: Vector, V: VType)
 
+@Experimental
 object EigenValueDecomposition {
   /**
    * Compute the leading k eigenvalues and eigenvectors on a symmetric square matrix using ARPACK.

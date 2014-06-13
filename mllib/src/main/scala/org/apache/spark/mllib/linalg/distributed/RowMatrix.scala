@@ -246,6 +246,23 @@ class RowMatrix(
   }
 
   /**
+   * Computes the singular value decomposition of this matrix, using default tolerance (1e-9).
+   *
+   * @param k number of singular values to keep. We might return less than k if there are
+   *          numerically zero singular values. See rCond.
+   * @param computeU whether to compute U
+   * @param rCond the reciprocal condition number. All singular values smaller than rCond * sigma(0)
+   *              are treated as zero, where sigma(0) is the largest singular value.
+   * @return SingularValueDecomposition(U, s, V)
+   */
+  def computeSVD(
+      k: Int,
+      computeU: Boolean = false,
+      rCond: Double = 1e-9): SingularValueDecomposition[RowMatrix, Matrix] = {
+    computeSVD(k, computeU, rCond, 1e-9)
+  }
+
+  /**
    * Computes the singular value decomposition of this matrix.
    * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A ~= U * S * V',
    * where S contains the leading singular values, U and V contain the corresponding singular
@@ -281,9 +298,9 @@ class RowMatrix(
    */
   def computeSVD(
       k: Int,
-      computeU: Boolean = false,
-      rCond: Double = 1e-9,
-      tol: Double = 1e-6): SingularValueDecomposition[RowMatrix, Matrix] = {
+      computeU: Boolean,
+      rCond: Double,
+      tol: Double): SingularValueDecomposition[RowMatrix, Matrix] = {
     val n = numCols().toInt
     require(k > 0 && k <= n, s"Request up to n singular values k=$k n=$n.")
 
