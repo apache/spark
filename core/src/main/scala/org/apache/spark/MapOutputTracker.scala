@@ -170,7 +170,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   /** Stop the tracker. */
   def stop() { }
 
-  //get map statuses for a shuffle
+  // Get map statuses for a shuffle
   private def getMapStatusesForShuffle(shuffleId: Int, reduceId: Int): Array[MapStatus]={
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
@@ -243,7 +243,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         val masterCompleteness = askTracker(GetShuffleStatus(shuffleId)).asInstanceOf[Int]
         val diff = masterCompleteness - completenessForShuffle(shuffleId)
         if (diff > 0) {
-          logInfo("Master is " + diff + " map statuses ahead of us. Clear local cache. ---lirui")
+          logInfo("Master is " + diff + " map statuses ahead of us for shuffleId "+shuffleId+". Clear local cache. ---lirui")
           mapStatuses -= shuffleId
         }
       }
@@ -320,10 +320,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       incrementEpoch()
     }
     if (isPartial) {
-      logInfo("Registered partial map outputs for shuffleId "+shuffleId+". ---lirui")
       partialForShuffle += shuffleId
     } else {
-      logInfo("Registered complete map outputs for shuffleId "+shuffleId+". ---lirui")
       partialForShuffle -= shuffleId
     }
   }
