@@ -18,25 +18,27 @@
 package org.apache.spark.sql.json
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashSet
 import scala.math.BigDecimal
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.Accumulable
+import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
-import org.apache.spark.sql.{Logging, SchemaRDD, SQLContext}
+import org.apache.spark.sql.{SQLContext, Logging, SchemaRDD}
 
 /**
- * A JsonTable is a special kind of [[SchemaRDD]] used to represent a JSON dataset backed by
- * a [[RDD]] of strings. Every string is a JSON object.
+ * :: Experimental ::
  *
+ * A JSON dataset (text files with one JSON object per line or a RDD[String] with one JSON object
+ * per string) can be directly loaded as a [[SchemaRDD]]. The schema of this [[SchemaRDD]] is
+ * automatically inferred from the dataset.
+ *
+ * == SQL Queries ==
  * {{{
  *  val sc: SparkContext // An existing spark context.
  *
@@ -46,156 +48,142 @@ import org.apache.spark.sql.{Logging, SchemaRDD, SQLContext}
  *  // Importing the SQL context gives access to all the SQL functions and implicit conversions.
  *  import sqlContext._
  *
- *  // Create a JsonTable from a text file. To infer the schema using the sampled dataset, use
- *  // jsonFile("examples/src/main/resources/people.json", samplingRatio)
- *  val jsonTable1 = jsonFile("examples/src/main/resources/people.json")
- *  // Print out the schema
- *  jsonTable1.printSchema
- *  jsonTable1.registerAsTable("jsonTable1")
- *  sql("SELECT * FROM jsonTable1").collect().foreach(println)
+ *  // Create a SchemaRDD from a JSON file (or a directory having JSON files).
+ *  val jsonTable = jsonFile("examples/src/main/resources/people.json")
+ *  // Or, if you have a JSON dataset as RDD[String]
+ *  // val json = sc.textFile("examples/src/main/resources/people.json")
+ *  // val jsonTable = jsonRDD(json)
  *
- *  // Check if the schema has been updated. Only needed when the initial schema is inferred based
- *  // on a sampled dataset.
- *  jsonTable1.adjustSchema()
+ *  // See the schema of jsonTable.
+ *  jsonTable.printSchema()
  *
- *  val rdd = sc.textFile("examples/src/main/resources/people.json")
- *  // Create a JsonTable from a RDD[String]. To infer the schema using the sampled dataset, use
- *  // jsonRDD(rdd, samplingRatio)
- *  val jsonTable2 = jsonRDD(rdd)
- *  jsonTable2.registerAsTable("jsonTable2")
- *  sql("SELECT * FROM jsonTable2").collect().foreach(println)
+ *  // Register jsonTable as a table.
+ *  jsonTable.registerAsTable("jsonTable")
  *
- *  // Check if the schema has been updated. Only needed when the initial schema is inferred based
- *  // on a sampled dataset.
- *  jsonTable2.adjustSchema()
+ *  // Run some queries.
+ *  sql("SELECT name, age FROM jsonTable").collect().foreach(println)
+ *  sql("SELECT name FROM jsonTable WHERE age >= 10 and age <= 19").collect().foreach(println)
+ *
+ *  // Create another RDD[String] storing JSON objects.
+ *  val anotherDataset = sc.parallelize(
+ *  """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
+ *  val anotherJsonTable = jsonRDD(anotherDataset)
+ *
+ *  // See the schema of anotherJsonTable.
+ *  anotherJsonTable.printSchema()
+ *
+ *  // Union jsonTable and anotherJsonTable.
+ *  val unionedJsonTable = jsonTable.unionAll(anotherJsonTable)
+ *
+ *  // See the schema of unionedJsonTable.
+ *  unionedJsonTable.printSchema()
+ *
+ *  // Register unionedJsonTable as table.
+ *  unionedJsonTable.registerAsTable("unionedJsonTable")
+ *
+ *  // Run some queries.
+ *  sql("SELECT name, age FROM unionedJsonTable").collect().foreach(println)
+ *  sql("SELECT name, age, address FROM unionedJsonTable WHERE address.city = 'Columbus'").
+ *    collect().foreach(println)
  * }}}
  *
- *  @groupname json JsonTable Functions
- *  @groupprio Query -3
- *  @groupprio json -2
- *  @groupprio schema -1
+ * == Language Integrated Queries ==
+ * {{{
+ *  val sc: SparkContext // An existing spark context.
+ *
+ *  import org.apache.spark.sql.SQLContext
+ *  val sqlContext = new SQLContext(sc)
+ *
+ *  // Importing the SQL context gives access to all the SQL functions and implicit conversions.
+ *  import sqlContext._
+ *
+ *  // Create a SchemaRDD from a JSON file (or a directory having JSON files).
+ *  val jsonTable = jsonFile("examples/src/main/resources/people.json")
+ *  // Or, if you have a JSON dataset as RDD[String]
+ *  // val json = sc.textFile("examples/src/main/resources/people.json")
+ *  // val jsonTable = jsonRDD(json)
+ *
+ *  // See the schema of jsonTable.
+ *  jsonTable.printSchema()
+ *
+ *  // Run some queries.
+ *  jsonTable.select('name, 'age).collect().foreach(println)
+ *  jsonTable.where('age <=19).select('name).collect().foreach(println)
+ *
+ *  // Create another RDD[String] storing JSON objects.
+ *  val anotherDataset = sc.parallelize(
+ *  """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
+ *  val anotherJsonTable = jsonRDD(anotherDataset)
+ *
+ *  // See the schema of anotherJsonTable.
+ *  anotherJsonTable.printSchema()
+ *
+ *  // Union jsonTable and anotherJsonTable.
+ *  val unionedJsonTable = jsonTable.unionAll(anotherJsonTable)
+ *
+ *  // See the schema of unionedJsonTable.
+ *  unionedJsonTable.printSchema()
+ *
+ *  // Run some queries.
+ *  unionedJsonTable.select('name, 'age).collect().foreach(println)
+ *  unionedJsonTable.where(
+ *    "address.city".attr === "Columbus").select(
+ *      'name, 'age, 'address).collect().foreach(println)
+ * }}}
  */
-protected[sql] class JsonTable(
+
+@AlphaComponent
+class JsonTable(
     @transient override val sqlContext: SQLContext,
-    protected var schema: StructType,
-    @transient protected var needsAutoCorrection: Boolean,
-    val jsonRDD: RDD[String])
-  extends SchemaRDD(sqlContext, null) {
-  import org.apache.spark.sql.json.JsonTable._
+    @transient override protected[spark] val logicalPlan: LogicalPlan,
+    protected[spark] val baseRDD: RDD[String],
+    protected[spark] val baseSchema: StructType)
+  extends SchemaRDD(sqlContext, logicalPlan) {
 
-  protected var updatedKeysAndTypes =
-    sqlContext.sparkContext.accumulableCollection(HashSet[(String, DataType)]())
-
-  protected var errorLogs = sqlContext.sparkContext.accumulableCollection(HashSet[String]())
-
-  @transient protected var currentLogicalPlan = {
-    val parsed = if (needsAutoCorrection) {
-      parseJson(jsonRDD).mapPartitions {
-        iter => iter.map { record: Map[String, Any] =>
-          updatedKeysAndTypes.localValue ++= getAllKeysWithValueTypes(record)
-          record
-        }
-      }
-    } else {
-      parseJson(jsonRDD)
-    }
-
-    SparkLogicalPlan(ExistingRdd(asAttributes(schema), parsed.map(asRow(_, schema, errorLogs))))
-  }
-
-  @transient protected var currentQueryExecution = sqlContext.executePlan(currentLogicalPlan)
-
-  @DeveloperApi
-  override def queryExecution = {
-    adjustSchema()
-
-    currentQueryExecution
-  }
-
-  override protected[spark] def logicalPlan: LogicalPlan = {
-    adjustSchema()
-
-    currentLogicalPlan
-  }
+  // We widen the type those fields with NullType to StringType. We want to use the original
+  // schema (baseSchema) with those fields with NullType when we union this JsonTable with another
+  // JsonTable.
+  protected[json] lazy val schema = JsonTable.nullTypeToStringType(baseSchema)
 
   /**
-   * Checks if we have seen new fields and updated data types during the last execution. If so,
-   * updates the schema of this JsonTable and returns true. If the schema does not nee
-   * to be updated, returns false. Also, if there was any runtime exception during last execution
-   * that has been tolerated, logs the exception at here. If the schema of this JsonTable
-   * inferred based on a sampled dataset, after the execution of the first query, the user should
-   * invoke this method to check if the schema has been updated and if the result of the first
-   * query is not correct because of the partial schema inferred based on sampled dataset.
+   * Combines the tuples of two JsonTables and union their schemas, keeping duplicates.
    *
-   * @group json
+   * @group Query
    */
-  def adjustSchema(): Boolean = {
-    if (!errorLogs.value.isEmpty) {
-      log.warn("There were runtime errors...")
-      errorLogs.value.foreach(log.warn(_))
-      errorLogs = sqlContext.sparkContext.accumulableCollection(HashSet[String]())
-    }
+  def unionAll(otherPlan: JsonTable): JsonTable = {
+    val unionedBaseSchema =
+      JsonTable.getCompatibleType(baseSchema, otherPlan.baseSchema).asInstanceOf[StructType]
+    val unionedJsonRDD = baseRDD.union(otherPlan.baseRDD)
+    val logicalPlan = JsonTable.createLogicalPlan(unionedJsonRDD, unionedBaseSchema)
 
-    if (needsAutoCorrection && !updatedKeysAndTypes.value.isEmpty) {
-      val newSchema = createSchema(updatedKeysAndTypes.value.toSet)
-      if (schema != newSchema) {
-        log.info("Schema has been updated.")
-        println("==== Original Schema ====")
-        currentLogicalPlan.printSchema()
-
-        // Use the new schema.
-        schema = newSchema
-
-        // Generate new logical plan.
-        currentLogicalPlan =
-          SparkLogicalPlan(
-            ExistingRdd(asAttributes(schema), parseJson(jsonRDD).map(asRow(_, schema, errorLogs))))
-
-        println("==== Updated Schema ====")
-        currentLogicalPlan.printSchema()
-
-        // Create a new accumulable with an empty set.
-        updatedKeysAndTypes =
-          sqlContext.sparkContext.accumulableCollection(HashSet[(String, DataType)]())
-        currentQueryExecution = sqlContext.executePlan(currentLogicalPlan)
-
-        // Update catalog.
-        tableNames.foreach {
-          tableName => sqlContext.catalog.registerTable(None, tableName, currentLogicalPlan)
-        }
-
-        return true
-      }
-    }
-
-    return false
+    new JsonTable(sqlContext, logicalPlan, unionedJsonRDD, unionedBaseSchema)
   }
 }
 
-/**
- * :: Experimental ::
- * Converts a JSON file to a SparkSQL logical query plan.  This implementation is only designed to
- * work on JSON files that have mostly uniform schema.  The conversion suffers from the following
- * limitation:
- *  - The data is optionally sampled to determine all of the possible fields. Any fields that do
- *    not appear in this sample will not be included in the final output.
- */
 @Experimental
 object JsonTable extends Logging {
 
   @DeveloperApi
   protected[sql] def apply(
+      sqlContext: SQLContext,
       json: RDD[String],
-      samplingRatio: Double = 1.0,
-      sqlContext: SQLContext): JsonTable = {
+      samplingRatio: Double = 1.0): JsonTable = {
     require(samplingRatio > 0)
-    val (schemaData, isSampled) =
-      if (samplingRatio > 0.99) (json, false) else (json.sample(false, samplingRatio, 1), true)
+    val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
+
     val allKeys = parseJson(schemaData).map(getAllKeysWithValueTypes).reduce(_ ++ _)
 
-    val schema = createSchema(allKeys)
+    val baseSchema = createSchema(allKeys)
 
-    new JsonTable(sqlContext, schema, isSampled, json)
+    new JsonTable(sqlContext, createLogicalPlan(json, baseSchema), json, baseSchema)
+  }
+
+  protected[json] def createLogicalPlan(
+      json: RDD[String],
+      baseSchema: StructType): LogicalPlan = {
+    val schema = nullTypeToStringType(baseSchema)
+
+    SparkLogicalPlan(ExistingRdd(asAttributes(schema), parseJson(json).map(asRow(_, schema))))
   }
 
   protected[json] def createSchema(allKeys: Set[(String, DataType)]): StructType = {
@@ -211,14 +199,7 @@ object JsonTable extends Logging {
           case (_, dataType) => dataType
         }.reduce((type1: DataType, type2: DataType) => getCompatibleType(type1, type2))
 
-        // Finally, we replace all NullType to StringType. We do not need to take care
-        // StructType because all fields with a StructType are represented by a placeholder
-        // StructType(Nil).
-        dataType match {
-          case NullType => (fieldName, StringType)
-          case ArrayType(NullType) => (fieldName, ArrayType(StringType))
-          case other => (fieldName, other)
-        }
+        (fieldName, dataType)
       }
     }
 
@@ -233,8 +214,6 @@ object JsonTable extends Logging {
         }
       }.map {
         a => StructField(a.head, resolved.get(prefix ++ a).get, nullable = true)
-      }.sortBy {
-        case StructField(name, _, _) => name
       }
 
       val structFields: Seq[StructField] = structLike.groupBy(_(0)).map {
@@ -251,11 +230,12 @@ object JsonTable extends Logging {
             case StringType => None
           }
         }
-      }.flatMap(field => field).toSeq.sortBy {
-        case StructField(name, _, _) => name
-      }
+      }.flatMap(field => field).toSeq
 
-      StructType(topLevelFields ++ structFields)
+      StructType(
+        (topLevelFields ++ structFields).sortBy {
+        case StructField(name, _, _) => name
+      })
     }
 
     makeStruct(resolved.keySet.toSeq, Nil)
@@ -264,7 +244,7 @@ object JsonTable extends Logging {
   /**
    * Returns the most general data type for two given data types.
    */
-  protected def getCompatibleType(t1: DataType, t2: DataType): DataType = {
+  protected[json] def getCompatibleType(t1: DataType, t2: DataType): DataType = {
     // Try and find a promotion rule that contains both types in question.
     val applicableConversion = HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p
       .contains(t2))
@@ -279,9 +259,18 @@ object JsonTable extends Logging {
       (t1, t2) match {
         case (other: DataType, NullType) => other
         case (NullType, other: DataType) => other
-        // TODO: Returns the union of fields1 and fields2?
-        case (StructType(fields1), StructType(fields2))
-          if (fields1 == fields2) => StructType(fields1)
+        case (StructType(fields1), StructType(fields2)) => {
+          val newFields = (fields1 ++ fields2).groupBy(field => field.name).map {
+            case (name, fieldTypes) => {
+              val dataType = fieldTypes.map(field => field.dataType).reduce(
+                (type1: DataType, type2: DataType) => getCompatibleType(type1, type2))
+              StructField(name, dataType, true)
+            }
+          }
+          StructType(newFields.toSeq.sortBy {
+            case StructField(name, _, _) => name
+          })
+        }
         case (ArrayType(elementType1), ArrayType(elementType2)) =>
           ArrayType(getCompatibleType(elementType1, elementType2))
         // TODO: We should use JsonObjectStringType to mark that values of field will be
@@ -489,45 +478,55 @@ object JsonTable extends Logging {
     }
   }
 
-  protected[json] def asRow(
-      json: Map[String,Any],
-      schema: StructType,
-      errorLogs: Accumulable[HashSet[String], String]): Row = {
+  protected[json] def asRow(json: Map[String,Any], schema: StructType): Row = {
     val row = new GenericMutableRow(schema.fields.length)
     schema.fields.zipWithIndex.foreach {
       // StructType
       case (StructField(name, fields: StructType, _), i) =>
         row.update(i, json.get(name).flatMap(v => Option(v)).map(
-          v => asRow(v.asInstanceOf[Map[String, Any]], fields, errorLogs)).orNull)
+          v => asRow(v.asInstanceOf[Map[String, Any]], fields)).orNull)
 
       // ArrayType(StructType)
       case (StructField(name, ArrayType(structType: StructType), _), i) =>
         row.update(i,
           json.get(name).flatMap(v => Option(v)).map(
             v => v.asInstanceOf[Seq[Any]].map(
-              e => asRow(e.asInstanceOf[Map[String, Any]], structType, errorLogs))).orNull)
+              e => asRow(e.asInstanceOf[Map[String, Any]], structType))).orNull)
 
       // Other cases
       case (StructField(name, dataType, _), i) =>
-        try {
-          row.update(i, json.get(name).flatMap(v => Option(v)).map(
-            enforceCorrectType(_, dataType)).getOrElse(null))
-        } catch {
-          case castException: ClassCastException => {
-            errorLogs.localValue +=
-              s"The original inferred data type (${dataType.toString}) of ${name} is " +
-              s"not correct. If ${name} is used in the last query, please re-run it to get " +
-              s"correct results. The exception message is ${castException.toString}"
-
-            row.update(i, null)
-          }
-        }
+        row.update(i, json.get(name).flatMap(v => Option(v)).map(
+          enforceCorrectType(_, dataType)).getOrElse(null))
     }
 
     row
   }
 
+  protected def nullTypeToStringType(struct: StructType): StructType = {
+    val fields = struct.fields.map {
+      case StructField(fieldName, dataType, nullable) => {
+        val newType = dataType match {
+          case NullType => StringType
+          case ArrayType(NullType) => ArrayType(StringType)
+          case struct: StructType => nullTypeToStringType(struct)
+          case other: DataType => other
+        }
+        StructField(fieldName, newType, nullable)
+      }
+    }
+
+    StructType(fields)
+  }
+
   protected[json] def asAttributes(struct: StructType): Seq[AttributeReference] = {
     struct.fields.map(f => AttributeReference(f.name, f.dataType, nullable = true)())
+  }
+
+  protected[json] def asStruct(attributes: Seq[AttributeReference]): StructType = {
+    val fields = attributes.map {
+      case AttributeReference(name, dataType, nullable) => StructField(name, dataType, nullable)
+    }
+
+    StructType(fields)
   }
 }

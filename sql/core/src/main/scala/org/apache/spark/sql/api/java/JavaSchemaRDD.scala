@@ -37,13 +37,11 @@ import org.apache.spark.storage.StorageLevel
  */
 class JavaSchemaRDD(
      @transient val sqlContext: SQLContext,
-     @transient protected[spark] val _logicalPlan: LogicalPlan)
+     @transient protected[spark] val logicalPlan: LogicalPlan)
   extends JavaRDDLike[Row, JavaRDD[Row]]
   with SchemaRDDLike {
 
   private[sql] val baseSchemaRDD = new SchemaRDD(sqlContext, logicalPlan)
-
-  protected[spark] def logicalPlan: LogicalPlan = _logicalPlan
 
   override val classTag = scala.reflect.classTag[Row]
 

@@ -102,9 +102,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonFile(
-      path: String,
-      samplingRatio: Double = 1.0): JsonTable = {
+  def jsonFile(path: String): JsonTable = jsonFile(path, 1.0)
+
+  /**
+   * :: Experimental ::
+   */
+  def jsonFile(path: String, samplingRatio: Double): JsonTable = {
     val json = sparkContext.textFile(path)
     jsonRDD(json, samplingRatio)
   }
@@ -116,12 +119,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonRDD(
-      json: RDD[String],
-      samplingRatio: Double = 1.0): JsonTable = {
-    val jsonTable = JsonTable(json, samplingRatio, this)
-    jsonTable
-  }
+  def jsonRDD(json: RDD[String]): JsonTable = jsonRDD(json, 1.0)
+
+  /**
+   * :: Experimental ::
+   */
+  def jsonRDD(json: RDD[String], samplingRatio: Double): JsonTable =
+    JsonTable(this, json, samplingRatio)
 
   /**
    * :: Experimental ::
@@ -164,7 +168,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    rdd.tableNames += tableName
     catalog.registerTable(None, tableName, rdd.logicalPlan)
   }
 
@@ -184,7 +187,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =
-    new SchemaRDD(this, catalog.lookupRelation(None, tableName), Set(tableName))
+    new SchemaRDD(this, catalog.lookupRelation(None, tableName))
 
   /** Caches the specified table in-memory. */
   def cacheTable(tableName: String): Unit = {
@@ -303,7 +306,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
    * access to the intermediate phases of query execution for developers.
    */
-  protected[sql] abstract class QueryExecution {
+  protected abstract class QueryExecution {
     def logical: LogicalPlan
 
     def eagerlyProcess(plan: LogicalPlan): RDD[Row] = plan match {

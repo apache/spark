@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
  */
 private[sql] trait SchemaRDDLike {
   @transient val sqlContext: SQLContext
-  protected[spark] def logicalPlan: LogicalPlan
+  @transient protected[spark] val logicalPlan: LogicalPlan
+
   private[sql] def baseSchemaRDD: SchemaRDD
 
   /**
@@ -45,11 +46,9 @@ private[sql] trait SchemaRDDLike {
    * internally.  This object reuse improves performance, but can make programming against the RDD
    * more difficult.  Instead end users should perform RDD operations on a SchemaRDD directly.
    */
-  @DeveloperApi
-  def queryExecution = _queryExecution
-
   @transient
-  protected lazy val _queryExecution = sqlContext.executePlan(logicalPlan)
+  @DeveloperApi
+  lazy val queryExecution = sqlContext.executePlan(logicalPlan)
 
   override def toString =
     s"""${super.toString}

@@ -19,10 +19,6 @@ package org.apache.spark.sql
 
 import net.razorvine.pickle.Pickler
 
-import java.util.{Map => JMap}
-
-import scala.collection.mutable.HashSet
-
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
@@ -34,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.api.java.JavaRDD
+import java.util.{Map => JMap}
 
 /**
  * :: AlphaComponent ::
@@ -100,15 +97,10 @@ import org.apache.spark.api.java.JavaRDD
 @AlphaComponent
 class SchemaRDD(
     @transient val sqlContext: SQLContext,
-    @transient protected[spark] val _logicalPlan: LogicalPlan,
-    @transient private val initialTableNames: Set[String] = Set[String]())
+    @transient protected[spark] val logicalPlan: LogicalPlan)
   extends RDD[Row](sqlContext.sparkContext, Nil) with SchemaRDDLike {
 
   def baseSchemaRDD = this
-
-  val tableNames: HashSet[String] = HashSet[String]() ++ initialTableNames
-
-  protected[spark] def logicalPlan: LogicalPlan = _logicalPlan
 
   // =========================================================================================
   // RDD functions: Copy the internal row representation so we present immutable data to users.
