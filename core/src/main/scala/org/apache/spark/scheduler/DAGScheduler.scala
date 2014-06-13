@@ -195,7 +195,9 @@ class DAGScheduler(
       case Some(stage) => stage
       case None =>
         val stage =
-          newOrUsedStage(shuffleDep.rdd, shuffleDep.rdd.partitions.size, shuffleDep, jobId, shuffleDep.rdd.creationSite)
+          newOrUsedStage(
+            shuffleDep.rdd, shuffleDep.rdd.partitions.size, shuffleDep, jobId,
+            shuffleDep.rdd.creationSite)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
         stage
     }
