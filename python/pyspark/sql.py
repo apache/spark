@@ -16,7 +16,7 @@
 #
 
 from pyspark.rdd import RDD
-from pyspark.serializers import PickleSerializer
+from pyspark.serializers import BatchedSerializer, PickleSerializer
 
 from py4j.protocol import Py4JError
 
@@ -347,7 +347,8 @@ class SchemaRDD(RDD):
         # TODO: This is inefficient, we should construct the Python Row object
         # in Java land in the javaToPython function. May require a custom
         # pickle serializer in Pyrolite
-        return RDD(jrdd, self._sc, PickleSerializer()).map(lambda d: Row(d))
+        return RDD(jrdd, self._sc, BatchedSerializer(
+                        PickleSerializer())).map(lambda d: Row(d))
 
     # We override the default cache/persist/checkpoint behavior as we want to cache the underlying
     # SchemaRDD object in the JVM, not the PythonRDD checkpointed by the super class

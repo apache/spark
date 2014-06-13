@@ -346,8 +346,8 @@ class SchemaRDD(
         row.zip(fieldNames).foreach { case (obj, name) =>
           map.put(name, obj)
         }
-        pickle.dumps(map)
-      }
+        map
+      }.grouped(10).map(batched => pickle.dumps(batched.toArray))
     }
   }
 
