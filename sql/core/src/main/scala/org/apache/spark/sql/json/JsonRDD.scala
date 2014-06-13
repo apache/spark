@@ -22,7 +22,7 @@ import scala.math.BigDecimal
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
-import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
@@ -132,8 +132,8 @@ import org.apache.spark.sql.{SQLContext, Logging, SchemaRDD}
  * }}}
  */
 
-@AlphaComponent
-class JsonTable(
+@Experimental
+private class JsonRDD(
     @transient override val sqlContext: SQLContext,
     @transient override protected[spark] val logicalPlan: LogicalPlan,
     protected[spark] val baseRDD: RDD[String],
@@ -143,31 +143,36 @@ class JsonTable(
   // We widen the type those fields with NullType to StringType. We want to use the original
   // schema (baseSchema) with those fields with NullType when we union this JsonTable with another
   // JsonTable.
-  protected[json] lazy val schema = JsonTable.nullTypeToStringType(baseSchema)
+  lazy val schema = JsonRDD.nullTypeToStringType(baseSchema)
 
   /**
    * Combines the tuples of two JsonTables and union their schemas, keeping duplicates.
    *
    * @group Query
    */
-  def unionAll(otherPlan: JsonTable): JsonTable = {
-    val unionedBaseSchema =
-      JsonTable.getCompatibleType(baseSchema, otherPlan.baseSchema).asInstanceOf[StructType]
-    val unionedJsonRDD = baseRDD.union(otherPlan.baseRDD)
-    val logicalPlan = JsonTable.createLogicalPlan(unionedJsonRDD, unionedBaseSchema)
+  override def unionAll(otherPlan: SchemaRDD): SchemaRDD = {
+    otherPlan match {
+      case jsonRDD: JsonRDD => {
+        val unionedBaseSchema =
+          JsonRDD.getCompatibleType(baseSchema, jsonRDD.baseSchema).asInstanceOf[StructType]
+        val unionedJsonRDD = baseRDD.union(jsonRDD.baseRDD)
+        val logicalPlan = JsonRDD.createLogicalPlan(unionedJsonRDD, unionedBaseSchema)
 
-    new JsonTable(sqlContext, logicalPlan, unionedJsonRDD, unionedBaseSchema)
+        new JsonRDD(sqlContext, logicalPlan, unionedJsonRDD, unionedBaseSchema)
+      }
+      case schemaRDD: SchemaRDD => super.unionAll(otherPlan)
+    }
   }
 }
 
 @Experimental
-object JsonTable extends Logging {
+private[sql] object JsonRDD extends Logging {
 
   @DeveloperApi
-  protected[sql] def apply(
+  private[sql] def apply(
       sqlContext: SQLContext,
       json: RDD[String],
-      samplingRatio: Double = 1.0): JsonTable = {
+      samplingRatio: Double = 1.0): SchemaRDD = {
     require(samplingRatio > 0)
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
 
@@ -175,10 +180,10 @@ object JsonTable extends Logging {
 
     val baseSchema = createSchema(allKeys)
 
-    new JsonTable(sqlContext, createLogicalPlan(json, baseSchema), json, baseSchema)
+    new JsonRDD(sqlContext, createLogicalPlan(json, baseSchema), json, baseSchema)
   }
 
-  protected[json] def createLogicalPlan(
+  private def createLogicalPlan(
       json: RDD[String],
       baseSchema: StructType): LogicalPlan = {
     val schema = nullTypeToStringType(baseSchema)
@@ -186,7 +191,7 @@ object JsonTable extends Logging {
     SparkLogicalPlan(ExistingRdd(asAttributes(schema), parseJson(json).map(asRow(_, schema))))
   }
 
-  protected[json] def createSchema(allKeys: Set[(String, DataType)]): StructType = {
+  private def createSchema(allKeys: Set[(String, DataType)]): StructType = {
     // Resolve type conflicts
     val resolved = allKeys.groupBy {
       case (key, dataType) => key
@@ -244,7 +249,7 @@ object JsonTable extends Logging {
   /**
    * Returns the most general data type for two given data types.
    */
-  protected[json] def getCompatibleType(t1: DataType, t2: DataType): DataType = {
+  private[json] def getCompatibleType(t1: DataType, t2: DataType): DataType = {
     // Try and find a promotion rule that contains both types in question.
     val applicableConversion = HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p
       .contains(t2))
@@ -280,7 +285,7 @@ object JsonTable extends Logging {
     }
   }
 
-  protected def getPrimitiveType(value: Any): DataType = {
+  private def getPrimitiveType(value: Any): DataType = {
     value match {
       case value: java.lang.String => StringType
       case value: java.lang.Integer => IntegerType
@@ -303,7 +308,7 @@ object JsonTable extends Logging {
    * type conflicts. Right now, when the element of an array is another array, we
    * treat the element as String.
    */
-  protected def getTypeOfArray(l: Seq[Any]): ArrayType = {
+  private def getTypeOfArray(l: Seq[Any]): ArrayType = {
     val elements = l.flatMap(v => Option(v))
     if (elements.isEmpty) {
       // If this JSON array is empty, we use NullType as a placeholder.
@@ -332,7 +337,7 @@ object JsonTable extends Logging {
    * instead of getting all fields of this struct because a field does not appear
    * in this JSON object can appear in other JSON objects.
    */
-  protected[json] def getAllKeysWithValueTypes(m: Map[String, Any]): Set[(String, DataType)] = {
+  private def getAllKeysWithValueTypes(m: Map[String, Any]): Set[(String, DataType)] = {
     m.map{
       // Quote the key with backticks to handle cases which have dots
       // in the field name.
@@ -368,7 +373,7 @@ object JsonTable extends Logging {
    * DefaultScalaModule in jackson-module-scala will make
    * the parsing very slow.
    */
-  protected def scalafy(obj: Any): Any = obj match {
+  private def scalafy(obj: Any): Any = obj match {
     case map: java.util.Map[String, Object] =>
       // .map(identity) is used as a workaround of non-serializable Map
       // generated by .mapValues.
@@ -379,7 +384,7 @@ object JsonTable extends Logging {
     case atom => atom
   }
 
-  protected[json] def parseJson(json: RDD[String]): RDD[Map[String, Any]] = {
+  private def parseJson(json: RDD[String]): RDD[Map[String, Any]] = {
     // According to [Jackson-72: https://jira.codehaus.org/browse/JACKSON-72],
     // ObjectMapper will not return BigDecimal when
     // "DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS" is disabled
@@ -397,14 +402,14 @@ object JsonTable extends Logging {
     }).map(scalafy).map(_.asInstanceOf[Map[String, Any]])
   }
 
-  protected def toLong(value: Any): Long = {
+  private def toLong(value: Any): Long = {
     value match {
       case value: java.lang.Integer => value.asInstanceOf[Int].toLong
       case value: java.lang.Long => value.asInstanceOf[Long]
     }
   }
 
-  protected def toDouble(value: Any): Double = {
+  private def toDouble(value: Any): Double = {
     value match {
       case value: java.lang.Integer => value.asInstanceOf[Int].toDouble
       case value: java.lang.Long => value.asInstanceOf[Long].toDouble
@@ -412,7 +417,7 @@ object JsonTable extends Logging {
     }
   }
 
-  protected def toDecimal(value: Any): BigDecimal = {
+  private def toDecimal(value: Any): BigDecimal = {
     value match {
       case value: java.lang.Integer => BigDecimal(value)
       case value: java.lang.Long => BigDecimal(value)
@@ -422,7 +427,7 @@ object JsonTable extends Logging {
     }
   }
 
-  protected def toJsonArrayString(seq: Seq[Any]): String = {
+  private def toJsonArrayString(seq: Seq[Any]): String = {
     val builder = new StringBuilder
     builder.append("[")
     var count = 0
@@ -437,7 +442,7 @@ object JsonTable extends Logging {
     builder.toString()
   }
 
-  protected def toJsonObjectString(map: Map[String, Any]): String = {
+  private def toJsonObjectString(map: Map[String, Any]): String = {
     val builder = new StringBuilder
     builder.append("{")
     var count = 0
@@ -452,7 +457,7 @@ object JsonTable extends Logging {
     builder.toString()
   }
 
-  protected def toString(value: Any): String = {
+  private def toString(value: Any): String = {
     value match {
       case value: Map[String, Any] => toJsonObjectString(value)
       case value: Seq[Any] => toJsonArrayString(value)
@@ -460,7 +465,7 @@ object JsonTable extends Logging {
     }
   }
 
-  protected[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
+  private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
     if (value == null) {
       null
     } else {
@@ -478,7 +483,7 @@ object JsonTable extends Logging {
     }
   }
 
-  protected[json] def asRow(json: Map[String,Any], schema: StructType): Row = {
+  private def asRow(json: Map[String,Any], schema: StructType): Row = {
     val row = new GenericMutableRow(schema.fields.length)
     schema.fields.zipWithIndex.foreach {
       // StructType
@@ -502,7 +507,7 @@ object JsonTable extends Logging {
     row
   }
 
-  protected def nullTypeToStringType(struct: StructType): StructType = {
+  private def nullTypeToStringType(struct: StructType): StructType = {
     val fields = struct.fields.map {
       case StructField(fieldName, dataType, nullable) => {
         val newType = dataType match {
@@ -518,11 +523,11 @@ object JsonTable extends Logging {
     StructType(fields)
   }
 
-  protected[json] def asAttributes(struct: StructType): Seq[AttributeReference] = {
+  private def asAttributes(struct: StructType): Seq[AttributeReference] = {
     struct.fields.map(f => AttributeReference(f.name, f.dataType, nullable = true)())
   }
 
-  protected[json] def asStruct(attributes: Seq[AttributeReference]): StructType = {
+  private def asStruct(attributes: Seq[AttributeReference]): StructType = {
     val fields = attributes.map {
       case AttributeReference(name, dataType, nullable) => StructField(name, dataType, nullable)
     }

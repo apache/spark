@@ -102,12 +102,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonFile(path: String): JsonTable = jsonFile(path, 1.0)
+  def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0)
 
   /**
    * :: Experimental ::
    */
-  def jsonFile(path: String, samplingRatio: Double): JsonTable = {
+  def jsonFile(path: String, samplingRatio: Double): SchemaRDD = {
     val json = sparkContext.textFile(path)
     jsonRDD(json, samplingRatio)
   }
@@ -119,13 +119,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonRDD(json: RDD[String]): JsonTable = jsonRDD(json, 1.0)
+  def jsonRDD(json: RDD[String]): SchemaRDD = jsonRDD(json, 1.0)
 
   /**
    * :: Experimental ::
    */
-  def jsonRDD(json: RDD[String], samplingRatio: Double): JsonTable =
-    JsonTable(this, json, samplingRatio)
+  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
+    JsonRDD(this, json, samplingRatio)
 
   /**
    * :: Experimental ::
