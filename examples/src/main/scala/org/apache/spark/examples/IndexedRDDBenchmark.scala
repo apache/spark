@@ -75,7 +75,8 @@ object IndexedRDDBenchmark {
     start = System.currentTimeMillis
     for (i <- 1 to trials) {
       val elem = r.nextInt(numElementsLarge)
-      large = large.put(elem, 0)
+      large = large.put(elem, 0).cache()
+      large.foreach(x => {})
     }
     end = System.currentTimeMillis
     println(s"Done. ${(end - start) / trials} ms per update.")
@@ -85,7 +86,8 @@ object IndexedRDDBenchmark {
     start = System.currentTimeMillis
     for (i <- 1 to trials) {
       val elem = numElementsLarge + r.nextInt(numElementsLarge)
-      large = large.put(elem, elem)
+      large = large.put(elem, elem).cache()
+      large.foreach(x => {})
     }
     end = System.currentTimeMillis
     println(s"Done. ${(end - start) / trials} ms per insert.")
