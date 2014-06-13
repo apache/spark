@@ -52,7 +52,12 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaRDDLike.countApproxDistinct$default$1"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1")
+              "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.storage.MemoryStore.Entry"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$"
+                + "createZero$1")
           ) ++
           Seq( // Ignore some private methods in ALS.
             ProblemFilters.exclude[MissingMethodProblem](
@@ -64,7 +69,10 @@ object MimaExcludes {
           ) ++
           MimaBuild.excludeSparkClass("rdd.ZippedRDD") ++
           MimaBuild.excludeSparkClass("rdd.ZippedPartition") ++
-          MimaBuild.excludeSparkClass("util.SerializableHyperLogLog")
+          MimaBuild.excludeSparkClass("util.SerializableHyperLogLog") ++
+          MimaBuild.excludeSparkClass("storage.Values") ++
+          MimaBuild.excludeSparkClass("storage.Entry") ++
+          MimaBuild.excludeSparkClass("storage.MemoryStore$Entry")
         case v if v.startsWith("1.0") =>
           Seq(
             MimaBuild.excludeSparkPackage("api.java"),
