@@ -30,7 +30,7 @@ class StageInfo(
     val name: String,
     val numTasks: Int,
     val rddInfos: Seq[RDDInfo],
-    val details: String = "") {
+    val details: String) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   /** Time when all tasks in the stage completed or when the stage was cancelled. */
