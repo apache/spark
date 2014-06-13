@@ -230,6 +230,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       CommandStrategy(self),
       TakeOrdered,
       ParquetOperations,
+      InMemoryScans,
       HiveTableScans,
       DataSinks,
       Scripts,
