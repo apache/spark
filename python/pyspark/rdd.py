@@ -370,6 +370,7 @@ class RDD(object):
         >>> len(rdd.takeSample(False, 15, 3))
         10
         """
+        numStDev = 10.0
 
         if num < 0:
             raise ValueError("Sample size cannot be negative.")
@@ -388,7 +389,6 @@ class RDD(object):
             rand.shuffle(samples)
             return samples
 
-        numStDev = 10.0
         maxSampleSize = sys.maxint - int(numStDev * sqrt(sys.maxint))
         if num > maxSampleSize:
             raise ValueError("Sample size cannot be greater than %d." % maxSampleSize)

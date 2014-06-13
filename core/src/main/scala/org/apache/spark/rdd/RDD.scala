@@ -390,13 +390,15 @@ abstract class RDD[T: ClassTag](
       num: Int,
       seed: Long = Utils.random.nextLong): Array[T] = {
     val numStDev =  10.0
-    val initialCount = this.count()
 
     if (num < 0) {
       throw new IllegalArgumentException("Negative number of elements requested")
+    } else if (num == 0) {
+      return new Array[T](0)
     }
 
-    if (initialCount == 0 || num == 0) {
+    val initialCount = this.count()
+    if (initialCount == 0) {
       return new Array[T](0)
     }
 
@@ -407,7 +409,7 @@ abstract class RDD[T: ClassTag](
     }
 
     val rand = new Random(seed)
-    if (!withReplacement && num > initialCount) {
+    if (!withReplacement && num >= initialCount) {
       return Utils.randomizeInPlace(this.collect(), rand)
     }
 
