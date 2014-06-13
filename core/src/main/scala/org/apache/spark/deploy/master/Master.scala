@@ -41,14 +41,13 @@ import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{SystemClock, Clock, AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 private[spark] class Master(
     host: String,
     port: Int,
     webUiPort: Int,
-    val securityMgr: SecurityManager,
-    clock: Clock = SystemClock)
+    val securityMgr: SecurityManager)
   extends Actor with Logging {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
@@ -331,7 +330,7 @@ private[spark] class Master(
     case Heartbeat(workerId) => {
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
-          workerInfo.lastHeartbeat = clock.getTime()
+          workerInfo.lastHeartbeat = System.currentTimeMillis()
         case None =>
           logWarning("Got heartbeat from unregistered worker " + workerId)
       }
@@ -601,7 +600,7 @@ private[spark] class Master(
   }
 
   def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
-    val now = clock.getTime()
+    val now = System.currentTimeMillis()
     val date = new Date(now)
     new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
   }
@@ -704,7 +703,7 @@ private[spark] class Master(
   /** Check for, and remove, any timed-out workers */
   def timeOutDeadWorkers() {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
-    val currentTime = clock.getTime()
+    val currentTime = System.currentTimeMillis()
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - WORKER_TIMEOUT).toArray
     for (worker <- toRemove) {
       if (worker.state != WorkerState.DEAD) {
@@ -726,7 +725,7 @@ private[spark] class Master(
   }
 
   def createDriver(desc: DriverDescription): DriverInfo = {
-    val now = clock.getTime()
+    val now = System.currentTimeMillis()
     val date = new Date(now)
     new DriverInfo(now, newDriverId(date), desc, date)
   }
@@ -786,7 +785,7 @@ private[spark] object Master {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
       securityManager = securityMgr)
     val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort,
-      securityMgr, SystemClock), actorName)
+      securityMgr), actorName)
     val timeout = AkkaUtils.askTimeout(conf)
     val respFuture = actor.ask(RequestWebUIPort)(timeout)
     val resp = Await.result(respFuture, timeout).asInstanceOf[WebUIPortResponse]

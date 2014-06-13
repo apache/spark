@@ -36,7 +36,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.spark._
-import org.apache.spark.util.{SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     securityManager: SecurityManager) extends Logging {
@@ -764,7 +764,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       // if we aren't authenticated yet lets block the senders until authentication completes
       try {
         connection.getAuthenticated().synchronized {
-          val clock = SystemClock
+          val clock : Clock = SystemClock
           val startTime = clock.getTime()
 
           while (!connection.isSaslComplete()) {
