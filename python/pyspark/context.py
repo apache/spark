@@ -553,7 +553,7 @@ class SparkContext(object):
         [0, 1, 16, 25]
         """
         if partitions == None:
-            partitions = range(rdd._jrdd.splits().size())
+            partitions = range(rdd._jrdd.partitions().size())
         javaPartitions = ListConverter().convert(partitions, self._gateway._gateway_client)
 
         # Implementation note: This is implemented as a mapPartitions followed

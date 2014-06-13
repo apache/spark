@@ -855,7 +855,7 @@ class RDD(object):
         [91, 92, 93]
         """
         items = []
-        totalParts = self._jrdd.splits().size()
+        totalParts = self._jrdd.partitions().size()
         partsScanned = 0
 
         while len(items) < num and partsScanned < totalParts:
