@@ -289,7 +289,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     } catch {
       case e: java.lang.IllegalArgumentException =>
         throw new TreeNodeException(
-          this, s"Failed to copy node.  Is otherCopyArgs specified correctly for $nodeName?")
+          this, s"Failed to copy node.  Is otherCopyArgs specified correctly for $nodeName? "
+            + s"Exception message: ${e.getMessage}.")
     }
   }
 
