@@ -34,6 +34,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.ConnectionManager
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -56,7 +57,7 @@ class SparkEnv (
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
     val mapOutputTracker: MapOutputTracker,
-    val shuffleFetcher: ShuffleFetcher,
+    val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
@@ -80,7 +81,7 @@ class SparkEnv (
     pythonWorkers.foreach { case(key, worker) => worker.stop() }
     httpFileServer.stop()
     mapOutputTracker.stop()
-    shuffleFetcher.stop()
+    shuffleManager.stop()
     broadcastManager.stop()
     blockManager.stop()
     blockManager.master.stop()
@@ -163,13 +164,20 @@ object SparkEnv extends Logging {
     def instantiateClass[T](propertyName: String, defaultClassName: String): T = {
       val name = conf.get(propertyName,  defaultClassName)
       val cls = Class.forName(name, true, Utils.getContextOrSparkClassLoader)
-      // First try with the constructor that takes SparkConf. If we can't find one,
-      // use a no-arg constructor instead.
+      // Look for a constructor taking a SparkConf and a boolean isDriver, then one taking just
+      // SparkConf, then one taking no arguments
       try {
-        cls.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[T]
+        cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)
+          .newInstance(conf, new java.lang.Boolean(isDriver))
+          .asInstanceOf[T]
       } catch {
         case _: NoSuchMethodException =>
-            cls.getConstructor().newInstance().asInstanceOf[T]
+          try {
+            cls.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[T]
+          } catch {
+            case _: NoSuchMethodException =>
+              cls.getConstructor().newInstance().asInstanceOf[T]
+          }
       }
     }
 
@@ -219,9 +227,6 @@ object SparkEnv extends Logging {
 
     val cacheManager = new CacheManager(blockManager)
 
-    val shuffleFetcher = instantiateClass[ShuffleFetcher](
-      "spark.shuffle.fetcher", "org.apache.spark.BlockStoreShuffleFetcher")
-
     val httpFileServer = new HttpFileServer(securityManager)
     httpFileServer.initialize()
     conf.set("spark.fileserver.uri",  httpFileServer.serverUri)
@@ -242,6 +247,9 @@ object SparkEnv extends Logging {
       "."
     }
 
+    val shuffleManager = instantiateClass[ShuffleManager](
+      "spark.shuffle.manager", "org.apache.spark.shuffle.hash.HashShuffleManager")
+
     // Warn about deprecated spark.cache.class property
     if (conf.contains("spark.cache.class")) {
       logWarning("The spark.cache.class property is no longer being used! Specify storage " +
@@ -255,7 +263,7 @@ object SparkEnv extends Logging {
       closureSerializer,
       cacheManager,
       mapOutputTracker,
-      shuffleFetcher,
+      shuffleManager,
       broadcastManager,
       blockManager,
       connectionManager,

@@ -121,6 +121,10 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     testALS(100, 200, 2, 15, 0.7, 0.4, true, false, true)
   }
 
+  test("rank-2 matrices with different user and product blocks") {
+    testALS(100, 200, 2, 15, 0.7, 0.4, numUserBlocks = 4, numProductBlocks = 2)
+  }
+
   test("pseudorandomness") {
     val ratings = sc.parallelize(ALSSuite.generateRatings(10, 20, 5, 0.5, false, false)._1, 2)
     val model11 = ALS.train(ratings, 5, 1, 1.0, 2, 1)
@@ -153,35 +157,52 @@ class ALSSuite extends FunSuite with LocalSparkContext {
   }
 
   test("NNALS, rank 2") {
-    testALS(100, 200, 2, 15, 0.7, 0.4, false, false, false, -1, false)
+    testALS(100, 200, 2, 15, 0.7, 0.4, false, false, false, -1, -1, false)
   }
 
   /**
    * Test if we can correctly factorize R = U * P where U and P are of known rank.
    *
-   * @param users          number of users
-   * @param products       number of products
-   * @param features       number of features (rank of problem)
-   * @param iterations     number of iterations to run
-   * @param samplingRate   what fraction of the user-product pairs are known
+   * @param users number of users
+   * @param products number of products
+   * @param features number of features (rank of problem)
+   * @param iterations number of iterations to run
+   * @param samplingRate what fraction of the user-product pairs are known
    * @param matchThreshold max difference allowed to consider a predicted rating correct
-   * @param implicitPrefs  flag to test implicit feedback
-   * @param bulkPredict    flag to test bulk prediciton
+   * @param implicitPrefs flag to test implicit feedback
+   * @param bulkPredict flag to test bulk prediciton
    * @param negativeWeights whether the generated data can contain negative values
-   * @param numBlocks      number of blocks to partition users and products into
+   * @param numUserBlocks number of user blocks to partition users into
+   * @param numProductBlocks number of product blocks to partition products into
    * @param negativeFactors whether the generated user/product factors can have negative entries
    */
-  def testALS(users: Int, products: Int, features: Int, iterations: Int,
-    samplingRate: Double, matchThreshold: Double, implicitPrefs: Boolean = false,
-    bulkPredict: Boolean = false, negativeWeights: Boolean = false, numBlocks: Int = -1,
-    negativeFactors: Boolean = true)
-  {
+  def testALS(
+      users: Int,
+      products: Int,
+      features: Int,
+      iterations: Int,
+      samplingRate: Double,
+      matchThreshold: Double,
+      implicitPrefs: Boolean = false,
+      bulkPredict: Boolean = false,
+      negativeWeights: Boolean = false,
+      numUserBlocks: Int = -1,
+      numProductBlocks: Int = -1,
+      negativeFactors: Boolean = true) {
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
       features, samplingRate, implicitPrefs, negativeWeights, negativeFactors)
 
-    val model = (new ALS().setBlocks(numBlocks).setRank(features).setIterations(iterations)
-          .setAlpha(1.0).setImplicitPrefs(implicitPrefs).setLambda(0.01).setSeed(0L)
-          .setNonnegative(!negativeFactors).run(sc.parallelize(sampledRatings)))
+    val model = new ALS()
+      .setUserBlocks(numUserBlocks)
+      .setProductBlocks(numProductBlocks)
+      .setRank(features)
+      .setIterations(iterations)
+      .setAlpha(1.0)
+      .setImplicitPrefs(implicitPrefs)
+      .setLambda(0.01)
+      .setSeed(0L)
+      .setNonnegative(!negativeFactors)
+      .run(sc.parallelize(sampledRatings))
 
     val predictedU = new DoubleMatrix(users, features)
     for ((u, vec) <- model.userFeatures.collect(); i <- 0 until features) {
@@ -208,8 +229,9 @@ class ALSSuite extends FunSuite with LocalSparkContext {
         val prediction = predictedRatings.get(u, p)
         val correct = trueRatings.get(u, p)
         if (math.abs(prediction - correct) > matchThreshold) {
-          fail("Model failed to predict (%d, %d): %f vs %f\ncorr: %s\npred: %s\nU: %s\n P: %s".format(
-            u, p, correct, prediction, trueRatings, predictedRatings, predictedU, predictedP))
+          fail(("Model failed to predict (%d, %d): %f vs %f\ncorr: %s\npred: %s\nU: %s\n P: %s")
+            .format(u, p, correct, prediction, trueRatings, predictedRatings, predictedU,
+              predictedP))
         }
       }
     } else {
