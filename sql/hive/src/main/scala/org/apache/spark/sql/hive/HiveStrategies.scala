@@ -70,6 +70,7 @@ private[hive] trait HiveStrategies {
         pruneFilterProject(
           projectList,
           otherPredicates,
+          identity[Seq[Expression]],
           HiveTableScan(_, relation, pruningPredicates.reduceLeftOption(And))(hiveContext)) :: Nil
       case _ =>
         Nil
