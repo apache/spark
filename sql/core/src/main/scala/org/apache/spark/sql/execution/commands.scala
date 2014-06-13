@@ -48,7 +48,7 @@ case class SetCommand(
     // Set value for key k.
     case (Some(k), Some(v)) =>
       context.set(k, v)
-      Array.empty[(String, String)]
+      Array(k -> v)
 
     // Query the value bound to key k.
     case (Some(k), _) =>

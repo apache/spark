@@ -250,10 +250,12 @@ class HiveQuerySuite extends HiveComparisonTest {
     clear()
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    assert(hql("set").collect().size == 0)
+    assert(hql("SET").collect().size == 0)
 
-    // "set key=val"
-    hql(s"SET $testKey=$testVal")
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql(s"SET $testKey=$testVal").collect())
+    }
+
     assert(hiveconf.get(testKey, "") == testVal)
     assertResult(Array(testKey -> testVal)) {
       rowsToPairs(hql("SET").collect())
@@ -278,7 +280,10 @@ class HiveQuerySuite extends HiveComparisonTest {
     clear()
     assert(sql("SET").collect().size == 0)
 
-    sql(s"SET $testKey=$testVal")
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql(s"SET $testKey=$testVal").collect())
+    }
+
     assert(hiveconf.get(testKey, "") == testVal)
     assertResult(Array(testKey -> testVal)) {
       rowsToPairs(sql("SET").collect())
