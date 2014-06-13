@@ -819,7 +819,7 @@ private[spark] object Utils extends Logging {
     var firstUserFile = "<unknown>"
     var firstUserLine = 0
     var insideSpark = true
-    var userCallStack = new ArrayBuffer[String]
+    var callStack = new ArrayBuffer[String]() :+ "<unknown>"
 
     for (el <- trace) {
       if (insideSpark) {
@@ -830,20 +830,21 @@ private[spark] object Utils extends Logging {
           } else {
             el.getMethodName
           }
+          callStack(0) = el.toString // Put last Spark method on top of the stack trace.
         } else {
           firstUserLine = el.getLineNumber
           firstUserFile = el.getFileName
-          userCallStack += el.toString
+          callStack += el.toString
           insideSpark = false
         }
       } else {
-        userCallStack += el.toString
+        callStack += el.toString
       }
     }
-    val userCallStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
+    val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
     CallSite(
       short = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
-      long = userCallStack.take(userCallStackDepth).mkString("\n"))
+      long = callStack.take(callStackDepth).mkString("\n"))
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
