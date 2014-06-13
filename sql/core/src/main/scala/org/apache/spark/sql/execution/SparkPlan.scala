@@ -77,8 +77,6 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
     SparkLogicalPlan(
       alreadyPlanned match {
         case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
-        case scan @ InMemoryColumnarTableScan(output, _, _) =>
-          scan.copy(attributes = output.map(_.newInstance))
         case _ => sys.error("Multiple instance of the same relation detected.")
       }).asInstanceOf[this.type]
   }
