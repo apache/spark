@@ -99,7 +99,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     val minimumMemory = appMasterResponse.getMinimumResourceCapability().getMemory()
 
     if (minimumMemory > 0) {
-      val mem = args.executorMemory + sparkConf.getInt("spark.yarn.container.memoryOverhead", 384)
+      val mem = args.executorMemory + sparkConf.getInt("spark.yarn.executor.memoryOverhead",
+        YarnAllocationHandler.MEMORY_OVERHEAD)
       val numCore = (mem  / minimumMemory) + (if (0 != (mem % minimumMemory)) 1 else 0)
 
       if (numCore > 0) {

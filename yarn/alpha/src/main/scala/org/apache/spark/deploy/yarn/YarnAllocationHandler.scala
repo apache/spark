@@ -89,16 +89,8 @@ private[yarn] class YarnAllocationHandler(
   private val pendingReleaseContainers = new ConcurrentHashMap[ContainerId, Boolean]
 
   // Additional memory overhead - in mb.
-  private def memoryOverhead: Int = {
-    var defaultMemoryOverhead = YarnAllocationHandler.MEMORY_OVERHEAD
-    sparkConf.getOption("spark.yarn.container.memoryOverhead").foreach { s =>
-      defaultMemoryOverhead = s.toInt
-    }
-    sparkConf.getOption("spark.yarn.executor.memoryOverhead").foreach { s =>
-      defaultMemoryOverhead = s.toInt
-    }
-    defaultMemoryOverhead
-  }
+  private def memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
+    YarnAllocationHandler.MEMORY_OVERHEAD)
 
   private val numExecutorsRunning = new AtomicInteger()
   // Used to generate a unique id per executor

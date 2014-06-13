@@ -91,19 +91,8 @@ private[yarn] class YarnAllocationHandler(
   private val pendingReleaseContainers = new ConcurrentHashMap[ContainerId, Boolean]
 
   // Additional memory overhead - in mb.
-  private def memoryOverhead: Int = {
-    // TODO: Here we can dynamically calculate the default value.
-    // eg: val defaultMemoryOverhead = (executorMemory * 0.25D).ceil.toInt
-    var defaultMemoryOverhead = YarnAllocationHandler.MEMORY_OVERHEAD
-    sparkConf.getOption("spark.yarn.container.memoryOverhead").foreach { s =>
-      defaultMemoryOverhead = s.toInt
-    }
-    sparkConf.getOption("spark.yarn.executor.memoryOverhead").foreach { s =>
-      defaultMemoryOverhead = s.toInt
-    }
-    defaultMemoryOverhead
-  }
-
+  private def memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
+    YarnAllocationHandler.MEMORY_OVERHEAD)
 
   // Number of container requests that have been sent to, but not yet allocated by the
   // ApplicationMaster.
