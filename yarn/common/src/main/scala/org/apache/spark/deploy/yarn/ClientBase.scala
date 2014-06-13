@@ -37,7 +37,7 @@ import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkException, Logging, SparkConf, SparkContext}
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
@@ -79,7 +79,7 @@ trait ClientBase extends Logging {
     ).foreach { case(cond, errStr) =>
       if (cond) {
         logError(errStr)
-        args.printUsageAndExit(1)
+        throw new IllegalArgumentException(args.getUsageMessage())
       }
     }
   }
@@ -94,15 +94,20 @@ trait ClientBase extends Logging {
 
     // If we have requested more then the clusters max for a single resource then exit.
     if (args.executorMemory > maxMem) {
-      logError("Required executor memory (%d MB), is above the max threshold (%d MB) of this cluster.".
-        format(args.executorMemory, maxMem))
-      System.exit(1)
+      val errorMessage =
+        "Required executor memory (%d MB), is above the max threshold (%d MB) of this cluster."
+          .format(args.executorMemory, maxMem)
+
+      logError(errorMessage)
+      throw new IllegalArgumentException(errorMessage)
     }
     val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
     if (amMem > maxMem) {
-      logError("Required AM memory (%d) is above the max threshold (%d) of this cluster".
-        format(args.amMemory, maxMem))
-      System.exit(1)
+
+      val errorMessage = "Required AM memory (%d) is above the max threshold (%d) of this cluster."
+        .format(args.amMemory, maxMem)
+      logError(errorMessage)
+      throw new IllegalArgumentException(errorMessage)
     }
 
     // We could add checks to make sure the entire cluster has enough resources but that involves
@@ -186,8 +191,9 @@ trait ClientBase extends Logging {
     val delegTokenRenewer = Master.getMasterPrincipal(conf)
     if (UserGroupInformation.isSecurityEnabled()) {
       if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
-        logError("Can't get Master Kerberos principal for use as renewer")
-        System.exit(1)
+        val errorMessage = "Can't get Master Kerberos principal for use as renewer"
+        logError(errorMessage)
+        throw new SparkException(errorMessage)
       }
     }
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
