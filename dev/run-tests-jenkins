@@ -35,13 +35,13 @@ else
 fi
 
 if [ "$sha1" == "$ghprbActualCommit" ]; then
-  github_message="$github_message- This patch did not merge cleanly<br>"
+  github_message="$github_message- This patch DID NOT merge cleanly<br>"
 else
   github_message="$github_message- This patch merges cleanly<br>"
   non_test_files=$(git diff master --name-only | grep -v "\/test" | tr "\n" " ")
   new_public_classes=$(git diff master $non_test_files \
     | grep -e "trait " -e "class " \
-    | grep "{"  \
+    | grep -e "{" -e "("  \
     | grep -v -e \@\@ -e private \
     | grep \+ \
     | sed "s/\+ *//" \
@@ -51,7 +51,7 @@ else
     github_message="$github_message- This patch adds no public classes<br>"
   else
     github_message="$github_message- This patch adds the following public classes (experimental):<br>"
-    github_message="$github_message<br>$new_public_classes"
+    github_message="$github_message$new_public_classes"
   fi
 fi
 github_message="${github_message}<br>For more information see test ouptut:"
