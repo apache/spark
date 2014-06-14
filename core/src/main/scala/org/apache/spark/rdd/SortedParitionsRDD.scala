@@ -77,7 +77,7 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
   
   private def fitsInMemory(list : ArrayBuffer[T]) : Boolean = {
     // TODO: use SizeEstimator
-    list.size < 100
+    list.size < 500
   }
 
   private def merge(list : ArrayBuffer[Iterator[T]]) : Iterator[T] = {
@@ -164,31 +164,39 @@ private class DiskBufferIterator[T](file: File, blockId: BlockId, serializer: Se
   private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
   private var compressedStream = SparkEnv.get.blockManager.wrapForCompression(blockId, bufferedStream)
   private var deserializeStream = serializer.newInstance.deserializeStream(compressedStream)
-  private var nextItem : T = null.asInstanceOf[T]
+  private var nextItem = None : Option[T]
   
   def hasNext : Boolean = {
-    if (nextItem == null) {
-      nextItem = doNext()
+    nextItem match {
+      case Some(item) => true
+      case None => nextItem = doNext()
     }
-    nextItem != null
+    nextItem match {
+      case Some(item) => true
+      case None => false
+    }
   }
   
   def next() : T = {
-    val item = if (nextItem == null) doNext else nextItem
-    if (item == null) {
-      throw new NoSuchElementException
+    nextItem match {
+      case Some(item) =>
+        nextItem = None
+        item
+      case None =>
+        doNext match {
+          case Some(item) => item
+          case None => throw new NoSuchElementException
+        }
     }
-    nextItem = null.asInstanceOf[T]
-    item
   }
 
-  private def doNext() : T = {
+  private def doNext() : Option[T] = {
     try {
-      deserializeStream.readObject().asInstanceOf[T]
+      Some(deserializeStream.readObject().asInstanceOf[T])
     } catch {
       case e: EOFException =>
         cleanup
-        null.asInstanceOf[T]
+        None
     }
   }
 
