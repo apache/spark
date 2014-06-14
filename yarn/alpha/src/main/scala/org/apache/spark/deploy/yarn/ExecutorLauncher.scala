@@ -289,7 +289,12 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
       .asInstanceOf[FinishApplicationMasterRequest]
     finishReq.setAppAttemptId(appAttemptId)
     finishReq.setFinishApplicationStatus(status)
-    finishReq.setTrackingUrl(sparkConf.get("spark.yarn.historyServer.address", ""))
+
+    val trackingUrl = sparkConf.getOption("spark.yarn.historyServer.address")
+      .map(url => "%s/by-id/%s".format(url, appAttemptId.getApplicationId()))
+      .getOrElse("")
+    finishReq.setTrackingUrl(trackingUrl)
+
     resourceManager.finishApplicationMaster(finishReq)
   }
 
