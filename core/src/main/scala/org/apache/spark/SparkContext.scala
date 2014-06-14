@@ -1253,7 +1253,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Post the application start event */
   private def postApplicationStart() {
-    listenerBus.post(SparkListenerApplicationStart(appName, startTime, sparkUser))
+    listenerBus.post(SparkListenerApplicationStart(appName, taskScheduler.applicationId(),
+      startTime, sparkUser))
   }
 
   /** Post the application end event */
