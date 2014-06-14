@@ -803,7 +803,7 @@ class RDD(object):
         Note: It returns the list sorted in descending order.
         >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
         [12]
-        >>> sc.parallelize([2, 3, 4, 5, 6], 2).cache().top(2)
+        >>> sc.parallelize([2, 3, 4, 5, 6], 2).top(2)
         [6, 5]
         """
         def topIterator(iterator):
