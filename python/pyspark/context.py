@@ -677,6 +677,8 @@ class SparkContext(object):
         >>> existing = len(sc.getPersistentRddIds())
         >>> rdd = sc.parallelize(range(4)).cache()
         >>> c = rdd.count()
+        >>> rdd.id() in sc.getPersistentRddIds()
+        True
         >>> len(sc.getPersistentRddIds()) - existing
         1
         >>> sc.unpersistRDD(rdd.id())
