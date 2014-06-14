@@ -24,6 +24,16 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{StringType, NullType}
 
+case class Dummy(optKey: Option[Expression]) extends Expression {
+  def children = optKey.toSeq
+  def references = Set.empty[Attribute]
+  def nullable = true
+  def dataType = NullType
+  override lazy val resolved = true
+  type EvaluatedType = Any
+  def eval(input: Row) = null.asInstanceOf[Any]
+}
+
 class TreeNodeSuite extends FunSuite {
   test("top node changed") {
     val after = Literal(1) transform { case Literal(1, _) => Literal(2) }
@@ -78,15 +88,6 @@ class TreeNodeSuite extends FunSuite {
   }
 
   test("transform works on nodes with Option children") {
-    case class Dummy(optKey: Option[Expression]) extends Expression {
-      def children = optKey.toSeq
-      def references = Set.empty[Attribute]
-      def nullable = true
-      def dataType = NullType
-      override lazy val resolved = true
-      type EvaluatedType = Any
-      def eval(input: Row) = null.asInstanceOf[Any]
-    }
     val dummy1 = Dummy(Some(Literal("1", StringType)))
     val dummy2 = Dummy(None)
     val toZero: PartialFunction[Expression, Expression] =  { case Literal(_, _) => Literal(0) }
