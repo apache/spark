@@ -44,7 +44,6 @@ function run_test() {
         echo -en "\033[0m"  # No color
         exit -1
     fi
-
 }
 
 echo "Running PySpark tests. Output is in python/unit-tests.log."
@@ -55,9 +54,13 @@ run_test "pyspark/conf.py"
 if [ -n "$_RUN_SQL_TESTS" ]; then
   run_test "pyspark/sql.py"
 fi
+# These tests are included in the module-level docs, and so must
+# be handled on a higher level rather than within the python file.
+export PYSPARK_DOC_TEST=1
 run_test "pyspark/broadcast.py"
 run_test "pyspark/accumulators.py"
 run_test "pyspark/serializers.py"
+unset PYSPARK_DOC_TEST
 run_test "pyspark/tests.py"
 run_test "pyspark/mllib/_common.py"
 run_test "pyspark/mllib/classification.py"

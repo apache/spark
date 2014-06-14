@@ -169,7 +169,7 @@ case class LeftSemiJoinHash(
   def execute() = {
 
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
-      val hashTable = new java.util.HashSet[Row]()
+      val hashSet = new java.util.HashSet[Row]()
       var currentRow: Row = null
 
       // Create a Hash set of buildKeys
@@ -177,43 +177,17 @@ case class LeftSemiJoinHash(
         currentRow = buildIter.next()
         val rowKey = buildSideKeyGenerator(currentRow)
         if(!rowKey.anyNull) {
-          val keyExists = hashTable.contains(rowKey)
+          val keyExists = hashSet.contains(rowKey)
           if (!keyExists) {
-            hashTable.add(rowKey)
+            hashSet.add(rowKey)
           }
         }
       }
 
-      new Iterator[Row] {
-        private[this] var currentStreamedRow: Row = _
-        private[this] var currentHashMatched: Boolean = false
-
-        private[this] val joinKeys = streamSideKeyGenerator()
-
-        override final def hasNext: Boolean =
-          streamIter.hasNext && fetchNext()
-
-        override final def next() = {
-          currentStreamedRow
-        }
-
-        /**
-         * Searches the streamed iterator for the next row that has at least one match in hashtable.
-         *
-         * @return true if the search is successful, and false the streamed iterator runs out of
-         *         tuples.
-         */
-        private final def fetchNext(): Boolean = {
-          currentHashMatched = false
-          while (!currentHashMatched && streamIter.hasNext) {
-            currentStreamedRow = streamIter.next()
-            if (!joinKeys(currentStreamedRow).anyNull) {
-              currentHashMatched = hashTable.contains(joinKeys.currentValue)
-            }
-          }
-          currentHashMatched
-        }
-      }
+      val joinKeys = streamSideKeyGenerator()
+      streamIter.filter(current => {
+        !joinKeys(current).anyNull && hashSet.contains(joinKeys.currentValue)
+      })
     }
   }
 }
