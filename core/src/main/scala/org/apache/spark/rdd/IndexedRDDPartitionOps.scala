@@ -111,13 +111,36 @@ private[spark] trait IndexedRDDPartitionOps[
   }
 
   /**
-   * Hides vertices that are the same between this and other. For vertices that are different, keeps
-   * the values from `other`. The indices of `this` and `other` must be the same.
+   * Intersects `this` and `other` and keeps only vertices with differing values. For differing
+   * vertices, keeps the values from `this`.
    */
   def diff(other: Self[V]): Self[V] = {
     if (self.index != other.index) {
       logWarning("Diffing two IndexedRDDPartitions with different indexes is slow.")
-      diff(createUsingIndex(other.iterator))
+      val newMask = new BitSet(self.capacity)
+
+      var i = self.mask.nextSetBit(0)
+      while (i >= 0) {
+        val vid = self.index.getValue(i)
+        val keep =
+          if (other.index.getValue(i) == vid && other.mask.get(i)) {
+            // The indices agree on this entry
+            self.values(i) != other.values(i)
+          } else if (other.isDefined(vid)) {
+            // The indices do not agree, but the corresponding entry exists somewhere
+            self.values(i) != other(vid)
+          } else {
+            // There is no corresponding entry
+            false
+          }
+
+        if (keep) {
+          newMask.set(i)
+        }
+
+        i = self.mask.nextSetBit(i + 1)
+      }
+      this.withMask(newMask)
     } else {
       val newMask = self.mask & other.mask
       var i = newMask.nextSetBit(0)
@@ -127,7 +150,7 @@ private[spark] trait IndexedRDDPartitionOps[
         }
         i = newMask.nextSetBit(i + 1)
       }
-      this.withValues(other.values).withMask(newMask)
+      this.withMask(newMask)
     }
   }
 
@@ -137,7 +160,22 @@ private[spark] trait IndexedRDDPartitionOps[
       (f: (Id, V, Option[V2]) => V3): Self[V3] = {
     if (self.index != other.index) {
       logWarning("Joining two IndexedRDDPartitions with different indexes is slow.")
-      leftJoin(createUsingIndex(other.iterator))(f)
+      val newValues = new Array[V3](self.capacity)
+
+      var i = self.mask.nextSetBit(0)
+      while (i >= 0) {
+        val vid = self.index.getValue(i)
+        val otherI =
+          if (other.index.getValue(i) == vid) {
+            if (other.mask.get(i)) i else -1
+          } else {
+            if (other.isDefined(vid)) other.index.getPos(vid) else -1
+          }
+        val otherV = if (otherI != -1) Some(other.values(otherI)) else None
+        newValues(i) = f(vid, self.values(i), otherV)
+        i = self.mask.nextSetBit(i + 1)
+      }
+      this.withValues(newValues.toVector)
     } else {
       val newValues = new Array[V3](self.capacity)
 
@@ -163,7 +201,23 @@ private[spark] trait IndexedRDDPartitionOps[
       (f: (Id, V, U) => V): Self[V] = {
     if (self.index != other.index) {
       logWarning("Joining two IndexedRDDPartitions with different indexes is slow.")
-      join(createUsingIndex(other.iterator))(f)
+      var newValues = self.values
+
+      var otherI = other.mask.nextSetBit(0)
+      while (otherI >= 0) {
+        val vid = other.index.getValue(otherI)
+        val selfI =
+          if (self.index.getValue(otherI) == vid) {
+            if (self.mask.get(otherI)) otherI else -1
+          } else {
+            if (self.isDefined(vid)) self.index.getPos(vid) else -1
+          }
+        if (selfI != -1) {
+          newValues = newValues.updated(selfI, f(vid, self.values(selfI), other.values(otherI)))
+        }
+        otherI = other.mask.nextSetBit(otherI + 1)
+      }
+      this.withValues(newValues)
     } else {
       val iterMask = self.mask & other.mask
       var newValues = self.values
@@ -197,7 +251,25 @@ private[spark] trait IndexedRDDPartitionOps[
       (f: (Id, V, U) => V2): Self[V2] = {
     if (self.index != other.index) {
       logWarning("Joining two IndexedRDDPartitions with different indexes is slow.")
-      innerJoin(createUsingIndex(other.iterator))(f)
+      val newMask = new BitSet(self.capacity)
+      val newValues = new Array[V2](self.capacity)
+
+      var i = self.mask.nextSetBit(0)
+      while (i >= 0) {
+        val vid = self.index.getValue(i)
+        val otherI =
+          if (other.index.getValue(i) == vid) {
+            if (other.mask.get(i)) i else -1
+          } else {
+            if (other.isDefined(vid)) other.index.getPos(vid) else -1
+          }
+        if (otherI != -1) {
+          newValues(i) = f(vid, self.values(i), other.values(otherI))
+          newMask.set(i)
+        }
+        i = self.mask.nextSetBit(i + 1)
+      }
+      this.withValues(newValues.toVector).withMask(newMask)
     } else {
       val newMask = self.mask & other.mask
       val newValues = new Array[V2](self.capacity)

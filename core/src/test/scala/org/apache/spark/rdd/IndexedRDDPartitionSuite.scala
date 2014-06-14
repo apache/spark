@@ -60,13 +60,13 @@ class IndexedRDDPartitionSuite extends FunSuite {
     val vp3a = vp.map { (vid, attr) => 2 }
     val vp3b = IndexedRDDPartition(vp3a.iterator)
     // diff with same index
-    val diff1 = vp2.diff(vp3a)
+    val diff1 = vp3a.diff(vp2)
     assert(diff1(0) === 2)
     assert(diff1(1) === 2)
     assert(diff1(2) === 2)
     assert(!diff1.isDefined(2))
     // diff with different indexes
-    val diff2 = vp2.diff(vp3b)
+    val diff2 = vp3b.diff(vp2)
     assert(diff2(0) === 2)
     assert(diff2(1) === 2)
     assert(diff2(2) === 2)

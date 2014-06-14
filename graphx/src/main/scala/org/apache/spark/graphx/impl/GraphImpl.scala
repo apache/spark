@@ -109,7 +109,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       vertices.cache()
       // The map preserves type, so we can use incremental replication
       val newVerts = vertices.mapValues(f).cache()
-      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
+      val changedVerts = newVerts.diff(vertices.asInstanceOf[VertexRDD[VD2]])
       val newReplicatedVertexView = replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2, ED]]
         .updateVertices(changedVerts)
       new GraphImpl(newVerts, newReplicatedVertexView)
@@ -233,7 +233,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   def joinVertices[U: ClassTag](other: RDD[(VertexId, U)])(mergeF: (VertexId, VD, U) => VD)
     : Graph[VD, ED] = {
     val newVerts = vertices.join(other)(mergeF).cache()
-    val changedVerts = vertices.diff(newVerts)
+    val changedVerts = newVerts.diff(vertices)
     val newReplicatedVertexView = replicatedVertexView.updateVertices(changedVerts)
     new GraphImpl(newVerts, newReplicatedVertexView)
   }
@@ -245,7 +245,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       vertices.cache()
       // updateF preserves type, so we can use incremental replication
       val newVerts = vertices.leftJoin(other)(updateF).cache()
-      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
+      val changedVerts = newVerts.diff(vertices.asInstanceOf[VertexRDD[VD2]])
       val newReplicatedVertexView = replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2, ED]]
         .updateVertices(changedVerts)
       new GraphImpl(newVerts, newReplicatedVertexView)
