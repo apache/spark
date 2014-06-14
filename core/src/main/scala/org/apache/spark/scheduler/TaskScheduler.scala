@@ -54,4 +54,8 @@ private[spark] trait TaskScheduler {
 
   // Get the default level of parallelism to use in the cluster, as a hint for sizing jobs.
   def defaultParallelism(): Int
+
+  /** Get the application ID associated with the job, if any. */
+  def applicationId(): Option[String]
+
 }

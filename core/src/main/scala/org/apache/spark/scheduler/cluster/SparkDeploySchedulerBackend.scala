@@ -34,6 +34,7 @@ private[spark] class SparkDeploySchedulerBackend(
   var client: AppClient = null
   var stopping = false
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
+  var appId: String = _
 
   val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
 
@@ -76,6 +77,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def connected(appId: String) {
     logInfo("Connected to Spark cluster with app ID " + appId)
+    this.appId = appId
   }
 
   override def disconnected() {
@@ -108,4 +110,7 @@ private[spark] class SparkDeploySchedulerBackend(
     logInfo("Executor %s removed: %s".format(fullId, message))
     removeExecutor(fullId.split("/")(1), reason.toString)
   }
+
+  override def applicationId(): Option[String] = Some(appId)
+
 }

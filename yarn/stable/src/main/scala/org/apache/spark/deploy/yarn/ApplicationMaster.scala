@@ -92,6 +92,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     amClient.init(yarnConf)
     amClient.start()
 
+    // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
+    System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
+
     // setup AmIpFilter for the SparkUI - do this before we start the UI
     addAmIpFilter()
 
@@ -150,7 +153,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
     val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
       .orElse(Option(System.getenv("LOCAL_DIRS")))
- 
+
     localDirs match {
       case None => throw new Exception("Yarn local dirs can't be empty")
       case Some(l) => l

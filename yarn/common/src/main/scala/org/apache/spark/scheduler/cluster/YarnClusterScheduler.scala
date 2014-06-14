@@ -24,14 +24,17 @@ import org.apache.spark.util.Utils
 import org.apache.hadoop.conf.Configuration
 
 /**
- *
- * This is a simple extension to ClusterScheduler - to ensure that appropriate initialization of ApplicationMaster, etc is done
+ * This is a simple extension to ClusterScheduler - to ensure that appropriate initialization of
+ * ApplicationMaster, etc is done
  */
-private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration) extends TaskSchedulerImpl(sc) {
+private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
+  extends TaskSchedulerImpl(sc) {
 
   logInfo("Created YarnClusterScheduler")
 
   def this(sc: SparkContext) = this(sc, new Configuration())
+
+  initialize(new YarnClusterSchedulerBackend(this, sc))
 
   // Nothing else for now ... initialize application master : which needs a SparkContext to
   // determine how to allocate.
@@ -57,4 +60,13 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
     }
     logInfo("YarnClusterScheduler.postStartHook done")
   }
+
+}
+
+private class YarnClusterSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  with Logging {
+
+  override def applicationId(): Option[String] = sc.getConf.getOption("spark.yarn.app.id")
+
 }

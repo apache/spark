@@ -28,6 +28,7 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def stop() {}
   def reviveOffers() {}
   def defaultParallelism() = 1
+  override def applicationId() = None
 }
 
 class FakeTaskSetManager(

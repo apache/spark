@@ -66,4 +66,6 @@ private[spark] class SimrSchedulerBackend(
     fs.delete(new Path(driverFilePath), false)
     super.stop()
   }
+
+  override def applicationId(): Option[String] = None
 }

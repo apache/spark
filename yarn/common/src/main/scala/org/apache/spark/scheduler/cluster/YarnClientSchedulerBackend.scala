@@ -116,4 +116,6 @@ private[spark] class YarnClientSchedulerBackend(
     logInfo("Stopped")
   }
 
+  override def applicationId(): Option[String] = Some(appId.toString())
+
 }

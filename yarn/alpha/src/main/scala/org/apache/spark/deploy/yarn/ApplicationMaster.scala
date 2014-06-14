@@ -89,6 +89,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     isLastAMRetry = appAttemptId.getAttemptId() >= maxAppAttempts
     resourceManager = registerWithResourceManager()
 
+    // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
+    System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
+
     // setup AmIpFilter for the SparkUI - do this before we start the UI
     addAmIpFilter()
 
