@@ -22,7 +22,7 @@ import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.SparkContext._
 
-import util.ManualClock
+import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.{SparkException, SparkConf}
 import org.apache.spark.streaming.dstream.{WindowedDStream, DStream}
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
