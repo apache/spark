@@ -20,11 +20,11 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 import scala.collection.mutable.ArrayBuffer
 import java.io.{InputStream, BufferedInputStream, FileInputStream, File, Serializable, EOFException}
-
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManager}
+import org.apache.spark.util.SizeEstimator
 
 private[spark] class SortedPartitionsRDD[T: ClassTag](
     prev: RDD[T],
@@ -40,7 +40,15 @@ private[spark] class SortedPartitionsRDD[T: ClassTag](
   }
 }
 
-private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean) extends Iterator[T] {    
+private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean) extends Iterator[T] with Logging {
+  private val sparkConf = SparkEnv.get.conf
+  // Collective memory threshold shared across all running tasks
+  private val maxMemoryThreshold = {
+    val memoryFraction = sparkConf.getDouble("spark.shuffle.memoryFraction", 0.3)
+    val safetyFraction = sparkConf.getDouble("spark.shuffle.safetyFraction", 0.8)
+    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+  }
+
   private val sorted = doSort()
   
   def hasNext : Boolean = {
@@ -63,21 +71,23 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
       diskBuffer ++= nextSubList
       subLists += diskBuffer.iterator
     }
+    println("Merge sorting one in-memory list with %d external list(s)".format(subLists.size - 1))
+    logInfo("Merge sorting one in-memory list with %d external list(s)".format(subLists.size - 1))
 
     merge(subLists)
   }
 
   private def nextSubList() : Iterator[T] = {
-    var subList = new ArrayBuffer[T](10000)
+    var subList = new SizeTrackingArrayBuffer[T](10)
     while (fitsInMemory(subList) && iter.hasNext) {
       subList += iter.next
     }
     return subList.sortWith(lt).iterator
   }
   
-  private def fitsInMemory(list : ArrayBuffer[T]) : Boolean = {
-    // TODO: use SizeEstimator
-    list.size < 500
+  private def fitsInMemory(list : SizeTrackingArrayBuffer[T]) : Boolean = {
+    // TODO: use maxMemoryThreshold
+    list.estimateSize < 10000
   }
 
   private def merge(list : ArrayBuffer[Iterator[T]]) : Iterator[T] = {
@@ -132,6 +142,50 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
   }
 }
 
+private class SizeTrackingArrayBuffer[T](initialSize : Int) {
+  private var array = new ArrayBuffer[T](initialSize)
+  private var averageSize : Double = 0.0
+  private var nextSampleNum : Int = 1
+
+  def +=(elem: T): this.type = {
+    array += elem
+    updateAverage
+    this
+  }
+
+  def ++=(xs: TraversableOnce[T]): this.type = {
+    array ++= xs
+    updateAverage
+    this
+  }
+
+  def size : Int = {
+    array.size
+  }
+
+  def sortWith(lt: (T, T) => Boolean): this.type = {
+    array = array.sortWith(lt)
+    this
+  }
+
+  def iterator : Iterator[T] = {
+    array.iterator
+  }
+
+  def updateAverage = {
+    if (array.size >= nextSampleNum) {
+      averageSize = SizeEstimator.estimate(array)
+      averageSize /= array.size
+      nextSampleNum <<= 1
+      assert(nextSampleNum < 0x40000000)
+    }
+  }
+
+  def estimateSize(): Long = {
+    (array.size * averageSize).toLong
+  }
+}
+
 private class DiskBuffer[T] {
   private val serializer = SparkEnv.get.serializer
   private val blockManager = SparkEnv.get.blockManager
@@ -141,14 +195,16 @@ private class DiskBuffer[T] {
 
   val (blockId, file) = diskBlockManager.createTempBlock()
   var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)
+  var numObjects : Int = 0
 
-  def +=(elem: T): DiskBuffer.this.type = {
+  def +=(elem: T): this.type = {
+    numObjects += 1
     writer.write(elem)
     this
   }
 
-  def ++=(xs: TraversableOnce[T]): DiskBuffer.this.type = {
-    xs.foreach(writer.write(_))
+  def ++=(xs: TraversableOnce[T]): this.type = {
+    xs.foreach({ numObjects += 1; writer.write(_) })
     this
   }
 
