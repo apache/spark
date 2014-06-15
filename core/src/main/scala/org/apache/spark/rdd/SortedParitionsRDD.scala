@@ -48,7 +48,8 @@ private[spark] class SortedPartitionsRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  override val partitioner = prev.partitioner    // Since sorting partitions cannot change a partition's keys
+  // Since sorting partitions cannot change a partition's keys
+  override val partitioner = prev.partitioner
 
   override def compute(split: Partition, context: TaskContext) = {
     new SortedIterator(firstParent[T].iterator(split, context), lt)
@@ -58,7 +59,8 @@ private[spark] class SortedPartitionsRDD[T: ClassTag](
 /**
  * An iterator that sorts a supplied iterator, either in-memory or externally.
  */
-private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean) extends Iterator[T] with Logging {
+private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
+    extends Iterator[T] with Logging {
   private val sparkConf = SparkEnv.get.conf
   // Collective memory threshold shared across all running tasks
   private val maxMemoryThreshold = {
@@ -285,10 +287,12 @@ private class DiskBuffer[T] {
 /**
  * An iterator for DiskBuffer
  */
-private class DiskBufferIterator[T](file: File, blockId: BlockId, serializer: Serializer, fileBufferSize : Int) extends Iterator[T] {
+private class DiskBufferIterator[T](file: File, blockId: BlockId, serializer: Serializer,
+    fileBufferSize : Int) extends Iterator[T] {
   private val fileStream = new FileInputStream(file)
   private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
-  private var compressedStream = SparkEnv.get.blockManager.wrapForCompression(blockId, bufferedStream)
+  private var compressedStream =
+    SparkEnv.get.blockManager.wrapForCompression(blockId, bufferedStream)
   private var deserializeStream = serializer.newInstance.deserializeStream(compressedStream)
   private var nextItem = None : Option[T]
   
