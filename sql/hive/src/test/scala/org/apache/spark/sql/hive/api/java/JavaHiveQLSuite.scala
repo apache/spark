@@ -38,7 +38,7 @@ class JavaHiveQLSuite extends FunSuite {
     override val sqlContext = TestHive
   }
 
-  test("SELECT * FROM src") {
+  ignore("SELECT * FROM src") {
     assert(
       javaHiveCtx.hql("SELECT * FROM src").collect().map(_.getInt(0)) ===
         TestHive.sql("SELECT * FROM src").collect().map(_.getInt(0)).toSeq)
@@ -52,7 +52,7 @@ class JavaHiveQLSuite extends FunSuite {
     explanation.size == 1 && explanation.head.startsWith(explainCommandClassName)
   }
 
-  test("Query Hive native command execution result") {
+  ignore("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 
     assertResult(0) {
@@ -88,7 +88,7 @@ class JavaHiveQLSuite extends FunSuite {
     TestHive.reset()
   }
 
-  test("Exactly once semantics for DDL and command statements") {
+  ignore("Exactly once semantics for DDL and command statements") {
     val tableName = "test_exactly_once"
     val q0 = javaHiveCtx.hql(s"CREATE TABLE $tableName(key INT, value STRING)")
 
