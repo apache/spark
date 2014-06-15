@@ -104,8 +104,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     totalExecutorCores = Option(totalExecutorCores)
       .getOrElse(defaultProperties.get("spark.cores.max").orNull)
     name = Option(name).getOrElse(defaultProperties.get("spark.app.name").orNull)
-    jars = Option(jars).getOrElse(defaultProperties.get("spark.jars").
-      map(p => Utils.resolveURIs(p)).orNull)
+    jars = Option(jars).getOrElse(defaultProperties.get("spark.jars").orNull)
 
     // This supports env vars in older versions of Spark
     master = Option(master).getOrElse(System.getenv("MASTER"))

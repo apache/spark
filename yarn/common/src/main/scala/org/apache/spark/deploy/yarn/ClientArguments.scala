@@ -45,10 +45,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   parseArgs(args.toList)
 
   files = Option(files).getOrElse(sparkConf.getOption("spark.yarn.dist.files").orNull)
-  files = Option(files).map(p => Utils.resolveURIs(p)).orNull
-
   archives = Option(archives).getOrElse(sparkConf.getOption("spark.yarn.dist.archives").orNull)
-  archives = Option(archives).map(p => Utils.resolveURIs(p)).orNull
 
   private def parseArgs(inputArgs: List[String]): Unit = {
     val userArgsBuffer: ArrayBuffer[String] = new ArrayBuffer[String]()
