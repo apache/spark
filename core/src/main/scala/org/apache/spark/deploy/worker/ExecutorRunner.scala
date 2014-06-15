@@ -143,11 +143,10 @@ private[spark] class ExecutorRunner(
       Files.write(header, stderr, Charsets.UTF_8)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
 
-      // Wait for it to exit; this is actually a bad thing if it happens, because we expect to run
-      // long-lived processes only. However, in the future, we might restart the executor a few
-      // times on the same machine.
+      // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
+      // or with nonzero exit code
       val exitCode = process.waitFor()
-      state = ExecutorState.FAILED
+      state = ExecutorState.EXITED
       val message = "Command exited with code " + exitCode
       worker ! ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode))
     } catch {
