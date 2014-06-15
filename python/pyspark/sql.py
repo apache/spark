@@ -76,14 +76,14 @@ class SQLContext:
         """Infer and apply a schema to an RDD of L{dict}s.
 
         We peek at the first row of the RDD to determine the fields names
-        and types, and then use that to extract all the dictionaries.
+        and types, and then use that to extract all the dictionaries. Nested
+        collections are supported, which include array, dict, list, set, and
+        tuple.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"},
         ...                    {"field1" : 3, "field2": "row3"}]
         True
-
-        Nested collections are supported, which include array, dict, list, set, and tuple.
 
         >>> from array import array
         >>> srdd = sqlCtx.inferSchema(nestedRdd1)

@@ -298,6 +298,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Peek at the first row of the RDD and infer its schema.
+   * TODO: consolidate this with the type system developed in SPARK-2060.
    */
   private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
     import scala.collection.JavaConversions._
