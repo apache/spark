@@ -110,7 +110,7 @@ class JsonProtocolSuite extends FunSuite {
     testTaskEndReason(UnknownReason)
 
     // BlockId
-    testBlockId(RDDBlockId(1, 2))
+    testBlockId(RDDBlockId(1, 2, 0))
     testBlockId(ShuffleBlockId(1, 2, 3))
     testBlockId(BroadcastBlockId(1L, "insert_words_of_wisdom_here"))
     testBlockId(TaskResultBlockId(1L))
@@ -468,7 +468,8 @@ class JsonProtocolSuite extends FunSuite {
     t.shuffleWriteMetrics = Some(sw)
     // Make at most 6 blocks
     t.updatedBlocks = Some((1 to (e % 5 + 1)).map { i =>
-      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i, c%i))
+      (RDDBlockId(e % i, f % i, StorageLevel.MEMORY_AND_DISK_SER_2.toInt),
+        BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i, c%i))
     }.toSeq)
     t
   }

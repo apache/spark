@@ -301,7 +301,9 @@ private[spark] class BlockManager(
           val onDisk = level.useDisk && diskStore.contains(blockId)
           val deserialized = if (inMem) level.deserialized else false
           val replication = if (inMem || inTachyon || onDisk) level.replication else 1
-          val storageLevel = StorageLevel(onDisk, inMem, inTachyon, deserialized, replication)
+          val compressed = level.compressed && !deserialized
+          val storageLevel = StorageLevel(onDisk, inMem, inTachyon, deserialized, compressed,
+            replication)
           val memSize = if (inMem) memoryStore.getSize(blockId) else 0L
           val tachyonSize = if (inTachyon) tachyonStore.getSize(blockId) else 0L
           val diskSize = if (onDisk) diskStore.getSize(blockId) else 0L
@@ -759,7 +761,7 @@ private[spark] class BlockManager(
   @volatile var cachedPeers: Seq[BlockManagerId] = null
   private def replicate(blockId: BlockId, data: ByteBuffer, level: StorageLevel): Unit = {
     val tLevel = StorageLevel(
-      level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
+      level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, level.compressed, 1)
     if (cachedPeers == null) {
       cachedPeers = master.getPeers(blockManagerId, level.replication - 1)
     }
@@ -948,7 +950,7 @@ private[spark] class BlockManager(
     blockId match {
       case _: ShuffleBlockId => compressShuffle
       case _: BroadcastBlockId => compressBroadcast
-      case _: RDDBlockId => compressRdds
+      case r: RDDBlockId => compressRdds || StorageLevel(r.storageLevel, 1).compressed
       case _: TempBlockId => compressShuffleSpill
       case _ => false
     }

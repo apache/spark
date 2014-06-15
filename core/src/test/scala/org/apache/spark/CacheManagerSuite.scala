@@ -52,8 +52,8 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
 
   test("get uncached rdd") {
     expecting {
-      blockManager.get(RDDBlockId(0, 0)).andReturn(None)
-      blockManager.put(RDDBlockId(0, 0), ArrayBuffer[Any](1, 2, 3, 4), StorageLevel.MEMORY_ONLY,
+      blockManager.get(RDDBlockId(0, 0, 0)).andReturn(None)
+      blockManager.put(RDDBlockId(0, 0, 0), ArrayBuffer[Any](1, 2, 3, 4), StorageLevel.MEMORY_ONLY,
         true).andStubReturn(Seq[(BlockId, BlockStatus)]())
     }
 
@@ -66,7 +66,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
 
   test("get cached rdd") {
     expecting {
-      blockManager.get(RDDBlockId(0, 0)).andReturn(Some(ArrayBuffer(5, 6, 7).iterator))
+      blockManager.get(RDDBlockId(0, 0, 0)).andReturn(Some(ArrayBuffer(5, 6, 7).iterator))
     }
 
     whenExecuting(blockManager) {
@@ -79,7 +79,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
   test("get uncached local rdd") {
     expecting {
       // Local computation should not persist the resulting value, so don't expect a put().
-      blockManager.get(RDDBlockId(0, 0)).andReturn(None)
+      blockManager.get(RDDBlockId(0, 0, 0)).andReturn(None)
     }
 
     whenExecuting(blockManager) {

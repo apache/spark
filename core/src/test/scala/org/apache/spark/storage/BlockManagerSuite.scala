@@ -57,7 +57,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   // Implicitly convert strings to BlockIds for test clarity.
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
-  def rdd(rddId: Int, splitId: Int) = RDDBlockId(rddId, splitId)
+  def rdd(rddId: Int, splitId: Int) = RDDBlockId(rddId, splitId, 0)
 
   before {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("test", "localhost", 0, conf = conf,
@@ -102,9 +102,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("StorageLevel object caching") {
-    val level1 = StorageLevel(false, false, false, false, 3)
-    val level2 = StorageLevel(false, false, false, false, 3) // this should return the same object as level1
-    val level3 = StorageLevel(false, false, false, false, 2) // this should return a different object
+    val level1 = StorageLevel(false, false, false, false, false, 3)
+    val level2 = StorageLevel(false, false, false, false, false, 3) // this should return the same object as level1
+    val level3 = StorageLevel(false, false, false, false, false, 2) // this should return a different object
     assert(level2 === level1, "level2 is not same as level1")
     assert(level2.eq(level1), "level2 is not the same object as level1")
     assert(level3 != level1, "level3 is same as level1")
@@ -952,15 +952,15 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askSlaves = false).size === 1)
     assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askSlaves = true).size === 3)
 
-    val blockIds = Seq(RDDBlockId(1, 0), RDDBlockId(1, 1), RDDBlockId(2, 0))
+    val blockIds = Seq(RDDBlockId(1, 0, 0), RDDBlockId(1, 1, 0), RDDBlockId(2, 0, 0))
     blockIds.foreach { blockId =>
       store.put(blockId, list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     }
     val matchedBlockIds = store.master.getMatchingBlockIds(_ match {
-      case RDDBlockId(1, _) => true
+      case RDDBlockId(1, _, _) => true
       case _ => false
     }, askSlaves = true)
-    assert(matchedBlockIds.toSet === Set(RDDBlockId(1, 0), RDDBlockId(1, 1)))
+    assert(matchedBlockIds.toSet === Set(RDDBlockId(1, 0, 0), RDDBlockId(1, 1, 0)))
   }
 
   test("SPARK-1194 regression: fix the same-RDD rule for cache replacement") {

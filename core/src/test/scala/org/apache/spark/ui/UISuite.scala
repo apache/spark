@@ -23,6 +23,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.io.Source
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
+import scala.xml.Node
 
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletContextHandler
@@ -32,7 +33,6 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.LocalSparkContext._
-import scala.xml.Node
 
 class UISuite extends FunSuite {
 
