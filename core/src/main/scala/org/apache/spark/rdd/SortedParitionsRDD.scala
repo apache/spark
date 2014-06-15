@@ -26,6 +26,21 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.SizeEstimator
 
+/**
+ * An RDD that sorts each of it's partitions independently.
+ * 
+ * If partitions are too large to fit in memory, they are externally sorted.
+ * 
+ * Two parameters control the memory threshold for external sort:
+ *
+ *   `spark.shuffle.memoryFraction` specifies the collective amount of memory used for storing
+ *   sub lists as a fraction of the executor's total memory. Since each concurrently running
+ *   task maintains one map, the actual threshold for each map is this quantity divided by the
+ *   number of running tasks.
+ *
+ *   `spark.shuffle.safetyFraction` specifies an additional margin of safety as a fraction of
+ *   this threshold, in case sub list size estimation is not sufficiently accurate.
+ */
 private[spark] class SortedPartitionsRDD[T: ClassTag](
     prev: RDD[T],
     lt: (T, T) => Boolean)
@@ -40,6 +55,9 @@ private[spark] class SortedPartitionsRDD[T: ClassTag](
   }
 }
 
+/**
+ * An iterator that sorts a supplied iterator, either in-memory or externally.
+ */
 private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean) extends Iterator[T] with Logging {
   private val sparkConf = SparkEnv.get.conf
   // Collective memory threshold shared across all running tasks
@@ -48,6 +66,9 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
     val safetyFraction = sparkConf.getDouble("spark.shuffle.safetyFraction", 0.8)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
+
+  // Number of list elements before tracking memory usage
+  private val trackMemoryThreshold = 1000
 
   private val sorted = doSort()
   
@@ -59,37 +80,72 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
     sorted.next
   }
   
+  /**
+   * Sort the incoming iterator.
+   * Any input that cannot fit in memory is split into sorted sub-lists and spilled to disk.
+   * Any spilled sub-lists are merge sorted and written back to disk.
+   */
   private def doSort() : Iterator[T] = {
     val subLists = new ArrayBuffer[Iterator[T]]()
 
-    // keep the first sub list in memory
+    // keep the first sub-list in memory
     subLists += nextSubList
 
     while (iter.hasNext) {
-      // spill remaining sub lists to disk
+      // spill remaining sub-lists to disk
       var diskBuffer = new DiskBuffer[T]()
       diskBuffer ++= nextSubList
       subLists += diskBuffer.iterator
     }
-    println("Merge sorting one in-memory list with %d external list(s)".format(subLists.size - 1))
     logInfo("Merge sorting one in-memory list with %d external list(s)".format(subLists.size - 1))
 
     merge(subLists)
   }
 
+  /**
+   * Gets a sorted sub-list that can fit in memory.
+   */
   private def nextSubList() : Iterator[T] = {
-    var subList = new SizeTrackingArrayBuffer[T](10)
+    var subList = new SizeTrackingArrayBuffer[T](1000)
     while (fitsInMemory(subList) && iter.hasNext) {
       subList += iter.next
     }
     return subList.sortWith(lt).iterator
   }
-  
+
+  /**
+   * Determines if a given list can fit in memory.
+   * This algorithm is similar to that found in ExternalAppendOnlyMap.
+   */
   private def fitsInMemory(list : SizeTrackingArrayBuffer[T]) : Boolean = {
-    // TODO: use maxMemoryThreshold
-    list.estimateSize < 10000
+    if (list.size > trackMemoryThreshold && list.atNextSampleSize) {
+      val listSize = list.estimateSize()
+      val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
+
+      // Atomically check whether there is sufficient memory in the global pool for
+      // this map to grow and, if possible, allocate the required amount
+      shuffleMemoryMap.synchronized {
+        val threadId = Thread.currentThread().getId
+        val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId)
+        val availableMemory = maxMemoryThreshold -
+          (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
+
+        // Assume list growth factor is 2x
+        if (availableMemory > listSize * 2) {
+          shuffleMemoryMap(threadId) = listSize * 2
+        } else {
+          shuffleMemoryMap(threadId) = 0
+          return false
+        }
+      }
+    }
+    return true
   }
 
+  /**
+   * Merge-sort a list of iterators, which might be in memory or disk.
+   * Returns a sorted iterator.
+   */
   private def merge(list : ArrayBuffer[Iterator[T]]) : Iterator[T] = {
     if (list.size == 1) {
       return list(0)
@@ -103,10 +159,11 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
     doMerge(left, right)
   }
 
+  /**
+   * Merge two iterators, returning a sorted iterator.
+   */
   private def doMerge(it1 : Iterator[T], it2 : Iterator[T]) : Iterator[T] = {
     var array = new DiskBuffer[T]()
-// for testing...
-//    var array = new ArrayBuffer[T]()
     if (!it1.hasNext) {
       array ++= it2
       return array.iterator
@@ -142,6 +199,9 @@ private[spark] class SortedIterator[T](iter: Iterator[T], lt: (T, T) => Boolean)
   }
 }
 
+/**
+ * A buffer similar to ArrayBuffer that can estimate it's size in bytes.
+ */
 private class SizeTrackingArrayBuffer[T](initialSize : Int) {
   private var array = new ArrayBuffer[T](initialSize)
   private var averageSize : Double = 0.0
@@ -172,6 +232,10 @@ private class SizeTrackingArrayBuffer[T](initialSize : Int) {
     array.iterator
   }
 
+  def atNextSampleSize : Boolean = {
+    array.size >= nextSampleNum
+  }
+
   def updateAverage = {
     if (array.size >= nextSampleNum) {
       averageSize = SizeEstimator.estimate(array)
@@ -186,6 +250,9 @@ private class SizeTrackingArrayBuffer[T](initialSize : Int) {
   }
 }
 
+/**
+ * A buffer similar to ArrayBuffer, but stored on disk.
+ */
 private class DiskBuffer[T] {
   private val serializer = SparkEnv.get.serializer
   private val blockManager = SparkEnv.get.blockManager
@@ -215,6 +282,9 @@ private class DiskBuffer[T] {
   }
 }
 
+/**
+ * An iterator for DiskBuffer
+ */
 private class DiskBufferIterator[T](file: File, blockId: BlockId, serializer: Serializer, fileBufferSize : Int) extends Iterator[T] {
   private val fileStream = new FileInputStream(file)
   private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
