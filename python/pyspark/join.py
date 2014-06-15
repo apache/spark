@@ -80,10 +80,13 @@ def python_left_outer_join(rdd, other, numPartitions):
 
 
 def python_cogroup(rdds, numPartitions):
-    vrdds = [rdd.map(lambda (k, v): (k, (i, v))) for i, rdd in enumerate(rdds)]
+    def make_mapper(i):
+        return lambda (k, v): (k, (i, v))
+    vrdds = [rdd.map(make_mapper(i)) for i, rdd in enumerate(rdds)]
     union_vrdds = reduce(lambda acc, other: acc.union(other), vrdds)
+    rdd_len = len(vrdds)
     def dispatch(seq):
-        bufs = [[] for rdd in vrdds]
+        bufs = [[] for i in range(rdd_len)]
         for (n, v) in seq:
             bufs[n].append(v)
         return tuple(map(ResultIterable, bufs))
