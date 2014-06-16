@@ -227,6 +227,20 @@ object IndexedRDDBenchmark {
     }
     println("Done.")
 
+    println(s"Testing scaling for IndexedRDDPartition creation ($trials trials)...")
+    println("partition size\tcreate time (ms)")
+    n = 1
+    while (n <= elemsPerPartition) {
+      start = System.nanoTime
+      for (i <- 1 to trials) {
+        val partition = IndexedRDDPartition((0 until n).iterator.map(x => (x.toLong, x)))
+      }
+      end = System.nanoTime
+      println(s"$n\t${(end - start).toDouble / trials / 1000000}")
+      n *= 10
+    }
+    println("Done.")
+
     // println(s"Get on vanilla RDD ($trials trials)...")
     // var start = System.currentTimeMillis
     // for (i <- 1 to trials) {
