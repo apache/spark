@@ -1052,10 +1052,10 @@ abstract class RDD[T: ClassTag](
    * Returns the top K (largest) elements from this RDD as defined by the specified
    * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
    * {{{
-   *   sc.parallelize(Array(10, 4, 2, 12, 3)).top(1)
+   *   sc.parallelize(Seq(10, 4, 2, 12, 3)).top(1)
    *   // returns Array(12)
    *
-   *   sc.parallelize(Array(2, 3, 4, 5, 6)).top(2)
+   *   sc.parallelize(Seq(2, 3, 4, 5, 6)).top(2)
    *   // returns Array(6, 5)
    * }}}
    *
@@ -1070,10 +1070,10 @@ abstract class RDD[T: ClassTag](
    * implicit Ordering[T] and maintains the ordering. This does the opposite of [[top]].
    * For example:
    * {{{
-   *   sc.parallelize(Array(10, 4, 2, 12, 3)).takeOrdered(1)
+   *   sc.parallelize(Seq(10, 4, 2, 12, 3)).takeOrdered(1)
    *   // returns Array(2)
    *
-   *   sc.parallelize(Array(2, 3, 4, 5, 6)).takeOrdered(2)
+   *   sc.parallelize(Seq(2, 3, 4, 5, 6)).takeOrdered(2)
    *   // returns Array(2, 3)
    * }}}
    *
