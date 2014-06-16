@@ -44,7 +44,7 @@ object IndexedRDDBenchmark {
       case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
     }
 
-    val numElementsLarge = numPartitions * elemsPerPartition
+    val numElements = numPartitions * elemsPerPartition
 
     val conf = new SparkConf()
       .setAppName(s"IndexedRDD Benchmark")
@@ -54,53 +54,105 @@ object IndexedRDDBenchmark {
 
     val r = new util.Random(0)
 
-    println("Constructing large dataset...")
-    var large = IndexedRDD(sc.parallelize(0 until numPartitions, numPartitions).flatMap(p =>
+    println("Constructing vanilla RDD...")
+    val vanilla = sc.parallelize(0 until numPartitions, numPartitions).flatMap(p =>
       (p * elemsPerPartition) until ((p + 1) * elemsPerPartition))
-      .map(x => (x.toLong, x))).cache()
-    val largeOrig = large
-    println(s"Done. Generated ${large.count} elements.")
+      .map(x => (x.toLong, x)).cache()
+    println("Constructing indexed RDD...")
+    val indexed = IndexedRDD(vanilla).cache()
+    println(s"Done. Generated ${vanilla.count}, ${indexed.count} elements.")
 
-    println(s"Get on large dataset ($trials trials)...")
+    println(s"Scanning vanilla RDD with mapValues ($trials trials)...")
     var start = System.currentTimeMillis
     for (i <- 1 to trials) {
-      val elem = r.nextInt(numElementsLarge)
-      val value = large.get(elem)
-      assert(value == Some(elem), s"get($elem) was $value")
+      val doubled = vanilla.mapValues(_ * 2)
+      doubled.foreach(x => {})
     }
     var end = System.currentTimeMillis
-    println(s"Done. ${(end - start) / trials} ms per get.")
-
-    println(s"Update on large dataset ($trials trials)...")
+    println(s"Done. ${(end - start) / trials} ms per scan.")
+    println(s"Scanning indexed RDD with mapValues ($trials trials)...")
     start = System.currentTimeMillis
     for (i <- 1 to trials) {
-      val elem = r.nextInt(numElementsLarge)
-      large = large.put(elem, 0).cache()
+      val doubled = indexed.mapValues(_ * 2)
+      doubled.foreach(x => {})
     }
-    large.foreach(x => {})
     end = System.currentTimeMillis
-    println(s"Done. ${(end - start) / trials} ms per update.")
-    val largeDerived = large.cache()
+    println(s"Done. ${(end - start) / trials} ms per scan.")
 
-    println(s"Insert on large dataset ($trials trials)...")
+    println("Constructing modified version of vanilla RDD...")
+    val vanilla2 = vanilla.mapValues(_ * 2).cache()
+    vanilla2.foreach(x => {})
+    println("Constructing modified version of indexed RDD...")
+    val indexed2 = indexed.mapValues(_ * 2).cache()
+    indexed2.foreach(x => {})
+    println(s"Done.")
+
+    println(s"Zipping vanilla RDD with modified version ($trials trials)...")
     start = System.currentTimeMillis
     for (i <- 1 to trials) {
-      val elem = numElementsLarge + r.nextInt(numElementsLarge)
-      large = large.put(elem, elem).cache()
+      val zipped = vanilla.zip(vanilla2).map(ab => (ab._1._1, ab._1._2 + ab._2._2))
+      zipped.foreach(x => {})
     }
-    large.foreach(x => {})
     end = System.currentTimeMillis
-    println(s"Done. ${(end - start) / trials} ms per insert.")
-
-    println(s"Join derived dataset with original ($trials trials)...")
+    println(s"Done. ${(end - start) / trials} ms per zip.")
+    // println(s"Joining vanilla RDD with modified version ($trials trials)...")
+    // start = System.currentTimeMillis
+    // for (i <- 1 to trials) {
+    //   val joined = vanilla.join(vanilla2)
+    //   joined.foreach(x => {})
+    // }
+    // end = System.currentTimeMillis
+    // println(s"Done. ${(end - start) / trials} ms per join.")
+    println(s"Joining indexed RDD with modified version ($trials trials)...")
     start = System.currentTimeMillis
     for (i <- 1 to trials) {
-      val joined = largeOrig.join(largeDerived) { (id, a, b) => a + b }.cache()
+      val joined = indexed.innerJoin(indexed2) { (id, a, b) => a + b }
       joined.foreach(x => {})
-      joined.unpersist(blocking = true)
     }
     end = System.currentTimeMillis
     println(s"Done. ${(end - start) / trials} ms per join.")
+
+
+    // println(s"Get on vanilla RDD ($trials trials)...")
+    // var start = System.currentTimeMillis
+    // for (i <- 1 to trials) {
+    //   val elem = r.nextInt(numElements)
+    //   val value = large.get(elem)
+    //   assert(value == Some(elem), s"get($elem) was $value")
+    // }
+    // var end = System.currentTimeMillis
+    // println(s"Done. ${(end - start) / trials} ms per get.")
+
+    // println(s"Update on large dataset ($trials trials)...")
+    // start = System.currentTimeMillis
+    // for (i <- 1 to trials) {
+    //   val elem = r.nextInt(numElements)
+    //   large = large.put(elem, 0).cache()
+    // }
+    // large.foreach(x => {})
+    // end = System.currentTimeMillis
+    // println(s"Done. ${(end - start) / trials} ms per update.")
+    // val largeDerived = large.cache()
+
+    // println(s"Insert on large dataset ($trials trials)...")
+    // start = System.currentTimeMillis
+    // for (i <- 1 to trials) {
+    //   val elem = numElements + r.nextInt(numElements)
+    //   large = large.put(elem, elem).cache()
+    // }
+    // large.foreach(x => {})
+    // end = System.currentTimeMillis
+    // println(s"Done. ${(end - start) / trials} ms per insert.")
+
+    // println(s"Join derived dataset with original ($trials trials)...")
+    // start = System.currentTimeMillis
+    // for (i <- 1 to trials) {
+    //   val joined = largeOrig.join(largeDerived) { (id, a, b) => a + b }.cache()
+    //   joined.foreach(x => {})
+    //   joined.unpersist(blocking = true)
+    // }
+    // end = System.currentTimeMillis
+    // println(s"Done. ${(end - start) / trials} ms per join.")
 
     sc.stop()
   }
