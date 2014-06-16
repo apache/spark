@@ -363,9 +363,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   def getSerializedMapOutputStatuses(shuffleId: Int): Array[Byte] = {
     var statuses: Array[MapStatus] = null
     var epochGotten: Long = -1
+    val partial = partialForShuffle.contains(shuffleId)
     epochLock.synchronized {
-      // Don't use the cached version if outputs are partial
-      if (epoch > cacheEpoch || partialForShuffle.contains(shuffleId)) {
+      if (epoch > cacheEpoch) {
         cachedSerializedStatuses.clear()
         cacheEpoch = epoch
       }
@@ -379,11 +379,12 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     }
     // If we got here, we failed to find the serialized locations in the cache, so we pulled
     // out a snapshot of the locations as "statuses"; let's serialize and return that
-    val bytes = MapOutputTracker.serializeMapStatuses(statuses,isPartial = partialForShuffle.contains(shuffleId))
+    val bytes = MapOutputTracker.serializeMapStatuses(statuses,isPartial = partial)
     logInfo("Size of output statuses for shuffle %d is %d bytes".format(shuffleId, bytes.length))
     // Add them into the table only if the epoch hasn't changed while we were working
     epochLock.synchronized {
-      if (epoch == epochGotten) {
+      // Don't put partial outputs in cache
+      if (epoch == epochGotten && !partial) {
         cachedSerializedStatuses(shuffleId) = bytes
       }
     }
