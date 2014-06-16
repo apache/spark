@@ -762,6 +762,11 @@ val counts = pairs.reduceByKey((a, b) => a + b)
 We could also use `counts.sortByKey()`, for example, to sort the pairs alphabetically, and finally
 `counts.collect()` to bring them back to the driver program as an array of objects.
 
+**Note:** when using custom objects as the key in key-value pair operations, you must be sure that a
+custom `equals()` method is accompanied with a matching `hashCode()` method.  For full details, see
+the contract outlined in the [Object.hashCode()
+documentation](http://docs.oracle.com/javase/7/docs/api/java/lang/Object.html#hashCode()).
+
 </div>
 
 <div data-lang="java" markdown="1">
@@ -794,6 +799,10 @@ JavaPairRDD<String, Integer> counts = pairs.reduceByKey((a, b) -> a + b);
 We could also use `counts.sortByKey()`, for example, to sort the pairs alphabetically, and finally
 `counts.collect()` to bring them back to the driver program as an array of objects.
 
+**Note:** when using custom objects as the key in key-value pair operations, you must be sure that a
+custom `equals()` method is accompanied with a matching `hashCode()` method.  For full details, see
+the contract outlined in the [Object.hashCode()
+documentation](http://docs.oracle.com/javase/7/docs/api/java/lang/Object.html#hashCode()).
 
 </div>
 
@@ -890,7 +899,7 @@ for details.
 </tr>
 <tr>
   <td> <b>reduceByKey</b>(<i>func</i>, [<i>numTasks</i>]) </td>
-  <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, V) pairs where the values for each key are aggregated using the given reduce function. Like in <code>groupByKey</code>, the number of reduce tasks is configurable through an optional second argument. </td>
+  <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, V) pairs where the values for each key are aggregated using the given reduce function <i>func</i>, which must be of type (V,V) => V. Like in <code>groupByKey</code>, the number of reduce tasks is configurable through an optional second argument. </td>
 </tr>
 <tr>
   <td> <b>aggregateByKey</b>(<i>zeroValue</i>)(<i>seqOp</i>, <i>combOp</i>, [<i>numTasks</i>]) </td>
@@ -1058,7 +1067,10 @@ storage levels is:
   <td> Store RDD in serialized format in <a href="http://tachyon-project.org">Tachyon</a>.
     Compared to MEMORY_ONLY_SER, OFF_HEAP reduces garbage collection overhead and allows executors
     to be smaller and to share a pool of memory, making it attractive in environments with
-    large heaps or multiple concurrent applications.
+    large heaps or multiple concurrent applications. Furthermore, as the RDDs reside in Tachyon,
+    the crash of an executor does not lead to losing the in-memory cache. In this mode, the memory 
+    in Tachyon is discardable. Thus, Tachyon does not attempt to reconstruct a block that it evicts
+    from memory.
   </td>
 </tr>
 </table>
