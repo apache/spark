@@ -50,10 +50,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
-  val registeredRatio = conf.getDouble("spark.executor.registeredRatio", 0)
-  val maxRegisteredWaitingTime = conf.getInt("spark.executor.maxRegisteredWaitingTime", 10000)
+  var minRegisteredRatio = conf.getDouble("spark.scheduler.minRegisteredRatio", 0)
+  val maxRegisteredWaitingTime = conf.getInt("spark.scheduler.maxRegisteredWaitingTime", 10000)
   val createTime = System.currentTimeMillis()
-  var ready = if(registeredRatio==0)true else false
+  var ready = if (minRegisteredRatio <= 0) true else false
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
     private val executorActor = new HashMap[String, ActorRef]
@@ -88,7 +88,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
-          if (executorActor.size >= totalExecutors.get() * registeredRatio) {
+          if (executorActor.size >= totalExecutors.get() * minRegisteredRatio) {
             ready = true
           }
           makeOffers()
