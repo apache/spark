@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
 import org.apache.spark.sql.catalyst.types._
@@ -100,13 +101,28 @@ class JavaSQLContext(val sqlContext: SQLContext) {
     new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
   }
 
-
   /**
    * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
    */
   def parquetFile(path: String): JavaSchemaRDD =
     new JavaSchemaRDD(sqlContext, ParquetRelation(path))
 
+  /**
+   * Loads a JSON file (one object per line), returning the result as a [[JavaSchemaRDD]].
+   *
+   * @group userf
+   */
+  def jsonFile(path: String): JavaSchemaRDD =
+    jsonRDD(sqlContext.sparkContext.textFile(path))
+
+  /**
+   * Loads a RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[JavaSchemaRDD]].
+   *
+   * @group userf
+   */
+  def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD =
+    new JavaSchemaRDD(sqlContext, JsonRDD.inferSchema(json, 1.0))
 
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
