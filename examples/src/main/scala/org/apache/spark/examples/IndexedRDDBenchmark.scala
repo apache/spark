@@ -70,11 +70,30 @@ object IndexedRDDBenchmark {
     }
     var end = System.currentTimeMillis
     println(s"Done. ${(end - start) / trials} ms per scan.")
+
+    println(s"Scanning vanilla RDD with mapValues and count ($trials trials)...")
+    start = System.currentTimeMillis
+    for (i <- 1 to trials) {
+      val doubled = vanilla.mapValues(_ * 2)
+      doubled.count()
+    }
+    end = System.currentTimeMillis
+    println(s"Done. ${(end - start) / trials} ms per scan.")
+
     println(s"Scanning indexed RDD with mapValues ($trials trials)...")
     start = System.currentTimeMillis
     for (i <- 1 to trials) {
       val doubled = indexed.mapValues(_ * 2)
       doubled.foreach(x => {})
+    }
+    end = System.currentTimeMillis
+    println(s"Done. ${(end - start) / trials} ms per scan.")
+
+    println(s"Scanning indexed RDD with mapValues and count ($trials trials)...")
+    start = System.currentTimeMillis
+    for (i <- 1 to trials) {
+      val doubled = indexed.mapValues(_ * 2)
+      doubled.count()
     }
     end = System.currentTimeMillis
     println(s"Done. ${(end - start) / trials} ms per scan.")
@@ -95,6 +114,16 @@ object IndexedRDDBenchmark {
     }
     end = System.currentTimeMillis
     println(s"Done. ${(end - start) / trials} ms per zip.")
+
+    println(s"Zipping vanilla RDD with modified version and count ($trials trials)...")
+    start = System.currentTimeMillis
+    for (i <- 1 to trials) {
+      val zipped = vanilla.zip(vanilla2).map(ab => (ab._1._1, ab._1._2 + ab._2._2))
+      zipped.count()
+    }
+    end = System.currentTimeMillis
+    println(s"Done. ${(end - start) / trials} ms per zip.")
+
     // println(s"Joining vanilla RDD with modified version ($trials trials)...")
     // start = System.currentTimeMillis
     // for (i <- 1 to trials) {
@@ -103,11 +132,21 @@ object IndexedRDDBenchmark {
     // }
     // end = System.currentTimeMillis
     // println(s"Done. ${(end - start) / trials} ms per join.")
+
     println(s"Joining indexed RDD with modified version ($trials trials)...")
     start = System.currentTimeMillis
     for (i <- 1 to trials) {
       val joined = indexed.innerJoin(indexed2) { (id, a, b) => a + b }
       joined.foreach(x => {})
+    }
+    end = System.currentTimeMillis
+    println(s"Done. ${(end - start) / trials} ms per join.")
+
+    println(s"Joining indexed RDD with modified version and count ($trials trials)...")
+    start = System.currentTimeMillis
+    for (i <- 1 to trials) {
+      val joined = indexed.innerJoin(indexed2) { (id, a, b) => a + b }
+      joined.count()
     }
     end = System.currentTimeMillis
     println(s"Done. ${(end - start) / trials} ms per join.")
