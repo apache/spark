@@ -238,6 +238,8 @@ teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 # The results of SQL queries are RDDs and support all the normal RDD operations.
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
+for teenName in teenNames.collect():
+  print teenName
 {% endhighlight %}
 
 </div>
@@ -275,7 +277,7 @@ val parquetFile = sqlCtx.parquetFile("people.parquet")
 //Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerAsTable("parquetFile")
 val teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
-teenagers.collect().foreach(println)
+teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
 </div>
@@ -311,10 +313,10 @@ List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
 {% highlight python %}
 # sqlCtx from the previous example is used in this example.
 
-peopleTable # The SchemaRDD from the previous example.
+schemaPeople # The SchemaRDD from the previous example.
 
 # SchemaRDDs can be saved as Parquet files, maintaining the schema information.
-peopleTable.saveAsParquetFile("people.parquet")
+schemaPeople.saveAsParquetFile("people.parquet")
 
 # Read in the Parquet file created above.  Parquet files are self-describing so the schema is preserved.
 # The result of loading a parquet file is also a SchemaRDD.
@@ -324,6 +326,8 @@ parquetFile = sqlCtx.parquetFile("people.parquet")
 parquetFile.registerAsTable("parquetFile");
 teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
+for teenName in teenNames.collect():
+  print teenName
 {% endhighlight %}
 
 </div>
@@ -477,11 +481,13 @@ people.printSchema()
 people.registerAsTable("people")
 
 # SQL statements can be run by using the sql methods provided by sqlCtx.
-val teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 # The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
 # The columns of a row in the result can be accessed by ordinal.
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
+for teenName in teenNames.collect():
+  print teenName
 
 # Alternatively, a SchemaRDD can be created for a JSON dataset represented by
 # a RDD[String] storing one JSON object per string.
@@ -597,6 +603,7 @@ val people: RDD[Person] = ... // An RDD of case class objects, from the first ex
 
 // The following is the same as 'SELECT name FROM people WHERE age >= 10 AND age <= 19'
 val teenagers = people.where('age >= 10).where('age <= 19).select('name)
+teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
 The DSL uses Scala symbols to represent columns in the underlying table, which are identifiers

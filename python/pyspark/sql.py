@@ -138,9 +138,10 @@ class SQLContext:
         >>> ofn.close()
         >>> srdd = sqlCtx.jsonFile(jsonFile)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
-        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
-        >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"},
-        ...                     {"f1" : 3, "f2": "row3"}]
+        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2, field3 as f3 from table1")
+        >>> srdd2.collect() == [{"f1": 1, "f2": "row1", "f3":{"field4":11}},
+        ...                     {"f1": 2, "f2": "row2", "f3":{"field4":22}},
+        ...                     {"f1": 3, "f2": "row3", "f3":{"field4":33}}]
         True
         """
         jschema_rdd = self._ssql_ctx.jsonFile(path)
@@ -151,9 +152,10 @@ class SQLContext:
 
         >>> srdd = sqlCtx.jsonRDD(json)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
-        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
-        >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"},
-        ...                     {"f1" : 3, "f2": "row3"}]
+        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2, field3 as f3 from table1")
+        >>> srdd2.collect() == [{"f1": 1, "f2": "row1", "f3":{"field4":11}},
+        ...                     {"f1": 2, "f2": "row2", "f3":{"field4":22}},
+        ...                     {"f1": 3, "f2": "row3", "f3":{"field4":33}}]
         True
         """
         def func(split, iterator):
@@ -369,7 +371,7 @@ class SchemaRDD(RDD):
 
     def getSchemaTreeString(self):
         """Returns the output schema in the tree format."""
-        self._jschema_rdd.getSchemaTreeString()
+        return self._jschema_rdd.getSchemaTreeString()
 
     def printSchema(self):
         """Prints out the schema in the tree format."""
@@ -473,8 +475,9 @@ def _test():
     globs['sqlCtx'] = SQLContext(sc)
     globs['rdd'] = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
-    jsonStrings = ['{"field1": 1, "field2": "row1"}',
-       '{"field1" : 2, "field2": "row2"}', '{"field1" : 3, "field2": "row3"}']
+    jsonStrings = ['{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
+       '{"field1" : 2, "field2": "row2", "field3":{"field4":22}}',
+       '{"field1" : 3, "field2": "row3", "field3":{"field4":33}}']
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
     (failure_count, test_count) = doctest.testmod(globs=globs,optionflags=doctest.ELLIPSIS)
