@@ -925,7 +925,9 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTION", Token(CASE(), Nil) :: branches) =>
       val transformed = branches.drop(1).sliding(2, 2).map {
         case Seq(condVal, value) =>
-          // FIXME?: the key will get evaluated for multiple times in CaseWhen's eval(). Optimize?
+          // FIXME: the key will get evaluated for multiple times in CaseWhen's eval(). Hence
+          // effectful / non-deterministic key expressions are *not* supported at the moment.
+          // We should consider adding new Expressions to get around this.
           Seq(Equals(nodeToExpr(branches(0)), nodeToExpr(condVal)),
               nodeToExpr(value))
         case Seq(elseVal) => Seq(nodeToExpr(elseVal))
