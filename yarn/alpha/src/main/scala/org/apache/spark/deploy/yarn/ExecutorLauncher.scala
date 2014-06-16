@@ -289,7 +289,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
       .asInstanceOf[FinishApplicationMasterRequest]
     finishReq.setAppAttemptId(appAttemptId)
     finishReq.setFinishApplicationStatus(status)
-    finishReq.setTrackingUrl(sparkConf.get("spark.yarn.historyServer.address", ""))
+    finishReq.setTrackingUrl(sparkConf.get("spark.driver.appUIHistoryAddress", ""))
     resourceManager.finishApplicationMaster(finishReq)
   }
 
