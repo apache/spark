@@ -205,6 +205,28 @@ object IndexedRDDBenchmark {
     }
     println("Done.")
 
+    println(s"Testing varying read-write mixtures ($microTrials trials)...")
+    println("write %\tworkload time (ms)")
+    for (writeProb <- 0 to 100) {
+      var partition = IndexedRDDPartition((0 until elemsPerPartition).iterator.map(x => (x.toLong, x)))
+      start = System.nanoTime
+      var numWrites = 0
+      for (i <- 1 to microTrials) {
+        val elem = r.nextInt(elemsPerPartition)
+        val isWrite = r.nextInt(100) < writeProb
+        if (isWrite) {
+          partition = partition.multiput(Array(elem.toLong -> 0), (id, a, b) => b)
+          numWrites += 1
+        } else {
+          val read = partition.multiget(Array(elem)).get(elem).get
+          assert(read == elem || read == 0)
+        }
+      }
+      end = System.nanoTime
+      println(s"${numWrites * 100.0 / microTrials}\t${(end - start).toDouble / 1000000}")
+    }
+    println("Done.")
+
     // println(s"Get on vanilla RDD ($trials trials)...")
     // var start = System.currentTimeMillis
     // for (i <- 1 to trials) {
