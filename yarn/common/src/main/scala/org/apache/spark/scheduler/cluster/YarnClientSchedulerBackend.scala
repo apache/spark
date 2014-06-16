@@ -70,9 +70,7 @@ private[spark] class YarnClientSchedulerBackend(
       ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
       ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
       ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
-      ("--name", "SPARK_YARN_APP_NAME", "spark.app.name"),
-      ("--files", "SPARK_YARN_DIST_FILES", "spark.yarn.dist.files"),
-      ("--archives", "SPARK_YARN_DIST_ARCHIVES", "spark.yarn.dist.archives"))
+      ("--name", "SPARK_YARN_APP_NAME", "spark.app.name"))
     .foreach { case (optName, envVar, sysProp) => addArg(optName, envVar, sysProp, argsArrayBuf) }
 
     logDebug("ClientArguments called with: " + argsArrayBuf)
