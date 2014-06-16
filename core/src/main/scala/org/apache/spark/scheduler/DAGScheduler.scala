@@ -856,11 +856,11 @@ class DAGScheduler(
               logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
             } else {
               stage.addOutputLoc(smt.partitionId, status)
-              //we need to register map outputs progressively if remove stage barrier is enabled
+              // Need to register map outputs progressively if remove stage barrier is enabled
               if (removeStageBarrier && dependantStagePreStarted.contains(stage) && stage.shuffleDep.isDefined) {
                 mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
                   stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-                  changeEpoch = true, isPartial = true)
+                  changeEpoch = false, isPartial = true)
               }
             }
             if (runningStages.contains(stage) && pendingTasks(stage).isEmpty) {
@@ -889,7 +889,7 @@ class DAGScheduler(
                 logInfo("Resubmitting " + stage + " (" + stage.name +
                   ") because some of its tasks had failed: " +
                   stage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
-                //Pre-started dependant stages should fail
+                // Pre-started dependant stages should fail
                 if (dependantStagePreStarted.contains(stage)) {
                   for (preStartedStage <- dependantStagePreStarted.get(stage).get) {
                     runningStages -= preStartedStage
@@ -924,7 +924,7 @@ class DAGScheduler(
                 }
               }
             } else {
-              //ShuffleMap stage not finished yet. Maybe we can remove the stage barrier here.
+              // ShuffleMap stage not finished yet. Maybe we can remove the stage barrier here.
               if(removeStageBarrier){
                 //TODO: need a better way to get the number of total CPUs
                 if (taskScheduler.isInstanceOf[TaskSchedulerImpl] && taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.isInstanceOf[CoarseGrainedSchedulerBackend]) {
@@ -945,7 +945,7 @@ class DAGScheduler(
                       //register map output finished so far
                       mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
                         stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-                        changeEpoch = true, isPartial = true)
+                        changeEpoch = false, isPartial = true)
                       waitingStages -= preStartedStage
                       runningStages += preStartedStage
                       //inform parent stages that the dependant stage has been pre-started

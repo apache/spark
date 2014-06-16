@@ -364,7 +364,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     var statuses: Array[MapStatus] = null
     var epochGotten: Long = -1
     epochLock.synchronized {
-      if (epoch > cacheEpoch) {
+      // Don't use the cached version if outputs are partial
+      if (epoch > cacheEpoch || partialForShuffle.contains(shuffleId)) {
         cachedSerializedStatuses.clear()
         cacheEpoch = epoch
       }

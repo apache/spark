@@ -353,15 +353,15 @@ object BlockFetcherIterator {
     extends BlockFetcherIterator {
     private val iterators=new ArrayBuffer[BlockFetcherIterator]()
 
-    //track the map outputs we've delegated
+    // Track the map outputs we've delegated
     private val delegatedStatuses = new HashSet[Int]()
 
-    //check if the map output is partial
+    // Check if the map output is partial
     private def isPartial = statuses.exists(_._1 == null)
 
     // Get the updated map output
     private def updateStatuses() {
-      logInfo("Trying to update map statuses for reduceId "+reduceId+" ---lirui")
+      logInfo("Updating map statuses for reduceId "+reduceId+" ---lirui")
       statuses = mapOutputTracker.getServerStatuses(shuffleId, reduceId)
     }
 
@@ -402,31 +402,32 @@ object BlockFetcherIterator {
     }
 
     override def hasNext: Boolean = {
-      //firstly see if the delegated iterators have more blocks for us
+      // Firstly see if the delegated iterators have more blocks for us
       if (iterators.exists(_.hasNext)) {
         return true
       }
-      //If we have blocks not delegated yet, try to delegate them to a new iterator
-      //and depend on the iterator to tell us if there are valid blocks.
+      // If we have blocks not delegated yet, try to delegate them to a new iterator
+      // and depend on the iterator to tell us if there are valid blocks.
       while (delegatedStatuses.size < statuses.size) {
         try {
-          iterators += getIterator()
+          val newItr = getIterator()
+          iterators += newItr
+          if (newItr.hasNext) {
+            return true
+          }
         } catch {
           case e: SparkException => return false
-        }
-        if (iterators.exists(_.hasNext)) {
-          return true
         }
       }
       false
     }
 
     override def next(): (BlockId, Option[Iterator[Any]]) = {
-      //try to get a block from the iterators we've created
+      // Try to get a block from the iterators we've created
       for (itr <- iterators if itr.hasNext) {
         return itr.next()
       }
-      //we rely on the iterators for "hasNext", shouldn't get here
+      // We rely on the iterators for "hasNext", shouldn't get here
       throw new SparkException("No more blocks to fetch for reduceId " + reduceId)
     }
 
