@@ -47,7 +47,7 @@ class BlockIdSuite extends FunSuite {
     val id = RDDBlockId(1, 2, 0)
     assertSame(id, RDDBlockId(1, 2, 0))
     assertDifferent(id, RDDBlockId(1, 1, 0))
-    assert(id.name === "rdd_1_2")
+    assert(id.name === "rdd_1_2_0")
     assert(id.asRDDId.get.rddId === 1)
     assert(id.asRDDId.get.splitIndex === 2)
     assert(id.isRDD)

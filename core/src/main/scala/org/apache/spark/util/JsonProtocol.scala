@@ -297,6 +297,7 @@ private[spark] object JsonProtocol {
     ("Use Memory" -> storageLevel.useMemory) ~
     ("Use Tachyon" -> storageLevel.useOffHeap) ~
     ("Deserialized" -> storageLevel.deserialized) ~
+    ("Compressed" -> storageLevel.compressed) ~
     ("Replication" -> storageLevel.replication)
   }
 

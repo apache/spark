@@ -796,7 +796,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val bytes = Array.fill[Byte](1000)(incr)
     val byteBuffer = ByteBuffer.wrap(bytes)
 
-    val blockId = BlockId("rdd_1_2")
+    val blockId = BlockId("rdd_1_2_0")
 
     // This sequence of mocks makes these tests fairly brittle. It would
     // be nice to refactor classes involved in disk storage in a way that
