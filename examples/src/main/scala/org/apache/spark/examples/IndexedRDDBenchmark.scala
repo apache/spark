@@ -160,8 +160,7 @@ object IndexedRDDBenchmark {
 
     println(s"Testing scaling for IndexedRDDPartition.get ($microTrials trials)...")
     println("partition size\tget time (ms)")
-    var n = 1
-    while (n <= elemsPerPartition) {
+    for (n <- 1 to elemsPerPartition by elemsPerPartition / 100) {
       val partition = IndexedRDDPartition((0 until n).iterator.map(x => (x.toLong, x)))
       start = System.nanoTime
       for (i <- 1 to microTrials) {
@@ -170,14 +169,12 @@ object IndexedRDDBenchmark {
       }
       end = System.nanoTime
       println(s"$n\t${(end - start).toDouble / microTrials / 1000000}")
-      n *= 10
     }
     println("Done.")
 
     println(s"Testing scaling for IndexedRDDPartition.put - update ($microTrials trials)...")
     println("partition size\tupdate time (ms)")
-    n = 1
-    while (n <= elemsPerPartition) {
+    for (n <- 1 to elemsPerPartition by elemsPerPartition / 100) {
       val partition = IndexedRDDPartition((0 until n).iterator.map(x => (x.toLong, x)))
       start = System.nanoTime
       for (i <- 1 to microTrials) {
@@ -186,13 +183,12 @@ object IndexedRDDBenchmark {
       }
       end = System.nanoTime
       println(s"$n\t${(end - start).toDouble / microTrials / 1000000}")
-      n *= 10
     }
     println("Done.")
 
     println(s"Testing scaling for IndexedRDDPartition.put - insert ($trials trials)...")
     println("partition size\tinsert time (ms)")
-    n = 1
+    var n = 1
     while (n <= elemsPerPartition) {
       val partition = IndexedRDDPartition((0 until n).iterator.map(x => (x.toLong, x)))
       start = System.nanoTime
