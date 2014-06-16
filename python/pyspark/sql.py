@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, PipelinedRDD
 
 from py4j.protocol import Py4JError
 
@@ -121,6 +121,49 @@ class SQLContext:
         True
         """
         jschema_rdd = self._ssql_ctx.parquetFile(path)
+        return SchemaRDD(jschema_rdd, self)
+
+
+    def jsonFile(self, path):
+        """Loads a text file storing one JSON object per line,
+           returning the result as a L{SchemaRDD}.
+
+        >>> import tempfile, shutil
+        >>> jsonFile = tempfile.mkdtemp()
+        >>> shutil.rmtree(jsonFile)
+        >>> ofn = open(jsonFile, 'w')
+        >>> for json in jsonStrings:
+        ...   print>>ofn, json
+        >>> ofn.close()
+        >>> srdd = sqlCtx.jsonFile(jsonFile)
+        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
+        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
+        >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"},
+        ...                     {"f1" : 3, "f2": "row3"}]
+        True
+        """
+        jschema_rdd = self._ssql_ctx.jsonFile(path)
+        return SchemaRDD(jschema_rdd, self)
+
+    def jsonRDD(self, rdd):
+        """Loads a RDD storing one JSON object per string, returning the result as a L{SchemaRDD}.
+
+        >>> srdd = sqlCtx.jsonRDD(json)
+        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
+        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
+        >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"},
+        ...                     {"f1" : 3, "f2": "row3"}]
+        True
+        """
+        def func(split, iterator):
+            for x in iterator:
+                if not isinstance(x, basestring):
+                    x = unicode(x)
+                yield x.encode("utf-8")
+        keyed = PipelinedRDD(rdd, func)
+        keyed._bypass_serializer = True
+        jrdd = keyed._jrdd.map(self._jvm.BytesToString())
+        jschema_rdd = self._ssql_ctx.jsonRDD(jrdd.rdd())
         return SchemaRDD(jschema_rdd, self)
 
     def sql(self, sqlQuery):
@@ -323,6 +366,14 @@ class SchemaRDD(RDD):
         """Creates a new table with the contents of this SchemaRDD."""
         self._jschema_rdd.saveAsTable(tableName)
 
+    def getSchemaTreeString(self):
+        """Returns the output schema in the tree format."""
+        self._jschema_rdd.getSchemaTreeString()
+
+    def printSchema(self):
+        """Prints out the schema in the tree format."""
+        print self.getSchemaTreeString()
+
     def count(self):
         """Return the number of elements in this RDD.
 
@@ -420,6 +471,10 @@ def _test():
     globs['sqlCtx'] = SQLContext(sc)
     globs['rdd'] = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+    jsonStrings = ['{"field1": 1, "field2": "row1"}',
+       '{"field1" : 2, "field2": "row2"}', '{"field1" : 3, "field2": "row3"}']
+    globs['jsonStrings'] = jsonStrings
+    globs['json'] = sc.parallelize(jsonStrings)
     (failure_count, test_count) = doctest.testmod(globs=globs,optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
