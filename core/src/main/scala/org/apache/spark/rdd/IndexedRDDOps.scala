@@ -65,15 +65,17 @@ trait IndexedRDDOps[
       }
     }
     // TODO: avoid sending all keys to all partitions, maybe by creating and zipping an RDD of keys
-    val results: Array[LongMap[V]] = self.context.runJob(self.partitionsRDD,
+    val results: Array[Array[(Id, V)]] = self.context.runJob(self.partitionsRDD,
       (context: TaskContext, partIter: Iterator[P[V]]) => {
-        val partitionResults = for {
-          part <- partIter
-          ksForPartition <- ksByPartition.get(context.partitionId)
-        } yield part.multiget(ksForPartition)
-        unionMaps(partitionResults)
+        if (partIter.hasNext && ksByPartition.contains(context.partitionId)) {
+          val part = partIter.next()
+          val ksForPartition = ksByPartition.get(context.partitionId).get
+          part.multiget(ksForPartition).toArray
+        } else {
+          Array.empty
+        }
       }, partitions, allowLocal = true)
-    unionMaps(results)
+    results.flatten.toMap
   }
 
   /**
