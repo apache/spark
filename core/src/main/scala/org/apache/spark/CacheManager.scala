@@ -48,8 +48,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       case None =>
         // Acquire a lock for loading this partition
         // If another thread already holds the lock, wait for it to finish return its results
-        acquireLockForPartition(key).foreach { values =>
-          return new InterruptibleIterator[T](context, values.asInstanceOf[Iterator[T]])
+        val storedValues = acquireLockForPartition[T](key)
+        if (storedValues.isDefined) {
+          return new InterruptibleIterator[T](context, storedValues.get)
         }
 
         // Otherwise, we have to load the partition ourselves
@@ -64,7 +65,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
           // Otherwise, cache the values and keep track of any updates in block statuses
           val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-          val cachedValues = cacheValues(key, computedValues, storageLevel, updatedBlocks)
+          val cachedValues = putInBlockManager(key, computedValues, storageLevel, updatedBlocks)
           context.taskMetrics.updatedBlocks = Some(updatedBlocks)
           new InterruptibleIterator(context, cachedValues)
 
@@ -83,10 +84,10 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
    * If the lock is free, just acquire it and return None. Otherwise, another thread is already
    * loading the partition, so we wait for it to finish and return the values loaded by the thread.
    */
-  private def acquireLockForPartition(id: RDDBlockId): Option[Iterator[Any]] = {
+  private def acquireLockForPartition[T](id: RDDBlockId): Option[Iterator[T]] = {
     loading.synchronized {
       if (!loading.contains(id)) {
-        // If the partition is free, acquire its lock and begin computing its value
+        // If the partition is free, acquire its lock to compute its value
         loading.add(id)
         None
       } else {
@@ -101,17 +102,15 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           }
         }
         logInfo(s"Finished waiting for $id")
-        /* See whether someone else has successfully loaded it. The main way this would fail
-         * is for the RDD-level cache eviction policy if someone else has loaded the same RDD
-         * partition but we didn't want to make space for it. However, that case is unlikely
-         * because it's unlikely that two threads would work on the same RDD partition. One
-         * downside of the current code is that threads wait serially if this does happen. */
         val values = blockManager.get(id)
         if (!values.isDefined) {
+          /* The block is not guaranteed to exist even after the other thread has finished.
+           * For instance, the block could be evicted after it was put, but before our get.
+           * In this case, we still need to load the partition ourselves. */
           logInfo(s"Whoever was loading $id failed; we'll try it ourselves")
           loading.add(id)
         }
-        values
+        values.map(_.asInstanceOf[Iterator[T]])
       }
     }
   }
@@ -120,45 +119,46 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
    * Cache the values of a partition, keeping track of any updates in the storage statuses
    * of other blocks along the way.
    */
-  private def cacheValues[T](
+  private def putInBlockManager[T](
       key: BlockId,
-      value: Iterator[T],
+      values: Iterator[T],
       storageLevel: StorageLevel,
       updatedBlocks: ArrayBuffer[(BlockId, BlockStatus)]): Iterator[T] = {
 
-    if (!storageLevel.useMemory) {
-      /* This RDD is not to be cached in memory, so we can just pass the computed values
-       * as an iterator directly to the BlockManager, rather than first fully unrolling
-       * it in memory. The latter option potentially uses much more memory and risks OOM
-       * exceptions that can be avoided. */
-      assume(storageLevel.useDisk || storageLevel.useOffHeap, s"Empty storage level for $key!")
-      updatedBlocks ++= blockManager.put(key, value, storageLevel, tellMaster = true)
-      blockManager.get(key) match {
-        case Some(values) =>
-          values.asInstanceOf[Iterator[T]]
-        case None =>
-          logInfo(s"Failure to store $key")
-          throw new BlockException(key, s"Block manager failed to return cached value for $key!")
-      }
-    } else {
-      /* This RDD is to be cached in memory. In this case we cannot pass the computed values
-       * to the BlockManager as an iterator and expect to read it back later. This is because
-       * we may end up dropping a partition from memory store before getting it back, e.g.
-       * when the entirety of the RDD does not fit in memory. */
-      if (storageLevel.deserialized) {
-        val elements = new ArrayBuffer[Any]
-        elements ++= value
-        updatedBlocks ++= blockManager.put(key, elements, storageLevel, tellMaster = true)
-        elements.iterator.asInstanceOf[Iterator[T]]
+    val cachedValues = {
+      if (!storageLevel.useMemory) {
+        /* This RDD is not to be cached in memory, so we can just pass the computed values
+         * as an iterator directly to the BlockManager, rather than first fully unrolling
+         * it in memory. The latter option potentially uses much more memory and risks OOM
+         * exceptions that can be avoided. */
+        updatedBlocks ++= blockManager.put(key, values, storageLevel, tellMaster = true)
+        blockManager.get(key) match {
+          case Some(v) => v
+          case None =>
+            logInfo(s"Failure to store $key")
+            throw new BlockException(key, s"Block manager failed to return cached value for $key!")
+        }
       } else {
-        /* This RDD is to be cached in memory in the form of serialized bytes. In this case,
-         * we only unroll the serialized form of the data, because the deserialized form may
-         * be much larger and may not fit in memory. */
-        val bytes = blockManager.dataSerialize(key, value)
-        updatedBlocks ++= blockManager.putBytes(key, bytes, storageLevel, tellMaster = true)
-        blockManager.dataDeserialize(key, bytes).asInstanceOf[Iterator[T]]
+        /* This RDD is to be cached in memory. In this case we cannot pass the computed values
+         * to the BlockManager as an iterator and expect to read it back later. This is because
+         * we may end up dropping a partition from memory store before getting it back, e.g.
+         * when the entirety of the RDD does not fit in memory. */
+        if (storageLevel.deserialized) {
+          val elements = new ArrayBuffer[Any]
+          elements ++= values
+          updatedBlocks ++= blockManager.put(key, elements, storageLevel, tellMaster = true)
+          elements.iterator
+        } else {
+          /* This RDD is to be cached in memory in the form of serialized bytes. In this case,
+           * we only unroll the serialized form of the data, because the deserialized form may
+           * be much larger and may not fit in memory. */
+          val bytes = blockManager.dataSerialize(key, values)
+          updatedBlocks ++= blockManager.putBytes(key, bytes, storageLevel, tellMaster = true)
+          blockManager.dataDeserialize(key, bytes)
+        }
       }
     }
+    cachedValues.asInstanceOf[Iterator[T]]
   }
 
 }
