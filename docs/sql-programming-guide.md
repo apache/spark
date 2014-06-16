@@ -405,23 +405,23 @@ JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(sc);
 
 // A JSON dataset is pointed by path.
 // The path can be either a single text file or a directory storing text files.
-String path = "examples/src/main/resources/people.json"
+String path = "examples/src/main/resources/people.json";
 // Create a JavaSchemaRDD from the file(s) pointed by path
-JavaSchemaRDD people = sqlCtx.jsonFile(path)
+JavaSchemaRDD people = sqlCtx.jsonFile(path);
 
 // Because the schema of a JSON dataset is automatically inferred, to write queries,
 // it is better to take a look at what is the schema.
-people.printSchema()
+people.printSchema();
 // The schema of people is ...
 // root
 //  |-- age: IntegerType
 //  |-- name: StringType
 
 // Register this JavaSchemaRDD as a table.
-people.registerAsTable("people")
+people.registerAsTable("people");
 
 // SQL statements can be run by using the sql methods provided by sqlCtx.
-JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
 // The results of SQL queries are JavaSchemaRDDs and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
@@ -435,11 +435,11 @@ List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
 // a RDD[String] storing one JSON object per string.
 List<String> jsonData = Arrays.asList(
   "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
-JavaRDD<String> anotherPeopleRDD = sc.parallelize(jsonData)
-val anotherPeople = sqlCtx.jsonRDD(anotherPeopleRDD)
+JavaRDD<String> anotherPeopleRDD = sc.parallelize(jsonData);
+JavaSchemaRDD anotherPeople = sqlCtx.jsonRDD(anotherPeopleRDD);
 
 // Take a look at the schema of this new JavaSchemaRDD.
-anotherPeople.printSchema()
+anotherPeople.printSchema();
 // The schema of anotherPeople is ...
 // root
 //  |-- address: StructType
