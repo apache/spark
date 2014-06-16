@@ -16,6 +16,7 @@
 #
 
 from pyspark.rdd import RDD
+from pyspark.serializers import BatchedSerializer, PickleSerializer
 
 from py4j.protocol import Py4JError
 
@@ -117,7 +118,7 @@ class SQLContext:
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.saveAsParquetFile(parquetFile)
         >>> srdd2 = sqlCtx.parquetFile(parquetFile)
-        >>> srdd.collect() == srdd2.collect()
+        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
         jschema_rdd = self._ssql_ctx.parquetFile(path)
@@ -141,7 +142,7 @@ class SQLContext:
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.table("table1")
-        >>> srdd.collect() == srdd2.collect()
+        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
         return SchemaRDD(self._ssql_ctx.table(tableName), self)
@@ -293,7 +294,7 @@ class SchemaRDD(RDD):
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.saveAsParquetFile(parquetFile)
         >>> srdd2 = sqlCtx.parquetFile(parquetFile)
-        >>> srdd2.collect() == srdd.collect()
+        >>> sorted(srdd2.collect()) == sorted(srdd.collect())
         True
         """
         self._jschema_rdd.saveAsParquetFile(path)
@@ -307,7 +308,7 @@ class SchemaRDD(RDD):
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.registerAsTable("test")
         >>> srdd2 = sqlCtx.sql("select * from test")
-        >>> srdd.collect() == srdd2.collect()
+        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
         self._jschema_rdd.registerAsTable(name)
@@ -346,7 +347,8 @@ class SchemaRDD(RDD):
         # TODO: This is inefficient, we should construct the Python Row object
         # in Java land in the javaToPython function. May require a custom
         # pickle serializer in Pyrolite
-        return RDD(jrdd, self._sc, self._sc.serializer).map(lambda d: Row(d))
+        return RDD(jrdd, self._sc, BatchedSerializer(
+                        PickleSerializer())).map(lambda d: Row(d))
 
     # We override the default cache/persist/checkpoint behavior as we want to cache the underlying
     # SchemaRDD object in the JVM, not the PythonRDD checkpointed by the super class

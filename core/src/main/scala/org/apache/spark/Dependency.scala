@@ -20,6 +20,7 @@ package org.apache.spark
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.ShuffleHandle
 
 /**
  * :: DeveloperApi ::
@@ -50,18 +51,23 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
  * Represents a dependency on the output of a shuffle stage.
  * @param rdd the parent RDD
  * @param partitioner partitioner used to partition the shuffle output
- * @param serializer [[org.apache.spark.serializer.Serializer Serializer]] to use. If set to null,
+ * @param serializer [[org.apache.spark.serializer.Serializer Serializer]] to use. If set to None,
  *                   the default serializer, as specified by `spark.serializer` config option, will
  *                   be used.
  */
 @DeveloperApi
-class ShuffleDependency[K, V](
+class ShuffleDependency[K, V, C](
     @transient rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
-    val serializer: Serializer = null)
+    val serializer: Option[Serializer] = None,
+    val keyOrdering: Option[Ordering[K]] = None,
+    val aggregator: Option[Aggregator[K, V, C]] = None)
   extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) {
 
   val shuffleId: Int = rdd.context.newShuffleId()
+
+  val shuffleHandle: ShuffleHandle = rdd.context.env.shuffleManager.registerShuffle(
+    shuffleId, rdd.partitions.size, this)
 
   rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
 }
