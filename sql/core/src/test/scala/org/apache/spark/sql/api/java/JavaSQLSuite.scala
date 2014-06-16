@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.api.java
 
-
 import scala.beans.BeanProperty
 
 import org.scalatest.FunSuite

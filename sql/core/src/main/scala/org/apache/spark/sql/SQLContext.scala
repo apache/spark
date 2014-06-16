@@ -106,6 +106,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    */
+  @Experimental
   def jsonFile(path: String, samplingRatio: Double): SchemaRDD = {
     val json = sparkContext.textFile(path)
     jsonRDD(json, samplingRatio)
@@ -122,6 +123,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * :: Experimental ::
    */
+  @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
     new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
 

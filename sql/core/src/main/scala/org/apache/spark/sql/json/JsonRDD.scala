@@ -22,7 +22,6 @@ import scala.math.BigDecimal
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,10 +30,8 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.sql.Logging
 
-@Experimental
 private[sql] object JsonRDD extends Logging {
 
-  @DeveloperApi
   private[sql] def inferSchema(
       json: RDD[String],
       samplingRatio: Double = 1.0): LogicalPlan = {
@@ -263,8 +260,8 @@ private[sql] object JsonRDD extends Logging {
       // the ObjectMapper will take the last value associated with this duplicate key.
       // For example: for {"key": 1, "key":2}, we will get "key"->2.
       val mapper = new ObjectMapper()
-      iter.map(record => mapper.readValue(record, classOf[Object]))
-    }).map(scalafy).map(_.asInstanceOf[Map[String, Any]])
+      iter.map(record => mapper.readValue(record, classOf[java.util.Map[String, Any]]))
+      }).map(scalafy).map(_.asInstanceOf[Map[String, Any]])
   }
 
   private def toLong(value: Any): Long = {

@@ -62,10 +62,10 @@ descendants.  To create a basic SQLContext, all you need is a SparkContext.
 
 {% highlight scala %}
 val sc: SparkContext // An existing SparkContext.
-val sqlCtx = new org.apache.spark.sql.SQLContext(sc)
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
 // createSchemaRDD is used to implicitly convert a RDD to a SchemaRDD.
-import sqlCtx.createSchemaRDD
+import sqlContext.createSchemaRDD
 {% endhighlight %}
 
 </div>
@@ -78,7 +78,7 @@ of its descendants.  To create a basic JavaSQLContext, all you need is a JavaSpa
 
 {% highlight java %}
 JavaSparkContext sc = ...; // An existing JavaSparkContext.
-JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(sc);
+JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc);
 {% endhighlight %}
 
 </div>
@@ -91,7 +91,7 @@ of its decedents.  To create a basic SQLContext, all you need is a SparkContext.
 
 {% highlight python %}
 from pyspark.sql import SQLContext
-sqlCtx = SQLContext(sc)
+sqlContext = SQLContext(sc)
 {% endhighlight %}
 
 </div>
@@ -99,6 +99,23 @@ sqlCtx = SQLContext(sc)
 </div>
 
 # Data Sources
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+Spark SQL supports operating of a variety of data sources though the SchemaRDD interface.
+Once a dataset has been loaded, it can be registered as a table and even joined with data from other sources.
+</div>
+
+<div data-lang="java"  markdown="1">
+Spark SQL supports operating of a variety of data sources though the JavaSchemaRDD interface.
+Once a dataset has been loaded, it can be registered as a table and even joined with data from other sources.
+</div>
+
+<div data-lang="python"  markdown="1">
+Spark SQL supports operating of a variety of data sources though the SchemaRDD interface.
+Once a dataset has been loaded, it can be registered as a table and even joined with data from other sources.
+</div>
+</div>
 
 ## RDDs
 
@@ -114,9 +131,9 @@ registered as a table.  Tables can be used in subsequent SQL statements.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
-val sqlCtx = new org.apache.spark.sql.SQLContext(sc)
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 // createSchemaRDD is used to implicitly convert a RDD to a SchemaRDD.
-import sqlCtx.createSchemaRDD
+import sqlContext.createSchemaRDD
 
 // Define the schema using a case class.
 // Note: Case classes in Scala 2.10 can support only up to 22 fields. To work around this limit, 
@@ -127,8 +144,8 @@ case class Person(name: String, age: Int)
 val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split(",")).map(p => Person(p(0), p(1).trim.toInt))
 people.registerAsTable("people")
 
-// SQL statements can be run by using the sql methods provided by sqlCtx.
-val teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+// SQL statements can be run by using the sql methods provided by sqlContext.
+val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 // The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
@@ -175,7 +192,7 @@ for the JavaBean.
 
 {% highlight java %}
 // sc is an existing JavaSparkContext.
-JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(sc)
+JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc)
 
 // Load a text file and convert each line to a JavaBean.
 JavaRDD<Person> people = sc.textFile("examples/src/main/resources/people.txt").map(
@@ -192,11 +209,11 @@ JavaRDD<Person> people = sc.textFile("examples/src/main/resources/people.txt").m
   });
 
 // Apply a schema to an RDD of JavaBeans and register it as a table.
-JavaSchemaRDD schemaPeople = sqlCtx.applySchema(people, Person.class);
+JavaSchemaRDD schemaPeople = sqlContext.applySchema(people, Person.class);
 schemaPeople.registerAsTable("people");
 
 // SQL can be run over RDDs that have been registered as tables.
-JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 // The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
 // The columns of a row in the result can be accessed by ordinal.
@@ -220,7 +237,7 @@ can be used in subsequent SQL statements.
 {% highlight python %}
 # sc is an existing SparkContext.
 from pyspark.sql import SQLContext
-sqlCtx = SQLContext(sc)
+sqlContext = SQLContext(sc)
 
 # Load a text file and convert each line to a dictionary.
 lines = sc.textFile("examples/src/main/resources/people.txt")
@@ -230,11 +247,11 @@ people = parts.map(lambda p: {"name": p[0], "age": int(p[1])})
 # Infer the schema, and register the SchemaRDD as a table.
 # In future versions of PySpark we would like to add support for registering RDDs with other
 # datatypes as tables
-schemaPeople = sqlCtx.inferSchema(people)
+schemaPeople = sqlContext.inferSchema(people)
 schemaPeople.registerAsTable("people")
 
 # SQL can be run over SchemaRDDs that have been registered as a table.
-teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 # The results of SQL queries are RDDs and support all the normal RDD operations.
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
@@ -261,9 +278,9 @@ of the original data.  Using the data from the above example:
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-// sqlCtx from the previous example is used in this example.
+// sqlContext from the previous example is used in this example.
 // createSchemaRDD is used to implicitly convert a RDD to a SchemaRDD.
-import sqlCtx.createSchemaRDD
+import sqlContext.createSchemaRDD
 
 val people: RDD[Person] = ... // An RDD of case class objects, from the previous example.
 
@@ -272,11 +289,11 @@ people.saveAsParquetFile("people.parquet")
 
 // Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
 // The result of loading a Parquet file is also a SchemaRDD.
-val parquetFile = sqlCtx.parquetFile("people.parquet")
+val parquetFile = sqlContext.parquetFile("people.parquet")
 
 //Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerAsTable("parquetFile")
-val teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
+val teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
@@ -285,7 +302,7 @@ teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-// sqlCtx from the previous example is used in this example.
+// sqlContext from the previous example is used in this example.
 
 JavaSchemaRDD schemaPeople = ... // The JavaSchemaRDD from the previous example.
 
@@ -294,11 +311,11 @@ schemaPeople.saveAsParquetFile("people.parquet");
 
 // Read in the Parquet file created above.  Parquet files are self-describing so the schema is preserved.
 // The result of loading a parquet file is also a JavaSchemaRDD.
-JavaSchemaRDD parquetFile = sqlCtx.parquetFile("people.parquet");
+JavaSchemaRDD parquetFile = sqlContext.parquetFile("people.parquet");
 
 //Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerAsTable("parquetFile");
-JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
+JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
 List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
   public String call(Row row) {
     return "Name: " + row.getString(0);
@@ -311,7 +328,7 @@ List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-# sqlCtx from the previous example is used in this example.
+# sqlContext from the previous example is used in this example.
 
 schemaPeople # The SchemaRDD from the previous example.
 
@@ -320,11 +337,11 @@ schemaPeople.saveAsParquetFile("people.parquet")
 
 # Read in the Parquet file created above.  Parquet files are self-describing so the schema is preserved.
 # The result of loading a parquet file is also a SchemaRDD.
-parquetFile = sqlCtx.parquetFile("people.parquet")
+parquetFile = sqlContext.parquetFile("people.parquet")
 
 # Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerAsTable("parquetFile");
-teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
+teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
 for teenName in teenNames.collect():
   print teenName
@@ -338,25 +355,23 @@ for teenName in teenNames.collect():
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
-Spark SQL supports querying JSON datasets. To query a JSON dataset, a SchemaRDD needs to be created for this JSON dataset. There are two ways to create a SchemaRDD for a JSON dataset:
+Spark SQL can automatically infer the schema of a JSON dataset and load it as a SchemaRDD.
+This conversion can be done using one of two methods in a SQLContext:
 
-1. Creating the SchemaRDD from text files that store one JSON object per line.
-2. Creating the SchemaRDD from a RDD of strings (`RDD[String]`) that stores one JSON object.
-
-The schema of a JSON dataset is automatically inferred when the SchemaRDD is created.
+* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
+* `jsonRdd` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
-val sqlCtx = new org.apache.spark.sql.SQLContext(sc)
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
 // A JSON dataset is pointed by path.
 // The path can be either a single text file or a directory storing text files.
 val path = "examples/src/main/resources/people.json"
 // Create a SchemaRDD from the file(s) pointed by path
-val people = sqlCtx.jsonFile(path)
+val people = sqlContext.jsonFile(path)
 
-// Because the schema of a JSON dataset is automatically inferred, to write queries,
-// it is better to take a look at what is the schema.
+// The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 // The schema of people is ...
 // root
@@ -366,51 +381,36 @@ people.printSchema()
 // Register this SchemaRDD as a table.
 people.registerAsTable("people")
 
-// SQL statements can be run by using the sql methods provided by sqlCtx.
-val teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
-
-// The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
-// The columns of a row in the result can be accessed by ordinal.
-teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
+// SQL statements can be run by using the sql methods provided by sqlContext.
+val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 // Alternatively, a SchemaRDD can be created for a JSON dataset represented by
 // a RDD[String] storing one JSON object per string.
 val anotherPeopleRDD = sc.parallelize(
   """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
-val anotherPeople = sqlCtx.jsonRDD(anotherPeopleRDD)
-
-// Take a look at the schema of this new SchemaRDD.
-anotherPeople.printSchema()
-// The schema of anotherPeople is ...
-// root
-//  |-- address: StructType
-//  |    |-- city: StringType
-//  |    |-- state: StringType
-//  |-- name: StringType
+val anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
 {% endhighlight %}
 
 </div>
 
 <div data-lang="java"  markdown="1">
-Spark SQL supports querying JSON datasets. To query a JSON dataset, a JavaSchemaRDD needs to be created for this JSON dataset. There are two ways to create a JavaSchemaRDD for a JSON dataset:
+Spark SQL can automatically infer the schema of a JSON dataset and load it as a JavaSchemaRDD.
+This conversion can be done using one of two methods in a JavaSQLContext :
 
-1. Creating the JavaSchemaRDD from text files that store one JSON object per line.
-2. Creating the JavaSchemaRDD from a RDD of strings (`RDD[String]`) that stores one JSON object.
-
-The schema of a JSON dataset is automatically inferred when the JavaSchemaRDD is created.
+* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
+* `jsonRdd` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
 {% highlight java %}
 // sc is an existing JavaSparkContext.
-JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(sc);
+JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc);
 
 // A JSON dataset is pointed by path.
 // The path can be either a single text file or a directory storing text files.
 String path = "examples/src/main/resources/people.json";
 // Create a JavaSchemaRDD from the file(s) pointed by path
-JavaSchemaRDD people = sqlCtx.jsonFile(path);
+JavaSchemaRDD people = sqlContext.jsonFile(path);
 
-// Because the schema of a JSON dataset is automatically inferred, to write queries,
-// it is better to take a look at what is the schema.
+// The inferred schema can be visualized using the printSchema() method.
 people.printSchema();
 // The schema of people is ...
 // root
@@ -420,57 +420,37 @@ people.printSchema();
 // Register this JavaSchemaRDD as a table.
 people.registerAsTable("people");
 
-// SQL statements can be run by using the sql methods provided by sqlCtx.
-JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
-
-// The results of SQL queries are JavaSchemaRDDs and support all the normal RDD operations.
-// The columns of a row in the result can be accessed by ordinal.
-List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
-  public String call(Row row) {
-    return "Name: " + row.getString(0);
-  }
-}).collect();
+// SQL statements can be run by using the sql methods provided by sqlContext.
+JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
 // Alternatively, a JavaSchemaRDD can be created for a JSON dataset represented by
 // a RDD[String] storing one JSON object per string.
 List<String> jsonData = Arrays.asList(
   "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
 JavaRDD<String> anotherPeopleRDD = sc.parallelize(jsonData);
-JavaSchemaRDD anotherPeople = sqlCtx.jsonRDD(anotherPeopleRDD);
-
-// Take a look at the schema of this new JavaSchemaRDD.
-anotherPeople.printSchema();
-// The schema of anotherPeople is ...
-// root
-//  |-- address: StructType
-//  |    |-- city: StringType
-//  |    |-- state: StringType
-//  |-- name: StringType
-
+JavaSchemaRDD anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD);
 {% endhighlight %}
 </div>
 
 <div data-lang="python"  markdown="1">
-Spark SQL supports querying JSON datasets. To query a JSON dataset, a SchemaRDD needs to be created for this JSON dataset. There are two ways to create a SchemaRDD for a JSON dataset:
+Spark SQL can automatically infer the schema of a JSON dataset and load it as a SchemaRDD.
+This conversion can be done using one of two methods in a SQLContext:
 
-1. Creating the SchemaRDD from text files that store one JSON object per line.
-2. Creating the SchemaRDD from a RDD of strings (`RDD[String]`) that stores one JSON object.
-
-The schema of a JSON dataset is automatically inferred when the SchemaRDD is created.
+* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
+* `jsonRdd` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
 {% highlight python %}
 # sc is an existing SparkContext.
 from pyspark.sql import SQLContext
-sqlCtx = SQLContext(sc)
+sqlContext = SQLContext(sc)
 
 # A JSON dataset is pointed by path.
 # The path can be either a single text file or a directory storing text files.
 path = "examples/src/main/resources/people.json"
 # Create a SchemaRDD from the file(s) pointed by path
-people = sqlCtx.jsonFile(path)
+people = sqlContext.jsonFile(path)
 
-# Because the schema of a JSON dataset is automatically inferred, to write queries,
-# it is better to take a look at what is the schema.
+# The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 # The schema of people is ...
 # root
@@ -480,29 +460,14 @@ people.printSchema()
 # Register this SchemaRDD as a table.
 people.registerAsTable("people")
 
-# SQL statements can be run by using the sql methods provided by sqlCtx.
-teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
-
-# The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
-# The columns of a row in the result can be accessed by ordinal.
-teenNames = teenagers.map(lambda p: "Name: " + p.name)
-for teenName in teenNames.collect():
-  print teenName
+# SQL statements can be run by using the sql methods provided by sqlContext.
+teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 # Alternatively, a SchemaRDD can be created for a JSON dataset represented by
 # a RDD[String] storing one JSON object per string.
 anotherPeopleRDD = sc.parallelize([
   '{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}'])
-anotherPeople = sqlCtx.jsonRDD(anotherPeopleRDD)
-
-# Take a look at the schema of this new SchemaRDD.
-anotherPeople.printSchema()
-# The schema of anotherPeople is ...
-# root
-#  |-- address: StructType
-#  |    |-- city: StringType
-#  |    |-- state: StringType
-#  |-- name: StringType
+anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
 {% endhighlight %}
 </div>
 
@@ -531,13 +496,13 @@ automatically.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
-val hiveCtx = new org.apache.spark.sql.hive.HiveContext(sc)
+val hiveContext = new org.apache.spark.sql.hive.HiveContext(sc)
 
-hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-hiveCtx.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+hiveContext.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+hiveContext.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 // Queries are expressed in HiveQL
-hiveCtx.hql("FROM src SELECT key, value").collect().foreach(println)
+hiveContext.hql("FROM src SELECT key, value").collect().foreach(println)
 {% endhighlight %}
 
 </div>
@@ -551,13 +516,13 @@ expressed in HiveQL.
 
 {% highlight java %}
 // sc is an existing JavaSparkContext.
-JavaHiveContext hiveCtx = new org.apache.spark.sql.hive.api.java.HiveContext(sc);
+JavaHiveContext hiveContext = new org.apache.spark.sql.hive.api.java.HiveContext(sc);
 
-hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
-hiveCtx.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
+hiveContext.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
+hiveContext.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
 
 // Queries are expressed in HiveQL.
-Row[] results = hiveCtx.hql("FROM src SELECT key, value").collect();
+Row[] results = hiveContext.hql("FROM src SELECT key, value").collect();
 
 {% endhighlight %}
 
@@ -573,13 +538,13 @@ expressed in HiveQL.
 {% highlight python %}
 # sc is an existing SparkContext.
 from pyspark.sql import HiveContext
-hiveCtx = HiveContext(sc)
+hiveContext = HiveContext(sc)
 
-hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-hiveCtx.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+hiveContext.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+hiveContext.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
-results = hiveCtx.hql("FROM src SELECT key, value").collect()
+results = hiveContext.hql("FROM src SELECT key, value").collect()
 
 {% endhighlight %}
 
@@ -596,9 +561,9 @@ using the data from the above examples:
 
 {% highlight scala %}
 // sc is an existing SparkContext.
-val sqlCtx = new org.apache.spark.sql.SQLContext(sc)
+val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 // Importing the SQL context gives access to all the public SQL functions and implicit conversions.
-import sqlCtx._
+import sqlContext._
 val people: RDD[Person] = ... // An RDD of case class objects, from the first example.
 
 // The following is the same as 'SELECT name FROM people WHERE age >= 10 AND age <= 19'

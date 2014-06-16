@@ -128,8 +128,8 @@ trait HiveTypeCoercion {
 
     def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
       // Try and find a promotion rule that contains both types in question.
-      val applicableConversion = HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p
-        .contains(t2))
+      val applicableConversion =
+        HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p.contains(t2))
 
       // If found return the widest common type, otherwise None
       applicableConversion.map(_.filter(t => t == t1 || t == t2).last)

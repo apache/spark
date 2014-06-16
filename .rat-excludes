@@ -22,6 +22,7 @@ spark-env.sh.template
 log4j-defaults.properties
 sorttable.js
 .*txt
+.*json
 .*data
 .*log
 cloudpickle.py

@@ -384,7 +384,7 @@ class SchemaRDD(RDD):
 
     def getSchemaTreeString(self):
         """Returns the output schema in the tree format."""
-        return self._jschema_rdd.getSchemaTreeString()
+        return self._jschema_rdd.schemaTreeString()
 
     def printSchema(self):
         """Prints out the schema in the tree format."""
