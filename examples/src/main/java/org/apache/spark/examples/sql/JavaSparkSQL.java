@@ -57,7 +57,6 @@ public class JavaSparkSQL {
     JavaSparkContext ctx = new JavaSparkContext(sparkConf);
     JavaSQLContext sqlCtx = new JavaSQLContext(ctx);
 
-
     System.out.println("=== Data source: RDD ===");
     // Load a text file and convert each line to a Java Bean.
     JavaRDD<Person> people = ctx.textFile("examples/src/main/resources/people.txt").map(
