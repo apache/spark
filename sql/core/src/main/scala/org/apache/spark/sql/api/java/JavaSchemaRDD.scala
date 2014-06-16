@@ -37,7 +37,7 @@ import org.apache.spark.storage.StorageLevel
  */
 class JavaSchemaRDD(
      @transient val sqlContext: SQLContext,
-     @transient protected[spark] val logicalPlan: LogicalPlan)
+     @transient val baseLogicalPlan: LogicalPlan)
   extends JavaRDDLike[Row, JavaRDD[Row]]
   with SchemaRDDLike {
 

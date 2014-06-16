@@ -15,22 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.shuffle
 
-import org.apache.spark.serializer.Serializer
+/**
+ * Obtained inside a reduce task to read combined records from the mappers.
+ */
+private[spark] trait ShuffleReader[K, C] {
+  /** Read the combined key-values for this reduce task */
+  def read(): Iterator[Product2[K, C]]
 
-private[spark] abstract class ShuffleFetcher {
-
-  /**
-   * Fetch the shuffle outputs for a given ShuffleDependency.
-   * @return An iterator over the elements of the fetched shuffle outputs.
-   */
-  def fetch[T](
-      shuffleId: Int,
-      reduceId: Int,
-      context: TaskContext,
-      serializer: Serializer = SparkEnv.get.serializer): Iterator[T]
-
-  /** Stop the fetcher */
-  def stop() {}
+  /** Close this reader */
+  def stop(): Unit
 }

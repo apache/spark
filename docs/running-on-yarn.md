@@ -67,6 +67,20 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
     The address of the Spark history server (i.e. host.com:18080). The address should not contain a scheme (http://). Defaults to not being set since the history server is an optional service. This address is given to the YARN ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.executor.memoryOverhead</code></td>
+  <td>384</code></td>
+  <td>
+    The amount of off heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.driver.memoryOverhead</code></td>
+  <td>384</code></td>
+  <td>
+    The amount of off heap memory (in megabytes) to be allocated per driver. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
+  </td>
+</tr>
 </table>
 
 By default, Spark on YARN will use a Spark jar installed locally, but the Spark JAR can also be in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't need to be distributed each time an application runs. To point to a JAR on HDFS, `export SPARK_JAR=hdfs:///some/path`.
