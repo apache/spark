@@ -684,6 +684,11 @@ val counts = pairs.reduceByKey((a, b) => a + b)
 We could also use `counts.sortByKey()`, for example, to sort the pairs alphabetically, and finally
 `counts.collect()` to bring them back to the driver program as an array of objects.
 
+**Note:** when using custom objects as the key in key-value pair operations, you must be sure that a
+custom `equals()` method is accompanied with a matching `hashCode()` method.  For full details, see
+the contract outlined in the [Object.hashCode()
+documentation](http://docs.oracle.com/javase/7/docs/api/java/lang/Object.html#hashCode()).
+
 </div>
 
 <div data-lang="java" markdown="1">
@@ -716,6 +721,10 @@ JavaPairRDD<String, Integer> counts = pairs.reduceByKey((a, b) -> a + b);
 We could also use `counts.sortByKey()`, for example, to sort the pairs alphabetically, and finally
 `counts.collect()` to bring them back to the driver program as an array of objects.
 
+**Note:** when using custom objects as the key in key-value pair operations, you must be sure that a
+custom `equals()` method is accompanied with a matching `hashCode()` method.  For full details, see
+the contract outlined in the [Object.hashCode()
+documentation](http://docs.oracle.com/javase/7/docs/api/java/lang/Object.html#hashCode()).
 
 </div>
 
