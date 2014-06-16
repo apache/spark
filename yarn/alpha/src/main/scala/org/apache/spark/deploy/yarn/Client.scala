@@ -71,7 +71,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 
     val capability = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
     // Memory for the ApplicationMaster.
-    capability.setMemory(args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
+    capability.setMemory(args.amMemory + memoryOverhead)
     amContainer.setResource(capability)
 
     appContext.setQueue(args.amQueue)
@@ -116,7 +116,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     val minResMemory = newApp.getMinimumResourceCapability().getMemory()
     val amMemory = ((args.amMemory / minResMemory) * minResMemory) +
           ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
-          YarnAllocationHandler.MEMORY_OVERHEAD)
+          memoryOverhead)
     amMemory
   }
 
