@@ -237,24 +237,15 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
 
     // Validate memoryFraction
-    val storageMemFraction = getDouble("spark.storage.memoryFraction", 0.6)
-    val shuffleMemFraction = getDouble("spark.shuffle.memoryFraction", 0.3)
-    val shuffleSafFraction = getDouble("spark.shuffle.safetyFraction", 0.8)
-
-    if (storageMemFraction > 1 || storageMemFraction < 0) {
-      val msg = s"spark.storage.memoryFraction should be between 0 and 1 " +
-        s"(was '$storageMemFraction')."
-      throw new IllegalArgumentException(msg)
-    }
-    if (shuffleMemFraction > 1 || shuffleMemFraction < 0) {
-      val msg = s"spark.shuffle.memoryFraction should be between 0 and 1 " +
-        s"(was '$shuffleMemFraction')."
-      throw new IllegalArgumentException(msg)
-    }
-    if (shuffleSafFraction > 1 || shuffleSafFraction < 0) {
-      val msg = s"spark.shuffle.safetyFraction should be between 0 and 1 " +
-        s"(was '$shuffleSafFraction')."
-      throw new IllegalArgumentException(msg)
+    val memoryKeys = Seq(
+      "spark.storage.memoryFraction",
+      "spark.shuffle.memoryFraction", 
+      "spark.shuffle.safetyFraction")
+    for (key -> memoryKeys) {
+      val value = getDouble(key, 0.5)
+      if (value > 1 || value < 0) {
+      throw new IllegalArgumentException("$key should be between 0 and (was '$value').")
+      }
     }
 
     // Check for legacy configs
