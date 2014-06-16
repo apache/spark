@@ -29,150 +29,15 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
-import org.apache.spark.sql.{SQLContext, Logging, SchemaRDD}
-
-/**
- * :: Experimental ::
- *
- * A JSON dataset (text files with one JSON object per line or a RDD[String] with one JSON object
- * per string) can be directly loaded as a [[SchemaRDD]]. The schema of this [[SchemaRDD]] is
- * automatically inferred from the dataset.
- *
- * == SQL Queries ==
- * {{{
- *  val sc: SparkContext // An existing spark context.
- *
- *  import org.apache.spark.sql.SQLContext
- *  val sqlContext = new SQLContext(sc)
- *
- *  // Importing the SQL context gives access to all the SQL functions and implicit conversions.
- *  import sqlContext._
- *
- *  // Create a SchemaRDD from a JSON file (or a directory having JSON files).
- *  val jsonTable = jsonFile("examples/src/main/resources/people.json")
- *  // Or, if you have a JSON dataset as RDD[String]
- *  // val json = sc.textFile("examples/src/main/resources/people.json")
- *  // val jsonTable = jsonRDD(json)
- *
- *  // See the schema of jsonTable.
- *  jsonTable.printSchema()
- *
- *  // Register jsonTable as a table.
- *  jsonTable.registerAsTable("jsonTable")
- *
- *  // Run some queries.
- *  sql("SELECT name, age FROM jsonTable").collect().foreach(println)
- *  sql("SELECT name FROM jsonTable WHERE age >= 10 and age <= 19").collect().foreach(println)
- *
- *  // Create another RDD[String] storing JSON objects.
- *  val anotherDataset = sc.parallelize(
- *  """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
- *  val anotherJsonTable = jsonRDD(anotherDataset)
- *
- *  // See the schema of anotherJsonTable.
- *  anotherJsonTable.printSchema()
- *
- *  // Union jsonTable and anotherJsonTable.
- *  val unionedJsonTable = jsonTable.unionAll(anotherJsonTable)
- *
- *  // See the schema of unionedJsonTable.
- *  unionedJsonTable.printSchema()
- *
- *  // Register unionedJsonTable as table.
- *  unionedJsonTable.registerAsTable("unionedJsonTable")
- *
- *  // Run some queries.
- *  sql("SELECT name, age FROM unionedJsonTable").collect().foreach(println)
- *  sql("SELECT name, age, address FROM unionedJsonTable WHERE address.city = 'Columbus'").
- *    collect().foreach(println)
- * }}}
- *
- * == Language Integrated Queries ==
- * {{{
- *  val sc: SparkContext // An existing spark context.
- *
- *  import org.apache.spark.sql.SQLContext
- *  val sqlContext = new SQLContext(sc)
- *
- *  // Importing the SQL context gives access to all the SQL functions and implicit conversions.
- *  import sqlContext._
- *
- *  // Create a SchemaRDD from a JSON file (or a directory having JSON files).
- *  val jsonTable = jsonFile("examples/src/main/resources/people.json")
- *  // Or, if you have a JSON dataset as RDD[String]
- *  // val json = sc.textFile("examples/src/main/resources/people.json")
- *  // val jsonTable = jsonRDD(json)
- *
- *  // See the schema of jsonTable.
- *  jsonTable.printSchema()
- *
- *  // Run some queries.
- *  jsonTable.select('name, 'age).collect().foreach(println)
- *  jsonTable.where('age <=19).select('name).collect().foreach(println)
- *
- *  // Create another RDD[String] storing JSON objects.
- *  val anotherDataset = sc.parallelize(
- *  """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
- *  val anotherJsonTable = jsonRDD(anotherDataset)
- *
- *  // See the schema of anotherJsonTable.
- *  anotherJsonTable.printSchema()
- *
- *  // Union jsonTable and anotherJsonTable.
- *  val unionedJsonTable = jsonTable.unionAll(anotherJsonTable)
- *
- *  // See the schema of unionedJsonTable.
- *  unionedJsonTable.printSchema()
- *
- *  // Run some queries.
- *  unionedJsonTable.select('name, 'age).collect().foreach(println)
- *  unionedJsonTable.where(
- *    "address.city".attr === "Columbus").select(
- *      'name, 'age, 'address).collect().foreach(println)
- * }}}
- */
-
-@Experimental
-private class JsonRDD(
-    @transient override val sqlContext: SQLContext,
-    @transient override protected[spark] val logicalPlan: LogicalPlan,
-    protected[spark] val baseRDD: RDD[String],
-    protected[spark] val baseSchema: StructType)
-  extends SchemaRDD(sqlContext, logicalPlan) {
-
-  // We widen the type those fields with NullType to StringType. We want to use the original
-  // schema (baseSchema) with those fields with NullType when we union this JsonTable with another
-  // JsonTable.
-  lazy val schema = JsonRDD.nullTypeToStringType(baseSchema)
-
-  /**
-   * Combines the tuples of two JsonTables and union their schemas, keeping duplicates.
-   *
-   * @group Query
-   */
-  override def unionAll(otherPlan: SchemaRDD): SchemaRDD = {
-    otherPlan match {
-      case jsonRDD: JsonRDD => {
-        val unionedBaseSchema =
-          JsonRDD.getCompatibleType(baseSchema, jsonRDD.baseSchema).asInstanceOf[StructType]
-        val unionedJsonRDD = baseRDD.union(jsonRDD.baseRDD)
-        val logicalPlan = JsonRDD.createLogicalPlan(unionedJsonRDD, unionedBaseSchema)
-
-        new JsonRDD(sqlContext, logicalPlan, unionedJsonRDD, unionedBaseSchema)
-      }
-      case schemaRDD: SchemaRDD => super.unionAll(otherPlan)
-    }
-  }
-}
+import org.apache.spark.sql.Logging
 
 @Experimental
 private[sql] object JsonRDD extends Logging {
 
   @DeveloperApi
-  private[sql] def apply(
-      sqlContext: SQLContext,
+  private[sql] def inferSchema(
       json: RDD[String],
-      samplingRatio: Double = 1.0): SchemaRDD = {
+      samplingRatio: Double = 1.0): LogicalPlan = {
     require(samplingRatio > 0)
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
 
@@ -180,7 +45,7 @@ private[sql] object JsonRDD extends Logging {
 
     val baseSchema = createSchema(allKeys)
 
-    new JsonRDD(sqlContext, createLogicalPlan(json, baseSchema), json, baseSchema)
+    createLogicalPlan(json, baseSchema)
   }
 
   private def createLogicalPlan(

@@ -20,6 +20,7 @@ package org.apache.spark.sql.json
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, getCompatibleType}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.TestSQLContext._
@@ -469,7 +470,7 @@ class JsonSuite extends QueryTest {
     )
   }
 
-  test("Handle missing fields") {
+  test("Handling missing fields") {
     val jsonSchemaRDD = jsonRDD(missingFields)
 
     val expectedSchema =
@@ -485,30 +486,34 @@ class JsonSuite extends QueryTest {
     jsonSchemaRDD.registerAsTable("jsonTable")
   }
 
-  test("Union JsonTables") {
-    val jsonSchemaRDD1 = jsonRDD(primitiveFieldAndType)
-    val jsonSchemaRDD2 = jsonRDD(missingFields)
+  test("Loading a JSON dataset from a text file") {
+    val file = getTempFilePath("json")
+    val path = file.toString
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    val jsonSchemaRDD = jsonFile(path)
 
     val expectedSchema =
-      AttributeReference("a", BooleanType, true)() ::
-      AttributeReference("b", LongType, true)() ::
       AttributeReference("bigInteger", DecimalType, true)() ::
-      AttributeReference("boolean", BooleanType, true)() ::
-      AttributeReference("c", ArrayType(IntegerType), true)() ::
-      AttributeReference("d", StructType(
-        StructField("field", BooleanType, true) :: Nil), true)() ::
-      AttributeReference("double", DoubleType, true)() ::
-      AttributeReference("e", StringType, true)() ::
-      AttributeReference("integer", IntegerType, true)() ::
-      AttributeReference("long", LongType, true)() ::
-      AttributeReference("null", StringType, true)() ::
-      AttributeReference("string", StringType, true)() :: Nil
+        AttributeReference("boolean", BooleanType, true)() ::
+        AttributeReference("double", DoubleType, true)() ::
+        AttributeReference("integer", IntegerType, true)() ::
+        AttributeReference("long", LongType, true)() ::
+        AttributeReference("null", StringType, true)() ::
+        AttributeReference("string", StringType, true)() :: Nil
 
-    val unioned1 = jsonSchemaRDD1.unionAll(jsonSchemaRDD2)
-    comparePlans(Schema(expectedSchema), Schema(unioned1.logicalPlan.output))
+    comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
 
-    val unioned2 = jsonSchemaRDD1.unionAll(jsonSchemaRDD2)
-    comparePlans(Schema(expectedSchema), Schema(unioned2.logicalPlan.output))
+    jsonSchemaRDD.registerAsTable("jsonTable")
+
+    checkAnswer(
+      sql("select * from jsonTable"),
+      (BigDecimal("92233720368547758070"),
+      true,
+      1.7976931348623157E308,
+      10,
+      21474836470L,
+      null,
+      "this is a simple string.") :: Nil
+    )
   }
-
 }

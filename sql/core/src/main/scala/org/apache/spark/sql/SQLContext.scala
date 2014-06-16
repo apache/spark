@@ -25,8 +25,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -50,7 +51,7 @@ import org.apache.spark.SparkContext
 class SQLContext(@transient val sparkContext: SparkContext)
   extends Logging
   with SQLConf
-  with dsl.ExpressionConversions
+  with ExpressionConversions
   with Serializable {
 
   self =>
@@ -97,8 +98,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
-   * If a sampled `json` needs to be used, `samplingRatio` can be used to specify
-   * the sampling ratio.
    *
    * @group userf
    */
@@ -114,8 +113,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Loads a RDD[String] storing JSON objects (one object per record), returning the result as a
-   * [[SchemaRDD]]. If a sampled `json` needs to be used, `samplingRatio` can be used to specify
-   * the sampling ratio.
+   * [[SchemaRDD]].
    *
    * @group userf
    */
@@ -125,7 +123,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * :: Experimental ::
    */
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
-    JsonRDD(this, json, samplingRatio)
+    new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
 
   /**
    * :: Experimental ::
