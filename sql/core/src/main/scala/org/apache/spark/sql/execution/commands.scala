@@ -83,8 +83,8 @@ case class ExplainCommand(
   override protected[sql] lazy val sideEffectResult: Seq[String] = this.toString.split("\n")
 
   def execute(): RDD[Row] = {
-    val explanation = sideEffectResult.mkString("\n")
-    context.sparkContext.parallelize(Seq(new GenericRow(Array[Any](explanation))), 1)
+    val explanation = sideEffectResult.map(row => new GenericRow(Array[Any](row)))
+    context.sparkContext.parallelize(explanation, 1)
   }
 
   override def otherCopyArgs = context :: Nil

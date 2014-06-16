@@ -169,7 +169,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.size == 1 && explanation.head.startsWith(explainCommandClassName)
+    explanation.size > 1 && explanation.head.startsWith(explainCommandClassName)
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
