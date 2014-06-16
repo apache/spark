@@ -38,7 +38,7 @@ class HashShuffleReader[K, C](
     val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context,
       Serializer.getSerializer(dep.serializer))
 
-    if (dep.aggregator.isDefined) {
+    val aggregatedIter = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         new InterruptibleIterator(context, dep.aggregator.get.combineCombinersByKey(iter, context))
       } else {
@@ -48,6 +48,17 @@ class HashShuffleReader[K, C](
       throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
       iter
+    }
+
+    dep.keyOrdering.map { ordering =>
+      val buf = aggregatedIter.toArray
+      if (dep.ascending) {
+        buf.sortWith((x, y) => ordering.lt(x._1, y._1)).iterator
+      } else {
+        buf.sortWith((x, y) => ordering.gt(x._1, y._1)).iterator
+      }
+    }.getOrElse {
+      aggregatedIter
     }
   }
 

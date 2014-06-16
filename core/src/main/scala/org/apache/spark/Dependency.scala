@@ -62,8 +62,11 @@ class ShuffleDependency[K, V, C](
     val serializer: Option[Serializer] = None,
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
-    val mapSideCombine: Boolean = false)
+    val mapSideCombine: Boolean = false,
+    val ascending: Boolean = true)
   extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) {
+
+  def isKeySorted = keyOrdering.isDefined
 
   val shuffleId: Int = rdd.context.newShuffleId()
 

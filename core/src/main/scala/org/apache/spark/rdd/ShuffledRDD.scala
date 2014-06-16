@@ -51,6 +51,8 @@ class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
 
   private var mapSideCombine: Boolean = false
 
+  private var ascending: Boolean = true
+
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): ShuffledRDD[K, V, C, P] = {
     this.serializer = Option(serializer)
@@ -60,6 +62,11 @@ class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
   /** Set key ordering for RDD's shuffle. */
   def setKeyOrdering(keyOrdering: Ordering[K]): ShuffledRDD[K, V, C, P] = {
     this.keyOrdering = Option(keyOrdering)
+    this
+  }
+
+  def setAscendingFlag(ascending: Boolean): ShuffledRDD[K, V, C, P] = {
+    this.ascending = ascending
     this
   }
 
@@ -76,7 +83,8 @@ class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    List(new ShuffleDependency(prev, part, serializer, keyOrdering, aggregator, mapSideCombine))
+    List(new ShuffleDependency(prev, part, serializer,
+      keyOrdering, aggregator, mapSideCombine, ascending))
   }
 
   override val partitioner = Some(part)
