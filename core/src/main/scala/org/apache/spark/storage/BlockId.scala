@@ -49,8 +49,8 @@ sealed abstract class BlockId {
 }
 
 @DeveloperApi
-case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
-  def name = "rdd_" + rddId + "_" + splitIndex
+case class RDDBlockId(rddId: Int, splitIndex: Int, storageLevel: Int) extends BlockId {
+  def name = "rdd_" + rddId + "_" + splitIndex + "_" + storageLevel
 }
 
 @DeveloperApi
@@ -86,7 +86,7 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
 
 @DeveloperApi
 object BlockId {
-  val RDD = "rdd_([0-9]+)_([0-9]+)".r
+  val RDD = "rdd_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
@@ -95,8 +95,8 @@ object BlockId {
 
   /** Converts a BlockId "name" String back into a BlockId. */
   def apply(id: String) = id match {
-    case RDD(rddId, splitIndex) =>
-      RDDBlockId(rddId.toInt, splitIndex.toInt)
+    case RDD(rddId, splitIndex, storageLevel) =>
+      RDDBlockId(rddId.toInt, splitIndex.toInt, storageLevel.toInt)
     case SHUFFLE(shuffleId, mapId, reduceId) =>
       ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
     case BROADCAST(broadcastId, field) =>

@@ -393,7 +393,7 @@ class CleanerTester(
 
   private def getRDDBlocks(rddId: Int): Seq[BlockId] = {
     blockManager.master.getMatchingBlockIds( _ match {
-      case RDDBlockId(`rddId`, _) => true
+      case RDDBlockId(`rddId`, _, _) => true
       case _ => false
     }, askSlaves = true)
   }

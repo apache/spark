@@ -199,7 +199,8 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
 
     // Get all the locations of the first partition and try to fetch the partitions
     // from those locations.
-    val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index)).toArray
+    val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index,
+      data.getStorageLevel.toInt)).toArray
     val blockId = blockIds(0)
     val blockManager = SparkEnv.get.blockManager
     blockManager.master.getLocations(blockId).foreach(id => {

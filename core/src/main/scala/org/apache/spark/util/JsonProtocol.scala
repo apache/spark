@@ -297,6 +297,7 @@ private[spark] object JsonProtocol {
     ("Use Memory" -> storageLevel.useMemory) ~
     ("Use Tachyon" -> storageLevel.useOffHeap) ~
     ("Deserialized" -> storageLevel.deserialized) ~
+    ("Compressed" -> storageLevel.compressed) ~
     ("Replication" -> storageLevel.replication)
   }
 
@@ -623,8 +624,9 @@ private[spark] object JsonProtocol {
     val useMemory = (json \ "Use Memory").extract[Boolean]
     val useTachyon = (json \ "Use Tachyon").extract[Boolean]
     val deserialized = (json \ "Deserialized").extract[Boolean]
+    val compressed = (json \ "Compressed").extract[Boolean]
     val replication = (json \ "Replication").extract[Int]
-    StorageLevel(useDisk, useMemory, useTachyon, deserialized, replication)
+    StorageLevel(useDisk, useMemory, useTachyon, deserialized, compressed, replication)
   }
 
   def blockStatusFromJson(json: JValue): BlockStatus = {
