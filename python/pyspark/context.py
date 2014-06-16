@@ -674,16 +674,13 @@ class SparkContext(object):
         Get a set of RDD IDs that have marked themselves as persistent via cache() call.
         Note that this does not necessarily mean the caching or computation was successful.
 
-        >>> existing = len(sc.getPersistentRddIds())
         >>> rdd = sc.parallelize(range(4)).cache()
         >>> c = rdd.count()
         >>> rdd.id() in sc.getPersistentRddIds()
         True
-        >>> len(sc.getPersistentRddIds()) - existing
-        1
         >>> sc.unpersistRDD(rdd.id())
-        >>> len(sc.getPersistentRddIds()) - existing
-        0
+        >>> rdd.id() in sc.getPersistentRddIds()
+        False
         """
         return self._jsc.getPersistentRddIds()
 
