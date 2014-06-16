@@ -59,6 +59,10 @@ object SparkBuild extends Build {
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
+  /** Following project only exists to pull previous artifacts of Spark for generating
+    Mima ignores. For more information see: SPARK 2071 */
+  lazy val oldDeps = Project("oldDeps", file("dev"), settings = oldDepsSettings)
+
   def replDependencies = Seq[ProjectReference](core, graphx, bagel, mllib, sql) ++ maybeHiveRef
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
@@ -86,7 +90,16 @@ object SparkBuild extends Build {
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
     .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeHive: _*) dependsOn(maybeGanglia: _*)
 
-  lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
+  lazy val assembleDepsTask = TaskKey[Unit]("assemble-deps")
+  lazy val assembleDeps = assembleDepsTask := {
+    println()
+    println("**** NOTE ****")
+    println("'sbt/sbt assemble-deps' is no longer supported.")
+    println("Instead create a normal assembly and:")
+    println("  export SPARK_PREPEND_CLASSES=1 (toggle on)")
+    println("  unset SPARK_PREPEND_CLASSES (toggle off)")
+    println()
+  }
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -336,6 +349,7 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
         "com.google.guava"           % "guava"            % "14.0.1",
         "org.apache.commons"         % "commons-lang3"    % "3.3.2",
+        "org.apache.commons"         % "commons-math3"    % "3.3" % "test",
         "com.google.code.findbugs"   % "jsr305"           % "1.3.9",
         "log4j"                      % "log4j"            % "1.2.17",
         "org.slf4j"                  % "slf4j-api"        % slf4jVersion,
@@ -369,6 +383,7 @@ object SparkBuild extends Build {
         "net.sf.py4j"                % "py4j"             % "0.8.1"
       ),
     libraryDependencies ++= maybeAvro,
+    assembleDeps,
     previousArtifact := sparkPreviousArtifact("spark-core")
   )
 
@@ -580,9 +595,7 @@ object SparkBuild extends Build {
 
   def assemblyProjSettings = sharedSettings ++ Seq(
     name := "spark-assembly",
-    assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
-    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
-    jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" }
+    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" }
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(
@@ -596,6 +609,17 @@ object SparkBuild extends Build {
       case "reference.conf"                                    => MergeStrategy.concat
       case _                                                   => MergeStrategy.first
     }
+  )
+
+  def oldDepsSettings() = Defaults.defaultSettings ++ Seq(
+    name := "old-deps",
+    scalaVersion := "2.10.4",
+    retrieveManaged := true,
+    retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
+    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq", 
+      "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
+      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx", 
+      "spark-core").map(sparkPreviousArtifact(_).get intransitive())
   )
 
   def twitterSettings() = sharedSettings ++ Seq(

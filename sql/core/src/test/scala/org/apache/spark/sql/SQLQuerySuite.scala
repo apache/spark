@@ -136,6 +136,12 @@ class SQLQuerySuite extends QueryTest {
       2.0)
   }
 
+  test("average overflow") {
+    checkAnswer(
+      sql("SELECT AVG(a),b FROM largeAndSmallInts group by b"),
+      Seq((2147483645.0,1),(2.0,2)))
+  }
+
   test("count") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM testData2"),
@@ -326,7 +332,7 @@ class SQLQuerySuite extends QueryTest {
         (3, "C"),
         (4, "D")))
   }
-  
+
   test("system function upper()") {
     checkAnswer(
       sql("SELECT n,UPPER(l) FROM lowerCaseData"),
@@ -343,7 +349,7 @@ class SQLQuerySuite extends QueryTest {
         (2, "ABC"),
         (3, null)))
   }
-    
+
   test("system function lower()") {
     checkAnswer(
       sql("SELECT N,LOWER(L) FROM upperCaseData"),
@@ -376,26 +382,27 @@ class SQLQuerySuite extends QueryTest {
     sql(s"SET $testKey=$testVal")
     checkAnswer(
       sql("SET"),
-      Seq(Seq(s"$testKey=$testVal"))
+      Seq(Seq(testKey, testVal))
     )
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
       sql("set"),
       Seq(
-        Seq(s"$testKey=$testVal"),
-        Seq(s"${testKey + testKey}=${testVal + testVal}"))
+        Seq(testKey, testVal),
+        Seq(testKey + testKey, testVal + testVal))
     )
 
     // "set key"
     checkAnswer(
       sql(s"SET $testKey"),
-      Seq(Seq(s"$testKey=$testVal"))
+      Seq(Seq(testKey, testVal))
     )
     checkAnswer(
       sql(s"SET $nonexistentKey"),
-      Seq(Seq(s"$nonexistentKey is undefined"))
+      Seq(Seq(nonexistentKey, "<undefined>"))
     )
+    clear()
   }
 
 }

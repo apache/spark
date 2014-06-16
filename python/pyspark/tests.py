@@ -188,6 +188,21 @@ class TestRDDFunctions(PySparkTestCase):
         os.unlink(tempFile.name)
         self.assertRaises(Exception, lambda: filtered_data.count())
 
+    def testAggregateByKey(self):
+        data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
+        def seqOp(x, y):
+            x.add(y)
+            return x
+
+        def combOp(x, y):
+            x |= y
+            return x
+          
+        sets = dict(data.aggregateByKey(set(), seqOp, combOp).collect())
+        self.assertEqual(3, len(sets))
+        self.assertEqual(set([1]), sets[1])
+        self.assertEqual(set([2]), sets[3])
+        self.assertEqual(set([1, 3]), sets[5])
 
 class TestIO(PySparkTestCase):
 

@@ -52,6 +52,10 @@ object Serializer {
   def getSerializer(serializer: Serializer): Serializer = {
     if (serializer == null) SparkEnv.get.serializer else serializer
   }
+
+  def getSerializer(serializer: Option[Serializer]): Serializer = {
+    serializer.getOrElse(SparkEnv.get.serializer)
+  }
 }
 
 

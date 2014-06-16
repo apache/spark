@@ -97,7 +97,7 @@ import java.util.{Map => JMap}
 @AlphaComponent
 class SchemaRDD(
     @transient val sqlContext: SQLContext,
-    @transient protected[spark] val logicalPlan: LogicalPlan)
+    @transient val baseLogicalPlan: LogicalPlan)
   extends RDD[Row](sqlContext.sparkContext, Nil) with SchemaRDDLike {
 
   def baseSchemaRDD = this
@@ -178,14 +178,18 @@ class SchemaRDD(
   def orderBy(sortExprs: SortOrder*): SchemaRDD =
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
 
+  @deprecated("use limit with integer argument", "1.1.0")
+  def limit(limitExpr: Expression): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+
   /**
-   * Limits the results by the given expressions.
+   * Limits the results by the given integer.
    * {{{
    *   schemaRDD.limit(10)
    * }}}
    */
-  def limit(limitExpr: Expression): SchemaRDD =
-    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+  def limit(limitNum: Int): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(Literal(limitNum), logicalPlan))
 
   /**
    * Performs a grouping followed by an aggregation.
@@ -343,16 +347,11 @@ class SchemaRDD(
       val pickle = new Pickler
       iter.map { row =>
         val map: JMap[String, Any] = new java.util.HashMap
-        // TODO: We place the map in an ArrayList so that the object is pickled to a List[Dict].
-        // Ideally we should be able to pickle an object directly into a Python collection so we
-        // don't have to create an ArrayList every time.
-        val arr: java.util.ArrayList[Any] = new java.util.ArrayList
         row.zip(fieldNames).foreach { case (obj, name) =>
           map.put(name, obj)
         }
-        arr.add(map)
-        pickle.dumps(arr)
-      }
+        map
+      }.grouped(10).map(batched => pickle.dumps(batched.toArray))
     }
   }
 
@@ -373,6 +372,8 @@ class SchemaRDD(
   // =======================================================================
 
   override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
+
+  override def take(num: Int): Array[Row] = limit(num).collect()
 
   // =======================================================================
   // Base RDD functions that do NOT change schema

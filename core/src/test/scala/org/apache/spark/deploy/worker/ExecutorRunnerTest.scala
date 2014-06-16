@@ -22,6 +22,7 @@ import java.io.File
 import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
+import org.apache.spark.SparkConf
 
 class ExecutorRunnerTest extends FunSuite {
   test("command includes appId") {
@@ -32,7 +33,7 @@ class ExecutorRunnerTest extends FunSuite {
       sparkHome, "appUiUrl")
     val appId = "12345-worker321-9876"
     val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321", f(sparkHome.getOrElse(".")),
-      f("ooga"), "blah", ExecutorState.RUNNING)
+      f("ooga"), "blah", new SparkConf, ExecutorState.RUNNING)
 
     assert(er.getCommandSeq.last === appId)
   }
