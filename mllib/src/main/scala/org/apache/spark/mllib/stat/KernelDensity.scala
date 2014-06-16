@@ -19,7 +19,9 @@ package org.apache.spark.mllib.stat
 
 import org.apache.spark.rdd.RDD
 import org.apache.commons.math3.util.FastMath
+import org.apache.spark.annotation.Experimental
 
+@Experimental
 object KernelDensity {
   /**
    * Given a set of samples form a distribution, estimates its density at the set of given points.
@@ -27,6 +29,11 @@ object KernelDensity {
    */
   def estimate(samples: RDD[Double], standardDeviation: Double,
       evaluationPoints: Array[Double]): Array[Double] = {
+    if (standardDeviation <= 0.0) {
+      throw new IllegalArgumentException("Standard deviation must be positive")
+    }
+
+    // This gets used in each Gaussian PDF computation, so compute it up front
     val logStandardDeviationPlusHalfLog2Pi =
       FastMath.log(standardDeviation) + 0.5 * FastMath.log(2 * FastMath.PI)
 
@@ -61,6 +68,7 @@ object KernelDensity {
       logStandardDeviationPlusHalfLog2Pi: Double, x: Double): Double = {
     val x0 = x - mean
     val x1 = x0 / standardDeviation
-    FastMath.exp(-0.5 * x1 * x1 - logStandardDeviationPlusHalfLog2Pi)
+    val logDensity = -0.5 * x1 * x1 - logStandardDeviationPlusHalfLog2Pi
+    FastMath.exp(logDensity)
   }
 }
