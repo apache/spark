@@ -36,11 +36,13 @@ object IndexedRDDBenchmark {
     var numPartitions = 1000
     var elemsPerPartition = 1000000
     var trials = 100
+    var microTrials = 100000
 
     options.foreach {
       case ("numPartitions", v) => numPartitions = v.toInt
       case ("elemsPerPartition", v) => elemsPerPartition = v.toInt
       case ("trials", v) => trials = v.toInt
+      case ("microTrials", v) => microTrials = v.toInt
       case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
     }
 
@@ -151,6 +153,57 @@ object IndexedRDDBenchmark {
     end = System.currentTimeMillis
     println(s"Done. ${(end - start) / trials} ms per join.")
 
+    vanilla.unpersist()
+    vanilla2.unpersist()
+    indexed.unpersist()
+    indexed2.unpersist()
+
+    println(s"Testing scaling for IndexedRDDPartition.get ($microTrials trials)...")
+    println("partition size\tget time (ms)")
+    var n = 1
+    while (n <= elemsPerPartition) {
+      val partition = IndexedRDDPartition((0 until n).iterator.map(x => (x.toLong, x)))
+      start = System.nanoTime
+      for (i <- 1 to microTrials) {
+        val elem = r.nextInt(n)
+        assert(partition.multiget(Array(elem)).get(elem) == Some(elem))
+      }
+      end = System.nanoTime
+      println(s"$n\t${(end - start).toDouble / microTrials / 1000000}")
+      n *= 10
+    }
+    println("Done.")
+
+    println(s"Testing scaling for IndexedRDDPartition.put - update ($microTrials trials)...")
+    println("partition size\tupdate time (ms)")
+    n = 1
+    while (n <= elemsPerPartition) {
+      val partition = IndexedRDDPartition((0 until n).iterator.map(x => (x.toLong, x)))
+      start = System.nanoTime
+      for (i <- 1 to microTrials) {
+        val elem = r.nextInt(n)
+        partition.multiput(Array(elem.toLong -> 0), (id, a, b) => b)
+      }
+      end = System.nanoTime
+      println(s"$n\t${(end - start).toDouble / microTrials / 1000000}")
+      n *= 10
+    }
+    println("Done.")
+
+    println(s"Testing scaling for IndexedRDDPartition.put - insert ($trials trials)...")
+    println("partition size\tinsert time (ms)")
+    n = 1
+    while (n <= elemsPerPartition) {
+      val partition = IndexedRDDPartition((0 until n).iterator.map(x => (x.toLong, x)))
+      start = System.nanoTime
+      for (i <- 1 to trials) {
+        partition.multiput(Array(-1L -> 0), (id, a, b) => b)
+      }
+      end = System.nanoTime
+      println(s"$n\t${(end - start).toDouble / trials / 1000000}")
+      n *= 10
+    }
+    println("Done.")
 
     // println(s"Get on vanilla RDD ($trials trials)...")
     // var start = System.currentTimeMillis
