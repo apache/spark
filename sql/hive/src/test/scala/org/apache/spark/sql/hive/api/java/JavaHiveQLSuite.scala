@@ -31,10 +31,10 @@ import org.apache.spark.sql.test.TestSQLContext
 import scala.collection.JavaConversions._
 
 class JavaHiveQLSuite extends FunSuite {
-  val javaCtx = new JavaSparkContext(TestSQLContext.sparkContext)
+  lazy val javaCtx = new JavaSparkContext(TestSQLContext.sparkContext)
 
   // There is a little trickery here to avoid instantiating two HiveContexts in the same JVM
-  val javaHiveCtx = new JavaHiveContext(javaCtx) {
+  lazy val javaHiveCtx = new JavaHiveContext(javaCtx) {
     override val sqlContext = TestHive
   }
 
