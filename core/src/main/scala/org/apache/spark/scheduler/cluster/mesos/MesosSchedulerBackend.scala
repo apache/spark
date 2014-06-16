@@ -62,6 +62,8 @@ private[spark] class MesosSchedulerBackend(
 
   var classLoader: ClassLoader = null
 
+  var frameworkId: FrameworkID = null
+
   override def start() {
     synchronized {
       classLoader = Thread.currentThread.getContextClassLoader
@@ -160,6 +162,7 @@ private[spark] class MesosSchedulerBackend(
     } finally {
       restoreClassLoader(oldClassLoader)
     }
+    this.frameworkId = frameworkId
   }
 
   def waitForRegister() {
@@ -334,5 +337,6 @@ private[spark] class MesosSchedulerBackend(
   // TODO: query Mesos for number of cores
   override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
 
-  override def applicationId(): Option[String] = None
+  override def applicationId(): Option[String] =
+    Some(frameworkId).map(id => Some(id.getValue())).getOrElse(null)
 }
