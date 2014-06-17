@@ -63,12 +63,13 @@ There are two main categories of parameters that should to be configured: declar
 Swift driver and the parameters that are required by Keystone. 
 
 Configuration of Hadoop to use Swift File system achieved via 
+
 <table class="table">
 <tr><th>Property Name</th><th>Value</th></tr>
 <tr>
   <td>fs.swift.impl</td>
   <td>org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem</td>
-<tr>
+</tr>
 </table>
 
 Additional parameters required by Keystone and should be provided to the Swift driver. Those 
