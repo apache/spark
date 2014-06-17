@@ -117,6 +117,17 @@ class JsonProtocolSuite extends FunSuite {
     testBlockId(StreamBlockId(1, 2L))
   }
 
+  test("Backward compatibility") {
+    // StageInfo.details was added after 1.0.0.
+    val info = makeStageInfo(1, 2, 3, 4L, 5L)
+    assert(info.details.nonEmpty)
+    val newJson = JsonProtocol.stageInfoToJson(info)
+    val oldJson = newJson.removeField { case (field, _) => field == "Details" }
+    val newInfo = JsonProtocol.stageInfoFromJson(oldJson)
+    assert(info.name === newInfo.name)
+    assert("" === newInfo.details)
+  }
+
 
   /** -------------------------- *
    | Helper test running methods |
@@ -235,6 +246,7 @@ class JsonProtocolSuite extends FunSuite {
     (0 until info1.rddInfos.size).foreach { i =>
       assertEquals(info1.rddInfos(i), info2.rddInfos(i))
     }
+    assert(info1.details === info2.details)
   }
 
   private def assertEquals(info1: RDDInfo, info2: RDDInfo) {
@@ -438,7 +450,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
     val rddInfos = (1 to a % 5).map { i => makeRddInfo(a % i, b % i, c % i, d % i, e % i) }
-    new StageInfo(a, "greetings", b, rddInfos)
+    new StageInfo(a, "greetings", b, rddInfos, "details")
   }
 
   private def makeTaskInfo(a: Long, b: Int, c: Long) = {

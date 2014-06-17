@@ -43,6 +43,9 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
+/** CallSite represents a place in user code. It can have a short and a long form. */
+private[spark] case class CallSite(val short: String, val long: String)
+
 /**
  * Various utility methods used by Spark.
  */
@@ -799,21 +802,12 @@ private[spark] object Utils extends Logging {
    */
   private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
 
-  private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
-                                    val firstUserLine: Int, val firstUserClass: String) {
-
-    /** Returns a printable version of the call site info suitable for logs. */
-    override def toString = {
-      "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
-    }
-  }
-
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getCallSiteInfo: CallSiteInfo = {
+  def getCallSite: CallSite = {
     val trace = Thread.currentThread.getStackTrace()
       .filterNot(_.getMethodName.contains("getStackTrace"))
 
@@ -824,11 +818,11 @@ private[spark] object Utils extends Logging {
     var lastSparkMethod = "<unknown>"
     var firstUserFile = "<unknown>"
     var firstUserLine = 0
-    var finished = false
-    var firstUserClass = "<unknown>"
+    var insideSpark = true
+    var callStack = new ArrayBuffer[String]() :+ "<unknown>"
 
     for (el <- trace) {
-      if (!finished) {
+      if (insideSpark) {
         if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
@@ -836,15 +830,21 @@ private[spark] object Utils extends Logging {
           } else {
             el.getMethodName
           }
+          callStack(0) = el.toString // Put last Spark method on top of the stack trace.
         } else {
           firstUserLine = el.getLineNumber
           firstUserFile = el.getFileName
-          firstUserClass = el.getClassName
-          finished = true
+          callStack += el.toString
+          insideSpark = false
         }
+      } else {
+        callStack += el.toString
       }
     }
-    new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
+    val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
+    CallSite(
+      short = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
+      long = callStack.take(callStackDepth).mkString("\n"))
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
