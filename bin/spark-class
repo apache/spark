@@ -33,7 +33,7 @@ export SPARK_HOME="$FWDIR"
 . $FWDIR/bin/load-spark-env.sh
 
 if [ -z "$1" ]; then
-  echo "Usage: spark-class <class> [<args>]" >&2
+  echo "Usage: spark-class <class> [<args>]" 1>&2
   exit 1
 fi
 
@@ -142,10 +142,9 @@ fi
 export CLASSPATH
 
 if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
-  echo -n "Spark Command: "
-  echo "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
-  echo "========================================"
-  echo
+  echo -n "Spark Command: " 1>&2
+  echo "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@" 1>&2
+  echo -e "========================================\n" 1>&2
 fi
 
 exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
