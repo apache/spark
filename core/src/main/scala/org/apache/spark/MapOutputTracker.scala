@@ -283,7 +283,6 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       }
       logInfo("Map status for shuffleId "+shuffleId+" is now complete. Updater terminated. ---lirui")
       partialEpoch.synchronized {
-        partialEpoch.remove(shuffleId)
         partialEpoch.notifyAll()
       }
     }
