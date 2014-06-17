@@ -30,4 +30,6 @@ private[spark] trait SchedulerBackend {
 
   def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =
     throw new UnsupportedOperationException
+
+  def freeSlotAvail(): Boolean = false
 }

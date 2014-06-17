@@ -925,35 +925,26 @@ class DAGScheduler(
               }
             } else {
               // ShuffleMap stage not finished yet. Maybe we can remove the stage barrier here.
-              if(removeStageBarrier){
-                //TODO: need a better way to get the number of total CPUs
-                if (taskScheduler.isInstanceOf[TaskSchedulerImpl] && taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.isInstanceOf[CoarseGrainedSchedulerBackend]) {
-                  val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend.asInstanceOf[CoarseGrainedSchedulerBackend]
-                  //check CPU usage
-                  val totalCores = backend.totalCoreCount.get()
-                  val pendingTaskNum = (for (taskSet <- pendingTasks.values) yield taskSet.size).sum
-                  val freeCores = totalCores - pendingTaskNum
-                  val waitingStageNum = waitingStages.size
-                  //TODO: compare free cores with "spark.task.cpus"
-                  if (freeCores > 0 && waitingStageNum > 0 && stage.shuffleDep.isDefined) {
-                    logInfo("We have " + totalCores + " CPUs. " + pendingTaskNum + " tasks are running/pending. " +
-                      waitingStageNum + " stages are waiting to be submitted. ---lirui")
-                    val preStartableStage = getPreStartableStage(stage)
-                    if (preStartableStage.isDefined) {
-                      val preStartedStage = preStartableStage.get
-                      logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
-                      //register map output finished so far
-                      mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
-                        stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-                        changeEpoch = false, isPartial = true)
-                      waitingStages -= preStartedStage
-                      runningStages += preStartedStage
-                      //inform parent stages that the dependant stage has been pre-started
-                      for (parentStage <- getMissingParentStages(preStartedStage)) {
-                        dependantStagePreStarted.getOrElseUpdate(parentStage, new ArrayBuffer[Stage]()) += preStartedStage
-                      }
-                      submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage).get)
+              if(removeStageBarrier && taskScheduler.isInstanceOf[TaskSchedulerImpl]){
+                // TODO: need a better way to check if there's free slots
+                val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend
+                val waitingStageNum = waitingStages.size
+                if (backend.freeSlotAvail() && waitingStageNum > 0 && stage.shuffleDep.isDefined) {
+                  val preStartableStage = getPreStartableStage(stage)
+                  if (preStartableStage.isDefined) {
+                    val preStartedStage = preStartableStage.get
+                    logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
+                    // Register map output finished so far
+                    mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
+                      stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+                      changeEpoch = false, isPartial = true)
+                    waitingStages -= preStartedStage
+                    runningStages += preStartedStage
+                    // Inform parent stages that the dependant stage has been pre-started
+                    for (parentStage <- getMissingParentStages(preStartedStage)) {
+                      dependantStagePreStarted.getOrElseUpdate(parentStage, new ArrayBuffer[Stage]()) += preStartedStage
                     }
+                    submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage).get)
                   }
                 }
               }
@@ -1208,7 +1199,6 @@ class DAGScheduler(
 
   // Select a waiting stage to pre-start
   private def getPreStartableStage(stage: Stage): Option[Stage] = {
-    //select a stage not ready to run
     for (waitingStage <- waitingStages) {
       val missingParents = getMissingParentStages(waitingStage)
       if (missingParents != Nil && missingParents.contains(stage) &&

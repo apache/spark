@@ -363,7 +363,7 @@ object BlockFetcherIterator {
 
     // Get the updated map output
     private def updateStatuses() {
-      logInfo("Updating map statuses for reduceId " + reduceId + " ---lirui")
+      logInfo("Waiting for new map statuses for reduceId " + reduceId + " ---lirui")
       val update = mapOutputTracker.getUpdatedStatus(shuffleId, reduceId, localEpoch)
       statuses = update._1
       localEpoch = update._2
@@ -374,18 +374,13 @@ object BlockFetcherIterator {
     //check if there's new map outputs ready to collect
     private def newStatusesReady = readyStatuses.exists(!delegatedStatuses.contains(_))
 
-    private def getIterator(initial: Boolean = false) = {
-      if (isPartial && !initial) {
-        logInfo("Still missing " + statuses.filter(_._1 == null).size + " map outputs for reduceId " + reduceId + " ---lirui")
-        updateStatuses()
-      }
+    private def getIterator() = {
       while (!newStatusesReady) {
         if (!isPartial && delegatedStatuses.size >= statuses.size) {
           //shouldn't get here, just to avoid infinite loop
           throw new SparkException("All blocks have been delegated for reduceId " + reduceId)
         }
-//        logInfo("Waiting for new map outputs for reduceId " + reduceId + " ---lirui")
-//        Thread.sleep(1000)
+        logInfo("Still missing " + statuses.filter(_._1 == null).size + " map outputs for reduceId " + reduceId + " ---lirui")
         updateStatuses()
       }
       val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
@@ -402,7 +397,7 @@ object BlockFetcherIterator {
     }
 
     override def initialize(){
-      iterators += getIterator(initial = true)
+      iterators += getIterator()
     }
 
     override def hasNext: Boolean = {

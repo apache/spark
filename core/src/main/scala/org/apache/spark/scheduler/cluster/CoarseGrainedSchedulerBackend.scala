@@ -46,6 +46,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
+  // Also track number of free cores
+  private val freeCoreCount = new AtomicInteger(0)
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
@@ -83,6 +85,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
+          freeCoreCount.addAndGet(cores)
           makeOffers()
         }
 
@@ -91,6 +94,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         if (TaskState.isFinished(state)) {
           if (executorActor.contains(executorId)) {
             freeCores(executorId) += scheduler.CPUS_PER_TASK
+            freeCoreCount.addAndGet(scheduler.CPUS_PER_TASK)
             makeOffers(executorId)
           } else {
             // Ignoring the update since we don't know about the executor.
@@ -159,6 +163,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         }
         else {
           freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
+          freeCoreCount.addAndGet(-scheduler.CPUS_PER_TASK)
           executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))
         }
       }
@@ -176,6 +181,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         totalCores -= executorId
         freeCores -= executorId
         totalCoreCount.addAndGet(-numCores)
+        freeCoreCount.addAndGet(-numCores)
         scheduler.executorLost(executorId, SlaveLost(reason))
       }
     }
@@ -244,6 +250,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         throw new SparkException("Error notifying standalone scheduler's driver actor", e)
     }
   }
+
+  override def freeSlotAvail(): Boolean = freeCoreCount.get() > 0
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
