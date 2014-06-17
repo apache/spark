@@ -769,4 +769,14 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       mutableDependencies += dep
     }
   }
+
+  test("treeAggregate") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10)
+    def seqOp = (c: Long, x: Int) => c + x
+    def combOp = (c1: Long, c2: Long) => c1 + c2
+    for (level <- 1 until 10) {
+      val sum = rdd.treeAggregate(0L)(seqOp, combOp, level)
+      assert(sum === -1000L)
+    }
+  }
 }

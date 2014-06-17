@@ -862,6 +862,30 @@ abstract class RDD[T: ClassTag](
     jobResult
   }
 
+  @DeveloperApi
+  def treeAggregate[U: ClassTag](zeroValue: U)(
+      seqOp: (U, T) => U,
+      combOp: (U, U) => U,
+      level: Int): U = {
+    require(level >= 1, s"Level must be greater than 1 but got $level.")
+    if (this.partitions.size == 0) {
+      return Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
+    }
+    val cleanSeqOp = sc.clean(seqOp)
+    val cleanCombOp = sc.clean(combOp)
+    val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
+    var local = this.mapPartitions(it => Iterator(aggregatePartition(it)))
+    var numPartitions = local.partitions.size
+    val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / level)).toInt, 2)
+    while (numPartitions > scale + numPartitions / scale) {
+      numPartitions /= scale
+      local = local.mapPartitionsWithIndex { (i, iter) =>
+        iter.map((i % numPartitions, _))
+      }.reduceByKey(new HashPartitioner(numPartitions), cleanCombOp).values
+    }
+    local.reduce(cleanCombOp)
+  }
+
   /**
    * Return the number of elements in the RDD.
    */
