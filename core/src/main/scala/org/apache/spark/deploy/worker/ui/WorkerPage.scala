@@ -46,7 +46,7 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
     val workerState = Await.result(stateFuture, timeout)
 
-    val executorHeaders = Seq("ExecutorID", "Cores", "Memory", "Job Details", "Logs")
+    val executorHeaders = Seq("ExecutorID", "Cores", "State", "Memory", "Job Details", "Logs")
     val runningExecutors = workerState.executors
     val runningExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, runningExecutors)
@@ -110,6 +110,7 @@ private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     <tr>
       <td>{executor.execId}</td>
       <td>{executor.cores}</td>
+      <td>{executor.state}</td>
       <td sorttable_customkey={executor.memory.toString}>
         {Utils.megabytesToString(executor.memory)}
       </td>
