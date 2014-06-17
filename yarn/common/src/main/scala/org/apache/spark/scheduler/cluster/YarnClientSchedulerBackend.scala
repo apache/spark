@@ -80,7 +80,7 @@ private[spark] class YarnClientSchedulerBackend(
       waitForApp()
     } catch {
       case e: IllegalArgumentException => {
-        Console.err.println(e.getMessage)
+        e.printStackTrace()
         System.exit(1)
       }
     }

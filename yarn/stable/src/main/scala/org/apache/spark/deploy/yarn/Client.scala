@@ -497,7 +497,7 @@ object Client {
       new Client(args, sparkConf).run()
     } catch {
       case e: Exception => {
-        Console.err.println(e.getMessage)
+        e.printStackTrace()
         System.exit(1)
       }
     }
