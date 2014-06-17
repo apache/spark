@@ -811,6 +811,8 @@ private[hive] object HiveQl {
   val IN = "(?i)IN".r
   val DIV = "(?i)DIV".r
   val BETWEEN = "(?i)BETWEEN".r
+  val WHEN = "(?i)WHEN".r
+  val CASE = "(?i)CASE".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -916,6 +918,21 @@ private[hive] object HiveQl {
     case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
     case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
     case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
+
+    /* Case statements */
+    case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>
+      CaseWhen(branches.map(nodeToExpr))
+    case Token("TOK_FUNCTION", Token(CASE(), Nil) :: branches) =>
+      val transformed = branches.drop(1).sliding(2, 2).map {
+        case Seq(condVal, value) =>
+          // FIXME (SPARK-2155): the key will get evaluated for multiple times in CaseWhen's eval().
+          // Hence effectful / non-deterministic key expressions are *not* supported at the moment.
+          // We should consider adding new Expressions to get around this.
+          Seq(Equals(nodeToExpr(branches(0)), nodeToExpr(condVal)),
+              nodeToExpr(value))
+        case Seq(elseVal) => Seq(nodeToExpr(elseVal))
+      }.toSeq.reduce(_ ++ _)
+      CaseWhen(transformed)
 
     /* Complex datatype manipulation */
     case Token("[", child :: ordinal :: Nil) =>
