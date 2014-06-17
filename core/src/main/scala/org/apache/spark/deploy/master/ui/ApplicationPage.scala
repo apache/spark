@@ -96,15 +96,11 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
       <div class="row-fluid"> <!-- Executors -->
         <div class="span12">
           <h4> Executor Summary </h4>
+          {executorsTable}
           {
-            executorsTable ++
-            {
-              if (removedExecutors.nonEmpty) {
-                <h4> Removed Executors </h4> ++
-                removedExecutorsTable
-              } else {
-                Seq.empty[Node]
-              }
+            if (removedExecutors.nonEmpty) {
+              <h4> Removed Executors </h4> ++
+              removedExecutorsTable
             }
           }
         </div>
