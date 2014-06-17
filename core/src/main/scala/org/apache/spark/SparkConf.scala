@@ -244,7 +244,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     for (key -> memoryKeys) {
       val value = getDouble(key, 0.5)
       if (value > 1 || value < 0) {
-      throw new IllegalArgumentException("$key should be between 0 and (was '$value').")
+        throw new IllegalArgumentException("$key should be between 0 and (was '$value').")
       }
     }
 
