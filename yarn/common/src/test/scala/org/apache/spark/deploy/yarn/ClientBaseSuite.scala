@@ -98,8 +98,8 @@ class ClientBaseSuite extends FunSuite with Matchers {
         cp should not contain (uri.getPath())
       }
     })
-    cp should contain (s"$$PWD")
-    cp should contain (s"$$PWD${File.separator}*")
+    cp should contain (Environment.PWD.$())
+    cp should contain (s"${Environment.PWD.$()}${File.separator}*")
     cp should not contain (ClientBase.SPARK_JAR)
     cp should not contain (ClientBase.APP_JAR)
   }
