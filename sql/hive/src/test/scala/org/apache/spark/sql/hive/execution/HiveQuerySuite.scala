@@ -164,6 +164,44 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SELECT * FROM src").toString
   }
 
+  createQueryTest("case statements with key #1",
+    "SELECT (CASE 1 WHEN 2 THEN 3 END) FROM src where key < 15")
+
+  createQueryTest("case statements with key #2",
+    "SELECT (CASE key WHEN 2 THEN 3 ELSE 0 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements with key #3",
+    "SELECT (CASE key WHEN 2 THEN 3 WHEN NULL THEN 4 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements with key #4",
+    "SELECT (CASE key WHEN 2 THEN 3 WHEN NULL THEN 4 ELSE 0 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #1",
+    "SELECT (CASE WHEN key > 2 THEN 3 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #2",
+    "SELECT (CASE WHEN key > 2 THEN 3 ELSE 4 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #3",
+    "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #4",
+    "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 ELSE 0 END) FROM src WHERE key < 15")
+
+  test("implement identity function using case statement") {
+    val actual = hql("SELECT (CASE key WHEN key THEN key END) FROM src").collect().toSet
+    val expected = hql("SELECT key FROM src").collect().toSet
+    assert(actual === expected)
+  }
+
+  // TODO: adopt this test when Spark SQL has the functionality / framework to report errors.
+  // See https://github.com/apache/spark/pull/1055#issuecomment-45820167 for a discussion.
+  ignore("non-boolean conditions in a CaseWhen are illegal") {
+    intercept[Exception] {
+      hql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
+    }
+  }
+
   private val explainCommandClassName =
     classOf[execution.ExplainCommand].getSimpleName.stripSuffix("$")
 
