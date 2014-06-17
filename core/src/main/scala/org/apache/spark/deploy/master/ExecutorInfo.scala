@@ -47,4 +47,6 @@ private[spark] class ExecutorInfo(
   }
 
   override def toString: String = fullId
+
+  override def hashCode: Int = toString.hashCode()
 }
