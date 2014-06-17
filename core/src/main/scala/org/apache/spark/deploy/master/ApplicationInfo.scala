@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import akka.actor.ActorRef
 
-import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
+import org.apache.spark.deploy.ApplicationDescription
 
 private[spark] class ApplicationInfo(
     val startTime: Long,
@@ -81,10 +81,6 @@ private[spark] class ApplicationInfo(
       executors -= exec.id
       coresGranted -= exec.cores
     }
-  }
-
-  def exitedExecutors: Seq[ExecutorInfo] = {
-    removedExecutors.filter(_.state == ExecutorState.EXITED)
   }
 
   private val myMaxCores = desc.maxCores.getOrElse(defaultCores)
