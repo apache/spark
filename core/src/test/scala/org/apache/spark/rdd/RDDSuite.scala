@@ -779,4 +779,12 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       assert(sum === -1000L)
     }
   }
+
+  test("treeReduce") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10)
+    for (level <- 1 until 10) {
+      val sum = rdd.treeReduce(_ + _, level)
+      assert(sum === -1000)
+    }
+  }
 }

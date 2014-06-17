@@ -827,6 +827,32 @@ abstract class RDD[T: ClassTag](
     jobResult.getOrElse(throw new UnsupportedOperationException("empty collection"))
   }
 
+  def treeReduce(f: (T, T) => T, level: Int): T = {
+    require(level >= 1, s"Level must be greater than 1 but got $level.")
+    val cleanF = sc.clean(f)
+    val reducePartition: Iterator[T] => Option[T] = iter => {
+      if (iter.hasNext) {
+        Some(iter.reduceLeft(cleanF))
+      } else {
+        None
+      }
+    }
+    val local = this.mapPartitions(it => Iterator(reducePartition(it)))
+    val op: (Option[T], Option[T]) => Option[T] = (c, x) => {
+      if (c.isDefined && x.isDefined) {
+        Some(cleanF(c.get, x.get))
+      } else if (c.isDefined) {
+        c
+      } else if (x.isDefined) {
+        x
+      } else {
+        None
+      }
+    }
+    local.treeAggregate(Option.empty[T])(op, op, level)
+      .getOrElse(throw new UnsupportedOperationException("empty collection"))
+  }
+
   /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
    * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to
