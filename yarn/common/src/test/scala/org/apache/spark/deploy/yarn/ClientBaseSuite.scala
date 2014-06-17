@@ -32,7 +32,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers._
+import org.scalatest.Matchers
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ HashMap => MutableHashMap }
@@ -41,7 +41,7 @@ import scala.util.Try
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
-class ClientBaseSuite extends FunSuite {
+class ClientBaseSuite extends FunSuite with Matchers {
 
   test("default Yarn application classpath") {
     ClientBase.getDefaultYarnApplicationClasspath should be(Some(Fixtures.knownDefYarnAppCP))
@@ -89,17 +89,19 @@ class ClientBaseSuite extends FunSuite {
 
     ClientBase.populateClasspath(args, conf, sparkConf, env, None)
 
-    val jars = env("CLASSPATH").split(File.pathSeparator)
-    s"$SPARK,$USER,$ADDED".split(",").foreach({ jar =>
-      val uri = new URI(jar)
+    val cp = env("CLASSPATH").split(File.pathSeparator)
+    s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
+      val uri = new URI(entry)
       if (ClientBase.LOCAL_SCHEME.equals(uri.getScheme())) {
-        jars should contain (uri.getPath())
+        cp should contain (uri.getPath())
       } else {
-        jars should not contain (uri.getPath())
+        cp should not contain (uri.getPath())
       }
     })
-    jars should not contain (ClientBase.SPARK_JAR)
-    jars should not contain (ClientBase.APP_JAR)
+    cp should contain (s"$$PWD")
+    cp should contain (s"$$PWD${File.separator}*")
+    cp should not contain (ClientBase.SPARK_JAR)
+    cp should not contain (ClientBase.APP_JAR)
   }
 
   test("Jar path propagation through SparkConf") {

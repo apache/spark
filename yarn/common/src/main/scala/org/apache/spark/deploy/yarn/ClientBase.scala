@@ -395,7 +395,15 @@ object ClientBase extends Logging {
   val APP_JAR: String = "__app__.jar"
   val LOCAL_SCHEME = "local"
   val CONF_SPARK_JAR = "spark.yarn.jar"
+  /**
+   * This is an internal config used to propagate the location of the user's jar file to the
+   * driver/executors.
+   */
   val CONF_SPARK_USER_JAR = "spark.yarn.user.jar"
+  /**
+   * This is an internal config used to propagate the list of extra jars to add to the classpath
+   * of executors.
+   */
   val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
   val ENV_SPARK_JAR = "SPARK_JAR"
 
@@ -506,8 +514,8 @@ object ClientBase extends Logging {
       addUserClasspath(args, sparkConf, env)
     }
 
-    // Append all class files and jar files under the working directory to the classpath.
-    addFileToClasspath("*", null, env)
+    // Append all jar files under the working directory to the classpath.
+    addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + "*", env);
   }
 
   /**
