@@ -30,7 +30,9 @@ if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
 
 rem Test that an argument was given
 if not "x%1"=="x" goto arg_given
-  echo Usage: run-example ^<example-class^> [^<args^>]
+  echo Usage: run-example ^<example-class^> [example-args]
+  echo   - set MASTER=XX to use a specific master
+  echo   - can use abbreviated example class name (e.g. SparkPi, mllib.LinearRegression)
   goto exit
 :arg_given
 
@@ -38,8 +40,14 @@ set EXAMPLES_DIR=%FWDIR%examples
 
 rem Figure out the JAR file that our examples were packaged into.
 set SPARK_EXAMPLES_JAR=
-for %%d in ("%EXAMPLES_DIR%\target\scala-%SCALA_VERSION%\spark-examples*assembly*.jar") do (
-  set SPARK_EXAMPLES_JAR=%%d
+if exist "%FWDIR%RELEASE" (
+  for %%d in ("%FWDIR%lib\spark-examples*.jar") do (
+    set SPARK_EXAMPLES_JAR=%%d
+  )
+) else (
+  for %%d in ("%EXAMPLES_DIR%\target\scala-%SCALA_VERSION%\spark-examples*.jar") do (
+    set SPARK_EXAMPLES_JAR=%%d
+  )
 )
 if "x%SPARK_EXAMPLES_JAR%"=="x" (
   echo Failed to find Spark examples assembly JAR.
@@ -47,15 +55,34 @@ if "x%SPARK_EXAMPLES_JAR%"=="x" (
   goto exit
 )
 
-rem Compute Spark classpath using external script
-set DONT_PRINT_CLASSPATH=1
-call "%FWDIR%bin\compute-classpath.cmd"
-set DONT_PRINT_CLASSPATH=0
-set CLASSPATH=%SPARK_EXAMPLES_JAR%;%CLASSPATH%
+rem Set master from MASTER environment variable if given
+if "x%MASTER%"=="x" (
+  set EXAMPLE_MASTER=local[*]
+) else (
+  set EXAMPLE_MASTER=%MASTER%
+)
 
-rem Figure out where java is.
-set RUNNER=java
-if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
+rem If the EXAMPLE_CLASS does not start with org.apache.spark.examples, add that
+set EXAMPLE_CLASS=%1
+set PREFIX=%EXAMPLE_CLASS:~0,25%
+if not %PREFIX%==org.apache.spark.examples (
+  set EXAMPLE_CLASS=org.apache.spark.examples.%EXAMPLE_CLASS%
+)
 
-"%RUNNER%" -cp "%CLASSPATH%" %JAVA_OPTS% %*
+rem Get the tail of the argument list, to skip the first one. This is surprisingly
+rem complicated on Windows.
+set "ARGS="
+:top
+shift
+if "%~1" neq "" (
+  set ARGS=%ARGS% "%~1"
+  goto :top
+)
+if defined ARGS set ARGS=%ARGS:~1%
+
+call "%FWDIR%bin\spark-submit.cmd" ^
+  --master %EXAMPLE_MASTER% ^
+  --class %EXAMPLE_CLASS% ^
+  "%SPARK_EXAMPLES_JAR%" %ARGS%
+
 :exit

@@ -22,6 +22,7 @@ from pyspark import SparkContext, RDD
 from pyspark.mllib.linalg import SparseVector
 from pyspark.serializers import Serializer
 
+
 """
 Common utilities shared throughout MLlib, primarily for dealing with
 different data types. These include:
@@ -56,7 +57,8 @@ except:
 #
 # Sparse double vector format:
 #
-# [1-byte 2] [4-byte length] [4-byte nonzeros] [nonzeros*4 bytes of indices] [nonzeros*8 bytes of values]
+# [1-byte 2] [4-byte length] [4-byte nonzeros] [nonzeros*4 bytes of indices] \
+# [nonzeros*8 bytes of values]
 #
 # Double matrix format:
 #
@@ -110,18 +112,18 @@ def _serialize_double_vector(v):
         return _serialize_sparse_vector(v)
     else:
         raise TypeError("_serialize_double_vector called on a %s; "
-                "wanted ndarray or SparseVector" % type(v))
+                        "wanted ndarray or SparseVector" % type(v))
 
 
 def _serialize_dense_vector(v):
     """Serialize a dense vector given as a NumPy array."""
     if v.ndim != 1:
         raise TypeError("_serialize_double_vector called on a %ddarray; "
-                "wanted a 1darray" % v.ndim)
+                        "wanted a 1darray" % v.ndim)
     if v.dtype != float64:
         if numpy.issubdtype(v.dtype, numpy.complex):
             raise TypeError("_serialize_double_vector called on an ndarray of %s; "
-                    "wanted ndarray of float64" % v.dtype)
+                            "wanted ndarray of float64" % v.dtype)
         v = v.astype(float64)
     length = v.shape[0]
     ba = bytearray(5 + 8 * length)
@@ -146,7 +148,7 @@ def _serialize_sparse_vector(v):
     return ba
 
 
-def _deserialize_double_vector(ba):
+def _deserialize_double_vector(ba, offset=0):
     """Deserialize a double vector from a mutually understood format.
 
     >>> x = array([1.0, 2.0, 3.0, 4.0, -1.0, 0.0, -0.0])
@@ -158,44 +160,47 @@ def _deserialize_double_vector(ba):
     """
     if type(ba) != bytearray:
         raise TypeError("_deserialize_double_vector called on a %s; "
-                "wanted bytearray" % type(ba))
-    if len(ba) < 5:
+                        "wanted bytearray" % type(ba))
+    nb = len(ba) - offset
+    if nb < 5:
         raise TypeError("_deserialize_double_vector called on a %d-byte array, "
-                "which is too short" % len(ba))
-    if ba[0] == DENSE_VECTOR_MAGIC:
-        return _deserialize_dense_vector(ba)
-    elif ba[0] == SPARSE_VECTOR_MAGIC:
-        return _deserialize_sparse_vector(ba)
+                "which is too short" % nb)
+    if ba[offset] == DENSE_VECTOR_MAGIC:
+        return _deserialize_dense_vector(ba, offset)
+    elif ba[offset] == SPARSE_VECTOR_MAGIC:
+        return _deserialize_sparse_vector(ba, offset)
     else:
         raise TypeError("_deserialize_double_vector called on bytearray "
                         "with wrong magic")
 
 
-def _deserialize_dense_vector(ba):
+def _deserialize_dense_vector(ba, offset=0):
     """Deserialize a dense vector into a numpy array."""
-    if len(ba) < 5:
+    nb = len(ba) - offset
+    if nb < 5:
         raise TypeError("_deserialize_dense_vector called on a %d-byte array, "
-                "which is too short" % len(ba))
-    length = ndarray(shape=[1], buffer=ba, offset=1, dtype=int32)[0]
-    if len(ba) != 8 * length + 5:
+                        "which is too short" % nb)
+    length = ndarray(shape=[1], buffer=ba, offset=offset + 1, dtype=int32)[0]
+    if nb < 8 * length + 5:
         raise TypeError("_deserialize_dense_vector called on bytearray "
                         "with wrong length")
-    return _deserialize_numpy_array([length], ba, 5)
+    return _deserialize_numpy_array([length], ba, offset + 5)
 
 
-def _deserialize_sparse_vector(ba):
+def _deserialize_sparse_vector(ba, offset=0):
     """Deserialize a sparse vector into a MLlib SparseVector object."""
-    if len(ba) < 9:
+    nb = len(ba) - offset
+    if nb < 9:
         raise TypeError("_deserialize_sparse_vector called on a %d-byte array, "
-                "which is too short" % len(ba))
-    header = ndarray(shape=[2], buffer=ba, offset=1, dtype=int32)
+                        "which is too short" % nb)
+    header = ndarray(shape=[2], buffer=ba, offset=offset + 1, dtype=int32)
     size = header[0]
     nonzeros = header[1]
-    if len(ba) != 9 + 12 * nonzeros:
+    if nb < 9 + 12 * nonzeros:
         raise TypeError("_deserialize_sparse_vector called on bytearray "
                         "with wrong length")
-    indices = _deserialize_numpy_array([nonzeros], ba, 9, dtype=int32)
-    values = _deserialize_numpy_array([nonzeros], ba, 9 + 4 * nonzeros, dtype=float64)
+    indices = _deserialize_numpy_array([nonzeros], ba, offset + 9, dtype=int32)
+    values = _deserialize_numpy_array([nonzeros], ba, offset + 9 + 4 * nonzeros, dtype=float64)
     return SparseVector(int(size), indices, values)
 
 
@@ -205,7 +210,7 @@ def _serialize_double_matrix(m):
         if m.dtype != float64:
             if numpy.issubdtype(m.dtype, numpy.complex):
                 raise TypeError("_serialize_double_matrix called on an ndarray of %s; "
-                        "wanted ndarray of float64" % m.dtype)
+                                "wanted ndarray of float64" % m.dtype)
             m = m.astype(float64)
         rows = m.shape[0]
         cols = m.shape[1]
@@ -225,10 +230,10 @@ def _deserialize_double_matrix(ba):
     """Deserialize a double matrix from a mutually understood format."""
     if type(ba) != bytearray:
         raise TypeError("_deserialize_double_matrix called on a %s; "
-                "wanted bytearray" % type(ba))
+                        "wanted bytearray" % type(ba))
     if len(ba) < 9:
         raise TypeError("_deserialize_double_matrix called on a %d-byte array, "
-                "which is too short" % len(ba))
+                        "which is too short" % len(ba))
     if ba[0] != DENSE_MATRIX_MAGIC:
         raise TypeError("_deserialize_double_matrix called on bytearray "
                         "with wrong magic")
@@ -242,7 +247,23 @@ def _deserialize_double_matrix(ba):
 
 
 def _serialize_labeled_point(p):
-    """Serialize a LabeledPoint with a features vector of any type."""
+    """
+    Serialize a LabeledPoint with a features vector of any type.
+
+    >>> from pyspark.mllib.regression import LabeledPoint
+    >>> dp0 = LabeledPoint(0.5, array([1.0, 2.0, 3.0, 4.0, -1.0, 0.0, -0.0]))
+    >>> dp1 = _deserialize_labeled_point(_serialize_labeled_point(dp0))
+    >>> dp1.label == dp0.label
+    True
+    >>> array_equal(dp1.features, dp0.features)
+    True
+    >>> sp0 = LabeledPoint(0.0, SparseVector(4, [1, 3], [3.0, 5.5]))
+    >>> sp1 = _deserialize_labeled_point(_serialize_labeled_point(sp0))
+    >>> sp1.label == sp1.label
+    True
+    >>> sp1.features == sp0.features
+    True
+    """
     from pyspark.mllib.regression import LabeledPoint
     serialized_features = _serialize_double_vector(p.features)
     header = bytearray(9)
@@ -251,6 +272,16 @@ def _serialize_labeled_point(p):
     header_float[0] = p.label
     return header + serialized_features
 
+def _deserialize_labeled_point(ba, offset=0):
+    """Deserialize a LabeledPoint from a mutually understood format."""
+    from pyspark.mllib.regression import LabeledPoint
+    if type(ba) != bytearray:
+        raise TypeError("Expecting a bytearray but got %s" % type(ba))
+    if ba[offset] != LABELED_POINT_MAGIC:
+        raise TypeError("Expecting magic number %d but got %d" % (LABELED_POINT_MAGIC, ba[0]))
+    label = ndarray(shape=[1], buffer=ba, offset=offset + 1, dtype=float64)[0]
+    features = _deserialize_double_vector(ba, offset + 9)
+    return LabeledPoint(label, features)
 
 def _copyto(array, buffer, offset, shape, dtype):
     """
@@ -267,7 +298,7 @@ def _copyto(array, buffer, offset, shape, dtype):
 def _get_unmangled_rdd(data, serializer):
     dataBytes = data.map(serializer)
     dataBytes._bypass_serializer = True
-    dataBytes.cache() # TODO: users should unpersist() this later!
+    dataBytes.cache()  # TODO: users should unpersist() this later!
     return dataBytes
 
 
@@ -293,14 +324,14 @@ def _linear_predictor_typecheck(x, coeffs):
     if type(x) == ndarray:
         if x.ndim == 1:
             if x.shape != coeffs.shape:
-                raise RuntimeError("Got array of %d elements; wanted %d"
-                        % (numpy.shape(x)[0], coeffs.shape[0]))
+                raise RuntimeError("Got array of %d elements; wanted %d" % (
+                    numpy.shape(x)[0], coeffs.shape[0]))
         else:
             raise RuntimeError("Bulk predict not yet supported.")
     elif type(x) == SparseVector:
         if x.size != coeffs.shape[0]:
-           raise RuntimeError("Got sparse vector of size %d; wanted %d"
-                   % (x.size, coeffs.shape[0]))
+            raise RuntimeError("Got sparse vector of size %d; wanted %d" % (
+                x.size, coeffs.shape[0]))
     elif (type(x) == RDD):
         raise RuntimeError("Bulk predict not yet supported.")
     else:
@@ -315,7 +346,7 @@ def _get_initial_weights(initial_weights, data):
         if type(initial_weights) == ndarray:
             if initial_weights.ndim != 1:
                 raise TypeError("At least one data element has "
-                        + initial_weights.ndim + " dimensions, which is not 1")
+                                + initial_weights.ndim + " dimensions, which is not 1")
             initial_weights = numpy.zeros([initial_weights.shape[0]])
         elif type(initial_weights) == SparseVector:
             initial_weights = numpy.zeros([initial_weights.size])
@@ -333,10 +364,10 @@ def _regression_train_wrapper(sc, train_func, klass, data, initial_weights):
         raise RuntimeError("JVM call result had unexpected length")
     elif type(ans[0]) != bytearray:
         raise RuntimeError("JVM call result had first element of type "
-                + type(ans[0]).__name__ + " which is not bytearray")
+                           + type(ans[0]).__name__ + " which is not bytearray")
     elif type(ans[1]) != float:
         raise RuntimeError("JVM call result had second element of type "
-                + type(ans[0]).__name__ + " which is not float")
+                           + type(ans[0]).__name__ + " which is not float")
     return klass(_deserialize_double_vector(ans[0]), ans[1])
 
 
@@ -423,7 +454,7 @@ def _squared_distance(v1, v2):
     v2 = _convert_vector(v2)
     if type(v1) == ndarray and type(v2) == ndarray:
         diff = v1 - v2
-        return diff.dot(diff)
+        return numpy.dot(diff, diff)
     elif type(v1) == ndarray:
         return v2.squared_distance(v1)
     else:
@@ -438,10 +469,12 @@ def _dot(vec, target):
     calling numpy.dot of the two vectors, but for SciPy ones, we
     have to transpose them because they're column vectors.
     """
-    if type(vec) == ndarray or type(vec) == SparseVector:
+    if type(vec) == ndarray:
+        return numpy.dot(vec, target)
+    elif type(vec) == SparseVector:
         return vec.dot(target)
     elif type(vec) == list:
-        return _convert_vector(vec).dot(target)
+        return numpy.dot(_convert_vector(vec), target)
     else:
         return vec.transpose().dot(target)[0]
 
@@ -450,8 +483,7 @@ def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs,
-            optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

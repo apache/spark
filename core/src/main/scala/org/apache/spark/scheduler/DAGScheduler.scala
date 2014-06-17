@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.NotSerializableException
+import java.io.{NotSerializableException, PrintWriter, StringWriter}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -38,7 +38,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SystemClock, Clock, Utils}
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -61,7 +61,8 @@ class DAGScheduler(
     listenerBus: LiveListenerBus,
     mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,
-    env: SparkEnv)
+    env: SparkEnv,
+    clock: Clock = SystemClock)
   extends Logging {
 
   import DAGScheduler._
@@ -189,7 +190,7 @@ class DAGScheduler(
    * The jobId value passed in will be used if the stage doesn't already exist with
    * a lower jobId (jobId always increases across jobs.)
    */
-  private def getShuffleMapStage(shuffleDep: ShuffleDependency[_,_], jobId: Int): Stage = {
+  private def getShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): Stage = {
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) => stage
       case None =>
@@ -209,7 +210,7 @@ class DAGScheduler(
   private def newStage(
       rdd: RDD[_],
       numTasks: Int,
-      shuffleDep: Option[ShuffleDependency[_,_]],
+      shuffleDep: Option[ShuffleDependency[_, _, _]],
       jobId: Int,
       callSite: Option[String] = None)
     : Stage =
@@ -232,7 +233,7 @@ class DAGScheduler(
   private def newOrUsedStage(
       rdd: RDD[_],
       numTasks: Int,
-      shuffleDep: ShuffleDependency[_,_],
+      shuffleDep: ShuffleDependency[_, _, _],
       jobId: Int,
       callSite: Option[String] = None)
     : Stage =
@@ -268,7 +269,7 @@ class DAGScheduler(
         // we can't do it in its constructor because # of partitions is unknown
         for (dep <- r.dependencies) {
           dep match {
-            case shufDep: ShuffleDependency[_,_] =>
+            case shufDep: ShuffleDependency[_, _, _] =>
               parents += getShuffleMapStage(shufDep, jobId)
             case _ =>
               visit(dep.rdd)
@@ -289,7 +290,7 @@ class DAGScheduler(
         if (getCacheLocs(rdd).contains(Nil)) {
           for (dep <- rdd.dependencies) {
             dep match {
-              case shufDep: ShuffleDependency[_,_] =>
+              case shufDep: ShuffleDependency[_, _, _] =>
                 val mapStage = getShuffleMapStage(shufDep, stage.jobId)
                 if (!mapStage.isAvailable) {
                   missing += mapStage
@@ -580,6 +581,10 @@ class DAGScheduler(
       case e: Exception =>
         jobResult = JobFailed(e)
         job.listener.jobFailed(e)
+      case oom: OutOfMemoryError =>
+        val exception = new SparkException("Local job aborted due to out of memory error", oom)
+        jobResult = JobFailed(exception)
+        job.listener.jobFailed(exception)
     } finally {
       val s = job.finalStage
       stageIdToJobIds -= s.id    // clean up data structures that were populated for a local job,
@@ -777,7 +782,7 @@ class DAGScheduler(
       logDebug("New pending tasks: " + myPending)
       taskScheduler.submitTasks(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
-      stageToInfos(stage).submissionTime = Some(System.currentTimeMillis())
+      stageToInfos(stage).submissionTime = Some(clock.getTime())
     } else {
       logDebug("Stage " + stage + " is actually done; %b %d %d".format(
         stage.isAvailable, stage.numAvailableOutputs, stage.numPartitions))
@@ -803,11 +808,11 @@ class DAGScheduler(
 
     def markStageAsFinished(stage: Stage) = {
       val serviceTime = stageToInfos(stage).submissionTime match {
-        case Some(t) => "%.03f".format((System.currentTimeMillis() - t) / 1000.0)
+        case Some(t) => "%.03f".format((clock.getTime() - t) / 1000.0)
         case _ => "Unknown"
       }
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
-      stageToInfos(stage).completionTime = Some(System.currentTimeMillis())
+      stageToInfos(stage).completionTime = Some(clock.getTime())
       listenerBus.post(SparkListenerStageCompleted(stageToInfos(stage)))
       runningStages -= stage
     }
@@ -1011,7 +1016,7 @@ class DAGScheduler(
       return
     }
     val dependentStages = resultStageToJob.keys.filter(x => stageDependsOn(x, failedStage)).toSeq
-    stageToInfos(failedStage).completionTime = Some(System.currentTimeMillis())
+    stageToInfos(failedStage).completionTime = Some(clock.getTime())
     for (resultStage <- dependentStages) {
       val job = resultStageToJob(resultStage)
       failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason",
@@ -1083,7 +1088,7 @@ class DAGScheduler(
         visitedRdds += rdd
         for (dep <- rdd.dependencies) {
           dep match {
-            case shufDep: ShuffleDependency[_,_] =>
+            case shufDep: ShuffleDependency[_, _, _] =>
               val mapStage = getShuffleMapStage(shufDep, stage.jobId)
               if (!mapStage.isAvailable) {
                 visitedStages += mapStage

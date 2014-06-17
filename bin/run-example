@@ -23,6 +23,16 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 export SPARK_HOME="$FWDIR"
 EXAMPLES_DIR="$FWDIR"/examples
 
+if [ -n "$1" ]; then
+  EXAMPLE_CLASS="$1"
+  shift
+else
+  echo "Usage: ./bin/run-example <example-class> [example-args]"
+  echo "  - set MASTER=XX to use a specific master"
+  echo "  - can use abbreviated example class name (e.g. SparkPi, mllib.LinearRegression)"
+  exit 1
+fi
+
 if [ -f "$FWDIR/RELEASE" ]; then
   export SPARK_EXAMPLES_JAR=`ls "$FWDIR"/lib/spark-examples-*hadoop*.jar`
 elif [ -e "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.jar ]; then
@@ -37,23 +47,12 @@ fi
 
 EXAMPLE_MASTER=${MASTER:-"local[*]"}
 
-if [ -n "$1" ]; then
-  EXAMPLE_CLASS="$1"
-  shift
-else 
-  echo "usage: ./bin/run-example <example-class> [example-args]" 
-  echo "  - set MASTER=XX to use a specific master"
-  echo "  - can use abbreviated example class name (e.g. SparkPi, mllib.MovieLensALS)"
-  echo
-  exit -1
-fi
-
 if [[ ! $EXAMPLE_CLASS == org.apache.spark.examples* ]]; then
   EXAMPLE_CLASS="org.apache.spark.examples.$EXAMPLE_CLASS"
 fi
 
-./bin/spark-submit \
+"$FWDIR"/bin/spark-submit \
   --master $EXAMPLE_MASTER \
   --class $EXAMPLE_CLASS \
-  $SPARK_EXAMPLES_JAR \
+  "$SPARK_EXAMPLES_JAR" \
   "$@"

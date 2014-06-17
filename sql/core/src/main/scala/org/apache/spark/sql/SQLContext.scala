@@ -31,10 +31,10 @@ import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.{Subquery, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.columnar.InMemoryRelation
 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
@@ -52,6 +52,7 @@ import org.apache.spark.sql.parquet.ParquetRelation
 @AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
   extends Logging
+  with SQLConf
   with dsl.ExpressionConversions
   with Serializable {
 
@@ -146,14 +147,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def sql(sqlText: String): SchemaRDD = {
-    val result = new SchemaRDD(this, parseSql(sqlText))
-    // We force query optimization to happen right away instead of letting it happen lazily like
-    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-    // generates the RDD lineage for DML queries, but do not perform any execution.
-    result.queryExecution.toRdd
-    result
-  }
+  def sql(sqlText: String): SchemaRDD = new SchemaRDD(this, parseSql(sqlText))
 
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =
@@ -165,10 +159,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val useCompression =
       sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
     val asInMemoryRelation =
-      InMemoryColumnarTableScan(
-        currentTable.output, executePlan(currentTable).executedPlan, useCompression)
+      InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
 
-    catalog.registerTable(None, tableName, SparkLogicalPlan(asInMemoryRelation))
+    catalog.registerTable(None, tableName, asInMemoryRelation)
   }
 
   /** Removes the specified table from the in-memory cache. */
@@ -176,24 +169,38 @@ class SQLContext(@transient val sparkContext: SparkContext)
     EliminateAnalysisOperators(catalog.lookupRelation(None, tableName)) match {
       // This is kind of a hack to make sure that if this was just an RDD registered as a table,
       // we reregister the RDD as a table.
-      case SparkLogicalPlan(inMem @ InMemoryColumnarTableScan(_, e: ExistingRdd, _)) =>
+      case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
         catalog.registerTable(None, tableName, SparkLogicalPlan(e))
-      case SparkLogicalPlan(inMem: InMemoryColumnarTableScan) =>
+      case inMem: InMemoryRelation =>
         inMem.cachedColumnBuffers.unpersist()
         catalog.unregisterTable(None, tableName)
       case plan => throw new IllegalArgumentException(s"Table $tableName is not cached: $plan")
     }
   }
 
+  /** Returns true if the table is currently cached in-memory. */
+  def isCached(tableName: String): Boolean = {
+    val relation = catalog.lookupRelation(None, tableName)
+    EliminateAnalysisOperators(relation) match {
+      case _: InMemoryRelation => true
+      case _ => false
+    }
+  }
+
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext = self.sparkContext
 
+    def numPartitions = self.numShufflePartitions
+
     val strategies: Seq[Strategy] =
+      CommandStrategy(self) ::
       TakeOrdered ::
       PartialAggregation ::
+      LeftSemiJoin ::
       HashJoin ::
+      InMemoryScans ::
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
@@ -206,17 +213,21 @@ class SQLContext(@transient val sparkContext: SparkContext)
      * final desired output requires complex expressions to be evaluated or when columns can be
      * further eliminated out after filtering has been done.
      *
+     * The `prunePushedDownFilters` parameter is used to remove those filters that can be optimized
+     * away by the filter pushdown optimization.
+     *
      * The required attributes for both filtering and expression evaluation are passed to the
      * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
      */
     def pruneFilterProject(
         projectList: Seq[NamedExpression],
         filterPredicates: Seq[Expression],
+        prunePushedDownFilters: Seq[Expression] => Seq[Expression],
         scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
 
       val projectSet = projectList.flatMap(_.references).toSet
       val filterSet = filterPredicates.flatMap(_.references).toSet
-      val filterCondition = filterPredicates.reduceLeftOption(And)
+      val filterCondition = prunePushedDownFilters(filterPredicates).reduceLeftOption(And)
 
       // Right now we still use a projection even if the only evaluation is applying an alias
       // to a column.  Since this is a no-op, it could be avoided. However, using this
@@ -240,6 +251,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val planner = new SparkPlanner
 
+  @transient
+  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[Row], 1)
+
   /**
    * Prepares a planned SparkPlan for execution by binding references to specific ordinals, and
    * inserting shuffle operations as needed.
@@ -247,7 +261,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
-      Batch("Add exchange", Once, AddExchange) ::
+      Batch("Add exchange", Once, AddExchange(self)) ::
       Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
   }
 
@@ -280,28 +294,32 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
       """.stripMargin.trim
-
-    /**
-     * Runs the query after interposing operators that print the result of each intermediate step.
-     */
-    def debugExec() = DebugQuery(executedPlan).execute().collect()
   }
 
   /**
    * Peek at the first row of the RDD and infer its schema.
-   * TODO: We only support primitive types, add support for nested types.
+   * TODO: consolidate this with the type system developed in SPARK-2060.
    */
   private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
-    val schema = rdd.first.map { case (fieldName, obj) =>
-      val dataType = obj.getClass match {
-        case c: Class[_] if c == classOf[java.lang.String] => StringType
-        case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
-        case c: Class[_] if c == classOf[java.lang.Long] => LongType
-        case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
-        case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
-        case c => throw new Exception(s"Object of type $c cannot be used")
-      }
-      AttributeReference(fieldName, dataType, true)()
+    import scala.collection.JavaConversions._
+    def typeFor(obj: Any): DataType = obj match {
+      case c: java.lang.String => StringType
+      case c: java.lang.Integer => IntegerType
+      case c: java.lang.Long => LongType
+      case c: java.lang.Double => DoubleType
+      case c: java.lang.Boolean => BooleanType
+      case c: java.util.List[_] => ArrayType(typeFor(c.head))
+      case c: java.util.Set[_] => ArrayType(typeFor(c.head))
+      case c: java.util.Map[_, _] =>
+        val (key, value) = c.head
+        MapType(typeFor(key), typeFor(value))
+      case c if c.getClass.isArray =>
+        val elem = c.asInstanceOf[Array[_]].head
+        ArrayType(typeFor(elem))
+      case c => throw new Exception(s"Object of type $c cannot be used")
+    }
+    val schema = rdd.first().map { case (fieldName, obj) =>
+      AttributeReference(fieldName, typeFor(obj), true)()
     }.toSeq
 
     val rowRdd = rdd.mapPartitions { iter =>

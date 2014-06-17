@@ -21,14 +21,12 @@ import java.nio.ByteBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.DataOutputBuffer
-import org.apache.hadoop.yarn.api._
-import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.client.api.impl.YarnClientImpl
+import org.apache.hadoop.yarn.client.api.YarnClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
-import org.apache.hadoop.yarn.util.{Apps, Records}
+import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{Logging, SparkConf}
 
@@ -37,7 +35,9 @@ import org.apache.spark.{Logging, SparkConf}
  * Version of [[org.apache.spark.deploy.yarn.ClientBase]] tailored to YARN's stable API.
  */
 class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: SparkConf)
-  extends YarnClientImpl with ClientBase with Logging {
+  extends ClientBase with Logging {
+
+  val yarnClient = YarnClient.createYarnClient
 
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
     this(clientArgs, new Configuration(), spConf)
@@ -53,8 +53,8 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
   def runApp(): ApplicationId = {
     validateArgs()
     // Initialize and start the client service.
-    init(yarnConf)
-    start()
+    yarnClient.init(yarnConf)
+    yarnClient.start()
 
     // Log details about this YARN cluster (e.g, the number of slave machines/NodeManagers).
     logClusterResourceDetails()
@@ -63,7 +63,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     // interface).
 
     // Get a new client application.
-    val newApp = super.createApplication()
+    val newApp = yarnClient.createApplication()
     val newAppResponse = newApp.getNewApplicationResponse()
     val appId = newAppResponse.getApplicationId()
 
@@ -84,7 +84,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 
     // Memory for the ApplicationMaster.
     val memoryResource = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
-    memoryResource.setMemory(args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
+    memoryResource.setMemory(args.amMemory + memoryOverhead)
     appContext.setResource(memoryResource)
 
     // Finally, submit and monitor the application.
@@ -95,15 +95,14 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
   def run() {
     val appId = runApp()
     monitorApplication(appId)
-    System.exit(0)
   }
 
   def logClusterResourceDetails() {
-    val clusterMetrics: YarnClusterMetrics = super.getYarnClusterMetrics
-    logInfo("Got Cluster metric info from ApplicationsManager (ASM), number of NodeManagers: " +
+    val clusterMetrics: YarnClusterMetrics = yarnClient.getYarnClusterMetrics
+    logInfo("Got Cluster metric info from ResourceManager, number of NodeManagers: " +
       clusterMetrics.getNumNodeManagers)
 
-    val queueInfo: QueueInfo = super.getQueueInfo(args.amQueue)
+    val queueInfo: QueueInfo = yarnClient.getQueueInfo(args.amQueue)
     logInfo( """Queue info ... queueName: %s, queueCurrentCapacity: %s, queueMaxCapacity: %s,
       queueApplicationCount = %s, queueChildQueueCount = %s""".format(
         queueInfo.getQueueName,
@@ -118,7 +117,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     // val minResMemory: Int = newApp.getMinimumResourceCapability().getMemory()
     // var amMemory = ((args.amMemory / minResMemory) * minResMemory) +
     //  ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
-    //    YarnAllocationHandler.MEMORY_OVERHEAD)
+    //    memoryOverhead )
     args.amMemory
   }
 
@@ -131,18 +130,23 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 
   def submitApp(appContext: ApplicationSubmissionContext) = {
     // Submit the application to the applications manager.
-    logInfo("Submitting application to ASM")
-    super.submitApplication(appContext)
+    logInfo("Submitting application to ResourceManager")
+    yarnClient.submitApplication(appContext)
   }
+
+  def getApplicationReport(appId: ApplicationId) =
+      yarnClient.getApplicationReport(appId)
+
+  def stop = yarnClient.stop
 
   def monitorApplication(appId: ApplicationId): Boolean = {
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
 
     while (true) {
       Thread.sleep(interval)
-      val report = super.getApplicationReport(appId)
+      val report = yarnClient.getApplicationReport(appId)
 
-      logInfo("Application report from ASM: \n" +
+      logInfo("Application report from ResourceManager: \n" +
         "\t application identifier: " + appId.toString() + "\n" +
         "\t appId: " + appId.getId() + "\n" +
         "\t clientToAMToken: " + report.getClientToAMToken() + "\n" +
@@ -181,9 +185,18 @@ object Client {
     // see Client#setupLaunchEnv().
     System.setProperty("SPARK_YARN_MODE", "true")
     val sparkConf = new SparkConf()
-    val args = new ClientArguments(argStrings, sparkConf)
 
-    new Client(args, sparkConf).run()
+    try {
+      val args = new ClientArguments(argStrings, sparkConf)
+      new Client(args, sparkConf).run()
+    } catch {
+      case e: Exception => {
+        Console.err.println(e.getMessage)
+        System.exit(1)
+      }
+    }
+
+    System.exit(0)
   }
 
 }

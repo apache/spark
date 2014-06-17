@@ -24,7 +24,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd._
+import org.apache.spark.util.Utils
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
@@ -66,6 +66,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("serialization") {
+    val empty = new EmptyRDD[Int](sc)
+    val serial = Utils.serialize(empty)
+    val deserial: EmptyRDD[Int] = Utils.deserialize(serial)
+    assert(!deserial.toString().isEmpty())
+  }
+
   test("countApproxDistinct") {
 
     def error(est: Long, size: Long) = math.abs(est - size) / size.toDouble
@@ -73,10 +80,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val size = 100
     val uniformDistro = for (i <- 1 to 100000) yield i % size
     val simpleRdd = sc.makeRDD(uniformDistro)
-    assert(error(simpleRdd.countApproxDistinct(0.2), size) < 0.2)
-    assert(error(simpleRdd.countApproxDistinct(0.05), size) < 0.05)
-    assert(error(simpleRdd.countApproxDistinct(0.01), size) < 0.01)
-    assert(error(simpleRdd.countApproxDistinct(0.001), size) < 0.001)
+    assert(error(simpleRdd.countApproxDistinct(4, 0), size) < 0.4)
+    assert(error(simpleRdd.countApproxDistinct(8, 0), size) < 0.1)
   }
 
   test("SparkContext.union") {
@@ -268,8 +273,9 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     // we can optionally shuffle to keep the upstream parallel
     val coalesced5 = data.coalesce(1, shuffle = true)
-    assert(coalesced5.dependencies.head.rdd.dependencies.head.rdd.asInstanceOf[ShuffledRDD[_, _, _]] !=
-      null)
+    val isEquals = coalesced5.dependencies.head.rdd.dependencies.head.rdd.
+      asInstanceOf[ShuffledRDD[_, _, _]] != null
+    assert(isEquals)
 
     // when shuffling, we can increase the number of partitions
     val coalesced6 = data.coalesce(20, shuffle = true)
@@ -351,6 +357,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     intercept[IllegalArgumentException] {
       nums.zip(sc.parallelize(1 to 4, 1)).collect()
+    }
+
+    intercept[SparkException] {
+      nums.zip(sc.parallelize(1 to 5, 2)).collect()
     }
   }
 
@@ -495,55 +505,56 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("takeSample") {
-    val data = sc.parallelize(1 to 100, 2)
+    val n = 1000000
+    val data = sc.parallelize(1 to n, 2)
     
     for (num <- List(5, 20, 100)) {
       val sample = data.takeSample(withReplacement=false, num=num)
       assert(sample.size === num)        // Got exactly num elements
       assert(sample.toSet.size === num)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
       assert(sample.toSet.size === 20)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=false, 200, seed)
+      val sample = data.takeSample(withReplacement=false, 100, seed)
       assert(sample.size === 100)        // Got only 100 elements
       assert(sample.toSet.size === 100)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=true, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
       val sample = data.takeSample(withReplacement=true, num=20)
       assert(sample.size === 20)        // Got exactly 100 elements
       assert(sample.toSet.size <= 20, "sampling with replacement returned all distinct elements")
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
-      val sample = data.takeSample(withReplacement=true, num=100)
-      assert(sample.size === 100)        // Got exactly 100 elements
+      val sample = data.takeSample(withReplacement=true, num=n)
+      assert(sample.size === n)        // Got exactly 100 elements
       // Chance of getting all distinct elements is astronomically low, so test we got < 100
-      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, 100, seed)
-      assert(sample.size === 100)        // Got exactly 100 elements
+      val sample = data.takeSample(withReplacement=true, n, seed)
+      assert(sample.size === n)        // Got exactly 100 elements
       // Chance of getting all distinct elements is astronomically low, so test we got < 100
-      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
+      assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, 200, seed)
-      assert(sample.size === 200)        // Got exactly 200 elements
+      val sample = data.takeSample(withReplacement=true, 2 * n, seed)
+      assert(sample.size === 2 * n)        // Got exactly 200 elements
       // Chance of getting all distinct elements is still quite low, so test we got < 100
-      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
+      assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
   }
 

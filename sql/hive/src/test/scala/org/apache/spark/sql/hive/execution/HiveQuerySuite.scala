@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
+import scala.util.Try
+
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.{SchemaRDD, execution, Row}
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -25,8 +29,10 @@ import org.apache.spark.sql.hive.test.TestHive._
 class HiveQuerySuite extends HiveComparisonTest {
 
   createQueryTest("between",
-    "SELECT * FROM src WHERE key between 1 and 2"
-  )
+    "SELECT * FROM src WHERE key Between 1 and 2")
+
+  createQueryTest("div",
+    "SELECT 1 DIV 2, 1 div 2, 1 dIv 2 FROM src LIMIT 1")
 
   test("Query expressed in SQL") {
     assert(sql("SELECT 1").collect() === Array(Seq(1)))
@@ -157,4 +163,154 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SHOW TABLES").toString
     hql("SELECT * FROM src").toString
   }
+
+  private val explainCommandClassName =
+    classOf[execution.ExplainCommand].getSimpleName.stripSuffix("$")
+
+  def isExplanation(result: SchemaRDD) = {
+    val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
+    explanation.size > 1 && explanation.head.startsWith(explainCommandClassName)
+  }
+
+  test("SPARK-1704: Explain commands as a SchemaRDD") {
+    hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+
+    val rdd = hql("explain select key, count(value) from src group by key")
+    assert(isExplanation(rdd))
+
+    TestHive.reset()
+  }
+
+  test("Query Hive native command execution result") {
+    val tableName = "test_native_commands"
+
+    assertResult(0) {
+      hql(s"DROP TABLE IF EXISTS $tableName").count()
+    }
+
+    assertResult(0) {
+      hql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
+    }
+
+    assert(
+      hql("SHOW TABLES")
+        .select('result)
+        .collect()
+        .map(_.getString(0))
+        .contains(tableName))
+
+    assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
+      hql(s"DESCRIBE $tableName")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    assert(isExplanation(hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
+
+    TestHive.reset()
+  }
+
+  test("Exactly once semantics for DDL and command statements") {
+    val tableName = "test_exactly_once"
+    val q0 = hql(s"CREATE TABLE $tableName(key INT, value STRING)")
+
+    // If the table was not created, the following assertion would fail
+    assert(Try(table(tableName)).isSuccess)
+
+    // If the CREATE TABLE command got executed again, the following assertion would fail
+    assert(Try(q0.count()).isSuccess)
+  }
+
+  test("parse HQL set commands") {
+    // Adapted from its SQL counterpart.
+    val testKey = "spark.sql.key.usedfortestonly"
+    val testVal = "val0,val_1,val2.3,my_table"
+
+    hql(s"set $testKey=$testVal")
+    assert(get(testKey, testVal + "_") == testVal)
+
+    hql("set mapred.reduce.tasks=20")
+    assert(get("mapred.reduce.tasks", "0") == "20")
+    hql("set mapred.reduce.tasks = 40")
+    assert(get("mapred.reduce.tasks", "0") == "40")
+
+    hql(s"set $testKey=$testVal")
+    assert(get(testKey, "0") == testVal)
+
+    hql(s"set $testKey=")
+    assert(get(testKey, "0") == "")
+  }
+
+  test("SET commands semantics for a HiveContext") {
+    // Adapted from its SQL counterpart.
+    val testKey = "spark.sql.key.usedfortestonly"
+    val testVal = "test.val.0"
+    val nonexistentKey = "nonexistent"
+    def rowsToPairs(rows: Array[Row]) = rows.map { case Row(key: String, value: String) =>
+      key -> value
+    }
+
+    clear()
+
+    // "set" itself returns all config variables currently specified in SQLConf.
+    assert(hql("SET").collect().size == 0)
+
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql(s"SET $testKey=$testVal").collect())
+    }
+
+    assert(hiveconf.get(testKey, "") == testVal)
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql("SET").collect())
+    }
+
+    hql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      rowsToPairs(hql("SET").collect())
+    }
+
+    // "set key"
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql(s"SET $testKey").collect())
+    }
+
+    assertResult(Array(nonexistentKey -> "<undefined>")) {
+      rowsToPairs(hql(s"SET $nonexistentKey").collect())
+    }
+
+    // Assert that sql() should have the same effects as hql() by repeating the above using sql().
+    clear()
+    assert(sql("SET").collect().size == 0)
+
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql(s"SET $testKey=$testVal").collect())
+    }
+
+    assert(hiveconf.get(testKey, "") == testVal)
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql("SET").collect())
+    }
+
+    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      rowsToPairs(sql("SET").collect())
+    }
+
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql(s"SET $testKey").collect())
+    }
+
+    assertResult(Array(nonexistentKey -> "<undefined>")) {
+      rowsToPairs(sql(s"SET $nonexistentKey").collect())
+    }
+
+    clear()
+  }
+
+  // Put tests that depend on specific Hive settings before these last two test,
+  // since they modify /clear stuff.
+
 }

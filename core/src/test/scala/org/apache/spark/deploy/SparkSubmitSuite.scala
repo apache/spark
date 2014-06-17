@@ -25,9 +25,9 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, Test
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
-class SparkSubmitSuite extends FunSuite with ShouldMatchers {
+class SparkSubmitSuite extends FunSuite with Matchers {
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }
@@ -91,7 +91,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
       "--jars=one.jar,two.jar,three.jar",
       "--name=myApp")
     val appArgs = new SparkSubmitArguments(clArgs)
-    appArgs.jars should be ("one.jar,two.jar,three.jar")
+    appArgs.jars should include regex (".*one.jar,.*two.jar,.*three.jar")
     appArgs.name should be ("myApp")
   }
 
@@ -125,17 +125,17 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     val childArgsStr = childArgs.mkString(" ")
-    childArgsStr should include ("--jar thejar.jar")
     childArgsStr should include ("--class org.SomeClass")
-    childArgsStr should include ("--addJars one.jar,two.jar,three.jar")
     childArgsStr should include ("--executor-memory 5g")
     childArgsStr should include ("--driver-memory 4g")
     childArgsStr should include ("--executor-cores 5")
     childArgsStr should include ("--arg arg1 --arg arg2")
     childArgsStr should include ("--queue thequeue")
-    childArgsStr should include ("--files file1.txt,file2.txt")
-    childArgsStr should include ("--archives archive1.txt,archive2.txt")
     childArgsStr should include ("--num-executors 6")
+    childArgsStr should include regex ("--jar .*thejar.jar")
+    childArgsStr should include regex ("--addJars .*one.jar,.*two.jar,.*three.jar")
+    childArgsStr should include regex ("--files .*file1.txt,.*file2.txt")
+    childArgsStr should include regex ("--archives .*archive1.txt,.*archive2.txt")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
     classpath should have length (0)
     sysProps("spark.app.name") should be ("beauty")
@@ -162,18 +162,19 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
-    classpath should contain ("thejar.jar")
-    classpath should contain ("one.jar")
-    classpath should contain ("two.jar")
-    classpath should contain ("three.jar")
+    classpath should have length (4)
+    classpath(0) should endWith ("thejar.jar")
+    classpath(1) should endWith ("one.jar")
+    classpath(2) should endWith ("two.jar")
+    classpath(3) should endWith ("three.jar")
     sysProps("spark.app.name") should be ("trill")
-    sysProps("spark.jars") should be ("one.jar,two.jar,three.jar,thejar.jar")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.executor.cores") should be ("5")
     sysProps("spark.yarn.queue") should be ("thequeue")
-    sysProps("spark.yarn.dist.files") should be ("file1.txt,file2.txt")
-    sysProps("spark.yarn.dist.archives") should be ("archive1.txt,archive2.txt")
     sysProps("spark.executor.instances") should be ("6")
+    sysProps("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
+    sysProps("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
+    sysProps("spark.jars") should include regex (".*one.jar,.*two.jar,.*three.jar,.*thejar.jar")
     sysProps("SPARK_SUBMIT") should be ("true")
   }
 
@@ -190,11 +191,13 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     val childArgsStr = childArgs.mkString(" ")
-    childArgsStr.startsWith("--memory 4g --cores 5 --supervise") should be (true)
-    childArgsStr should include ("launch spark://h:p thejar.jar org.SomeClass arg1 arg2")
+    childArgsStr should startWith ("--memory 4g --cores 5 --supervise")
+    childArgsStr should include regex ("launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2")
     mainClass should be ("org.apache.spark.deploy.Client")
-    classpath should have length (0)
-    sysProps should have size (2) // contains --jar entry and SPARK_SUBMIT
+    classpath should have size (0)
+    sysProps should have size (2)
+    sysProps.keys should contain ("spark.jars")
+    sysProps.keys should contain ("SPARK_SUBMIT")
   }
 
   test("handles standalone client mode") {
@@ -211,7 +214,8 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
-    classpath should contain ("thejar.jar")
+    classpath should have length (1)
+    classpath(0) should endWith ("thejar.jar")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.cores.max") should be ("5")
   }
@@ -230,7 +234,8 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
-    classpath should contain ("thejar.jar")
+    classpath should have length (1)
+    classpath(0) should endWith ("thejar.jar")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.cores.max") should be ("5")
   }

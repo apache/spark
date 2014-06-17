@@ -20,6 +20,7 @@ package org.apache.spark.util
 import scala.util.Random
 
 import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
+import java.net.URI
 import java.nio.{ByteBuffer, ByteOrder}
 
 import com.google.common.base.Charsets
@@ -139,6 +140,38 @@ class UtilsSuite extends FunSuite {
     Utils.deleteRecursively(tmpDir2)
   }
 
+  test("reading offset bytes across multiple files") {
+    val tmpDir = Files.createTempDir()
+    tmpDir.deleteOnExit()
+    val files = (1 to 3).map(i => new File(tmpDir, i.toString))
+    Files.write("0123456789", files(0), Charsets.UTF_8)
+    Files.write("abcdefghij", files(1), Charsets.UTF_8)
+    Files.write("ABCDEFGHIJ", files(2), Charsets.UTF_8)
+
+    // Read first few bytes in the 1st file
+    assert(Utils.offsetBytes(files, 0, 5) === "01234")
+
+    // Read bytes within the 1st file
+    assert(Utils.offsetBytes(files, 5, 8) === "567")
+
+    // Read bytes across 1st and 2nd file
+    assert(Utils.offsetBytes(files, 8, 18) === "89abcdefgh")
+
+    // Read bytes across 1st, 2nd and 3rd file
+    assert(Utils.offsetBytes(files, 5, 24) === "56789abcdefghijABCD")
+
+    // Read some nonexistent bytes in the beginning
+    assert(Utils.offsetBytes(files, -5, 18) === "0123456789abcdefgh")
+
+    // Read some nonexistent bytes at the end
+    assert(Utils.offsetBytes(files, 18, 35) === "ijABCDEFGHIJ")
+
+    // Read some nonexistent bytes on both ends
+    assert(Utils.offsetBytes(files, -5, 35) === "0123456789abcdefghijABCDEFGHIJ")
+
+    Utils.deleteRecursively(tmpDir)
+  }
+
   test("deserialize long value") {
     val testval : Long = 9730889947L
     val bbuf = ByteBuffer.allocate(8)
@@ -168,5 +201,68 @@ class UtilsSuite extends FunSuite {
     assert(result.size.equals(1))
     assert(result(0).getCanonicalPath.equals(child1.getCanonicalPath))
   }
-}
 
+  test("resolveURI") {
+    def assertResolves(before: String, after: String, testWindows: Boolean = false): Unit = {
+      assume(before.split(",").length == 1)
+      assert(Utils.resolveURI(before, testWindows) === new URI(after))
+      assert(Utils.resolveURI(after, testWindows) === new URI(after))
+      assert(new URI(Utils.resolveURIs(before, testWindows)) === new URI(after))
+      assert(new URI(Utils.resolveURIs(after, testWindows)) === new URI(after))
+    }
+    val cwd = System.getProperty("user.dir")
+    assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
+    assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
+    assertResolves("spark.jar", s"file:$cwd/spark.jar")
+    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
+    assertResolves("C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt", testWindows = true)
+    assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt", testWindows = true)
+    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo") }
+    intercept[IllegalArgumentException] { Utils.resolveURI("file:foo:baby") }
+
+    // Test resolving comma-delimited paths
+    assert(Utils.resolveURIs("jar1,jar2") === s"file:$cwd/jar1,file:$cwd/jar2")
+    assert(Utils.resolveURIs("file:/jar1,file:/jar2") === "file:/jar1,file:/jar2")
+    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3") ===
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
+    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3,jar4#jar5") ===
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5")
+    assert(Utils.resolveURIs("hdfs:/jar1,file:/jar2,jar3,C:\\pi.py#py.pi", testWindows = true) ===
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi")
+  }
+
+  test("nonLocalPaths") {
+    assert(Utils.nonLocalPaths("spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("file:/spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("file:///spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("local:/spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("local:///spark.jar") === Array.empty)
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar") === Array("hdfs:/spark.jar"))
+    assert(Utils.nonLocalPaths("hdfs:///spark.jar") === Array("hdfs:///spark.jar"))
+    assert(Utils.nonLocalPaths("file:/spark.jar,local:/smart.jar,family.py") === Array.empty)
+    assert(Utils.nonLocalPaths("local:/spark.jar,file:/smart.jar,family.py") === Array.empty)
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/spark.jar,s3:/smart.jar,local.py,file:/hello/pi.py") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+    assert(Utils.nonLocalPaths("local.py,hdfs:/spark.jar,file:/hello/pi.py,s3:/smart.jar") ===
+      Array("hdfs:/spark.jar", "s3:/smart.jar"))
+
+    // Test Windows paths
+    assert(Utils.nonLocalPaths("C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("file:/C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("file:///C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("local:/C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("local:///C:/some/path.jar", testWindows = true) === Array.empty)
+    assert(Utils.nonLocalPaths("hdfs:/a.jar,C:/my.jar,s3:/another.jar", testWindows = true) ===
+      Array("hdfs:/a.jar", "s3:/another.jar"))
+    assert(Utils.nonLocalPaths("D:/your.jar,hdfs:/a.jar,s3:/another.jar", testWindows = true) ===
+      Array("hdfs:/a.jar", "s3:/another.jar"))
+    assert(Utils.nonLocalPaths("hdfs:/a.jar,s3:/another.jar,e:/our.jar", testWindows = true) ===
+      Array("hdfs:/a.jar", "s3:/another.jar"))
+  }
+
+}

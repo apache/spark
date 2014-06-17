@@ -119,6 +119,11 @@ object HashFilteredJoin extends Logging with PredicateHelper {
     case FilteredOperation(predicates, join @ Join(left, right, Inner, condition)) =>
       logger.debug(s"Considering hash inner join on: ${predicates ++ condition}")
       splitPredicates(predicates ++ condition, join)
+    // All predicates can be evaluated for left semi join (those that are in the WHERE
+    // clause can only from left table, so they can all be pushed down.)
+    case FilteredOperation(predicates, join @ Join(left, right, LeftSemi, condition)) =>
+      logger.debug(s"Considering hash left semi join on: ${predicates ++ condition}")
+      splitPredicates(predicates ++ condition, join)
     case join @ Join(left, right, joinType, condition) =>
       logger.debug(s"Considering hash join on: $condition")
       splitPredicates(condition.toSeq, join)
@@ -129,11 +134,12 @@ object HashFilteredJoin extends Logging with PredicateHelper {
   // as join keys.
   def splitPredicates(allPredicates: Seq[Expression], join: Join): Option[ReturnType] = {
     val Join(left, right, joinType, _) = join
-    val (joinPredicates, otherPredicates) = allPredicates.partition {
-      case Equals(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
-        (canEvaluate(l, right) && canEvaluate(r, left)) => true
-      case _ => false
-    }
+    val (joinPredicates, otherPredicates) =
+      allPredicates.flatMap(splitConjunctivePredicates).partition {
+        case Equals(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
+          (canEvaluate(l, right) && canEvaluate(r, left)) => true
+        case _ => false
+      }
 
     val joinKeys = joinPredicates.map {
       case Equals(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)

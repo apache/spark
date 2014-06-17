@@ -70,7 +70,7 @@ class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
   }
 
   /**
-   *  Return a sampler with is the complement of the range specified of the current sampler.
+   *  Return a sampler that is the complement of the range specified of the current sampler.
    */
   def cloneComplement():  BernoulliSampler[T] = new BernoulliSampler[T](lb, ub, !complement)
 
