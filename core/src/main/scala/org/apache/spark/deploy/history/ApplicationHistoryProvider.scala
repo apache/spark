@@ -30,15 +30,14 @@ private[spark] case class ApplicationHistoryInfo(
 private[spark] abstract class ApplicationHistoryProvider {
 
   /**
-   * This method should return a list of applications available for the history server to
-   * show.
+   * Returns a list of applications available for the history server to show.
    *
    * @return List of all know applications.
    */
   def getListing(): Seq[ApplicationHistoryInfo]
 
   /**
-   * This method should return the application UI.
+   * Returns the Spark UI for a specific application.
    *
    * @param appId The application ID.
    * @return The application's UI, or null if application is not found.
@@ -51,7 +50,7 @@ private[spark] abstract class ApplicationHistoryProvider {
   def stop(): Unit = { }
 
   /**
-   * Returns configuration data to be shown in the HS home page.
+   * Returns configuration data to be shown in the History Server home page.
    *
    * @return A map with the configuration data. Data is show in the order returned by the map.
    */
