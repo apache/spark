@@ -53,8 +53,8 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
 
   // env variable SPARK_YARN_DIST_ARCHIVES/SPARK_YARN_DIST_FILES set in yarn-client then
   // it should default to hdfs://
-  files = Option(files).getOrElse(sys.props.get("SPARK_YARN_DIST_FILES").orNull)
-  archives = Option(archives).getOrElse(sys.props.get("SPARK_YARN_DIST_ARCHIVES").orNull)
+  files = Option(files).getOrElse(sys.env.get("SPARK_YARN_DIST_FILES").orNull)
+  archives = Option(archives).getOrElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES").orNull)
 
   // spark.yarn.dist.archives/spark.yarn.dist.files defaults to use file:// if not specified,
   // for both yarn-client and yarn-cluster
