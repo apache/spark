@@ -351,12 +351,6 @@ trait ClientBase extends Logging {
       javaOpts += "-XX:CMSIncrementalDutyCycle=10"
     }
 
-    // SPARK_JAVA_OPTS is deprecated, but for backwards compatibility:
-    sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
-      sparkConf.set("spark.executor.extraJavaOptions", opts)
-      sparkConf.set("spark.driver.extraJavaOptions", opts)
-    }
-
     // Forward the Spark configuration to the application master / executors.
     // TODO: it might be nicer to pass these as an internal environment variable rather than
     // as Java options, due to complications with string parsing of nested quotes.
@@ -364,8 +358,9 @@ trait ClientBase extends Logging {
       javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
     }
     if (args.amClass == classOf[ApplicationMaster].getName) {
-      sys.props.get("spark.driver.extraJavaOptions").foreach(opts => javaOpts += opts)
-      sys.props.get("spark.driver.libraryPath").foreach(p => javaOpts += s"-Djava.library.path=$p")
+      sparkConf.getOption("spark.driver.extraJavaOptions").foreach(opts => javaOpts += opts)
+      sparkConf.getOption("spark.driver.libraryPath")
+        .foreach(p => javaOpts += s"-Djava.library.path=$p")
     }
 
     // Command for the ApplicationMaster

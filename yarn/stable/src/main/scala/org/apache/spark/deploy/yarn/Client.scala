@@ -185,6 +185,7 @@ object Client {
     // see Client#setupLaunchEnv().
     System.setProperty("SPARK_YARN_MODE", "true")
     val sparkConf = new SparkConf()
+    sparkConf.validateSettings()
 
     try {
       val args = new ClientArguments(argStrings, sparkConf)
