@@ -44,13 +44,6 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
 
   parseArgs(args.toList)
 
-  // -archives/--files via spark submit or yarn-client defaults to use file:// if not specified
-  if (sys.props.contains("SPARK_SUBMIT") || (sparkConf.getOption("spark.master").isDefined &&
-    sparkConf.get("spark.master") == "yarn-client")) {
-    files = Option(files).map(p => Utils.resolveURIs(p)).orNull
-    archives = Option(archives).map(p => Utils.resolveURIs(p)).orNull
-  }
-
   // env variable SPARK_YARN_DIST_ARCHIVES/SPARK_YARN_DIST_FILES set in yarn-client then
   // it should default to hdfs://
   files = Option(files).getOrElse(sys.env.get("SPARK_YARN_DIST_FILES").orNull)
