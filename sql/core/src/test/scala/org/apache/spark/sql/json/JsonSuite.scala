@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, getCompatibleType}
+import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, compatibleType}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.TestSQLContext._
 
@@ -58,10 +58,10 @@ class JsonSuite extends QueryTest {
 
   test("Get compatible type") {
     def checkDataType(t1: DataType, t2: DataType, expected: DataType) {
-      var actual = getCompatibleType(t1, t2)
+      var actual = compatibleType(t1, t2)
       assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")
-      actual = getCompatibleType(t2, t1)
+      actual = compatibleType(t2, t1)
       assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")
     }
@@ -494,12 +494,12 @@ class JsonSuite extends QueryTest {
 
     val expectedSchema =
       AttributeReference("bigInteger", DecimalType, true)() ::
-        AttributeReference("boolean", BooleanType, true)() ::
-        AttributeReference("double", DoubleType, true)() ::
-        AttributeReference("integer", IntegerType, true)() ::
-        AttributeReference("long", LongType, true)() ::
-        AttributeReference("null", StringType, true)() ::
-        AttributeReference("string", StringType, true)() :: Nil
+      AttributeReference("boolean", BooleanType, true)() ::
+      AttributeReference("double", DoubleType, true)() ::
+      AttributeReference("integer", IntegerType, true)() ::
+      AttributeReference("long", LongType, true)() ::
+      AttributeReference("null", StringType, true)() ::
+      AttributeReference("string", StringType, true)() :: Nil
 
     comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
 

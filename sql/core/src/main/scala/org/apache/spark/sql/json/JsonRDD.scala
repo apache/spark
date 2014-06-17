@@ -38,7 +38,7 @@ private[sql] object JsonRDD extends Logging {
     require(samplingRatio > 0)
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
 
-    val allKeys = parseJson(schemaData).map(getAllKeysWithValueTypes).reduce(_ ++ _)
+    val allKeys = parseJson(schemaData).map(allKeysWithValueTypes).reduce(_ ++ _)
 
     val baseSchema = createSchema(allKeys)
 
@@ -64,7 +64,7 @@ private[sql] object JsonRDD extends Logging {
         val fieldName = key.substring(1, key.length - 1).split("`.`").toSeq
         val dataType = typeSet.map {
           case (_, dataType) => dataType
-        }.reduce((type1: DataType, type2: DataType) => getCompatibleType(type1, type2))
+        }.reduce((type1: DataType, type2: DataType) => compatibleType(type1, type2))
 
         (fieldName, dataType)
       }
@@ -111,7 +111,7 @@ private[sql] object JsonRDD extends Logging {
   /**
    * Returns the most general data type for two given data types.
    */
-  private[json] def getCompatibleType(t1: DataType, t2: DataType): DataType = {
+  private[json] def compatibleType(t1: DataType, t2: DataType): DataType = {
     // Try and find a promotion rule that contains both types in question.
     val applicableConversion = HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p
       .contains(t2))
@@ -130,7 +130,7 @@ private[sql] object JsonRDD extends Logging {
           val newFields = (fields1 ++ fields2).groupBy(field => field.name).map {
             case (name, fieldTypes) => {
               val dataType = fieldTypes.map(field => field.dataType).reduce(
-                (type1: DataType, type2: DataType) => getCompatibleType(type1, type2))
+                (type1: DataType, type2: DataType) => compatibleType(type1, type2))
               StructField(name, dataType, true)
             }
           }
@@ -139,7 +139,7 @@ private[sql] object JsonRDD extends Logging {
           })
         }
         case (ArrayType(elementType1), ArrayType(elementType2)) =>
-          ArrayType(getCompatibleType(elementType1, elementType2))
+          ArrayType(compatibleType(elementType1, elementType2))
         // TODO: We should use JsonObjectStringType to mark that values of field will be
         // strings and every string is a Json object.
         case (_, _) => StringType
@@ -147,7 +147,7 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def getPrimitiveType(value: Any): DataType = {
+  private def typeOfPrimitiveValue(value: Any): DataType = {
     value match {
       case value: java.lang.String => StringType
       case value: java.lang.Integer => IntegerType
@@ -166,11 +166,11 @@ private[sql] object JsonRDD extends Logging {
 
   /**
    * Returns the element type of an JSON array. We go through all elements of this array
-   * to detect any possible type conflict. We use [[getCompatibleType]] to resolve
+   * to detect any possible type conflict. We use [[compatibleType]] to resolve
    * type conflicts. Right now, when the element of an array is another array, we
    * treat the element as String.
    */
-  private def getTypeOfArray(l: Seq[Any]): ArrayType = {
+  private def typeOfArray(l: Seq[Any]): ArrayType = {
     val elements = l.flatMap(v => Option(v))
     if (elements.isEmpty) {
       // If this JSON array is empty, we use NullType as a placeholder.
@@ -183,10 +183,10 @@ private[sql] object JsonRDD extends Logging {
           case map: Map[_, _] => StructType(Nil)
           // We have an array of arrays. If those element arrays do not have the same
           // element types, we will return ArrayType[StringType].
-          case seq: Seq[_] =>  getTypeOfArray(seq)
-          case value => getPrimitiveType(value)
+          case seq: Seq[_] =>  typeOfArray(seq)
+          case value => typeOfPrimitiveValue(value)
         }
-      }.reduce((type1: DataType, type2: DataType) => getCompatibleType(type1, type2))
+      }.reduce((type1: DataType, type2: DataType) => compatibleType(type1, type2))
 
       ArrayType(elementType)
     }
@@ -199,7 +199,7 @@ private[sql] object JsonRDD extends Logging {
    * instead of getting all fields of this struct because a field does not appear
    * in this JSON object can appear in other JSON objects.
    */
-  private def getAllKeysWithValueTypes(m: Map[String, Any]): Set[(String, DataType)] = {
+  private def allKeysWithValueTypes(m: Map[String, Any]): Set[(String, DataType)] = {
     m.map{
       // Quote the key with backticks to handle cases which have dots
       // in the field name.
@@ -207,17 +207,17 @@ private[sql] object JsonRDD extends Logging {
     }.flatMap {
       case (key: String, struct: Map[String, Any]) => {
         // The value associted with the key is an JSON object.
-        getAllKeysWithValueTypes(struct).map {
+        allKeysWithValueTypes(struct).map {
           case (k, dataType) => (s"$key.$k", dataType)
         } ++ Set((key, StructType(Nil)))
       }
       case (key: String, array: List[Any]) => {
         // The value associted with the key is an array.
-        getTypeOfArray(array) match {
+        typeOfArray(array) match {
           case ArrayType(StructType(Nil)) => {
             // The elements of this arrays are structs.
             array.asInstanceOf[List[Map[String, Any]]].flatMap {
-              element => getAllKeysWithValueTypes(element)
+              element => allKeysWithValueTypes(element)
             }.map {
               case (k, dataType) => (s"$key.$k", dataType)
             } :+ (key, ArrayType(StructType(Nil)))
@@ -225,7 +225,7 @@ private[sql] object JsonRDD extends Logging {
           case ArrayType(elementType) => (key, ArrayType(elementType)) :: Nil
         }
       }
-      case (key: String, value) => (key, getPrimitiveType(value)) :: Nil
+      case (key: String, value) => (key, typeOfPrimitiveValue(value)) :: Nil
     }.toSet
   }
 

@@ -382,13 +382,13 @@ class SchemaRDD(RDD):
         """Creates a new table with the contents of this SchemaRDD."""
         self._jschema_rdd.saveAsTable(tableName)
 
-    def getSchemaTreeString(self):
+    def schemaTreeString(self):
         """Returns the output schema in the tree format."""
         return self._jschema_rdd.schemaTreeString()
 
     def printSchema(self):
         """Prints out the schema in the tree format."""
-        print self.getSchemaTreeString()
+        print self.schemaTreeString()
 
     def count(self):
         """Return the number of elements in this RDD.
