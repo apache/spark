@@ -169,7 +169,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.size == 1 && explanation.head.startsWith(explainCommandClassName)
+    explanation.size > 1 && explanation.head.startsWith(explainCommandClassName)
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
@@ -184,25 +184,29 @@ class HiveQuerySuite extends HiveComparisonTest {
   test("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 
-    val q0 = hql(s"DROP TABLE IF EXISTS $tableName")
-    assert(q0.count() == 0)
-
-    val q1 = hql(s"CREATE TABLE $tableName(key INT, value STRING)")
-    assert(q1.count() == 0)
-
-    val q2 = hql("SHOW TABLES")
-    val tables = q2.select('result).collect().map { case Row(table: String) => table }
-    assert(tables.contains(tableName))
-
-    val q3 = hql(s"DESCRIBE $tableName")
-    assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
-      q3.select('result).collect().map { case Row(fieldDesc: String) =>
-        fieldDesc.split("\t").map(_.trim)
-      }
+    assertResult(0) {
+      hql(s"DROP TABLE IF EXISTS $tableName").count()
     }
 
-    val q4 = hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")
-    assert(isExplanation(q4))
+    assertResult(0) {
+      hql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
+    }
+
+    assert(
+      hql("SHOW TABLES")
+        .select('result)
+        .collect()
+        .map(_.getString(0))
+        .contains(tableName))
+
+    assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
+      hql(s"DESCRIBE $tableName")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    assert(isExplanation(hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
 
     TestHive.reset()
   }

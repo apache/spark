@@ -92,13 +92,15 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 
     appAttemptId = getApplicationAttemptId()
     resourceManager = registerWithResourceManager()
+
     val appMasterResponse: RegisterApplicationMasterResponse = registerApplicationMaster()
 
     // Compute number of threads for akka
     val minimumMemory = appMasterResponse.getMinimumResourceCapability().getMemory()
 
     if (minimumMemory > 0) {
-      val mem = args.executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD
+      val mem = args.executorMemory + sparkConf.getInt("spark.yarn.executor.memoryOverhead",
+        YarnAllocationHandler.MEMORY_OVERHEAD)
       val numCore = (mem  / minimumMemory) + (if (0 != (mem % minimumMemory)) 1 else 0)
 
       if (numCore > 0) {
