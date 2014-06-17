@@ -102,7 +102,24 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   serverChannel.socket.setReuseAddress(true)
   serverChannel.socket.setReceiveBufferSize(256 * 1024)
 
-  serverChannel.socket.bind(new InetSocketAddress(port))
+  def bindWithIncrement(port: Int, maxTries: Int = 3) {
+    for( offset <- 0 until maxTries ) {
+      try {
+        serverChannel.socket.bind(new InetSocketAddress(port + offset))
+        return
+      } catch {
+        case e: java.net.BindException => {
+          if(!e.getMessage.contains("Address already in use") ||
+             offset == maxTries) {
+            throw e
+          }
+          logInfo("Could not bind on port: " + (port+offset))
+        }
+        case e: Exception => throw e
+      }
+    }
+  }
+  bindWithIncrement(port, 3)
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)
 
   val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)
