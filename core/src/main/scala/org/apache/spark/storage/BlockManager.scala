@@ -363,6 +363,12 @@ private[spark] class BlockManager(
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
+        // Double check to make sure the block is still there, since it
+        // might has been removed when we actually come here.
+        if (blockInfo.get(blockId).isEmpty) {
+          logDebug(s"Block $blockId had been removed")
+          return None
+        }
 
         // If another thread is writing the block, wait for it to become ready.
         if (!info.waitForReady()) {
