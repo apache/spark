@@ -64,7 +64,7 @@ descendants.  To create a basic SQLContext, all you need is a SparkContext.
 val sc: SparkContext // An existing SparkContext.
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
-// createSchemaRDD is used to implicitly convert a RDD to a SchemaRDD.
+// createSchemaRDD is used to implicitly convert an RDD to a SchemaRDD.
 import sqlContext.createSchemaRDD
 {% endhighlight %}
 
@@ -102,17 +102,17 @@ sqlContext = SQLContext(sc)
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-Spark SQL supports operating of a variety of data sources though the SchemaRDD interface.
+Spark SQL supports operating on a variety of data sources though the SchemaRDD interface.
 Once a dataset has been loaded, it can be registered as a table and even joined with data from other sources.
 </div>
 
 <div data-lang="java"  markdown="1">
-Spark SQL supports operating of a variety of data sources though the JavaSchemaRDD interface.
+Spark SQL supports operating on a variety of data sources though the JavaSchemaRDD interface.
 Once a dataset has been loaded, it can be registered as a table and even joined with data from other sources.
 </div>
 
 <div data-lang="python"  markdown="1">
-Spark SQL supports operating of a variety of data sources though the SchemaRDD interface.
+Spark SQL supports operating on a variety of data sources though the SchemaRDD interface.
 Once a dataset has been loaded, it can be registered as a table and even joined with data from other sources.
 </div>
 </div>
@@ -132,7 +132,7 @@ registered as a table.  Tables can be used in subsequent SQL statements.
 {% highlight scala %}
 // sc is an existing SparkContext.
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-// createSchemaRDD is used to implicitly convert a RDD to a SchemaRDD.
+// createSchemaRDD is used to implicitly convert an RDD to a SchemaRDD.
 import sqlContext.createSchemaRDD
 
 // Define the schema using a case class.
@@ -279,7 +279,7 @@ of the original data.  Using the data from the above example:
 
 {% highlight scala %}
 // sqlContext from the previous example is used in this example.
-// createSchemaRDD is used to implicitly convert a RDD to a SchemaRDD.
+// createSchemaRDD is used to implicitly convert an RDD to a SchemaRDD.
 import sqlContext.createSchemaRDD
 
 val people: RDD[Person] = ... // An RDD of case class objects, from the previous example.
@@ -365,10 +365,10 @@ This conversion can be done using one of two methods in a SQLContext:
 // sc is an existing SparkContext.
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
-// A JSON dataset is pointed by path.
+// A JSON dataset is pointed to by path.
 // The path can be either a single text file or a directory storing text files.
 val path = "examples/src/main/resources/people.json"
-// Create a SchemaRDD from the file(s) pointed by path
+// Create a SchemaRDD from the file(s) pointed to by path
 val people = sqlContext.jsonFile(path)
 
 // The inferred schema can be visualized using the printSchema() method.
@@ -385,7 +385,7 @@ people.registerAsTable("people")
 val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 // Alternatively, a SchemaRDD can be created for a JSON dataset represented by
-// a RDD[String] storing one JSON object per string.
+// an RDD[String] storing one JSON object per string.
 val anotherPeopleRDD = sc.parallelize(
   """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
 val anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
@@ -404,10 +404,10 @@ This conversion can be done using one of two methods in a JavaSQLContext :
 // sc is an existing JavaSparkContext.
 JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc);
 
-// A JSON dataset is pointed by path.
+// A JSON dataset is pointed to by path.
 // The path can be either a single text file or a directory storing text files.
 String path = "examples/src/main/resources/people.json";
-// Create a JavaSchemaRDD from the file(s) pointed by path
+// Create a JavaSchemaRDD from the file(s) pointed to by path
 JavaSchemaRDD people = sqlContext.jsonFile(path);
 
 // The inferred schema can be visualized using the printSchema() method.
@@ -424,7 +424,7 @@ people.registerAsTable("people");
 JavaSchemaRDD teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
 // Alternatively, a JavaSchemaRDD can be created for a JSON dataset represented by
-// a RDD[String] storing one JSON object per string.
+// an RDD[String] storing one JSON object per string.
 List<String> jsonData = Arrays.asList(
   "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
 JavaRDD<String> anotherPeopleRDD = sc.parallelize(jsonData);
@@ -444,10 +444,10 @@ This conversion can be done using one of two methods in a SQLContext:
 from pyspark.sql import SQLContext
 sqlContext = SQLContext(sc)
 
-# A JSON dataset is pointed by path.
+# A JSON dataset is pointed to by path.
 # The path can be either a single text file or a directory storing text files.
 path = "examples/src/main/resources/people.json"
-# Create a SchemaRDD from the file(s) pointed by path
+# Create a SchemaRDD from the file(s) pointed to by path
 people = sqlContext.jsonFile(path)
 
 # The inferred schema can be visualized using the printSchema() method.
@@ -464,7 +464,7 @@ people.registerAsTable("people")
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 # Alternatively, a SchemaRDD can be created for a JSON dataset represented by
-# a RDD[String] storing one JSON object per string.
+# an RDD[String] storing one JSON object per string.
 anotherPeopleRDD = sc.parallelize([
   '{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}'])
 anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)

@@ -113,7 +113,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * Loads a RDD[String] storing JSON objects (one object per record), returning the result as a
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
    * [[SchemaRDD]].
    *
    * @group userf

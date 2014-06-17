@@ -110,7 +110,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
     jsonRDD(sqlContext.sparkContext.textFile(path))
 
   /**
-   * Loads a RDD[String] storing JSON objects (one object per record), returning the result as a
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
    * [[JavaSchemaRDD]].
    *
    * @group userf

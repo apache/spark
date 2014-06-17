@@ -161,7 +161,7 @@ class SQLContext:
         return SchemaRDD(jschema_rdd, self)
 
     def jsonRDD(self, rdd):
-        """Loads a RDD storing one JSON object per string, returning the result as a L{SchemaRDD}.
+        """Loads an RDD storing one JSON object per string, returning the result as a L{SchemaRDD}.
 
         >>> srdd = sqlCtx.jsonRDD(json)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
@@ -310,7 +310,7 @@ class SchemaRDD(RDD):
 
     For normal L{pyspark.rdd.RDD} operations (map, count, etc.) the
     L{SchemaRDD} is not operated on directly, as it's underlying
-    implementation is a RDD composed of Java objects. Instead it is
+    implementation is an RDD composed of Java objects. Instead it is
     converted to a PythonRDD in the JVM, on which Python operations can
     be done.
     """
