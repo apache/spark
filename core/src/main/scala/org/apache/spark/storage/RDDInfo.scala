@@ -26,7 +26,7 @@ class RDDInfo(
     val id: Int,
     val name: String,
     val numPartitions: Int,
-    val storageLevel: StorageLevel)
+    var storageLevel: StorageLevel)
   extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0
@@ -36,8 +36,8 @@ class RDDInfo(
 
   override def toString = {
     import Utils.bytesToString
-    ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s; " +
-      "TachyonSize: %s; DiskSize: %s").format(
+    ("RDD \"%s\" (%d) StorageLevel: %s; CachedPartitions: %d; TotalPartitions: %d; " +
+      "MemorySize: %s; TachyonSize: %s; DiskSize: %s").format(
         name, id, storageLevel.toString, numCachedPartitions, numPartitions,
         bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
   }
