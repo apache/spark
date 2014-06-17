@@ -20,10 +20,11 @@ package org.apache.spark.deploy.master
 import java.util.Date
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import akka.actor.ActorRef
 
-import org.apache.spark.deploy.ApplicationDescription
+import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 
 private[spark] class ApplicationInfo(
     val startTime: Long,
@@ -41,6 +42,7 @@ private[spark] class ApplicationInfo(
   @transient var appSource: ApplicationSource = _
 
   @transient private var nextExecutorId: Int = _
+  @transient private var exitedExecutors: ArrayBuffer[ExecutorInfo] = _
 
   init()
 
@@ -51,6 +53,7 @@ private[spark] class ApplicationInfo(
     endTime = -1L
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
+    exitedExecutors = new ArrayBuffer[ExecutorInfo]
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {
@@ -74,10 +77,16 @@ private[spark] class ApplicationInfo(
 
   def removeExecutor(exec: ExecutorInfo) {
     if (executors.contains(exec.id)) {
+      if (exec.state == ExecutorState.EXITED) {
+        exitedExecutors += executors(exec.id)
+      }
       executors -= exec.id
       coresGranted -= exec.cores
     }
   }
+
+  /** Return the information for all live and exited executors. */
+  def executorInfo: Seq[ExecutorInfo] = (executors.values ++ exitedExecutors).toSet.toSeq
 
   private val myMaxCores = desc.maxCores.getOrElse(defaultCores)
 
