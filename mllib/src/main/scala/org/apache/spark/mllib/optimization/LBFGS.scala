@@ -60,7 +60,7 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
    * Set the convergence tolerance of iterations for L-BFGS. Default 1E-4.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    */
-  def setConvergenceTol(tolerance: Int): this.type = {
+  def setConvergenceTol(tolerance: Double): this.type = {
     this.convergenceTol = tolerance
     this
   }
