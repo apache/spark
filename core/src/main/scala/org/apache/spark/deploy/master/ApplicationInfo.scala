@@ -37,12 +37,12 @@ private[spark] class ApplicationInfo(
 
   @transient var state: ApplicationState.Value = _
   @transient var executors: mutable.HashMap[Int, ExecutorInfo] = _
+  @transient var removedExecutors: ArrayBuffer[ExecutorInfo] = _
   @transient var coresGranted: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
 
   @transient private var nextExecutorId: Int = _
-  @transient private var exitedExecutors: ArrayBuffer[ExecutorInfo] = _
 
   init()
 
@@ -53,7 +53,7 @@ private[spark] class ApplicationInfo(
     endTime = -1L
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
-    exitedExecutors = new ArrayBuffer[ExecutorInfo]
+    removedExecutors = new ArrayBuffer[ExecutorInfo]
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {
@@ -77,16 +77,15 @@ private[spark] class ApplicationInfo(
 
   def removeExecutor(exec: ExecutorInfo) {
     if (executors.contains(exec.id)) {
-      if (exec.state == ExecutorState.EXITED) {
-        exitedExecutors += executors(exec.id)
-      }
+      removedExecutors += executors(exec.id)
       executors -= exec.id
       coresGranted -= exec.cores
     }
   }
 
-  /** Return the information for all live and exited executors. */
-  def executorInfo: Seq[ExecutorInfo] = (executors.values ++ exitedExecutors).toSet.toSeq
+  def exitedExecutors: Seq[ExecutorInfo] = {
+    removedExecutors.filter(_.state == ExecutorState.EXITED)
+  }
 
   private val myMaxCores = desc.maxCores.getOrElse(defaultCores)
 
