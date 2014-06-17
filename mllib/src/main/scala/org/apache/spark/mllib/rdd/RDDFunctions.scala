@@ -20,7 +20,7 @@ package org.apache.spark.mllib.rdd
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
 
 /**
  * Machine learning specific RDD functions.
@@ -43,6 +43,65 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
     } else {
       new SlidingRDD[T](self, windowSize)
     }
+  }
+
+  /**
+   * Computes the all-reduced RDD of the parent RDD, which has the same number of partitions and
+   * locality information as its parent RDD. Each partition contains only one record, which is the
+   * same as calling `RDD#reduce` on its parent RDD.
+   *
+   * @param f reducer
+   * @return all-reduced RDD
+   */
+  def allReduce(f: (T, T) => T): RDD[T] = {
+    val numPartitions = self.partitions.size
+    require(numPartitions > 0, "Parent RDD does not have any partitions.")
+    val nextPowerOfTwo = {
+      var i = 0
+      while ((numPartitions >> i) > 0) {
+        i += 1
+      }
+      1 << i
+    }
+    var butterfly = self.mapPartitions( (iter) =>
+      Iterator(iter.reduce(f)),
+      preservesPartitioning = true
+    ).cache()
+
+    if (nextPowerOfTwo > numPartitions) {
+      val padding = self.context.parallelize(Seq.empty[T], nextPowerOfTwo - numPartitions)
+      butterfly = butterfly.union(padding)
+    }
+
+    var offset = nextPowerOfTwo >> 1
+    while (offset > 0) {
+      butterfly = new ButterflyReducedRDD[T](butterfly, f, offset).cache()
+      offset >>= 1
+    }
+
+    if (nextPowerOfTwo > numPartitions) {
+      PartitionPruningRDD.create(butterfly, (i) => i < numPartitions)
+    } else {
+      butterfly
+    }
+  }
+
+  /**
+   * Reduce the elements of this RDD using the binary tree algorithm.
+   */
+  def binaryTreeReduce(f: (T, T) => T): T = {
+    var reduced = self.mapPartitions( (iter) =>
+      if (iter.isEmpty) {
+        Iterator.empty
+      } else {
+        Iterator(iter.reduce(f))
+      },
+      preservesPartitioning = true
+    )
+    while (reduced.partitions.size > 3) {
+      reduced = new BinaryTreeReducedRDD(reduced, f)
+    }
+    reduced.reduce(f)
   }
 }
 
