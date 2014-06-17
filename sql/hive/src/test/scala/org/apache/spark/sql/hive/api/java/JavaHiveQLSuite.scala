@@ -49,7 +49,7 @@ class JavaHiveQLSuite extends FunSuite {
 
   def isExplanation(result: JavaSchemaRDD) = {
     val explanation = result.collect().map(_.getString(0))
-    explanation.size == 1 && explanation.head.startsWith(explainCommandClassName)
+    explanation.size > 1 && explanation.head.startsWith(explainCommandClassName)
   }
 
   ignore("Query Hive native command execution result") {
