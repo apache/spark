@@ -208,13 +208,11 @@ class RowMatrix(
     val nt: Int = n * (n + 1) / 2
 
     // Compute the upper triangular part of the gram matrix.
-    val GU = rows.aggregate(new BDV[Double](new Array[Double](nt)))(
+    val GU = rows.treeAggregate(new BDV[Double](new Array[Double](nt)))(
       seqOp = (U, v) => {
         RowMatrix.dspr(1.0, v, U.data)
         U
-      },
-      combOp = (U1, U2) => U1 += U2
-    )
+      }, combOp = (U1, U2) => U1 += U2, 2)
 
     RowMatrix.triuToFull(n, GU.data)
   }
@@ -309,10 +307,11 @@ class RowMatrix(
         s"We need at least $mem bytes of memory.")
     }
 
-    val (m, mean) = rows.aggregate[(Long, BDV[Double])]((0L, BDV.zeros[Double](n)))(
+    val (m, mean) = rows.treeAggregate[(Long, BDV[Double])]((0L, BDV.zeros[Double](n)))(
       seqOp = (s: (Long, BDV[Double]), v: Vector) => (s._1 + 1L, s._2 += v.toBreeze),
-      combOp = (s1: (Long, BDV[Double]), s2: (Long, BDV[Double])) => (s1._1 + s2._1, s1._2 += s2._2)
-    )
+      combOp = (s1: (Long, BDV[Double]), s2: (Long, BDV[Double])) =>
+        (s1._1 + s2._1, s1._2 += s2._2),
+      2)
 
     updateNumRows(m)
 
@@ -371,10 +370,10 @@ class RowMatrix(
    */
   def computeColumnSummaryStatistics(): MultivariateStatisticalSummary = {
     val zeroValue = new ColumnStatisticsAggregator(numCols().toInt)
-    val summary = rows.map(_.toBreeze).aggregate[ColumnStatisticsAggregator](zeroValue)(
-      (aggregator, data) => aggregator.add(data),
-      (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
-    )
+    val summary = rows.map(_.toBreeze).treeAggregate[ColumnStatisticsAggregator](zeroValue)(
+      seqOp = (aggregator, data) => aggregator.add(data),
+      combOp = (aggregator1, aggregator2) => aggregator1.merge(aggregator2),
+      2)
     updateNumRows(summary.count)
     summary
   }

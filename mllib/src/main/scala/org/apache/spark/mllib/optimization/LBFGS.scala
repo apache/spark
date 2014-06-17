@@ -198,7 +198,7 @@ object LBFGS extends Logging {
       val localData = data
       val localGradient = gradient
 
-      val (gradientSum, lossSum) = localData.aggregate((BDV.zeros[Double](weights.size), 0.0))(
+      val (gradientSum, lossSum) = localData.treeAggregate((BDV.zeros[Double](weights.size), 0.0))(
           seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
             val l = localGradient.compute(
               features, label, Vectors.fromBreeze(weights), Vectors.fromBreeze(grad))
@@ -206,7 +206,7 @@ object LBFGS extends Logging {
           },
           combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
             (grad1 += grad2, loss1 + loss2)
-          })
+          }, 2)
 
       /**
        * regVal is sum of weight squares if it's L2 updater;
