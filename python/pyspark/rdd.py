@@ -1448,6 +1448,7 @@ class RDD(object):
     def getStorageLevel(self):
         """
         Get the RDD's current storage level.
+
         >>> rdd1 = sc.parallelize([1,2])
         >>> rdd1.getStorageLevel()
         StorageLevel(False, False, False, False, 1)
