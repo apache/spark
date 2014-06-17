@@ -40,9 +40,9 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   private val subDirsPerLocalDir = shuffleManager.conf.getInt("spark.diskStore.subDirectories", 64)
 
-  // Create one local directory for each path mentioned in spark.local.dir; then, inside this
-  // directory, create multiple subdirectories that we will hash files into, in order to avoid
-  // having really large inodes at the top level.
+  /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
+   * directory, create multiple subdirectories that we will hash files into, in order to avoid
+   * having really large inodes at the top level. */
   private val localDirs: Array[File] = createLocalDirs()
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
   private var shuffleSender : ShuffleSender = null
@@ -114,7 +114,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   }
 
   private def createLocalDirs(): Array[File] = {
-    logDebug("Creating local directories at root dirs '" + rootDirs + "'")
+    logDebug(s"Creating local directories at root dirs '$rootDirs'")
     val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
     rootDirs.split(",").map { rootDir =>
       var foundLocalDir = false
@@ -126,21 +126,20 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
         tries += 1
         try {
           localDirId = "%s-%04x".format(dateFormat.format(new Date), rand.nextInt(65536))
-          localDir = new File(rootDir, "spark-local-" + localDirId)
+          localDir = new File(rootDir, s"spark-local-$localDirId")
           if (!localDir.exists) {
             foundLocalDir = localDir.mkdirs()
           }
         } catch {
           case e: Exception =>
-            logWarning("Attempt " + tries + " to create local dir " + localDir + " failed", e)
+            logWarning(s"Attempt $tries to create local dir $localDir failed", e)
         }
       }
       if (!foundLocalDir) {
-        logError("Failed " + MAX_DIR_CREATION_ATTEMPTS +
-          " attempts to create local dir in " + rootDir)
+        logError(s"Failed $MAX_DIR_CREATION_ATTEMPTS attempts to create local dir in $rootDir")
         System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
       }
-      logInfo("Created local directory at " + localDir)
+      logInfo(s"Created local directory at $localDir")
       localDir
     }
   }
@@ -163,7 +162,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
           if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
         } catch {
           case e: Exception =>
-            logError("Exception while deleting local spark dir: " + localDir, e)
+            logError(s"Exception while deleting local spark dir: $localDir", e)
         }
       }
     }
@@ -175,7 +174,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
 
   private[storage] def startShuffleBlockSender(port: Int): Int = {
     shuffleSender = new ShuffleSender(port, this)
-    logInfo("Created ShuffleSender binding to port : " + shuffleSender.port)
+    logInfo(s"Created ShuffleSender binding to port: ${shuffleSender.port}")
     shuffleSender.port
   }
 }

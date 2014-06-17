@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 import org.apache.spark.sql.hive.execution.HiveComparisonTest
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -34,7 +34,7 @@ class CachedTableSuite extends HiveComparisonTest {
 
   test("check that table is cached and uncache") {
     TestHive.table("src").queryExecution.analyzed match {
-      case SparkLogicalPlan(_ : InMemoryColumnarTableScan) => // Found evidence of caching
+      case _ : InMemoryRelation => // Found evidence of caching
       case noCache => fail(s"No cache node found in plan $noCache")
     }
     TestHive.uncacheTable("src")
@@ -45,7 +45,7 @@ class CachedTableSuite extends HiveComparisonTest {
 
   test("make sure table is uncached") {
     TestHive.table("src").queryExecution.analyzed match {
-      case cachePlan @ SparkLogicalPlan(_ : InMemoryColumnarTableScan) =>
+      case cachePlan: InMemoryRelation =>
         fail(s"Table still cached after uncache: $cachePlan")
       case noCache => // Table uncached successfully
     }

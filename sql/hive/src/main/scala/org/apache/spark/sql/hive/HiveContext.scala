@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
+package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.util.{ArrayList => JArrayList}
@@ -32,12 +31,13 @@ import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
-import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.execution.{Command => PhysicalCommand}
 
 /**
  * Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
@@ -71,14 +71,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /**
    * Executes a query expressed in HiveQL using Spark, returning the result as a SchemaRDD.
    */
-  def hiveql(hqlQuery: String): SchemaRDD = {
-    val result = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
-    // We force query optimization to happen right away instead of letting it happen lazily like
-    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-    // generates the RDD lineage for DML queries, but does not perform any execution.
-    result.queryExecution.toRdd
-    result
-  }
+  def hiveql(hqlQuery: String): SchemaRDD = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
 
   /** An alias for `hiveql`. */
   def hql(hqlQuery: String): SchemaRDD = hiveql(hqlQuery)
@@ -164,7 +157,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /**
    * Runs the specified SQL query using Hive.
    */
-  protected def runSqlHive(sql: String): Seq[String] = {
+  protected[sql] def runSqlHive(sql: String): Seq[String] = {
     val maxResults = 100000
     val results = runHive(sql, 100000)
     // It is very confusing when you only get back some of the results...
@@ -228,8 +221,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override val strategies: Seq[Strategy] = Seq(
       CommandStrategy(self),
+      HiveCommandStrategy(self),
       TakeOrdered,
       ParquetOperations,
+      InMemoryScans,
       HiveTableScans,
       DataSinks,
       Scripts,
@@ -251,29 +246,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override lazy val optimizedPlan =
       optimizer(catalog.PreInsertionCasts(catalog.CreateTables(analyzed)))
 
-    override lazy val toRdd: RDD[Row] = {
-      def processCmd(cmd: String): RDD[Row] = {
-        val output = runSqlHive(cmd)
-        if (output.size == 0) {
-          emptyResult
-        } else {
-          val asRows = output.map(r => new GenericRow(r.split("\t").asInstanceOf[Array[Any]]))
-          sparkContext.parallelize(asRows, 1)
-        }
-      }
-
-      logical match {
-        case s: SetCommand => eagerlyProcess(s)
-        case _ => analyzed match {
-          case NativeCommand(cmd) => processCmd(cmd)
-          case _ => executedPlan.execute().map(_.copy())
-        }
-      }
-    }
+    override lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-        ShortType, DecimalType)
+        ShortType, DecimalType, TimestampType)
 
     protected def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
@@ -297,7 +274,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         struct.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ))=>
+      case (seq: Seq[_], ArrayType(typ)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
       case (map: Map[_,_], MapType(kType, vType)) =>
         map.map {
@@ -313,10 +290,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
      * Returns the result as a hive compatible sequence of strings.  For native commands, the
      * execution is simply passed back to Hive.
      */
-    def stringResult(): Seq[String] = analyzed match {
-      case NativeCommand(cmd) => runSqlHive(cmd)
-      case ExplainCommand(plan) => executePlan(plan).toString.split("\n")
-      case query =>
+    def stringResult(): Seq[String] = executedPlan match {
+      case command: PhysicalCommand =>
+        command.sideEffectResult.map(_.toString)
+
+      case other =>
         val result: Seq[Seq[Any]] = toRdd.collect().toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
@@ -327,8 +305,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override def simpleString: String =
       logical match {
-        case _: NativeCommand => "<Executed by Hive>"
-        case _: SetCommand => "<Set Command: Executed by Hive, and noted by SQLContext>"
+        case _: NativeCommand => "<Native command: executed by Hive>"
+        case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
         case _ => executedPlan.toString
       }
   }

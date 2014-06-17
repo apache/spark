@@ -97,7 +97,7 @@ import java.util.{Map => JMap}
 @AlphaComponent
 class SchemaRDD(
     @transient val sqlContext: SQLContext,
-    @transient protected[spark] val logicalPlan: LogicalPlan)
+    @transient val baseLogicalPlan: LogicalPlan)
   extends RDD[Row](sqlContext.sparkContext, Nil) with SchemaRDDLike {
 
   def baseSchemaRDD = this
@@ -347,16 +347,11 @@ class SchemaRDD(
       val pickle = new Pickler
       iter.map { row =>
         val map: JMap[String, Any] = new java.util.HashMap
-        // TODO: We place the map in an ArrayList so that the object is pickled to a List[Dict].
-        // Ideally we should be able to pickle an object directly into a Python collection so we
-        // don't have to create an ArrayList every time.
-        val arr: java.util.ArrayList[Any] = new java.util.ArrayList
         row.zip(fieldNames).foreach { case (obj, name) =>
           map.put(name, obj)
         }
-        arr.add(map)
-        pickle.dumps(arr)
-      }
+        map
+      }.grouped(10).map(batched => pickle.dumps(batched.toArray))
     }
   }
 

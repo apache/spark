@@ -89,10 +89,13 @@ private[spark] object StorageUtils {
       // Add up memory, disk and Tachyon sizes
       val persistedBlocks =
         blocks.filter { status => status.memSize + status.diskSize + status.tachyonSize > 0 }
+      val _storageLevel =
+        if (persistedBlocks.length > 0) persistedBlocks(0).storageLevel else StorageLevel.NONE
       val memSize = persistedBlocks.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
       val diskSize = persistedBlocks.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
       val tachyonSize = persistedBlocks.map(_.tachyonSize).reduceOption(_ + _).getOrElse(0L)
       rddInfoMap.get(rddId).map { rddInfo =>
+        rddInfo.storageLevel = _storageLevel
         rddInfo.numCachedPartitions = persistedBlocks.length
         rddInfo.memSize = memSize
         rddInfo.diskSize = diskSize

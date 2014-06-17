@@ -31,8 +31,16 @@ import org.apache.spark.sql.catalyst.types._
 trait HiveTypeCoercion {
 
   val typeCoercionRules =
-    List(PropagateTypes, ConvertNaNs, WidenTypes, PromoteStrings, BooleanComparisons, BooleanCasts,
-      StringToIntegralCasts, FunctionArgumentConversion)
+    PropagateTypes ::
+    ConvertNaNs ::
+    WidenTypes ::
+    PromoteStrings ::
+    BooleanComparisons ::
+    BooleanCasts ::
+    StringToIntegralCasts ::
+    FunctionArgumentConversion ::
+    CastNulls ::
+    Nil
 
   /**
    * Applies any changes to [[catalyst.expressions.AttributeReference AttributeReference]] data
@@ -282,4 +290,33 @@ trait HiveTypeCoercion {
         Average(Cast(e, DoubleType))
     }
   }
+
+  /**
+   * Ensures that NullType gets casted to some other types under certain circumstances.
+   */
+  object CastNulls extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case cw @ CaseWhen(branches) =>
+        val valueTypes = branches.sliding(2, 2).map {
+          case Seq(_, value) if value.resolved => Some(value.dataType)
+          case Seq(elseVal) if elseVal.resolved => Some(elseVal.dataType)
+          case _ => None
+        }.toSeq
+        if (valueTypes.distinct.size == 2 && valueTypes.exists(_ == Some(NullType))) {
+          val otherType = valueTypes.filterNot(_ == Some(NullType))(0).get
+          val transformedBranches = branches.sliding(2, 2).map {
+            case Seq(cond, value) if value.resolved && value.dataType == NullType =>
+              Seq(cond, Cast(value, otherType))
+            case Seq(elseVal) if elseVal.resolved && elseVal.dataType == NullType =>
+              Seq(Cast(elseVal, otherType))
+            case s => s
+          }.reduce(_ ++ _)
+          CaseWhen(transformedBranches)
+        } else {
+          // It is possible to have more types due to the possibility of short-circuiting.
+          cw
+        }
+    }
+  }
+
 }

@@ -22,12 +22,11 @@ import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
 
-import org.apache.commons.math3.distribution.BinomialDistribution
-import org.apache.commons.math3.distribution.PoissonDistribution
-
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
+
+import org.apache.spark.rdd.RDDSuiteUtils._
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
@@ -140,38 +139,6 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
     val result = pairs.aggregate(emptyMap)(mergeElement, mergeMaps)
     assert(result.toSet === Set(("a", 6), ("b", 2), ("c", 5)))
-  }
-
-  test("aggregateWithContext") {
-    val data = Array(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3))
-    val numPartitions = 2
-    val pairs = sc.makeRDD(data, numPartitions)
-    //determine the partitionId for each pair
-    type StringMap = HashMap[String, Int]
-    val partitions = pairs.collectPartitions()
-    val offSets = new StringMap
-    for (i <- 0 to numPartitions-1) {
-      partitions(i).foreach( {case (k, v) => offSets.put(k, offSets.getOrElse(k, 0) + i)})
-    }
-    val emptyMap = new StringMap {
-      override def default(key: String): Int = 0
-    }
-    val mergeElement: ((TaskContext, StringMap), (String, Int)) => StringMap = (arg1, pair) => {
-      val stringMap = arg1._2
-      val tc = arg1._1
-      stringMap(pair._1) += pair._2 + tc.partitionId
-      stringMap
-    }
-    val mergeMaps: (StringMap, StringMap) => StringMap = (map1, map2) => {
-      for ((key, value) <- map2) {
-        map1(key) += value
-      }
-      map1
-    }
-    val result = pairs.aggregateWithContext(emptyMap)(mergeElement, mergeMaps)
-    val expected = Set(("a", 6), ("b", 2), ("c", 5))
-      .map({case(k, v) => (k -> (offSets.getOrElse(k, 0) + v))})
-    assert(result.toSet === expected)
   }
 
   test("basic caching") {
@@ -539,29 +506,6 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(sortedTopK === nums.sorted(ord).take(5))
   }
 
-  test("computeFraction") {
-    // test that the computed fraction guarantees enough datapoints
-    // in the sample with a failure rate <= 0.0001
-    val data = new EmptyRDD[Int](sc)
-    val n = 100000
-
-    for (s <- 1 to 15) {
-      val frac = data.computeFraction(s, n, true)
-      val poisson = new PoissonDistribution(frac * n)
-      assert(poisson.inverseCumulativeProbability(0.0001) >= s, "Computed fraction is too low")
-    }
-    for (s <- List(20, 100, 1000)) {
-      val frac = data.computeFraction(s, n, true)
-      val poisson = new PoissonDistribution(frac * n)
-      assert(poisson.inverseCumulativeProbability(0.0001) >= s, "Computed fraction is too low")
-    }
-    for (s <- List(1, 10, 100, 1000)) {
-      val frac = data.computeFraction(s, n, false)
-      val binomial = new BinomialDistribution(n, frac)
-      assert(binomial.inverseCumulativeProbability(0.0001)*n >= s, "Computed fraction is too low")
-    }
-  }
-
   test("takeSample") {
     val n = 1000000
     val data = sc.parallelize(1 to n, 2)
@@ -609,8 +553,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, 2*n, seed)
-      assert(sample.size === 2*n)        // Got exactly 200 elements
+      val sample = data.takeSample(withReplacement=true, 2 * n, seed)
+      assert(sample.size === 2 * n)        // Got exactly 200 elements
       // Chance of getting all distinct elements is still quite low, so test we got < 100
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
@@ -643,14 +587,63 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("sortByKey") {
+    val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
+
+    val col1 = Array("4|60|C", "5|50|A", "6|40|B")
+    val col2 = Array("6|40|B", "5|50|A", "4|60|C")
+    val col3 = Array("5|50|A", "6|40|B", "4|60|C")
+
+    assert(data.sortBy(_.split("\\|")(0)).collect() === col1)
+    assert(data.sortBy(_.split("\\|")(1)).collect() === col2)
+    assert(data.sortBy(_.split("\\|")(2)).collect() === col3)
+  }
+
+  test("sortByKey ascending parameter") {
+    val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
+
+    val asc = Array("4|60|C", "5|50|A", "6|40|B")
+    val desc = Array("6|40|B", "5|50|A", "4|60|C")
+
+    assert(data.sortBy(_.split("\\|")(0), true).collect() === asc)
+    assert(data.sortBy(_.split("\\|")(0), false).collect() === desc)
+  }
+
+  test("sortByKey with explicit ordering") {
+    val data = sc.parallelize(Seq("Bob|Smith|50",
+                                  "Jane|Smith|40",
+                                  "Thomas|Williams|30",
+                                  "Karen|Williams|60"))
+
+    val ageOrdered = Array("Thomas|Williams|30",
+                           "Jane|Smith|40",
+                           "Bob|Smith|50",
+                           "Karen|Williams|60")
+
+    // last name, then first name
+    val nameOrdered = Array("Bob|Smith|50",
+                            "Jane|Smith|40",
+                            "Karen|Williams|60",
+                            "Thomas|Williams|30")
+
+    val parse = (s: String) => {
+      val split = s.split("\\|")
+      Person(split(0), split(1), split(2).toInt)
+    }
+
+    import scala.reflect.classTag
+    assert(data.sortBy(parse, true, 2)(AgeOrdering, classTag[Person]).collect() === ageOrdered)
+    assert(data.sortBy(parse, true, 2)(NameOrdering, classTag[Person]).collect() === nameOrdered)
+  }
+
   test("intersection") {
     val all = sc.parallelize(1 to 10)
     val evens = sc.parallelize(2 to 10 by 2)
     val intersection = Array(2, 4, 6, 8, 10)
 
     // intersection is commutative
-    assert(all.intersection(evens).collect.sorted === intersection)
-    assert(evens.intersection(all).collect.sorted === intersection)
+    assert(all.intersection(evens).collect().sorted === intersection)
+    assert(evens.intersection(all).collect().sorted === intersection)
   }
 
   test("intersection strips duplicates in an input") {
@@ -658,8 +651,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val b = sc.parallelize(Seq(1,1,2,3))
     val intersection = Array(1,2,3)
 
-    assert(a.intersection(b).collect.sorted === intersection)
-    assert(b.intersection(a).collect.sorted === intersection)
+    assert(a.intersection(b).collect().sorted === intersection)
+    assert(b.intersection(a).collect().sorted === intersection)
   }
 
   test("zipWithIndex") {
