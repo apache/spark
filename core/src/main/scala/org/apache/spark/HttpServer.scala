@@ -47,7 +47,7 @@ private[spark] class HttpServer(resourceBase: File,
   private var server: Server = null
   private var port: Int = localPort
 
-  private def startOnPort(startPort: Int) {
+  private def startOnPort(startPort: Int): Tuple2[Server,Int] = {
     val server = new Server()
     val connector = new SocketConnector
     connector.setMaxIdleTime(60*1000)
@@ -81,21 +81,23 @@ private[spark] class HttpServer(resourceBase: File,
     return (server, actualPort)
   }
 
-  private def startWithIncrements(startPort: Int, maxTries: Int) {
-    for( tryPort <- startPort until (startPort+maxTries)) {
+  private def startWithIncrements(startPort: Int, maxRetries: Int): Tuple2[Server,Int] = {
+    for( offset <- 0 to maxRetries) {
       try {
-        val (server, actualPort) = startOnPort(startPort)
+        val (server, actualPort) = startOnPort(startPort+offset)
         return (server, actualPort)
       } catch {
         case e: java.net.BindException => {
-          if (!e.getMessage.contains("Address already in use")) {
+          if (!e.getMessage.contains("Address already in use") ||
+            offset == (maxRetries-1)) {
             throw e
           }
-          logInfo("Could not bind on port: " + (tryPort))
+          logInfo("Could not bind on port: " + (startPort+offset))
         }
         case e: Exception => throw e
       }
     }
+    return (null, -1)
   }
 
   def start() {
@@ -103,7 +105,9 @@ private[spark] class HttpServer(resourceBase: File,
       throw new ServerStateException("Server is already started")
     } else {
       logInfo("Starting HTTP Server")
-      (server, port) = startWithIncrements(localPort, 3)
+      val (actualServer, actualPort) = startWithIncrements(localPort, 3)
+      server = actualServer
+      port = actualPort
     }
   }
 
