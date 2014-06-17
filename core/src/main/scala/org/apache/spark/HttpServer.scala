@@ -84,7 +84,7 @@ private[spark] class HttpServer(resourceBase: File,
   private def startWithIncrements(startPort: Int, maxRetries: Int): Tuple2[Server,Int] = {
     for( offset <- 0 to maxRetries) {
       try {
-        val (server, actualPort) = startOnPort(startPort+offset)
+        val (server, actualPort) = startOnPort(startPort + offset)
         return (server, actualPort)
       } catch {
         case e: java.net.BindException => {
@@ -92,7 +92,7 @@ private[spark] class HttpServer(resourceBase: File,
             offset == (maxRetries-1)) {
             throw e
           }
-          logInfo("Could not bind on port: " + (startPort+offset))
+          logInfo("Could not bind on port: " + (startPort + offset))
         }
         case e: Exception => throw e
       }

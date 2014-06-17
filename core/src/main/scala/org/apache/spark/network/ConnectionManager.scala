@@ -113,7 +113,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
              offset == maxTries) {
             throw e
           }
-          logInfo("Could not bind on port: " + (port+offset))
+          logInfo("Could not bind on port: " + (port + offset))
         }
         case e: Exception => throw e
       }
