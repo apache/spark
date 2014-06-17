@@ -374,7 +374,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         finishReq.setDiagnostics(diagnostics)
 
         val trackingUrl = sparkConf.getOption("spark.yarn.historyServer.address")
-          .map(url => "%s/by-id/%s".format(url, appAttemptId.getApplicationId()))
+          .map(url => "%s/history/%s".format(url, appAttemptId.getApplicationId()))
           .getOrElse("")
         finishReq.setTrackingUrl(trackingUrl)
         resourceManager.finishApplicationMaster(finishReq)

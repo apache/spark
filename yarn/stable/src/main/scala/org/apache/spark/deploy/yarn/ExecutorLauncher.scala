@@ -251,7 +251,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
   def finishApplicationMaster(status: FinalApplicationStatus) {
     logInfo("Unregistering ApplicationMaster with " + status)
     val trackingUrl = sparkConf.getOption("spark.yarn.historyServer.address")
-      .map(url => "%s/by-id/%s".format(url, appAttemptId.getApplicationId()))
+      .map(url => "%s/history/%s".format(url, appAttemptId.getApplicationId()))
       .getOrElse("")
     amClient.unregisterApplicationMaster(status, "" /* appMessage */ , trackingUrl)
   }

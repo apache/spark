@@ -45,8 +45,13 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   // A timestamp of when the disk was last accessed to check for log updates
   private var lastLogCheckTimeMs = -1L
 
+  // The modification time of the newest log detected during the last scan. This is used
+  // to ignore logs that are older during subsequent scans, to avoid processing data that
+  // is already known.
+  private var mostRecentLogModTime = -1L
+
   // List of applications, in order from newest to oldest.
-  @volatile private var appList: Seq[ApplicationHistoryInfo] = Nil
+  @volatile private var appList: mutable.Map[String, FsApplicationHistoryInfo] = mutable.Map()
 
   /**
    * A background thread that periodically checks for event log updates on disk.
@@ -91,12 +96,30 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     logCheckingThread.start()
   }
 
-  override def getListing() = appList
+  override def getListing() = appList.values
 
   override def getAppUI(appId: String): SparkUI = {
     try {
-      val appLogDir = fs.getFileStatus(new Path(logDir, appId))
-      loadAppInfo(appLogDir, true)._2
+      appList.get(appId).map(info => {
+        val (replayBus, appListener) = createReplayBus(fs.getFileStatus(
+          new Path(logDir, info.logDir)))
+        val ui = {
+          val conf = this.conf.clone()
+          val appSecManager = new SecurityManager(conf)
+          new SparkUI(conf, appSecManager, replayBus, appId, "/history/" + appId)
+          // Do not call ui.bind() to avoid creating a new server for each application
+        }
+
+        replayBus.replay()
+
+        // Note that this does not have any effect due to SPARK-2169.
+        ui.setAppName(s"${appListener.appName} ($appId)")
+
+        val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
+        ui.getSecurityManager.setUIAcls(uiAclsEnabled)
+        ui.getSecurityManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
+        ui
+      }).getOrElse(null)
     } catch {
       case e: FileNotFoundException => null
     }
@@ -116,80 +139,99 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     try {
       val logStatus = fs.listStatus(new Path(logDir))
       val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
-      val logInfos = logDirs.filter {
-        dir => fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))
-      }
 
-      val currentApps = Map[String, ApplicationHistoryInfo](
-        appList.map(app => (app.id -> app)):_*)
-
-      // For any application that either (i) is not listed or (ii) has changed since the last time
-      // the listing was created (defined by the log dir's modification time), load the app's info.
-      // Otherwise just reuse what's already in memory.
-      val newApps = new mutable.ArrayBuffer[ApplicationHistoryInfo](logInfos.size)
-      for (dir <- logInfos) {
-        val curr = currentApps.getOrElse(dir.getPath().getName(), null)
-        if (curr == null || curr.lastUpdated < getModificationTime(dir)) {
-          try {
-            newApps += loadAppInfo(dir, false)._1
-          } catch {
-            case e: Exception => logError(s"Failed to load app info from directory $dir.")
+      // Load all new logs from the log directory. Only directories that have a modification time
+      // later than the last known log directory will be loaded.
+      var newMostRecentModTime = mostRecentLogModTime
+      val logInfos = logDirs
+        .filter { dir =>
+          if (fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))) {
+            val modTime = getModificationTime(dir)
+            newMostRecentModTime = math.max(newMostRecentModTime, modTime)
+            modTime > mostRecentLogModTime
+          } else {
+            false
           }
-        } else {
-          newApps += curr
         }
-      }
+        .map { dir =>
+          try {
+            val (replayBus, appListener) = createReplayBus(dir)
+            replayBus.replay()
+            new FsApplicationHistoryInfo(
+              dir.getPath().getName(),
+              appListener.appId.getOrElse(dir.getPath().getName()),
+              appListener.appName,
+              appListener.startTime,
+              appListener.endTime,
+              getModificationTime(dir),
+              appListener.sparkUser)
+          } catch {
+            case e: Exception =>
+              logInfo(s"Failed to load application log data from $dir.", e)
+              null
+          }
+        }
+        .sortBy { info => -info.endTime }
 
-      appList = newApps.sortBy { info => -info.endTime }
+      mostRecentLogModTime = newMostRecentModTime
+
+      if (!logInfos.isEmpty) {
+        var newAppList = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
+
+        // Merge the new apps with the existing ones, discarding any duplicates. The new map
+        // is created in descending end time order.
+        var currentApps = appList.values.iterator
+        logInfos.foreach { info =>
+          if (info != null) {
+            currentApps
+              .takeWhile(oldInfo => oldInfo.endTime > info.endTime)
+              .foreach { oldInfo =>
+                if (!newAppList.contains(oldInfo.id)) {
+                  newAppList += (oldInfo.id -> oldInfo)
+                }
+              }
+
+            newAppList += (info.id -> info)
+          }
+        }
+
+        currentApps.foreach { oldInfo =>
+          if (!newAppList.contains(oldInfo.id)) {
+            newAppList += (oldInfo.id -> oldInfo)
+          }
+        }
+
+        appList = newAppList
+      }
     } catch {
       case t: Throwable => logError("Exception in checking for event log updates", t)
     }
   }
 
-  /**
-   * Parse the application's logs to find out the information we need to build the
-   * listing page.
-   *
-   * When creating the listing of available apps, there is no need to load the whole UI for the
-   * application. The UI is requested by the HistoryServer (by calling getAppInfo()) when the user
-   * clicks on a specific application.
-   *
-   * @param logDir Directory with application's log files.
-   * @param renderUI Whether to create the SparkUI for the application.
-   * @return A 2-tuple `(app info, ui)`. `ui` will be null if `renderUI` is false.
-   */
-  private def loadAppInfo(logDir: FileStatus, renderUI: Boolean) = {
-    val elogInfo = EventLoggingListener.parseLoggingInfo(logDir.getPath(), fs)
-    val path = logDir.getPath
-    val appId = path.getName
+  private def loadAppUI(logDir: FileStatus, appId: String): SparkUI = {
+    val (replayBus, appListener) = createReplayBus(logDir)
+    val ui: SparkUI = {
+      val conf = this.conf.clone()
+      val appSecManager = new SecurityManager(conf)
+      new SparkUI(conf, appSecManager, replayBus, appId, "/history/" + appId)
+      // Do not call ui.bind() to avoid creating a new server for each application
+    }
+
+    replayBus.replay()
+
+    val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
+    ui.getSecurityManager.setUIAcls(uiAclsEnabled)
+    ui.getSecurityManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
+    ui
+  }
+
+  private def createReplayBus(logDir: FileStatus) = {
+    val path = logDir.getPath()
+    val elogInfo = EventLoggingListener.parseLoggingInfo(path, fs)
     val replayBus = new ReplayListenerBus(elogInfo.logPaths, fs, elogInfo.compressionCodec)
     val appListener = new ApplicationEventListener
     replayBus.addListener(appListener)
-
-    val ui: SparkUI = if (renderUI) {
-        val conf = this.conf.clone()
-        val appSecManager = new SecurityManager(conf)
-        new SparkUI(conf, appSecManager, replayBus, appId, "/history/" + appId)
-        // Do not call ui.bind() to avoid creating a new server for each application
-      } else {
-        null
-      }
-
-    replayBus.replay()
-    val appInfo = ApplicationHistoryInfo(
-      appId,
-      appListener.appName,
-      appListener.startTime,
-      appListener.endTime,
-      getModificationTime(logDir),
-      appListener.sparkUser)
-
-    if (ui != null) {
-      val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
-      ui.getSecurityManager.setUIAcls(uiAclsEnabled)
-      ui.getSecurityManager.setViewAcls(appListener.sparkUser, appListener.viewAcls)
-    }
-    (appInfo, ui)
+    (replayBus, appListener)
   }
 
   /** Return when this directory was last modified. */
@@ -212,3 +254,13 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private def getMonotonicTimeMs() = System.nanoTime() / (1000 * 1000)
 
 }
+
+private class FsApplicationHistoryInfo(
+  val logDir: String,
+  id: String,
+  name: String,
+  startTime: Long,
+  endTime: Long,
+  lastUpdated: Long,
+  sparkUser: String)
+  extends ApplicationHistoryInfo(id, name, startTime, endTime, lastUpdated, sparkUser)

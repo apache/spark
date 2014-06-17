@@ -327,7 +327,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       logInfo("Unregistering ApplicationMaster with " + status)
       if (registered) {
         val trackingUrl = sparkConf.getOption("spark.yarn.historyServer.address")
-          .map(url => "%s/by-id/%s".format(url, appAttemptId.getApplicationId()))
+          .map(url => "%s/history/%s".format(url, appAttemptId.getApplicationId()))
           .getOrElse("")
         amClient.unregisterApplicationMaster(status, diagnostics, trackingUrl)
       }
