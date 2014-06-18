@@ -480,6 +480,7 @@ private[hive] object HiveQl {
             whereClause ::
             groupByClause ::
             orderByClause ::
+            havingClause ::
             sortByClause ::
             clusterByClause ::
             distributeByClause ::
@@ -494,6 +495,7 @@ private[hive] object HiveQl {
               "TOK_WHERE",
               "TOK_GROUPBY",
               "TOK_ORDERBY",
+              "TOK_HAVING",
               "TOK_SORTBY",
               "TOK_CLUSTERBY",
               "TOK_DISTRIBUTEBY",
@@ -576,21 +578,26 @@ private[hive] object HiveQl {
         val withDistinct =
           if (selectDistinctClause.isDefined) Distinct(withProject) else withProject
 
+        val withHaving = havingClause.map { h => 
+          val Seq(havingExpr) = h.getChildren.toSeq
+          Filter(nodeToExpr(havingExpr), withDistinct)
+        }.getOrElse(withDistinct)
+
         val withSort =
           (orderByClause, sortByClause, distributeByClause, clusterByClause) match {
             case (Some(totalOrdering), None, None, None) =>
-              Sort(totalOrdering.getChildren.map(nodeToSortOrder), withDistinct)
+              Sort(totalOrdering.getChildren.map(nodeToSortOrder), withHaving)
             case (None, Some(perPartitionOrdering), None, None) =>
-              SortPartitions(perPartitionOrdering.getChildren.map(nodeToSortOrder), withDistinct)
+              SortPartitions(perPartitionOrdering.getChildren.map(nodeToSortOrder), withHaving)
             case (None, None, Some(partitionExprs), None) =>
-              Repartition(partitionExprs.getChildren.map(nodeToExpr), withDistinct)
+              Repartition(partitionExprs.getChildren.map(nodeToExpr), withHaving)
             case (None, Some(perPartitionOrdering), Some(partitionExprs), None) =>
               SortPartitions(perPartitionOrdering.getChildren.map(nodeToSortOrder),
-                Repartition(partitionExprs.getChildren.map(nodeToExpr), withDistinct))
+                Repartition(partitionExprs.getChildren.map(nodeToExpr), withHaving))
             case (None, None, None, Some(clusterExprs)) =>
               SortPartitions(clusterExprs.getChildren.map(nodeToExpr).map(SortOrder(_, Ascending)),
-                Repartition(clusterExprs.getChildren.map(nodeToExpr), withDistinct))
-            case (None, None, None, None) => withDistinct
+                Repartition(clusterExprs.getChildren.map(nodeToExpr), withHaving))
+            case (None, None, None, None) => withHaving
             case _ => sys.error("Unsupported set of ordering / distribution clauses.")
           }
 
