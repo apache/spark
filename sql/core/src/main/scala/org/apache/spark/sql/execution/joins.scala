@@ -109,7 +109,7 @@ trait HashJoin {
       /**
        * Searches the streamed iterator for the next row that has at least one match in hashtable.
        *
-       * @return true if the search is successful, and false the streamed iterator runs out of
+       * @return true if the search is successful, and false if the streamed iterator runs out of
        *         tuples.
        */
       private final def fetchNext(): Boolean = {
@@ -136,7 +136,7 @@ trait HashJoin {
 
 /**
  * :: DeveloperApi ::
- * Performs and inner hash join of two child relations by first shuffling the data using the join
+ * Performs an inner hash join of two child relations by first shuffling the data using the join
  * keys.
  */
 @DeveloperApi
@@ -163,9 +163,10 @@ case class ShuffledHashJoin(
 
 /**
  * :: DeveloperApi ::
- * Performs an inner hash join of two child relations.  When the operator is constructed, a Spark
- * job is asynchronously started to calculate the values for the broadcasted relation.  This data
- * is then placed in a Spark broadcast variable.  The streamed relation is not shuffled.
+ * Performs an inner hash join of two child relations.  When the output RDD of this operator is
+ * being constructed, a Spark job is asynchronously started to calculate the values for the
+ * broadcasted relation.  This data is then placed in a Spark broadcast variable.  The streamed
+ * relation is not shuffled.
  */
 @DeveloperApi
 case class BroadcastHashJoin(

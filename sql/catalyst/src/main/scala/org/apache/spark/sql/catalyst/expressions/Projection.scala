@@ -45,8 +45,8 @@ class Projection(expressions: Seq[Expression]) extends (Row => Row) {
  * that schema.
  *
  * In contrast to a normal projection, a MutableProjection reuses the same underlying row object
- * each time an input row is added.  This significatly reduces the cost of calcuating the
- * projection, but means that it is not safe
+ * each time an input row is added.  This significantly reduces the cost of calculating the
+ * projection, but means that it is not safe ...?
  */
 case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.fs.FileSystem
+
+import org.apache.spark.sql
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -31,6 +34,29 @@ private[hive] trait HiveStrategies {
   self: SQLContext#SparkPlanner =>
 
   val hiveContext: HiveContext
+
+  // FIXME(zongheng): WIP
+  object HashJoin extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case HashFilteredJoin(
+            Inner,
+            leftKeys,
+            rightKeys,
+            condition,
+            left,
+            right @ PhysicalOperation(_, _, b: MetastoreRelation)) =>
+
+        val path = b.hiveQlTable.getPath
+        val fs = path.getFileSystem(hiveContext.hiveconf)
+        val size = fs.getContentSummary(path).getLength // TODO: in bytes?
+
+
+        val hashJoin =
+          sql.execution.BroadcastHashJoin(
+            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))(sparkContext)
+        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+    }
+  }
 
   object Scripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
