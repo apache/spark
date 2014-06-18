@@ -27,6 +27,7 @@ protocol SparkFlumeProtocol {
   }
 
   record EventBatch {
+    string errorMsg = ""; // If this is empty it is a valid message, else it represents an error
     string sequenceNumber;
     array<SparkSinkEvent> events;
   }

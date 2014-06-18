@@ -23,7 +23,7 @@ import java.util.concurrent.{TimeUnit, CountDownLatch, Callable}
 import scala.util.control.Breaks
 
 import org.apache.flume.{Transaction, Channel}
-import org.apache.spark.flume.{SparkSinkEvent, ErrorEventBatch, EventBatch}
+import org.apache.spark.flume.{SparkSinkEvent, EventBatch}
 import org.slf4j.LoggerFactory
 
 
@@ -50,7 +50,8 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
   private val LOG = LoggerFactory.getLogger(classOf[TransactionProcessor])
 
   // If a real batch is not returned, we always have to return an error batch.
-  @volatile private var eventBatch: EventBatch = new ErrorEventBatch("Unknown Error")
+  @volatile private var eventBatch: EventBatch = new EventBatch("Unknown Error", "",
+    util.Collections.emptyList())
 
   // Synchronization primitives
   val batchGeneratedLatch = new CountDownLatch(1)
@@ -70,7 +71,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
   /**
    * Get an event batch from the channel. This method will block until a batch of events is
    * available from the channel. If no events are available after a large number of attempts of
-   * polling the channel, this method will return [[ErrorEventBatch]].
+   * polling the channel, this method will return an [[EventBatch]] with a non-empty error message
    *
    * @return An [[EventBatch]] instance with sequence number set to seqNum, filled with a
    *         maximum of maxBatchSize events
@@ -96,16 +97,14 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
 
   /**
    * Populates events into the event batch. If the batch cannot be populated,
-   * this method will not set the event batch which will stay [[ErrorEventBatch]]
+   * this method will not set the events into the event batch, but it sets an error message.
    */
   private def populateEvents() {
     try {
       txOpt = Option(channel.getTransaction)
       if(txOpt.isEmpty) {
-        assert(eventBatch.isInstanceOf[ErrorEventBatch])
-        eventBatch.asInstanceOf[ErrorEventBatch].message = "Something went wrong. Channel was " +
-          "unable to create a transaction!"
-        eventBatch
+        eventBatch.setErrorMsg("Something went wrong. Channel was " +
+          "unable to create a transaction!")
       }
       txOpt.map(tx => {
         tx.begin()
@@ -135,16 +134,16 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
           val msg = "Tried several times, " +
             "but did not get any events from the channel!"
           LOG.warn(msg)
-          eventBatch.asInstanceOf[ErrorEventBatch].message = msg
+          eventBatch.setErrorMsg(msg)
         } else {
           // At this point, the events are available, so fill them into the event batch
-          eventBatch = new EventBatch(seqNum, events)
+          eventBatch = new EventBatch("",seqNum, events)
         }
       })
     } catch {
       case e: Exception =>
         LOG.error("Error while processing transaction.", e)
-        eventBatch.asInstanceOf[ErrorEventBatch].message = e.getMessage
+        eventBatch.setErrorMsg(e.getMessage)
         try {
           txOpt.map(tx => {
             rollbackAndClose(tx, close = true)

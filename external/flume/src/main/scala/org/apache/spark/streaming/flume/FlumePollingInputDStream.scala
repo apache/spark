@@ -31,7 +31,7 @@ import org.apache.avro.ipc.specific.SpecificRequestor
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 
 import org.apache.spark.Logging
-import org.apache.spark.flume.{EventBatch, ErrorEventBatch, SparkSinkEvent, SparkFlumeProtocol}
+import org.apache.spark.flume.{EventBatch, SparkSinkEvent, SparkFlumeProtocol}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
@@ -99,37 +99,40 @@ private[streaming] class FlumePollingReceiver(
           counter = counter % connections.size
           val client = connections(counter).client
           counter += 1
-          client.getEventBatch(maxBatchSize) match {
-            case errorBatch: ErrorEventBatch =>
-              logWarning("Error Event Batch received from Spark Sink. " + errorBatch.message)
-            case batch: EventBatch =>
-              val seq = batch.getSequenceNumber
-              val events: java.util.List[SparkSinkEvent] = batch.getEvents
-              logDebug(
-                "Received batch of " + events.size() + " events with sequence number: " + seq)
-              try {
-                // Convert each Flume event to a serializable SparkPollingEvent
-                events.foreach(event => {
-                  store(SparkFlumePollingEvent.fromSparkSinkEvent(event))
-                })
-                // Send an ack to Flume so that Flume discards the events from its channels.
-                client.ack(seq)
-              } catch {
-                case e: Throwable =>
-                  try {
-                    // Let Flume know that the events need to be pushed back into the channel.
-                    client.nack(seq) // If the agent is down, even this could fail and throw
-                  } catch {
-                    case e: Throwable => logError(
-                      "Sending Nack also failed. A Flume agent is down.")
-                  }
-                  TimeUnit.SECONDS.sleep(2L) // for now just leave this as a fixed 2 seconds.
-                  logWarning("Error while attempting to store events", e)
-              }
+          val eventBatch = client.getEventBatch(maxBatchSize)
+          val errorMsg = eventBatch.getErrorMsg
+          if (errorMsg.toString.equals("")) { // No error, proceed with processing data
+            val seq = eventBatch.getSequenceNumber
+            val events: java.util.List[SparkSinkEvent] = eventBatch.getEvents
+            logDebug(
+              "Received batch of " + events.size() + " events with sequence number: " + seq)
+            try {
+              // Convert each Flume event to a serializable SparkPollingEvent
+              events.foreach(event => {
+                store(SparkFlumePollingEvent.fromSparkSinkEvent(event))
+              })
+              // Send an ack to Flume so that Flume discards the events from its channels.
+              client.ack(seq)
+            } catch {
+              case e: Exception =>
+                try {
+                  // Let Flume know that the events need to be pushed back into the channel.
+                  client.nack(seq) // If the agent is down, even this could fail and throw
+                } catch {
+                  case e: Exception => logError(
+                    "Sending Nack also failed. A Flume agent is down.")
+                }
+                TimeUnit.SECONDS.sleep(2L) // for now just leave this as a fixed 2 seconds.
+                logWarning("Error while attempting to store events", e)
+            }
+          } else {
+            logWarning("Did not receive events from Flume agent due to error on the Flume agent: " +
+              "" + errorMsg.toString)
           }
         }
       }
     }
+
     // Create multiple threads and start all of them.
     for (i <- 0 until parallelism) {
       logInfo("Starting Flume Polling Receiver worker threads starting..")
