@@ -49,17 +49,19 @@ if [[ ! "$@" =~ --package-only ]]; then
   mvn -Pyarn release:clean
 
   mvn -DskipTests \
-    -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
+    -Darguments="-DskipTests=true -Dmaven.javadoc.skip=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
     -Dusername=$GIT_USERNAME -Dpassword=$GIT_PASSWORD \
+    -Dmaven.javadoc.skip=true \
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Pyarn -Phive -Pspark-ganglia-lgpl\
+    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl\
     -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
     --batch-mode release:prepare
 
   mvn -DskipTests \
-    -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
+    -Darguments="-DskipTests=true -Dmaven.javadoc.skip=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Pyarn -Phive -Pspark-ganglia-lgpl\
+    -Dmaven.javadoc.skip=true \
+    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl\
     release:perform
 
   cd ..
@@ -109,9 +111,9 @@ make_binary_release() {
     spark-$RELEASE_VERSION-bin-$NAME.tgz.sha
 }
 
-make_binary_release "hadoop1" "--hadoop 1.0.4"
-make_binary_release "cdh4" "--hadoop 2.0.0-mr1-cdh4.2.0"
-make_binary_release "hadoop2" "--with-yarn --hadoop 2.2.0"
+make_binary_release "hadoop1" "--with-hive --hadoop 1.0.4"
+make_binary_release "cdh4" "--with-hive --hadoop 2.0.0-mr1-cdh4.2.0"
+make_binary_release "hadoop2" "--with-hive --with-yarn --hadoop 2.2.0"
 
 # Copy data
 echo "Copying release tarballs"

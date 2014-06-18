@@ -36,7 +36,13 @@ private[spark] object UIUtils extends Logging {
   def formatDate(timestamp: Long): String = dateFormat.get.format(new Date(timestamp))
 
   def formatDuration(milliseconds: Long): String = {
+    if (milliseconds < 100) {
+      return "%d ms".format(milliseconds)
+    }
     val seconds = milliseconds.toDouble / 1000
+    if (seconds < 1) {
+      return "%.1f s".format(seconds)
+    }
     if (seconds < 60) {
       return "%.0f s".format(seconds)
     }
@@ -162,7 +168,7 @@ private[spark] object UIUtils extends Logging {
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
-            <a href="/" class="brand">
+            <a href={prependBaseUri("/")} class="brand">
               <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
             </a>
             <ul class="nav">{header}</ul>

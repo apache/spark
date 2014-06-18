@@ -91,9 +91,17 @@ private[ui] class StageTableBase(
         {s.name}
       </a>
 
+    val details = if (s.details.nonEmpty) (
+      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +show details
+      </span>
+      <pre class="stage-details collapsed">{s.details}</pre>
+    )
+
     listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink} {killLink}</div>)
-      .getOrElse(<div> {killLink}{nameLink}</div>)
+      .getOrElse(<div>{killLink} {nameLink} {details}</div>)
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {

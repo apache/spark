@@ -70,7 +70,7 @@ class HistoryServer(
    * TODO: Add a mechanism to update manually.
    */
   private val logCheckingThread = new Thread {
-    override def run() {
+    override def run(): Unit = Utils.logUncaughtExceptions {
       while (!stopped) {
         val now = System.currentTimeMillis
         if (now - lastLogCheckTime > UPDATE_INTERVAL_MS) {
@@ -154,7 +154,7 @@ class HistoryServer(
         numCompletedApplications = logInfos.size
 
       } catch {
-        case t: Throwable => logError("Exception in checking for event log updates", t)
+        case e: Exception => logError("Exception in checking for event log updates", e)
       }
     } else {
       logWarning("Attempted to check for event log updates before binding the server.")
@@ -231,8 +231,8 @@ class HistoryServer(
         dir.getModificationTime
       }
     } catch {
-      case t: Throwable =>
-        logError("Exception in accessing modification time of %s".format(dir.getPath), t)
+      case e: Exception =>
+        logError("Exception in accessing modification time of %s".format(dir.getPath), e)
         -1L
     }
   }

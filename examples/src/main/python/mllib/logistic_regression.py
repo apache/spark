@@ -39,12 +39,12 @@ def parsePoint(line):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print >> sys.stderr, "Usage: logistic_regression <master> <file> <iters>"
+    if len(sys.argv) != 3:
+        print >> sys.stderr, "Usage: logistic_regression <file> <iterations>"
         exit(-1)
-    sc = SparkContext(sys.argv[1], "PythonLR")
-    points = sc.textFile(sys.argv[2]).map(parsePoint)
-    iterations = int(sys.argv[3])
+    sc = SparkContext(appName="PythonLR")
+    points = sc.textFile(sys.argv[1]).map(parsePoint)
+    iterations = int(sys.argv[2])
     model = LogisticRegressionWithSGD.train(points, iterations)
     print "Final weights: " + str(model.weights)
     print "Final intercept: " + str(model.intercept)

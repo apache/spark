@@ -303,10 +303,11 @@ private[spark] class Master(
             appInfo.removeExecutor(exec)
             exec.worker.removeExecutor(exec)
 
+            val normalExit = exitStatus.exists(_ == 0)
             // Only retry certain number of times so we don't go into an infinite loop.
-            if (appInfo.incrementRetryCount < ApplicationState.MAX_NUM_RETRY) {
+            if (!normalExit && appInfo.incrementRetryCount < ApplicationState.MAX_NUM_RETRY) {
               schedule()
-            } else {
+            } else if (!normalExit) {
               logError("Application %s with ID %s failed %d times, removing it".format(
                 appInfo.desc.name, appInfo.id, appInfo.retryCount))
               removeApplication(appInfo, ApplicationState.FAILED)
@@ -684,8 +685,8 @@ private[spark] class Master(
         webUi.attachSparkUI(ui)
         return true
       } catch {
-        case t: Throwable =>
-          logError("Exception in replaying log for application %s (%s)".format(appName, app.id), t)
+        case e: Exception =>
+          logError("Exception in replaying log for application %s (%s)".format(appName, app.id), e)
       }
     } else {
       logWarning("Application %s (%s) has no valid logs: %s".format(appName, app.id, eventLogDir))

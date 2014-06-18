@@ -35,7 +35,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   /**
    * Checks for three-valued-logic.  Based on:
    * http://en.wikipedia.org/wiki/Null_(SQL)#Comparisons_with_NULL_and_the_three-valued_logic_.283VL.29
-   *
+   * I.e. in flat cpo "False -> Unknown -> True", OR is lowest upper bound, AND is greatest lower bound.
    * p       q       p OR q  p AND q  p = q
    * True    True    True    True     True
    * True    False   True    False    False
@@ -364,6 +364,19 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     checkEvaluation(GetField(BoundReference(2, AttributeReference("c", typeS)()), "a"), "aa", row)
     checkEvaluation(GetField(Literal(null, typeS), "a"), null, row)
+
+    val typeS_notNullable = StructType(
+      StructField("a", StringType, nullable = false)
+        :: StructField("b", StringType, nullable = false) :: Nil
+    )
+
+    assert(GetField(BoundReference(2,
+      AttributeReference("c", typeS)()), "a").nullable === true)
+    assert(GetField(BoundReference(2,
+      AttributeReference("c", typeS_notNullable, nullable = false)()), "a").nullable === false)
+
+    assert(GetField(Literal(null, typeS), "a").nullable === true)
+    assert(GetField(Literal(null, typeS_notNullable), "a").nullable === true)
   }
 
   test("arithmetic") {

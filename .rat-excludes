@@ -3,6 +3,7 @@ target
 .project
 .classpath
 .mima-excludes
+.generated-mima-excludes
 .rat-excludes
 .*md
 derby.log
@@ -21,6 +22,7 @@ spark-env.sh.template
 log4j-defaults.properties
 sorttable.js
 .*txt
+.*json
 .*data
 .*log
 cloudpickle.py
@@ -43,3 +45,9 @@ test.out/*
 .*iml
 service.properties
 db.lck
+build/*
+dist/*
+.*out
+.*ipr
+.*iws
+logs

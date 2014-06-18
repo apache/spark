@@ -22,6 +22,9 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkConf
+import org.apache.spark.serializer.KryoSerializer
+
 import org.apache.spark.graphx._
 
 class EdgePartitionSuite extends FunSuite {
@@ -119,5 +122,20 @@ class EdgePartitionSuite extends FunSuite {
     assert(ep.isActive(2))
     assert(!ep.isActive(-1))
     assert(ep.numActives == Some(2))
+  }
+
+  test("Kryo serialization") {
+    val aList = List((0, 1, 0), (1, 0, 0), (1, 2, 0), (5, 4, 0), (5, 5, 0))
+    val a: EdgePartition[Int, Int] = makeEdgePartition(aList)
+    val conf = new SparkConf()
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
+    val s = new KryoSerializer(conf).newInstance()
+    val aSer: EdgePartition[Int, Int] = s.deserialize(s.serialize(a))
+    assert(aSer.srcIds.toList === a.srcIds.toList)
+    assert(aSer.dstIds.toList === a.dstIds.toList)
+    assert(aSer.data.toList === a.data.toList)
+    assert(aSer.index != null)
+    assert(aSer.vertices.iterator.toSet === a.vertices.iterator.toSet)
   }
 }

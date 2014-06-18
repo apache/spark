@@ -187,7 +187,8 @@ private[hive] case class HiveSimpleUdf(name: String, children: Seq[Expression]) 
     val primitiveClasses = Seq(
       Integer.TYPE, classOf[java.lang.Integer], classOf[java.lang.String], java.lang.Double.TYPE,
       classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long],
-      classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte]
+      classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte],
+      classOf[java.sql.Timestamp]
     )
     val matchingConstructor = argClass.getConstructors.find { c =>
       c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
@@ -248,17 +249,31 @@ private[hive] case class HiveGenericUdf(name: String, children: Seq[Expression])
     isUDFDeterministic && children.foldLeft(true)((prev, n) => prev && n.foldable)
   }
 
+  protected lazy val deferedObjects = Array.fill[DeferredObject](children.length)({
+    new DeferredObjectAdapter
+  })
+
+  // Adapter from Catalyst ExpressionResult to Hive DeferredObject
+  class DeferredObjectAdapter extends DeferredObject {
+    private var func: () => Any = _
+    def set(func: () => Any) {
+      this.func = func
+    }
+    override def prepare(i: Int) = {}
+    override def get(): AnyRef = wrap(func())
+  }
+
   val dataType: DataType = inspectorToDataType(returnInspector)
 
   override def eval(input: Row): Any = {
     returnInspector // Make sure initialized.
-    val args = children.map { v =>
-      new DeferredObject {
-        override def prepare(i: Int) = {}
-        override def get(): AnyRef = wrap(v.eval(input))
-      }
-    }.toArray
-    unwrap(function.evaluate(args))
+    var i = 0
+    while (i < children.length) {
+      val idx = i
+      deferedObjects(i).asInstanceOf[DeferredObjectAdapter].set(() => {children(idx).eval(input)})
+      i += 1
+    }
+    unwrap(function.evaluate(deferedObjects))
   }
 }
 
@@ -320,6 +335,9 @@ private[hive] trait HiveInspectors {
     case BinaryType => PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector
     case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
     case DecimalType => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
+    case StructType(fields) =>
+      ObjectInspectorFactory.getStandardStructObjectInspector(
+        fields.map(f => f.name), fields.map(f => toInspector(f.dataType)))
   }
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {

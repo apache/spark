@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.types.BooleanType
 
 
@@ -98,13 +97,19 @@ case class And(left: Expression, right: Expression) extends BinaryPredicate {
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    val r = right.eval(input)
-    if (l == false || r == false) {
-      false
-    } else if (l == null || r == null ) {
-      null
+    if (l == false) {
+       false
     } else {
-      true
+      val r = right.eval(input)
+      if (r == false) {
+        false
+      } else {
+        if (l != null && r != null) {
+          true
+        } else {
+          null
+        }
+      }
     }
   }
 }
@@ -114,13 +119,19 @@ case class Or(left: Expression, right: Expression) extends BinaryPredicate {
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    val r = right.eval(input)
-    if (l == true || r == true) {
+    if (l == true) {
       true
-    } else if (l == null || r == null) {
-      null
     } else {
-      false
+      val r = right.eval(input)
+      if (r == true) {
+        true
+      } else {
+        if (l != null && r != null) {
+          false
+        } else {
+          null
+        }
+      }
     }
   }
 }
@@ -133,8 +144,12 @@ case class Equals(left: Expression, right: Expression) extends BinaryComparison 
   def symbol = "="
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    val r = right.eval(input)
-    if (l == null || r == null) null else l == r
+    if (l == null) {
+      null
+    } else {
+      val r = right.eval(input)
+      if (r == null) null else l == r
+    }
   }
 }
 
@@ -162,7 +177,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     extends Expression {
 
   def children = predicate :: trueValue :: falseValue :: Nil
-  def nullable = trueValue.nullable || falseValue.nullable
+  override def nullable = trueValue.nullable || falseValue.nullable
   def references = children.flatMap(_.references).toSet
   override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
   def dataType = {
@@ -175,8 +190,9 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   }
 
   type EvaluatedType = Any
+
   override def eval(input: Row): Any = {
-    if (predicate.eval(input).asInstanceOf[Boolean]) {
+    if (true == predicate.eval(input)) {
       trueValue.eval(input)
     } else {
       falseValue.eval(input)
@@ -184,4 +200,79 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   }
 
   override def toString = s"if ($predicate) $trueValue else $falseValue"
+}
+
+// scalastyle:off
+/**
+ * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END".
+ * Refer to this link for the corresponding semantics:
+ * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-ConditionalFunctions
+ *
+ * The other form of case statements "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END" gets
+ * translated to this form at parsing time.  Namely, such a statement gets translated to
+ * "CASE WHEN a=b THEN c [WHEN a=d THEN e]* [ELSE f] END".
+ *
+ * Note that `branches` are considered in consecutive pairs (cond, val), and the optional last
+ * element is the value for the default catch-all case (if provided). Hence, `branches` consists of
+ * at least two elements, and can have an odd or even length.
+ */
+// scalastyle:on
+case class CaseWhen(branches: Seq[Expression]) extends Expression {
+  type EvaluatedType = Any
+  def children = branches
+  def references = children.flatMap(_.references).toSet
+  def dataType = {
+    if (!resolved) {
+      throw new UnresolvedException(this, "cannot resolve due to differing types in some branches")
+    }
+    branches(1).dataType
+  }
+
+  @transient private[this] lazy val branchesArr = branches.toArray
+  @transient private[this] lazy val predicates =
+    branches.sliding(2, 2).collect { case Seq(cond, _) => cond }.toSeq
+  @transient private[this] lazy val values =
+    branches.sliding(2, 2).collect { case Seq(_, value) => value }.toSeq
+
+  override def nullable = {
+    // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
+    values.exists(_.nullable) || (values.length % 2 == 0)
+  }
+
+  override lazy val resolved = {
+    if (!childrenResolved) {
+      false
+    } else {
+      val allCondBooleans = predicates.forall(_.dataType == BooleanType)
+      val dataTypesEqual = values.map(_.dataType).distinct.size <= 1
+      allCondBooleans && dataTypesEqual
+    }
+  }
+
+  /** Written in imperative fashion for performance considerations.  Same for CaseKeyWhen. */
+  override def eval(input: Row): Any = {
+    val len = branchesArr.length
+    var i = 0
+    // If all branches fail and an elseVal is not provided, the whole statement
+    // defaults to null, according to Hive's semantics.
+    var res: Any = null
+    while (i < len - 1) {
+      if (branchesArr(i).eval(input) == true) {
+        res = branchesArr(i + 1).eval(input)
+        return res
+      }
+      i += 2
+    }
+    if (i == len - 1) {
+      res = branchesArr(i).eval(input)
+    }
+    res
+  }
+
+  override def toString = {
+    "CASE" + branches.sliding(2, 2).map {
+      case Seq(cond, value) => s" WHEN $cond THEN $value"
+      case Seq(elseValue) => s" ELSE $elseValue"
+    }.mkString
+  }
 }

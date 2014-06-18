@@ -81,7 +81,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
 
       case "kill" =>
         val driverId = driverArgs.driverId
-        val killFuture = masterActor ! RequestKillDriver(driverId)
+        masterActor ! RequestKillDriver(driverId)
     }
   }
 
@@ -157,7 +157,7 @@ object Client {
     // TODO: See if we can initialize akka so return messages are sent back using the same TCP
     //       flow. Else, this (sadly) requires the DriverClient be routable from the Master.
     val (actorSystem, _) = AkkaUtils.createActorSystem(
-      "driverClient", Utils.localHostName(), 0, false, conf, new SecurityManager(conf))
+      "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
     actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
 

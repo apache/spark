@@ -187,6 +187,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           arg
         }
+      case Some(arg: TreeNode[_]) if children contains arg =>
+        val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
+        if (!(newChild fastEquals arg)) {
+          changed = true
+          Some(newChild)
+        } else {
+          Some(arg)
+        }
       case m: Map[_,_] => m
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
@@ -231,6 +239,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           arg
         }
+      case Some(arg: TreeNode[_]) if children contains arg =>
+        val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
+        if (!(newChild fastEquals arg)) {
+          changed = true
+          Some(newChild)
+        } else {
+          Some(arg)
+        }
       case m: Map[_,_] => m
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
@@ -273,7 +289,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     } catch {
       case e: java.lang.IllegalArgumentException =>
         throw new TreeNodeException(
-          this, s"Failed to copy node.  Is otherCopyArgs specified correctly for $nodeName?")
+          this, s"Failed to copy node.  Is otherCopyArgs specified correctly for $nodeName? "
+            + s"Exception message: ${e.getMessage}.")
     }
   }
 

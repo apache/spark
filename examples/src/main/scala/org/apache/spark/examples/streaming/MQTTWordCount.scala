@@ -75,14 +75,14 @@ object MQTTPublisher {
  * Example Java code for Mqtt Publisher and Subscriber can be found here
  * https://bitbucket.org/mkjinesh/mqttclient
  * Usage: MQTTWordCount <MqttbrokerUrl> <topic>
-\ *   <MqttbrokerUrl> and <topic> describe where Mqtt publisher is running.
+ *   <MqttbrokerUrl> and <topic> describe where Mqtt publisher is running.
  *
  * To run this example locally, you may run publisher as
- *    `$ ./bin/spark-submit examples.jar \
- *    --class org.apache.spark.examples.streaming.MQTTPublisher tcp://localhost:1883 foo`
+ *    `$ bin/run-example \
+ *      org.apache.spark.examples.streaming.MQTTPublisher tcp://localhost:1883 foo`
  * and run the example as
- *    `$ ./bin/spark-submit examples.jar \
- *    --class org.apache.spark.examples.streaming.MQTTWordCount tcp://localhost:1883 foo`
+ *    `$ bin/run-example \
+ *      org.apache.spark.examples.streaming.MQTTWordCount tcp://localhost:1883 foo`
  */
 object MQTTWordCount {
 

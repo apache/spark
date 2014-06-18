@@ -74,7 +74,7 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
   type EvaluatedType = Any
 
   def dataType = field.dataType
-  override def nullable = field.nullable
+  override def nullable = child.nullable || field.nullable
   override def foldable = child.foldable
 
   protected def structType = child.dataType match {

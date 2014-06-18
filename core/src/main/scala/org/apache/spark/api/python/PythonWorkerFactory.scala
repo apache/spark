@@ -71,7 +71,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           stopDaemon()
           startDaemon()
           new Socket(daemonHost, daemonPort)
-        case e: Throwable => throw e
       }
     }
   }

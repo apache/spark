@@ -17,9 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.PrintWriter
-
-import scala.util.Try
+import java.io.{File, PrintWriter}
 
 import com.google.common.io.Files
 import org.json4s.jackson.JsonMethods._
@@ -39,11 +37,15 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     "org.apache.spark.io.LZFCompressionCodec",
     "org.apache.spark.io.SnappyCompressionCodec"
   )
-  private val testDir = Files.createTempDir()
+  private var testDir: File = _
+
+  before {
+    testDir = Files.createTempDir()
+    testDir.deleteOnExit()
+  }
 
   after {
-    Try { fileSystem.delete(Utils.getFilePath(testDir, "events.txt"), true) }
-    Try { fileSystem.delete(Utils.getFilePath(testDir, "test-replay"), true) }
+    Utils.deleteRecursively(testDir)
   }
 
   test("Simple replay") {

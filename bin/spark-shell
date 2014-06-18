@@ -28,14 +28,14 @@ esac
 # Enter posix mode for bash
 set -o posix
 
-if [[ "$@" == *--help* ]]; then
-  echo "Usage: ./bin/spark-shell [options]"
-  ./bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
-  exit 0
-fi
-
 ## Global script variables
 FWDIR="$(cd `dirname $0`/..; pwd)"
+
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+  echo "Usage: ./bin/spark-shell [options]"
+  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exit 0
+fi
 
 function main(){
     if $cygwin; then
@@ -46,11 +46,11 @@ function main(){
         # (see https://github.com/sbt/sbt/issues/562).
         stty -icanon min 1 -echo > /dev/null 2>&1
         export SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Djline.terminal=unix"
-        $FWDIR/bin/spark-submit spark-internal "$@" --class org.apache.spark.repl.Main
+        $FWDIR/bin/spark-submit spark-shell "$@" --class org.apache.spark.repl.Main
         stty icanon echo > /dev/null 2>&1
     else
         export SPARK_SUBMIT_OPTS
-        $FWDIR/bin/spark-submit spark-internal "$@" --class org.apache.spark.repl.Main
+        $FWDIR/bin/spark-submit spark-shell "$@" --class org.apache.spark.repl.Main
     fi
 }
 

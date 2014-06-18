@@ -33,10 +33,11 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
 
   def this(sc: SparkContext) = this(sc, new Configuration())
 
-  // Nothing else for now ... initialize application master : which needs sparkContext to determine how to allocate
-  // Note that only the first creation of SparkContext influences (and ideally, there must be only one SparkContext, right ?)
-  // Subsequent creations are ignored - since nodes are already allocated by then.
-
+  // Nothing else for now ... initialize application master : which needs a SparkContext to
+  // determine how to allocate.
+  // Note that only the first creation of a SparkContext influences (and ideally, there must be
+  // only one SparkContext, right ?). Subsequent creations are ignored since executors are already
+  // allocated by then.
 
   // By default, rack is unknown
   override def getRackForHost(hostPort: String): Option[String] = {
@@ -48,6 +49,7 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
   override def postStartHook() {
     val sparkContextInitialized = ApplicationMaster.sparkContextInitialized(sc)
     if (sparkContextInitialized){
+      ApplicationMaster.waitForInitialAllocations()
       // Wait for a few seconds for the slaves to bootstrap and register with master - best case attempt
       Thread.sleep(3000L)
     }

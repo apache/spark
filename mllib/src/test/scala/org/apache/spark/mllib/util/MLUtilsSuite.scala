@@ -32,6 +32,7 @@ import com.google.common.io.Files
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.util.Utils
 
 class MLUtilsSuite extends FunSuite with LocalSparkContext {
 
@@ -67,6 +68,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
         |-1 2:4.0 4:5.0 6:6.0
       """.stripMargin
     val tempDir = Files.createTempDir()
+    tempDir.deleteOnExit()
     val file = new File(tempDir.getPath, "part-00000")
     Files.write(lines, file, Charsets.US_ASCII)
     val path = tempDir.toURI.toString
@@ -90,7 +92,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     assert(multiclassPoints(1).label === -1.0)
     assert(multiclassPoints(2).label === -1.0)
 
-    deleteQuietly(tempDir)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("saveAsLibSVMFile") {
@@ -107,7 +109,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       .toSet
     val expected = Set("1.1 1:1.23 3:4.56", "0.0 1:1.01 2:2.02 3:3.03")
     assert(lines === expected)
-    deleteQuietly(tempDir)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("appendBias") {
@@ -158,16 +160,33 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  /** Delete a file/directory quietly. */
-  def deleteQuietly(f: File) {
-    if (f.isDirectory) {
-      f.listFiles().foreach(deleteQuietly)
-    }
-    try {
-      f.delete()
-    } catch {
-      case _: Throwable =>
-    }
+  test("loadVectors") {
+    val vectors = sc.parallelize(Seq(
+      Vectors.dense(1.0, 2.0),
+      Vectors.sparse(2, Array(1), Array(-1.0)),
+      Vectors.dense(0.0, 1.0)
+    ), 2)
+    val tempDir = Files.createTempDir()
+    val outputDir = new File(tempDir, "vectors")
+    val path = outputDir.toURI.toString
+    vectors.saveAsTextFile(path)
+    val loaded = loadVectors(sc, path)
+    assert(vectors.collect().toSet === loaded.collect().toSet)
+    Utils.deleteRecursively(tempDir)
+  }
+
+  test("loadLabeledPoints") {
+    val points = sc.parallelize(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0, 2.0)),
+      LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))),
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0))
+    ), 2)
+    val tempDir = Files.createTempDir()
+    val outputDir = new File(tempDir, "points")
+    val path = outputDir.toURI.toString
+    points.saveAsTextFile(path)
+    val loaded = loadLabeledPoints(sc, path)
+    assert(points.collect().toSet === loaded.collect().toSet)
+    Utils.deleteRecursively(tempDir)
   }
 }
-

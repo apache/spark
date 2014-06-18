@@ -28,7 +28,7 @@ import scala.collection.JavaConversions._
 class PruningSuite extends HiveComparisonTest {
   // Column pruning tests
 
-  createPruningTest("Column pruning: with partitioned table",
+  createPruningTest("Column pruning - with partitioned table",
     "SELECT key FROM srcpart WHERE ds = '2008-04-08' LIMIT 3",
     Seq("key"),
     Seq("key"),
@@ -36,43 +36,43 @@ class PruningSuite extends HiveComparisonTest {
       Seq("2008-04-08", "11"),
       Seq("2008-04-08", "12")))
 
-  createPruningTest("Column pruning: with non-partitioned table",
+  createPruningTest("Column pruning - with non-partitioned table",
     "SELECT key FROM src WHERE key > 10 LIMIT 3",
     Seq("key"),
     Seq("key"),
     Seq.empty)
 
-  createPruningTest("Column pruning: with multiple projects",
+  createPruningTest("Column pruning - with multiple projects",
     "SELECT c1 FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 LIMIT 3",
     Seq("c1"),
     Seq("key"),
     Seq.empty)
 
-  createPruningTest("Column pruning: projects alias substituting",
+  createPruningTest("Column pruning - projects alias substituting",
     "SELECT c1 AS c2 FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 LIMIT 3",
     Seq("c2"),
     Seq("key"),
     Seq.empty)
 
-  createPruningTest("Column pruning: filter alias in-lining",
+  createPruningTest("Column pruning - filter alias in-lining",
     "SELECT c1 FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 WHERE c1 < 100 LIMIT 3",
     Seq("c1"),
     Seq("key"),
     Seq.empty)
 
-  createPruningTest("Column pruning: without filters",
+  createPruningTest("Column pruning - without filters",
     "SELECT c1 FROM (SELECT key AS c1 FROM src) t1 LIMIT 3",
     Seq("c1"),
     Seq("key"),
     Seq.empty)
 
-  createPruningTest("Column pruning: simple top project without aliases",
+  createPruningTest("Column pruning - simple top project without aliases",
     "SELECT key FROM (SELECT key FROM src WHERE key > 10) t1 WHERE key < 100 LIMIT 3",
     Seq("key"),
     Seq("key"),
     Seq.empty)
 
-  createPruningTest("Column pruning: non-trivial top project with aliases",
+  createPruningTest("Column pruning - non-trivial top project with aliases",
     "SELECT c1 * 2 AS double FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 LIMIT 3",
     Seq("double"),
     Seq("key"),
@@ -80,19 +80,19 @@ class PruningSuite extends HiveComparisonTest {
 
   // Partition pruning tests
 
-  createPruningTest("Partition pruning: non-partitioned, non-trivial project",
+  createPruningTest("Partition pruning - non-partitioned, non-trivial project",
     "SELECT key * 2 AS double FROM src WHERE value IS NOT NULL",
     Seq("double"),
     Seq("key", "value"),
     Seq.empty)
 
-  createPruningTest("Partiton pruning: non-partitioned table",
+  createPruningTest("Partition pruning - non-partitioned table",
     "SELECT value FROM src WHERE key IS NOT NULL",
     Seq("value"),
     Seq("value", "key"),
     Seq.empty)
 
-  createPruningTest("Partition pruning: with filter on string partition key",
+  createPruningTest("Partition pruning - with filter on string partition key",
     "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08'",
     Seq("value", "hr"),
     Seq("value", "hr"),
@@ -100,7 +100,7 @@ class PruningSuite extends HiveComparisonTest {
       Seq("2008-04-08", "11"),
       Seq("2008-04-08", "12")))
 
-  createPruningTest("Partition pruning: with filter on int partition key",
+  createPruningTest("Partition pruning - with filter on int partition key",
     "SELECT value, hr FROM srcpart1 WHERE hr < 12",
     Seq("value", "hr"),
     Seq("value", "hr"),
@@ -108,20 +108,20 @@ class PruningSuite extends HiveComparisonTest {
       Seq("2008-04-08", "11"),
       Seq("2008-04-09", "11")))
 
-  createPruningTest("Partition pruning: left only 1 partition",
+  createPruningTest("Partition pruning - left only 1 partition",
     "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08' AND hr < 12",
     Seq("value", "hr"),
     Seq("value", "hr"),
     Seq(
       Seq("2008-04-08", "11")))
 
-  createPruningTest("Partition pruning: all partitions pruned",
+  createPruningTest("Partition pruning - all partitions pruned",
     "SELECT value, hr FROM srcpart1 WHERE ds = '2014-01-27' AND hr = 11",
     Seq("value", "hr"),
     Seq("value", "hr"),
     Seq.empty)
 
-  createPruningTest("Partition pruning: pruning with both column key and partition key",
+  createPruningTest("Partition pruning - pruning with both column key and partition key",
     "SELECT value, hr FROM srcpart1 WHERE value IS NOT NULL AND hr < 12",
     Seq("value", "hr"),
     Seq("value", "hr"),

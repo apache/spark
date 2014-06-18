@@ -24,8 +24,10 @@ import scala.xml.Node
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
+import org.apache.spark.Logging
+import org.apache.spark.util.logging.{FileAppender, RollingFileAppender}
 
-private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") {
+private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {
   private val worker = parent.worker
   private val workDir = parent.workDir
 
@@ -39,21 +41,18 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") {
     val offset = Option(request.getParameter("offset")).map(_.toLong)
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
 
-    val path = (appId, executorId, driverId) match {
+    val logDir = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
-        s"${workDir.getPath}/$appId/$executorId/$logType"
+        s"${workDir.getPath}/$appId/$executorId/"
       case (None, None, Some(d)) =>
-        s"${workDir.getPath}/$driverId/$logType"
+        s"${workDir.getPath}/$driverId/"
       case _ =>
         throw new Exception("Request must specify either application or driver identifiers")
     }
 
-    val (startByte, endByte) = getByteRange(path, offset, byteLength)
-    val file = new File(path)
-    val logLength = file.length
-
-    val pre = s"==== Bytes $startByte-$endByte of $logLength of $path ====\n"
-    pre + Utils.offsetBytes(path, startByte, endByte)
+    val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)
+    val pre = s"==== Bytes $startByte-$endByte of $logLength of $logDir$logType ====\n"
+    pre + logText
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -65,19 +64,16 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") {
     val offset = Option(request.getParameter("offset")).map(_.toLong)
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
 
-    val (path, params) = (appId, executorId, driverId) match {
+    val (logDir, params) = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
-        (s"${workDir.getPath}/$a/$e/$logType", s"appId=$a&executorId=$e")
+        (s"${workDir.getPath}/$a/$e/", s"appId=$a&executorId=$e")
       case (None, None, Some(d)) =>
-        (s"${workDir.getPath}/$d/$logType", s"driverId=$d")
+        (s"${workDir.getPath}/$d/", s"driverId=$d")
       case _ =>
         throw new Exception("Request must specify either application or driver identifiers")
     }
 
-    val (startByte, endByte) = getByteRange(path, offset, byteLength)
-    val file = new File(path)
-    val logLength = file.length
-    val logText = <node>{Utils.offsetBytes(path, startByte, endByte)}</node>
+    val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)
     val linkToMaster = <p><a href={worker.activeMasterWebUiUrl}>Back to Master</a></p>
     val range = <span>Bytes {startByte.toString} - {endByte.toString} of {logLength}</span>
 
@@ -127,23 +123,37 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") {
     UIUtils.basicSparkPage(content, logType + " log page for " + appId)
   }
 
-  /** Determine the byte range for a log or log page. */
-  private def getByteRange(path: String, offset: Option[Long], byteLength: Int): (Long, Long) = {
-    val defaultBytes = 100 * 1024
-    val maxBytes = 1024 * 1024
-    val file = new File(path)
-    val logLength = file.length()
-    val getOffset = offset.getOrElse(logLength - defaultBytes)
-    val startByte =
-      if (getOffset < 0) {
-        0L
-      } else if (getOffset > logLength) {
-        logLength
-      } else {
-        getOffset
+  /** Get the part of the log files given the offset and desired length of bytes */
+  private def getLog(
+      logDirectory: String,
+      logType: String,
+      offsetOption: Option[Long],
+      byteLength: Int
+    ): (String, Long, Long, Long) = {
+    try {
+      val files = RollingFileAppender.getSortedRolledOverFiles(logDirectory, logType)
+      logDebug(s"Sorted log files of type $logType in $logDirectory:\n${files.mkString("\n")}")
+
+      val totalLength = files.map { _.length }.sum
+      val offset = offsetOption.getOrElse(totalLength - byteLength)
+      val startIndex = {
+        if (offset < 0) {
+          0L
+        } else if (offset > totalLength) {
+          totalLength
+        } else {
+          offset
+        }
       }
-    val logPageLength = math.min(byteLength, maxBytes)
-    val endByte = math.min(startByte + logPageLength, logLength)
-    (startByte, endByte)
+      val endIndex = math.min(startIndex + totalLength, totalLength)
+      logDebug(s"Getting log from $startIndex to $endIndex")
+      val logText = Utils.offsetBytes(files, startIndex, endIndex)
+      logDebug(s"Got log of length ${logText.length} bytes")
+      (logText, startIndex, endIndex, totalLength)
+    } catch {
+      case e: Exception =>
+        logError(s"Error getting $logType logs from directory $logDirectory", e)
+        ("Error getting logs due to exception: " + e.getMessage, 0, 0, 0)
+    }
   }
 }

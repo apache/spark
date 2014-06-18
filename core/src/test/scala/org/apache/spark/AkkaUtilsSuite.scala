@@ -39,7 +39,6 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     val hostname = "localhost"
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.driver.port", boundPort.toString)    // Will be cleared by LocalSparkContext
     System.setProperty("spark.hostPort", hostname + ":" + boundPort)
     assert(securityManager.isAuthenticationEnabled() === true)
 
@@ -77,7 +76,6 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     val hostname = "localhost"
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.driver.port", boundPort.toString)    // Will be cleared by LocalSparkContext
     System.setProperty("spark.hostPort", hostname + ":" + boundPort)
 
     assert(securityManager.isAuthenticationEnabled() === false)
@@ -129,7 +127,6 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     val hostname = "localhost"
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.driver.port", boundPort.toString)    // Will be cleared by LocalSparkContext
     System.setProperty("spark.hostPort", hostname + ":" + boundPort)
 
     assert(securityManager.isAuthenticationEnabled() === true)
@@ -182,7 +179,6 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     val hostname = "localhost"
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.driver.port", boundPort.toString)    // Will be cleared by LocalSparkContext
     System.setProperty("spark.hostPort", hostname + ":" + boundPort)
 
     assert(securityManager.isAuthenticationEnabled() === true)

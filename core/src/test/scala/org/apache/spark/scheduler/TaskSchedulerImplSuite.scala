@@ -117,7 +117,7 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
   }
 
   def resourceOffer(rootPool: Pool): Int = {
-    val taskSetQueue = rootPool.getSortedTaskSetQueue()
+    val taskSetQueue = rootPool.getSortedTaskSetQueue
     /* Just for Test*/
     for (manager <- taskSetQueue) {
        logInfo("parentName:%s, parent running tasks:%d, name:%s,runningTasks:%d".format(
