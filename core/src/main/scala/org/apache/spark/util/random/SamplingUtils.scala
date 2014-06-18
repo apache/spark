@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.random
 
-import org.apache.commons.math3.distribution.{PoissonDistribution, NormalDistribution}
+import org.apache.commons.math3.distribution.PoissonDistribution
 
 private[spark] object SamplingUtils {
 
@@ -43,7 +43,7 @@ private[spark] object SamplingUtils {
    * @return a sampling rate that guarantees sufficient sample size with 99.99% success rate
    */
   def computeFractionForSampleSize(sampleSizeLowerBound: Int, total: Long,
-                                   withReplacement: Boolean): Double = {
+      withReplacement: Boolean): Double = {
     val fraction = sampleSizeLowerBound.toDouble / total
     if (withReplacement) {
       val numStDev = if (sampleSizeLowerBound < 12) 9 else 5
@@ -56,12 +56,29 @@ private[spark] object SamplingUtils {
   }
 }
 
+/**
+ * Utility functions that help us determine bounds on adjusted sampling rate to guarantee exact
+ * sample sizes with high confidence when sampling with replacement.
+ *
+ * The algorithm for guaranteeing sample size instantly accepts items whose associated value drawn
+ * from Pois(s) is less than the lower bound and puts items whose value is between the lower and
+ * upper bound in a waitlist. The final sample is consisted of all items accepted on the fly and a
+ * portion of the waitlist needed to make the exact sample size.
+ */
 private[spark] object PoissonBounds {
 
   val delta = 1e-4 / 3.0
-  val phi = new NormalDistribution().cumulativeProbability(1.0 - delta)
 
-  def getLambda1(s: Double): Double = {
+  /**
+   * Compute the threshold for accepting items on the fly. The threshold value is a fairly small
+   * number, which means if the item has an associated value < threshold, it is highly likely to
+   * be in the final sample. Hence we accept items with values less than the returned value of this
+   * function instantly.
+   *
+   * @param s sample size
+   * @return threshold for accepting items on the fly
+   */
+  def getLowerBound(s: Double): Double = {
     var lb = math.max(0.0, s - math.sqrt(s / delta)) // Chebyshev's inequality
     var ub = s
     while (lb < ub - 1.0) {
@@ -79,7 +96,16 @@ private[spark] object PoissonBounds {
     poisson.inverseCumulativeProbability(delta)
   }
 
-  def getLambda2(s: Double): Double = {
+  /**
+   * Compute the threshold for waitlisting items. An item is waitlisted if its associated value is
+   * greater than the lower bound determined above but below the upper bound computed here.
+   * The value is computed such that we only need to keep log(s) items in the waitlist and still be
+   * able to guarantee sample size with high confidence.
+   *
+   * @param s sample size
+   * @return threshold for waitlisting the item
+   */
+  def getUpperBound(s: Double): Double = {
     var lb = s
     var ub = s + math.sqrt(s / delta) // Chebyshev's inequality
     while (lb < ub - 1.0) {

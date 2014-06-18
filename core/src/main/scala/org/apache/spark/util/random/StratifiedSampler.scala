@@ -26,6 +26,9 @@ import scala.Some
 import org.apache.spark.rdd.RDD
 
 private[spark] object StratifiedSampler extends Logging {
+  /**
+   * Returns the function used by aggregate to collect sampling statistics for each partition.
+   */
   def getSeqOp[K, V](withReplacement: Boolean,
       fractionByKey: (K => Double),
       counts: Option[Map[K, Long]]): ((TaskContext, Result[K]),(K, V)) => Result[K] = {
@@ -43,9 +46,9 @@ private[spark] object StratifiedSampler extends Logging {
         if (stratum.q1.isEmpty || stratum.q2.isEmpty) {
           val n = counts.get(item._1)
           val s = math.ceil(n * fraction).toLong
-          val lmbd1 = PB.getLambda1(s)
+          val lmbd1 = PB.getLowerBound(s)
           val minCount = PB.getMinCount(lmbd1)
-          val lmbd2 = if (lmbd1 == 0) PB.getLambda2(s) else PB.getLambda2(s - minCount)
+          val lmbd2 = if (lmbd1 == 0) PB.getUpperBound(s) else PB.getUpperBound(s - minCount)
           val q1 = lmbd1 / n
           val q2 = lmbd2 / n
           stratum.q1 = Some(q1)
@@ -60,6 +63,8 @@ private[spark] object StratifiedSampler extends Logging {
           stratum.addToWaitList(ArrayBuffer.fill(x2)(rng.nextUniform(0.0, 1.0)))
         }
       } else {
+        // We use the streaming version of the algorithm for sampling without replacement.
+        // Hence, q1 and q2 change on every iteration.
         val g1 = - math.log(delta) / stratum.numItems
         val g2 = (2.0 / 3.0) * g1
         val q1 = math.max(0, fraction + g2 - math.sqrt((g2 * g2 + 3 * g2 * fraction)))
@@ -79,7 +84,11 @@ private[spark] object StratifiedSampler extends Logging {
     }
   }
 
-  def getCombOp[K](): (Result[K], Result[K])  => Result[K] = {
+  /**
+   * Returns the function used by aggregate to combine results from different partitions, as
+   * returned by seqOp.
+   */
+  def getCombOp[K](): (Result[K], Result[K]) => Result[K] = {
     (r1: Result[K], r2: Result[K]) => {
       // take union of both key sets in case one partition doesn't contain all keys
       val keyUnion = r1.resultMap.keys.toSet.union(r2.resultMap.keys.toSet)
@@ -100,6 +109,10 @@ private[spark] object StratifiedSampler extends Logging {
     }
   }
 
+  /**
+   * Given the result returned by the aggregate function, we need to determine the threshold used
+   * to accept items to generate the exact sample size.
+   */
   def computeThresholdByKey[K](finalResult: Map[K, Stratum], fractionByKey: (K => Double)):
     (K => Double) = {
     val thresholdByKey = new mutable.HashMap[K, Double]()
@@ -122,11 +135,15 @@ private[spark] object StratifiedSampler extends Logging {
     thresholdByKey
   }
 
-  def computeThresholdByKey[K](finalResult: Map[K, String]): (K => String) = {
-    finalResult
-  }
-
-  def getBernoulliSamplingFunction[K, V](rdd:RDD[(K,  V)],
+  /**
+   * Return the per partition sampling function used for sampling without replacement.
+   *
+   * When exact sample size is required, we make an additional pass over the RDD to determine the
+   * exact sampling rate that guarantees sample size with high confidence.
+   *
+   * The sampling function has a unique seed per partition.
+   */
+  def getBernoulliSamplingFunction[K, V](rdd: RDD[(K,  V)],
       fractionByKey: K => Double,
       exact: Boolean,
       seed: Long): (Int, Iterator[(K, V)]) => Iterator[(K, V)] = {
@@ -146,6 +163,16 @@ private[spark] object StratifiedSampler extends Logging {
     }
   }
 
+  /**
+   * Return the per partition sampling function used for sampling with replacement.
+   *
+   * When exact sample size is required, we make two additional passed over the RDD to determine
+   * the exact sampling rate that guarantees sample size with high confidence. The first pass
+   * counts the number of items in each stratum (group of items with the same key) in the RDD, and
+   * the second pass uses the counts to determine exact sampling rates.
+   *
+   * The sampling function has a unique seed per partition.
+   */
   def getPoissonSamplingFunction[K, V](rdd:RDD[(K,  V)],
       fractionByKey: K => Double,
       exact: Boolean,
@@ -191,6 +218,10 @@ private[spark] object StratifiedSampler extends Logging {
   }
 }
 
+/**
+ * Object used by seqOp to keep track of the number of items accepted and items waitlisted per
+ * stratum, as well as the bounds for accepting and waitlisting items.
+ */
 private[random] class Stratum(var numItems: Long = 0L, var numAccepted: Long = 0L)
   extends Serializable {
 
@@ -205,13 +236,14 @@ private[random] class Stratum(var numItems: Long = 0L, var numAccepted: Long = 0
   def addToWaitList(elem: Double) = waitList += elem
 
   def addToWaitList(elems: ArrayBuffer[Double]) = waitList ++= elems
-
-  override def toString() = {
-    "numItems: " + numItems + " numAccepted: " + numAccepted + " q1: " + q1 + " q2: " + q2 +
-      " waitListSize:" + waitList.size
-  }
 }
 
+/**
+ * Object used by seqOp and combOp to keep track of the sampling statistics for all strata.
+ *
+ * When used by seqOp for each partition, we also keep track of the partition ID in this object
+ * to make sure a single random number generator with a unique seed is used for each partition.
+ */
 private[random] class Result[K](var resultMap: Map[K, Stratum],
                 var cachedPartitionId: Option[Int] = None,
                 val seed: Long)
