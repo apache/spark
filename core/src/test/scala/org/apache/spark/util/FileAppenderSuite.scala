@@ -129,9 +129,9 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
       }
 
       // Create and test file appender
-      val inputStream = new PipedInputStream(new PipedOutputStream())
-      val outFile = new File("stdout")
-      val appender = FileAppender(inputStream, outFile, conf)
+      val testOutputStream = new PipedOutputStream()
+      val testInputStream = new PipedInputStream(testOutputStream)
+      val appender = FileAppender(testInputStream, testFile, conf)
       assert(appender.isInstanceOf[ExpectedAppender])
       assert(appender.getClass.getSimpleName ===
         classTag[ExpectedAppender].runtimeClass.getSimpleName)
@@ -145,9 +145,8 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
         }
         assert(policyParam === expectedRollingPolicyParam)
       }
-      appender.stop()
-      appender.awaitTermination
-      assert(outFile.delete())
+      testOutputStream.close()
+      appender.awaitTermination()
     }
 
     import RollingFileAppender._
