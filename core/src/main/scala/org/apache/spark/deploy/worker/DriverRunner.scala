@@ -152,14 +152,12 @@ private[spark] class DriverRunner(
       val localJarFile = new File(driverDir, jarFileName)
       val localJarFilename = localJarFile.getAbsolutePath
 
-      if (!localJarFile.exists()) {
-        // May already exist if running multiple workers on one node
+      if (!localJarFile.exists()) {// May already exist if running multiple workers on one node
         logInfo(s"Copying user jar $jarPath to $destPath")
         FileUtil.copy(jarFileSystem, jarPath, destPath, false, emptyConf)
       }
 
-      if (!localJarFile.exists()) {
-        // Verify copy succeeded
+      if (!localJarFile.exists()) {// Verify copy succeeded
         throw new Exception(s"Did not see expected jar $jarFileName in $driverDir")
       }
       localJarFiles += localJarFilename
