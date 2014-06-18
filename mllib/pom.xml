@@ -48,7 +48,7 @@
     </dependency>
      <dependency>
             <groupId>com.verizon</groupId>
-            <artifactId>jecos</artifactId>
+            <artifactId>cvxoptimizer</artifactId>
             <version>0.0.1-SNAPSHOT</version>
           </dependency>
     <dependency>

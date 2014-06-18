@@ -33,10 +33,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
 import org.apache.spark.mllib.optimization.NNLS
-import com.verizon.jecos.QpSolver
 import breeze.linalg.CSCMatrix
 import breeze.linalg.norm
 import breeze.linalg.DenseVector
+import com.verizon.cvxoptimizer.ecos.QpSolver
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
@@ -535,39 +535,61 @@ class ALS private (
         }
       }
 
+      var qpTime: Long = 0
+      var lsTime: Long = 0
+
       val ws = if (nonnegative) NNLS.createWorkspace(rank)
       else null
-      
-      if(nonnegative) qpProblem = 2
-      
+
+      if (nonnegative) qpProblem = 2
+
       val qpSolver = qpProblem match {
-        case 1 =>
+        case 1 => {
           println("Unbounded QP")
           new QpSolver(rank)
-        case 2 =>
-          println("Bounded QP")
-          new QpSolver(rank, false, None, None, true, false)
-        case 3 =>
+        }
+        case 2 => {
+          println("QP with positivity x >= 0")
+          new QpSolver(rank, 0, false, None, None, true)
+        }
+        case 3 => {
+          println("Qp with lower and upper bounds 0 <= x <= 1")
+          val qpSolver = new QpSolver(rank, 0, false, None, None, true, true)
+          qpSolver.updateUb(Array.fill[Double](rank)(1.0))
+          qpSolver
+        }
+        case 4 => {
+          //Qp with linear equality
+          println("Qp with smoothness constraint and bounds")
+          println("lower and upper bounds 0 <= x <= 1")
+          println("smoothness x1 + x2 + ... + xr = 1")
+          val equalityBuilder = new CSCMatrix.Builder[Double](1, rank)
+          for (i <- 0 until rank) equalityBuilder.add(0, i, 1)
+          val qpSolver = new QpSolver(rank, 0, false, Some(equalityBuilder.result), None, true, true)
+          qpSolver.updateUb(Array.fill[Double](rank)(1.0))
+          qpSolver
+        }
+        case 5 => {
           //prepare the linear inequality
           //-u <= x <= u
           //-x -u <= 0, x - u <= 0
           //Each variable transforms to 2 inequalities
-          //In objective function we add regularization parameter alpha*(u1 + u2 + ... + ur)
-
-          //TO DO : Linear objective will change, make sure it works with the change
+          //In objective function we add regularization parameter alpha*(u1 + u2 + ... + ur)          
           println("Qp with L1 constraint")
-          val inequalityBuilder = new CSCMatrix.Builder[Double](2 * rank, rank + 1)
-          for (i <- 0 to rank - 1) {
-            inequalityBuilder.add(i, i, -1)
-            inequalityBuilder.add(i, rank, -1)
-            inequalityBuilder.add(2 * i + 1, i, -1)
-            inequalityBuilder.add(2 * i + 1, rank, -1)
+          val inequalityBuilder = new CSCMatrix.Builder[Double](2 * rank, 2 * rank)
+          for (i <- 0 until rank) {
+            inequalityBuilder.add(2 * i, i, -1)
+            inequalityBuilder.add(2 * i, rank + i, -1)
+            inequalityBuilder.add(2 * i + 1, i, 1)
+            inequalityBuilder.add(2 * i + 1, rank + i, -1)
           }
-          new QpSolver(rank, false, None, Some(inequalityBuilder.result), false, false)
+          val qpSolver = new QpSolver(rank, rank, false, None, Some(inequalityBuilder.result), false)
+          qpSolver
+        }
       }
-      
+
       // Solve the least-squares problem for each user and return the new feature vectors
-      Array.range(0, numUsers).map { index =>
+      val factors = Array.range(0, numUsers).map { index =>
         // Compute the full XtX matrix from the lower-triangular part we got above
         fillFullMatrix(userXtX(index), fullXtX)
         // Add regularization
@@ -576,25 +598,49 @@ class ALS private (
           fullXtX.data(i * rank + i) += lambda
           i += 1
         }
-        
+
         // Solve the resulting matrix, which is symmetric and positive-definite
         val result = if (implicitPrefs) {
-          val qpResult = qpSolver.run(fullXtX.addi(YtY.get.value), userXy(index).mul(-1).data)._2
+          val H = fullXtX.add(YtY.get.value)
+          val f = if (qpProblem == 5) {
+            userXy(index).mul(-1).data ++ Array.fill[Double](rank)(alpha)
+          } else {
+            userXy(index).mul(-1).data
+          }
+
+          val qpStart = System.currentTimeMillis()
+          val qpResult = qpSolver.run(H, f)._2
+          qpTime = qpTime + (System.currentTimeMillis() - qpStart)
+
+          val lsStart = System.currentTimeMillis()
           val result = solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws)
-          println("Implicit Qp " + DenseVector(qpResult).toString)
-          println("Implicit Ls " + DenseVector(result).toString)
+          lsTime = lsTime + (System.currentTimeMillis() - lsStart)
           assert(norm(DenseVector(qpResult) - DenseVector(result), 2) < 1E-2)
           qpResult
         } else {
-          val qpResult = qpSolver.run(fullXtX, userXy(index).mul(-1).data)._2
+          val H = fullXtX
+          val f = if (qpProblem == 5) {
+            userXy(index).mul(-1).data ++ Array.fill[Double](rank)(alpha)
+          } else {
+            userXy(index).mul(-1).data
+          }
+          val qpStart = System.currentTimeMillis()
+          val qpResult = qpSolver.run(H, f)._2
+          qpTime = qpTime + (System.currentTimeMillis() - qpStart)
+
+          val lsStart = System.currentTimeMillis()
           val result = solveLeastSquares(fullXtX, userXy(index), ws)
+          lsTime = lsTime + (System.currentTimeMillis() - lsStart)
+
           assert(norm(DenseVector(qpResult) - DenseVector(result), 2) < 1E-2)
           qpResult
         }
         result
       }
+      println("Qp " + qpTime + " Ls " + lsTime)
+      factors
     }
-  
+
   /**
    * Given A^T A and A^T b, find the x minimising ||Ax - b||_2, possibly subject
    * to nonnegativity constraints if `nonnegative` is true.

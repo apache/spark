@@ -469,7 +469,7 @@ object SparkBuild extends Build {
     previousArtifact := sparkPreviousArtifact("spark-mllib"),
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % jblasVersion,
-      "com.verizon" % "jecos" % "0.0.1-SNAPSHOT",
+      "com.verizon" % "cvxoptimizer" % "0.0.1-SNAPSHOT",
       "org.scalanlp" %% "breeze" % "0.7" excludeAll(excludeJUnit)
     )
   )
