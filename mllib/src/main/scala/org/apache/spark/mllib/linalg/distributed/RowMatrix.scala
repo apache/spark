@@ -207,13 +207,14 @@ class RowMatrix(
    * @param v a local DenseVector whose length must match the number of columns of this matrix.
    * @return a local DenseVector representing the product.
    */
-  private[mllib] def multiplyGramianMatrix(v: DenseVector): DenseVector = {
+  private[mllib] def multiplyGramianMatrixBy(v: DenseVector): DenseVector = {
     val n = numCols().toInt
+    val vbr = rows.context.broadcast(v.toBreeze)
 
     val bv = rows.aggregate(BDV.zeros[Double](n))(
       seqOp = (U, r) => {
         val rBrz = r.toBreeze
-        val a = rBrz.dot(v.toBreeze)
+        val a = rBrz.dot(vbr.value)
         rBrz match {
           case _: BDV[_] => brzAxpy(a, rBrz.asInstanceOf[BDV[Double]], U)
           case _: BSV[_] => brzAxpy(a, rBrz.asInstanceOf[BSV[Double]], U)
@@ -223,7 +224,7 @@ class RowMatrix(
       combOp = (U1, U2) => U1 += U2
     )
 
-    new DenseVector(bv.data)
+    Vectors.fromBreeze(bv).asInstanceOf[DenseVector]
   }
 
   /**
@@ -259,7 +260,11 @@ class RowMatrix(
       k: Int,
       computeU: Boolean = false,
       rCond: Double = 1e-9): SingularValueDecomposition[RowMatrix, Matrix] = {
-    computeSVD(k, computeU, rCond, 1e-9)
+    if (numCols() < 100) {
+      computeSVD(k, computeU, rCond, 1e-9, true)
+    } else {
+      computeSVD(k, computeU, rCond, 1e-9, false)
+    }
   }
 
   /**
@@ -274,7 +279,7 @@ class RowMatrix(
    * The decomposition is computed by providing a function that multiples a vector with A'A to
    * ARPACK, and iteratively invoking ARPACK-dsaupd on master node, from which we recover S and V.
    * Then we compute U via easy matrix multiplication as U =  A * (V * S^{-1}).
-   * Note that this approach requires `O(nnz(A))` time.
+   * Note that this approach requires approximately `O(k * nnz(A))` time.
    *
    * ARPACK requires k to be strictly less than n. Thus when the requested eigenvalues k = n, a
    * non-sparse implementation will be used, which requires `n^2` doubles to fit in memory and
@@ -294,21 +299,27 @@ class RowMatrix(
    *              are treated as zero, where sigma(0) is the largest singular value.
    * @param tol the numerical tolerance of svd computation. Larger tolerance means fewer iterations,
    *            but less accurate result.
+   * @param isDenseSVD invoke dense SVD implementation when isDenseSVD = true. This requires
+   *                   `O(n^2)` memory and `O(n^3)` time. For a skinny matrix (m >> n) with small n,
+   *                   dense implementation might be faster.
    * @return SingularValueDecomposition(U, s, V)
    */
   def computeSVD(
       k: Int,
       computeU: Boolean,
       rCond: Double,
-      tol: Double): SingularValueDecomposition[RowMatrix, Matrix] = {
+      tol: Double,
+      isDenseSVD: Boolean): SingularValueDecomposition[RowMatrix, Matrix] = {
     val n = numCols().toInt
     require(k > 0 && k <= n, s"Request up to n singular values k=$k n=$n.")
 
-    val (sigmaSquares: BDV[Double], u: BDM[Double]) = if (k < n) {
-      EigenValueDecomposition.symmetricEigs(multiplyGramianMatrix, n, k, tol)
+    val (sigmaSquares: BDV[Double], u: BDM[Double]) = if (!isDenseSVD && k < n) {
+      EigenValueDecomposition.symmetricEigs(multiplyGramianMatrixBy, n, k, tol)
     } else {
-      logWarning(s"Request full SVD (k = n = $k), while ARPACK requires k strictly less than n. " +
-          s"Using non-sparse implementation.")
+      if (!isDenseSVD && k == n) {
+        logWarning(s"Request full SVD (k = n = $k), while ARPACK requires k strictly less than " +
+            s"n. Using non-sparse implementation.")
+      }
       val G = computeGramianMatrix()
       val (uFull: BDM[Double], sigmaSquaresFull: BDV[Double], vFull: BDM[Double]) =
         brzSvd(G.toBreeze.asInstanceOf[BDM[Double]])

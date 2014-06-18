@@ -39,10 +39,14 @@ object EigenValueDecomposition {
    *
    * @param mul a function that multiplies the symmetric matrix with a DenseVector.
    * @param n dimension of the square matrix (maximum Int.MaxValue).
-   * @param k number of leading eigenvalues required.
+   * @param k number of leading eigenvalues required, 0 < k < n.
    * @param tol tolerance of the eigs computation.
    * @return a dense vector of eigenvalues in descending order and a dense matrix of eigenvectors
-   *         (columns of the matrix). The number of computed eigenvalues might be smaller than k.
+   *         (columns of the matrix).
+   * @note The number of computed eigenvalues might be smaller than k when some Ritz values do not
+   *       satisfy the convergence criterion specified by tol (see ARPACK Users Guide, Chapter 4.6
+   *       for more details). The maximum number of Arnoldi update iterations is set to 300 in this
+   *       function.
    */
   private[mllib] def symmetricEigs(mul: DenseVector => DenseVector, n: Int, k: Int, tol: Double)
     : (BDV[Double], BDM[Double]) = {
@@ -55,10 +59,10 @@ object EigenValueDecomposition {
     val tolW = new doubleW(tol)
     // number of desired eigenvalues, 0 < nev < n
     val nev = new intW(k)
-    // nev Lanczos vectors are generated are generated in the first iteration
-    // ncv-nev Lanczos vectors are generated are generated in each subsequent iteration
+    // nev Lanczos vectors are generated in the first iteration
+    // ncv-nev Lanczos vectors are generated in each subsequent iteration
     // ncv must be smaller than n
-    val ncv = scala.math.min(2 * k, n)
+    val ncv = math.min(2 * k, n)
 
     // "I" for standard eigenvalue problem, "G" for generalized eigenvalue problem
     val bmat = "I"
@@ -75,7 +79,7 @@ object EigenValueDecomposition {
 
     var ido = new intW(0)
     var info = new intW(0)
-    var resid:Array[Double] = new Array[Double](n)
+    var resid = new Array[Double](n)
     var v = new Array[Double](n * ncv)
     var workd = new Array[Double](n * 3)
     var workl = new Array[Double](ncv * (ncv + 8))
@@ -128,19 +132,20 @@ object EigenValueDecomposition {
     // number of computed eigenvalues, might be smaller than k
     val computed = iparam(4)
 
-    val eigenPairs = java.util.Arrays.copyOfRange(d, 0, computed).zipWithIndex.map{
+    val eigenPairs = java.util.Arrays.copyOfRange(d, 0, computed).zipWithIndex.map {
       r => (r._1, java.util.Arrays.copyOfRange(z, r._2 * n, r._2 * n + n))
     }
 
     // sort the eigen-pairs in descending order
-    val sortedEigenPairs = eigenPairs.sortBy(-1 * _._1)
+    val sortedEigenPairs = eigenPairs.sortBy(- _._1)
 
     // copy eigenvectors in descending order of eigenvalues
     val sortedU = BDM.zeros[Double](n, computed)
-    sortedEigenPairs.zipWithIndex.map{
+    sortedEigenPairs.zipWithIndex.foreach {
       r => {
+        val b = r._2 * n
         for (i <- 0 until n) {
-          sortedU.data(r._2 * n + i) = r._1._2(i)
+          sortedU.data(b + i) = r._1._2(i)
         }
       }
     }
