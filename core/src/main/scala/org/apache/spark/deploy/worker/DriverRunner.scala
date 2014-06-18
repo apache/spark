@@ -26,10 +26,10 @@ import scala.collection.mutable.ArrayBuffer
 import akka.actor.ActorRef
 import com.google.common.base.Charsets
 import com.google.common.io.Files
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileUtil, Path}
 
 import org.apache.spark.Logging
-import org.apache.spark.SparkConf
 import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
