@@ -209,7 +209,6 @@ public class SimpleApp {
     sc.hadoopConfiguration().set("fs.swift.service.ibm.username", "tester");
     
     JavaRDD<String> logData = sc.textFile(logFile).cache();
-
     long num = logData.count();
 
     System.out.println("Total number of lines: " + num);
