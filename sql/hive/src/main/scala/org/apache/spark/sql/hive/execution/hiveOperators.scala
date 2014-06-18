@@ -454,7 +454,7 @@ case class NativeCommand(
         // This method is introduced by https://issues.apache.org/jira/browse/HIVE-4545.
         // Right now, we split every string by any number of consecutive spaces.
         sideEffectResult.map(
-          r => r.split("\\s+")).map(r => new GenericRow(r.asInstanceOf[Array[Any]]))
+          r => r.trim.split("\\s+", 3)).map(r => new GenericRow(r.asInstanceOf[Array[Any]]))
       } else {
         sideEffectResult.map(r => new GenericRow(Array[Any](r)))
       }
