@@ -307,6 +307,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
     lazy val sparkPlan = planner(optimizedPlan).next()
+    // executedPlan should not be used to initialize any SparkPlan. It should be
+    // only used for execution.
     lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
