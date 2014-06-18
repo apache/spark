@@ -1,6 +1,7 @@
 ---
 layout: global
-title: <a href="mllib-guide.html">MLlib</a> - Decision Tree
+title: Decision Tree - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Decision Tree
 ---
 
 * Table of contents

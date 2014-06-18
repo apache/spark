@@ -22,6 +22,16 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types._
 
+object HiveTypeCoercion {
+  // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
+  // The conversion for integral and floating point types have a linear widening hierarchy:
+  val numericPrecedence =
+    Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
+  // Boolean is only wider than Void
+  val booleanPrecedence = Seq(NullType, BooleanType)
+  val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil
+}
+
 /**
  * A collection of [[catalyst.rules.Rule Rules]] that can be used to coerce differing types that
  * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
@@ -31,8 +41,16 @@ import org.apache.spark.sql.catalyst.types._
 trait HiveTypeCoercion {
 
   val typeCoercionRules =
-    List(PropagateTypes, ConvertNaNs, WidenTypes, PromoteStrings, BooleanComparisons, BooleanCasts,
-      StringToIntegralCasts, FunctionArgumentConversion)
+    PropagateTypes ::
+    ConvertNaNs ::
+    WidenTypes ::
+    PromoteStrings ::
+    BooleanComparisons ::
+    BooleanCasts ::
+    StringToIntegralCasts ::
+    FunctionArgumentConversion ::
+    CastNulls ::
+    Nil
 
   /**
    * Applies any changes to [[catalyst.expressions.AttributeReference AttributeReference]] data
@@ -108,19 +126,18 @@ trait HiveTypeCoercion {
    *
    * Additionally, all types when UNION-ed with strings will be promoted to strings.
    * Other string conversions are handled by PromoteStrings.
+   *
+   * Widening types might result in loss of precision in the following cases:
+   * - IntegerType to FloatType
+   * - LongType to FloatType
+   * - LongType to DoubleType
    */
   object WidenTypes extends Rule[LogicalPlan] {
-    // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
-    // The conversion for integral and floating point types have a linear widening hierarchy:
-    val numericPrecedence =
-      Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
-    // Boolean is only wider than Void
-    val booleanPrecedence = Seq(NullType, BooleanType)
-    val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil
 
     def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
       // Try and find a promotion rule that contains both types in question.
-      val applicableConversion = allPromotions.find(p => p.contains(t1) && p.contains(t2))
+      val applicableConversion =
+        HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p.contains(t2))
 
       // If found return the widest common type, otherwise None
       applicableConversion.map(_.filter(t => t == t1 || t == t2).last)
@@ -264,10 +281,51 @@ trait HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      // Promote SUM to largest types to prevent overflows.
+      // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
       case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
       case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
+
+      case s @ SumDistinct(e @ DecimalType()) => s // Decimal is already the biggest.
+      case SumDistinct(e @ IntegralType()) if e.dataType != LongType =>
+        SumDistinct(Cast(e, LongType))
+      case SumDistinct(e @ FractionalType()) if e.dataType != DoubleType =>
+        SumDistinct(Cast(e, DoubleType))
+
+      case s @ Average(e @ DecimalType()) => s // Decimal is already the biggest.
+      case Average(e @ IntegralType()) if e.dataType != LongType =>
+        Average(Cast(e, LongType))
+      case Average(e @ FractionalType()) if e.dataType != DoubleType =>
+        Average(Cast(e, DoubleType))
     }
   }
+
+  /**
+   * Ensures that NullType gets casted to some other types under certain circumstances.
+   */
+  object CastNulls extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case cw @ CaseWhen(branches) =>
+        val valueTypes = branches.sliding(2, 2).map {
+          case Seq(_, value) if value.resolved => Some(value.dataType)
+          case Seq(elseVal) if elseVal.resolved => Some(elseVal.dataType)
+          case _ => None
+        }.toSeq
+        if (valueTypes.distinct.size == 2 && valueTypes.exists(_ == Some(NullType))) {
+          val otherType = valueTypes.filterNot(_ == Some(NullType))(0).get
+          val transformedBranches = branches.sliding(2, 2).map {
+            case Seq(cond, value) if value.resolved && value.dataType == NullType =>
+              Seq(cond, Cast(value, otherType))
+            case Seq(elseVal) if elseVal.resolved && elseVal.dataType == NullType =>
+              Seq(Cast(elseVal, otherType))
+            case s => s
+          }.reduce(_ ++ _)
+          CaseWhen(transformedBranches)
+        } else {
+          // It is possible to have more types due to the possibility of short-circuiting.
+          cw
+        }
+    }
+  }
+
 }

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.sql.catalyst.types.{DataType, StructType, BooleanType}
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.api.java.JavaRDD
 import java.util.{Map => JMap}
@@ -41,8 +41,10 @@ import java.util.{Map => JMap}
  * whose elements are scala case classes into a SchemaRDD.  This conversion can also be done
  * explicitly using the `createSchemaRDD` function on a [[SQLContext]].
  *
- * A `SchemaRDD` can also be created by loading data in from external sources, for example,
- * by using the `parquetFile` method on [[SQLContext]].
+ * A `SchemaRDD` can also be created by loading data in from external sources.
+ * Examples are loading data from Parquet files by using by using the
+ * `parquetFile` method on [[SQLContext]], and loading JSON datasets
+ * by using `jsonFile` and `jsonRDD` methods on [[SQLContext]].
  *
  * == SQL Queries ==
  * A SchemaRDD can be registered as a table in the [[SQLContext]] that was used to create it.  Once
@@ -59,7 +61,7 @@ import java.util.{Map => JMap}
  *  // Importing the SQL context gives access to all the SQL functions and implicit conversions.
  *  import sqlContext._
  *
- *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_\$i")))
+ *  val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
  *  // Any RDD containing case classes can be registered as a table.  The schema of the table is
  *  // automatically inferred using scala reflection.
  *  rdd.registerAsTable("records")
@@ -97,7 +99,7 @@ import java.util.{Map => JMap}
 @AlphaComponent
 class SchemaRDD(
     @transient val sqlContext: SQLContext,
-    @transient protected[spark] val logicalPlan: LogicalPlan)
+    @transient val baseLogicalPlan: LogicalPlan)
   extends RDD[Row](sqlContext.sparkContext, Nil) with SchemaRDDLike {
 
   def baseSchemaRDD = this
@@ -178,14 +180,18 @@ class SchemaRDD(
   def orderBy(sortExprs: SortOrder*): SchemaRDD =
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
 
+  @deprecated("use limit with integer argument", "1.1.0")
+  def limit(limitExpr: Expression): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+
   /**
-   * Limits the results by the given expressions.
+   * Limits the results by the given integer.
    * {{{
    *   schemaRDD.limit(10)
    * }}}
    */
-  def limit(limitExpr: Expression): SchemaRDD =
-    new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
+  def limit(limitNum: Int): SchemaRDD =
+    new SchemaRDD(sqlContext, Limit(Literal(limitNum), logicalPlan))
 
   /**
    * Performs a grouping followed by an aggregation.
@@ -202,6 +208,20 @@ class SchemaRDD(
       case e => Alias(e, e.toString)()
     }
     new SchemaRDD(sqlContext, Aggregate(groupingExprs, aliasedExprs, logicalPlan))
+  }
+
+  /**
+   * Performs an aggregation over all Rows in this RDD.
+   * This is equivalent to a groupBy with no grouping expressions.
+   *
+   * {{{
+   *   schemaRDD.aggregate(Sum('sales) as 'totalSales)
+   * }}}
+   *
+   * @group Query
+   */
+  def aggregate(aggregateExprs: Expression*): SchemaRDD = {
+    groupBy()(aggregateExprs: _*)
   }
 
   /**
@@ -276,6 +296,15 @@ class SchemaRDD(
 
   /**
    * :: Experimental ::
+   * Return the number of elements in the RDD. Unlike the base RDD implementation of count, this
+   * implementation leverages the query optimizer to compute the count on the SchemaRDD, which
+   * supports features such as filter pushdown.
+   */
+  @Experimental
+  override def count(): Long = aggregate(Count(Literal(1))).collect().head.getLong(0)
+
+  /**
+   * :: Experimental ::
    * Applies the given Generator, or table generating function, to this relation.
    *
    * @param generator A table generating function.  The API for such functions is likely to change
@@ -314,22 +343,41 @@ class SchemaRDD(
    */
   def toJavaSchemaRDD: JavaSchemaRDD = new JavaSchemaRDD(sqlContext, logicalPlan)
 
+  /**
+   * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
+   */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    val fieldNames: Seq[String] = this.queryExecution.analyzed.output.map(_.name)
+    def rowToMap(row: Row, structType: StructType): JMap[String, Any] = {
+      val fields = structType.fields.map(field => (field.name, field.dataType))
+      val map: JMap[String, Any] = new java.util.HashMap
+      row.zip(fields).foreach {
+        case (obj, (name, dataType)) =>
+          dataType match {
+            case struct: StructType => map.put(name, rowToMap(obj.asInstanceOf[Row], struct))
+            case other => map.put(name, obj)
+          }
+      }
+
+      map
+    }
+
+    // TODO: Actually, the schema of a row should be represented by a StructType instead of
+    // a Seq[Attribute]. Once we have finished that change, we can just use rowToMap to
+    // construct the Map for python.
+    val fields: Seq[(String, DataType)] = this.queryExecution.analyzed.output.map(
+      field => (field.name, field.dataType))
     this.mapPartitions { iter =>
       val pickle = new Pickler
       iter.map { row =>
         val map: JMap[String, Any] = new java.util.HashMap
-        // TODO: We place the map in an ArrayList so that the object is pickled to a List[Dict].
-        // Ideally we should be able to pickle an object directly into a Python collection so we
-        // don't have to create an ArrayList every time.
-        val arr: java.util.ArrayList[Any] = new java.util.ArrayList
-        row.zip(fieldNames).foreach { case (obj, name) =>
-          map.put(name, obj)
+        row.zip(fields).foreach { case (obj, (name, dataType)) =>
+          dataType match {
+            case struct: StructType => map.put(name, rowToMap(obj.asInstanceOf[Row], struct))
+            case other => map.put(name, obj)
+          }
         }
-        arr.add(map)
-        pickle.dumps(arr)
-      }
+        map
+      }.grouped(10).map(batched => pickle.dumps(batched.toArray))
     }
   }
 
@@ -344,6 +392,14 @@ class SchemaRDD(
   private def applySchema(rdd: RDD[Row]): SchemaRDD = {
     new SchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(logicalPlan.output, rdd)))
   }
+
+  // =======================================================================
+  // Overriden RDD actions
+  // =======================================================================
+
+  override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
+
+  override def take(num: Int): Array[Row] = limit(num).collect()
 
   // =======================================================================
   // Base RDD functions that do NOT change schema

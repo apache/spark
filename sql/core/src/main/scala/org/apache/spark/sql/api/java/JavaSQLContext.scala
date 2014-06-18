@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
 import org.apache.spark.sql.catalyst.types._
@@ -40,19 +41,13 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   /**
    * Executes a query expressed in SQL, returning the result as a JavaSchemaRDD
    */
-  def sql(sqlQuery: String): JavaSchemaRDD = {
-    val result = new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlQuery))
-    // We force query optimization to happen right away instead of letting it happen lazily like
-    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-    // generates the RDD lineage for DML queries, but do not perform any execution.
-    result.queryExecution.toRdd
-    result
-  }
+  def sql(sqlQuery: String): JavaSchemaRDD =
+    new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlQuery))
 
   /**
    * :: Experimental ::
    * Creates an empty parquet file with the schema of class `beanClass`, which can be registered as
-   * a table. This registered table can be used as the target of future insertInto` operations.
+   * a table. This registered table can be used as the target of future `insertInto` operations.
    *
    * {{{
    *   JavaSQLContext sqlCtx = new JavaSQLContext(...)
@@ -62,7 +57,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * }}}
    *
    * @param beanClass A java bean class object that will be used to determine the schema of the
-   *                  parquet file.                          s
+   *                  parquet file.
    * @param path The path where the directory containing parquet metadata should be created.
    *             Data inserted into this table will also be stored at this location.
    * @param allowExisting When false, an exception will be thrown if this directory already exists.
@@ -100,13 +95,30 @@ class JavaSQLContext(val sqlContext: SQLContext) {
     new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
   }
 
-
   /**
    * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
    */
   def parquetFile(path: String): JavaSchemaRDD =
     new JavaSchemaRDD(sqlContext, ParquetRelation(path))
 
+  /**
+   * Loads a JSON file (one object per line), returning the result as a [[JavaSchemaRDD]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group userf
+   */
+  def jsonFile(path: String): JavaSchemaRDD =
+    jsonRDD(sqlContext.sparkContext.textFile(path))
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[JavaSchemaRDD]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group userf
+   */
+  def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD =
+    new JavaSchemaRDD(sqlContext, JsonRDD.inferSchema(json, 1.0))
 
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only

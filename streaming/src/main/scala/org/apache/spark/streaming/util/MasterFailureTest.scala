@@ -187,7 +187,6 @@ object MasterFailureTest extends Logging {
     setupCalled = true
 
     // Setup the streaming computation with the given operation
-    System.clearProperty("spark.driver.port")
     val ssc = new StreamingContext("local[4]", "MasterFailureTest", batchDuration, null, Nil,
       Map())
     ssc.checkpoint(checkpointDir.toString)

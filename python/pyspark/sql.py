@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, PipelinedRDD
+from pyspark.serializers import BatchedSerializer, PickleSerializer
 
 from py4j.protocol import Py4JError
 
@@ -23,14 +24,14 @@ __all__ = ["SQLContext", "HiveContext", "LocalHiveContext", "TestHiveContext", "
 
 
 class SQLContext:
-    """
-    Main entry point for SparkSQL functionality. A SQLContext can be used create L{SchemaRDD}s,
-    register L{SchemaRDD}s as tables, execute sql over tables, cache tables, and read parquet files.
+    """Main entry point for SparkSQL functionality.
+
+    A SQLContext can be used create L{SchemaRDD}s, register L{SchemaRDD}s as
+    tables, execute SQL over tables, cache tables, and read parquet files.
     """
 
     def __init__(self, sparkContext, sqlContext = None):
-        """
-        Create a new SQLContext.
+        """Create a new SQLContext.
 
         @param sparkContext: The SparkContext to wrap.
 
@@ -63,22 +64,37 @@ class SQLContext:
 
     @property
     def _ssql_ctx(self):
-        """
-        Accessor for the JVM SparkSQL context.  Subclasses can override this property to provide
-        their own JVM Contexts.
+        """Accessor for the JVM SparkSQL context.
+
+        Subclasses can override this property to provide their own
+        JVM Contexts.
         """
         if not hasattr(self, '_scala_SQLContext'):
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
 
     def inferSchema(self, rdd):
-        """
-        Infer and apply a schema to an RDD of L{dict}s. We peek at the first row of the RDD to
-        determine the fields names and types, and then use that to extract all the dictionaries.
+        """Infer and apply a schema to an RDD of L{dict}s.
+
+        We peek at the first row of the RDD to determine the fields names
+        and types, and then use that to extract all the dictionaries. Nested
+        collections are supported, which include array, dict, list, set, and
+        tuple.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"},
         ...                    {"field1" : 3, "field2": "row3"}]
+        True
+
+        >>> from array import array
+        >>> srdd = sqlCtx.inferSchema(nestedRdd1)
+        >>> srdd.collect() == [{"f1" : array('i', [1, 2]), "f2" : {"row1" : 1.0}},
+        ...                    {"f1" : array('i', [2, 3]), "f2" : {"row2" : 2.0}}]
+        True
+
+        >>> srdd = sqlCtx.inferSchema(nestedRdd2)
+        >>> srdd.collect() == [{"f1" : [[1, 2], [2, 3]], "f2" : set([1, 2]), "f3" : (1, 2)},
+        ...                    {"f1" : [[2, 3], [3, 4]], "f2" : set([2, 3]), "f3" : (2, 3)}]
         True
         """
         if (rdd.__class__ is SchemaRDD):
@@ -92,9 +108,10 @@ class SQLContext:
         return SchemaRDD(srdd, self)
 
     def registerRDDAsTable(self, rdd, tableName):
-        """
-        Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
-        during the lifetime of this instance of SQLContext.
+        """Registers the given RDD as a temporary table in the catalog.
+
+        Temporary tables exist only during the lifetime of this instance of
+        SQLContext.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
@@ -106,8 +123,7 @@ class SQLContext:
             raise ValueError("Can only register SchemaRDD as table")
 
     def parquetFile(self, path):
-        """
-        Loads a Parquet file, returning the result as a L{SchemaRDD}.
+        """Loads a Parquet file, returning the result as a L{SchemaRDD}.
 
         >>> import tempfile, shutil
         >>> parquetFile = tempfile.mkdtemp()
@@ -115,15 +131,61 @@ class SQLContext:
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.saveAsParquetFile(parquetFile)
         >>> srdd2 = sqlCtx.parquetFile(parquetFile)
-        >>> srdd.collect() == srdd2.collect()
+        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
         jschema_rdd = self._ssql_ctx.parquetFile(path)
         return SchemaRDD(jschema_rdd, self)
 
-    def sql(self, sqlQuery):
+
+    def jsonFile(self, path):
+        """Loads a text file storing one JSON object per line,
+           returning the result as a L{SchemaRDD}.
+           It goes through the entire dataset once to determine the schema.
+
+        >>> import tempfile, shutil
+        >>> jsonFile = tempfile.mkdtemp()
+        >>> shutil.rmtree(jsonFile)
+        >>> ofn = open(jsonFile, 'w')
+        >>> for json in jsonStrings:
+        ...   print>>ofn, json
+        >>> ofn.close()
+        >>> srdd = sqlCtx.jsonFile(jsonFile)
+        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
+        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2, field3 as f3 from table1")
+        >>> srdd2.collect() == [{"f1": 1, "f2": "row1", "f3":{"field4":11}},
+        ...                     {"f1": 2, "f2": "row2", "f3":{"field4":22}},
+        ...                     {"f1": 3, "f2": "row3", "f3":{"field4":33}}]
+        True
         """
-        Executes a SQL query using Spark, returning the result as a L{SchemaRDD}.
+        jschema_rdd = self._ssql_ctx.jsonFile(path)
+        return SchemaRDD(jschema_rdd, self)
+
+    def jsonRDD(self, rdd):
+        """Loads an RDD storing one JSON object per string, returning the result as a L{SchemaRDD}.
+           It goes through the entire dataset once to determine the schema.
+
+        >>> srdd = sqlCtx.jsonRDD(json)
+        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
+        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2, field3 as f3 from table1")
+        >>> srdd2.collect() == [{"f1": 1, "f2": "row1", "f3":{"field4":11}},
+        ...                     {"f1": 2, "f2": "row2", "f3":{"field4":22}},
+        ...                     {"f1": 3, "f2": "row3", "f3":{"field4":33}}]
+        True
+        """
+        def func(split, iterator):
+            for x in iterator:
+                if not isinstance(x, basestring):
+                    x = unicode(x)
+                yield x.encode("utf-8")
+        keyed = PipelinedRDD(rdd, func)
+        keyed._bypass_serializer = True
+        jrdd = keyed._jrdd.map(self._jvm.BytesToString())
+        jschema_rdd = self._ssql_ctx.jsonRDD(jrdd.rdd())
+        return SchemaRDD(jschema_rdd, self)
+
+    def sql(self, sqlQuery):
+        """Return a L{SchemaRDD} representing the result of the given query.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
@@ -135,35 +197,30 @@ class SQLContext:
         return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
 
     def table(self, tableName):
-        """
-        Returns the specified table as a L{SchemaRDD}.
+        """Returns the specified table as a L{SchemaRDD}.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.table("table1")
-        >>> srdd.collect() == srdd2.collect()
+        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
         return SchemaRDD(self._ssql_ctx.table(tableName), self)
 
     def cacheTable(self, tableName):
-        """
-        Caches the specified table in-memory.
-        """
+        """Caches the specified table in-memory."""
         self._ssql_ctx.cacheTable(tableName)
 
     def uncacheTable(self, tableName):
-        """
-        Removes the specified table from the in-memory cache.
-        """
+        """Removes the specified table from the in-memory cache."""
         self._ssql_ctx.uncacheTable(tableName)
 
 
 class HiveContext(SQLContext):
-    """
-    An instance of the Spark SQL execution engine that integrates with data stored in Hive.
-    Configuration for Hive is read from hive-site.xml on the classpath. It supports running both SQL
-    and HiveQL commands.
+    """A variant of Spark SQL that integrates with data stored in Hive.
+
+    Configuration for Hive is read from hive-site.xml on the classpath.
+    It supports running both SQL and HiveQL commands.
     """
 
     @property
@@ -193,9 +250,10 @@ class HiveContext(SQLContext):
 
 
 class LocalHiveContext(HiveContext):
-    """
-    Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
-    created with data stored in ./metadata.  Warehouse data is stored in in ./warehouse.
+    """Starts up an instance of hive where metadata is stored locally.
+
+    An in-process metadata data is created with data stored in ./metadata.
+    Warehouse data is stored in in ./warehouse.
 
     >>> import os
     >>> hiveCtx = LocalHiveContext(sc)
@@ -228,8 +286,10 @@ class TestHiveContext(HiveContext):
 # TODO: Investigate if it is more efficient to use a namedtuple. One problem is that named tuples
 # are custom classes that must be generated per Schema.
 class Row(dict):
-    """
-    An extended L{dict} that takes a L{dict} in its constructor, and exposes those items as fields.
+    """A row in L{SchemaRDD}.
+
+    An extended L{dict} that takes a L{dict} in its constructor, and
+    exposes those items as fields.
 
     >>> r = Row({"hello" : "world", "foo" : "bar"})
     >>> r.hello
@@ -245,13 +305,16 @@ class Row(dict):
 
 
 class SchemaRDD(RDD):
-    """
-    An RDD of L{Row} objects that has an associated schema. The underlying JVM object is a SchemaRDD,
-    not a PythonRDD, so we can utilize the relational query api exposed by SparkSQL.
+    """An RDD of L{Row} objects that has an associated schema.
 
-    For normal L{pyspark.rdd.RDD} operations (map, count, etc.) the L{SchemaRDD} is not operated on
-    directly, as it's underlying implementation is a RDD composed of Java objects. Instead it is
-    converted to a PythonRDD in the JVM, on which Python operations can be done.
+    The underlying JVM object is a SchemaRDD, not a PythonRDD, so we can
+    utilize the relational query api exposed by SparkSQL.
+
+    For normal L{pyspark.rdd.RDD} operations (map, count, etc.) the
+    L{SchemaRDD} is not operated on directly, as it's underlying
+    implementation is an RDD composed of Java objects. Instead it is
+    converted to a PythonRDD in the JVM, on which Python operations can
+    be done.
     """
 
     def __init__(self, jschema_rdd, sql_ctx):
@@ -266,9 +329,10 @@ class SchemaRDD(RDD):
 
     @property
     def _jrdd(self):
-        """
-        Lazy evaluation of PythonRDD object. Only done when a user calls methods defined by the
-        L{pyspark.rdd.RDD} super class (map, count, etc.).
+        """Lazy evaluation of PythonRDD object.
+
+        Only done when a user calls methods defined by the
+        L{pyspark.rdd.RDD} super class (map, filter, etc.).
         """
         if not hasattr(self, '_lazy_jrdd'):
             self._lazy_jrdd = self._toPython()._jrdd
@@ -279,10 +343,10 @@ class SchemaRDD(RDD):
         return self._jrdd.id()
 
     def saveAsParquetFile(self, path):
-        """
-        Saves the contents of this L{SchemaRDD} as a parquet file, preserving the schema.  Files
-        that are written out using this method can be read back in as a SchemaRDD using the
-        L{SQLContext.parquetFile} method.
+        """Save the contents as a Parquet file, preserving the schema.
+
+        Files that are written out using this method can be read back in as
+        a SchemaRDD using the L{SQLContext.parquetFile} method.
 
         >>> import tempfile, shutil
         >>> parquetFile = tempfile.mkdtemp()
@@ -290,36 +354,58 @@ class SchemaRDD(RDD):
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.saveAsParquetFile(parquetFile)
         >>> srdd2 = sqlCtx.parquetFile(parquetFile)
-        >>> srdd2.collect() == srdd.collect()
+        >>> sorted(srdd2.collect()) == sorted(srdd.collect())
         True
         """
         self._jschema_rdd.saveAsParquetFile(path)
 
     def registerAsTable(self, name):
-        """
-        Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
-        table is tied to the L{SQLContext} that was used to create this SchemaRDD.
+        """Registers this RDD as a temporary table using the given name.
+
+        The lifetime of this temporary table is tied to the L{SQLContext}
+        that was used to create this SchemaRDD.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.registerAsTable("test")
         >>> srdd2 = sqlCtx.sql("select * from test")
-        >>> srdd.collect() == srdd2.collect()
+        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
         self._jschema_rdd.registerAsTable(name)
 
     def insertInto(self, tableName, overwrite = False):
-        """
-        Inserts the contents of this SchemaRDD into the specified table,
-        optionally overwriting any existing data.
+        """Inserts the contents of this SchemaRDD into the specified table.
+
+        Optionally overwriting any existing data.
         """
         self._jschema_rdd.insertInto(tableName, overwrite)
 
     def saveAsTable(self, tableName):
-        """
-        Creates a new table with the contents of this SchemaRDD.
-        """
+        """Creates a new table with the contents of this SchemaRDD."""
         self._jschema_rdd.saveAsTable(tableName)
+
+    def schemaString(self):
+        """Returns the output schema in the tree format."""
+        return self._jschema_rdd.schemaString()
+
+    def printSchema(self):
+        """Prints out the schema in the tree format."""
+        print self.schemaString()
+
+    def count(self):
+        """Return the number of elements in this RDD.
+
+        Unlike the base RDD implementation of count, this implementation
+        leverages the query optimizer to compute the count on the SchemaRDD,
+        which supports features such as filter pushdown.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.count()
+        3L
+        >>> srdd.count() == srdd.map(lambda x: x).count()
+        True
+        """
+        return self._jschema_rdd.count()
 
     def _toPython(self):
         # We have to import the Row class explicitly, so that the reference Pickler has is
@@ -329,7 +415,8 @@ class SchemaRDD(RDD):
         # TODO: This is inefficient, we should construct the Python Row object
         # in Java land in the javaToPython function. May require a custom
         # pickle serializer in Pyrolite
-        return RDD(jrdd, self._sc, self._sc.serializer).map(lambda d: Row(d))
+        return RDD(jrdd, self._sc, BatchedSerializer(
+                        PickleSerializer())).map(lambda d: Row(d))
 
     # We override the default cache/persist/checkpoint behavior as we want to cache the underlying
     # SchemaRDD object in the JVM, not the PythonRDD checkpointed by the super class
@@ -394,6 +481,7 @@ class SchemaRDD(RDD):
 
 def _test():
     import doctest
+    from array import array
     from pyspark.context import SparkContext
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
@@ -403,6 +491,17 @@ def _test():
     globs['sqlCtx'] = SQLContext(sc)
     globs['rdd'] = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+    jsonStrings = ['{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
+       '{"field1" : 2, "field2": "row2", "field3":{"field4":22}}',
+       '{"field1" : 3, "field2": "row3", "field3":{"field4":33}}']
+    globs['jsonStrings'] = jsonStrings
+    globs['json'] = sc.parallelize(jsonStrings)
+    globs['nestedRdd1'] = sc.parallelize([
+        {"f1" : array('i', [1, 2]), "f2" : {"row1" : 1.0}},
+        {"f1" : array('i', [2, 3]), "f2" : {"row2" : 2.0}}])
+    globs['nestedRdd2'] = sc.parallelize([
+        {"f1" : [[1, 2], [2, 3]], "f2" : set([1, 2]), "f3" : (1, 2)},
+        {"f1" : [[2, 3], [3, 4]], "f2" : set([2, 3]), "f3" : (2, 3)}])
     (failure_count, test_count) = doctest.testmod(globs=globs,optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

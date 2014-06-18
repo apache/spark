@@ -42,10 +42,11 @@ class ShuffledRDD[K, V, P <: Product2[K, V] : ClassTag](
     part: Partitioner)
   extends RDD[P](prev.context, Nil) {
 
-  private var serializer: Serializer = null
+  private var serializer: Option[Serializer] = None
 
+  /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): ShuffledRDD[K, V, P] = {
-    this.serializer = serializer
+    this.serializer = Option(serializer)
     this
   }
 
@@ -60,9 +61,10 @@ class ShuffledRDD[K, V, P <: Product2[K, V] : ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[P] = {
-    val shuffledId = dependencies.head.asInstanceOf[ShuffleDependency[K, V]].shuffleId
-    val ser = Serializer.getSerializer(serializer)
-    SparkEnv.get.shuffleFetcher.fetch[P](shuffledId, split.index, context, ser)
+    val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, V]]
+    SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context)
+      .read()
+      .asInstanceOf[Iterator[P]]
   }
 
   override def clearDependencies() {

@@ -160,5 +160,33 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-}
+  test("loadVectors") {
+    val vectors = sc.parallelize(Seq(
+      Vectors.dense(1.0, 2.0),
+      Vectors.sparse(2, Array(1), Array(-1.0)),
+      Vectors.dense(0.0, 1.0)
+    ), 2)
+    val tempDir = Files.createTempDir()
+    val outputDir = new File(tempDir, "vectors")
+    val path = outputDir.toURI.toString
+    vectors.saveAsTextFile(path)
+    val loaded = loadVectors(sc, path)
+    assert(vectors.collect().toSet === loaded.collect().toSet)
+    Utils.deleteRecursively(tempDir)
+  }
 
+  test("loadLabeledPoints") {
+    val points = sc.parallelize(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0, 2.0)),
+      LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))),
+      LabeledPoint(1.0, Vectors.dense(0.0, 1.0))
+    ), 2)
+    val tempDir = Files.createTempDir()
+    val outputDir = new File(tempDir, "points")
+    val path = outputDir.toURI.toString
+    points.saveAsTextFile(path)
+    val loaded = loadLabeledPoints(sc, path)
+    assert(points.collect().toSet === loaded.collect().toSet)
+    Utils.deleteRecursively(tempDir)
+  }
+}

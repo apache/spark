@@ -187,7 +187,8 @@ private[hive] case class HiveSimpleUdf(name: String, children: Seq[Expression]) 
     val primitiveClasses = Seq(
       Integer.TYPE, classOf[java.lang.Integer], classOf[java.lang.String], java.lang.Double.TYPE,
       classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long],
-      classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte]
+      classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte],
+      classOf[java.sql.Timestamp]
     )
     val matchingConstructor = argClass.getConstructors.find { c =>
       c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
@@ -334,6 +335,9 @@ private[hive] trait HiveInspectors {
     case BinaryType => PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector
     case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
     case DecimalType => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
+    case StructType(fields) =>
+      ObjectInspectorFactory.getStandardStructObjectInspector(
+        fields.map(f => f.name), fields.map(f => toInspector(f.dataType)))
   }
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {

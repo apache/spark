@@ -401,7 +401,7 @@ object DecisionTree extends Serializable with Logging {
      */
     def isSampleValid(parentFilters: List[Filter], labeledPoint: LabeledPoint): Boolean = {
       // leaf
-      if ((level > 0) & (parentFilters.length == 0)) {
+      if ((level > 0) && (parentFilters.length == 0)) {
         return false
       }
 
@@ -454,7 +454,7 @@ object DecisionTree extends Serializable with Logging {
           val bin = binForFeatures(mid)
           val lowThreshold = bin.lowSplit.threshold
           val highThreshold = bin.highSplit.threshold
-          if ((lowThreshold < feature) & (highThreshold >= feature)){
+          if ((lowThreshold < feature) && (highThreshold >= feature)){
             return mid
           }
           else if (lowThreshold >= feature) {

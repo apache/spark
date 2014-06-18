@@ -43,6 +43,9 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
+/** CallSite represents a place in user code. It can have a short and a long form. */
+private[spark] case class CallSite(val short: String, val long: String)
+
 /**
  * Various utility methods used by Spark.
  */
@@ -799,21 +802,12 @@ private[spark] object Utils extends Logging {
    */
   private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
 
-  private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
-                                    val firstUserLine: Int, val firstUserClass: String) {
-
-    /** Returns a printable version of the call site info suitable for logs. */
-    override def toString = {
-      "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
-    }
-  }
-
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getCallSiteInfo: CallSiteInfo = {
+  def getCallSite: CallSite = {
     val trace = Thread.currentThread.getStackTrace()
       .filterNot(_.getMethodName.contains("getStackTrace"))
 
@@ -824,11 +818,11 @@ private[spark] object Utils extends Logging {
     var lastSparkMethod = "<unknown>"
     var firstUserFile = "<unknown>"
     var firstUserLine = 0
-    var finished = false
-    var firstUserClass = "<unknown>"
+    var insideSpark = true
+    var callStack = new ArrayBuffer[String]() :+ "<unknown>"
 
     for (el <- trace) {
-      if (!finished) {
+      if (insideSpark) {
         if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
@@ -836,15 +830,21 @@ private[spark] object Utils extends Logging {
           } else {
             el.getMethodName
           }
+          callStack(0) = el.toString // Put last Spark method on top of the stack trace.
         } else {
           firstUserLine = el.getLineNumber
           firstUserFile = el.getFileName
-          firstUserClass = el.getClassName
-          finished = true
+          callStack += el.toString
+          insideSpark = false
         }
+      } else {
+        callStack += el.toString
       }
     }
-    new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
+    val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
+    CallSite(
+      short = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
+      long = callStack.take(callStackDepth).mkString("\n"))
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
@@ -860,6 +860,59 @@ private[spark] object Utils extends Logging {
     stream.read(buff)
     stream.close()
     Source.fromBytes(buff).mkString
+  }
+
+  /**
+   * Return a string containing data across a set of files. The `startIndex`
+   * and `endIndex` is based on the cumulative size of all the files take in
+   * the given order. See figure below for more details.
+   */
+  def offsetBytes(files: Seq[File], start: Long, end: Long): String = {
+    val fileLengths = files.map { _.length }
+    val startIndex = math.max(start, 0)
+    val endIndex = math.min(end, fileLengths.sum)
+    val fileToLength = files.zip(fileLengths).toMap
+    logDebug("Log files: \n" + fileToLength.mkString("\n"))
+
+    val stringBuffer = new StringBuffer((endIndex - startIndex).toInt)
+    var sum = 0L
+    for (file <- files) {
+      val startIndexOfFile = sum
+      val endIndexOfFile = sum + fileToLength(file)
+      logDebug(s"Processing file $file, " +
+        s"with start index = $startIndexOfFile, end index = $endIndex")
+
+      /*
+                                      ____________
+       range 1:                      |            |
+                                     |   case A   |
+
+       files:   |==== file 1 ====|====== file 2 ======|===== file 3 =====|
+
+                     |   case B  .       case C       .    case D    |
+       range 2:      |___________.____________________.______________|
+       */
+
+      if (startIndex <= startIndexOfFile  && endIndex >= endIndexOfFile) {
+        // Case C: read the whole file
+        stringBuffer.append(offsetBytes(file.getAbsolutePath, 0, fileToLength(file)))
+      } else if (startIndex > startIndexOfFile && startIndex < endIndexOfFile) {
+        // Case A and B: read from [start of required range] to [end of file / end of range]
+        val effectiveStartIndex = startIndex - startIndexOfFile
+        val effectiveEndIndex = math.min(endIndex - startIndexOfFile, fileToLength(file))
+        stringBuffer.append(Utils.offsetBytes(
+          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+      } else if (endIndex > startIndexOfFile && endIndex < endIndexOfFile) {
+        // Case D: read from [start of file] to [end of require range]
+        val effectiveStartIndex = math.max(startIndex - startIndexOfFile, 0)
+        val effectiveEndIndex = endIndex - startIndexOfFile
+        stringBuffer.append(Utils.offsetBytes(
+          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+      }
+      sum += fileToLength(file)
+      logDebug(s"After processing file $file, string built is ${stringBuffer.toString}}")
+    }
+    stringBuffer.toString
   }
 
   /**
@@ -1086,9 +1139,19 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return true if this is Windows.
+   * Whether the underlying operating system is Windows.
    */
-  def isWindows = SystemUtils.IS_OS_WINDOWS
+  val isWindows = SystemUtils.IS_OS_WINDOWS
+
+  /**
+   * Pattern for matching a Windows drive, which contains only a single alphabet character.
+   */
+  val windowsDrive = "([a-zA-Z])".r
+
+  /**
+   * Format a Windows path such that it can be safely passed to a URI.
+   */
+  def formatWindowsPath(path: String): String = path.replace("\\", "/")
 
   /**
    * Indicates whether Spark is currently running unit tests.
@@ -1101,7 +1164,7 @@ private[spark] object Utils extends Logging {
    * Strip the directory from a path name
    */
   def stripDirectory(path: String): String = {
-    path.split(File.separator).last
+    new File(path).getName
   }
 
   /**
@@ -1166,4 +1229,61 @@ private[spark] object Utils extends Logging {
         true
     }
   }
+
+  /**
+   * Return a well-formed URI for the file described by a user input string.
+   *
+   * If the supplied path does not contain a scheme, or is a relative path, it will be
+   * converted into an absolute path with a file:// scheme.
+   */
+  def resolveURI(path: String, testWindows: Boolean = false): URI = {
+
+    // In Windows, the file separator is a backslash, but this is inconsistent with the URI format
+    val windows = isWindows || testWindows
+    val formattedPath = if (windows) formatWindowsPath(path) else path
+
+    val uri = new URI(formattedPath)
+    if (uri.getPath == null) {
+      throw new IllegalArgumentException(s"Given path is malformed: $uri")
+    }
+    uri.getScheme match {
+      case windowsDrive(d) if windows =>
+        new URI("file:/" + uri.toString.stripPrefix("/"))
+      case null =>
+        // Preserve fragments for HDFS file name substitution (denoted by "#")
+        // For instance, in "abc.py#xyz.py", "xyz.py" is the name observed by the application
+        val fragment = uri.getFragment
+        val part = new File(uri.getPath).toURI
+        new URI(part.getScheme, part.getPath, fragment)
+      case _ =>
+        uri
+    }
+  }
+
+  /** Resolve a comma-separated list of paths. */
+  def resolveURIs(paths: String, testWindows: Boolean = false): String = {
+    if (paths == null || paths.trim.isEmpty) {
+      ""
+    } else {
+      paths.split(",").map { p => Utils.resolveURI(p, testWindows) }.mkString(",")
+    }
+  }
+
+  /** Return all non-local paths from a comma-separated list of paths. */
+  def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
+    val windows = isWindows || testWindows
+    if (paths == null || paths.trim.isEmpty) {
+      Array.empty
+    } else {
+      paths.split(",").filter { p =>
+        val formattedPath = if (windows) formatWindowsPath(p) else p
+        new URI(formattedPath).getScheme match {
+          case windowsDrive(d) if windows => false
+          case "local" | "file" | null => false
+          case _ => true
+        }
+      }
+    }
+  }
+
 }

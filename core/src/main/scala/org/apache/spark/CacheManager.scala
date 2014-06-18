@@ -32,10 +32,14 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
   private val loading = new HashSet[RDDBlockId]()
 
   /** Gets or computes an RDD split. Used by RDD.iterator() when an RDD is cached. */
-  def getOrCompute[T](rdd: RDD[T], split: Partition, context: TaskContext,
+  def getOrCompute[T](
+      rdd: RDD[T],
+      split: Partition,
+      context: TaskContext,
       storageLevel: StorageLevel): Iterator[T] = {
+
     val key = RDDBlockId(rdd.id, split.index)
-    logDebug("Looking for partition " + key)
+    logDebug(s"Looking for partition $key")
     blockManager.get(key) match {
       case Some(values) =>
         // Partition is already materialized, so just return its values
@@ -45,7 +49,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         // Mark the split as loading (unless someone else marks it first)
         loading.synchronized {
           if (loading.contains(key)) {
-            logInfo("Another thread is loading %s, waiting for it to finish...".format(key))
+            logInfo(s"Another thread is loading $key, waiting for it to finish...")
             while (loading.contains(key)) {
               try {
                 loading.wait()
@@ -54,7 +58,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
                   logWarning(s"Got an exception while waiting for another thread to load $key", e)
               }
             }
-            logInfo("Finished waiting for %s".format(key))
+            logInfo(s"Finished waiting for $key")
             /* See whether someone else has successfully loaded it. The main way this would fail
              * is for the RDD-level cache eviction policy if someone else has loaded the same RDD
              * partition but we didn't want to make space for it. However, that case is unlikely
@@ -64,7 +68,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
               case Some(values) =>
                 return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
               case None =>
-                logInfo("Whoever was loading %s failed; we'll try it ourselves".format(key))
+                logInfo(s"Whoever was loading $key failed; we'll try it ourselves")
                 loading.add(key)
             }
           } else {
@@ -73,7 +77,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         }
         try {
           // If we got here, we have to load the split
-          logInfo("Partition %s not found, computing it".format(key))
+          logInfo(s"Partition $key not found, computing it")
           val computedValues = rdd.computeOrReadCheckpoint(split, context)
 
           // Persist the result, so long as the task is not running locally
@@ -97,8 +101,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
                 case Some(values) =>
                   values.asInstanceOf[Iterator[T]]
                 case None =>
-                  logInfo("Failure to store %s".format(key))
-                  throw new Exception("Block manager failed to return persisted valued")
+                  logInfo(s"Failure to store $key")
+                  throw new SparkException("Block manager failed to return persisted value")
               }
             } else {
               // In this case the RDD is cached to an array buffer. This will save the results
