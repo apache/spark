@@ -900,16 +900,16 @@ import org.apache.spark.util.Utils
 
     /** Code to access a variable with the specified name */
     def fullPath(vname: String) = {
-      // lineRep.readPath + accessPath + ".`%s`".format(vname)
-      lineRep.readPath + ".INSTANCE" + accessPath + ".`%s`".format(vname)
+      lineRep.readPath + accessPath + ".`%s`".format(vname)
+      // lineRep.readPath + ".INSTANCE" + accessPath + ".`%s`".format(vname)
     }
       /** Same as fullpath, but after it has been flattened, so:
        *  $line5.$iw.$iw.$iw.Bippy      // fullPath
        *  $line5.$iw$$iw$$iw$Bippy      // fullFlatName
        */
       def fullFlatName(name: String) =
-        // lineRep.readPath + accessPath.replace('.', '$') + nme.NAME_JOIN_STRING + name
-        lineRep.readPath + ".INSTANCE" + accessPath.replace('.', '$') + nme.NAME_JOIN_STRING + name
+        lineRep.readPath + accessPath.replace('.', '$') + nme.NAME_JOIN_STRING + name
+        //lineRep.readPath + ".INSTANCE" + accessPath.replace('.', '$') + nme.NAME_JOIN_STRING + name
 
     /** The unmangled symbol name, but supplemented with line info. */
     def disambiguated(name: Name): String = name + " (in " + lineRep + ")"
@@ -942,9 +942,7 @@ import org.apache.spark.util.Utils
         |  %s%s%s
       """.stripMargin.format(lineRep.readName, envLines.map("  " + _ + ";\n").mkString, importsPreamble, indentCode(toCompute))
       val postamble = importsTrailer + "\n}" + "\n" +
-        "object " + lineRep.readName + " {\n" +
-        "  val INSTANCE = new " + lineRep.readName + "();\n" +
-        "}\n"
+        "object " + lineRep.readName + s" extends ${lineRep.readName}"
       val generate = (m: MemberHandler) => m extraCodeToEvaluate Request.this
 
       /*
@@ -980,7 +978,7 @@ import org.apache.spark.util.Utils
       |    (""
       """.stripMargin.format(
         lineRep.evalName, evalResult, lineRep.printName,
-        executionWrapper, lineRep.readName + ".INSTANCE" + accessPath
+        executionWrapper, lineRep.readName + accessPath
       )
       val postamble = """
       |    )
@@ -1260,7 +1258,7 @@ object SparkIMain {
   // $line3.$read.$iw.$iw.Bippy =
   //   $line3.$read$$iw$$iw$Bippy@4a6a00ca
   private def removeLineWrapper(s: String) = s.replaceAll("""\$line\d+[./]\$(read|eval|print)[$.]""", "")
-  private def removeIWPackages(s: String)  = s.replaceAll("""\$(iw|iwC|read|eval|print)[$.]""", "")
+  private def removeIWPackages(s: String)  = s.replaceAll("""\$(iw|read|eval|print)[$.]""", "")
   private def removeSparkVals(s: String)   = s.replaceAll("""\$VAL[0-9]+[$.]""", "")
 
   def stripString(s: String)               = removeSparkVals(removeIWPackages(removeLineWrapper(s)))

@@ -148,8 +148,8 @@ trait SparkImports {
     // add code for a new object to hold some imports
     def addWrapper() {
       val impname = nme.INTERPRETER_IMPORT_WRAPPER
-      code append "class %sC extends Serializable {\n".format(impname)
-      trailingBraces append "}\nval " + impname + " = new " + impname + "C;\n"
+      code append "class %s extends Serializable {\n".format(impname)
+      trailingBraces append "}\nval " + impname + " = new " + impname + "\n"
       accessPath append ("." + impname)
 
       currentImps.clear
@@ -185,16 +185,17 @@ trait SparkImports {
         case x =>
           for (imv <- x.definedNames) {
             if (currentImps contains imv) addWrapper()
-            val objName = req.lineRep.readPath
-            val valName = "$VAL" + newValId();
-
-            if(!code.toString.endsWith(".`" + imv + "`;\n")) { // Which means already imported
-               code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
-               code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
-            }
+            // val objName = req.lineRep.readPath
+            // val valName = "$VAL" + newValId();
+            //
+            // if(!code.toString.endsWith(".`" + imv + "`;\n")) { // Which means already imported
+            //    code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
+            //    code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
+            // }
             // code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
             // code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
             // code append ("import " + (req fullPath imv) + "\n")
+            code append ("import " + (req fullPath imv) + "\n")
             currentImps += imv
           }
       }
