@@ -363,8 +363,9 @@ private[spark] class BlockManager(
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
-        // Double check to make sure the block is still there, since it
-        // might has been removed when we actually come here.
+        // Double check to make sure the block is still there, since removeBlock
+        // method also synchronizes on BlockInfo object, so the block might have
+        // been removed when we actually come here.
         if (blockInfo.get(blockId).isEmpty) {
           logDebug(s"Block $blockId had been removed")
           return None
