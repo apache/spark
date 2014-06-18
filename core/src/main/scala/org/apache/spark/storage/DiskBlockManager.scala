@@ -23,7 +23,6 @@ import java.util.{Date, Random, UUID}
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
 import org.apache.spark.util.Utils
 
 /**
@@ -35,7 +34,7 @@ import org.apache.spark.util.Utils
  * @param rootDirs The directories to use for storing block files. Data will be hashed among these.
  */
 private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootDirs: String)
-  extends PathResolver with Logging {
+  extends Logging {
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   private val subDirsPerLocalDir = shuffleManager.conf.getInt("spark.diskStore.subDirectories", 64)
@@ -45,21 +44,25 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
    * having really large inodes at the top level. */
   private val localDirs: Array[File] = createLocalDirs()
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
-  private var shuffleSender : ShuffleSender = null
 
   addShutdownHook()
 
-  /**
-   * Returns the physical file segment in which the given BlockId is located.
-   * If the BlockId has been mapped to a specific FileSegment, that will be returned.
-   * Otherwise, we assume the Block is mapped to a whole file identified by the BlockId directly.
-   */
-  def getBlockLocation(blockId: BlockId): FileSegment = {
+  def getFileSegment(blockId: BlockId): FileSegment = {
     if (blockId.isShuffle && shuffleManager.consolidateShuffleFiles) {
-      shuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId])
+      val objectSegment = shuffleManager.getBlockLocation(
+        blockId.asInstanceOf[ShuffleBlockId])
+      val fileObjectId = FileObjectId.toFileObjectId(objectSegment.objectId)
+      fileObjectId match {
+        case Some(id: FileObjectId) =>
+          new FileSegment(id, objectSegment.offset, objectSegment.length)
+        case None =>
+          // Should not come here when we only have one diskStore
+          // Fix this when pluggable storage is implemented.
+          throw BlockException(blockId, "Block Not found")
+      }
     } else {
       val file = getFile(blockId.name)
-      new FileSegment(file, 0, file.length())
+      new FileSegment(FileObjectId(file), 0, file.length())
     }
   }
 
@@ -92,7 +95,8 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
 
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
-    getBlockLocation(blockId).file.exists()
+    // only for test
+    getFile(blockId.name).exists()
   }
 
   /** List all the blocks currently stored on disk by the disk manager. */
@@ -167,14 +171,6 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
       }
     }
 
-    if (shuffleSender != null) {
-      shuffleSender.stop()
-    }
   }
 
-  private[storage] def startShuffleBlockSender(port: Int): Int = {
-    shuffleSender = new ShuffleSender(port, this)
-    logInfo(s"Created ShuffleSender binding to port: ${shuffleSender.port}")
-    shuffleSender.port
-  }
 }

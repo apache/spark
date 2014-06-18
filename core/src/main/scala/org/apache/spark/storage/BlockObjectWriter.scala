@@ -58,7 +58,7 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
   /**
    * Returns the file segment of committed data that this Writer has written.
    */
-  def fileSegment(): FileSegment
+  def objectSegment(): ObjectSegment
 
   /**
    * Cumulative time spent performing blocking writes, in ns.
@@ -74,7 +74,7 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
 /** BlockObjectWriter which writes directly to a file on disk. Appends to the given file. */
 private[spark] class DiskBlockObjectWriter(
     blockId: BlockId,
-    file: File,
+    objectId: FileObjectId,
     serializer: Serializer,
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
@@ -102,6 +102,7 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   /** The file channel, used for repositioning / truncating the file. */
+  private val file = objectId.file
   private var channel: FileChannel = null
   private var bs: OutputStream = null
   private var fos: FileOutputStream = null
@@ -179,8 +180,8 @@ private[spark] class DiskBlockObjectWriter(
     objOut.writeObject(value)
   }
 
-  override def fileSegment(): FileSegment = {
-    new FileSegment(file, initialPosition, bytesWritten)
+  override def objectSegment(): ObjectSegment = {
+    new ObjectSegment(objectId, initialPosition, bytesWritten)
   }
 
   // Only valid if called after close()

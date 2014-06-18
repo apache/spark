@@ -22,5 +22,5 @@ import org.apache.spark.storage.FileSegment;
 
 public interface PathResolver {
   /** Get the file segment in which the given block resides. */
-  FileSegment getBlockLocation(BlockId blockId);
+  FileSegment getFileSegment(BlockId blockId);
 }

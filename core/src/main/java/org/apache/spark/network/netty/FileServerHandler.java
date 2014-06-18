@@ -42,7 +42,7 @@ class FileServerHandler extends SimpleChannelInboundHandler<String> {
   @Override
   public void channelRead0(ChannelHandlerContext ctx, String blockIdString) {
     BlockId blockId = BlockId.apply(blockIdString);
-    FileSegment fileSegment = pResolver.getBlockLocation(blockId);
+    FileSegment fileSegment = pResolver.getFileSegment(blockId);
     // if getBlockLocation returns null, close the channel
     if (fileSegment == null) {
       //ctx.close();

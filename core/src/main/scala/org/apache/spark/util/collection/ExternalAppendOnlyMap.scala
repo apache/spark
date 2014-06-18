@@ -29,7 +29,7 @@ import com.google.common.io.ByteStreams
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, BlockManager}
+import org.apache.spark.storage.{ObjectId, BlockId, BlockManager}
 
 /**
  * :: DeveloperApi ::
@@ -71,7 +71,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
-  private val diskBlockManager = blockManager.diskBlockManager
+  private val diskStore = blockManager.diskStore
 
   // Collective memory threshold shared across all running tasks
   private val maxMemoryThreshold = {
@@ -156,8 +156,8 @@ class ExternalAppendOnlyMap[K, V, C](
     spillCount += 1
     logWarning("Spilling in-memory map of %d MB to disk (%d time%s so far)"
       .format(mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
-    val (blockId, file) = diskBlockManager.createTempBlock()
-    var writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)
+    val (blockId, objectId) = diskStore.createTempBlock()
+    var writer = blockManager.getDiskWriter(blockId, objectId, serializer, fileBufferSize)
     var objectsWritten = 0
 
     // List of batch sizes (bytes) in the order they are written to disk
@@ -182,7 +182,7 @@ class ExternalAppendOnlyMap[K, V, C](
         if (objectsWritten == serializerBatchSize) {
           flush()
           writer.close()
-          writer = blockManager.getDiskWriter(blockId, file, serializer, fileBufferSize)
+          writer = blockManager.getDiskWriter(blockId, objectId, serializer, fileBufferSize)
         }
       }
       if (objectsWritten > 0) {
@@ -194,7 +194,7 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     currentMap = new SizeTrackingAppendOnlyMap[K, C]
-    spilledMaps.append(new DiskMapIterator(file, blockId, batchSizes))
+    spilledMaps.append(new DiskMapIterator(objectId, blockId, batchSizes))
 
     // Reset the amount of shuffle memory used by this map in the global pool
     val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
@@ -348,10 +348,10 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * An iterator that returns (K, C) pairs in sorted order from an on-disk map
    */
-  private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
+  private class DiskMapIterator(objectId: ObjectId, blockId: BlockId, batchSizes: ArrayBuffer[Long])
     extends Iterator[(K, C)] {
-    private val fileStream = new FileInputStream(file)
-    private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
+    private val objectStream = blockManager.diskStore.getInputStream(objectId)
+    private val bufferedStream = new BufferedInputStream(objectStream, fileBufferSize)
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
@@ -416,7 +416,7 @@ class ExternalAppendOnlyMap[K, V, C](
     // TODO: Ensure this gets called even if the iterator isn't drained.
     private def cleanup() {
       deserializeStream.close()
-      file.delete()
+      blockManager.diskStore.removeObject(objectId)
     }
   }
 }

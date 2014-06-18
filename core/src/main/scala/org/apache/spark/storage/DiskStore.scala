@@ -17,26 +17,32 @@
 
 package org.apache.spark.storage
 
-import java.io.{FileOutputStream, RandomAccessFile}
+import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{HashMap, ArrayBuffer}
 
 import org.apache.spark.Logging
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
+import org.apache.spark.scheduler.Stage
+import java.util.concurrent.atomic.AtomicInteger
+import scala.Some
+import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
 
 /**
  * Stores BlockManager blocks on disk.
  */
-private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
-  extends BlockStore(blockManager) with Logging {
+private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
+  extends BlockStore(blockManager) with PathResolver with Logging {
 
   val minMemoryMapBytes = blockManager.conf.getLong("spark.storage.memoryMapThreshold", 2 * 4096L)
+  private val nameToObjectId = new HashMap[String, ObjectId]
+  private var shuffleSender : ShuffleSender = null
 
   override def getSize(blockId: BlockId): Long = {
-    diskManager.getBlockLocation(blockId).length
+    getFileSegment(blockId).length
   }
 
   override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
@@ -92,7 +98,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
   }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
-    val segment = diskManager.getBlockLocation(blockId)
+    val segment = getFileSegment(blockId)
     val channel = new RandomAccessFile(segment.file, "r").getChannel
 
     try {
@@ -123,7 +129,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
   }
 
   override def remove(blockId: BlockId): Boolean = {
-    val fileSegment = diskManager.getBlockLocation(blockId)
+    val fileSegment = getFileSegment(blockId)
     val file = fileSegment.file
     if (file.exists() && file.length() == fileSegment.length) {
       file.delete()
@@ -136,7 +142,113 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
   }
 
   override def contains(blockId: BlockId): Boolean = {
-    val file = diskManager.getBlockLocation(blockId).file
+    val file = getFileSegment(blockId).file
     file.exists()
+  }
+
+  def getBlockObjectWriter(
+      blockId: BlockId,
+      objectId: ObjectId,
+      serializer: Serializer,
+      bufferSize: Int): BlockObjectWriter = {
+
+    val fileObjectId = FileObjectId.toFileObjectId(objectId)
+
+    fileObjectId match {
+      case Some(foid: FileObjectId) =>
+        val compressStream: OutputStream =>
+          OutputStream = blockManager.wrapForCompression(blockId, _)
+        val syncWrites = blockManager.conf.getBoolean("spark.shuffle.sync", false)
+        new DiskBlockObjectWriter(blockId, foid, serializer, bufferSize, compressStream, syncWrites)
+      case None =>
+        null
+    }
+
+  }
+
+  override def getFileSegment(blockId: BlockId): FileSegment = {
+    diskManager.getFileSegment(blockId)
+  }
+
+  def createTempBlock(): (TempBlockId, ObjectId) = {
+
+    val (blockId, file) = diskManager.createTempBlock()
+    val objectId = new FileObjectId(file)
+
+    (blockId, objectId)
+  }
+
+  def getInputStream(objectId: ObjectId): InputStream = {
+    val fileObjectId = FileObjectId.toFileObjectId(objectId)
+
+    fileObjectId match {
+      case Some(FileObjectId(file)) =>
+        new FileInputStream(file)
+      case None =>
+        null
+    }
+  }
+
+  def getOrNewObject(name: String): ObjectId = {
+
+    val objectId = nameToObjectId.get(name)
+
+    if (objectId.isEmpty) {
+      val file = diskManager.getFile(name)
+      val newObjectId = new FileObjectId(file)
+      nameToObjectId.put(name, newObjectId)
+      newObjectId
+    } else {
+      objectId.get
+    }
+  }
+
+  def getObjectSize(objectId: ObjectId): Long = {
+    val fileObjectId = FileObjectId.toFileObjectId(objectId)
+
+    fileObjectId match {
+      case Some(FileObjectId(file)) =>
+        file.length
+      case None =>
+        0
+    }
+  }
+
+  def isObjectExists(objectId: ObjectId): Boolean = {
+    val fileObjectId = FileObjectId.toFileObjectId(objectId)
+
+    fileObjectId match {
+      case Some(FileObjectId(file)) =>
+        file.exists
+      case None =>
+        false
+    }
+  }
+
+  def removeObject(id: ObjectId): Boolean = {
+    val fileObjectId = FileObjectId.toFileObjectId(id)
+
+    fileObjectId match {
+      case Some(FileObjectId(file)) =>
+        if (file != null && file.exists()) {
+          return file.delete()
+        }
+      case _ =>
+        false
+    }
+    false
+  }
+
+  private[storage] def startShuffleBlockSender(port: Int): Int = {
+    shuffleSender = new ShuffleSender(port, this)
+    logInfo(s"Created ShuffleSender binding to port: ${shuffleSender.port}")
+    shuffleSender.port
+  }
+
+  /** stop shuffle sender. */
+  private[spark] def stop() {
+    if (shuffleSender != null) {
+      shuffleSender.stop()
+    }
   }
 }

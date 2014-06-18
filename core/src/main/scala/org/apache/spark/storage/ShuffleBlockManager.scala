@@ -104,26 +104,27 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
           blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializer, bufferSize)
         }
       } else {
+        val diskStore = blockManager.diskStore
         Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-          val blockFile = blockManager.diskBlockManager.getFile(blockId)
+          val objectId = diskStore.getOrNewObject(blockId.name)
           // Because of previous failures, the shuffle file may already exist on this machine.
           // If so, remove it.
-          if (blockFile.exists) {
-            if (blockFile.delete()) {
-              logInfo(s"Removed existing shuffle file $blockFile")
+          if (diskStore.isObjectExists(objectId)) {
+            if (diskStore.removeObject(objectId)) {
+              logInfo(s"Removed existing shuffle object $objectId")
             } else {
-              logWarning(s"Failed to remove existing shuffle file $blockFile")
+              logWarning(s"Failed to remove existing shuffle object $objectId")
             }
           }
-          blockManager.getDiskWriter(blockId, blockFile, serializer, bufferSize)
+          blockManager.getDiskWriter(blockId, objectId, serializer, bufferSize)
         }
       }
 
       override def releaseWriters(success: Boolean) {
         if (consolidateShuffleFiles) {
           if (success) {
-            val offsets = writers.map(_.fileSegment().offset)
+            val offsets = writers.map(_.objectSegment().offset)
             fileGroup.recordMapOutput(mapId, offsets)
           }
           recycleFileGroup(fileGroup)
@@ -139,11 +140,11 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
 
       private def newFileGroup(): ShuffleFileGroup = {
         val fileId = shuffleState.nextFileId.getAndIncrement()
-        val files = Array.tabulate[File](numBuckets) { bucketId =>
+        val objects = Array.tabulate[ObjectId](numBuckets) { bucketId =>
           val filename = physicalFileName(shuffleId, bucketId, fileId)
-          blockManager.diskBlockManager.getFile(filename)
+          blockManager.diskStore.getOrNewObject(filename)
         }
-        val fileGroup = new ShuffleFileGroup(fileId, shuffleId, files)
+        val fileGroup = new ShuffleFileGroup(blockManager, fileId, shuffleId, objects)
         shuffleState.allFileGroups.add(fileGroup)
         fileGroup
       }
@@ -159,11 +160,11 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
    * This function should only be called if shuffle file consolidation is enabled, as it is
    * an error condition if we don't find the expected block.
    */
-  def getBlockLocation(id: ShuffleBlockId): FileSegment = {
+  def getBlockLocation(id: ShuffleBlockId): ObjectSegment = {
     // Search all file groups associated with this shuffle.
     val shuffleState = shuffleStates(id.shuffleId)
     for (fileGroup <- shuffleState.allFileGroups) {
-      val segment = fileGroup.getFileSegmentFor(id.mapId, id.reduceId)
+      val segment = fileGroup.getObjectSegmentFor(id.mapId, id.reduceId)
       if (segment.isDefined) { return segment.get }
     }
     throw new IllegalStateException("Failed to find shuffle block: " + id)
@@ -183,8 +184,8 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
     shuffleStates.get(shuffleId) match {
       case Some(state) =>
         if (consolidateShuffleFiles) {
-          for (fileGroup <- state.allFileGroups; file <- fileGroup.files) {
-            file.delete()
+          for (fileGroup <- state.allFileGroups; objectId <- fileGroup.objects) {
+            blockManager.diskStore.removeObject(objectId)
           }
         } else {
           for (mapId <- state.completedMapTasks; reduceId <- 0 until state.numBuckets) {
@@ -219,7 +220,11 @@ object ShuffleBlockManager {
    * A group of shuffle files, one per reducer.
    * A particular mapper will be assigned a single ShuffleFileGroup to write its output to.
    */
-  private class ShuffleFileGroup(val shuffleId: Int, val fileId: Int, val files: Array[File]) {
+  private class ShuffleFileGroup(
+      val blockManager: BlockManager,
+      val shuffleId: Int,
+      val fileId: Int,
+      val objects: Array[ObjectId]) {
     /**
      * Stores the absolute index of each mapId in the files of this group. For instance,
      * if mapId 5 is the first block in each file, mapIdToIndex(5) = 0.
@@ -232,13 +237,13 @@ object ShuffleBlockManager {
      * Note: mapIdToIndex(mapId) returns the index of the mapper into the vector for every
      * reducer.
      */
-    private val blockOffsetsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
+    private val blockOffsetsByReducer = Array.fill[PrimitiveVector[Long]](objects.length) {
       new PrimitiveVector[Long]()
     }
 
     def numBlocks = mapIdToIndex.size
 
-    def apply(bucketId: Int) = files(bucketId)
+    def apply(bucketId: Int) = objects(bucketId)
 
     def recordMapOutput(mapId: Int, offsets: Array[Long]) {
       mapIdToIndex(mapId) = numBlocks
@@ -247,9 +252,9 @@ object ShuffleBlockManager {
       }
     }
 
-    /** Returns the FileSegment associated with the given map task, or None if no entry exists. */
-    def getFileSegmentFor(mapId: Int, reducerId: Int): Option[FileSegment] = {
-      val file = files(reducerId)
+    /** Returns the ObjectSegment associated with the given map task, or None if no entry exists. */
+    def getObjectSegmentFor(mapId: Int, reducerId: Int): Option[ObjectSegment] = {
+      val blockObject = objects(reducerId)
       val blockOffsets = blockOffsetsByReducer(reducerId)
       val index = mapIdToIndex.getOrElse(mapId, -1)
       if (index >= 0) {
@@ -258,10 +263,10 @@ object ShuffleBlockManager {
           if (index + 1 < numBlocks) {
             blockOffsets(index + 1) - offset
           } else {
-            file.length() - offset
+            blockManager.diskStore.getObjectSize(blockObject) - offset
           }
         assert(length >= 0)
-        Some(new FileSegment(file, offset, length))
+        Some(new ObjectSegment(blockObject, offset, length))
       } else {
         None
       }

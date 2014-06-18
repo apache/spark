@@ -108,13 +108,13 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
     val blockId0 = new ShuffleBlockId(1, 2, 3)
     val newFile = diskBlockManager.getFile(filename)
     writeToFile(newFile, 15)
-    shuffleBlockManager.idToSegmentMap(blockId0) = new FileSegment(newFile, 0, 15)
+    shuffleBlockManager.idToSegmentMap(blockId0) = new FileSegment(FileObjectId(newFile), 0, 15)
     assertSegmentEquals(blockId0, filename, 0, 15)
 
     val blockId1 = new ShuffleBlockId(1, 2, 4)
     val newFile2 = diskBlockManager.getFile(filename)
     writeToFile(newFile2, 12)
-    shuffleBlockManager.idToSegmentMap(blockId1) = new FileSegment(newFile, 15, 12)
+    shuffleBlockManager.idToSegmentMap(blockId1) = new FileSegment(FileObjectId(newFile), 15, 12)
     assertSegmentEquals(blockId1, filename, 15, 12)
 
     assert(newFile === newFile2)
@@ -122,7 +122,7 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
   }
 
   def assertSegmentEquals(blockId: BlockId, filename: String, offset: Int, length: Int) {
-    val segment = diskBlockManager.getBlockLocation(blockId)
+    val segment = diskBlockManager.getFileSegment(blockId)
     assert(segment.file.getName === filename)
     assert(segment.offset === offset)
     assert(segment.length === length)

@@ -20,12 +20,30 @@ package org.apache.spark.storage
 import java.io.File
 
 /**
- * References a particular segment of a file (potentially the entire file),
- * based off an offset and a length.
+ * Represent an external object written by specific BlockStore
  */
-private[spark] class FileSegment(override val objectId: FileObjectId, offset: Long, length: Long)
-    extends ObjectSegment(objectId, offset, length) {
-  override def toString = "(name=%s, offset=%d, length=%d)"
-    .format(objectId.file.getName, offset, length)
-  def file = objectId.file
+
+abstract class ObjectId {
+  def id: String
+  override def toString = "(block object %d)".format(id)
+  override def hashCode = id.hashCode
+  override def equals(other: Any): Boolean = other match {
+    case o: ObjectId => getClass == o.getClass && id.equals(o.id)
+    case _ => false
+  }
+}
+
+case class FileObjectId(file: File) extends ObjectId {
+  def id = file.getName
+  override def toString = "(File block object %d)".format(id)
+}
+
+object FileObjectId {
+  def toFileObjectId(id: ObjectId): Option[FileObjectId] = {
+    if (id.isInstanceOf[FileObjectId]) {
+      Some(id.asInstanceOf[FileObjectId])
+    } else {
+      None
+    }
+  }
 }
