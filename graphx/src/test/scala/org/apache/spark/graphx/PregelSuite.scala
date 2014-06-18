@@ -55,4 +55,40 @@ class PregelSuite extends FunSuite with LocalSparkContext {
         chain.vertices.mapValues { (vid, attr) => attr + 1 }.collect.toSet)
     }
   }
+  
+  test("chain propagation with ssProg and ssAccumulator") {
+    withSpark { sc =>
+      val n = 5
+      val chain = Graph.fromEdgeTuples(
+        sc.parallelize((1 until n).map(x => (x: VertexId, x + 1: VertexId)), 3),
+        0).cache()
+      assert(chain.vertices.collect.toSet === (1 to n).map(x => (x: VertexId, 0)).toSet)
+      val chainWithSeed = chain.mapVertices { (vid, attr) => if (vid == 1) 1 else 0 }.cache()
+      assert(chainWithSeed.vertices.collect.toSet ===
+        Set((1: VertexId, 1)) ++ (2 to n).map(x => (x: VertexId, 0)).toSet)
+      
+      val ssAccumulator = sc.accumulator(0l)(SparkContext.LongAccumulatorParam)
+      val ssProgAccumulator  = sc.accumulator(0l)(SparkContext.LongAccumulatorParam)
+      
+      def defaultSsProg( g: Graph[Int, Int], activeMessages: Long): Boolean = {
+          ssProgAccumulator.add(1)
+    	  true
+      }
+      
+      val result = Pregel(chainWithSeed, ssAccumulator, 0, Int.MaxValue, EdgeDirection.Either)(
+        (vid, attr, msg) => math.max(msg, attr),
+        et => if (et.dstAttr != et.srcAttr) Iterator((et.dstId, et.srcAttr)) else Iterator.empty,
+        (a: Int, b: Int) => math.max(a, b),
+        defaultSsProg)
+        
+      assert(result.vertices.collect.toSet ===
+        chain.vertices.mapValues { (vid, attr) => attr + 1 }.collect.toSet)
+        
+      assert(ssAccumulator.value == ssProgAccumulator.value, 
+          ssAccumulator.value + " should equal " + ssProgAccumulator.value)
+      
+      //assert(ssAccumulator.value > 0, "ssAccumulator shouldn't be 0 or less")
+    }
+  }
+  
 }

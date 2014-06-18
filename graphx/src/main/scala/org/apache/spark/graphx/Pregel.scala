@@ -19,6 +19,7 @@ package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
 import org.apache.spark.Logging
+import org.apache.spark.Accumulator
 
 
 /**
@@ -105,7 +106,7 @@ object Pregel extends Logging {
    * messages of type A and merges them into a single message of type
    * A.  ''This function must be commutative and associative and
    * ideally the size of A should not increase.''
-   *
+   * 
    * @return the resulting graph at the end of the computation
    *
    */
@@ -113,10 +114,91 @@ object Pregel extends Logging {
      (graph: Graph[VD, ED],
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
-      activeDirection: EdgeDirection = EdgeDirection.Either)
+      activeDirection: EdgeDirection = EdgeDirection.Either,
+      ssAccumulator: Accumulator[Int] = null)
      (vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
+    : Graph[VD, ED] =
+  {
+    var ssAccumulator:Accumulator[Long] = null;
+    apply( graph, ssAccumulator, initialMsg, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg, defaultSsProg)
+  }
+  
+  /**
+   * Execute a Pregel-like iterative vertex-parallel abstraction.  The
+   * user-defined vertex-program `vprog` is executed in parallel on
+   * each vertex receiving any inbound messages and computing a new
+   * value for the vertex.  The `sendMsg` function is then invoked on
+   * all out-edges and is used to compute an optional message to the
+   * destination vertex. The `mergeMsg` function is a commutative
+   * associative function used to combine messages destined to the
+   * same vertex.
+   *
+   * On the first iteration all vertices receive the `initialMsg` and
+   * on subsequent iterations if a vertex does not receive a message
+   * then the vertex-program is not invoked.
+   *
+   * This function iterates until there are no remaining messages, or
+   * for `maxIterations` iterations.
+   *
+   * @tparam VD the vertex data type
+   * @tparam ED the edge data type
+   * @tparam A the Pregel message type
+   *
+   * @param graph the input graph.
+   *
+   * @param ssAccumulator a user supplied accumulator so that
+   * the user will be able to write vprog functions that can
+   * have knowledge of the current superstep
+   * 
+   * @param initialMsg the message each vertex will receive at the on
+   * the first iteration
+   *
+   * @param maxIterations the maximum number of iterations to run for
+   *
+   * @param activeDirection the direction of edges incident to a vertex that received a message in
+   * the previous round on which to run `sendMsg`. For example, if this is `EdgeDirection.Out`, only
+   * out-edges of vertices that received a message in the previous round will run. The default is
+   * `EdgeDirection.Either`, which will run `sendMsg` on edges where either side received a message
+   * in the previous round. If this is `EdgeDirection.Both`, `sendMsg` will only run on edges where
+   * *both* vertices received a message.
+   *
+   * @param vprog the user-defined vertex program which runs on each
+   * vertex and receives the inbound message and computes a new vertex
+   * value.  On the first iteration the vertex program is invoked on
+   * all vertices and is passed the default message.  On subsequent
+   * iterations the vertex program is only invoked on those vertices
+   * that receive messages.
+   *
+   * @param sendMsg a user supplied function that is applied to out
+   * edges of vertices that received messages in the current
+   * iteration
+   *
+   * @param mergeMsg a user supplied function that takes two incoming
+   * messages of type A and merges them into a single message of type
+   * A.  ''This function must be commutative and associative and
+   * ideally the size of A should not increase.''
+   *
+   * @param ssProg a user supplied function that will fire at the end
+   * of every iteration.  It will return a boolean that could cause
+   * the loop to exit
+   * 
+   * @return the resulting graph at the end of the computation
+   *
+   */
+  def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
+     (graph: Graph[VD, ED],
+      ssAccumulator: Accumulator[Long],
+      initialMsg: A,
+      maxIterations: Int,
+      activeDirection: EdgeDirection
+      )
+     (vprog: (VertexId, VD, A) => VD,
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
+      mergeMsg: (A, A) => A,
+      ssprog: (Graph[VD, ED], Long) => Boolean
+      )
     : Graph[VD, ED] =
   {
     var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
@@ -126,7 +208,7 @@ object Pregel extends Logging {
     // Loop
     var prevG: Graph[VD, ED] = null
     var i = 0
-    while (activeMessages > 0 && i < maxIterations) {
+    while (activeMessages > 0 && i < maxIterations && ssprog(g, activeMessages)) {
       // Receive the messages. Vertices that didn't get any messages do not appear in newVerts.
       val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
       // Update the graph with the new vertices.
@@ -153,9 +235,14 @@ object Pregel extends Logging {
       prevG.edges.unpersist(blocking=false)
       // count the iteration
       i += 1
+      if (ssAccumulator != null) ssAccumulator.add(1);
     }
 
     g
   } // end of apply
 
+  def defaultSsProg[VD: ClassTag, ED: ClassTag]( g: Graph[VD, ED], activeMessages: Long): Boolean = {
+    true
+  }
+  
 } // end of class Pregel
