@@ -124,8 +124,8 @@ private[sql] trait SchemaRDDLike {
     sqlContext.executePlan(InsertIntoCreatedTable(None, tableName, logicalPlan)).toRdd
 
   /** Returns the output schema in the tree format. */
-  def schemaTreeString: String = queryExecution.analyzed.schemaTreeString
+  def schemaString: String = queryExecution.analyzed.schemaString
 
   /** Prints out the schema in the tree format. */
-  def printSchema(): Unit = println(schemaTreeString)
+  def printSchema(): Unit = println(schemaString)
 }

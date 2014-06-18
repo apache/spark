@@ -98,6 +98,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
+   * It goes through the entire dataset once to determine the schema.
    *
    * @group userf
    */
@@ -115,6 +116,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
    * [[SchemaRDD]].
+   * It goes through the entire dataset once to determine the schema.
    *
    * @group userf
    */

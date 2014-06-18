@@ -503,7 +503,7 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       "com.twitter"                  % "parquet-column"             % parquetVersion,
       "com.twitter"                  % "parquet-hadoop"             % parquetVersion,
-      "com.fasterxml.jackson.core"   % "jackson-core"               % "2.3.2"
+      "com.fasterxml.jackson.core"   % "jackson-databind"           % "2.3.0" // json4s-jackson 3.2.6 requires jackson-databind 2.3.0.
     ),
     initialCommands in console :=
       """

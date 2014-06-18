@@ -141,6 +141,7 @@ class SQLContext:
     def jsonFile(self, path):
         """Loads a text file storing one JSON object per line,
            returning the result as a L{SchemaRDD}.
+           It goes through the entire dataset once to determine the schema.
 
         >>> import tempfile, shutil
         >>> jsonFile = tempfile.mkdtemp()
@@ -162,6 +163,7 @@ class SQLContext:
 
     def jsonRDD(self, rdd):
         """Loads an RDD storing one JSON object per string, returning the result as a L{SchemaRDD}.
+           It goes through the entire dataset once to determine the schema.
 
         >>> srdd = sqlCtx.jsonRDD(json)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
@@ -382,13 +384,13 @@ class SchemaRDD(RDD):
         """Creates a new table with the contents of this SchemaRDD."""
         self._jschema_rdd.saveAsTable(tableName)
 
-    def schemaTreeString(self):
+    def schemaString(self):
         """Returns the output schema in the tree format."""
-        return self._jschema_rdd.schemaTreeString()
+        return self._jschema_rdd.schemaString()
 
     def printSchema(self):
         """Prints out the schema in the tree format."""
-        print self.schemaTreeString()
+        print self.schemaString()
 
     def count(self):
         """Return the number of elements in this RDD.

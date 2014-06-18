@@ -35,11 +35,9 @@ private[sql] object JsonRDD extends Logging {
   private[sql] def inferSchema(
       json: RDD[String],
       samplingRatio: Double = 1.0): LogicalPlan = {
-    require(samplingRatio > 0)
+    require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
-
     val allKeys = parseJson(schemaData).map(allKeysWithValueTypes).reduce(_ ++ _)
-
     val baseSchema = createSchema(allKeys)
 
     createLogicalPlan(json, baseSchema)

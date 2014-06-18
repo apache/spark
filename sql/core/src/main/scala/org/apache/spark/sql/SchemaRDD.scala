@@ -343,6 +343,9 @@ class SchemaRDD(
    */
   def toJavaSchemaRDD: JavaSchemaRDD = new JavaSchemaRDD(sqlContext, logicalPlan)
 
+  /**
+   * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
+   */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     def rowToMap(row: Row, structType: StructType): JMap[String, Any] = {
       val fields = structType.fields.map(field => (field.name, field.dataType))

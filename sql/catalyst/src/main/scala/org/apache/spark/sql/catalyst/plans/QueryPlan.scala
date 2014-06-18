@@ -126,7 +126,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }.toSeq
   }
 
-  protected def generateSchemaTreeString(schema: Seq[Attribute]): String = {
+  protected def generateSchemaString(schema: Seq[Attribute]): String = {
     val builder = new StringBuilder
     builder.append("root\n")
     val prefix = " |"
@@ -136,10 +136,10 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       dataType match {
         case fields: StructType =>
           builder.append(s"$prefix-- $name: $StructType\n")
-          generateSchemaTreeString(fields, s"$prefix    |", builder)
+          generateSchemaString(fields, s"$prefix    |", builder)
         case ArrayType(fields: StructType) =>
           builder.append(s"$prefix-- $name: $ArrayType[$StructType]\n")
-          generateSchemaTreeString(fields, s"$prefix    |", builder)
+          generateSchemaString(fields, s"$prefix    |", builder)
         case ArrayType(elementType: DataType) =>
           builder.append(s"$prefix-- $name: $ArrayType[$elementType]\n")
         case _ => builder.append(s"$prefix-- $name: $dataType\n")
@@ -149,17 +149,17 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     builder.toString()
   }
 
-  protected def generateSchemaTreeString(
+  protected def generateSchemaString(
       schema: StructType,
       prefix: String,
       builder: StringBuilder): StringBuilder = {
     schema.fields.foreach {
       case StructField(name, fields: StructType, _) =>
         builder.append(s"$prefix-- $name: $StructType\n")
-        generateSchemaTreeString(fields, s"$prefix    |", builder)
+        generateSchemaString(fields, s"$prefix    |", builder)
       case StructField(name, ArrayType(fields: StructType), _) =>
         builder.append(s"$prefix-- $name: $ArrayType[$StructType]\n")
-        generateSchemaTreeString(fields, s"$prefix    |", builder)
+        generateSchemaString(fields, s"$prefix    |", builder)
       case StructField(name, ArrayType(elementType: DataType), _) =>
         builder.append(s"$prefix-- $name: $ArrayType[$elementType]\n")
       case StructField(name, fieldType: DataType, _) =>
@@ -170,8 +170,8 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   }
 
   /** Returns the output schema in the tree format. */
-  def schemaTreeString: String = generateSchemaTreeString(output)
+  def schemaString: String = generateSchemaString(output)
 
   /** Prints out the schema in the tree format */
-  def printSchema(): Unit = println(schemaTreeString)
+  def printSchema(): Unit = println(schemaString)
 }

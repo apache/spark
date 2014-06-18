@@ -102,17 +102,17 @@ sqlContext = SQLContext(sc)
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-Spark SQL supports operating on a variety of data sources though the SchemaRDD interface.
+Spark SQL supports operating on a variety of data sources through the `SchemaRDD` interface.
 Once a dataset has been loaded, it can be registered as a table and even joined with data from other sources.
 </div>
 
 <div data-lang="java"  markdown="1">
-Spark SQL supports operating on a variety of data sources though the JavaSchemaRDD interface.
+Spark SQL supports operating on a variety of data sources through the `JavaSchemaRDD` interface.
 Once a dataset has been loaded, it can be registered as a table and even joined with data from other sources.
 </div>
 
 <div data-lang="python"  markdown="1">
-Spark SQL supports operating on a variety of data sources though the SchemaRDD interface.
+Spark SQL supports operating on a variety of data sources through the `SchemaRDD` interface.
 Once a dataset has been loaded, it can be registered as a table and even joined with data from other sources.
 </div>
 </div>
@@ -373,7 +373,6 @@ val people = sqlContext.jsonFile(path)
 
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
-// The schema of people is ...
 // root
 //  |-- age: IntegerType
 //  |-- name: StringType
@@ -412,7 +411,6 @@ JavaSchemaRDD people = sqlContext.jsonFile(path);
 
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema();
-// The schema of people is ...
 // root
 //  |-- age: IntegerType
 //  |-- name: StringType
@@ -452,7 +450,6 @@ people = sqlContext.jsonFile(path)
 
 # The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
-# The schema of people is ...
 # root
 #  |-- age: IntegerType
 #  |-- name: StringType
