@@ -20,6 +20,7 @@ package org.apache.spark.examples
 import breeze.linalg._
 import breeze.numerics._
 import org.apache.spark._
+import org.apache.spark.SparkContext._
 
 /**
    From the spark base dir:
@@ -35,10 +36,12 @@ import org.apache.spark._
 */
 /**
  * Logistic regression based classification for multiple lables.
- * Usage: SparkLRMultiClass [dataFileName] [numClasses]
+ * Usage: SparkLRMultiClass [dataFileName] [numClasses] [lambda] [alpha] [iterations]
  */
 object SparkLRMultiClass {
 /*
+	// Unused vector/matrix functions: Breeze Linear Algrbra library provides these and more.
+	// Leaving these in comments since it shows a functional implementation of vector and multiplication using Array.zip
 	val random = new java.security.SecureRandom
 	def random2dArray(dim1: Int, dim2: Int, maxValue: Double) = Array.fill(dim1, dim2) { random.nextDouble()*maxValue }
 	def vecMul(v1: Array[Double], v2: Array[Double]) : Double = (v1 zip v2).map(z => z._1*z._2).sum
@@ -58,19 +61,22 @@ object SparkLRMultiClass {
     val sparkConf = new SparkConf().setAppName("SparkLRMultiClass")
     val sc = new SparkContext(sparkConf)
 
-	var numClasses = 8
-	var ITERATIONS = 30
-	var alpha = 3.0 // learning rate
-	var lambda = 1.0 // regularization parameter
-
 	var dataFile = "examples/src/main/resources/ny-weather-preprocessed.csv"
+	var numClasses = 8
+	var lambda = 1.0 // regularization parameter
+	var alpha = 3.0 // learning rate
+	var ITERATIONS = 30
+
 	if(args.length > 0) dataFile = args(0)
 	if(args.length > 1) numClasses = args(1).toInt
+	if(args.length > 2) lambda = args(2).toDouble
+	if(args.length > 3) alpha = args(3).toDouble
+	if(args.length > 4) ITERATIONS = args(4).toInt
 	
 	val data = sc.textFile(dataFile)
 	val vectors = data.map(line => line.split(",").map(java.lang.Double.parseDouble(_)))
 	val numFeatures = vectors.take(1)(0).size - 1
-	val m : Double = vectors.count
+	val m : Double = vectors.count // size of training data
 	var all_theta = DenseMatrix.zeros[Double](numClasses, numFeatures+1)
 	// training
 	for(c <- 1 to numClasses) {
@@ -85,7 +91,7 @@ object SparkLRMultiClass {
 				val ones = DenseVector.ones[Double](numClasses)
 				val h = sigmoid(z)
 				val grad = x*(h - y)
-				val J = -(y*log(h) + (1.0-y)*log(1.0-h))
+				val J = -(y*breeze.numerics.log(h) + (1.0-y)*breeze.numerics.log(1.0-h))
 				(grad, J)
 			}.reduce((acc, curr) => ((acc._1 + curr._1), (acc._2 + curr._2)))
 			var grad = (grad_cost._1 + theta*lambda)/m
@@ -113,6 +119,17 @@ object SparkLRMultiClass {
 
 	val accuracy = correctPredictions/m
 	println("Total correct predictions:  " + correctPredictions + " out of " + m + ", accuracy: " + accuracy);
+
+	val confusionMatrix = vectors.map {p =>
+				val x = DenseVector.vertcat(DenseVector(1.0), DenseVector(p.slice(0, p.length-1)))
+				val yVal = p(p.length-1)
+				val z = all_theta*x
+				val h = sigmoid(z)
+				val c = argmax(h)+1
+				((yVal.toInt, c), 1)
+			}
+			.reduceByKey {(a,b) => a + b}.collect
+	confusionMatrix.map { x => x match { case ((actualVal, realVal), count) => println("(("+ actualVal+","+realVal+")," + count + ")") }}
 
 	sc.stop()
 }
