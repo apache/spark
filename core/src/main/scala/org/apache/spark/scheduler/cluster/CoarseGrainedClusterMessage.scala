@@ -66,4 +66,6 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage
 
+  case class AddWebUIFilter(filter: String, proxyBase :String) extends CoarseGrainedClusterMessage
+
 }

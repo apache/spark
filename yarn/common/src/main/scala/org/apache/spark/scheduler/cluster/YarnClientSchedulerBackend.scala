@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
+import org.apache.spark.ui.JettyUtils
 import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, ExecutorLauncher}
 import org.apache.spark.scheduler.TaskSchedulerImpl
@@ -48,6 +49,7 @@ private[spark] class YarnClientSchedulerBackend(
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
+    conf.set("spark.driver.appUIAddress", sc.ui.appUIHostPort)
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
@@ -113,6 +115,17 @@ private[spark] class YarnClientSchedulerBackend(
     super.stop()
     client.stop
     logInfo("Stopped")
+  }
+
+  override def addWebUIFilter(filter: String, proxyBase: String) {
+    if (filter != null && filter.nonEmpty && proxyBase != null && proxyBase.nonEmpty) {
+      logInfo(s"Add WebUI Filter. $filter")
+      val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
+      System.setProperty("spark.ui.filters", amFilter)
+      System.setProperty(s"spark.$amFilter.params", filter)
+      System.setProperty("spark.ui.proxyBase", proxyBase)
+      JettyUtils.addFilters(sc.ui.handlers, conf)
+    }
   }
 
 }
