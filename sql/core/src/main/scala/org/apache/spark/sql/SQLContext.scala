@@ -22,24 +22,22 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
-
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-
 import org.apache.spark.sql.columnar.InMemoryRelation
-
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
-
+import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.SparkContext
 
 /**
  * :: AlphaComponent ::
@@ -53,7 +51,7 @@ import org.apache.spark.sql.parquet.ParquetRelation
 class SQLContext(@transient val sparkContext: SparkContext)
   extends Logging
   with SQLConf
-  with dsl.ExpressionConversions
+  with ExpressionConversions
   with Serializable {
 
   self =>
@@ -97,6 +95,39 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def parquetFile(path: String): SchemaRDD =
     new SchemaRDD(this, parquet.ParquetRelation(path))
+
+  /**
+   * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group userf
+   */
+  def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0)
+
+  /**
+   * :: Experimental ::
+   */
+  @Experimental
+  def jsonFile(path: String, samplingRatio: Double): SchemaRDD = {
+    val json = sparkContext.textFile(path)
+    jsonRDD(json, samplingRatio)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[SchemaRDD]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group userf
+   */
+  def jsonRDD(json: RDD[String]): SchemaRDD = jsonRDD(json, 1.0)
+
+  /**
+   * :: Experimental ::
+   */
+  @Experimental
+  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
+    new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
 
   /**
    * :: Experimental ::
