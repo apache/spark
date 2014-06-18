@@ -928,8 +928,9 @@ class DAGScheduler(
               if(removeStageBarrier && taskScheduler.isInstanceOf[TaskSchedulerImpl]){
                 // TODO: need a better way to check if there's free slots
                 val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend
-                val waitingStageNum = waitingStages.size
-                if (backend.freeSlotAvail() && waitingStageNum > 0 && stage.shuffleDep.isDefined) {
+                val numPendingTask = pendingTasks.values.map(_.size).sum
+                val numWaitingStage = waitingStages.size
+                if (backend.freeSlotAvail(numPendingTask) && numWaitingStage > 0 && stage.shuffleDep.isDefined) {
                   val preStartableStage = getPreStartableStage(stage)
                   if (preStartableStage.isDefined) {
                     val preStartedStage = preStartableStage.get

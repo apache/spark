@@ -283,6 +283,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       }
       logInfo("Map status for shuffleId "+shuffleId+" is now complete. Updater terminated. ---lirui")
       partialEpoch.synchronized {
+        partialEpoch.remove(shuffleId)
         partialEpoch.notifyAll()
       }
     }
@@ -362,6 +363,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
         }
       }
       incrementEpoch()
+      partialForShuffle += shuffleId
     } else {
       throw new SparkException("unregisterMapOutput called for nonexistent shuffle ID")
     }
