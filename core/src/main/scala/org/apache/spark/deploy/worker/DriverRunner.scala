@@ -21,14 +21,15 @@ import java.io._
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
+import scala.collection.mutable.ArrayBuffer
 
 import akka.actor.ActorRef
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileUtil, Path}
 
 import org.apache.spark.Logging
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
@@ -70,11 +71,10 @@ private[spark] class DriverRunner(
       override def run() {
         try {
           val driverDir = createWorkingDirectory()
-          val localJarFilename = downloadUserJar(driverDir)
+          val localJarFiles: ArrayBuffer[String] = downloadUserJar(driverDir)
 
           // Make sure user application jar is on the classpath
-          // TODO: If we add ability to submit multiple jars they should also be added here
-          val classPath = driverDesc.command.classPathEntries ++ Seq(s"$localJarFilename")
+          val classPath = driverDesc.command.classPathEntries ++ localJarFiles.toSeq
           val newCommand = Command(
             driverDesc.command.mainClass,
             driverDesc.command.arguments.map(substituteVariables),
@@ -139,28 +139,34 @@ private[spark] class DriverRunner(
    * Download the user jar into the supplied directory and return its local path.
    * Will throw an exception if there are errors downloading the jar.
    */
-  private def downloadUserJar(driverDir: File): String = {
-
-    val jarPath = new Path(driverDesc.jarUrl)
-
+  private def downloadUserJar(driverDir: File): ArrayBuffer[String] = {
     val emptyConf = new Configuration()
-    val jarFileSystem = jarPath.getFileSystem(emptyConf)
+    val jars: Seq[String] = driverDesc.jarUrl.split(",").filter(_.size != 0).toSeq
+    val localJarFiles = new ArrayBuffer[String]
+    def addJar(jarUrl: String) {
+      val jarPath = new Path(jarUrl)
+      val jarFileSystem = jarPath.getFileSystem(emptyConf)
 
-    val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
-    val jarFileName = jarPath.getName
-    val localJarFile = new File(driverDir, jarFileName)
-    val localJarFilename = localJarFile.getAbsolutePath
+      val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
+      val jarFileName = jarPath.getName
+      val localJarFile = new File(driverDir, jarFileName)
+      val localJarFilename = localJarFile.getAbsolutePath
 
-    if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
-      logInfo(s"Copying user jar $jarPath to $destPath")
-      FileUtil.copy(jarFileSystem, jarPath, destPath, false, emptyConf)
+      if (!localJarFile.exists()) {
+        // May already exist if running multiple workers on one node
+        logInfo(s"Copying user jar $jarPath to $destPath")
+        FileUtil.copy(jarFileSystem, jarPath, destPath, false, emptyConf)
+      }
+
+      if (!localJarFile.exists()) {
+        // Verify copy succeeded
+        throw new Exception(s"Did not see expected jar $jarFileName in $driverDir")
+      }
+      localJarFiles += localJarFilename
     }
+    jars.foreach(addJar)
 
-    if (!localJarFile.exists()) { // Verify copy succeeded
-      throw new Exception(s"Did not see expected jar $jarFileName in $driverDir")
-    }
-
-    localJarFilename
+    localJarFiles
   }
 
   private def launchDriver(command: Seq[String], envVars: Map[String, String], baseDir: File,
