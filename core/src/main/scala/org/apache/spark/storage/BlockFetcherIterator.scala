@@ -363,7 +363,7 @@ object BlockFetcherIterator {
 
     // Get the updated map output
     private def updateStatuses() {
-      logInfo("Waiting for new map statuses for reduceId " + reduceId + " ---lirui")
+      logInfo("Waiting for new map statuses for reduceId " + reduceId + " of shuffleId " + shuffleId + " ---lirui")
       val update = mapOutputTracker.getUpdatedStatus(shuffleId, reduceId, localEpoch)
       statuses = update._1
       localEpoch = update._2
@@ -380,7 +380,8 @@ object BlockFetcherIterator {
           //shouldn't get here, just to avoid infinite loop
           throw new SparkException("All blocks have been delegated for reduceId " + reduceId)
         }
-        logInfo("Still missing " + statuses.filter(_._1 == null).size + " map outputs for reduceId " + reduceId + " ---lirui")
+        logInfo("Still missing " + statuses.filter(_._1 == null).size +
+          " map outputs for reduceId " + reduceId + " of shuffleId " + shuffleId + " ---lirui")
         updateStatuses()
       }
       val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
@@ -392,7 +393,8 @@ object BlockFetcherIterator {
         case (address, splits) =>
           (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
       }
-      logInfo("Delegating " + blocksByAddress.map(_._2.size).sum + " blocks to a new iterator for reduceId "+reduceId+" ---lirui")
+      logInfo("Delegating " + blocksByAddress.map(_._2.size).sum +
+        " blocks to a new iterator for reduceId " + reduceId + " of shuffleId " + shuffleId + " ---lirui")
       blockManager.getMultiple(blocksByAddress, serializer)
     }
 
