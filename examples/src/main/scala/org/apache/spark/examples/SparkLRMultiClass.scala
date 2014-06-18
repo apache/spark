@@ -17,27 +17,27 @@
 
 package org.apache.spark.examples
 
+import scala.util.control.Breaks._
 import breeze.linalg._
 import breeze.numerics._
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 
 /**
-   From the spark base dir:
-   Compile standalone using:
-   scalac -d target -cp assembly/target/scala-2.10/spark-assembly-1.1.0-SNAPSHOT-hadoop1.0.4.jar examples/src/main/scala/org/apache/spark/examples/SparkLRMultiClass.scala
-   Execute using:
-   java -cp target;assembly/target/scala-2.10/spark-assembly-1.1.0-SNAPSHOT-hadoop1.0.4.jar -Dspark.master=local[4] org.apache.spark.examples.SparkLRMultiClass
+ * @author: Kiran Lonikar
+ * Logistic regression based classification for multiple lables. Uses simple gradient descent algorithm with regularization.
+ * Usage: SparkLRMultiClass [dataFileName] [numClasses] [lambda] [alpha] [maxIterations] [costThreshold]
+ * From the spark base dir:
+ * Compile standalone using:
+ * scalac -d target -cp assembly/target/scala-2.10/spark-assembly-1.1.0-SNAPSHOT-hadoop1.0.4.jar examples/src/main/scala/org/apache/spark/examples/SparkLRMultiClass.scala
+ * Execute using:
+ * java -cp target;assembly/target/scala-2.10/spark-assembly-1.1.0-SNAPSHOT-hadoop1.0.4.jar -Dspark.master=local[4] org.apache.spark.examples.SparkLRMultiClass examples\src\main\resources\ny-weather-preprocessed.csv 9 0.5 10 50 0.001
 
-   NOTE: to change the spark logging level to WARN, do the following (no other way works):
-   Open the file core/src/main/resources/org/apache/spark/log4j-defaults.properties and replace INFO with WARN
-   Then using the command like below, update the spark archive to have the new file:
-   jar uvf assembly/target/scala-2.10/spark-assembly-1.1.0-SNAPSHOT-hadoop1.0.4.jar -C core/src/main/resources org/apache/spark/log4j-defaults.properties
+ * NOTE: to change the spark logging level to WARN, do the following (no other way works):
+ * Open the file core/src/main/resources/org/apache/spark/log4j-defaults.properties and replace INFO with WARN
+ * Then using the command like below, update the spark archive to have the new file:
+ * jar uvf assembly/target/scala-2.10/spark-assembly-1.1.0-SNAPSHOT-hadoop1.0.4.jar -C core/src/main/resources org/apache/spark/log4j-defaults.properties
 */
-/**
- * Logistic regression based classification for multiple lables.
- * Usage: SparkLRMultiClass [dataFileName] [numClasses] [lambda] [alpha] [iterations]
- */
 object SparkLRMultiClass {
 /*
 	// Unused vector/matrix functions: Breeze Linear Algrbra library provides these and more.
@@ -66,12 +66,14 @@ object SparkLRMultiClass {
 	var lambda = 1.0 // regularization parameter
 	var alpha = 3.0 // learning rate
 	var ITERATIONS = 30
+	var costThreshold = 0.01
 
 	if(args.length > 0) dataFile = args(0)
 	if(args.length > 1) numClasses = args(1).toInt
 	if(args.length > 2) lambda = args(2).toDouble
 	if(args.length > 3) alpha = args(3).toDouble
 	if(args.length > 4) ITERATIONS = args(4).toInt
+	if(args.length > 5) costThreshold = args(5).toDouble
 	
 	val data = sc.textFile(dataFile)
 	val vectors = data.map(line => line.split(",").map(java.lang.Double.parseDouble(_)))
@@ -82,7 +84,7 @@ object SparkLRMultiClass {
 	for(c <- 0 to (numClasses-1)) {
 		var theta = DenseVector.zeros[Double](numFeatures+1)
 		var cost = 0.0
-		for (i <- 1 to ITERATIONS) {
+		breakable { for (i <- 1 to ITERATIONS) {
 			val grad_cost = vectors.map {p =>
 				val x = DenseVector.vertcat(DenseVector(1.0), DenseVector(p.slice(0, p.length-1)))
 				val yVal = p(p.length-1)
@@ -99,7 +101,11 @@ object SparkLRMultiClass {
 			cost = (grad_cost._2 + lambda*(theta.t*theta - theta(0)*theta(0))/2.0)/m
 			theta -= grad*alpha
 			println("label: " + c + ", Cost: " + cost + ", gradient: " + grad)
-		}
+			if(cost <= costThreshold) {
+				println("Terminating gradient for label " + c);
+				break
+			}
+		} }
 		println("Label: " + c + ", final cost: " + cost + ", theta: " + theta);
 		all_theta(c, ::) := theta.t
 	}
