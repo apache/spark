@@ -445,7 +445,19 @@ case class NativeCommand(
     if (sideEffectResult.size == 0) {
       context.emptyResult
     } else {
-      val rows = sideEffectResult.map(r => new GenericRow(Array[Any](r)))
+      // TODO: Need a better way to handle the result of a native command.
+      // We may want to consider to use JsonMetaDataFormatter in Hive.
+      val isDescribe = sql.trim.startsWith("describe")
+      val rows = if (isDescribe) {
+        // TODO: If we upgrade Hive to 0.13, we need to check the results of
+        // context.sessionState.isHiveServerQuery() to determine how to split the result.
+        // This method is introduced by https://issues.apache.org/jira/browse/HIVE-4545.
+        // Right now, we split every string by any number of consecutive spaces.
+        sideEffectResult.map(
+          r => r.split("\\s+")).map(r => new GenericRow(r.asInstanceOf[Array[Any]]))
+      } else {
+        sideEffectResult.map(r => new GenericRow(Array[Any](r)))
+      }
       context.sparkContext.parallelize(rows, 1)
     }
   }
