@@ -79,7 +79,7 @@ object SparkLRMultiClass {
 	val m : Double = vectors.count // size of training data
 	var all_theta = DenseMatrix.zeros[Double](numClasses, numFeatures+1)
 	// training
-	for(c <- 1 to numClasses) {
+	for(c <- 0 to (numClasses-1)) {
 		var theta = DenseVector.zeros[Double](numFeatures+1)
 		var cost = 0.0
 		for (i <- 1 to ITERATIONS) {
@@ -101,7 +101,7 @@ object SparkLRMultiClass {
 			println("label: " + c + ", Cost: " + cost + ", gradient: " + grad)
 		}
 		println("Label: " + c + ", final cost: " + cost + ", theta: " + theta);
-		all_theta(c-1, ::) := theta.t
+		all_theta(c, ::) := theta.t
 	}
 
 	println("Final model: ")
@@ -113,7 +113,7 @@ object SparkLRMultiClass {
 				val yVal = p(p.length-1)
 				val z = all_theta*x
 				val h = sigmoid(z)
-				val c = argmax(h)+1
+				val c = argmax(h)
 				if(c == yVal) 1 else 0
 			}.reduce (_ + _)
 
@@ -125,11 +125,12 @@ object SparkLRMultiClass {
 				val yVal = p(p.length-1)
 				val z = all_theta*x
 				val h = sigmoid(z)
-				val c = argmax(h)+1
+				val c = argmax(h)
 				((yVal.toInt, c), 1)
 			}
 			.reduceByKey {(a,b) => a + b}.collect
-	confusionMatrix.map { x => x match { case ((actualVal, realVal), count) => println("(("+ actualVal+","+realVal+")," + count + ")") }}
+	println("Distribution of predictions: ")
+	confusionMatrix.map { x => x match { case ((actualVal, predictedVal), count) => println("(("+ actualVal+","+predictedVal+")," + count + ")") }}
 
 	sc.stop()
 }
