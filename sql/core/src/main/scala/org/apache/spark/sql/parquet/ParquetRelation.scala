@@ -43,19 +43,20 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
  *
  * @param path The path to the Parquet file.
  */
-private[sql] case class ParquetRelation(val path: String)
-    extends LeafNode with MultiInstanceRelation {
+private[sql] case class ParquetRelation(
+    val path: String,
+    @transient val conf: Option[Configuration] = None) extends LeafNode with MultiInstanceRelation {
   self: Product =>
 
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =
     ParquetTypesConverter
-      .readMetaData(new Path(path))
+      .readMetaData(new Path(path), conf)
       .getFileMetaData
       .getSchema
 
   /** Attributes */
-  override val output = ParquetTypesConverter.readSchemaFromFile(new Path(path))
+  override val output = ParquetTypesConverter.readSchemaFromFile(new Path(path), conf)
 
   override def newInstance = ParquetRelation(path).asInstanceOf[this.type]
 
@@ -130,7 +131,7 @@ private[sql] object ParquetRelation {
     }
     ParquetRelation.enableLogForwarding()
     ParquetTypesConverter.writeMetaData(attributes, path, conf)
-    new ParquetRelation(path.toString) {
+    new ParquetRelation(path.toString, Some(conf)) {
       override val output = attributes
     }
   }
