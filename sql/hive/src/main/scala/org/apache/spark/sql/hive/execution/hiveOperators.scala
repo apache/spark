@@ -490,8 +490,10 @@ case class DescribeHiveTableCommand(
       val partColumnInfo =
         partitionColumns.map(field => (field.getName, field.getType, field.getComment))
       results ++=
-        partColumnInfo ++ Seq(("# Partition Information", "", "")) ++
-          Seq((s"# ${output.get(0).name}", output.get(1).name, output.get(2).name)) ++ partColumnInfo
+        partColumnInfo ++
+        Seq(("# Partition Information", "", "")) ++
+        Seq((s"# ${output.get(0).name}", output.get(1).name, output.get(2).name)) ++
+        partColumnInfo
     }
 
     if (isExtended) {
