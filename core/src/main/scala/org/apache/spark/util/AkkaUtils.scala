@@ -122,6 +122,6 @@ private[spark] object AkkaUtils extends Logging {
     math.max(conf.getInt("spark.akka.frameSize", 0) * 1024 * 1024, minFrameSizeBytes)
   }
 
-  /** The min frame size for Akka messages in bytes. */
+  /** The minimum value of the max frame size for Akka messages in bytes. */
   val minFrameSizeBytes = 10 * 1024 * 1024
 }
