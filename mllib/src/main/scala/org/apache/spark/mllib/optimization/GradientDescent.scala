@@ -39,7 +39,6 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
   private var numIterations: Int = 100
   private var regParam: Double = 0.0
   private var miniBatchFraction: Double = 1.0
-  private var stochastic: Boolean = true
 
   /**
    * Set the initial step size of SGD for the first step. Default 1.0.
@@ -98,15 +97,6 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
   }
 
   /**
-   * Set the stochastic parameter. Default is true, which samples data and apply gradient
-   * descent; otherwise gradient descent on each data instance sequentially.
-   */
-  def setStochastic(stochastic: Boolean): this.type  = {
-    this.stochastic = stochastic
-    this
-  }
-
-  /**
    * :: DeveloperApi ::
    * Runs gradient descent on the given training data.
    * @param data training data
@@ -115,7 +105,8 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
    */
   @DeveloperApi
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
-    val (weights, _) = if (stochastic) {
+    val (weights, _) = if (miniBatchFraction > 0.0) {
+      // run minibatch
       GradientDescent.runMiniBatchSGD(
         data,
         gradient,
@@ -126,6 +117,7 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
         miniBatchFraction,
         initialWeights)
     } else {
+      // run per instance learning
       GradientDescent.runGradientDescent(
         data,
         gradient,
@@ -260,12 +252,13 @@ object GradientDescent extends Logging {
 
     val iters = new Array[Int](numPartitions)
     for (i <- 1 to numIterations) {
+      logInfo("GradientDescent.runGradientDescent iteration %d".format(i))
 
       def descentPartition(
           index: Int,
           iter: Iterator[(Double, Vector)]): Iterator[(Vector, Double, Seq[(Int, Int)])] = {
 
-        val localUpdadter = updater.copy()
+        val localUpdadter = updater.clone()
         var localWeights = Vectors.dense(weights.toArray)
         val startIter = iters(index)
         var localIter = startIter
@@ -273,16 +266,20 @@ object GradientDescent extends Logging {
         while (iter.hasNext) {
           val v = iter.next()
           localIter += 1
-          val (grad, l) = gradient.compute(v._2, v._1, localWeights, localUpdadter.weightScale)
+          val (grad, l) = gradient.compute(v._2, v._1, localWeights,
+            localUpdadter.weightShrinkage, localUpdadter.weightTruncation)
           loss += l
 
-          localWeights = localUpdadter.compute(localWeights, grad, stepSize, localIter, regParam)._1
+          localWeights = localUpdadter.compute(localWeights, grad, stepSize,
+            localIter, regParam)._1
         }
-        val regVal = localUpdadter.computeNorm(localWeights, regParam)
 
-        val finalWeights = localUpdadter.finalCatchup(localWeights)
+        logInfo("GradientDescent.runGradientDescent Updater " +
+          " weight shrinkage %f, truncation %f before catch up".format(
+            localUpdadter.weightShrinkage, localUpdadter.weightTruncation))
+        val finalWeights = localUpdadter.applyLazyRegularization(localWeights)
         loss /= (localIter - startIter)
-        Iterator((finalWeights, loss + regVal, Seq((index, localIter))))
+        Iterator((finalWeights, loss, Seq((index, localIter))))
       }
 
       def mergeWeights(
@@ -295,10 +292,14 @@ object GradientDescent extends Logging {
         data.mapPartitionsWithIndex(descentPartition, true)
           .reduce(mergeWeights)
       weights = Vectors.fromBreeze(newWeights.toBreeze :*= 1.0 / iterIndexedSeq.size)
-      stochasticLossHistory.append(lossSum / iterIndexedSeq.size)
+      val avgLoss = lossSum / iterIndexedSeq.size
+      val regVal = updater.computeRegularizationPenalty(weights, regParam)
+      stochasticLossHistory.append(avgLoss + regVal)
       iterIndexedSeq.foreach { kv: (Int, Int) =>
         iters(kv._1) = kv._2
       }
+      logInfo("GradientDescent.runGradientDescent iteration %d finish with loss %f, regVal %f"
+        .format(i, avgLoss, regVal))
     }
 
     logInfo("GradientDescent.runGradientDescent finished. Last 10 stochastic losses %s".format(

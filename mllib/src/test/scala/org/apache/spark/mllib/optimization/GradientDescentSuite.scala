@@ -26,6 +26,7 @@ import org.scalatest.matchers.ShouldMatchers
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.classification.SVMWithSGD
 
 object GradientDescentSuite {
 
@@ -62,6 +63,10 @@ object GradientDescentSuite {
 }
 
 class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+
+  def compareDouble(x: Double, y: Double, tol: Double = 1E-3): Boolean = {
+    math.abs(x - y) / (math.abs(y) + 1e-15) < tol
+  }
 
   test("Assert the loss is decreasing.") {
     val nPoints = 10000
@@ -105,7 +110,7 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     val (_, loss2) = GradientDescent.runGradientDescent(
       dataRDD,
       gradient,
-      updater,
+      new LazyL1Updater(),
       stepSize,
       numIterations,
       regParam,
@@ -142,10 +147,6 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     val (newWeights1, loss1) = GradientDescent.runMiniBatchSGD(
       dataRDD, gradient, updater, 1, 1, regParam1, 1.0, initialWeightsWithIntercept)
 
-    def compareDouble(x: Double, y: Double, tol: Double = 1E-3): Boolean = {
-      math.abs(x - y) / (math.abs(y) + 1e-15) < tol
-    }
-
     assert(compareDouble(
       loss1(0),
       loss0(0) + (math.pow(initialWeightsWithIntercept(0), 2) +
@@ -157,5 +158,54 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
       compareDouble(newWeights1(1) , newWeights0(1) - initialWeightsWithIntercept(1)),
       "The different between newWeights with/without regularization " +
         "should be initialWeightsWithIntercept.")
+  }
+
+  test("Assert lazy l2 updater is equivalent to regular l2 updater.") {
+    val nPoints = 10000
+    val A = 2.0
+    val B = -1.5
+
+    val initialB = -1.0
+    val initialWeights = Array(initialB)
+
+    val gradient = new LogisticGradient()
+    val updater = new SquaredL2Updater()
+    val lazyUpdater = new LazySquaredL2Updater()
+    val stepSize = 1.0
+    val numIterations = 10
+    val regParam = 1
+
+    // Add a extra variable consisting of all 1.0's for the intercept.
+    val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
+    val data = testData.map { case LabeledPoint(label, features) =>
+      label -> Vectors.dense(1.0 +: features.toArray)
+    }
+
+    val dataRDD = sc.parallelize(data, 2).cache()
+    val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
+
+    val (weight, loss) = GradientDescent.runGradientDescent(
+      dataRDD,
+      gradient,
+      updater,
+      stepSize,
+      numIterations,
+      regParam,
+      initialWeightsWithIntercept)
+
+    val (lazyWeight, lazyLoss) = GradientDescent.runGradientDescent(
+      dataRDD,
+      gradient,
+      lazyUpdater,
+      stepSize,
+      numIterations,
+      regParam,
+      initialWeightsWithIntercept)
+
+    val weightsEqual = weight.toArray zip lazyWeight.toArray forall { x: (Double, Double) =>
+      compareDouble(x._1, x._2) }
+    val lossEqual = loss zip lazyLoss forall { x: (Double, Double) =>
+      compareDouble(x._1, x._2) }
+    assert(weightsEqual && lossEqual, "lazy l2 update incorrect")
   }
 }

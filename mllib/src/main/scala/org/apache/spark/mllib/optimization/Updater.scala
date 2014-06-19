@@ -38,7 +38,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * regularization term R(w) (if any regularization is used).
  */
 @DeveloperApi
-abstract class Updater extends Serializable {
+abstract class Updater extends Serializable with Cloneable {
   /**
    * Compute an updated value for weights given the gradient, stepSize, iteration number and
    * regularization parameter. Also returns the regularization value regParam * R(w)
@@ -60,10 +60,36 @@ abstract class Updater extends Serializable {
       iter: Int,
       regParam: Double): (Vector, Double)
 
-  def finalCatchup(weights:  Vector) = weights
-  def weightScale = 1.0
-  def copy(): Updater
-  def computeNorm(weights: Vector, regParam: Double): Double = 0.0
+  /**
+   * Compute the regularization penalty
+   * @param weights - Column matrix of size dx1 where d is the number of features.
+   * @param regParam - Regularization parameter
+   * @return the regularization value computed using the given weights.
+   */
+  def computeRegularizationPenalty(weights: Vector, regParam: Double): Double = 0.0
+
+  /**
+   * Copy this object
+   */
+  override def clone(): Updater = null
+
+  /**
+   * Return the weight scaling coefficient accumulated during lazy L2 regularization.
+   */
+  def weightShrinkage = 1.0
+
+  /**
+   * Return the weight soft threshold coefficient accumulated during lazy L1 regularization.
+   */
+  def weightTruncation = 0.0
+
+  /**
+   * Apply weight scaling and thresholding to the given weight, and return the updated
+   * weights. weightScale and weightThreshold are reset.
+   * @param weights - Column matrix of size dx1 where d is the number of features.
+   * @return - new weights after scaling and thresholding have been applied.
+   */
+  def applyLazyRegularization(weights:  Vector) = weights
 }
 
 /**
@@ -86,7 +112,7 @@ class SimpleUpdater extends Updater {
     (Vectors.fromBreeze(brzWeights), 0)
   }
 
-  override def copy() = new SimpleUpdater()
+  override def clone() = new SimpleUpdater()
 }
 
 /**
@@ -122,17 +148,75 @@ class L1Updater extends Updater {
     brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
     // Apply proximal operator (soft thresholding)
     val shrinkageVal = regParam * thisIterStepSize
-    var i = 0
-    while (i < brzWeights.length) {
+    for (i <- 0 until brzWeights.length) {
       val wi = brzWeights(i)
       brzWeights(i) = signum(wi) * max(0.0, abs(wi) - shrinkageVal)
-      i += 1
     }
 
     (Vectors.fromBreeze(brzWeights), brzNorm(brzWeights, 1.0) * regParam)
   }
 
-  override def copy() = new L1Updater()
+  override def clone() = new L1Updater()
+
+  override def computeRegularizationPenalty(weights: Vector, regParam: Double): Double = {
+    val brzWeights: BV[Double] = weights.toBreeze.toDenseVector
+    val norm = brzNorm(brzWeights, 1.0)
+    regParam * norm
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Lazy updater for L1 regularized problems.
+ *          R(w) = ||w||_1
+ *
+ * The difference with L1Updater is that, this class does not soft threshold weights,
+ * it accumulates the soft threshold for L1 regularization into softThreshold. Thresholding
+ * is applied dynamically during predication for a data instance.
+ *
+ * There are two advantages: 1. This makes the updater more efficient for sparse data,
+ * as it does not need to soft threshold every weight. 2. For features that has many small
+ * updates, lazy update gives them chances to accumulate.
+ */
+@DeveloperApi
+class LazyL1Updater extends L1Updater {
+  var softThreshold = 0.0
+
+  override def compute(
+      weightsOld: Vector,
+      gradient: Vector,
+      stepSize: Double,
+      iter: Int,
+      regParam: Double): (Vector, Double) = {
+    val thisIterStepSize = stepSize / math.sqrt(iter)
+    // Take gradient step
+    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
+    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
+    // Accumulate truncation
+    softThreshold += regParam * thisIterStepSize
+
+    // return 0 for the reg penalty
+    (Vectors.fromBreeze(brzWeights), 0.0)
+  }
+
+  override def clone() = {
+    val n = new LazyL1Updater()
+    n.softThreshold = softThreshold
+    n
+  }
+
+  override def weightTruncation = softThreshold
+
+  override def applyLazyRegularization(weights: Vector) = {
+    val brzWeights = weights.toBreeze.toDenseVector
+    // apply shrinkage
+    for (i <- 0 until brzWeights.length) {
+      val wi = brzWeights(i)
+      brzWeights(i) = signum(wi) * max(0.0, abs(wi) - softThreshold)
+    }
+    softThreshold = 0.0
+    Vectors.fromBreeze(brzWeights)
+  }
 }
 
 /**
@@ -162,52 +246,46 @@ class SquaredL2Updater extends Updater {
     (Vectors.fromBreeze(brzWeights), 0.5 * regParam * norm * norm)
   }
 
-  override def copy() = new SquaredL2Updater()
+  override def clone() = new SquaredL2Updater()
+
+  override def computeRegularizationPenalty(weights: Vector, regParam: Double): Double = {
+    val brzWeights: BV[Double] = weights.toBreeze.toDenseVector
+    val norm = brzNorm(brzWeights, 2.0)
+    0.5 * regParam * norm * norm
+  }
 }
 
 object LazySquaredL2Updater {
+  // avoid underflow
   val MinimumScale = 1e-14
-  val MinimumDiscount = 1e-8
 }
 
-class LazySquaredL2Updater extends Updater {
+/**
+ * :: DeveloperApi ::
+ * Lazy updater for L2 regularized problems.
+ *          R(w) = 1/2 ||w||^2
+ *
+ * The difference with L2Updater is that, this class does not scale weights,
+ * it accumulates the scaling for L2 regularization into scale. Scaling
+ * is applied dynamically during predication for a data instance. The results
+ * should be the same between lazy L2 and regular L2. The main advantage is
+ * lazy L2 update is more efficient for sparse data, as it does not need to
+ * scale every weight.
+ */
+@DeveloperApi
+class LazySquaredL2Updater extends SquaredL2Updater {
   var scale: Double = 1.0
 
-  def finalCatchUp(weights: Vector) = {
-    val brzWeights = weights.toBreeze.toDenseVector
-    brzWeights :*= scale
-    scale = 1.0
-    Vectors.fromBreeze(brzWeights)
-  }
-
-  def weightDecay(discount: Double, weights: Vector) = {
-    val decayed = if (scale < LazySquaredL2Updater.MinimumScale) {
-      finalCatchUp(weights)
-    } else {
-      weights
-    }
-    if (discount > LazySquaredL2Updater.MinimumDiscount) {
-      scale *= discount
-    } else {
-      scale *= LazySquaredL2Updater.MinimumDiscount;
-    }
-    decayed
-  }
-
   override def compute(
-                        weightsOld: Vector,
-                        gradient: Vector,
-                        stepSize: Double,
-                        iter: Int,
-                        regParam: Double): (Vector, Double) = {
-    // add up both updates from the gradient of the loss (= step) as well as
-    // the gradient of the regularizer (= regParam * weightsOld)
-    // w' = w - thisIterStepSize * (gradient + regParam * w)
-    // w' = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
+      weightsOld: Vector,
+      gradient: Vector,
+      stepSize: Double,
+      iter: Int,
+      regParam: Double): (Vector, Double) = {
     // scale *= (1 - thisIterStepSize * regParam)
     // w' = w - thisIterStepSize * gradient / scale
     val thisIterStepSize = stepSize / math.sqrt(iter)
-    val discount = (1.0 - thisIterStepSize * regParam)
+    val discount = 1.0 - thisIterStepSize * regParam
     val decayedWeights = weightDecay(discount, weightsOld)
     val brzWeights: BV[Double] = decayedWeights.toBreeze.toDenseVector
 
@@ -216,16 +294,36 @@ class LazySquaredL2Updater extends Updater {
     (Vectors.fromBreeze(brzWeights), 0.0)
   }
 
-  override def copy() = {
+  override def clone() = {
     val n = new LazySquaredL2Updater()
     n.scale = scale
     n
   }
 
-  override def computeNorm(weights: Vector, regParam: Double): Double = {
-    val brzWeights: BV[Double] = weights.toBreeze.toDenseVector
-    val norm = brzNorm(brzWeights, 2.0)
-    0.5 * regParam * norm * norm
+  override def weightShrinkage = scale
+
+  override def applyLazyRegularization(weights: Vector) = {
+    val brzWeights = weights.toBreeze.toDenseVector
+    brzWeights :*= scale
+    scale = 1.0
+    Vectors.fromBreeze(brzWeights)
   }
 
+  /** *
+    * Accmulate L2 regularization shrinkage. In case scale is already too small,
+    * update the weights and reset scale to 1
+    */
+  private def weightDecay(discount: Double, weights: Vector) = {
+    if (discount <= 0.0) {
+      weights
+    } else {
+      val decayed = if (scale < LazySquaredL2Updater.MinimumScale) {
+        applyLazyRegularization(weights)
+      } else {
+        weights
+      }
+      scale *= discount
+      decayed
+    }
+  }
 }
