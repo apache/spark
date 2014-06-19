@@ -183,9 +183,7 @@ private[spark] class MesosSchedulerBackend(
     val oldClassLoader = setClassLoader()
     try {
       synchronized {
-        // Build a big list of the offerable workers, and remember their indices so that we can
-        // figure out which Offer to reply to for each worker
-        val offerableIndices = new ArrayBuffer[Int]
+        // Build a big list of the offerable workers
         val offerableWorkers = new ArrayBuffer[WorkerOffer]
 
         def enoughMemory(o: Offer) = {
@@ -195,7 +193,6 @@ private[spark] class MesosSchedulerBackend(
         }
 
         for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer)) {
-          offerableIndices += index
           offerableWorkers += new WorkerOffer(
             offer.getSlaveId.getValue,
             offer.getHostname,
@@ -206,14 +203,13 @@ private[spark] class MesosSchedulerBackend(
         val taskLists = scheduler.resourceOffers(offerableWorkers)
 
         // Build a list of Mesos tasks for each slave
-        val mesosTasks = offers.map(o => Collections.emptyList[MesosTaskInfo]())
+        val mesosTasks = offers.map(o => new JArrayList[MesosTaskInfo]())
         for ((taskList, index) <- taskLists.zipWithIndex) {
           if (!taskList.isEmpty) {
-            val offerNum = offerableIndices(index)
-            val slaveId = offers(offerNum).getSlaveId.getValue
-            slaveIdsWithExecutors += slaveId
-            mesosTasks(offerNum) = new JArrayList[MesosTaskInfo](taskList.size)
             for (taskDesc <- taskList) {
+              val slaveId = taskDesc.executorId
+              val offerNum = offers.indexWhere(_.getSlaveId.getValue == slaveId)
+              slaveIdsWithExecutors += slaveId
               taskIdToSlaveId(taskDesc.taskId) = slaveId
               mesosTasks(offerNum).add(createMesosTask(taskDesc, slaveId))
             }
