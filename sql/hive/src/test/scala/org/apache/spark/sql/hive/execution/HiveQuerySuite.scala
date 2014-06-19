@@ -28,6 +28,12 @@ import org.apache.spark.sql.{SchemaRDD, execution, Row}
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  test("CREATE TABLE AS runs once") {
+    hql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
+    assert(hql("SELECT COUNT(*) FROM foo").collect().head.getLong(0) === 1,
+      "Incorrect number of rows in created table")
+  }
+
   createQueryTest("between",
     "SELECT * FROM src WHERE key Between 1 and 2")
 
