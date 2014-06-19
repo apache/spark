@@ -266,23 +266,13 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("key", "int", null),
         Array("value", "string", null),
         Array("dt", "string", null),
-        Array("# Partition Information", null, null),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
         Array("dt", "string", null))
     ) {
       hql("DESCRIBE test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
         .collect()
-    }
-
-    // Describe a table with keyword FORMATTED
-    // We only
-    assertResult(6) {
-      hql("DESCRIBE FORMATTED test_describe_commands1").count()
-    }
-
-    // Describe a table
-    assertResult(6) {
-      hql("DESCRIBE EXTENDED test_describe_commands1").count()
     }
 
     // Describe a table with a fully qualified table name
@@ -291,7 +281,8 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("key", "int", null),
         Array("value", "string", null),
         Array("dt", "string", null),
-        Array("# Partition Information", null, null),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
         Array("dt", "string", null))
     ) {
       hql("DESCRIBE default.test_describe_commands1")
