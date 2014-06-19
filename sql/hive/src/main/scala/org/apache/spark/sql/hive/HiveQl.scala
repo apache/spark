@@ -391,30 +391,34 @@ private[hive] object HiveQl {
 
     case Token("TOK_DESCTABLE", describeArgs) =>
       // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
-      val Some(tableType) :: formatted :: extended :: _ :: Nil =
+      val Some(tableType) :: formatted :: extended :: pretty :: Nil =
         getClauses(Seq("TOK_TABTYPE", "FORMATTED", "EXTENDED", "PRETTY"), describeArgs)
-      // TODO: support PRETTY?
-      tableType match {
-        case Token("TOK_TABTYPE", nameParts) if nameParts.size == 1 => {
-          nameParts.head match {
-            case Token(".", dbName :: tableName :: Nil) =>
-              // It is describing a table with the format like "describe db.table".
-              val (db, tableName) = extractDbNameTableName(nameParts.head)
-              DescribeCommand(
-                UnresolvedRelation(db, tableName, None), formatted.isDefined, extended.isDefined)
-            case Token(".", dbName :: tableName :: colName :: Nil) =>
-              // It is describing a column with the format like "describe db.table column".
-              NativePlaceholder
-            case tableName =>
-              // It is describing a table with the format like "describe table".
-              DescribeCommand(
-                UnresolvedRelation(None, tableName.getText, None),
-                formatted.isDefined,
-                extended.isDefined)
+      if (formatted.isDefined || pretty.isDefined) {
+        // FORMATTED and PRETTY are not supported and this statement will be treated as
+        // a Hive native command.
+        NativePlaceholder
+      } else {
+        tableType match {
+          case Token("TOK_TABTYPE", nameParts) if nameParts.size == 1 => {
+            nameParts.head match {
+              case Token(".", dbName :: tableName :: Nil) =>
+                // It is describing a table with the format like "describe db.table".
+                val (db, tableName) = extractDbNameTableName(nameParts.head)
+                DescribeCommand(
+                  UnresolvedRelation(db, tableName, None), extended.isDefined)
+              case Token(".", dbName :: tableName :: colName :: Nil) =>
+                // It is describing a column with the format like "describe db.table column".
+                NativePlaceholder
+              case tableName =>
+                // It is describing a table with the format like "describe table".
+                DescribeCommand(
+                  UnresolvedRelation(None, tableName.getText, None),
+                  extended.isDefined)
+            }
           }
+          // All other cases.
+          case _ => NativePlaceholder
         }
-        // All other cases.
-        case _ => NativePlaceholder
       }
 
     case Token("TOK_CREATETABLE", children)

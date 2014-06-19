@@ -68,17 +68,15 @@ case class CacheCommand(tableName: String, doCache: Boolean) extends Command
 /**
  * Returned for the "DESCRIBE tableName" command.
  * @param table The table to be described.
- * @param isFormatted True if "DESCRIBE FORMATTED" is used. Otherwise, false.
- *                    It is effective only when the table is a Hive table.
  * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
  *                   It is effective only when the table is a Hive table.
  */
 case class DescribeCommand(
     table: LogicalPlan,
-    isFormatted: Boolean,
     isExtended: Boolean) extends Command {
   override def output = Seq(
-    BoundReference(0, AttributeReference("name", StringType, nullable = false)()),
-    BoundReference(1, AttributeReference("type", StringType, nullable = false)()),
+    // Column names are based on Hive.
+    BoundReference(0, AttributeReference("col_name", StringType, nullable = false)()),
+    BoundReference(1, AttributeReference("data_type", StringType, nullable = false)()),
     BoundReference(2, AttributeReference("comment", StringType, nullable = false)()))
 }

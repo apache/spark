@@ -86,7 +86,7 @@ private[hive] trait HiveStrategies {
         resolvedTable match {
           case t: MetastoreRelation =>
             Seq(DescribeHiveTableCommand(
-              t, describe.output, describe.isFormatted, describe.isExtended)(context))
+              t, describe.output, describe.isExtended)(context))
           case o: LogicalPlan =>
             Seq(DescribeCommand(planLater(o), describe.output)(context))
         }

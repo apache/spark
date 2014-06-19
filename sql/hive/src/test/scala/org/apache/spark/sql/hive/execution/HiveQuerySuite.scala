@@ -270,7 +270,7 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("dt", "string", null))
     ) {
       hql("DESCRIBE test_describe_commands1")
-        .select('name, 'type, 'comment)
+        .select('col_name, 'data_type, 'comment)
         .collect()
     }
 
@@ -295,7 +295,7 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("dt", "string", null))
     ) {
       hql("DESCRIBE default.test_describe_commands1")
-        .select('name, 'type, 'comment)
+        .select('col_name, 'data_type, 'comment)
         .collect()
     }
 
@@ -347,7 +347,7 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("b", "StringType", null))
     ) {
       hql("DESCRIBE test_describe_commands2")
-        .select('name, 'type, 'comment)
+        .select('col_name, 'data_type, 'comment)
         .collect()
     }
   }

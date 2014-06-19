@@ -462,32 +462,43 @@ case class NativeCommand(
 case class DescribeHiveTableCommand(
     table: MetastoreRelation,
     output: Seq[Attribute],
-    isFormatted: Boolean,
     isExtended: Boolean)(
     @transient context: HiveContext)
   extends LeafNode with Command {
 
+  // Strings with the format like Hive. It is used for result comparison in our unit tests.
+  lazy val hiveString: Seq[String] = {
+    val alignment = 20
+    val delim = "\t"
+
+    sideEffectResult.map {
+      case (name, dataType, comment) =>
+        String.format("%-" + alignment + "s", name) + delim +
+          String.format("%-" + alignment + "s", dataType) + delim +
+          String.format("%-" + alignment + "s", Option(comment).getOrElse("None"))
+    }
+  }
+
   override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] = {
-    val cols: Seq[FieldSchema] = table.hiveQlTable.getCols
-    val parCols: Seq[FieldSchema] = table.hiveQlTable.getPartCols
-    val columnInfo = cols.map(field => (field.getName, field.getType, field.getComment))
-    val partColumnInfo = parCols.map(field => (field.getName, field.getType, field.getComment))
+    // Trying to mimic the format of Hive's output. But not exactly the same.
+    var results: Seq[(String, String, String)] = Nil
 
-    val formattedPart = if (isFormatted) {
-      (MetaDataFormatUtils.getTableInformation(table.hiveQlTable), null, null) :: Nil
-    } else {
-      Nil
+    val columns: Seq[FieldSchema] = table.hiveQlTable.getCols
+    val partitionColumns: Seq[FieldSchema] = table.hiveQlTable.getPartCols
+    results ++= columns.map(field => (field.getName, field.getType, field.getComment))
+    if (!partitionColumns.isEmpty) {
+      val partColumnInfo =
+        partitionColumns.map(field => (field.getName, field.getType, field.getComment))
+      results ++=
+        partColumnInfo ++ Seq(("# Partition Information", "", "")) ++
+          Seq((s"# ${output.get(0).name}", output.get(1).name, output.get(2).name)) ++ partColumnInfo
     }
 
-    val extendedPart = if (isExtended) {
-      ("Detailed Table Information", table.hiveQlTable.getTTable.toString, null) :: Nil
-    } else {
-      Nil
+    if (isExtended) {
+      results ++= Seq(("Detailed Table Information", table.hiveQlTable.getTTable.toString, ""))
     }
 
-    // Trying to mimic the format of Hive's output. But not 100% the same.
-    columnInfo ++ partColumnInfo ++ Seq(("# Partition Information", null, null)) ++
-      partColumnInfo ++ formattedPart ++ extendedPart
+    results
   }
 
   override def execute(): RDD[Row] = {
