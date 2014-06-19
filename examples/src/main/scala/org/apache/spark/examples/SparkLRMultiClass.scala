@@ -26,7 +26,7 @@ import org.apache.spark.SparkContext._
 /**
  * @author: Kiran Lonikar
  * Logistic regression based classification for multiple lables. Uses simple gradient descent algorithm with regularization.
- * Usage: SparkLRMultiClass [dataFileName] [numClasses] [lambda] [alpha] [maxIterations] [costThreshold]
+ * Usage: SparkLRMultiClass [dataFileName] [numClasses] [lambda] [alpha] [maxIterations] [costThreshold] [numFeatures]
  * From the spark base dir:
  * Compile standalone using:
  * scalac -d target -cp assembly/target/scala-2.10/spark-assembly-1.1.0-SNAPSHOT-hadoop1.0.4.jar examples/src/main/scala/org/apache/spark/examples/SparkLRMultiClass.scala
@@ -39,23 +39,6 @@ import org.apache.spark.SparkContext._
  * jar uvf assembly/target/scala-2.10/spark-assembly-1.1.0-SNAPSHOT-hadoop1.0.4.jar -C core/src/main/resources org/apache/spark/log4j-defaults.properties
 */
 object SparkLRMultiClass {
-/*
-	// Unused vector/matrix functions: Breeze Linear Algrbra library provides these and more.
-	// Leaving these in comments since it shows a functional implementation of vector and multiplication using Array.zip
-	val random = new java.security.SecureRandom
-	def random2dArray(dim1: Int, dim2: Int, maxValue: Double) = Array.fill(dim1, dim2) { random.nextDouble()*maxValue }
-	def vecMul(v1: Array[Double], v2: Array[Double]) : Double = (v1 zip v2).map(z => z._1*z._2).sum
-	def dotProduct(vector: Array[Double], matrix: Array[Array[Double]]): Array[Double] = { 
-		// ignore dimensionality checks for simplicity of example 
-		(0 to (matrix(0).size - 1)).toArray.map( colIdx => { 
-			val colVec: Array[Double] = matrix.map( rowVec => rowVec(colIdx) ) 
-			val elemWiseProd: Array[Double] = (vector zip colVec).map( entryTuple => entryTuple._1 * entryTuple._2 ) 
-			elemWiseProd.sum 
-		} )
-	}
-
-	def sigmoid(z : Double) : Double = 1/(1+exp(-z))
-*/
 
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("SparkLRMultiClass")
@@ -67,17 +50,21 @@ object SparkLRMultiClass {
 	var alpha = 3.0 // learning rate
 	var ITERATIONS = 30
 	var costThreshold = 0.01
+	var numFeatures = 0
 
+	// TODO: Crude cmd line args processing. Change later to use --name value style.
 	if(args.length > 0) dataFile = args(0)
 	if(args.length > 1) numClasses = args(1).toInt
 	if(args.length > 2) lambda = args(2).toDouble
 	if(args.length > 3) alpha = args(3).toDouble
 	if(args.length > 4) ITERATIONS = args(4).toInt
 	if(args.length > 5) costThreshold = args(5).toDouble
+	if(args.length > 6) numFeatures = args(6).toInt
 	
 	val data = sc.textFile(dataFile)
-	val vectors = data.map(line => line.split(",").map(java.lang.Double.parseDouble(_)))
-	val numFeatures = vectors.take(1)(0).size - 1
+	val vectors = data.map(line => line.split(",").map(_.toDouble))
+	if(numFeatures == 0) numFeatures = vectors.take(1)(0).size - 1
+	
 	val m : Double = vectors.count // size of training data
 	var all_theta = DenseMatrix.zeros[Double](numClasses, numFeatures+1)
 	// training
@@ -100,9 +87,9 @@ object SparkLRMultiClass {
 			grad(0) -= theta(0)*lambda/m
 			cost = (grad_cost._2 + lambda*(theta.t*theta - theta(0)*theta(0))/2.0)/m
 			theta -= grad*alpha
-			println("label: " + c + ", Cost: " + cost + ", gradient: " + grad)
+			println("label: " + c + ", Cost: " + cost)
 			if(cost <= costThreshold) {
-				println("Terminating gradient for label " + c);
+				println("Terminating gradient descent for label " + c);
 				break
 			}
 		} }
