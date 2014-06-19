@@ -124,6 +124,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         addressToExecutorId.get(address).foreach(removeExecutor(_,
           "remote Akka client disassociated"))
 
+      case RetrieveSparkProps =>
+        sender ! sparkProperties
     }
 
     // Make fake resource offers on all executors

@@ -18,9 +18,14 @@
 package org.apache.spark.executor
 
 import java.nio.ByteBuffer
+import java.util.concurrent.TimeUnit
+
+import scala.concurrent.Await
 
 import akka.actor._
 import akka.remote._
+import akka.pattern.Patterns
+import akka.util.Timeout
 
 import org.apache.spark.{SparkEnv, Logging, SecurityManager, SparkConf}
 import org.apache.spark.TaskState.TaskState
@@ -101,26 +106,33 @@ private[spark] object CoarseGrainedExecutorBackend {
     workerUrl: Option[String]) {
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
-        // Debug code
-        Utils.checkHost(hostname)
+      // Debug code
+      Utils.checkHost(hostname)
 
-        val conf = new SparkConf
-        // Create a new ActorSystem to run the backend, because we can't create a
-        // SparkEnv / Executor before getting started with all our system properties, etc
-        val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0,
-          conf, new SecurityManager(conf))
-        // set it
-        val sparkHostPort = hostname + ":" + boundPort
-        actorSystem.actorOf(
-          Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId,
-            sparkHostPort, cores),
-          name = "Executor")
-        workerUrl.foreach {
-          url =>
-            actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
-        }
-        actorSystem.awaitTermination()
+      // Bootstrap to fetch the driver's Spark properties.
+      val executorConf = new SparkConf
+      val (fetcher, _) = AkkaUtils.createActorSystem(
+        "driverConfFetcher", hostname, 0, executorConf, new SecurityManager(executorConf))
+      val driver = fetcher.actorSelection(driverUrl)
+      val timeout = new Timeout(5, TimeUnit.MINUTES)
+      val fut = Patterns.ask(driver, RetrieveSparkProps, timeout)
+      val props = Await.result(fut, timeout.duration).asInstanceOf[Seq[(String, String)]]
+      fetcher.shutdown()
 
+      // Create a new ActorSystem to run the backend, because we can't create a
+      // SparkEnv / Executor before getting started with all our system properties, etc
+      val driverConf = new SparkConf().setAll(props)
+      val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
+        "sparkExecutor", hostname, 0, driverConf, new SecurityManager(driverConf))
+      // set it
+      val sparkHostPort = hostname + ":" + boundPort
+      actorSystem.actorOf(
+        Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId, sparkHostPort, cores),
+        name = "Executor")
+      workerUrl.foreach { url =>
+        actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+      }
+      actorSystem.awaitTermination()
     }
   }
 

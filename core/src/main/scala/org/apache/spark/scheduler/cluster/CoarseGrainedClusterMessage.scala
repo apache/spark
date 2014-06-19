@@ -22,10 +22,13 @@ import java.nio.ByteBuffer
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.util.{SerializableBuffer, Utils}
+import org.apache.spark.SparkConf
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {
+
+  case object RetrieveSparkProps extends CoarseGrainedClusterMessage
 
   // Driver to executors
   case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
