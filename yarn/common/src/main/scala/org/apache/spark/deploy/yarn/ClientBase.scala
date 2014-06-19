@@ -294,8 +294,6 @@ trait ClientBase extends Logging {
       // Pass SPARK_YARN_USER_ENV itself to the AM so it can use it to set up executor environments.
       env("SPARK_YARN_USER_ENV") = userEnvs
     }
-
-    logInfo(s"ApplicationMaster environment: $env")
     env
   }
 
@@ -320,6 +318,37 @@ trait ClientBase extends Logging {
     logInfo("Setting up container launch context")
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
     amContainer.setLocalResources(localResources)
+
+    // In cluster mode, if the deprecated SPARK_JAVA_OPTS is set, we need to propagate it to
+    // executors. But we can't just set spark.executor.extraJavaOptions, because the driver's
+    // SparkContext will not let that set spark* system properties, which is expected behavior for
+    // Yarn clients. So propagate it through the environment.
+    //
+    // Note that to warn the user about the deprecation in cluster mode, some code from
+    // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
+    // described above).
+    if (args.amClass == classOf[ApplicationMaster].getName) {
+      sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
+        val warning =
+          s"""
+            |SPARK_JAVA_OPTS was detected (set to '$value').
+            |This is deprecated in Spark 1.0+.
+            |
+            |Please instead use:
+            | - ./spark-submit with conf/spark-defaults.conf to set defaults for an application
+            | - ./spark-submit with --driver-java-options to set -X options for a driver
+            | - spark.executor.extraJavaOptions to set -X options for executors
+          """.stripMargin
+        logWarning(warning)
+        for (proc <- Seq("driver", "executor")) {
+          val key = s"spark.$proc.extraJavaOptions"
+          if (sparkConf.contains(key)) {
+            throw new SparkException(s"Found both $key and SPARK_JAVA_OPTS. Use only the former.")
+          }
+        }
+        env("SPARK_JAVA_OPTS") = value
+      }
+    }
     amContainer.setEnvironment(env)
 
     val amMemory = calculateAMMemory(newApp)
@@ -357,8 +386,11 @@ trait ClientBase extends Logging {
     for ((k, v) <- sparkConf.getAll) {
       javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
     }
+
     if (args.amClass == classOf[ApplicationMaster].getName) {
-      sparkConf.getOption("spark.driver.extraJavaOptions").foreach(opts => javaOpts += opts)
+      sparkConf.getOption("spark.driver.extraJavaOptions")
+        .orElse(sys.env.get("SPARK_JAVA_OPTS"))
+        .foreach(opts => javaOpts += opts)
       sparkConf.getOption("spark.driver.libraryPath")
         .foreach(p => javaOpts += s"-Djava.library.path=$p")
     }
@@ -374,7 +406,10 @@ trait ClientBase extends Logging {
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 
-    logInfo("Command for starting the Spark ApplicationMaster: " + commands)
+    logInfo("Yarn AM launch context:")
+    logInfo(s"  class:   ${args.amClass}")
+    logInfo(s"  env:     $env")
+    logInfo(s"  command: ${commands.mkString(" ")}")
 
     // TODO: it would be nicer to just make sure there are no null commands here
     val printableCommands = commands.map(s => if (s == null) "null" else s).toList
