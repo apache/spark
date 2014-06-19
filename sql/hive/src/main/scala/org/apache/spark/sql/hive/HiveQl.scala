@@ -205,7 +205,7 @@ private[hive] object HiveQl {
     extends Exception(s"Failed to parse: $sql", cause)
 
   class SemanticException(msg: String)
-    extends Exception(msg)
+    extends Exception(s"Error in semantic analysis: $msg")
 
   /**
    * Returns the AST for the given SQL string.
@@ -584,7 +584,7 @@ private[hive] object HiveQl {
         val withHaving = havingClause.map { h => 
 
           if (groupByClause == None) {
-            throw new SemanticException("Error in semantic analysis: HAVING specified without GROUP BY")
+            throw new SemanticException("HAVING specified without GROUP BY")
           }
 
           val Seq(havingExpr) = h.getChildren.toSeq
