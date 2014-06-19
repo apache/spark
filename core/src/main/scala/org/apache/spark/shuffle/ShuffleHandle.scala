@@ -15,27 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.api.java
+package org.apache.spark.shuffle
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.hive.test.TestHive
-
-// Implicits
-import scala.collection.JavaConversions._
-
-class JavaHiveSQLSuite extends FunSuite {
-  ignore("SELECT * FROM src") {
-    val javaCtx = new JavaSparkContext(TestSQLContext.sparkContext)
-    // There is a little trickery here to avoid instantiating two HiveContexts in the same JVM
-    val javaSqlCtx = new JavaHiveContext(javaCtx) {
-      override val sqlContext = TestHive
-    }
-
-    assert(
-      javaSqlCtx.hql("SELECT * FROM src").collect().map(_.getInt(0)) ===
-        TestHive.sql("SELECT * FROM src").collect().map(_.getInt(0)).toSeq)
-  }
-}
+/**
+ * An opaque handle to a shuffle, used by a ShuffleManager to pass information about it to tasks.
+ *
+ * @param shuffleId ID of the shuffle
+ */
+private[spark] abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}

@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.sql.catalyst.plans
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{ExprId, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 
 /**
- * Provides helper methods for comparing plans produced by optimization rules with the expected
- * result
+ * Provides helper methods for comparing plans.
  */
-class OptimizerTest extends FunSuite {
+class PlanTest extends FunSuite {
 
   /**
    * Since attribute references are given globally unique ids during analysis,

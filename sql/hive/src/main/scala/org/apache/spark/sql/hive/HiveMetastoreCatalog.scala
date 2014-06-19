@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.SparkLogicalPlan
 import org.apache.spark.sql.hive.execution.{HiveTableScan, InsertIntoHiveTable}
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -130,8 +130,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
         castChildOutput(p, table, child)
 
-      case p @ logical.InsertIntoTable(SparkLogicalPlan(InMemoryColumnarTableScan(
-        _, HiveTableScan(_, table, _), _)), _, child, _) =>
+      case p @ logical.InsertIntoTable(
+                 InMemoryRelation(_, _,
+                   HiveTableScan(_, table, _)), _, child, _) =>
         castChildOutput(p, table, child)
     }
 
@@ -236,6 +237,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case BinaryType => "binary"
     case BooleanType => "boolean"
     case DecimalType => "decimal"
+    case TimestampType => "timestamp"
   }
 }
 

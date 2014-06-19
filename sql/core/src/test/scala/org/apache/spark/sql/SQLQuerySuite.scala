@@ -136,6 +136,12 @@ class SQLQuerySuite extends QueryTest {
       2.0)
   }
 
+  test("average overflow") {
+    checkAnswer(
+      sql("SELECT AVG(a),b FROM largeAndSmallInts group by b"),
+      Seq((2147483645.0,1),(2.0,2)))
+  }
+
   test("count") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM testData2"),
@@ -326,7 +332,7 @@ class SQLQuerySuite extends QueryTest {
         (3, "C"),
         (4, "D")))
   }
-  
+
   test("system function upper()") {
     checkAnswer(
       sql("SELECT n,UPPER(l) FROM lowerCaseData"),
@@ -343,7 +349,7 @@ class SQLQuerySuite extends QueryTest {
         (2, "ABC"),
         (3, null)))
   }
-    
+
   test("system function lower()") {
     checkAnswer(
       sql("SELECT N,LOWER(L) FROM upperCaseData"),
@@ -361,6 +367,42 @@ class SQLQuerySuite extends QueryTest {
         (1, "abc"),
         (2, "abc"),
         (3, null)))
-  }  
-  
+  }
+
+  test("SET commands semantics using sql()") {
+    clear()
+    val testKey = "test.key.0"
+    val testVal = "test.val.0"
+    val nonexistentKey = "nonexistent"
+
+    // "set" itself returns all config variables currently specified in SQLConf.
+    assert(sql("SET").collect().size == 0)
+
+    // "set key=val"
+    sql(s"SET $testKey=$testVal")
+    checkAnswer(
+      sql("SET"),
+      Seq(Seq(testKey, testVal))
+    )
+
+    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    checkAnswer(
+      sql("set"),
+      Seq(
+        Seq(testKey, testVal),
+        Seq(testKey + testKey, testVal + testVal))
+    )
+
+    // "set key"
+    checkAnswer(
+      sql(s"SET $testKey"),
+      Seq(Seq(testKey, testVal))
+    )
+    checkAnswer(
+      sql(s"SET $nonexistentKey"),
+      Seq(Seq(nonexistentKey, "<undefined>"))
+    )
+    clear()
+  }
+
 }

@@ -135,9 +135,9 @@ case class Aggregate(
   def references = (groupingExpressions ++ aggregateExpressions).flatMap(_.references).toSet
 }
 
-case class Limit(limit: Expression, child: LogicalPlan) extends UnaryNode {
+case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   def output = child.output
-  def references = limit.references
+  def references = limitExpr.references
 }
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {

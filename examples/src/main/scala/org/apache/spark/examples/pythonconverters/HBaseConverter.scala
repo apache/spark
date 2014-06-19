@@ -15,22 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.examples.pythonconverters
 
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.api.python.Converter
+import org.apache.hadoop.hbase.client.Result
+import org.apache.hadoop.hbase.util.Bytes
 
-private[spark] abstract class ShuffleFetcher {
-
-  /**
-   * Fetch the shuffle outputs for a given ShuffleDependency.
-   * @return An iterator over the elements of the fetched shuffle outputs.
-   */
-  def fetch[T](
-      shuffleId: Int,
-      reduceId: Int,
-      context: TaskContext,
-      serializer: Serializer = SparkEnv.get.serializer): Iterator[T]
-
-  /** Stop the fetcher */
-  def stop() {}
+/**
+ * Implementation of [[org.apache.spark.api.python.Converter]] that converts a HBase Result
+ * to a String
+ */
+class HBaseConverter extends Converter[Any, String] {
+  override def convert(obj: Any): String = {
+    val result = obj.asInstanceOf[Result]
+    Bytes.toStringBinary(result.value())
+  }
 }

@@ -175,6 +175,8 @@ package object dsl {
 
     def where(condition: Expression) = Filter(condition, logicalPlan)
 
+    def limit(limitExpr: Expression) = Limit(limitExpr, logicalPlan)
+
     def join(
         otherPlan: LogicalPlan,
         joinType: JoinType = Inner,

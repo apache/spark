@@ -181,6 +181,39 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void sortBy() {
+    List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
+    pairs.add(new Tuple2<Integer, Integer>(0, 4));
+    pairs.add(new Tuple2<Integer, Integer>(3, 2));
+    pairs.add(new Tuple2<Integer, Integer>(-1, 1));
+
+    JavaRDD<Tuple2<Integer, Integer>> rdd = sc.parallelize(pairs);
+
+    // compare on first value
+    JavaRDD<Tuple2<Integer, Integer>> sortedRDD = rdd.sortBy(new Function<Tuple2<Integer, Integer>, Integer>() {
+      public Integer call(Tuple2<Integer, Integer> t) throws Exception {
+        return t._1();
+      }
+    }, true, 2);
+
+    Assert.assertEquals(new Tuple2<Integer, Integer>(-1, 1), sortedRDD.first());
+    List<Tuple2<Integer, Integer>> sortedPairs = sortedRDD.collect();
+    Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(1));
+    Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
+
+    // compare on second value
+    sortedRDD = rdd.sortBy(new Function<Tuple2<Integer, Integer>, Integer>() {
+      public Integer call(Tuple2<Integer, Integer> t) throws Exception {
+        return t._2();
+      }
+    }, true, 2);
+    Assert.assertEquals(new Tuple2<Integer, Integer>(-1, 1), sortedRDD.first());
+    sortedPairs = sortedRDD.collect();
+    Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(1));
+    Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(2));
+  }
+
+  @Test
   public void foreach() {
     final Accumulator<Integer> accum = sc.accumulator(0);
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
@@ -315,6 +348,37 @@ public class JavaAPISuite implements Serializable {
 
     sum = rdd.reduce(add);
     Assert.assertEquals(33, sum);
+  }
+
+  @Test
+  public void aggregateByKey() {
+    JavaPairRDD<Integer, Integer> pairs = sc.parallelizePairs(
+      Arrays.asList(
+        new Tuple2<Integer, Integer>(1, 1),
+        new Tuple2<Integer, Integer>(1, 1),
+        new Tuple2<Integer, Integer>(3, 2),
+        new Tuple2<Integer, Integer>(5, 1),
+        new Tuple2<Integer, Integer>(5, 3)), 2);
+
+    Map<Integer, Set<Integer>> sets = pairs.aggregateByKey(new HashSet<Integer>(),
+      new Function2<Set<Integer>, Integer, Set<Integer>>() {
+        @Override
+        public Set<Integer> call(Set<Integer> a, Integer b) {
+          a.add(b);
+          return a;
+        }
+      },
+      new Function2<Set<Integer>, Set<Integer>, Set<Integer>>() {
+        @Override
+        public Set<Integer> call(Set<Integer> a, Set<Integer> b) {
+          a.addAll(b);
+          return a;
+        }
+      }).collectAsMap();
+    Assert.assertEquals(3, sets.size());
+    Assert.assertEquals(new HashSet<Integer>(Arrays.asList(1)), sets.get(1));
+    Assert.assertEquals(new HashSet<Integer>(Arrays.asList(2)), sets.get(3));
+    Assert.assertEquals(new HashSet<Integer>(Arrays.asList(1, 3)), sets.get(5));
   }
 
   @SuppressWarnings("unchecked")

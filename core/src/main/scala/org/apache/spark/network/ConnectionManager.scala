@@ -250,14 +250,14 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     try {
       while(!selectorThread.isInterrupted) {
         while (! registerRequests.isEmpty) {
-          val conn: SendingConnection = registerRequests.dequeue
+          val conn: SendingConnection = registerRequests.dequeue()
           addListeners(conn)
           conn.connect()
           addConnection(conn)
         }
 
         while(!keyInterestChangeRequests.isEmpty) {
-          val (key, ops) = keyInterestChangeRequests.dequeue
+          val (key, ops) = keyInterestChangeRequests.dequeue()
 
           try {
             if (key.isValid) {
@@ -532,9 +532,9 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           }
           return
         }
-        var securityMsgResp = SecurityMessage.fromResponse(replyToken,
+        val securityMsgResp = SecurityMessage.fromResponse(replyToken,
           securityMsg.getConnectionId.toString())
-        var message = securityMsgResp.toBufferMessage
+        val message = securityMsgResp.toBufferMessage
         if (message == null) throw new Exception("Error creating security message")
         sendSecurityMessage(waitingConn.getRemoteConnectionManagerId(), message)
       } catch  {
@@ -568,9 +568,9 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           logDebug("Server sasl not completed: " + connection.connectionId)
         }
         if (replyToken != null) {
-          var securityMsgResp = SecurityMessage.fromResponse(replyToken,
+          val securityMsgResp = SecurityMessage.fromResponse(replyToken,
             securityMsg.getConnectionId)
-          var message = securityMsgResp.toBufferMessage
+          val message = securityMsgResp.toBufferMessage
           if (message == null) throw new Exception("Error creating security Message")
           sendSecurityMessage(connection.getRemoteConnectionManagerId(), message)
         }
@@ -618,7 +618,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
         return true
       }
     }
-    return false
+    false
   }
 
   private def handleMessage(
@@ -694,9 +694,9 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           var firstResponse: Array[Byte] = null
           try {
             firstResponse = conn.sparkSaslClient.firstToken()
-            var securityMsg = SecurityMessage.fromResponse(firstResponse,
+            val securityMsg = SecurityMessage.fromResponse(firstResponse,
               conn.connectionId.toString())
-            var message = securityMsg.toBufferMessage
+            val message = securityMsg.toBufferMessage
             if (message == null) throw new Exception("Error creating security message")
             connectionsAwaitingSasl += ((conn.connectionId, conn))
             sendSecurityMessage(connManagerId, message)

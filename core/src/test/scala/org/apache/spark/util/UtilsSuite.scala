@@ -140,6 +140,38 @@ class UtilsSuite extends FunSuite {
     Utils.deleteRecursively(tmpDir2)
   }
 
+  test("reading offset bytes across multiple files") {
+    val tmpDir = Files.createTempDir()
+    tmpDir.deleteOnExit()
+    val files = (1 to 3).map(i => new File(tmpDir, i.toString))
+    Files.write("0123456789", files(0), Charsets.UTF_8)
+    Files.write("abcdefghij", files(1), Charsets.UTF_8)
+    Files.write("ABCDEFGHIJ", files(2), Charsets.UTF_8)
+
+    // Read first few bytes in the 1st file
+    assert(Utils.offsetBytes(files, 0, 5) === "01234")
+
+    // Read bytes within the 1st file
+    assert(Utils.offsetBytes(files, 5, 8) === "567")
+
+    // Read bytes across 1st and 2nd file
+    assert(Utils.offsetBytes(files, 8, 18) === "89abcdefgh")
+
+    // Read bytes across 1st, 2nd and 3rd file
+    assert(Utils.offsetBytes(files, 5, 24) === "56789abcdefghijABCD")
+
+    // Read some nonexistent bytes in the beginning
+    assert(Utils.offsetBytes(files, -5, 18) === "0123456789abcdefgh")
+
+    // Read some nonexistent bytes at the end
+    assert(Utils.offsetBytes(files, 18, 35) === "ijABCDEFGHIJ")
+
+    // Read some nonexistent bytes on both ends
+    assert(Utils.offsetBytes(files, -5, 35) === "0123456789abcdefghijABCDEFGHIJ")
+
+    Utils.deleteRecursively(tmpDir)
+  }
+
   test("deserialize long value") {
     val testval : Long = 9730889947L
     val bbuf = ByteBuffer.allocate(8)

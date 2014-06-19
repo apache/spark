@@ -210,7 +210,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     var nextMessageToBeUsed = 0
 
     def addMessage(message: Message) {
-      messages.synchronized{
+      messages.synchronized {
         /* messages += message */
         messages.enqueue(message)
         logDebug("Added [" + message + "] to outbox for sending to " +
@@ -223,7 +223,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
         while (!messages.isEmpty) {
           /* nextMessageToBeUsed = nextMessageToBeUsed % messages.size */
           /* val message = messages(nextMessageToBeUsed) */
-          val message = messages.dequeue
+          val message = messages.dequeue()
           val chunk = message.getChunkForSending(defaultChunkSize)
           if (chunk.isDefined) {
             messages.enqueue(message)

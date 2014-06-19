@@ -200,6 +200,7 @@ def get_spark_shark_version(opts):
         sys.exit(1)
     return (version, spark_shark_map[version])
 
+
 # Attempt to resolve an appropriate AMI given the architecture and
 # region of the request.
 def get_spark_ami(opts):
@@ -417,6 +418,16 @@ def launch_cluster(conn, opts, cluster_name):
                                block_device_map=block_map)
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
+
+    # Give the instances descriptive names
+    for master in master_nodes:
+        master.add_tag(
+            key='Name',
+            value='spark-{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+    for slave in slave_nodes:
+        slave.add_tag(
+            key='Name',
+            value='spark-{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
 
     # Return all the instances
     return (master_nodes, slave_nodes)
@@ -678,9 +689,23 @@ def ssh(host, opts, command):
             time.sleep(30)
             tries = tries + 1
 
+# Backported from Python 2.7 for compatiblity with 2.6 (See SPARK-1990)
+def _check_output(*popenargs, **kwargs):
+    if 'stdout' in kwargs:
+        raise ValueError('stdout argument not allowed, it will be overridden.')
+    process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)
+    output, unused_err = process.communicate()
+    retcode = process.poll()
+    if retcode:
+        cmd = kwargs.get("args")
+        if cmd is None:
+            cmd = popenargs[0]
+        raise subprocess.CalledProcessError(retcode, cmd, output=output)
+    return output
+
 
 def ssh_read(host, opts, command):
-    return subprocess.check_output(
+    return _check_output(
         ssh_command(opts) + ['%s@%s' % (opts.user, host), stringify_command(command)])
 
 

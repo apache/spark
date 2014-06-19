@@ -21,7 +21,7 @@ import scala.util.Random
 import scala.collection.JavaConversions._
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.LocalSparkContext
@@ -62,7 +62,7 @@ object GradientDescentSuite {
   }
 }
 
-class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers {
 
   def compareDouble(x: Double, y: Double, tol: Double = 1E-3): Boolean = {
     math.abs(x - y) / (math.abs(y) + 1e-15) < tol

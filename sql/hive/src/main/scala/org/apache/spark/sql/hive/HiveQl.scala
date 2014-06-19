@@ -207,17 +207,30 @@ private[hive] object HiveQl {
   /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {
     try {
-      if (sql.toLowerCase.startsWith("set")) {
-        NativeCommand(sql)
-      } else if (sql.toLowerCase.startsWith("add jar")) {
+      if (sql.trim.toLowerCase.startsWith("set")) {
+        // Split in two parts since we treat the part before the first "="
+        // as key, and the part after as value, which may contain other "=" signs.
+        sql.trim.drop(3).split("=", 2).map(_.trim) match {
+          case Array("") => // "set"
+            SetCommand(None, None)
+          case Array(key) => // "set key"
+            SetCommand(Some(key), None)
+          case Array(key, value) => // "set key=value"
+            SetCommand(Some(key), Some(value))
+        }
+      } else if (sql.trim.toLowerCase.startsWith("cache table")) {
+        CacheCommand(sql.drop(12).trim, true)
+      } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
+        CacheCommand(sql.drop(14).trim, false)
+      } else if (sql.trim.toLowerCase.startsWith("add jar")) {
         AddJar(sql.drop(8))
-      } else if (sql.toLowerCase.startsWith("add file")) {
+      } else if (sql.trim.toLowerCase.startsWith("add file")) {
         AddFile(sql.drop(9))
-      } else if (sql.startsWith("dfs")) {
+      } else if (sql.trim.startsWith("dfs")) {
         DfsCommand(sql)
-      } else if (sql.startsWith("source")) {
+      } else if (sql.trim.startsWith("source")) {
         SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
-      } else if (sql.startsWith("!")) {
+      } else if (sql.trim.startsWith("!")) {
         ShellCommand(sql.drop(1))
       } else {
         val tree = getAst(sql)
@@ -798,6 +811,8 @@ private[hive] object HiveQl {
   val IN = "(?i)IN".r
   val DIV = "(?i)DIV".r
   val BETWEEN = "(?i)BETWEEN".r
+  val WHEN = "(?i)WHEN".r
+  val CASE = "(?i)CASE".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -830,11 +845,11 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(MAX(), Nil) :: arg :: Nil) => Max(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(MIN(), Nil) :: arg :: Nil) => Min(nodeToExpr(arg))
-    
+
     /* System functions about string operations */
     case Token("TOK_FUNCTION", Token(UPPER(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(LOWER(), Nil) :: arg :: Nil) => Lower(nodeToExpr(arg))
-    
+
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), StringType)
@@ -903,6 +918,21 @@ private[hive] object HiveQl {
     case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
     case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
     case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
+
+    /* Case statements */
+    case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>
+      CaseWhen(branches.map(nodeToExpr))
+    case Token("TOK_FUNCTION", Token(CASE(), Nil) :: branches) =>
+      val transformed = branches.drop(1).sliding(2, 2).map {
+        case Seq(condVal, value) =>
+          // FIXME (SPARK-2155): the key will get evaluated for multiple times in CaseWhen's eval().
+          // Hence effectful / non-deterministic key expressions are *not* supported at the moment.
+          // We should consider adding new Expressions to get around this.
+          Seq(Equals(nodeToExpr(branches(0)), nodeToExpr(condVal)),
+              nodeToExpr(value))
+        case Seq(elseVal) => Seq(nodeToExpr(elseVal))
+      }.toSeq.reduce(_ ++ _)
+      CaseWhen(transformed)
 
     /* Complex datatype manipulation */
     case Token("[", child :: ordinal :: Nil) =>

@@ -59,6 +59,10 @@ object SparkBuild extends Build {
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
+  /** Following project only exists to pull previous artifacts of Spark for generating
+    Mima ignores. For more information see: SPARK 2071 */
+  lazy val oldDeps = Project("oldDeps", file("dev"), settings = oldDepsSettings)
+
   def replDependencies = Seq[ProjectReference](core, graphx, bagel, mllib, sql) ++ maybeHiveRef
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
@@ -72,7 +76,7 @@ object SparkBuild extends Build {
 
   lazy val catalyst = Project("catalyst", file("sql/catalyst"), settings = catalystSettings) dependsOn(core)
 
-  lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core, catalyst)
+  lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core) dependsOn(catalyst % "compile->compile;test->test")
 
   lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql)
 
@@ -86,7 +90,16 @@ object SparkBuild extends Build {
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
     .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeHive: _*) dependsOn(maybeGanglia: _*)
 
-  lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
+  lazy val assembleDepsTask = TaskKey[Unit]("assemble-deps")
+  lazy val assembleDeps = assembleDepsTask := {
+    println()
+    println("**** NOTE ****")
+    println("'sbt/sbt assemble-deps' is no longer supported.")
+    println("Instead create a normal assembly and:")
+    println("  export SPARK_PREPEND_CLASSES=1 (toggle on)")
+    println("  unset SPARK_PREPEND_CLASSES (toggle off)")
+    println()
+  }
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -336,6 +349,7 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
         "com.google.guava"           % "guava"            % "14.0.1",
         "org.apache.commons"         % "commons-lang3"    % "3.3.2",
+        "org.apache.commons"         % "commons-math3"    % "3.3" % "test",
         "com.google.code.findbugs"   % "jsr305"           % "1.3.9",
         "log4j"                      % "log4j"            % "1.2.17",
         "org.slf4j"                  % "slf4j-api"        % slf4jVersion,
@@ -369,6 +383,7 @@ object SparkBuild extends Build {
         "net.sf.py4j"                % "py4j"             % "0.8.1"
       ),
     libraryDependencies ++= maybeAvro,
+    assembleDeps,
     previousArtifact := sparkPreviousArtifact("spark-core")
   )
 
@@ -486,9 +501,23 @@ object SparkBuild extends Build {
   def sqlCoreSettings = sharedSettings ++ Seq(
     name := "spark-sql",
     libraryDependencies ++= Seq(
-      "com.twitter" % "parquet-column" % parquetVersion,
-      "com.twitter" % "parquet-hadoop" % parquetVersion
-    )
+      "com.twitter"                  % "parquet-column"             % parquetVersion,
+      "com.twitter"                  % "parquet-hadoop"             % parquetVersion,
+      "com.fasterxml.jackson.core"   % "jackson-databind"           % "2.3.0" // json4s-jackson 3.2.6 requires jackson-databind 2.3.0.
+    ),
+    initialCommands in console :=
+      """
+        |import org.apache.spark.sql.catalyst.analysis._
+        |import org.apache.spark.sql.catalyst.dsl._
+        |import org.apache.spark.sql.catalyst.errors._
+        |import org.apache.spark.sql.catalyst.expressions._
+        |import org.apache.spark.sql.catalyst.plans.logical._
+        |import org.apache.spark.sql.catalyst.rules._
+        |import org.apache.spark.sql.catalyst.types._
+        |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.execution
+        |import org.apache.spark.sql.test.TestSQLContext._
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
   )
 
   // Since we don't include hive in the main assembly this project also acts as an alternative
@@ -580,9 +609,7 @@ object SparkBuild extends Build {
 
   def assemblyProjSettings = sharedSettings ++ Seq(
     name := "spark-assembly",
-    assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
-    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
-    jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" }
+    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" }
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(
@@ -596,6 +623,17 @@ object SparkBuild extends Build {
       case "reference.conf"                                    => MergeStrategy.concat
       case _                                                   => MergeStrategy.first
     }
+  )
+
+  def oldDepsSettings() = Defaults.defaultSettings ++ Seq(
+    name := "old-deps",
+    scalaVersion := "2.10.4",
+    retrieveManaged := true,
+    retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
+    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq", 
+      "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
+      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx", 
+      "spark-core").map(sparkPreviousArtifact(_).get intransitive())
   )
 
   def twitterSettings() = sharedSettings ++ Seq(

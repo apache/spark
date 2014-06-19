@@ -22,13 +22,13 @@ import java.util.concurrent.Semaphore
 import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.{LocalSparkContext, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.executor.TaskMetrics
 
-class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
+class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
   with BeforeAndAfter with BeforeAndAfterAll {
 
   /** Length of time to wait while draining listener events. */

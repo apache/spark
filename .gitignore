@@ -7,7 +7,7 @@
 sbt/*.jar
 .settings
 .cache
-.generated-mima-excludes
+.generated-mima*
 /build/
 work/
 out/
