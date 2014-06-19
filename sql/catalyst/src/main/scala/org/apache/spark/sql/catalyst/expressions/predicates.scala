@@ -236,7 +236,7 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
 
   override def nullable = {
     // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
-    values.exists(_.nullable) || (values.length % 2 == 0)
+    values.exists(_.nullable) || (branches.length % 2 == 0)
   }
 
   override lazy val resolved = {
