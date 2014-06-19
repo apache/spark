@@ -132,7 +132,8 @@ case class Aggregate(
   extends UnaryNode {
 
   override def output = aggregateExpressions.map(_.toAttribute)
-  override def references = (groupingExpressions ++ aggregateExpressions).flatMap(_.references).toSet
+  override def references =
+    (groupingExpressions ++ aggregateExpressions).flatMap(_.references).toSet
 }
 
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
