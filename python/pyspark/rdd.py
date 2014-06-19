@@ -1327,11 +1327,13 @@ class RDD(object):
         """
         Alias for cogroup but with support for multiple RDDs.
 
+        >>> w = sc.parallelize([("a", 5), ("b", 6)])
         >>> x = sc.parallelize([("a", 1), ("b", 4)])
         >>> y = sc.parallelize([("a", 2)])
         >>> z = sc.parallelize([("b", 42)])
-        >>> map((lambda (x,y): (x, (list(y[0]), list(y[1]), list(y[2])))), sorted(list(x.groupWith(y, z).collect())))
-        [('a', ([1], [2], [])), ('b', ([4], [], [42]))]
+        >>> map((lambda (x,y): (x, (list(y[0]), list(y[1]), list(y[2]), list(y[3])))), \
+                sorted(list(w.groupWith(x, y, z).collect())))
+        [('a', ([5], [1], [2], [])), ('b', ([6], [4], [], [42]))]
 
         """
         return python_cogroup((self, other) + others, numPartitions=None)
