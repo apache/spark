@@ -257,7 +257,6 @@ class JsonProtocolSuite extends FunSuite {
     assert(info1.numTasks === info2.numTasks)
     assert(info1.submissionTime === info2.submissionTime)
     assert(info1.completionTime === info2.completionTime)
-    assert(info1.emittedTaskSizeWarning === info2.emittedTaskSizeWarning)
     assert(info1.rddInfos.size === info2.rddInfos.size)
     (0 until info1.rddInfos.size).foreach { i =>
       assertEquals(info1.rddInfos(i), info2.rddInfos(i))
@@ -294,7 +293,6 @@ class JsonProtocolSuite extends FunSuite {
     assert(info1.gettingResultTime === info2.gettingResultTime)
     assert(info1.finishTime === info2.finishTime)
     assert(info1.failed === info2.failed)
-    assert(info1.serializedSize === info2.serializedSize)
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
