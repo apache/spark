@@ -99,7 +99,10 @@ private[spark] class Executor(
 
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
-  private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
+  // TODO: [SPARK-1112] We use the min frame size to determine whether to use Akka to send the
+  // TODO: task result or block manager. Since this is via the backend, whose actor system is
+  // TODO: initialized before receiving the Spark conf, the safe bet is using the min frame size.
+  private val akkaFrameSize = AkkaUtils.minFrameSizeBytes
 
   // Start worker thread pool
   val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
