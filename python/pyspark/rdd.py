@@ -1323,7 +1323,6 @@ class RDD(object):
         map_values_fn = lambda (k, v): (k, f(v))
         return self.map(map_values_fn, preservesPartitioning=True)
 
-    # TODO: support varargs cogroup of several RDDs.
     def groupWith(self, other, *others):
         """
         Alias for cogroup.
