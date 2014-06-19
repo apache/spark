@@ -37,6 +37,7 @@ import breeze.linalg.CSCMatrix
 import breeze.linalg.norm
 import breeze.linalg.DenseVector
 import com.verizon.cvxoptimizer.ecos.QpSolver
+import com.verizon.cvxoptimizer.admm.DirectQpSolver
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
@@ -537,32 +538,26 @@ class ALS private (
 
       var qpTime: Long = 0
       var lsTime: Long = 0
-
+      var directQpTime: Long = 0
+      
       val ws = if (nonnegative) NNLS.createWorkspace(rank)
       else null
 
       if (nonnegative) qpProblem = 2
-
+      
       val qpSolver = qpProblem match {
-        case 1 => {
-          println("Unbounded QP")
-          new QpSolver(rank)
-        }
-        case 2 => {
-          println("QP with positivity x >= 0")
-          new QpSolver(rank, 0, false, None, None, true)
-        }
+        case 1 => new QpSolver(rank)
+        case 2 => new QpSolver(rank, 0, false, None, None, true)
         case 3 => {
-          println("Qp with lower and upper bounds 0 <= x <= 1")
           val qpSolver = new QpSolver(rank, 0, false, None, None, true, true)
           qpSolver.updateUb(Array.fill[Double](rank)(1.0))
           qpSolver
         }
         case 4 => {
           //Qp with linear equality
-          println("Qp with smoothness constraint and bounds")
-          println("lower and upper bounds 0 <= x <= 1")
-          println("smoothness x1 + x2 + ... + xr = 1")
+          //Qp with smoothness constraint and bounds
+          //"lower and upper bounds 0 <= x <= 1")
+          //"smoothness x1 + x2 + ... + xr = 1")
           val equalityBuilder = new CSCMatrix.Builder[Double](1, rank)
           for (i <- 0 until rank) equalityBuilder.add(0, i, 1)
           val qpSolver = new QpSolver(rank, 0, false, Some(equalityBuilder.result), None, true, true)
@@ -575,7 +570,7 @@ class ALS private (
           //-x -u <= 0, x - u <= 0
           //Each variable transforms to 2 inequalities
           //In objective function we add regularization parameter alpha*(u1 + u2 + ... + ur)          
-          println("Qp with L1 constraint")
+          //Qp with L1 constraint
           val inequalityBuilder = new CSCMatrix.Builder[Double](2 * rank, 2 * rank)
           for (i <- 0 until rank) {
             inequalityBuilder.add(2 * i, i, -1)
@@ -587,7 +582,30 @@ class ALS private (
           qpSolver
         }
       }
-
+      
+      val directQpSolver = qpProblem match {
+        case 1 => new DirectQpSolver(rank)
+        case 2 => new DirectQpSolver(rank).setProximal(2)
+        case 3 => {
+          //Direct QP with bounds
+          val lb = DoubleMatrix.zeros(rank, 1)
+          val ub = DoubleMatrix.zeros(rank, 1).addi(1.0)
+          new DirectQpSolver(rank,Some(lb), Some(ub)).setProximal(1)
+        }
+        case 4 => {
+          //Direct QP with equality/inequality not tested yet
+          val c = Array.fill[Double](rank)(1.0)
+          new DirectQpSolver(rank, None, None, Some(c)).setProximal(4)
+        }
+        case 5 => {
+          //Direct QP with L1
+          val proximal = 5
+          val qpSolverL1 = new DirectQpSolver(rank).setProximal(5)
+          qpSolverL1.setLambda(1.0)
+          qpSolverL1
+        }
+      }
+      
       // Solve the least-squares problem for each user and return the new feature vectors
       val factors = Array.range(0, numUsers).map { index =>
         // Compute the full XtX matrix from the lower-triangular part we got above
@@ -602,42 +620,67 @@ class ALS private (
         // Solve the resulting matrix, which is symmetric and positive-definite
         val result = if (implicitPrefs) {
           val H = fullXtX.add(YtY.get.value)
-          val f = if (qpProblem == 5) {
-            userXy(index).mul(-1).data ++ Array.fill[Double](rank)(alpha)
-          } else {
-            userXy(index).mul(-1).data
-          }
-
-          val qpStart = System.currentTimeMillis()
-          val qpResult = qpSolver.run(H, f)._2
-          qpTime = qpTime + (System.currentTimeMillis() - qpStart)
-
-          val lsStart = System.currentTimeMillis()
+          val f = userXy(index).mul(-1)
+          
+          val qpStart = System.nanoTime()
+          val qpResult = qpSolver.solve(H, f.data)._2
+          qpTime = qpTime + (System.nanoTime() - qpStart)
+          
+          val directQpStart = System.nanoTime()
+          val directQpResult = directQpSolver.solve(H, f)
+          directQpTime = directQpTime + (System.nanoTime() - directQpStart)
+          
+          val lsStart = System.nanoTime()
           val result = solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws)
-          lsTime = lsTime + (System.currentTimeMillis() - lsStart)
-          assert(norm(DenseVector(qpResult) - DenseVector(result), 2) < 1E-2)
-          qpResult
+          lsTime = lsTime + (System.nanoTime() - lsStart)
+          if(norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2 ||
+              norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) {
+            println("H")
+            println(H)
+            println("f")
+            println(f)
+            println("qpResult " + DenseVector(qpResult))
+            println("directQpResult " + DenseVector(directQpResult))
+            println("lsResult " + DenseVector(result))
+          }
+          directQpResult.data
         } else {
           val H = fullXtX
-          val f = if (qpProblem == 5) {
-            userXy(index).mul(-1).data ++ Array.fill[Double](rank)(alpha)
+          val f = userXy(index).mul(-1)
+          
+          val falpha = if (qpProblem == 5) {
+            f.data ++ Array.fill[Double](rank)(alpha)
           } else {
-            userXy(index).mul(-1).data
+            f.data
           }
-          val qpStart = System.currentTimeMillis()
-          val qpResult = qpSolver.run(H, f)._2
-          qpTime = qpTime + (System.currentTimeMillis() - qpStart)
-
-          val lsStart = System.currentTimeMillis()
+          
+          val directQpStart = System.nanoTime()
+          val directQpResult = directQpSolver.solve(H, f)
+          directQpTime = directQpTime + (System.nanoTime() - directQpStart)
+          
+          val qpStart = System.nanoTime()
+          val qpResult = qpSolver.solve(H, falpha)._2
+          qpTime = qpTime + (System.nanoTime() - qpStart)
+          
+          val lsStart = System.nanoTime()
           val result = solveLeastSquares(fullXtX, userXy(index), ws)
-          lsTime = lsTime + (System.currentTimeMillis() - lsStart)
-
-          assert(norm(DenseVector(qpResult) - DenseVector(result), 2) < 1E-2)
-          qpResult
+          lsTime = lsTime + (System.nanoTime() - lsStart)
+          
+          if(norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2 ||
+              norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) {
+            println("H")
+            println(H)
+            println("f")
+            println(f)
+            println("qpResult " + DenseVector(qpResult))
+            println("directQpResult " + DenseVector(directQpResult))
+            println("lsResult " + DenseVector(result))
+          }
+          directQpResult.data
         }
         result
       }
-      println("Qp " + qpTime + " Ls " + lsTime)
+      println("Qp " + qpTime + " directQp " + directQpTime + " Ls " + lsTime)
       factors
     }
 
