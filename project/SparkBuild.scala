@@ -505,7 +505,7 @@ object SparkBuild extends Build {
       "com.twitter"                  % "parquet-hadoop"             % parquetVersion,
       "com.twitter"                  % "parquet-avro"               % parquetVersion      % "test",
       // here we need version >= 1.7.5 because of AVRO-1274
-      "org.apache.avro"              % "avro"                       % "1.7.6"             % "test"
+      "org.apache.avro"              % "avro"                       % "1.7.6"             % "test",
       "com.fasterxml.jackson.core"   % "jackson-databind"           % "2.3.0" // json4s-jackson 3.2.6 requires jackson-databind 2.3.0.
     ),
     initialCommands in console :=
