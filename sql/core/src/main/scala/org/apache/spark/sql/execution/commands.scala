@@ -86,9 +86,8 @@ case class ExplainCommand(
   extends LeafNode with Command {
 
   // Run through the optimizer to generate the physical plan.
-  // This is really side effect free but we follow the infrastructure anyway...
   override protected[sql] lazy val sideEffectResult: Seq[String] = {
-    context.executePlan(logicalPlan).executedPlan.toString.split("\n")
+    "Physical execution plan:" +: context.executePlan(logicalPlan).executedPlan.toString.split("\n")
   }
 
   def execute(): RDD[Row] = {
