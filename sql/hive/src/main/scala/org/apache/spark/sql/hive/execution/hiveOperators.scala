@@ -344,12 +344,16 @@ case class InsertIntoHiveTable(
     writer.commitJob()
   }
 
+  override def execute() = result
+
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
    * `org.apache.hadoop.hive.serde2.SerDe` and the
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
+   *
+   * Note: this is run once and then kept to avoid double insertions.
    */
-  def execute() = {
+  private lazy val result: RDD[Row] = {
     val childRdd = child.execute()
     assert(childRdd != null)
 
