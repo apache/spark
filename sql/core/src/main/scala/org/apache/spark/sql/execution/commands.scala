@@ -130,8 +130,10 @@ case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
     @transient context: SQLContext)
   extends LeafNode with Command {
 
-  override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] =
-    child.output.map(field => (field.name, field.dataType.toString, None.toString))
+  override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] = {
+    Seq(("# Registered as a temporary table", null, null)) ++
+      child.output.map(field => (field.name, field.dataType.toString, null))
+  }
 
   override def execute(): RDD[Row] = {
     val rows = sideEffectResult.map {

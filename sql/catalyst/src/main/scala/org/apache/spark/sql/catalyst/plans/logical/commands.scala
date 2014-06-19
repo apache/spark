@@ -62,7 +62,16 @@ case class ExplainCommand(plan: LogicalPlan) extends Command {
 case class CacheCommand(tableName: String, doCache: Boolean) extends Command
 
 /**
- * Returned for the "Describe tableName" command.
+ * Returned for the "DESCRIBE tableName" command.
+ */
+
+/**
+ * Returned for the "DESCRIBE tableName" command.
+ * @param table The table to be described.
+ * @param isFormatted True if "DESCRIBE FORMATTED" is used. Otherwise, false.
+ *                    It is effective only when the table is a Hive table.
+ * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
+ *                   It is effective only when the table is a Hive table.
  */
 case class DescribeCommand(
     table: LogicalPlan,

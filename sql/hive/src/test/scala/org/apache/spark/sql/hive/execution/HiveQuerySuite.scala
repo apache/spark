@@ -21,7 +21,9 @@ import scala.util.Try
 
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{SchemaRDD, execution, Row}
+import org.apache.spark.sql.{SchemaRDD, Row}
+
+case class TestData(a: Int, b: String)
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -250,11 +252,11 @@ class HiveQuerySuite extends HiveComparisonTest {
     assert(Try(q0.count()).isSuccess)
   }
 
-  test("Describe commands") {
-    hql(s"CREATE TABLE test_describe_commands (key INT, value STRING) PARTITIONED BY (dt STRING)")
+  test("DESCRIBE commands") {
+    hql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
 
     hql(
-      """FROM src INSERT OVERWRITE TABLE test_describe_commands PARTITION (dt='2008-06-08')
+      """FROM src INSERT OVERWRITE TABLE test_describe_commands1 PARTITION (dt='2008-06-08')
         |SELECT key, value
       """.stripMargin)
 
@@ -267,7 +269,7 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("# Partition Information", null, null),
         Array("dt", "string", null))
     ) {
-      hql("DESCRIBE test_describe_commands")
+      hql("DESCRIBE test_describe_commands1")
         .select('name, 'type, 'comment)
         .collect()
     }
@@ -275,12 +277,12 @@ class HiveQuerySuite extends HiveComparisonTest {
     // Describe a table with keyword FORMATTED
     // We only
     assertResult(6) {
-      hql("DESCRIBE FORMATTED test_describe_commands").count()
+      hql("DESCRIBE FORMATTED test_describe_commands1").count()
     }
 
     // Describe a table
     assertResult(6) {
-      hql("DESCRIBE EXTENDED test_describe_commands").count()
+      hql("DESCRIBE EXTENDED test_describe_commands1").count()
     }
 
     // Describe a table with a fully qualified table name
@@ -292,14 +294,14 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("# Partition Information", null, null),
         Array("dt", "string", null))
     ) {
-      hql("DESCRIBE default.test_describe_commands")
+      hql("DESCRIBE default.test_describe_commands1")
         .select('name, 'type, 'comment)
         .collect()
     }
 
     // Describe a column is a native command
     assertResult(Array(Array("value", "string", "from deserializer"))) {
-      hql("DESCRIBE test_describe_commands value")
+      hql("DESCRIBE test_describe_commands1 value")
         .select('result)
         .collect()
         .map(_.getString(0).split("\t").map(_.trim))
@@ -307,7 +309,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     // Describe a column is a native command
     assertResult(Array(Array("value", "string", "from deserializer"))) {
-      hql("DESCRIBE default.test_describe_commands value")
+      hql("DESCRIBE default.test_describe_commands1 value")
         .select('result)
         .collect()
         .map(_.getString(0).split("\t").map(_.trim))
@@ -325,10 +327,28 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array("", "", ""),
         Array("dt", "string", "None"))
     ) {
-      hql("DESCRIBE test_describe_commands PARTITION (dt='2008-06-08')")
+      hql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
         .select('result)
         .collect()
         .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a registered temporary table.
+    val testData: SchemaRDD =
+      TestHive.sparkContext.parallelize(
+        TestData(1, "str1") ::
+        TestData(1, "str2") :: Nil)
+    testData.registerAsTable("test_describe_commands2")
+
+    assertResult(
+      Array(
+        Array("# Registered as a temporary table", null, null),
+        Array("a", "IntegerType", null),
+        Array("b", "StringType", null))
+    ) {
+      hql("DESCRIBE test_describe_commands2")
+        .select('name, 'type, 'comment)
+        .collect()
     }
   }
 

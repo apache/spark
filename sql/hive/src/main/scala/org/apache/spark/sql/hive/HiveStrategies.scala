@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -88,10 +88,6 @@ private[hive] trait HiveStrategies {
             Seq(DescribeHiveTableCommand(
               t, describe.output, describe.isFormatted, describe.isExtended)(context))
           case o: LogicalPlan =>
-            if (describe.isFormatted)
-              logger.info("Formatted is ignored because it is not defined for non-Hive tables.")
-            if (describe.isExtended)
-              logger.info("Extended is ignored because it is not defined for non-Hive tables.")
             Seq(DescribeCommand(planLater(o), describe.output)(context))
         }
       }

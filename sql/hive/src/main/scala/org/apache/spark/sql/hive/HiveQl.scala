@@ -369,7 +369,7 @@ private[hive] object HiveQl {
 
   protected def extractDbNameTableName(tableNameParts: Node): (Option[String], String) = {
     val (db, tableName) =
-      tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
+      tableNameParts.getChildren.map { case Token(part, Nil) => cleanIdentifier(part) } match {
         case Seq(tableOnly) => (None, tableOnly)
         case Seq(databaseName, table) => (Some(databaseName), table)
       }
@@ -379,7 +379,8 @@ private[hive] object HiveQl {
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     // Just fake explain for any of the native commands.
-    case Token("TOK_EXPLAIN", explainArgs) if noExplainCommands contains explainArgs.head.getText =>
+    case Token("TOK_EXPLAIN", explainArgs)
+      if noExplainCommands.contains(explainArgs.head.getText) =>
       ExplainCommand(NoRelation)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
