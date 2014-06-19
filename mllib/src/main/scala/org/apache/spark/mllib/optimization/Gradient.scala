@@ -84,9 +84,9 @@ abstract class Gradient extends Serializable {
     val dotProduct = if (weightTruncation == 0.0) {
       brzWeights.dot(brzData)
     } else {
-      brzData.activeKeysIterator.aggregate(0.0) (
-        seqop = { case (agg, index: Int) =>
-          val value = brzData(index)
+      brzData.activeIterator.aggregate(0.0) (
+        seqop = { case (agg, indexValue: (Int, Double)) =>
+          val (index, value) = indexValue
           val wi = weights(index)
           agg + value * signum(wi) * max(0.0, abs(wi) - weightTruncation) },
         combop = {_ + _ }

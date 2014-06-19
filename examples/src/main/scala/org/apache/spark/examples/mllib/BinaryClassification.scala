@@ -94,7 +94,13 @@ object BinaryClassification {
         .text("add interept 1.0 to input data")
         .action((_, c) => c.copy(addIntercept = true))
       opt[Double]("miniBatchFraction")
-        .text("sample fraction per gradient descent step")
+        .text(
+          """
+            |        sample fraction per gradient descent step
+            |          1.0 is batch
+            |          0.0 is stochastic
+            |          (0.0 to 1.0) is minibatch
+          """.stripMargin)
         .action((x, c) => c.copy(miniBatchFraction = x))
       arg[String]("<input>")
         .required()
