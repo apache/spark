@@ -37,6 +37,9 @@ private[spark] object SamplingUtils {
    *     ~ Binomial(total, fraction) and our choice of q guarantees 1-delta, or 0.9999 success
    *     rate, where success rate is defined the same as in sampling with replacement.
    *
+   * The smallest sampling rate supported is 1e-10 (in order to avoid running into the limit of the
+   * RNG's resolution).
+   *
    * @param sampleSizeLowerBound sample size
    * @param total size of RDD
    * @param withReplacement whether sampling with replacement
@@ -47,11 +50,11 @@ private[spark] object SamplingUtils {
     val fraction = sampleSizeLowerBound.toDouble / total
     if (withReplacement) {
       val numStDev = if (sampleSizeLowerBound < 12) 9 else 5
-      fraction + numStDev * math.sqrt(fraction / total)
+      math.max(1e-10, fraction + numStDev * math.sqrt(fraction / total))
     } else {
       val delta = 1e-4
       val gamma = - math.log(delta) / total
-      math.min(1, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction))
+      math.min(1, math.max(1e-10, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction)))
     }
   }
 }
