@@ -60,3 +60,16 @@ case class ExplainCommand(plan: LogicalPlan) extends Command {
  * Returned for the "CACHE TABLE tableName" and "UNCACHE TABLE tableName" command.
  */
 case class CacheCommand(tableName: String, doCache: Boolean) extends Command
+
+/**
+ * Returned for the "Describe tableName" command. [Extended|Formatted|Pretty] is not handled.
+ */
+case class DescribeCommand(
+    table: LogicalPlan,
+    isFormatted: Boolean,
+    isExtended: Boolean) extends Command {
+  override def output = Seq(
+    BoundReference(0, AttributeReference("name", StringType, nullable = false)()),
+    BoundReference(1, AttributeReference("type", StringType, nullable = false)()),
+    BoundReference(2, AttributeReference("comment", StringType, nullable = false)()))
+}

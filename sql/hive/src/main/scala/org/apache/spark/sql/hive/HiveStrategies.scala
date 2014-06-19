@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SQLContext}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -81,6 +81,20 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.NativeCommand(sql) =>
         NativeCommand(sql, plan.output)(context) :: Nil
+      case describe: logical.DescribeCommand => {
+        val resolvedTable = context.executePlan(describe.table).analyzed
+        resolvedTable match {
+          case t: MetastoreRelation =>
+            Seq(DescribeHiveTableCommand(
+              t, describe.output, describe.isFormatted, describe.isExtended)(context))
+          case o: LogicalPlan =>
+            if (describe.isFormatted)
+              logger.info("Formatted is ignored because it is not defined for non-Hive tables.")
+            if (describe.isExtended)
+              logger.info("Extended is ignored because it is not defined for non-Hive tables.")
+            Seq(DescribeCommand(planLater(o), describe.output)(context))
+        }
+      }
       case _ => Nil
     }
   }

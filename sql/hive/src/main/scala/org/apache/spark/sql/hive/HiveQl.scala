@@ -52,7 +52,6 @@ private[hive] case class AddFile(filePath: String) extends Command
 private[hive] object HiveQl {
   protected val nativeCommands = Seq(
     "TOK_DESCFUNCTION",
-    "TOK_DESCTABLE",
     "TOK_DESCDATABASE",
     "TOK_SHOW_TABLESTATUS",
     "TOK_SHOWDATABASES",
@@ -119,6 +118,12 @@ private[hive] object HiveQl {
 
     "TOK_SWITCHDATABASE"
   )
+
+  // Commands that we do not need to explain.
+  protected val noExplainCommands = Seq(
+    "TOK_CREATETABLE",
+    "TOK_DESCTABLE"
+  ) ++ nativeCommands
 
   /**
    * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations
@@ -362,13 +367,19 @@ private[hive] object HiveQl {
     }
   }
 
+  protected def extractDbNameTableName(tableNameParts: Node): (Option[String], String) = {
+    val (db, tableName) =
+      tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
+        case Seq(tableOnly) => (None, tableOnly)
+        case Seq(databaseName, table) => (Some(databaseName), table)
+      }
+
+    (db, tableName)
+  }
+
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     // Just fake explain for any of the native commands.
-    case Token("TOK_EXPLAIN", explainArgs) if nativeCommands contains explainArgs.head.getText =>
-      ExplainCommand(NoRelation)
-    // Create tables aren't native commands due to CTAS queries, but we still don't need to
-    // explain them.
-    case Token("TOK_EXPLAIN", explainArgs) if explainArgs.head.getText == "TOK_CREATETABLE" =>
+    case Token("TOK_EXPLAIN", explainArgs) if noExplainCommands contains explainArgs.head.getText =>
       ExplainCommand(NoRelation)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
@@ -376,6 +387,34 @@ private[hive] object HiveQl {
         getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
       // TODO: support EXTENDED?
       ExplainCommand(nodeToPlan(query))
+
+    case Token("TOK_DESCTABLE", describeArgs) =>
+      // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
+      val Some(tableType) :: formatted :: extended :: _ :: Nil =
+        getClauses(Seq("TOK_TABTYPE", "FORMATTED", "EXTENDED", "PRETTY"), describeArgs)
+      // TODO: support PRETTY?
+      tableType match {
+        case Token("TOK_TABTYPE", nameParts) if nameParts.size == 1 => {
+          nameParts.head match {
+            case Token(".", dbName :: tableName :: Nil) =>
+              // It is describing a table with the format like "describe db.table".
+              val (db, tableName) = extractDbNameTableName(nameParts.head)
+              DescribeCommand(
+                UnresolvedRelation(db, tableName, None), formatted.isDefined, extended.isDefined)
+            case Token(".", dbName :: tableName :: colName :: Nil) =>
+              // It is describing a column with the format like "describe db.table column".
+              NativePlaceholder
+            case tableName =>
+              // It is describing a table with the format like "describe table".
+              DescribeCommand(
+                UnresolvedRelation(None, tableName.getText, None),
+                formatted.isDefined,
+                extended.isDefined)
+          }
+        }
+        // All other cases.
+        case _ => NativePlaceholder
+      }
 
     case Token("TOK_CREATETABLE", children)
         if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
@@ -414,11 +453,8 @@ private[hive] object HiveQl {
           s"Unhandled clauses: ${notImplemented.flatten.map(dumpTree(_)).mkString("\n")}")
       }
 
-      val (db, tableName) =
-        tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
-          case Seq(tableOnly) => (None, tableOnly)
-          case Seq(databaseName, table) => (Some(databaseName), table)
-        }
+      val (db, tableName) = extractDbNameTableName(tableNameParts)
+
       InsertIntoCreatedTable(db, tableName, nodeToPlan(query))
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
@@ -736,11 +772,7 @@ private[hive] object HiveQl {
       val Some(tableNameParts) :: partitionClause :: Nil =
         getClauses(Seq("TOK_TABNAME", "TOK_PARTSPEC"), tableArgs)
 
-      val (db, tableName) =
-        tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
-          case Seq(tableOnly) => (None, tableOnly)
-          case Seq(databaseName, table) => (Some(databaseName), table)
-        }
+      val (db, tableName) = extractDbNameTableName(tableNameParts)
 
       val partitionKeys = partitionClause.map(_.getChildren.map {
         // Parse partitions. We also make keys case insensitive.

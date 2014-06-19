@@ -237,13 +237,6 @@ class HiveQuerySuite extends HiveComparisonTest {
         .map(_.getString(0))
         .contains(tableName))
 
-    assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
-      hql(s"DESCRIBE $tableName")
-        .select('result)
-        .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
-    }
-
     assert(isExplanation(hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
 
     TestHive.reset()
@@ -258,6 +251,88 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     // If the CREATE TABLE command got executed again, the following assertion would fail
     assert(Try(q0.count()).isSuccess)
+  }
+
+  test("Describe commands") {
+    hql(s"CREATE TABLE test_describe_commands (key INT, value STRING) PARTITIONED BY (dt STRING)")
+
+    hql(
+      """FROM src INSERT OVERWRITE TABLE test_describe_commands PARTITION (dt='2008-06-08')
+        |SELECT key, value
+      """.stripMargin)
+
+    // Describe a table
+    assertResult(
+      Array(
+        Array("key", "int", null),
+        Array("value", "string", null),
+        Array("dt", "string", null),
+        Array("# Partition Information", null, null),
+        Array("dt", "string", null))
+    ) {
+      hql("DESCRIBE test_describe_commands")
+        .select('name, 'type, 'comment)
+        .collect()
+    }
+
+    // Describe a table with keyword FORMATTED
+    // We only
+    assertResult(6) {
+      hql("DESCRIBE FORMATTED test_describe_commands").count()
+    }
+
+    // Describe a table
+    assertResult(6) {
+      hql("DESCRIBE EXTENDED test_describe_commands").count()
+    }
+
+    // Describe a table with a fully qualified table name
+    assertResult(
+      Array(
+        Array("key", "int", null),
+        Array("value", "string", null),
+        Array("dt", "string", null),
+        Array("# Partition Information", null, null),
+        Array("dt", "string", null))
+    ) {
+      hql("DESCRIBE default.test_describe_commands")
+        .select('name, 'type, 'comment)
+        .collect()
+    }
+
+    // Describe a column is a native command
+    assertResult(Array(Array("value", "string", "from deserializer"))) {
+      hql("DESCRIBE test_describe_commands value")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a column is a native command
+    assertResult(Array(Array("value", "string", "from deserializer"))) {
+      hql("DESCRIBE default.test_describe_commands value")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a partition is a native command
+    assertResult(
+      Array(
+        Array("key", "int", "None"),
+        Array("value", "string", "None"),
+        Array("dt", "string", "None"),
+        Array("", "", ""),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
+        Array("", "", ""),
+        Array("dt", "string", "None"))
+    ) {
+      hql("DESCRIBE test_describe_commands PARTITION (dt='2008-06-08')")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
   }
 
   test("parse HQL set commands") {

@@ -19,8 +19,10 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.Context
+import org.apache.hadoop.hive.ql.metadata.formatting.MetaDataFormatUtils
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Hive}
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
 import org.apache.hadoop.hive.serde.serdeConstants
@@ -445,21 +447,54 @@ case class NativeCommand(
     if (sideEffectResult.size == 0) {
       context.emptyResult
     } else {
-      // TODO: Need a better way to handle the result of a native command.
-      // We may want to consider to use JsonMetaDataFormatter in Hive.
-      val isDescribe = sql.trim.startsWith("describe")
-      val rows = if (isDescribe) {
-        // TODO: If we upgrade Hive to 0.13, we need to check the results of
-        // context.sessionState.isHiveServerQuery() to determine how to split the result.
-        // This method is introduced by https://issues.apache.org/jira/browse/HIVE-4545.
-        // Right now, we split every string by any number of consecutive spaces.
-        sideEffectResult.map(
-          r => r.trim.split("\\s+", 3)).map(r => new GenericRow(r.asInstanceOf[Array[Any]]))
-      } else {
-        sideEffectResult.map(r => new GenericRow(Array[Any](r)))
-      }
+      val rows = sideEffectResult.map(r => new GenericRow(Array[Any](r)))
       context.sparkContext.parallelize(rows, 1)
     }
+  }
+
+  override def otherCopyArgs = context :: Nil
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class DescribeHiveTableCommand(
+    table: MetastoreRelation,
+    output: Seq[Attribute],
+    isFormatted: Boolean,
+    isExtended: Boolean)(
+    @transient context: HiveContext)
+  extends LeafNode with Command {
+
+  override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] = {
+    val cols: Seq[FieldSchema] = table.hiveQlTable.getCols
+    val parCols: Seq[FieldSchema] = table.hiveQlTable.getPartCols
+    val columnInfo = cols.map(field => (field.getName, field.getType, field.getComment))
+    val partColumnInfo = parCols.map(field => (field.getName, field.getType, field.getComment))
+
+    val formattedPart = if (isFormatted) {
+      (MetaDataFormatUtils.getTableInformation(table.hiveQlTable), null, null) :: Nil
+    } else {
+      Nil
+    }
+
+    val extendedPart = if (isExtended) {
+      ("Detailed Table Information", table.hiveQlTable.getTTable.toString, null) :: Nil
+    } else {
+      Nil
+    }
+
+    // Trying to mimic the format of Hive's output. But not 100% the same.
+    columnInfo ++ partColumnInfo ++ Seq(("# Partition Information", null, null)) ++
+      partColumnInfo ++ formattedPart ++ extendedPart
+  }
+
+  override def execute(): RDD[Row] = {
+    val rows = sideEffectResult.map {
+      case (name, dataType, comment) => new GenericRow(Array[Any](name, dataType, comment))
+    }
+    context.sparkContext.parallelize(rows, 1)
   }
 
   override def otherCopyArgs = context :: Nil
