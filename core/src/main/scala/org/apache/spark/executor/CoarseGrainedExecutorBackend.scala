@@ -112,7 +112,7 @@ private[spark] object CoarseGrainedExecutorBackend {
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
       val (fetcher, _) = AkkaUtils.createActorSystem(
-        "driverConfFetcher", hostname, 0, executorConf, new SecurityManager(executorConf))
+        "driverPropsFetcher", hostname, 0, executorConf, new SecurityManager(executorConf))
       val driver = fetcher.actorSelection(driverUrl)
       val timeout = new Timeout(5, TimeUnit.MINUTES)
       val fut = Patterns.ask(driver, RetrieveSparkProps, timeout)
