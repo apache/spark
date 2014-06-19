@@ -227,8 +227,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       fractionByKey: Map[K, Double],
       seed: Long = Utils.random.nextLong,
       exact: Boolean = true): RDD[(K, V)]= {
+    require(fractionByKey.forall({case(k, v) => v >= 0.0}), "Invalid sampling rates.")
     if (withReplacement) {
-      require(fractionByKey.forall({case(k, v) => v >= 0.0}), "Invalid sampling rates.")
       val counts = if (exact) Some(this.countByKey()) else None
       val samplingFunc =
         StratifiedSampler.getPoissonSamplingFunction(self, fractionByKey, exact, counts, seed)

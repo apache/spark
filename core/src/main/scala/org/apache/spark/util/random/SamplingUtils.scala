@@ -54,7 +54,8 @@ private[spark] object SamplingUtils {
     } else {
       val delta = 1e-4
       val gamma = - math.log(delta) / total
-      math.min(1, math.max(1e-10, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction)))
+      math.min(1,
+        math.max(1e-10, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction)))
     }
   }
 }

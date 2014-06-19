@@ -106,7 +106,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
         n: Long) = {
       val expectedSampleSize = stratifiedData.countByKey().mapValues(count =>
         math.ceil(count * samplingRate).toInt)
-      val fractionByKey = (_:String) => samplingRate
+      val fractionByKey = Map("1" -> samplingRate, "0" -> samplingRate)
       val sample = stratifiedData.sampleByKey(false, fractionByKey, seed, exact)
       val sampleCounts = sample.countByKey()
       val takeSample = sample.collect()
@@ -124,7 +124,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
         n: Long) = {
       val expectedSampleSize = stratifiedData.countByKey().mapValues(count =>
         math.ceil(count * samplingRate).toInt)
-      val fractionByKey = (_:String) => samplingRate
+      val fractionByKey = Map("1" -> samplingRate, "0" -> samplingRate)
       val sample = stratifiedData.sampleByKey(true, fractionByKey, seed, exact)
       val sampleCounts = sample.countByKey()
       val takeSample = sample.collect()
