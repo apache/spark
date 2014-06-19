@@ -61,7 +61,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
     val appName = if (info.started) info.name else info.logDirPath.getName
-    val uiAddress = parent.getAddress + info.ui.basePath
+    val uiAddress = info.ui.basePath
     val startTime = if (info.started) UIUtils.formatDate(info.startTime) else "Not started"
     val endTime = if (info.completed) UIUtils.formatDate(info.endTime) else "Not completed"
     val difference = if (info.started && info.completed) info.endTime - info.startTime else -1L
