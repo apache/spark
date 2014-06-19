@@ -214,7 +214,8 @@ private[spark] class Executor(
           // TODO: the task result or block manager. Since this is via the backend, whose actor
           // TODO: system is initialized before receiving the Spark conf, and hence it does not know
           // TODO: `spark.akka.frameSize`. A temporary solution is using the min frame size.
-          if (serializedDirectResult.limit >= AkkaUtils.minFrameSizeBytes - 1024) {
+          // [SPARK-2156] We subtract 200K to leave some space for other data in the Akka message.
+          if (serializedDirectResult.limit >= AkkaUtils.minFrameSizeBytes - 200 * 1024) {
             logInfo("Storing result for " + taskId + " in local BlockManager")
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
