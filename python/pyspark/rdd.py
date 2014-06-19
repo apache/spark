@@ -1325,7 +1325,14 @@ class RDD(object):
 
     def groupWith(self, other, *others):
         """
-        Alias for cogroup.
+        Alias for cogroup but with support for multiple RDDs.
+
+        >>> x = sc.parallelize([("a", 1), ("b", 4)])
+        >>> y = sc.parallelize([("a", 2)])
+        >>> z = sc.parallelize([("b", 42)])
+        >>> map((lambda (x,y): (x, (list(y[0]), list(y[1]), list(y[2])))), sorted(list(x.groupWith(y, z).collect())))
+        [('a', ([1], [2], [])), ('b', ([4], [], [42]))]
+
         """
         return python_cogroup((self, other) + others, numPartitions=None)
 
