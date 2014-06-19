@@ -68,15 +68,29 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.memoryOverhead</code></td>
-  <td>384</code></td>
+  <td><code>spark.yarn.dist.archives</code></td>
+  <td>(none)</td>
+  <td>
+    Comma separated list of archives to be extracted into the working directory of each executor.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.dist.files</code></td>
+  <td>(none)</td>
+  <td>
+    Comma-separated list of files to be placed in the working directory of each executor.
+  <td>
+</tr>
+<tr>
+ <td><code>spark.yarn.executor.memoryOverhead</code></td>
+  <td>384</td>
   <td>
     The amount of off heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.driver.memoryOverhead</code></td>
-  <td>384</code></td>
+  <td>384</td>
   <td>
     The amount of off heap memory (in megabytes) to be allocated per driver. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
   </td>
