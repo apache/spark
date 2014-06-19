@@ -62,7 +62,7 @@ case class ExplainCommand(plan: LogicalPlan) extends Command {
 case class CacheCommand(tableName: String, doCache: Boolean) extends Command
 
 /**
- * Returned for the "Describe tableName" command. [Extended|Formatted|Pretty] is not handled.
+ * Returned for the "Describe tableName" command.
  */
 case class DescribeCommand(
     table: LogicalPlan,
