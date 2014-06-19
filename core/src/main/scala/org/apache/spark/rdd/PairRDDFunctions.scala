@@ -719,8 +719,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
-      hadoopConf: Configuration = self.context.hadoopConfiguration)
+      conf: Configuration = self.context.hadoopConfiguration)
   {
+    // keep the source-compatibility and distinct with the SparkConf
+    val hadoopConf = conf
     val job = new NewAPIHadoopJob(hadoopConf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
@@ -752,8 +754,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      hadoopConf: JobConf = new JobConf(self.context.hadoopConfiguration),
+      conf: JobConf = new JobConf(self.context.hadoopConfiguration),
       codec: Option[Class[_ <: CompressionCodec]] = None) {
+    // keep the source-compatibility and distinct with the SparkConf
+    val hadoopConf = conf
     hadoopConf.setOutputKeyClass(keyClass)
     hadoopConf.setOutputValueClass(valueClass)
     // Doesn't work in Scala 2.9 due to what may be a generics bug
@@ -779,7 +783,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * output paths required (e.g. a table name to write to) in the same way as it would be
    * configured for a Hadoop MapReduce job.
    */
-  def saveAsNewAPIHadoopDataset(hadoopConf: Configuration) {
+  def saveAsNewAPIHadoopDataset(conf: Configuration) {
+    // keep the source-compatibility and distinct with the SparkConf
+    val hadoopConf = conf
     val job = new NewAPIHadoopJob(hadoopConf)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
@@ -837,7 +843,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
    * MapReduce job.
    */
-  def saveAsHadoopDataset(hadoopConf: JobConf) {
+  def saveAsHadoopDataset(conf: JobConf) {
+    // keep the source-compatibility and distinct with the SparkConf
+    val hadoopConf = conf
     val outputFormatInstance = hadoopConf.getOutputFormat
     val keyClass = hadoopConf.getOutputKeyClass
     val valueClass = hadoopConf.getOutputValueClass
