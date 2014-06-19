@@ -217,6 +217,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * the RDD to guarantee sample size with a 99.99% confidence; when sampling with replacement, we
    * need two additional passes over the RDD to guarantee sample size with a 99.99% confidence.
    *
+   * Note that if the sampling rate for any stratum is < 1e-10, we will throw an exception to
+   * avoid not being able to ever create the sample as an artifact of the RNG's quality.
+   *
    * @param withReplacement whether to sample with or without replacement
    * @param fractionByKey function mapping key to sampling rate
    * @param seed seed for the random number generator
@@ -227,6 +230,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       fractionByKey: K => Double,
       seed: Long = Utils.random.nextLong,
       exact: Boolean = true): RDD[(K, V)]= {
+
+    require(fractionByKey.asInstanceOf[Map[K, Double]].forall({case(k, v) => v >= 1e-10}),
+      "Unable to support sampling rates < 1e-10.")
+
     if (withReplacement) {
       val counts = if (exact) Some(this.countByKey()) else None
       val samplingFunc =
