@@ -224,7 +224,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     TestHive.reset()
   }
 
-  test("SPARK-2180: HAVING support in GROUP BY clauses") {
+  test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
       .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
     
@@ -237,6 +237,12 @@ class HiveQuerySuite extends HiveComparisonTest {
     assert(results === Array(Pair("foo", 4)))
     
     TestHive.reset()
+  }
+
+  test("SPARK-2180:  HAVING without GROUP BY raises exception") {
+    intercept[Exception] {
+      hql("SELECT value, attr FROM having_test HAVING attr > 3")
+    }
   }
 
   test("Query Hive native command execution result") {
