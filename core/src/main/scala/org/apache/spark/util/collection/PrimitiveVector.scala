@@ -36,7 +36,7 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
     _array(index)
   }
 
-  def +=(value: V) {
+  def +=(value: V): Unit = {
     if (_numElements == _array.length) {
       resize(_array.length * 2)
     }
