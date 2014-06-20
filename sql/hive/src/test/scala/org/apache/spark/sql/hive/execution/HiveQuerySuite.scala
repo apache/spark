@@ -21,7 +21,9 @@ import scala.util.Try
 
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{SchemaRDD, execution, Row}
+import org.apache.spark.sql.{SchemaRDD, Row}
+
+case class TestData(a: Int, b: String)
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -240,13 +242,6 @@ class HiveQuerySuite extends HiveComparisonTest {
         .map(_.getString(0))
         .contains(tableName))
 
-    assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
-      hql(s"DESCRIBE $tableName")
-        .select('result)
-        .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
-    }
-
     assert(isExplanation(hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
 
     TestHive.reset()
@@ -261,6 +256,97 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     // If the CREATE TABLE command got executed again, the following assertion would fail
     assert(Try(q0.count()).isSuccess)
+  }
+
+  test("DESCRIBE commands") {
+    hql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
+
+    hql(
+      """FROM src INSERT OVERWRITE TABLE test_describe_commands1 PARTITION (dt='2008-06-08')
+        |SELECT key, value
+      """.stripMargin)
+
+    // Describe a table
+    assertResult(
+      Array(
+        Array("key", "int", null),
+        Array("value", "string", null),
+        Array("dt", "string", null),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
+        Array("dt", "string", null))
+    ) {
+      hql("DESCRIBE test_describe_commands1")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
+
+    // Describe a table with a fully qualified table name
+    assertResult(
+      Array(
+        Array("key", "int", null),
+        Array("value", "string", null),
+        Array("dt", "string", null),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
+        Array("dt", "string", null))
+    ) {
+      hql("DESCRIBE default.test_describe_commands1")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
+
+    // Describe a column is a native command
+    assertResult(Array(Array("value", "string", "from deserializer"))) {
+      hql("DESCRIBE test_describe_commands1 value")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a column is a native command
+    assertResult(Array(Array("value", "string", "from deserializer"))) {
+      hql("DESCRIBE default.test_describe_commands1 value")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a partition is a native command
+    assertResult(
+      Array(
+        Array("key", "int", "None"),
+        Array("value", "string", "None"),
+        Array("dt", "string", "None"),
+        Array("", "", ""),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
+        Array("", "", ""),
+        Array("dt", "string", "None"))
+    ) {
+      hql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a registered temporary table.
+    val testData: SchemaRDD =
+      TestHive.sparkContext.parallelize(
+        TestData(1, "str1") ::
+        TestData(1, "str2") :: Nil)
+    testData.registerAsTable("test_describe_commands2")
+
+    assertResult(
+      Array(
+        Array("# Registered as a temporary table", null, null),
+        Array("a", "IntegerType", null),
+        Array("b", "StringType", null))
+    ) {
+      hql("DESCRIBE test_describe_commands2")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
   }
 
   test("parse HQL set commands") {
