@@ -17,14 +17,13 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.shuffle.{ShuffleManager}
-
 import scala.concurrent.Future
 
 import akka.actor.{ActorRef, Actor}
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.shuffle.ShuffleManager
 
 /**
  * An actor to take commands from the master to execute options. For example,

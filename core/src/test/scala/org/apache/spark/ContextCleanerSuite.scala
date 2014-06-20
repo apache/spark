@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.lang.ref.WeakReference
 
-import org.apache.spark.shuffle.MapOutputTrackerMaster
-
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.language.postfixOps
@@ -34,6 +32,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BroadcastBlockId, RDDBlockId, ShuffleBlockId}
+import org.apache.spark.shuffle.MapOutputTrackerMaster
 
 class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 

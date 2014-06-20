@@ -20,13 +20,12 @@ package org.apache.spark.storage
 import java.util.concurrent.ArrayBlockingQueue
 
 import akka.actor._
-import org.apache.spark.shuffle.hash.HashShuffleManager
-import org.apache.spark.shuffle.{ShuffleManager, MapOutputTrackerMaster}
 import util.Random
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.shuffle.hash.HashShuffleManager
 
 /**
  * This class tests the BlockManager and MemoryStore for thread safety and

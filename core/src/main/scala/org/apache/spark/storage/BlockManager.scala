@@ -20,8 +20,6 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, OutputStream, BufferedOutputStream, ByteArrayOutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
-import org.apache.spark.shuffle.{ShuffleManager}
-
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
@@ -32,6 +30,7 @@ import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.shuffle.{ShuffleManager}
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util._

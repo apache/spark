@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.lang.ref.{ReferenceQueue, WeakReference}
 
-import org.apache.spark.shuffle.MapOutputTrackerMaster
-
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 
 import org.apache.spark.broadcast.Broadcast

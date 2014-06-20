@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.shuffle.MapOutputTrackerMaster
-
 import scala.Tuple2
 import scala.collection.mutable.{HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
@@ -30,6 +28,7 @@ import org.scalatest.{BeforeAndAfter, FunSuiteLike}
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.shuffle.MapOutputTrackerMaster
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.CallSite
 

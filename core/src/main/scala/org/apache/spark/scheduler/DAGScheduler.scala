@@ -21,8 +21,6 @@ import java.io.{NotSerializableException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.shuffle.{ShuffleManager}
-
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -39,6 +37,7 @@ import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
 import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
 

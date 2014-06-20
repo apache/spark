@@ -17,16 +17,17 @@
 
 package org.apache.spark.shuffle
 
+import scala.concurrent.Await
+
 import akka.actor._
 import akka.testkit.TestActorRef
+import org.scalatest.FunSuite
+
 import org.apache.spark._
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
-import org.scalatest.FunSuite
-
-import scala.concurrent.Await
 
 class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
   private val conf = new SparkConf

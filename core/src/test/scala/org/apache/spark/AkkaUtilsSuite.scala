@@ -17,14 +17,17 @@
 
 package org.apache.spark
 
-import org.apache.spark.shuffle.{MapOutputTracker, MapOutputTrackerWorker, MapOutputTrackerMaster, MapOutputTrackerMasterActor}
-import org.scalatest.FunSuite
+import scala.concurrent.Await
 
 import akka.actor._
+import org.scalatest.FunSuite
+
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
-import scala.concurrent.Await
+import org.apache.spark.shuffle.{MapOutputTracker, MapOutputTrackerWorker, MapOutputTrackerMaster,
+MapOutputTrackerMasterActor}
+
 
 /**
   * Test the AkkaUtils with various security settings.
