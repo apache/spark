@@ -403,6 +403,7 @@ private[hive] object HiveQl {
             nameParts.head match {
               case Token(".", dbName :: tableName :: Nil) =>
                 // It is describing a table with the format like "describe db.table".
+                // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
                 val (db, tableName) = extractDbNameTableName(nameParts.head)
                 DescribeCommand(
                   UnresolvedRelation(db, tableName, None), extended.isDefined)

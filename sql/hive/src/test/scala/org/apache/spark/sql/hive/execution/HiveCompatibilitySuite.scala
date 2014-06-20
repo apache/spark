@@ -78,7 +78,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_merge",
     "alter_concatenate_indexed_table",
     "protectmode2",
-    "describe_table",
+    //"describe_table",
     "describe_comment_nonascii",
     "udf5",
     "udf_java_method",
@@ -185,7 +185,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "describe_formatted_view_partitioned_json",
 
     // Hive returns the results of describe as plain text. Comments with multiple lines
-    // introduce extra in the Hive results, which make the result comparison fail.
+    // introduce extra lines in the Hive results, which make the result comparison fail.
     "describe_comment_indent"
   )
 

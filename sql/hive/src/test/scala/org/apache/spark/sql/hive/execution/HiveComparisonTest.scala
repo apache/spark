@@ -145,9 +145,11 @@ abstract class HiveComparisonTest
       case _: LogicalNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
       case _: DescribeCommand =>
+        // Filter out non-deterministic lines and lines which do not have actual results but
+        // can introduce problems because of the way Hive formats these lines.
+        // Then, remove empty lines. Do not sort the results.
         answer.filterNot(
-          r => nonDeterministicLine(r) || ignoredLine(r)).map(_.trim).filterNot(
-            r => r == "" || r == "\n")
+          r => nonDeterministicLine(r) || ignoredLine(r)).map(_.trim).filterNot(_ == "")
       case plan => if (isSorted(plan)) answer else answer.sorted
     }
     orderedAnswer.map(cleanPaths)
