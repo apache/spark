@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{HashPartitioner, RangePartitioner, SparkConf}
 import org.apache.spark.rdd.ShuffledRDD
-import org.apache.spark.sql.{SQLConf, SQLContext, Row}
+import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.{NoBind, MutableProjection, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -82,9 +82,10 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 }
 
 /**
- * Ensures that the [[catalyst.plans.physical.Partitioning Partitioning]] of input data meets the
- * [[catalyst.plans.physical.Distribution Distribution]] requirements for each operator by inserting
- * [[Exchange]] Operators where required.
+ * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
+ * of input data meets the
+ * [[org.apache.spark.sql.catalyst.plans.physical.Distribution Distribution]] requirements for
+ * each operator by inserting [[Exchange]] Operators where required.
  */
 private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
