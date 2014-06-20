@@ -249,15 +249,12 @@ case class LeftSemiJoinBNL(
 
 
 
-/*
-LeftSemiBloomFilterBroadcastJoin
-Sometimes the semijoin's broadcast table can't fit memory.So  we can make it as Bloomfilter to  reduce the space
-and then broadcast it do the mapside  join
-The bloomfilter  use Shark's BloomFilter class implementation.
-*/
-
 /**
  * :: DeveloperApi ::
+ * LeftSemiBloomFilterBroadcastJoin
+ * Sometimes the semijoin's broadcast table can't fit memory.So  we can make it as Bloomfilter to  reduce the space
+ * and then broadcast it do the mapside  join
+ * The bloomfilter  use Shark's BloomFilter class implementation.
  */
 @DeveloperApi
 case class LeftSemiJoinBFB(
@@ -309,8 +306,6 @@ case class LeftSemiJoinBFB(
       buildRow(row)
     })
   }
-
-
 
 
 
