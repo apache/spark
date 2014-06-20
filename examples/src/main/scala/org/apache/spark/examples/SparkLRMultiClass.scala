@@ -40,6 +40,21 @@ import org.apache.spark.SparkContext._
 */
 object SparkLRMultiClass {
 
+  /**
+    Builds an RDD from a CSV file. Each row of the RDD contains the class label yVal and a feature vector.
+  */
+  def csv2featureVectors(sc: SparkContext, dataFile: String, numFeaturesIn: Int) = {
+      val data = sc.textFile(dataFile)
+	  val vectors = data.map(line => line.split(",").map(_.toDouble))
+	  val featureVectors = vectors.map {p =>
+				val x = DenseVector.vertcat(DenseVector(1.0), DenseVector(p.slice(0, p.length-1)))
+				val yVal = p(p.length-1)
+				(yVal.toInt, x)
+				}
+	  val numFeatures = if(numFeaturesIn == 0) vectors.take(1)(0).size - 1 else numFeaturesIn
+	  (numFeatures, featureVectors)
+  }
+  
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("SparkLRMultiClass")
     val sc = new SparkContext(sparkConf)
@@ -50,7 +65,7 @@ object SparkLRMultiClass {
 	var alpha = 3.0 // learning rate
 	var ITERATIONS = 30
 	var costThreshold = 0.01
-	var numFeatures = 0
+	var numFeaturesIn = 0
 
 	// TODO: Crude cmd line args processing. Change later to use --name value style.
 	if(args.length > 0) dataFile = args(0)
@@ -59,25 +74,21 @@ object SparkLRMultiClass {
 	if(args.length > 3) alpha = args(3).toDouble
 	if(args.length > 4) ITERATIONS = args(4).toInt
 	if(args.length > 5) costThreshold = args(5).toDouble
-	if(args.length > 6) numFeatures = args(6).toInt
+	if(args.length > 6) numFeaturesIn = args(6).toInt
 	
-	val data = sc.textFile(dataFile)
-	val vectors = data.map(line => line.split(",").map(_.toDouble))
-	if(numFeatures == 0) numFeatures = vectors.take(1)(0).size - 1
+    val (numFeatures, featureVectors) = csv2featureVectors(sc, dataFile, numFeaturesIn)
 	
-	val m : Double = vectors.count // size of training data
+	val m : Double = featureVectors.count // size of training data
 	var all_theta = DenseMatrix.zeros[Double](numClasses, numFeatures+1)
 	// training
 	for(c <- 0 to (numClasses-1)) {
 		var theta = DenseVector.zeros[Double](numFeatures+1)
 		var cost = 0.0
 		breakable { for (i <- 1 to ITERATIONS) {
-			val grad_cost = vectors.map {p =>
-				val x = DenseVector.vertcat(DenseVector(1.0), DenseVector(p.slice(0, p.length-1)))
-				val yVal = p(p.length-1)
+			val grad_cost = featureVectors.map {p =>
+				val (yVal, x) = p
 				val y = if(yVal == c) 1.0 else 0.0
 				val z = theta.t*x
-				val ones = DenseVector.ones[Double](numClasses)
 				val h = sigmoid(z)
 				val grad = x*(h - y)
 				val J = -(y*breeze.numerics.log(h) + (1.0-y)*breeze.numerics.log(1.0-h))
@@ -101,9 +112,8 @@ object SparkLRMultiClass {
 	println(all_theta.toString(Int.MaxValue, Int.MaxValue))
 	
 	// Prediction
-	val correctPredictions = vectors.map {p =>
-				val x = DenseVector.vertcat(DenseVector(1.0), DenseVector(p.slice(0, p.length-1)))
-				val yVal = p(p.length-1)
+	val correctPredictions = featureVectors.map {p =>
+				val (yVal, x) = p
 				val z = all_theta*x
 				val h = sigmoid(z)
 				val c = argmax(h)
@@ -113,13 +123,12 @@ object SparkLRMultiClass {
 	val accuracy = correctPredictions/m
 	println("Total correct predictions:  " + correctPredictions + " out of " + m + ", accuracy: " + accuracy);
 
-	val confusionMatrix = vectors.map {p =>
-				val x = DenseVector.vertcat(DenseVector(1.0), DenseVector(p.slice(0, p.length-1)))
-				val yVal = p(p.length-1)
+	val confusionMatrix = featureVectors.map {p =>
+				val (yVal, x) = p
 				val z = all_theta*x
 				val h = sigmoid(z)
 				val c = argmax(h)
-				((yVal.toInt, c), 1)
+				((yVal, c), 1)
 			}
 			.reduceByKey {(a,b) => a + b}.collect
 	println("Distribution of predictions: ")
