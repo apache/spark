@@ -254,7 +254,10 @@ trait HiveTypeCoercion {
       // Skip if the type is boolean type already. Note that this extra cast should be removed
       // by optimizer.SimplifyCasts.
       case Cast(e, BooleanType) if e.dataType == BooleanType => e
-      case Cast(e, BooleanType) => Not(EqualTo(e, Literal(0)))
+      // If the data type is not boolean and is being cast boolean, turn it into a comparison
+      // with the numeric value, i.e. x != 0. This will coerce the type into numeric type.
+      case Cast(e, BooleanType) if e.dataType != BooleanType => Not(EqualTo(e, Literal(0)))
+      // Turn true into 1, and false into 0 if casting boolean into other types.
       case Cast(e, dataType) if e.dataType == BooleanType =>
         Cast(If(e, Literal(1), Literal(0)), dataType)
     }
