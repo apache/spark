@@ -142,8 +142,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
        * to the BlockManager as an iterator and expect to read it back later. This is because
        * we may end up dropping a partition from memory store before getting it back, e.g.
        * when the entirety of the RDD does not fit in memory. */
-      val elements = new ArrayBuffer[Any]
-      elements ++= values
+      val elements = values.toArray[Any]
       updatedBlocks ++= blockManager.put(key, elements, storageLevel, tellMaster = true)
       elements.iterator.asInstanceOf[Iterator[T]]
     }

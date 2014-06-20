@@ -27,7 +27,7 @@ import org.apache.spark.util.{SizeEstimator, Utils}
 private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
 
 /**
- * Stores blocks in memory, either as ArrayBuffers of deserialized Java objects or as
+ * Stores blocks in memory, either as Arrays of deserialized Java objects or as
  * serialized ByteBuffers.
  */
 private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
@@ -55,8 +55,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
-      val elements = new ArrayBuffer[Any]
-      elements ++= values
+      val elements = values.toArray
       val sizeEstimate = SizeEstimator.estimate(elements.asInstanceOf[AnyRef])
       val putAttempt = tryToPut(blockId, elements, sizeEstimate, deserialized = true)
       PutResult(sizeEstimate, Left(values.toIterator), putAttempt.droppedBlocks)
@@ -68,7 +67,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   override def putValues(
       blockId: BlockId,
-      values: ArrayBuffer[Any],
+      values: Array[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
     if (level.deserialized) {
@@ -87,9 +86,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    val valueEntries = new ArrayBuffer[Any]()
-    valueEntries ++= values
-    putValues(blockId, valueEntries, level, returnValues)
+    putValues(blockId, values.toArray, level, returnValues)
   }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
@@ -99,7 +96,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     if (entry == null) {
       None
     } else if (entry.deserialized) {
-      Some(blockManager.dataSerialize(blockId, entry.value.asInstanceOf[ArrayBuffer[Any]].iterator))
+      Some(blockManager.dataSerialize(blockId, entry.value.asInstanceOf[Array[Any]].iterator))
     } else {
       Some(entry.value.asInstanceOf[ByteBuffer].duplicate()) // Doesn't actually copy the data
     }
@@ -112,7 +109,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     if (entry == null) {
       None
     } else if (entry.deserialized) {
-      Some(entry.value.asInstanceOf[ArrayBuffer[Any]].iterator)
+      Some(entry.value.asInstanceOf[Array[Any]].iterator)
     } else {
       val buffer = entry.value.asInstanceOf[ByteBuffer].duplicate() // Doesn't actually copy data
       Some(blockManager.dataDeserialize(blockId, buffer))
@@ -149,8 +146,8 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   /**
    * Try to put in a set of values, if we can free up enough space. The value should either be
-   * an ArrayBuffer if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated)
-   * size must also be passed by the caller.
+   * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
+   * must also be passed by the caller.
    *
    * Lock on the object putLock to ensure that all the put requests and its associated block
    * dropping is done by only on thread at a time. Otherwise while one thread is dropping
@@ -193,7 +190,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         // Tell the block manager that we couldn't put it in memory so that it can drop it to
         // disk if the block allows disk storage.
         val data = if (deserialized) {
-          Left(value.asInstanceOf[ArrayBuffer[Any]])
+          Left(value.asInstanceOf[Array[Any]])
         } else {
           Right(value.asInstanceOf[ByteBuffer].duplicate())
         }
@@ -227,7 +224,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
     if (maxMemory - currentMemory < space) {
       val rddToAdd = getRddId(blockIdToAdd)
-      val selectedBlocks = new ArrayBuffer[BlockId]()
+      val selectedBlocks = new ArrayBuffer[BlockId]
       var selectedMemory = 0L
 
       // This is synchronized to ensure that the set of entries is not changed
@@ -254,7 +251,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           // future safety.
           if (entry != null) {
             val data = if (entry.deserialized) {
-              Left(entry.value.asInstanceOf[ArrayBuffer[Any]])
+              Left(entry.value.asInstanceOf[Array[Any]])
             } else {
               Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
             }

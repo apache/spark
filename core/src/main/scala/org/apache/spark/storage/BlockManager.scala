@@ -37,7 +37,7 @@ import org.apache.spark.util._
 private[spark] sealed trait BlockValues
 private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
 private[spark] case class IteratorValues(iterator: Iterator[Any]) extends BlockValues
-private[spark] case class ArrayBufferValues(buffer: ArrayBuffer[Any]) extends BlockValues
+private[spark] case class ArrayValues(buffer: Array[Any]) extends BlockValues
 
 private[spark] class BlockManager(
     executorId: String,
@@ -451,16 +451,12 @@ private[spark] class BlockManager(
               val values = dataDeserialize(blockId, bytes)
               if (level.deserialized) {
                 // Cache the values before returning them
-                // TODO: Consider creating a putValues that also takes in a iterator?
-                val valuesBuffer = new ArrayBuffer[Any]
-                valuesBuffer ++= values
-                memoryStore.putValues(blockId, valuesBuffer, level, returnValues = true).data
-                  match {
-                    case Left(values2) =>
-                      return Some(values2)
-                    case _ =>
-                      throw new SparkException("Memory store did not return an iterator")
-                  }
+                memoryStore.putValues(blockId, values, level, returnValues = true).data match {
+                  case Left(values2) =>
+                    return Some(values2)
+                  case _ =>
+                    throw new SparkException("Memory store did not return an iterator")
+                }
               } else {
                 return Some(values)
               }
@@ -576,11 +572,11 @@ private[spark] class BlockManager(
    */
   def put(
       blockId: BlockId,
-      values: ArrayBuffer[Any],
+      values: Array[Any],
       level: StorageLevel,
       tellMaster: Boolean = true): Seq[(BlockId, BlockStatus)] = {
     require(values != null, "Values is null")
-    doPut(blockId, ArrayBufferValues(values), level, tellMaster)
+    doPut(blockId, ArrayValues(values), level, tellMaster)
   }
 
   /**
@@ -682,7 +678,7 @@ private[spark] class BlockManager(
         val result = data match {
           case IteratorValues(iterator) =>
             blockStore.putValues(blockId, iterator, level, returnValues)
-          case ArrayBufferValues(array) =>
+          case ArrayValues(array) =>
             blockStore.putValues(blockId, array, level, returnValues)
           case ByteBufferValues(bytes) =>
             bytes.rewind()
@@ -814,7 +810,7 @@ private[spark] class BlockManager(
    */
   def dropFromMemory(
       blockId: BlockId,
-      data: Either[ArrayBuffer[Any], ByteBuffer]): Option[BlockStatus] = {
+      data: Either[Array[Any], ByteBuffer]): Option[BlockStatus] = {
 
     logInfo(s"Dropping block $blockId from memory")
     val info = blockInfo.get(blockId).orNull

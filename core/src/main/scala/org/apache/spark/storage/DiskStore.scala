@@ -21,8 +21,6 @@ import java.io.{FileOutputStream, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Logging
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
@@ -59,7 +57,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
 
   override def putValues(
       blockId: BlockId,
-      values: ArrayBuffer[Any],
+      values: Array[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
     putValues(blockId, values.toIterator, level, returnValues)

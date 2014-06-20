@@ -20,8 +20,6 @@ package org.apache.spark.storage
 import java.io.IOException
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
-
 import tachyon.client.{ReadType, WriteType}
 
 import org.apache.spark.Logging
@@ -47,7 +45,7 @@ private class TachyonStore(
 
   override def putValues(
       blockId: BlockId,
-      values: ArrayBuffer[Any],
+      values: Array[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
     putValues(blockId, values.toIterator, level, returnValues)

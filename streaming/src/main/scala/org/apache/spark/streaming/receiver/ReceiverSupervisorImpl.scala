@@ -110,8 +110,7 @@ private[streaming] class ReceiverSupervisorImpl(
     ) {
     val blockId = optionalBlockId.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
-    blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]],
-      storageLevel, tellMaster = true)
+    blockManager.put(blockId, arrayBuffer.toArray[Any], storageLevel, tellMaster = true)
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
     reportPushedBlock(blockId, arrayBuffer.size, optionalMetadata)
   }

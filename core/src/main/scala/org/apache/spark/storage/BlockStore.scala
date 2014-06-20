@@ -45,7 +45,7 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
 
   def putValues(
     blockId: BlockId,
-    values: ArrayBuffer[Any],
+    values: Array[Any],
     level: StorageLevel,
     returnValues: Boolean): PutResult
 
