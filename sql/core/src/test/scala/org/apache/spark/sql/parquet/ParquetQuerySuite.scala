@@ -19,27 +19,23 @@ package org.apache.spark.sql.parquet
 
 import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
 
-import org.apache.hadoop.fs.{Path, FileSystem}
-import org.apache.hadoop.mapreduce.Job
-
 import parquet.hadoop.ParquetFileWriter
 import parquet.hadoop.util.ContextUtil
 import parquet.schema.MessageTypeParser
 
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.{SqlLexical, SqlParser}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{BooleanType, IntegerType}
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.TestData
-import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.util.getTempFilePath
-import org.apache.spark.sql.catalyst.{SqlLexical, SqlParser}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, Star}
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.util.Utils
 
-// Implicits
-import org.apache.spark.sql.test.TestSQLContext._
 
 case class TestRDDEntry(key: Int, value: String)
 
@@ -72,7 +68,6 @@ case class AllDataTypes(
     booleanField: Boolean)
 
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
-  import TestData._
   TestData // Load test data tables.
 
   var testRDD: SchemaRDD = null
@@ -319,7 +314,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
   test("create RecordFilter for simple predicates") {
     val attribute1 = new AttributeReference("first", IntegerType, false)()
-    val predicate1 = new Equals(attribute1, new Literal(1, IntegerType))
+    val predicate1 = new EqualTo(attribute1, new Literal(1, IntegerType))
     val filter1 = ParquetFilters.createFilter(predicate1)
     assert(filter1.isDefined)
     assert(filter1.get.predicate == predicate1, "predicates do not match")

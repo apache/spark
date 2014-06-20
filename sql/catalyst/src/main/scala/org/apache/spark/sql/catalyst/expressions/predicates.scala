@@ -52,7 +52,7 @@ trait PredicateHelper {
    *
    * For example consider a join between two relations R(a, b) and S(c, d).
    *
-   * `canEvaluate(Equals(a,b), R)` returns `true` where as `canEvaluate(Equals(a,c), R)` returns
+   * `canEvaluate(EqualTo(a,b), R)` returns `true` where as `canEvaluate(EqualTo(a,c), R)` returns
    * `false`.
    */
   protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
@@ -140,7 +140,7 @@ abstract class BinaryComparison extends BinaryPredicate {
   self: Product =>
 }
 
-case class Equals(left: Expression, right: Expression) extends BinaryComparison {
+case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "="
   override def eval(input: Row): Any = {
     val l = left.eval(input)
