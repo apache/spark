@@ -204,3 +204,18 @@ case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
 }
 
+/**
+ * :: DeveloperApi ::
+ * This operator support the substract function .Return an table with the elements from `this` that are not in `other`.
+ */
+@DeveloperApi
+case class Except(children: Seq[SparkPlan])(@transient sc: SparkContext) extends SparkPlan {
+  // TODO:The input children:Seq[SparkPlan]  should only contain two SparkPlan
+  override def output = children.head.output
+
+  override def execute() = {
+    children(0).execute().subtract(children(1).execute())
+  }
+
+  override def otherCopyArgs = sc :: Nil
+}
