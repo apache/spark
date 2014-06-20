@@ -20,20 +20,21 @@ package org.apache.spark.storage
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
+import scala.language.{implicitConversions, postfixOps}
+
 import akka.actor._
+import org.mockito.Mockito.{mock, when}
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts._
+import org.scalatest.Matchers
+import org.scalatest.time.SpanSugar._
+import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
+
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
-import org.apache.spark.shuffle.{ShuffleManager, MapOutputTrackerMaster}
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
-import org.mockito.Mockito.{mock, when}
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts._
-import org.scalatest.time.SpanSugar._
-import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
-
-import scala.language.{implicitConversions, postfixOps}
 
 class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   with PrivateMethodTester {
