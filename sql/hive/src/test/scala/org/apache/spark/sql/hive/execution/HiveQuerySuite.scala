@@ -224,6 +224,32 @@ class HiveQuerySuite extends HiveComparisonTest {
     TestHive.reset()
   }
 
+  test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
+    val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
+      .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
+    
+    TestHive.sparkContext.parallelize(fixture).registerAsTable("having_test")
+    
+    val results = 
+      hql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
+      .collect()
+      .map(x => Pair(x.getString(0), x.getInt(1)))
+    
+    assert(results === Array(Pair("foo", 4)))
+    
+    TestHive.reset()
+  }
+
+  test("SPARK-2180:  HAVING without GROUP BY raises exception") {
+    intercept[Exception] {
+      hql("SELECT value, attr FROM having_test HAVING attr > 3")
+    }
+  }
+  
+  test("SPARK-2180:  HAVING with non-boolean clause raises no exceptions") {
+    val results = hql("select key, count(*) c from src group by key having c").collect()
+  }
+
   test("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 
@@ -441,3 +467,6 @@ class HiveQuerySuite extends HiveComparisonTest {
   // since they modify /clear stuff.
 
 }
+
+// for SPARK-2180 test
+case class HavingRow(key: Int, value: String, attr: Int)
