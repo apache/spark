@@ -698,7 +698,7 @@ private[hive] object HiveQl {
 
       val joinConditions = joinExpressions.sliding(2).map {
         case Seq(c1, c2) =>
-          val predicates = (c1, c2).zipped.map { case (e1, e2) => Equals(e1, e2): Expression }
+          val predicates = (c1, c2).zipped.map { case (e1, e2) => EqualTo(e1, e2): Expression }
           predicates.reduceLeft(And)
       }.toBuffer
 
@@ -924,9 +924,9 @@ private[hive] object HiveQl {
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
 
     /* Comparisons */
-    case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))
-    case Token("!=", left :: right:: Nil) => Not(Equals(nodeToExpr(left), nodeToExpr(right)))
-    case Token("<>", left :: right:: Nil) => Not(Equals(nodeToExpr(left), nodeToExpr(right)))
+    case Token("=", left :: right:: Nil) => EqualTo(nodeToExpr(left), nodeToExpr(right))
+    case Token("!=", left :: right:: Nil) => Not(EqualTo(nodeToExpr(left), nodeToExpr(right)))
+    case Token("<>", left :: right:: Nil) => Not(EqualTo(nodeToExpr(left), nodeToExpr(right)))
     case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
@@ -966,7 +966,7 @@ private[hive] object HiveQl {
           // FIXME (SPARK-2155): the key will get evaluated for multiple times in CaseWhen's eval().
           // Hence effectful / non-deterministic key expressions are *not* supported at the moment.
           // We should consider adding new Expressions to get around this.
-          Seq(Equals(nodeToExpr(branches(0)), nodeToExpr(condVal)),
+          Seq(EqualTo(nodeToExpr(branches(0)), nodeToExpr(condVal)),
               nodeToExpr(value))
         case Seq(elseVal) => Seq(nodeToExpr(elseVal))
       }.toSeq.reduce(_ ++ _)
