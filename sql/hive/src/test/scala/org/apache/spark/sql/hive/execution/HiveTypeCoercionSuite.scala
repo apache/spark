@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Equals}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EqualsTo}
 import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -43,9 +43,9 @@ class HiveTypeCoercionSuite extends HiveComparisonTest {
       c
     }
 
-    // Only one Equals
+    // Only one EqualsTo
     var numEquals = 0
-    project.transformAllExpressions { case e: Equals =>
+    project.transformAllExpressions { case e: EqualsTo =>
       numEquals += 1
       e
     }
