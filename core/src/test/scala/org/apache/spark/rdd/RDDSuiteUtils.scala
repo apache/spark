@@ -15,27 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.api.java
+package org.apache.spark.rdd
 
-import org.scalatest.FunSuite
+object RDDSuiteUtils {
+  case class Person(first: String, last: String, age: Int)
 
-import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.hive.test.TestHive
+  object AgeOrdering extends Ordering[Person] {
+    def compare(a:Person, b:Person) = a.age compare b.age
+  }
 
-// Implicits
-import scala.collection.JavaConversions._
-
-class JavaHiveSQLSuite extends FunSuite {
-  ignore("SELECT * FROM src") {
-    val javaCtx = new JavaSparkContext(TestSQLContext.sparkContext)
-    // There is a little trickery here to avoid instantiating two HiveContexts in the same JVM
-    val javaSqlCtx = new JavaHiveContext(javaCtx) {
-      override val sqlContext = TestHive
-    }
-
-    assert(
-      javaSqlCtx.hql("SELECT * FROM src").collect().map(_.getInt(0)) ===
-        TestHive.sql("SELECT * FROM src").collect().map(_.getInt(0)).toSeq)
+  object NameOrdering extends Ordering[Person] {
+    def compare(a:Person, b:Person) =
+      implicitly[Ordering[Tuple2[String,String]]].compare((a.last, a.first), (b.last, b.first))
   }
 }

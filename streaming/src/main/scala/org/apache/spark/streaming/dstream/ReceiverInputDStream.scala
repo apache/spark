@@ -74,7 +74,7 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
 
   /** Get information on received blocks. */
   private[streaming] def getReceivedBlockInfo(time: Time) = {
-    receivedBlockInfo(time)
+    receivedBlockInfo.get(time).getOrElse(Array.empty[ReceivedBlockInfo])
   }
 
   /**

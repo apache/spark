@@ -549,6 +549,18 @@ class RDD(object):
                     .mapPartitions(mapFunc,preservesPartitioning=True)
                     .flatMap(lambda x: x, preservesPartitioning=True))
 
+    def sortBy(self, keyfunc, ascending=True, numPartitions=None):
+        """
+        Sorts this RDD by the given keyfunc
+
+        >>> tmp = [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
+        >>> sc.parallelize(tmp).sortBy(lambda x: x[0]).collect()
+        [('1', 3), ('2', 5), ('a', 1), ('b', 2), ('d', 4)]
+        >>> sc.parallelize(tmp).sortBy(lambda x: x[1]).collect()
+        [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
+        """
+        return self.keyBy(keyfunc).sortByKey(ascending, numPartitions).values()
+
     def glom(self):
         """
         Return an RDD created by coalescing all elements within each partition
@@ -845,7 +857,7 @@ class RDD(object):
         Note: It returns the list sorted in descending order.
         >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
         [12]
-        >>> sc.parallelize([2, 3, 4, 5, 6], 2).cache().top(2)
+        >>> sc.parallelize([2, 3, 4, 5, 6], 2).top(2)
         [6, 5]
         """
         def topIterator(iterator):
@@ -1448,9 +1460,12 @@ class RDD(object):
     def getStorageLevel(self):
         """
         Get the RDD's current storage level.
+
         >>> rdd1 = sc.parallelize([1,2])
         >>> rdd1.getStorageLevel()
         StorageLevel(False, False, False, False, 1)
+        >>> print(rdd1.getStorageLevel())
+        Serialized 1x Replicated
         """
         java_storage_level = self._jrdd.getStorageLevel()
         storage_level = StorageLevel(java_storage_level.useDisk(),

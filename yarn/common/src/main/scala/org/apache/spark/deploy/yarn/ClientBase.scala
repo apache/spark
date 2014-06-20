@@ -65,6 +65,10 @@ trait ClientBase extends Logging {
   val APP_FILE_PERMISSION: FsPermission =
     FsPermission.createImmutable(Integer.parseInt("644", 8).toShort)
 
+  // Additional memory overhead - in mb.
+  protected def memoryOverhead: Int = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
+    YarnAllocationHandler.MEMORY_OVERHEAD)
+
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {
     Map(
@@ -72,10 +76,10 @@ trait ClientBase extends Logging {
           "Error: You must specify a user jar when running in standalone mode!"),
       (args.userClass == null) -> "Error: You must specify a user class!",
       (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!",
-      (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: AM memory size must be" +
-        "greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD),
-      (args.executorMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: Executor memory size" +
-        "must be greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD.toString)
+      (args.amMemory <= memoryOverhead) -> ("Error: AM memory size must be" +
+        "greater than: " + memoryOverhead),
+      (args.executorMemory <= memoryOverhead) -> ("Error: Executor memory size" +
+        "must be greater than: " + memoryOverhead.toString)
     ).foreach { case(cond, errStr) =>
       if (cond) {
         logError(errStr)
@@ -101,7 +105,7 @@ trait ClientBase extends Logging {
       logError(errorMessage)
       throw new IllegalArgumentException(errorMessage)
     }
-    val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
+    val amMem = args.amMemory + memoryOverhead
     if (amMem > maxMem) {
 
       val errorMessage = "Required AM memory (%d) is above the max threshold (%d) of this cluster."
@@ -158,7 +162,7 @@ trait ClientBase extends Logging {
     val fs = FileSystem.get(conf)
     val remoteFs = originalPath.getFileSystem(conf)
     var newPath = originalPath
-    if (! compareFs(remoteFs, fs)) {
+    if (!compareFs(remoteFs, fs)) {
       newPath = new Path(dstDir, originalPath.getName())
       logInfo("Uploading " + originalPath + " to " + newPath)
       FileUtil.copy(remoteFs, originalPath, fs, newPath, false, conf)
@@ -246,6 +250,7 @@ trait ClientBase extends Logging {
         }
       }
     }
+    logInfo("Prepared Local resources " + localResources)
     sparkConf.set(ClientBase.CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
 
     UserGroupInformation.getCurrentUser().addCredentials(credentials)

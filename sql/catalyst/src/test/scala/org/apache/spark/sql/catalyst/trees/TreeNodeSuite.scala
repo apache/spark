@@ -22,6 +22,17 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.{StringType, NullType}
+
+case class Dummy(optKey: Option[Expression]) extends Expression {
+  def children = optKey.toSeq
+  def references = Set.empty[Attribute]
+  def nullable = true
+  def dataType = NullType
+  override lazy val resolved = true
+  type EvaluatedType = Any
+  def eval(input: Row) = null.asInstanceOf[Any]
+}
 
 class TreeNodeSuite extends FunSuite {
   test("top node changed") {
@@ -75,4 +86,20 @@ class TreeNodeSuite extends FunSuite {
 
     assert(expected === actual)
   }
+
+  test("transform works on nodes with Option children") {
+    val dummy1 = Dummy(Some(Literal("1", StringType)))
+    val dummy2 = Dummy(None)
+    val toZero: PartialFunction[Expression, Expression] =  { case Literal(_, _) => Literal(0) }
+
+    var actual = dummy1 transformDown toZero
+    assert(actual === Dummy(Some(Literal(0))))
+
+    actual = dummy1 transformUp toZero
+    assert(actual === Dummy(Some(Literal(0))))
+
+    actual = dummy2 transform toZero
+    assert(actual === Dummy(None))
+  }
+
 }
