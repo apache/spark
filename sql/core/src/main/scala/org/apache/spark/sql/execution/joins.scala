@@ -237,13 +237,14 @@ case class BroadcastNestedLoopJoin(
   }
 }
 
-/*
-In some case ,data skew happens.SkewJoin  sample the table rdd to find the largest key,then make the largest key
-rows as a table rdd.The streamed rdd will be made  as mainstreamedtable rdd without the largest key and the maxkeystreamedtable rdd
-with the largest key.
-Then,join the two table  with the buildtable.
-Finally,union the two result rdd.
-*/
+/**
+ * :: DeveloperApi ::
+ *In some case ,data skew happens.SkewJoin  sample the table rdd to find the largest key,then make the largest key
+ *rows as a table rdd.The streamed rdd will be made  as mainstreamedtable rdd without the largest key and the maxkeystreamedtable rdd
+ *with the largest key.
+ *Then,join the two table  with the buildtable.
+ *Finally,union the two result rdd.
+ */
 @DeveloperApi
 case class SkewJoin(
                      leftKeys: Seq[Expression],
@@ -273,41 +274,41 @@ case class SkewJoin(
 
 
   def execute() = {
-    val streamedtable = streamedPlan.execute()
+    val streamedTable = streamedPlan.execute()
     //This will later write as configuration
-    val sample = streamedtable.sample(false, 0.3, 9).map(row => streamSideKeyGenerator(row)).collect()
-    val sortedsample = sample.sortWith((row1, row2) => row1.hashCode() > row2.hashCode())
+    val sample = streamedTable.sample(false, 0.3, 9).map(row => streamSideKeyGenerator(row)).collect()
+    val sortedSample = sample.sortWith((row1, row2) => row1.hashCode() > row2.hashCode())
     var max = 0
     var num = sample.size - 1
     var temp = 0
-    var maxrowkey = sortedsample(0)
+    var maxrowKey = sortedSample(0)
     //find the largest key
-    if (sortedsample.size > 1) {
+    if (sortedSample.size > 1) {
       for (i <- 1 to num) {
-        if (sortedsample(i - 1) == sortedsample(i)) temp += 1
+        if (sortedSample(i - 1) == sortedSample(i)) temp += 1
         else {
           if (temp > max) {
             max = temp
-            maxrowkey = sortedsample(i - 1)
+            maxrowKey = sortedSample(i - 1)
           }
           temp = 0
         }
       }
     }
-    val maxkeystreamedtable = streamedtable.filter(row => {
-      streamSideKeyGenerator(row).toString().equals(maxrowkey.toString())
+    val maxKeyStreamedTable = streamedTable.filter(row => {
+      streamSideKeyGenerator(row).toString().equals(maxrowKey.toString())
     })
-    val mainstreamedtable = streamedtable.filter(row => {
-      !streamSideKeyGenerator(row).toString().equals(maxrowkey.toString())
+    val mainStreamedTable = streamedTable.filter(row => {
+      !streamSideKeyGenerator(row).toString().equals(maxrowKey.toString())
     })
-    val buildrdd = buildPlan.execute()
-    val maxkeyjoinedrdd = maxkeystreamedtable.map(_.copy()).cartesian(buildrdd.map(_.copy())).map {
+    val buildRdd = buildPlan.execute()
+    val maxKeyJoinedRdd = maxKeyStreamedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())).map {
       case (l: Row, r: Row) => buildRow(l ++ r)
     }
-    val mainjoinedrdd = mainstreamedtable.map(_.copy()).cartesian(buildrdd.map(_.copy())).map {
+    val mainJoinedRdd = mainStreamedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())).map {
       case (l: Row, r: Row) => buildRow(l ++ r)
     }
-    sc.union(maxkeyjoinedrdd, mainjoinedrdd)
+    sc.union(maxKeyJoinedRdd, mainJoinedRdd)
   }
 }
 
