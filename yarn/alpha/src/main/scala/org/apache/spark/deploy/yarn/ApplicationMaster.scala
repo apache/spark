@@ -184,6 +184,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
   private def startUserClass(): Thread = {
     logInfo("Starting the user JAR in a separate Thread")
+    System.setProperty("spark.executor.instances", args.numExecutors.toString)
     val mainMethod = Class.forName(
       args.userClass,
       false /* initialize */ ,

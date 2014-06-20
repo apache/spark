@@ -254,14 +254,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   }
 
   override def isReady(): Boolean = {
-    if (ready){
+    if (ready) {
       return true
     }
     if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTime) {
       ready = true
       return true
     }
-    return false
+    false
   }
 }
 

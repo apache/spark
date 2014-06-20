@@ -47,10 +47,5 @@ private[spark] class YarnClusterSchedulerBackend(
       .foreach { case (optName, envVar, sysProp) => addArg(optName, envVar, sysProp, argsArrayBuf) }
     val args = new ApplicationMasterArguments(argsArrayBuf.toArray)
     totalExecutors.set(args.numExecutors)
-    // reset default minRegisteredRatio for yarn mode
-    if (minRegisteredRatio == 0) {
-      minRegisteredRatio = 0.9
-      ready = false
-    }
   }
 }
