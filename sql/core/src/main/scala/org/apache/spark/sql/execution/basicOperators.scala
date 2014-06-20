@@ -204,3 +204,18 @@ case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
 }
 
+/**
+ * :: DeveloperApi ::
+ *Return a new SparkPlan containing the distinct elements .
+ */
+import org.apache.spark.SparkContext._
+@DeveloperApi
+case class Distinct(child: SparkPlan)(@transient sc: SparkContext) extends UnaryNode {
+  // TODO: Implement a distinct, and use a strategy to generate the proper Distinct plan:
+
+  override def output = child.output
+
+  override def execute() = {
+    child.execute().map(x => (x, null)).reduceByKey((x, y) => x).map(_._1)
+  }
+}
