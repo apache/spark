@@ -20,8 +20,10 @@ package org.apache.spark.sql.hive.execution
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
+import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Hive}
+import org.apache.hadoop.hive.ql.metadata.formatting.MetaDataFormatUtils
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
@@ -458,6 +460,64 @@ case class NativeCommand(
       val rows = sideEffectResult.map(r => new GenericRow(Array[Any](r)))
       context.sparkContext.parallelize(rows, 1)
     }
+  }
+
+  override def otherCopyArgs = context :: Nil
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class DescribeHiveTableCommand(
+    table: MetastoreRelation,
+    output: Seq[Attribute],
+    isExtended: Boolean)(
+    @transient context: HiveContext)
+  extends LeafNode with Command {
+
+  // Strings with the format like Hive. It is used for result comparison in our unit tests.
+  lazy val hiveString: Seq[String] = {
+    val alignment = 20
+    val delim = "\t"
+
+    sideEffectResult.map {
+      case (name, dataType, comment) =>
+        String.format("%-" + alignment + "s", name) + delim +
+          String.format("%-" + alignment + "s", dataType) + delim +
+          String.format("%-" + alignment + "s", Option(comment).getOrElse("None"))
+    }
+  }
+
+  override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] = {
+    // Trying to mimic the format of Hive's output. But not exactly the same.
+    var results: Seq[(String, String, String)] = Nil
+
+    val columns: Seq[FieldSchema] = table.hiveQlTable.getCols
+    val partitionColumns: Seq[FieldSchema] = table.hiveQlTable.getPartCols
+    results ++= columns.map(field => (field.getName, field.getType, field.getComment))
+    if (!partitionColumns.isEmpty) {
+      val partColumnInfo =
+        partitionColumns.map(field => (field.getName, field.getType, field.getComment))
+      results ++=
+        partColumnInfo ++
+        Seq(("# Partition Information", "", "")) ++
+        Seq((s"# ${output.get(0).name}", output.get(1).name, output.get(2).name)) ++
+        partColumnInfo
+    }
+
+    if (isExtended) {
+      results ++= Seq(("Detailed Table Information", table.hiveQlTable.getTTable.toString, ""))
+    }
+
+    results
+  }
+
+  override def execute(): RDD[Row] = {
+    val rows = sideEffectResult.map {
+      case (name, dataType, comment) => new GenericRow(Array[Any](name, dataType, comment))
+    }
+    context.sparkContext.parallelize(rows, 1)
   }
 
   override def otherCopyArgs = context :: Nil
