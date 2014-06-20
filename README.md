@@ -32,7 +32,7 @@ If you wish to try out the package directly from github, you can use `install_gi
 SparkR by default links to Hadoop 1.0.4. To use SparkR with other Hadoop
 versions, you will need to rebuild SparkR with the same version that [Spark is
 linked
-to](http://spark.incubator.apache.org/docs/latest/index.html#a-note-about-hadoop-versions). 
+to](http://spark.apache.org/docs/latest/index.html#a-note-about-hadoop-versions).
 For example to use SparkR with a CDH 4.2.0 MR1 cluster, you can run
 
     SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 ./install-dev.sh
