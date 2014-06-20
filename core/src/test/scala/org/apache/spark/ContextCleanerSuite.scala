@@ -414,5 +414,6 @@ class CleanerTester(
   }
 
   private def blockManager = sc.env.blockManager
-  private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+  private def mapOutputTrackerMaster = sc.env.shuffleManager.mapOutputTracker.
+    asInstanceOf[MapOutputTrackerMaster]
 }

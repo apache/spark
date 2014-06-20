@@ -35,7 +35,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
 private[spark] trait ShuffleManager {
 
   protected var isDriver: Boolean = true
-  protected var mapOutputTracker: MapOutputTracker = _
+  protected[spark] var mapOutputTracker: MapOutputTracker = _
 
   /**
    * initialize the mapOutputTracker
@@ -139,7 +139,7 @@ private[spark] trait ShuffleManager {
   // TODO: disassociate Epoch with ShuffleManager?
   def incrementEpoch() {
     if (isDriver) {
-      mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].incrementEpoch()
+      mapOutputTracker.incrementEpoch()
     }
   }
 

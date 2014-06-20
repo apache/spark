@@ -184,6 +184,13 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
+  def incrementEpoch() {
+    epochLock.synchronized {
+      epoch += 1
+      logDebug("Increasing epoch to " + epoch)
+    }
+  }
+
   /**
    * Called from executors to update the epoch number, potentially clearing old outputs
    * because of a fetch failure. Each worker task calls this with the latest epoch
@@ -276,13 +283,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   /** Check if the given shuffle is being tracked */
   def containsShuffle(shuffleId: Int): Boolean = {
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
-  }
-
-  def incrementEpoch() {
-    epochLock.synchronized {
-      epoch += 1
-      logDebug("Increasing epoch to " + epoch)
-    }
   }
 
   def getSerializedMapOutputStatuses(shuffleId: Int): Array[Byte] = {
