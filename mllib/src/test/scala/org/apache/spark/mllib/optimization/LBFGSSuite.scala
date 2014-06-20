@@ -195,4 +195,38 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
     assert(lossLBFGS3.length == 6)
     assert((lossLBFGS3(4) - lossLBFGS3(5)) / lossLBFGS3(4) < convergenceTol)
   }
+
+  test("Optimize via class LBFGS.") {
+    val regParam = 0.2
+
+    // Prepare another non-zero weights to compare the loss in the first iteration.
+    val initialWeightsWithIntercept = Vectors.dense(0.3, 0.12)
+    val convergenceTol = 1e-12
+    val maxNumIterations = 10
+
+    val lbfgsOptimizer = new LBFGS(gradient, squaredL2Updater)
+      .setNumCorrections(numCorrections)
+      .setConvergenceTol(convergenceTol)
+      .setMaxNumIterations(maxNumIterations)
+      .setRegParam(regParam)
+
+    val weightLBFGS = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
+
+    val numGDIterations = 50
+    val stepSize = 1.0
+    val (weightGD, _) = GradientDescent.runMiniBatchSGD(
+      dataRDD,
+      gradient,
+      squaredL2Updater,
+      stepSize,
+      numGDIterations,
+      regParam,
+      miniBatchFrac,
+      initialWeightsWithIntercept)
+
+    // for class LBFGS and the optimize method, we only look at the weights
+    assert(compareDouble(weightLBFGS(0), weightGD(0), 0.02) &&
+      compareDouble(weightLBFGS(1), weightGD(1), 0.02),
+      "The weight differences between LBFGS and GD should be within 2%.")
+  }
 }
