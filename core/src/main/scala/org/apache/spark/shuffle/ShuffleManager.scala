@@ -34,6 +34,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark] trait ShuffleManager {
 
+  protected var isDriver: Boolean = true
   protected var mapOutputTracker: MapOutputTracker = _
 
   /**
@@ -43,6 +44,7 @@ private[spark] trait ShuffleManager {
    * this method for customized approach to keep track the map output
    */
   def initMapOutputTracker(conf: SparkConf, isDriver: Boolean, actorSystem: ActorSystem) {
+    this.isDriver = isDriver
     if (isDriver) {
       mapOutputTracker = new MapOutputTrackerMaster(conf)
       mapOutputTracker.trackerActor = actorSystem.actorOf(
@@ -66,7 +68,7 @@ private[spark] trait ShuffleManager {
       shuffleId: Int,
       numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    if (mapOutputTracker.isInstanceOf[MapOutputTrackerMaster]) {
+    if (isDriver) {
       mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].registerShuffle(shuffleId, numMaps)
     }
     new BaseShuffleHandle(shuffleId, numMaps, dependency)
@@ -78,7 +80,7 @@ private[spark] trait ShuffleManager {
   }
 
   def registerMapOutput(shuffleId: Int, mapId: Int, status: MapStatus) {
-    if (mapOutputTracker.isInstanceOf[MapOutputTrackerMaster]) {
+    if (isDriver) {
       mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].registerMapOutput(shuffleId, mapId,
         status)
     }
@@ -86,21 +88,21 @@ private[spark] trait ShuffleManager {
 
   /** Register multiple map output information for the given shuffle */
   def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false) {
-    if (mapOutputTracker.isInstanceOf[MapOutputTrackerMaster]) {
+    if (isDriver) {
       mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].registerMapOutputs(
         shuffleId, statuses, changeEpoch)
     }
   }
 
   def unregisterMapOutput(shuffleId: Int, mapId: Int, bmAddress: BlockManagerId) {
-    if (mapOutputTracker.isInstanceOf[MapOutputTrackerMaster]) {
+    if (isDriver) {
       mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].unregisterMapOutput(shuffleId, mapId,
         bmAddress)
     }
   }
 
   def containsShuffle(shuffleId: Int): Boolean =  {
-    if (mapOutputTracker.isInstanceOf[MapOutputTrackerMaster]) {
+    if (isDriver) {
       mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].containsShuffle(shuffleId)
     } else {
       false
@@ -109,7 +111,7 @@ private[spark] trait ShuffleManager {
 
   // TODO: MapStatus should be customizable
   def getShuffleMetadata(shuffleId: Int): Array[MapStatus] = {
-    if (mapOutputTracker.isInstanceOf[MapOutputTrackerMaster]) {
+    if (isDriver) {
       val serLocs = mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].
         getSerializedMapOutputStatuses(shuffleId)
       MapOutputTracker.deserializeMapStatuses(serLocs)
@@ -136,7 +138,7 @@ private[spark] trait ShuffleManager {
 
   // TODO: disassociate Epoch with ShuffleManager?
   def incrementEpoch() {
-    if (mapOutputTracker.isInstanceOf[MapOutputTrackerMaster]) {
+    if (isDriver) {
       mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].incrementEpoch()
     }
   }
