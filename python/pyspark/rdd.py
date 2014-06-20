@@ -1233,7 +1233,7 @@ class RDD(object):
                     combiners[k] = mergeCombiners(combiners[k], v)
             return combiners.iteritems()
         return shuffled.mapPartitions(_mergeCombiners)
-   
+
     def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):
         """
         Aggregate the values of each key, using given combine functions and a neutral "zero value".
@@ -1245,7 +1245,7 @@ class RDD(object):
         """
         def createZero():
           return copy.deepcopy(zeroValue)
-        
+
         return self.combineByKey(lambda v: seqFunc(createZero(), v), seqFunc, combFunc, numPartitions)
 
     def foldByKey(self, zeroValue, func, numPartitions=None):
@@ -1323,12 +1323,20 @@ class RDD(object):
         map_values_fn = lambda (k, v): (k, f(v))
         return self.map(map_values_fn, preservesPartitioning=True)
 
-    # TODO: support varargs cogroup of several RDDs.
-    def groupWith(self, other):
+    def groupWith(self, other, *others):
         """
-        Alias for cogroup.
+        Alias for cogroup but with support for multiple RDDs.
+
+        >>> w = sc.parallelize([("a", 5), ("b", 6)])
+        >>> x = sc.parallelize([("a", 1), ("b", 4)])
+        >>> y = sc.parallelize([("a", 2)])
+        >>> z = sc.parallelize([("b", 42)])
+        >>> map((lambda (x,y): (x, (list(y[0]), list(y[1]), list(y[2]), list(y[3])))), \
+                sorted(list(w.groupWith(x, y, z).collect())))
+        [('a', ([5], [1], [2], [])), ('b', ([6], [4], [], [42]))]
+
         """
-        return self.cogroup(other)
+        return python_cogroup((self, other) + others, numPartitions=None)
 
     # TODO: add variant with custom parittioner
     def cogroup(self, other, numPartitions=None):
@@ -1342,7 +1350,7 @@ class RDD(object):
         >>> map((lambda (x,y): (x, (list(y[0]), list(y[1])))), sorted(list(x.cogroup(y).collect())))
         [('a', ([1], [2])), ('b', ([4], []))]
         """
-        return python_cogroup(self, other, numPartitions)
+        return python_cogroup((self, other), numPartitions)
 
     def subtractByKey(self, other, numPartitions=None):
         """
