@@ -125,31 +125,28 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       storageLevel: StorageLevel,
       updatedBlocks: ArrayBuffer[(BlockId, BlockStatus)]): Iterator[T] = {
 
-    val cachedValues = {
-      if (!storageLevel.useMemory) {
-        /* This RDD is not to be cached in memory, so we can just pass the computed values
-         * as an iterator directly to the BlockManager, rather than first fully unrolling
-         * it in memory. The latter option potentially uses much more memory and risks OOM
-         * exceptions that can be avoided. */
-        updatedBlocks ++= blockManager.put(key, values, storageLevel, tellMaster = true)
-        blockManager.get(key) match {
-          case Some(v) => v
-          case None =>
-            logInfo(s"Failure to store $key")
-            throw new BlockException(key, s"Block manager failed to return cached value for $key!")
-        }
-      } else {
-        /* This RDD is to be cached in memory. In this case we cannot pass the computed values
-         * to the BlockManager as an iterator and expect to read it back later. This is because
-         * we may end up dropping a partition from memory store before getting it back, e.g.
-         * when the entirety of the RDD does not fit in memory. */
-        val elements = new ArrayBuffer[Any]
-        elements ++= values
-        updatedBlocks ++= blockManager.put(key, elements, storageLevel, tellMaster = true)
-        elements.iterator
+    if (!storageLevel.useMemory) {
+      /* This RDD is not to be cached in memory, so we can just pass the computed values
+       * as an iterator directly to the BlockManager, rather than first fully unrolling
+       * it in memory. The latter option potentially uses much more memory and risks OOM
+       * exceptions that can be avoided. */
+      updatedBlocks ++= blockManager.put(key, values, storageLevel, tellMaster = true)
+      blockManager.get(key) match {
+        case Some(v) => v.asInstanceOf[Iterator[T]]
+        case None =>
+          logInfo(s"Failure to store $key")
+          throw new BlockException(key, s"Block manager failed to return cached value for $key!")
       }
+    } else {
+      /* This RDD is to be cached in memory. In this case we cannot pass the computed values
+       * to the BlockManager as an iterator and expect to read it back later. This is because
+       * we may end up dropping a partition from memory store before getting it back, e.g.
+       * when the entirety of the RDD does not fit in memory. */
+      val elements = new ArrayBuffer[Any]
+      elements ++= values
+      updatedBlocks ++= blockManager.put(key, elements, storageLevel, tellMaster = true)
+      elements.iterator.asInstanceOf[Iterator[T]]
     }
-    cachedValues.asInstanceOf[Iterator[T]]
   }
 
 }
