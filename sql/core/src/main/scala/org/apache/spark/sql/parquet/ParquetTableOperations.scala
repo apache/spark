@@ -36,6 +36,7 @@ import parquet.schema.MessageType
 import org.apache.spark.{Logging, SerializableWritable, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
+import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 
 /**
@@ -64,10 +65,13 @@ case class ParquetTableScan(
       NewFileInputFormat.addInputPath(job, path)
     }
 
-    // Store Parquet schema in `Configuration`
+    // Store both requested and original schema in `Configuration`
     conf.set(
-        RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
-        ParquetTypesConverter.convertFromAttributes(output).toString)
+      RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+      ParquetTypesConverter.convertToString(output))
+    conf.set(
+      RowWriteSupport.SPARK_ROW_SCHEMA,
+      ParquetTypesConverter.convertToString(relation.output))
 
     // Store record filtering predicate in `Configuration`
     // Note 1: the input format ignores all predicates that cannot be expressed
@@ -166,13 +170,18 @@ case class InsertIntoParquetTable(
 
     val job = new Job(sc.hadoopConfiguration)
 
-    ParquetOutputFormat.setWriteSupportClass(
-      job,
-      classOf[org.apache.spark.sql.parquet.RowWriteSupport])
+    val writeSupport =
+      if (child.output.map(_.dataType).forall(_.isPrimitive)) {
+        logger.debug("Initializing MutableRowWriteSupport")
+        classOf[org.apache.spark.sql.parquet.MutableRowWriteSupport]
+      } else {
+        classOf[org.apache.spark.sql.parquet.RowWriteSupport]
+      }
 
-    // TODO: move that to function in object
+    ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
+
     val conf = ContextUtil.getConfiguration(job)
-    conf.set(RowWriteSupport.PARQUET_ROW_SCHEMA, relation.parquetSchema.toString)
+    RowWriteSupport.setSchema(relation.output, conf)
 
     val fspath = new Path(relation.path)
     val fs = fspath.getFileSystem(conf)
