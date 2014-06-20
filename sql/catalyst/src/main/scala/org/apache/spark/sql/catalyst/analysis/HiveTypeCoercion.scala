@@ -251,7 +251,9 @@ trait HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
+      // Skip if the type is boolean type already. Note that this extra cast should be removed
+      // by optimizer.SimplifyCasts.
+      case Cast(e, BooleanType) if e.dataType == BooleanType => e
       case Cast(e, BooleanType) => Not(Equals(e, Literal(0)))
       case Cast(e, dataType) if e.dataType == BooleanType =>
         Cast(If(e, Literal(1), Literal(0)), dataType)
