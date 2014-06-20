@@ -371,12 +371,18 @@ case class InsertIntoHiveTable(
           ObjectInspectorCopyOption.JAVA)
         .asInstanceOf[StructObjectInspector]
 
-      iter.map { row =>
-        // Casts Strings to HiveVarchars when necessary.
-        val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector)
-        val mappedRow = row.zip(fieldOIs).map(wrap)
 
-        serializer.serialize(mappedRow.toArray, standardOI)
+      val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
+      val outputData = new Array[Any](fieldOIs.length)
+      iter.map { row =>
+        var i = 0
+        while (i < row.length) {
+          // Casts Strings to HiveVarchars when necessary.
+          outputData(i) = wrap(row(i), fieldOIs(i))
+          i += 1
+        }
+
+        serializer.serialize(outputData, standardOI)
       }
     }
 
