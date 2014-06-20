@@ -25,13 +25,6 @@ import org.apache.spark.shuffle._
  * mapper (possibly reusing these across waves of tasks).
  */
 class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
-  /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
-  override def registerShuffle[K, V, C](
-      shuffleId: Int,
-      numMaps: Int,
-      dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    new BaseShuffleHandle(shuffleId, numMaps, dependency)
-  }
 
   /**
    * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
@@ -51,10 +44,4 @@ class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
       : ShuffleWriter[K, V] = {
     new HashShuffleWriter(handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, context)
   }
-
-  /** Remove a shuffle's metadata from the ShuffleManager. */
-  override def unregisterShuffle(shuffleId: Int): Unit = {}
-
-  /** Shut down this ShuffleManager. */
-  override def stop(): Unit = {}
 }

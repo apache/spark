@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.lang.ref.WeakReference
 
+import org.apache.spark.shuffle.MapOutputTrackerMaster
+
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.language.postfixOps

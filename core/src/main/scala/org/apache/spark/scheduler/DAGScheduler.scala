@@ -17,9 +17,11 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{NotSerializableException, PrintWriter, StringWriter}
+import java.io.{NotSerializableException}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
+
+import org.apache.spark.shuffle.{ShuffleManager}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.concurrent.Await
@@ -59,7 +61,7 @@ class DAGScheduler(
     private[scheduler] val sc: SparkContext,
     private[scheduler] val taskScheduler: TaskScheduler,
     listenerBus: LiveListenerBus,
-    mapOutputTracker: MapOutputTrackerMaster,
+    shuffleManager: ShuffleManager,
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv,
     clock: Clock = SystemClock)
@@ -72,7 +74,7 @@ class DAGScheduler(
       sc,
       taskScheduler,
       sc.listenerBus,
-      sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
+      sc.env.shuffleManager,
       sc.env.blockManager.master,
       sc.env)
   }
@@ -241,18 +243,17 @@ class DAGScheduler(
     : Stage =
   {
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId, callSite)
-    if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
-      val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
-      val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-      for (i <- 0 until locs.size) {
-        stage.outputLocs(i) = Option(locs(i)).toList   // locs(i) will be null if missing
+    if (shuffleManager.containsShuffle(shuffleDep.shuffleId)) {
+      val mapStatusArray = shuffleManager.getShuffleMetadata(shuffleDep.shuffleId)
+      for (i <- 0 until mapStatusArray.size) {
+        stage.outputLocs(i) = Option(mapStatusArray(i)).toList   // locs(i) will be null if missing
       }
-      stage.numAvailableOutputs = locs.count(_ != null)
+      stage.numAvailableOutputs = mapStatusArray.count(_ != null)
     } else {
-      // Kind of ugly: need to register RDDs with the cache and map output tracker here
+      // Kind of ugly: need to register RDDs with the cache and shuffleManager here
       // since we can't do it in the RDD constructor because # of partitions is unknown
       logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
-      mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size)
+      shuffleManager.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size, shuffleDep)
     }
     stage
   }
@@ -866,7 +867,7 @@ class DAGScheduler(
                 // epoch incremented to refetch them.
                 // TODO: Only increment the epoch number if this is not the first time
                 //       we registered these map outputs.
-                mapOutputTracker.registerMapOutputs(
+                shuffleManager.registerMapOutputs(
                   stage.shuffleDep.get.shuffleId,
                   stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
                   changeEpoch = true)
@@ -915,7 +916,7 @@ class DAGScheduler(
         val mapStage = shuffleToMapStage(shuffleId)
         if (mapId != -1) {
           mapStage.removeOutputLoc(mapId, bmAddress)
-          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+          shuffleManager.unregisterMapOutput(shuffleId, mapId, bmAddress)
         }
         logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
           "); marking it for resubmission")
@@ -955,7 +956,7 @@ class DAGScheduler(
    * stray fetch failures from possibly retriggering the detection of a node as lost.
    */
   private[scheduler] def handleExecutorLost(execId: String, maybeEpoch: Option[Long] = None) {
-    val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
+    val currentEpoch = maybeEpoch.getOrElse(shuffleManager.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
       failedEpoch(execId) = currentEpoch
       logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
@@ -964,10 +965,10 @@ class DAGScheduler(
       for ((shuffleId, stage) <- shuffleToMapStage) {
         stage.removeOutputsOnExecutor(execId)
         val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
-        mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
+        shuffleManager.registerMapOutputs(shuffleId, locs, changeEpoch = true)
       }
       if (shuffleToMapStage.isEmpty) {
-        mapOutputTracker.incrementEpoch()
+        shuffleManager.incrementEpoch()
       }
       clearCacheLocs()
     } else {

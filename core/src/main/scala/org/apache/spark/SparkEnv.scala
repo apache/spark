@@ -56,7 +56,6 @@ class SparkEnv (
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
-    val mapOutputTracker: MapOutputTracker,
     val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
@@ -80,7 +79,6 @@ class SparkEnv (
   private[spark] def stop() {
     pythonWorkers.foreach { case(key, worker) => worker.stop() }
     httpFileServer.stop()
-    mapOutputTracker.stop()
     shuffleManager.stop()
     broadcastManager.stop()
     blockManager.stop()
@@ -202,24 +200,17 @@ object SparkEnv extends Logging {
       }
     }
 
-    val mapOutputTracker =  if (isDriver) {
-      new MapOutputTrackerMaster(conf)
-    } else {
-      new MapOutputTrackerWorker(conf)
-    }
+    val shuffleManager = instantiateClass[ShuffleManager](
+      "spark.shuffle.manager", "org.apache.spark.shuffle.hash.HashShuffleManager")
 
-    // Have to assign trackerActor after initialization as MapOutputTrackerActor
-    // requires the MapOutputTracker itself
-    mapOutputTracker.trackerActor = registerOrLookup(
-      "MapOutputTracker",
-      new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
+    shuffleManager.initMapOutputTracker(conf, isDriver, actorSystem)
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
       new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, securityManager, mapOutputTracker)
+      serializer, conf, securityManager, shuffleManager)
 
     val connectionManager = blockManager.connectionManager
 
@@ -247,9 +238,6 @@ object SparkEnv extends Logging {
       "."
     }
 
-    val shuffleManager = instantiateClass[ShuffleManager](
-      "spark.shuffle.manager", "org.apache.spark.shuffle.hash.HashShuffleManager")
-
     // Warn about deprecated spark.cache.class property
     if (conf.contains("spark.cache.class")) {
       logWarning("The spark.cache.class property is no longer being used! Specify storage " +
@@ -262,7 +250,6 @@ object SparkEnv extends Logging {
       serializer,
       closureSerializer,
       cacheManager,
-      mapOutputTracker,
       shuffleManager,
       broadcastManager,
       blockManager,

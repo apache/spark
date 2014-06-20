@@ -17,8 +17,8 @@
 
 package org.apache.spark.shuffle.hash
 
-import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
-import org.apache.spark.{Logging, MapOutputTracker, SparkEnv, TaskContext}
+import org.apache.spark.shuffle.{MapOutputTracker, BaseShuffleHandle, ShuffleWriter}
+import org.apache.spark.{Logging, SparkEnv, TaskContext}
 import org.apache.spark.storage.{BlockObjectWriter}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -37,7 +37,7 @@ class HashShuffleWriter[K, V](
 
   private val blockManager = SparkEnv.get.blockManager
   private val shuffleBlockManager = blockManager.shuffleBlockManager
-  private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
+  private val ser = Serializer.getSerializer(dep.serializer.orNull)
   private val shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, mapId, numOutputSplits, ser)
 
   /** Write a bunch of records to this task's output */
@@ -69,7 +69,7 @@ class HashShuffleWriter[K, V](
       stopping = true
       if (success) {
         try {
-          return Some(commitWritesAndBuildStatus())
+          Some(commitWritesAndBuildStatus())
         } catch {
           case e: Exception =>
             revertWrites()
@@ -77,7 +77,7 @@ class HashShuffleWriter[K, V](
         }
       } else {
         revertWrites()
-        return None
+        None
       }
     } finally {
       // Release the writers back to the shuffle block manager.

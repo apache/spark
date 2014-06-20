@@ -15,13 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.shuffle
 
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
-
-import scala.collection.mutable.{HashSet, HashMap, Map}
-import scala.concurrent.Await
 
 import akka.actor._
 import akka.pattern.ask

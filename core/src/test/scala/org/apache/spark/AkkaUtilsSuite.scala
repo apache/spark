@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import org.apache.spark.shuffle.{MapOutputTracker, MapOutputTrackerWorker, MapOutputTrackerMaster, MapOutputTrackerMasterActor}
 import org.scalatest.FunSuite
 
 import akka.actor._
