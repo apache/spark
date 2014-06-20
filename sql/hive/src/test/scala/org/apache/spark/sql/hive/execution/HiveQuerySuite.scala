@@ -21,12 +21,20 @@ import scala.util.Try
 
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{SchemaRDD, execution, Row}
+import org.apache.spark.sql.{SchemaRDD, Row}
+
+case class TestData(a: Int, b: String)
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
+
+  test("CREATE TABLE AS runs once") {
+    hql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
+    assert(hql("SELECT COUNT(*) FROM foo").collect().head.getLong(0) === 1,
+      "Incorrect number of rows in created table")
+  }
 
   createQueryTest("between",
     "SELECT * FROM src WHERE key Between 1 and 2")
@@ -164,12 +172,47 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SELECT * FROM src").toString
   }
 
-  private val explainCommandClassName =
-    classOf[execution.ExplainCommand].getSimpleName.stripSuffix("$")
+  createQueryTest("case statements with key #1",
+    "SELECT (CASE 1 WHEN 2 THEN 3 END) FROM src where key < 15")
+
+  createQueryTest("case statements with key #2",
+    "SELECT (CASE key WHEN 2 THEN 3 ELSE 0 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements with key #3",
+    "SELECT (CASE key WHEN 2 THEN 3 WHEN NULL THEN 4 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements with key #4",
+    "SELECT (CASE key WHEN 2 THEN 3 WHEN NULL THEN 4 ELSE 0 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #1",
+    "SELECT (CASE WHEN key > 2 THEN 3 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #2",
+    "SELECT (CASE WHEN key > 2 THEN 3 ELSE 4 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #3",
+    "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #4",
+    "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 ELSE 0 END) FROM src WHERE key < 15")
+
+  test("implement identity function using case statement") {
+    val actual = hql("SELECT (CASE key WHEN key THEN key END) FROM src").collect().toSet
+    val expected = hql("SELECT key FROM src").collect().toSet
+    assert(actual === expected)
+  }
+
+  // TODO: adopt this test when Spark SQL has the functionality / framework to report errors.
+  // See https://github.com/apache/spark/pull/1055#issuecomment-45820167 for a discussion.
+  ignore("non-boolean conditions in a CaseWhen are illegal") {
+    intercept[Exception] {
+      hql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
+    }
+  }
 
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.size == 1 && explanation.head.startsWith(explainCommandClassName)
+    explanation.size > 1 && explanation.head.startsWith("Physical execution plan")
   }
 
   test("SPARK-1704: Explain commands as a SchemaRDD") {
@@ -181,28 +224,51 @@ class HiveQuerySuite extends HiveComparisonTest {
     TestHive.reset()
   }
 
+  test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
+    val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
+      .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
+    
+    TestHive.sparkContext.parallelize(fixture).registerAsTable("having_test")
+    
+    val results = 
+      hql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
+      .collect()
+      .map(x => Pair(x.getString(0), x.getInt(1)))
+    
+    assert(results === Array(Pair("foo", 4)))
+    
+    TestHive.reset()
+  }
+
+  test("SPARK-2180:  HAVING without GROUP BY raises exception") {
+    intercept[Exception] {
+      hql("SELECT value, attr FROM having_test HAVING attr > 3")
+    }
+  }
+  
+  test("SPARK-2180:  HAVING with non-boolean clause raises no exceptions") {
+    val results = hql("select key, count(*) c from src group by key having c").collect()
+  }
+
   test("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 
-    val q0 = hql(s"DROP TABLE IF EXISTS $tableName")
-    assert(q0.count() == 0)
-
-    val q1 = hql(s"CREATE TABLE $tableName(key INT, value STRING)")
-    assert(q1.count() == 0)
-
-    val q2 = hql("SHOW TABLES")
-    val tables = q2.select('result).collect().map { case Row(table: String) => table }
-    assert(tables.contains(tableName))
-
-    val q3 = hql(s"DESCRIBE $tableName")
-    assertResult(Array(Array("key", "int", "None"), Array("value", "string", "None"))) {
-      q3.select('result).collect().map { case Row(fieldDesc: String) =>
-        fieldDesc.split("\t").map(_.trim)
-      }
+    assertResult(0) {
+      hql(s"DROP TABLE IF EXISTS $tableName").count()
     }
 
-    val q4 = hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")
-    assert(isExplanation(q4))
+    assertResult(0) {
+      hql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
+    }
+
+    assert(
+      hql("SHOW TABLES")
+        .select('result)
+        .collect()
+        .map(_.getString(0))
+        .contains(tableName))
+
+    assert(isExplanation(hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
 
     TestHive.reset()
   }
@@ -216,6 +282,97 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     // If the CREATE TABLE command got executed again, the following assertion would fail
     assert(Try(q0.count()).isSuccess)
+  }
+
+  test("DESCRIBE commands") {
+    hql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
+
+    hql(
+      """FROM src INSERT OVERWRITE TABLE test_describe_commands1 PARTITION (dt='2008-06-08')
+        |SELECT key, value
+      """.stripMargin)
+
+    // Describe a table
+    assertResult(
+      Array(
+        Array("key", "int", null),
+        Array("value", "string", null),
+        Array("dt", "string", null),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
+        Array("dt", "string", null))
+    ) {
+      hql("DESCRIBE test_describe_commands1")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
+
+    // Describe a table with a fully qualified table name
+    assertResult(
+      Array(
+        Array("key", "int", null),
+        Array("value", "string", null),
+        Array("dt", "string", null),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
+        Array("dt", "string", null))
+    ) {
+      hql("DESCRIBE default.test_describe_commands1")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
+
+    // Describe a column is a native command
+    assertResult(Array(Array("value", "string", "from deserializer"))) {
+      hql("DESCRIBE test_describe_commands1 value")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a column is a native command
+    assertResult(Array(Array("value", "string", "from deserializer"))) {
+      hql("DESCRIBE default.test_describe_commands1 value")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a partition is a native command
+    assertResult(
+      Array(
+        Array("key", "int", "None"),
+        Array("value", "string", "None"),
+        Array("dt", "string", "None"),
+        Array("", "", ""),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
+        Array("", "", ""),
+        Array("dt", "string", "None"))
+    ) {
+      hql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a registered temporary table.
+    val testData: SchemaRDD =
+      TestHive.sparkContext.parallelize(
+        TestData(1, "str1") ::
+        TestData(1, "str2") :: Nil)
+    testData.registerAsTable("test_describe_commands2")
+
+    assertResult(
+      Array(
+        Array("# Registered as a temporary table", null, null),
+        Array("a", "IntegerType", null),
+        Array("b", "StringType", null))
+    ) {
+      hql("DESCRIBE test_describe_commands2")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
   }
 
   test("parse HQL set commands") {
@@ -310,3 +467,6 @@ class HiveQuerySuite extends HiveComparisonTest {
   // since they modify /clear stuff.
 
 }
+
+// for SPARK-2180 test
+case class HavingRow(key: Int, value: String, attr: Int)

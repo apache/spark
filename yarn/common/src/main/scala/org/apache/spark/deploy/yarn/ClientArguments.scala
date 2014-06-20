@@ -21,8 +21,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.InputFormatInfo
-import org.apache.spark.util.IntParam
-import org.apache.spark.util.MemoryParam
+import org.apache.spark.util.{Utils, IntParam, MemoryParam}
 
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
@@ -44,6 +43,18 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var priority = 0
 
   parseArgs(args.toList)
+
+  // env variable SPARK_YARN_DIST_ARCHIVES/SPARK_YARN_DIST_FILES set in yarn-client then
+  // it should default to hdfs://
+  files = Option(files).getOrElse(sys.env.get("SPARK_YARN_DIST_FILES").orNull)
+  archives = Option(archives).getOrElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES").orNull)
+
+  // spark.yarn.dist.archives/spark.yarn.dist.files defaults to use file:// if not specified,
+  // for both yarn-client and yarn-cluster
+  files = Option(files).getOrElse(sparkConf.getOption("spark.yarn.dist.files").
+    map(p => Utils.resolveURIs(p)).orNull)
+  archives = Option(archives).getOrElse(sparkConf.getOption("spark.yarn.dist.archives").
+    map(p => Utils.resolveURIs(p)).orNull)
 
   private def parseArgs(inputArgs: List[String]): Unit = {
     val userArgsBuffer: ArrayBuffer[String] = new ArrayBuffer[String]()

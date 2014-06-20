@@ -154,7 +154,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.WriteToFile(path, child) =>
         val relation =
           ParquetRelation.create(path, child, sparkContext.hadoopConfiguration)
-        InsertIntoParquetTable(relation, planLater(child), overwrite=true)(sparkContext) :: Nil
+        // Note: overwrite=false because otherwise the metadata we just created will be deleted
+        InsertIntoParquetTable(relation, planLater(child), overwrite=false)(sparkContext) :: Nil
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child), overwrite)(sparkContext) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
@@ -250,9 +251,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.SetCommand(key, value) =>
         Seq(execution.SetCommand(key, value, plan.output)(context))
-      case logical.ExplainCommand(child) =>
-        val executedPlan = context.executePlan(child).executedPlan
-        Seq(execution.ExplainCommand(executedPlan, plan.output)(context))
+      case logical.ExplainCommand(logicalPlan) =>
+        Seq(execution.ExplainCommand(logicalPlan, plan.output)(context))
       case logical.CacheCommand(tableName, cache) =>
         Seq(execution.CacheCommand(tableName, cache)(context))
       case _ => Nil
