@@ -30,7 +30,7 @@ private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
  * Stores blocks in memory, either as Arrays of deserialized Java objects or as
  * serialized ByteBuffers.
  */
-private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
+private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   extends BlockStore(blockManager) {
 
   private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
@@ -212,7 +212,9 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    *
    * Return whether there is enough free space, along with the blocks dropped in the process.
    */
-  private def ensureFreeSpace(blockIdToAdd: BlockId, space: Long): ResultWithDroppedBlocks = {
+  private[spark] def ensureFreeSpace(
+      blockIdToAdd: BlockId,
+      space: Long): ResultWithDroppedBlocks = {
     logInfo(s"ensureFreeSpace($space) called with curMem=$currentMemory, maxMem=$maxMemory")
 
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
@@ -274,6 +276,6 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 }
 
-private case class ResultWithDroppedBlocks(
+private[spark] case class ResultWithDroppedBlocks(
     success: Boolean,
     droppedBlocks: Seq[(BlockId, BlockStatus)])

@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 /**
  * Stores BlockManager blocks on Tachyon.
  */
-private class TachyonStore(
+private[spark] class TachyonStore(
     blockManager: BlockManager,
     tachyonManager: TachyonBlockManager)
   extends BlockStore(blockManager: BlockManager) with Logging {

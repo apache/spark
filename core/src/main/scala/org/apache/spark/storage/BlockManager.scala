@@ -61,9 +61,9 @@ private[spark] class BlockManager(
 
   // Actual storage of where blocks are kept
   private var tachyonInitialized = false
-  private[storage] val memoryStore = new MemoryStore(this, maxMemory)
-  private[storage] val diskStore = new DiskStore(this, diskBlockManager)
-  private[storage] lazy val tachyonStore: TachyonStore = {
+  private[spark] val memoryStore = new MemoryStore(this, maxMemory)
+  private[spark] val diskStore = new DiskStore(this, diskBlockManager)
+  private[spark] lazy val tachyonStore: TachyonStore = {
     val storeDir = conf.get("spark.tachyonStore.baseDir", "/tmp_spark_tachyon")
     val appFolderName = conf.get("spark.tachyonStore.folderName")
     val tachyonStorePath = s"$storeDir/$appFolderName/${this.executorId}"
@@ -1049,9 +1049,17 @@ private[spark] class BlockManager(
 private[spark] object BlockManager extends Logging {
   private val ID_GENERATOR = new IdGenerator
 
+  /** Return the total amount of storage memory available. */
   private def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
-    (Runtime.getRuntime.maxMemory * memoryFraction).toLong
+    val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
+    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+  }
+
+  /** Return the amount of storage memory used for unrolling RDD partitions. */
+  def getBufferMemory(conf: SparkConf): Long = {
+    val bufferFraction = conf.getDouble("spark.storage.bufferFraction", 0.2)
+    (getMaxMemory(conf) * bufferFraction).toLong
   }
 
   def getHeartBeatFrequency(conf: SparkConf): Long =

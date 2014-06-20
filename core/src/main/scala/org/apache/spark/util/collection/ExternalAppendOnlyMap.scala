@@ -130,9 +130,9 @@ class ExternalAppendOnlyMap[K, V, C](
       // this map to grow and, if possible, allocate the required amount
       shuffleMemoryMap.synchronized {
         val threadId = Thread.currentThread().getId
-        val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId)
+        val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId).getOrElse(0L)
         val availableMemory = maxMemoryThreshold -
-          (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
+          (shuffleMemoryMap.values.sum - previouslyOccupiedMemory)
 
         // Assume map growth factor is 2x
         shouldSpill = availableMemory < mapSize * 2

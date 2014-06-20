@@ -36,4 +36,8 @@ private[spark] class SizeTrackingAppendOnlyBuffer[T: ClassTag]
     resetSamples()
     this
   }
+
+  override def array: Array[T] = {
+    super.iterator.toArray
+  }
 }

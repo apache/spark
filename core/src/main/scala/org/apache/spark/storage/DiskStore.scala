@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 /**
  * Stores BlockManager blocks on disk.
  */
-private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
+private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
   extends BlockStore(blockManager) with Logging {
 
   val minMemoryMapBytes = blockManager.conf.getLong("spark.storage.memoryMapThreshold", 2 * 4096L)

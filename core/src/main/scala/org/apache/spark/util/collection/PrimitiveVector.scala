@@ -50,6 +50,16 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
 
   def size: Int = _numElements
 
+  def iterator: Iterator[V] = new Iterator[V] {
+    var index = 0
+    override def hasNext: Boolean = index < _numElements
+    override def next(): V = {
+      val value = _array(index)
+      index += 1
+      value
+    }
+  }
+
   /** Gets the underlying array backing this vector. */
   def array: Array[V] = _array
 

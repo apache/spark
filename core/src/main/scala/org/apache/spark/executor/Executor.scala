@@ -259,11 +259,11 @@ private[spark] class Executor(
           }
         }
       } finally {
-        // TODO: Unregister shuffle memory only for ResultTask
+        val threadId = Thread.currentThread().getId
         val shuffleMemoryMap = env.shuffleMemoryMap
-        shuffleMemoryMap.synchronized {
-          shuffleMemoryMap.remove(Thread.currentThread().getId)
-        }
+        val cacheMemoryMap = env.cacheMemoryMap
+        shuffleMemoryMap.synchronized { shuffleMemoryMap.remove(threadId) }
+        cacheMemoryMap.synchronized { cacheMemoryMap.remove(threadId) }
         runningTasks.remove(taskId)
       }
     }
