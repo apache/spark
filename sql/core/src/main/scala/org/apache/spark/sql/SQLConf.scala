@@ -29,7 +29,7 @@ import scala.collection.JavaConverters._
  */
 trait SQLConf {
 
-  /************************** Spark SQL Params/Hints ********************/
+  /** ************************ Spark SQL Params/Hints ******************* */
 
   /** Number of partitions to use for shuffle operators. */
   private[spark] def numShufflePartitions: Int = get("spark.sql.shuffle.partitions", "200").toInt
@@ -43,7 +43,7 @@ trait SQLConf {
   private[spark] def autoConvertJoinSize: Int =
     get("spark.sql.auto.convert.join.size", "10000").toInt
 
-  /************************ SQLConf functionality methods *************/
+  /** ********************** SQLConf functionality methods ************ */
 
   @transient
   private val settings = java.util.Collections.synchronizedMap(
