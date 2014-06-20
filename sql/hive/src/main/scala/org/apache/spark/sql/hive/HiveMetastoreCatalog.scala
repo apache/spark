@@ -34,9 +34,8 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.hive.execution.{HiveTableScan, InsertIntoHiveTable}
-import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
+import org.apache.spark.sql.columnar.InMemoryRelation
+import org.apache.spark.sql.hive.execution.HiveTableScan
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -241,15 +240,24 @@ object HiveMetastoreTypes extends RegexParsers {
   }
 }
 
+
+
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: TTable, val partitions: Seq[TPartition])
-  extends BaseRelation {
+  extends BaseRelation
+  with SizeEstimatableRelation[HiveContext] {
   // TODO: Can we use org.apache.hadoop.hive.ql.metadata.Table as the type of table and
   // use org.apache.hadoop.hive.ql.metadata.Partition as the type of elements of partitions.
   // Right now, using org.apache.hadoop.hive.ql.metadata.Table and
   // org.apache.hadoop.hive.ql.metadata.Partition will cause a NotSerializableException
   // which indicates the SerDe we used is not Serializable.
+
+  def estimatedSize(context: HiveContext): Long = {
+    val path = hiveQlTable.getPath
+    val fs = path.getFileSystem(context.hiveconf) // TODO: or sc.hadoopConfiguration?
+    fs.getContentSummary(path).getLength // TODO: in bytes or system-dependent?
+  }
 
   def hiveQlTable = new Table(table)
 

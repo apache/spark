@@ -32,9 +32,10 @@ import parquet.schema.{Type => ParquetType, PrimitiveType => ParquetPrimitiveTyp
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 import parquet.schema.Type.Repetition
 
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
+import org.apache.spark.sql.catalyst.plans.logical.{SizeEstimatableRelation, LogicalPlan, LeafNode}
 import org.apache.spark.sql.catalyst.types._
 
 // Implicits
@@ -52,9 +53,18 @@ import scala.collection.JavaConversions._
  *
  * @param path The path to the Parquet file.
  */
-private[sql] case class ParquetRelation(val path: String)
-    extends LeafNode with MultiInstanceRelation {
+private[sql] case class ParquetRelation(path: String)
+    extends LeafNode
+    with MultiInstanceRelation
+    with SizeEstimatableRelation[SQLContext] {
   self: Product =>
+
+  def estimatedSize(context: SQLContext): Long = {
+    // TODO: right config?
+    val hdfsPath = new Path(path)
+    val fs = hdfsPath.getFileSystem(context.sparkContext.hadoopConfiguration)
+    fs.getContentSummary(hdfsPath).getLength // TODO: in bytes or system-dependent?
+  }
 
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =

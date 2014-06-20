@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.sql.{SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{SizeEstimatableRelation, BaseRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.parquet._
 import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
+
+  val sqlContext: SQLContext
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -51,64 +52,70 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * evaluated by matching hash keys.
    */
   object HashJoin extends Strategy with PredicateHelper {
-    var broadcastTables: Seq[String] =
+
+    private[this] def broadcastHashJoin(
+        leftKeys: Seq[Expression],
+        rightKeys: Seq[Expression],
+        left: LogicalPlan,
+        right: LogicalPlan,
+        condition: Option[Expression],
+        side: BuildSide) = {
+      val broadcastHashJoin = execution.BroadcastHashJoin(
+        leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))(sparkContext)
+      condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
+    }
+
+    def broadcastTables: Seq[String] =
       sparkContext.conf.get("spark.sql.hints.broadcastTables", "").split(",").toBuffer
 
+    // TODO: how to unit test these conversions?
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-
-//      case HashFilteredJoin(
-//            Inner,
-//            leftKeys,
-//            rightKeys,
-//            condition,
-//            left,
-//            right @ PhysicalOperation(_, _, b: MetastoreRelation))
-//        if tableRawSizeBelowThreshold(left) =>
-//        // TODO: these will be used
-////        import org.apache.hadoop.fs.ContentSummary
-////        import org.apache.hadoop.fs.FileSystem
-////        import org.apache.hadoop.fs.Path
-//
-//        FileSystem.get()
-//
-//        val hashJoin =
-//          execution.BroadcastHashJoin(
-//            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))(sparkContext)
-//        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+      case HashFilteredJoin(
+              Inner,
+              leftKeys,
+              rightKeys,
+              condition,
+              left,
+              right @ PhysicalOperation(_, _, b: BaseRelation))
+        if broadcastTables.contains(b.tableName) =>
+          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
       case HashFilteredJoin(
-            Inner,
-            leftKeys,
-            rightKeys,
-            condition,
-            left,
-            right @ PhysicalOperation(_, _, b: BaseRelation))
-          if broadcastTables.contains(b.tableName)=>
-
-        val hashJoin =
-          execution.BroadcastHashJoin(
-            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))(sparkContext)
-        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+              Inner,
+              leftKeys,
+              rightKeys,
+              condition,
+              left @ PhysicalOperation(_, _, b: BaseRelation),
+              right)
+        if broadcastTables.contains(b.tableName) =>
+          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
       case HashFilteredJoin(
-             Inner,
-             leftKeys,
-             rightKeys,
-             condition,
-             left @ PhysicalOperation(_, _, b: BaseRelation),
-             right)
-          if broadcastTables.contains(b.tableName) =>
+              Inner,
+              leftKeys,
+              rightKeys,
+              condition,
+              left,
+              right @ PhysicalOperation(_, _, b: SizeEstimatableRelation[SQLContext]))
+        if b.estimatedSize(sqlContext) <= sqlContext.autoConvertJoinSize =>
+          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
-        val hashJoin =
-          execution.BroadcastHashJoin(
-            leftKeys, rightKeys, BuildLeft, planLater(left), planLater(right))(sparkContext)
-        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+      case HashFilteredJoin(
+              Inner,
+              leftKeys,
+              rightKeys,
+              condition,
+              left @ PhysicalOperation(_, _, b: SizeEstimatableRelation[SQLContext]),
+              right)
+        if b.estimatedSize(sqlContext) <= sqlContext.autoConvertJoinSize =>
+          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case HashFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
         val hashJoin =
           execution.ShuffledHashJoin(
             leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+
       case _ => Nil
     }
   }
@@ -167,25 +174,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-//  // FIXME(zongheng): WIP
-//  object AutoBroadcastHashJoin extends Strategy {
-//    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-//      case logical.Join(left, right, joinType, condition) =>
-//
-//        execution.BroadcastHashJoin()
-//
-//        execution.BroadcastNestedLoopJoin(
-//          planLater(left), planLater(right), joinType, condition)(sparkContext) :: Nil
-//      case _ => Nil
-//    }
-//  }
-
   object BroadcastNestedLoopJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-
-      // FIXME: WIP -- auto broadcast hash join
-      case logical.Join
-
       case logical.Join(left, right, joinType, condition) =>
         execution.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joinType, condition)(sparkContext) :: Nil
