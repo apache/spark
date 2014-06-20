@@ -512,7 +512,7 @@ class RDD(object):
         [('a', 3), ('fleece', 7), ('had', 2), ('lamb', 5), ('little', 4), ('Mary', 1), ('was', 8), ('white', 9), ('whose', 6)]
         """
         if numPartitions is None:
-            numPartitions = self.ctx.defaultParallelism
+            numPartitions = self._defaultReducePartitions()
 
         bounds = list()
 
@@ -1154,7 +1154,7 @@ class RDD(object):
         set([])
         """
         if numPartitions is None:
-            numPartitions = self.ctx.defaultParallelism
+            numPartitions = self._defaultReducePartitions()
 
         if partitionFunc is None:
             partitionFunc = lambda x: 0 if x is None else hash(x)
@@ -1212,7 +1212,7 @@ class RDD(object):
         [('a', '11'), ('b', '1')]
         """
         if numPartitions is None:
-            numPartitions = self.ctx.defaultParallelism
+            numPartitions = self._defaultReducePartitions()
         def combineLocally(iterator):
             combiners = {}
             for x in iterator:
@@ -1233,7 +1233,7 @@ class RDD(object):
                     combiners[k] = mergeCombiners(combiners[k], v)
             return combiners.iteritems()
         return shuffled.mapPartitions(_mergeCombiners)
-   
+
     def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):
         """
         Aggregate the values of each key, using given combine functions and a neutral "zero value".
@@ -1245,7 +1245,7 @@ class RDD(object):
         """
         def createZero():
           return copy.deepcopy(zeroValue)
-        
+
         return self.combineByKey(lambda v: seqFunc(createZero(), v), seqFunc, combFunc, numPartitions)
 
     def foldByKey(self, zeroValue, func, numPartitions=None):
@@ -1323,12 +1323,20 @@ class RDD(object):
         map_values_fn = lambda (k, v): (k, f(v))
         return self.map(map_values_fn, preservesPartitioning=True)
 
-    # TODO: support varargs cogroup of several RDDs.
-    def groupWith(self, other):
+    def groupWith(self, other, *others):
         """
-        Alias for cogroup.
+        Alias for cogroup but with support for multiple RDDs.
+
+        >>> w = sc.parallelize([("a", 5), ("b", 6)])
+        >>> x = sc.parallelize([("a", 1), ("b", 4)])
+        >>> y = sc.parallelize([("a", 2)])
+        >>> z = sc.parallelize([("b", 42)])
+        >>> map((lambda (x,y): (x, (list(y[0]), list(y[1]), list(y[2]), list(y[3])))), \
+                sorted(list(w.groupWith(x, y, z).collect())))
+        [('a', ([5], [1], [2], [])), ('b', ([6], [4], [], [42]))]
+
         """
-        return self.cogroup(other)
+        return python_cogroup((self, other) + others, numPartitions=None)
 
     # TODO: add variant with custom parittioner
     def cogroup(self, other, numPartitions=None):
@@ -1342,7 +1350,7 @@ class RDD(object):
         >>> map((lambda (x,y): (x, (list(y[0]), list(y[1])))), sorted(list(x.cogroup(y).collect())))
         [('a', ([1], [2])), ('b', ([4], []))]
         """
-        return python_cogroup(self, other, numPartitions)
+        return python_cogroup((self, other), numPartitions)
 
     def subtractByKey(self, other, numPartitions=None):
         """
@@ -1474,6 +1482,21 @@ class RDD(object):
                                      java_storage_level.deserialized(),
                                      java_storage_level.replication())
         return storage_level
+
+    def _defaultReducePartitions(self):
+        """
+        Returns the default number of partitions to use during reduce tasks (e.g., groupBy).
+        If spark.default.parallelism is set, then we'll use the value from SparkContext
+        defaultParallelism, otherwise we'll use the number of partitions in this RDD.
+
+        This mirrors the behavior of the Scala Partitioner#defaultPartitioner, intended to reduce
+        the likelihood of OOMs. Once PySpark adopts Partitioner-based APIs, this behavior will
+        be inherent.
+        """
+        if self.ctx._conf.contains("spark.default.parallelism"):
+            return self.ctx.defaultParallelism
+        else:
+            return self.getNumPartitions()
 
     # TODO: `lookup` is disabled because we can't make direct comparisons based
     # on the key; we need to compare the hash of the key to the hash of the

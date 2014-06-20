@@ -120,7 +120,7 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
     // on SparkConf settings.
 
     def testAppenderSelection[ExpectedAppender: ClassTag, ExpectedRollingPolicy](
-        properties: Seq[(String, String)], expectedRollingPolicyParam: Long = -1): FileAppender = {
+        properties: Seq[(String, String)], expectedRollingPolicyParam: Long = -1): Unit = {
 
       // Set spark conf properties
       val conf = new SparkConf
@@ -129,8 +129,9 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
       }
 
       // Create and test file appender
-      val inputStream = new PipedInputStream(new PipedOutputStream())
-      val appender = FileAppender(inputStream, new File("stdout"), conf)
+      val testOutputStream = new PipedOutputStream()
+      val testInputStream = new PipedInputStream(testOutputStream)
+      val appender = FileAppender(testInputStream, testFile, conf)
       assert(appender.isInstanceOf[ExpectedAppender])
       assert(appender.getClass.getSimpleName ===
         classTag[ExpectedAppender].runtimeClass.getSimpleName)
@@ -144,7 +145,8 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
         }
         assert(policyParam === expectedRollingPolicyParam)
       }
-      appender
+      testOutputStream.close()
+      appender.awaitTermination()
     }
 
     import RollingFileAppender._

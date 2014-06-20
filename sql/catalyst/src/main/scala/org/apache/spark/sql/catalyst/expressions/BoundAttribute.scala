@@ -68,7 +68,7 @@ class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {
 }
 
 object BindReferences extends Logging {
-  def bindReference(expression: Expression, input: Seq[Attribute]): Expression = {
+  def bindReference[A <: Expression](expression: A, input: Seq[Attribute]): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
         val ordinal = input.indexWhere(_.exprId == a.exprId)
@@ -83,6 +83,6 @@ object BindReferences extends Logging {
           BoundReference(ordinal, a)
         }
       }
-    }
+    }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
   }
 }

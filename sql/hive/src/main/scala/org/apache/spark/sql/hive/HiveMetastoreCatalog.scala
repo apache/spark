@@ -207,7 +207,9 @@ object HiveMetastoreTypes extends RegexParsers {
     }
 
   protected lazy val structType: Parser[DataType] =
-    "struct" ~> "<" ~> repsep(structField,",") <~ ">" ^^ StructType
+    "struct" ~> "<" ~> repsep(structField,",") <~ ">"  ^^ {
+      case fields => new StructType(fields)
+    }
 
   protected lazy val dataType: Parser[DataType] =
     arrayType |

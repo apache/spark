@@ -95,13 +95,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
       Project(substitutedProjection, child)
 
     // Eliminate no-op Projects
-    case Project(projectList, child) if(child.output == projectList) => child
+    case Project(projectList, child) if child.output == projectList => child
   }
 }
 
 /**
- * Replaces [[catalyst.expressions.Expression Expressions]] that can be statically evaluated with
- * equivalent [[catalyst.expressions.Literal Literal]] values. This rule is more specific with 
+ * Replaces [[Expression Expressions]] that can be statically evaluated with
+ * equivalent [[Literal]] values. This rule is more specific with
  * Null value propagation from bottom to top of the expression tree.
  */
 object NullPropagation extends Rule[LogicalPlan] {
@@ -110,8 +110,8 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Count(Literal(null, _)) => Cast(Literal(0L), e.dataType)
       case e @ Sum(Literal(c, _)) if c == 0 => Cast(Literal(0L), e.dataType)
       case e @ Average(Literal(c, _)) if c == 0 => Literal(0.0, e.dataType)
-      case e @ IsNull(c) if c.nullable == false => Literal(false, BooleanType)
-      case e @ IsNotNull(c) if c.nullable == false => Literal(true, BooleanType)
+      case e @ IsNull(c) if !c.nullable => Literal(false, BooleanType)
+      case e @ IsNotNull(c) if !c.nullable => Literal(true, BooleanType)
       case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
       case e @ GetItem(_, Literal(null, _)) => Literal(null, e.dataType)
       case e @ GetField(Literal(null, _), _) => Literal(null, e.dataType)
@@ -154,8 +154,8 @@ object NullPropagation extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces [[catalyst.expressions.Expression Expressions]] that can be statically evaluated with
- * equivalent [[catalyst.expressions.Literal Literal]] values.
+ * Replaces [[Expression Expressions]] that can be statically evaluated with
+ * equivalent [[Literal]] values.
  */
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -197,7 +197,7 @@ object BooleanSimplification extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines two adjacent [[catalyst.plans.logical.Filter Filter]] operators into one, merging the
+ * Combines two adjacent [[Filter]] operators into one, merging the
  * conditions into one conjunctive predicate.
  */
 object CombineFilters extends Rule[LogicalPlan] {
@@ -223,9 +223,8 @@ object SimplifyFilters extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes [[catalyst.plans.logical.Filter Filter]] operators through
- * [[catalyst.plans.logical.Project Project]] operators, in-lining any
- * [[catalyst.expressions.Alias Aliases]] that were defined in the projection.
+ * Pushes [[Filter]] operators through [[Project]] operators, in-lining any [[Alias Aliases]]
+ * that were defined in the projection.
  *
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
@@ -248,10 +247,10 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[catalyst.plans.logical.Filter Filter]] operators where the `condition` can be
+ * Pushes down [[Filter]] operators where the `condition` can be
  * evaluated using only the attributes of the left or right side of a join.  Other
- * [[catalyst.plans.logical.Filter Filter]] conditions are moved into the `condition` of the
- * [[catalyst.plans.logical.Join Join]].
+ * [[Filter]] conditions are moved into the `condition` of the [[Join]].
+ *
  * And also Pushes down the join filter, where the `condition` can be evaluated using only the 
  * attributes of the left or right side of sub query when applicable. 
  * 
@@ -345,8 +344,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Removes [[catalyst.expressions.Cast Casts]] that are unnecessary because the input is already
- * the correct type.
+ * Removes [[Cast Casts]] that are unnecessary because the input is already the correct type.
  */
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
@@ -355,7 +353,7 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines two adjacent [[catalyst.plans.logical.Limit Limit]] operators into one, merging the
+ * Combines two adjacent [[Limit]] operators into one, merging the
  * expressions into one single expression.
  */
 object CombineLimits extends Rule[LogicalPlan] {
@@ -366,7 +364,7 @@ object CombineLimits extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes the inner [[catalyst.expressions.CaseConversionExpression]] that are unnecessary because
+ * Removes the inner [[CaseConversionExpression]] that are unnecessary because
  * the inner conversion is overwritten by the outer one.
  */
 object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {

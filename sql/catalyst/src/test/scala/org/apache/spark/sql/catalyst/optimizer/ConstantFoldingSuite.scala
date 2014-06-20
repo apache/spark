@@ -195,8 +195,8 @@ class ConstantFoldingSuite extends PlanTest {
           Add(Literal(null, IntegerType), 1) as 'c9,
           Add(1, Literal(null, IntegerType)) as 'c10,
 
-          Equals(Literal(null, IntegerType), 1) as 'c11,
-          Equals(1, Literal(null, IntegerType)) as 'c12,
+          EqualTo(Literal(null, IntegerType), 1) as 'c11,
+          EqualTo(1, Literal(null, IntegerType)) as 'c12,
 
           Like(Literal(null, StringType), "abc") as 'c13,
           Like("abc", Literal(null, StringType)) as 'c14,

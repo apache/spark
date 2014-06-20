@@ -41,19 +41,19 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema
    * and false if it is still contains any unresolved placeholders. Implementations of LogicalPlan
-   * can override this (e.g. [[catalyst.analysis.UnresolvedRelation UnresolvedRelation]] should
-   * return `false`).
+   * can override this (e.g.
+   * [[org.apache.spark.sql.catalyst.analysis.UnresolvedRelation UnresolvedRelation]]
+   * should return `false`).
    */
   lazy val resolved: Boolean = !expressions.exists(!_.resolved) && childrenResolved
 
   /**
    * Returns true if all its children of this query plan have been resolved.
    */
-  def childrenResolved = !children.exists(!_.resolved)
+  def childrenResolved: Boolean = !children.exists(!_.resolved)
 
   /**
-   * Optionally resolves the given string to a
-   * [[catalyst.expressions.NamedExpression NamedExpression]]. The attribute is expressed as
+   * Optionally resolves the given string to a [[NamedExpression]]. The attribute is expressed as
    * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
   def resolve(name: String): Option[NamedExpression] = {
@@ -93,7 +93,7 @@ abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
   self: Product =>
 
   // Leaf nodes by definition cannot reference any input attributes.
-  def references = Set.empty
+  override def references = Set.empty
 }
 
 /**

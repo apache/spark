@@ -249,6 +249,39 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     ))
   }
 
+  test("groupWith3") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
+    val rdd3 = sc.parallelize(Array((1, 'a'), (3, 'b'), (4, 'c'), (4, 'd')))
+    val joined = rdd1.groupWith(rdd2, rdd3).collect()
+    assert(joined.size === 4)
+    val joinedSet = joined.map(x => (x._1,
+      (x._2._1.toList, x._2._2.toList, x._2._3.toList))).toSet
+    assert(joinedSet === Set(
+      (1, (List(1, 2), List('x'), List('a'))),
+      (2, (List(1), List('y', 'z'), List())),
+      (3, (List(1), List(), List('b'))),
+      (4, (List(), List('w'), List('c', 'd')))
+    ))
+  }
+
+  test("groupWith4") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
+    val rdd3 = sc.parallelize(Array((1, 'a'), (3, 'b'), (4, 'c'), (4, 'd')))
+    val rdd4 = sc.parallelize(Array((2, '@')))
+    val joined = rdd1.groupWith(rdd2, rdd3, rdd4).collect()
+    assert(joined.size === 4)
+    val joinedSet = joined.map(x => (x._1,
+      (x._2._1.toList, x._2._2.toList, x._2._3.toList, x._2._4.toList))).toSet
+    assert(joinedSet === Set(
+      (1, (List(1, 2), List('x'), List('a'), List())),
+      (2, (List(1), List('y', 'z'), List(), List('@'))),
+      (3, (List(1), List(), List('b'), List())),
+      (4, (List(), List('w'), List('c', 'd'), List()))
+    ))
+  }
+
   test("zero-partition RDD") {
     val emptyDir = Files.createTempDir()
     emptyDir.deleteOnExit()
