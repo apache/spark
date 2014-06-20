@@ -323,11 +323,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       override def schedulingMode: SchedulingMode = SchedulingMode.NONE
       override def start() = {}
       override def stop() = {}
-      override def submitTasks(taskSet: TaskSet) = {
-        // normally done by TaskSetManager
-        taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
-        taskSets += taskSet
-      }
+      override def submitTasks(taskSet: TaskSet) = {}
       override def cancelTasks(stageId: Int, interruptThread: Boolean) {
         throw new UnsupportedOperationException
       }
