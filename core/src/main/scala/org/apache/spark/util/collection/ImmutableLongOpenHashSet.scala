@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.immutable.BitSet
+import scala.collection.immutable.{BitSet => ImmutableBitSet}
 import scala.reflect._
 import com.google.common.hash.Hashing
 
@@ -36,7 +36,7 @@ class ImmutableLongOpenHashSet(
     /** Underlying array of elements used as a hash table. */
     val data: Vector[Long],
     /** Whether or not there is an element at the corresponding position in `data`. */
-    val bitset: BitSet,
+    val bitset: ImmutableBitSet,
     /**
      * Position of a focused element. This is useful when returning a modified set along with a
      * pointer to the location of modification.
@@ -50,7 +50,7 @@ class ImmutableLongOpenHashSet(
   require(loadFactor > 0.0, "Load factor must be greater than 0.0")
   require(data.size == nextPowerOf2(data.size), "data capacity must be a power of 2")
 
-  import OpenHashSet._
+  import OpenHashSet.{INVALID_POS, NONEXISTENCE_MASK, POSITION_MASK, Hasher, LongHasher}
 
   private val hasher: Hasher[Long] = new LongHasher
 
@@ -78,19 +78,19 @@ class ImmutableLongOpenHashSet(
     var i = 1
     var result: ImmutableLongOpenHashSet = null
     while (result == null) {
-      if (!bitset.get(pos)) {
+      if (!bitset(pos)) {
         // This is a new key.
-        result = new ImmutableLongOpenHashSet(data.updated(pos, k), bitset + pos, size + 1, pos | NONEXISTENCE_MASK, loadFactor)
+        result = new ImmutableLongOpenHashSet(data.updated(pos, k), bitset + pos, pos | NONEXISTENCE_MASK, loadFactor)
       } else if (data(pos) == k) {
         // Found an existing key.
         result = this.withFocus(pos)
       } else {
         val delta = i
-        pos = (pos + delta) & _mask
+        pos = (pos + delta) & mask
         i += 1
       }
     }
-    result.rehashIfNeeded(grow, move)
+    result.rehashIfNeeded(ImmutableLongOpenHashSet.grow, ImmutableLongOpenHashSet.move)
   }
 
   /**
@@ -102,7 +102,7 @@ class ImmutableLongOpenHashSet(
   def rehashIfNeeded(
       allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit): ImmutableLongOpenHashSet = {
     if (size > growThreshold) {
-      rehash(k, allocateFunc, moveFunc)
+      rehash(allocateFunc, moveFunc)
     } else {
       this
     }
@@ -133,15 +133,7 @@ class ImmutableLongOpenHashSet(
   /** Return the value at the specified position. */
   def getValue(pos: Int): Long = data(pos)
 
-  def iterator = new Iterator[Long] {
-    var pos = nextPos(0)
-    override def hasNext: Boolean = pos != INVALID_POS
-    override def next(): Long = {
-      val tmp = getValue(pos)
-      pos = nextPos(pos + 1)
-      tmp
-    }
-  }
+  def iterator: Iterator[Long] = bitset.iterator.map { pos => getValue(pos) }
 
   /** Return the value at the specified position. */
   def getValueSafe(pos: Int): Long = {
@@ -149,10 +141,13 @@ class ImmutableLongOpenHashSet(
     data(pos)
   }
 
-  /**
-   * Return the next position with an element stored, starting from the given position inclusively.
-   */
-  def nextPos(fromPos: Int): Int = bitset.nextSetBit(fromPos)
+  // /**
+  //  * Return the next position with an element stored, starting from the given position inclusively.
+  //  */
+  // def nextPos(fromPos: Int): Int = {
+  //   val iter = bitset.keysIteratorFrom(fromPos)
+  //   if (iter.hasNext) iter.next() else INVALID_POS
+  // }
 
   /**
    * Double the table's size and re-hash everything.
@@ -163,15 +158,15 @@ class ImmutableLongOpenHashSet(
    */
   private def rehash(
       allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit): ImmutableLongOpenHashSet = {
-    val newCapacity = _capacity * 2
+    val newCapacity = capacity * 2
     allocateFunc(newCapacity)
-    var newBitset = new BitSet(newCapacity)
+    var newBitset = ImmutableBitSet.empty
     val newData = new Array[Long](newCapacity)
     val newMask = newCapacity - 1
 
     var oldPos = 0
     while (oldPos < capacity) {
-      if (_bitset(oldPos)) {
+      if (bitset(oldPos)) {
         val key = data(oldPos)
         var newPos = hashcode(hasher.hash(key)) & newMask
         var i = 1
@@ -207,4 +202,20 @@ class ImmutableLongOpenHashSet(
     val highBit = Integer.highestOneBit(n)
     if (highBit == n) n else highBit << 1
   }
+}
+
+object ImmutableLongOpenHashSet {
+  def empty(initialCapacity: Int, loadFactor: Double): ImmutableLongOpenHashSet =
+    new ImmutableLongOpenHashSet(
+      Vector.fill[Long](initialCapacity)(0L), ImmutableBitSet.empty, -1, loadFactor)
+
+  def empty(initialCapacity: Int): ImmutableLongOpenHashSet = empty(initialCapacity, 0.7)
+
+  def empty(): ImmutableLongOpenHashSet = empty(64, 0.7)
+
+  private def grow1(newSize: Int) {}
+  private def move1(oldPos: Int, newPos: Int) { }
+
+  private val grow = grow1 _
+  private val move = move1 _
 }
