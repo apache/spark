@@ -101,7 +101,7 @@ class ALS private (
   private var lambda: Double,
   private var implicitPrefs: Boolean,
   private var alpha: Double,
-  private var seed: Long = System.nanoTime()) extends Serializable with Logging {
+  private var seed: Long = System.currentTimeMillis()) extends Serializable with Logging {
 
   /**
    * Constructs an ALS instance with default parameters: {numBlocks: -1, rank: 10, iterations: 10,
@@ -478,6 +478,25 @@ class ALS private (
         }
     }
 
+  private def diagnose(qpFail: Int, H: DoubleMatrix, f: DoubleMatrix,
+    qpResult: DenseVector[Double], directQpResult: DenseVector[Double], lsResult: DenseVector[Double]) {
+    qpFail match {
+      case 1 => {
+        println("ECOS QP Failure")
+        println("qpResult " + qpResult)
+      }
+      case 2 => {
+        println("ADMM QP Failure")
+        println("directQpResult " + directQpResult)
+      }
+    }
+    println("H")
+    println(H)
+    println("f")
+    println(f)
+    println("lsResult " + lsResult)
+  }
+  
   /**
    * Compute the new feature vectors for a block of the users matrix given the list of factors
    * it received from each product and its InLinkBlock.
@@ -539,12 +558,12 @@ class ALS private (
       var qpTime: Long = 0
       var lsTime: Long = 0
       var directQpTime: Long = 0
-      
+
       val ws = if (nonnegative) NNLS.createWorkspace(rank)
       else null
 
       if (nonnegative) qpProblem = 2
-      
+
       val qpSolver = qpProblem match {
         case 1 => new QpSolver(rank)
         case 2 => new QpSolver(rank, 0, false, None, None, true)
@@ -582,7 +601,7 @@ class ALS private (
           qpSolver
         }
       }
-      
+
       val directQpSolver = qpProblem match {
         case 1 => new DirectQpSolver(rank)
         case 2 => new DirectQpSolver(rank).setProximal(2)
@@ -590,7 +609,7 @@ class ALS private (
           //Direct QP with bounds
           val lb = DoubleMatrix.zeros(rank, 1)
           val ub = DoubleMatrix.zeros(rank, 1).addi(1.0)
-          new DirectQpSolver(rank,Some(lb), Some(ub)).setProximal(1)
+          new DirectQpSolver(rank, Some(lb), Some(ub)).setProximal(1)
         }
         case 4 => {
           //Direct QP with equality/inequality not tested yet
@@ -605,7 +624,7 @@ class ALS private (
           qpSolverL1
         }
       }
-      
+
       // Solve the least-squares problem for each user and return the new feature vectors
       val factors = Array.range(0, numUsers).map { index =>
         // Compute the full XtX matrix from the lower-triangular part we got above
@@ -621,66 +640,67 @@ class ALS private (
         val result = if (implicitPrefs) {
           val H = fullXtX.add(YtY.get.value)
           val f = userXy(index).mul(-1)
-          
-          val qpStart = System.nanoTime()
+
+          val qpStart = System.currentTimeMillis()
           val qpResult = qpSolver.solve(H, f.data)._2
-          qpTime = qpTime + (System.nanoTime() - qpStart)
-          
-          val directQpStart = System.nanoTime()
+          qpTime = qpTime + (System.currentTimeMillis() - qpStart)
+
+          val directQpStart = System.currentTimeMillis()
           val directQpResult = directQpSolver.solve(H, f)
-          directQpTime = directQpTime + (System.nanoTime() - directQpStart)
-          
-          val lsStart = System.nanoTime()
+          directQpTime = directQpTime + (System.currentTimeMillis() - directQpStart)
+
+          val lsStart = System.currentTimeMillis()
           val result = solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws)
-          lsTime = lsTime + (System.nanoTime() - lsStart)
-          if(norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2 ||
-              norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) {
-            println("H")
-            println(H)
-            println("f")
-            println(f)
-            println("qpResult " + DenseVector(qpResult))
-            println("directQpResult " + DenseVector(directQpResult))
-            println("lsResult " + DenseVector(result))
+          lsTime = lsTime + (System.currentTimeMillis() - lsStart)
+
+          var qpFail = 0
+          if(qpProblem == 1 || qpProblem == 2) {
+        	  if (norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2) qpFail = 1
+              if (norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) qpFail = 2
+          }
+          if (qpFail > 0) diagnose(qpFail, H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
+          else {
+            if(index % 100 == 0) diagnose(qpFail, H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
           }
           directQpResult.data
         } else {
           val H = fullXtX
           val f = userXy(index).mul(-1)
-          
+
           val falpha = if (qpProblem == 5) {
+            directQpSolver.setLambda(alpha)
             f.data ++ Array.fill[Double](rank)(alpha)
           } else {
             f.data
           }
-          
-          val directQpStart = System.nanoTime()
+
+          val directQpStart = System.currentTimeMillis()
           val directQpResult = directQpSolver.solve(H, f)
-          directQpTime = directQpTime + (System.nanoTime() - directQpStart)
-          
-          val qpStart = System.nanoTime()
+          directQpTime = directQpTime + (System.currentTimeMillis() - directQpStart)
+
+          val qpStart = System.currentTimeMillis()
           val qpResult = qpSolver.solve(H, falpha)._2
-          qpTime = qpTime + (System.nanoTime() - qpStart)
-          
-          val lsStart = System.nanoTime()
+          qpTime = qpTime + (System.currentTimeMillis() - qpStart)
+
+          val lsStart = System.currentTimeMillis()
           val result = solveLeastSquares(fullXtX, userXy(index), ws)
-          lsTime = lsTime + (System.nanoTime() - lsStart)
+          lsTime = lsTime + (System.currentTimeMillis() - lsStart)
           
-          if(norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2 ||
-              norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) {
-            println("H")
-            println(H)
-            println("f")
-            println(f)
-            println("qpResult " + DenseVector(qpResult))
-            println("directQpResult " + DenseVector(directQpResult))
-            println("lsResult " + DenseVector(result))
+          var qpFail = 0
+          
+          if (qpProblem == 1 || qpProblem == 2) {
+        	  if (norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2) qpFail = 1
+        	  if (norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) qpFail = 2
+          }
+          if (qpFail > 0) diagnose(qpFail, H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
+          else {
+            if(index % 100 == 0) diagnose(qpFail, H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
           }
           directQpResult.data
         }
         result
       }
-      println("Qp " + qpTime + " directQp " + directQpTime + " Ls " + lsTime)
+      println("lsTime " + lsTime + " qpTime " + qpTime + " directQpTime " + directQpTime)
       factors
     }
 

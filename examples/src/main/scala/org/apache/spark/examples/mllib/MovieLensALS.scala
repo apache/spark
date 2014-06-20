@@ -50,7 +50,8 @@ object MovieLensALS {
       numIterations: Int = 20,
       lambda: Double = 1.0,
       rank: Int = 10,
-      implicitPrefs: Boolean = false)
+      implicitPrefs: Boolean = false,
+      qpProblem: Int = 1)
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -76,13 +77,16 @@ object MovieLensALS {
         .required()
         .text("input paths to a MovieLens dataset of ratings")
         .action((x, c) => c.copy(input = x))
+      opt[Int]("qpProblem")
+      	.text(s"qp problem, default : 1")
+      	.action((x,c) => c.copy(qpProblem = x))
       note(
         """
           |For example, the following command runs this app on a synthetic dataset:
           |
           | bin/spark-submit --class org.apache.spark.examples.mllib.MovieLensALS \
           |  examples/target/scala-*/spark-examples-*.jar \
-          |  --rank 5 --numIterations 20 --lambda 1.0 --kryo \
+          |  --rank 5 --numIterations 20 --lambda 1.0 --kryo --qpProblem 2\
           |  data/mllib/sample_movielens_data.txt
         """.stripMargin)
     }
@@ -154,14 +158,27 @@ object MovieLensALS {
     println(s"Training: $numTraining, test: $numTest.")
 
     ratings.unpersist(blocking = false)
-
-    val model = new ALS()
+    
+    val als = new ALS()
       .setRank(params.rank)
       .setIterations(params.numIterations)
       .setLambda(params.lambda)
       .setImplicitPrefs(params.implicitPrefs)
-      .run(training)
-
+    
+    //Let's test the explicit options first
+    println(s"Qp option ${params.qpProblem}")
+    
+    params.qpProblem match {
+      case 1 => println("Unbounded Qp")
+      case 2 => println("Qp with positivity")
+      case 3 => println("Qp with bounds")
+      case 4 => println("Qp with equality")
+      case 5 => println("Qp with L1")
+    }
+    als.setQpProblem(params.qpProblem)
+    
+    val model = als.run(training)
+      
     val rmse = computeRmse(model, test, params.implicitPrefs)
 
     println(s"Test RMSE = $rmse.")
