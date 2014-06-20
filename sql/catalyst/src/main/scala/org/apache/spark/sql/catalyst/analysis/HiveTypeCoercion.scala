@@ -33,7 +33,7 @@ object HiveTypeCoercion {
 }
 
 /**
- * A collection of [[catalyst.rules.Rule Rules]] that can be used to coerce differing types that
+ * A collection of [[Rule Rules]] that can be used to coerce differing types that
  * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
  * but they do not introduce any dependencies on the hive codebase.  For this reason they remain in
  * Catalyst until we have a more standard set of coercions.
@@ -53,8 +53,8 @@ trait HiveTypeCoercion {
     Nil
 
   /**
-   * Applies any changes to [[catalyst.expressions.AttributeReference AttributeReference]] data
-   * types that are made by other rules to instances higher in the query tree.
+   * Applies any changes to [[AttributeReference]] data types that are made by other rules to
+   * instances higher in the query tree.
    */
   object PropagateTypes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -234,8 +234,8 @@ trait HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      // No need to change Equals operators as that actually makes sense for boolean types.
-      case e: Equals => e
+      // No need to change EqualTo operators as that actually makes sense for boolean types.
+      case e: EqualTo => e
       // Otherwise turn them to Byte types so that there exists and ordering.
       case p: BinaryComparison
           if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
@@ -244,15 +244,20 @@ trait HiveTypeCoercion {
   }
 
   /**
-   * Casts to/from [[catalyst.types.BooleanType BooleanType]] are transformed into comparisons since
+   * Casts to/from [[BooleanType]] are transformed into comparisons since
    * the JVM does not consider Booleans to be numeric types.
    */
   object BooleanCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
-      case Cast(e, BooleanType) => Not(Equals(e, Literal(0)))
+      // Skip if the type is boolean type already. Note that this extra cast should be removed
+      // by optimizer.SimplifyCasts.
+      case Cast(e, BooleanType) if e.dataType == BooleanType => e
+      // If the data type is not boolean and is being cast boolean, turn it into a comparison
+      // with the numeric value, i.e. x != 0. This will coerce the type into numeric type.
+      case Cast(e, BooleanType) if e.dataType != BooleanType => Not(EqualTo(e, Literal(0)))
+      // Turn true into 1, and false into 0 if casting boolean into other types.
       case Cast(e, dataType) if e.dataType == BooleanType =>
         Cast(If(e, Literal(1), Literal(0)), dataType)
     }

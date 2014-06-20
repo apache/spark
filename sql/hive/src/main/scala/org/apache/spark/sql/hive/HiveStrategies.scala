@@ -81,6 +81,16 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.NativeCommand(sql) =>
         NativeCommand(sql, plan.output)(context) :: Nil
+      case describe: logical.DescribeCommand => {
+        val resolvedTable = context.executePlan(describe.table).analyzed
+        resolvedTable match {
+          case t: MetastoreRelation =>
+            Seq(DescribeHiveTableCommand(
+              t, describe.output, describe.isExtended)(context))
+          case o: LogicalPlan =>
+            Seq(DescribeCommand(planLater(o), describe.output)(context))
+        }
+      }
       case _ => Nil
     }
   }
