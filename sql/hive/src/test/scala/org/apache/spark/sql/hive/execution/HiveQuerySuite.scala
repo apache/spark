@@ -230,7 +230,8 @@ class HiveQuerySuite extends HiveComparisonTest {
     
     TestHive.sparkContext.parallelize(fixture).registerAsTable("having_test")
     
-    val results = hql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
+    val results = 
+      hql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
       .map(x => Pair(x.getString(0), x.getInt(1)))
     
@@ -243,6 +244,10 @@ class HiveQuerySuite extends HiveComparisonTest {
     intercept[Exception] {
       hql("SELECT value, attr FROM having_test HAVING attr > 3")
     }
+  }
+  
+  test("SPARK-2180:  HAVING with non-boolean clause raises no exceptions") {
+    val results = hql("select key, count(*) c from src group by key having c").collect()
   }
 
   test("Query Hive native command execution result") {

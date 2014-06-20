@@ -587,8 +587,11 @@ private[hive] object HiveQl {
             throw new SemanticException("HAVING specified without GROUP BY")
           }
 
-          val Seq(havingExpr) = h.getChildren.toSeq
-          Filter(nodeToExpr(havingExpr), withDistinct)
+          val havingExpr = h.getChildren.toSeq match {
+            case Seq(hexpr) => nodeToExpr(hexpr)
+          }
+          
+          Filter(Cast(havingExpr, BooleanType), withDistinct)
         }.getOrElse(withDistinct)
 
         val withSort =
