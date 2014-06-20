@@ -46,7 +46,7 @@ case object AllTuples extends Distribution
 
 /**
  * Represents data where tuples that share the same values for the `clustering`
- * [[catalyst.expressions.Expression Expressions]] will be co-located. Based on the context, this
+ * [[Expression Expressions]] will be co-located. Based on the context, this
  * can mean such tuples are either co-located in the same partition or they will be contiguous
  * within a single partition.
  */
@@ -60,7 +60,7 @@ case class ClusteredDistribution(clustering: Seq[Expression]) extends Distributi
 
 /**
  * Represents data where tuples have been ordered according to the `ordering`
- * [[catalyst.expressions.Expression Expressions]].  This is a strictly stronger guarantee than
+ * [[Expression Expressions]].  This is a strictly stronger guarantee than
  * [[ClusteredDistribution]] as an ordering will ensure that tuples that share the same value for
  * the ordering expressions are contiguous and will never be split across partitions.
  */
@@ -79,19 +79,17 @@ sealed trait Partitioning {
   val numPartitions: Int
 
   /**
-   * Returns true iff the guarantees made by this
-   * [[catalyst.plans.physical.Partitioning Partitioning]] are sufficient to satisfy
-   * the partitioning scheme mandated by the `required`
-   * [[catalyst.plans.physical.Distribution Distribution]], i.e. the current dataset does not
-   * need to be re-partitioned for the `required` Distribution (it is possible that tuples within
-   * a partition need to be reorganized).
+   * Returns true iff the guarantees made by this [[Partitioning]] are sufficient
+   * to satisfy the partitioning scheme mandated by the `required` [[Distribution]],
+   * i.e. the current dataset does not need to be re-partitioned for the `required`
+   * Distribution (it is possible that tuples within a partition need to be reorganized).
    */
   def satisfies(required: Distribution): Boolean
 
   /**
    * Returns true iff all distribution guarantees made by this partitioning can also be made
    * for the `other` specified partitioning.
-   * For example, two [[catalyst.plans.physical.HashPartitioning HashPartitioning]]s are
+   * For example, two [[HashPartitioning HashPartitioning]]s are
    * only compatible if the `numPartitions` of them is the same.
    */
   def compatibleWith(other: Partitioning): Boolean
