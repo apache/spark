@@ -233,10 +233,12 @@ case class CaseWhen(branches: Seq[Expression]) extends Expression {
     branches.sliding(2, 2).collect { case Seq(cond, _) => cond }.toSeq
   @transient private[this] lazy val values =
     branches.sliding(2, 2).collect { case Seq(_, value) => value }.toSeq
+  @transient private[this] lazy val elseValue =
+    if (branches.length % 2 == 0) None else Option(branches.last)
 
   override def nullable = {
     // If no value is nullable and no elseValue is provided, the whole statement defaults to null.
-    values.exists(_.nullable) || (values.length % 2 == 0)
+    values.exists(_.nullable) || (elseValue.map(_.nullable).getOrElse(true))
   }
 
   override lazy val resolved = {
