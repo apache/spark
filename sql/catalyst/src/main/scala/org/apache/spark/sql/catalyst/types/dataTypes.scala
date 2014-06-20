@@ -19,9 +19,71 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.Timestamp
 
-import scala.reflect.runtime.universe.{typeTag, TypeTag}
+import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.{typeTag, TypeTag, runtimeMirror}
+
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.util.Utils
+
+/**
+ *
+ */
+object DataType extends RegexParsers {
+  protected lazy val primitiveType: Parser[DataType] =
+    "StringType" ^^^ StringType |
+    "FloatType" ^^^ FloatType |
+    "IntegerType" ^^^ IntegerType |
+    "ByteType" ^^^ ByteType |
+    "ShortType" ^^^ ShortType |
+    "DoubleType" ^^^ DoubleType |
+    "LongType" ^^^ LongType |
+    "BinaryType" ^^^ BinaryType |
+    "BooleanType" ^^^ BooleanType |
+    "DecimalType" ^^^ DecimalType |
+    "TimestampType" ^^^ TimestampType
+
+  protected lazy val arrayType: Parser[DataType] =
+    "ArrayType" ~> "(" ~> dataType <~ ")" ^^ ArrayType
+
+  protected lazy val mapType: Parser[DataType] =
+    "MapType" ~> "(" ~> dataType ~ "," ~ dataType <~ ")" ^^ {
+      case t1 ~ _ ~ t2 => MapType(t1, t2)
+    }
+
+  protected lazy val structField: Parser[StructField] =
+    ("StructField(" ~> "[a-zA-Z0-9_]*".r) ~ ("," ~> dataType) ~ ("," ~> boolVal <~ ")") ^^ {
+      case name ~ tpe ~ nullable  =>
+          StructField(name, tpe, nullable = nullable)
+    }
+
+  protected lazy val boolVal: Parser[Boolean] =
+    "true" ^^^ true |
+    "false" ^^^ false
+
+
+  protected lazy val structType: Parser[DataType] =
+    "StructType\\([A-zA-z]*\\(".r ~> repsep(structField, ",") <~ "))" ^^ {
+      case fields => new StructType(fields)
+    }
+
+  protected lazy val dataType: Parser[DataType] =
+    arrayType |
+      mapType |
+      structType |
+      primitiveType
+
+  /**
+   * Parses a string representation of a DataType.
+   *
+   * TODO: Generate parser as pickler...
+   */
+  def apply(asString: String): DataType = parseAll(dataType, asString) match {
+    case Success(result, _) => result
+    case failure: NoSuccess => sys.error(s"Unsupported dataType: $asString, $failure")
+  }
+}
 
 abstract class DataType {
   /** Matches any expression that evaluates to this DataType */
@@ -29,25 +91,36 @@ abstract class DataType {
     case e: Expression if e.dataType == this => true
     case _ => false
   }
+
+  def isPrimitive: Boolean = false
 }
 
 case object NullType extends DataType
+
+trait PrimitiveType extends DataType {
+  override def isPrimitive = true
+}
 
 abstract class NativeType extends DataType {
   type JvmType
   @transient val tag: TypeTag[JvmType]
   val ordering: Ordering[JvmType]
+
+  @transient val classTag = {
+    val mirror = runtimeMirror(Utils.getSparkClassLoader)
+    ClassTag[JvmType](mirror.runtimeClass(tag.tpe))
+  }
 }
 
-case object StringType extends NativeType {
+case object StringType extends NativeType with PrimitiveType {
   type JvmType = String
   @transient lazy val tag = typeTag[JvmType]
   val ordering = implicitly[Ordering[JvmType]]
 }
-case object BinaryType extends DataType {
+case object BinaryType extends DataType with PrimitiveType {
   type JvmType = Array[Byte]
 }
-case object BooleanType extends NativeType {
+case object BooleanType extends NativeType with PrimitiveType {
   type JvmType = Boolean
   @transient lazy val tag = typeTag[JvmType]
   val ordering = implicitly[Ordering[JvmType]]
@@ -63,7 +136,7 @@ case object TimestampType extends NativeType {
   }
 }
 
-abstract class NumericType extends NativeType {
+abstract class NumericType extends NativeType with PrimitiveType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
   // type parameter and and add a numeric annotation (i.e., [JvmType : Numeric]). This gets
@@ -154,6 +227,17 @@ case object FloatType extends FractionalType {
 case class ArrayType(elementType: DataType) extends DataType
 
 case class StructField(name: String, dataType: DataType, nullable: Boolean)
-case class StructType(fields: Seq[StructField]) extends DataType
+
+object StructType {
+  def fromAttributes(attributes: Seq[Attribute]): StructType = {
+    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
+  }
+
+  // def apply(fields: Seq[StructField]) = new StructType(fields.toIndexedSeq)
+}
+
+case class StructType(fields: Seq[StructField]) extends DataType {
+  def toAttributes = fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+}
 
 case class MapType(keyType: DataType, valueType: DataType) extends DataType

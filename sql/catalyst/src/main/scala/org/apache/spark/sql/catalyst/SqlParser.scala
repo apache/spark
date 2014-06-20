@@ -66,43 +66,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected case class Keyword(str: String)
 
   protected implicit def asParser(k: Keyword): Parser[String] =
-    allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
-
-  protected class SqlLexical extends StdLexical {
-    case class FloatLit(chars: String) extends Token {
-      override def toString = chars
-    }
-    override lazy val token: Parser[Token] = (
-        identChar ~ rep( identChar | digit ) ^^
-          { case first ~ rest => processIdent(first :: rest mkString "") }
-      | rep1(digit) ~ opt('.' ~> rep(digit)) ^^ {
-        case i ~ None    => NumericLit(i mkString "")
-        case i ~ Some(d) => FloatLit(i.mkString("") + "." + d.mkString(""))
-      }
-      | '\'' ~ rep( chrExcept('\'', '\n', EofCh) ) ~ '\'' ^^
-        { case '\'' ~ chars ~ '\'' => StringLit(chars mkString "") }
-      | '\"' ~ rep( chrExcept('\"', '\n', EofCh) ) ~ '\"' ^^
-        { case '\"' ~ chars ~ '\"' => StringLit(chars mkString "") }
-      | EofCh ^^^ EOF
-      | '\'' ~> failure("unclosed string literal")
-      | '\"' ~> failure("unclosed string literal")
-      | delim
-      | failure("illegal character")
-    )
-
-    override def identChar = letter | elem('.') | elem('_')
-
-    override def whitespace: Parser[Any] = rep(
-      whitespaceChar
-    | '/' ~ '*' ~ comment
-    | '/' ~ '/' ~ rep( chrExcept(EofCh, '\n') )
-    | '#' ~ rep( chrExcept(EofCh, '\n') )
-    | '-' ~ '-' ~ rep( chrExcept(EofCh, '\n') )
-    | '/' ~ '*' ~ failure("unclosed comment")
-    )
-  }
-
-  override val lexical = new SqlLexical
+    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
 
   protected val ALL = Keyword("ALL")
   protected val AND = Keyword("AND")
@@ -161,24 +125,9 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     this.getClass
       .getMethods
       .filter(_.getReturnType == classOf[Keyword])
-      .map(_.invoke(this).asInstanceOf[Keyword])
+      .map(_.invoke(this).asInstanceOf[Keyword].str)
 
-  /** Generate all variations of upper and lower case of a given string */
-  private def allCaseVersions(s: String, prefix: String = ""): Stream[String] = {
-    if (s == "") {
-      Stream(prefix)
-    } else {
-      allCaseVersions(s.tail, prefix + s.head.toLower) ++
-        allCaseVersions(s.tail, prefix + s.head.toUpper)
-    }
-  }
-
-  lexical.reserved ++= reservedWords.flatMap(w => allCaseVersions(w.str))
-
-  lexical.delimiters += (
-    "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
-    ",", ";", "%", "{", "}", ":", "[", "]"
-  )
+  override val lexical = new SqlLexical(reservedWords)
 
   protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
@@ -383,7 +332,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
 
   protected lazy val baseExpression: PackratParser[Expression] =
-    expression ~ "[" ~  expression <~ "]" ^^ {
+    expression ~ "[" ~ expression <~ "]" ^^ {
       case base ~ _ ~ ordinal => GetItem(base, ordinal)
     } |
     TRUE ^^^ Literal(true, BooleanType) |
@@ -398,4 +347,56 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
 
   protected lazy val dataType: Parser[DataType] =
     STRING ^^^ StringType
+}
+
+class SqlLexical(val keywords: Seq[String]) extends StdLexical {
+  case class FloatLit(chars: String) extends Token {
+    override def toString = chars
+  }
+
+  reserved ++= keywords.flatMap(w => allCaseVersions(w))
+
+  delimiters += (
+      "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
+      ",", ";", "%", "{", "}", ":", "[", "]"
+  )
+
+  override lazy val token: Parser[Token] = (
+    identChar ~ rep( identChar | digit ) ^^
+      { case first ~ rest => processIdent(first :: rest mkString "") }
+      | rep1(digit) ~ opt('.' ~> rep(digit)) ^^ {
+      case i ~ None    => NumericLit(i mkString "")
+      case i ~ Some(d) => FloatLit(i.mkString("") + "." + d.mkString(""))
+    }
+      | '\'' ~ rep( chrExcept('\'', '\n', EofCh) ) ~ '\'' ^^
+      { case '\'' ~ chars ~ '\'' => StringLit(chars mkString "") }
+      | '\"' ~ rep( chrExcept('\"', '\n', EofCh) ) ~ '\"' ^^
+      { case '\"' ~ chars ~ '\"' => StringLit(chars mkString "") }
+      | EofCh ^^^ EOF
+      | '\'' ~> failure("unclosed string literal")
+      | '\"' ~> failure("unclosed string literal")
+      | delim
+      | failure("illegal character")
+    )
+
+  override def identChar = letter | elem('_') | elem('.')
+
+  override def whitespace: Parser[Any] = rep(
+    whitespaceChar
+      | '/' ~ '*' ~ comment
+      | '/' ~ '/' ~ rep( chrExcept(EofCh, '\n') )
+      | '#' ~ rep( chrExcept(EofCh, '\n') )
+      | '-' ~ '-' ~ rep( chrExcept(EofCh, '\n') )
+      | '/' ~ '*' ~ failure("unclosed comment")
+  )
+
+  /** Generate all variations of upper and lower case of a given string */
+  def allCaseVersions(s: String, prefix: String = ""): Stream[String] = {
+    if (s == "") {
+      Stream(prefix)
+    } else {
+      allCaseVersions(s.tail, prefix + s.head.toLower) ++
+        allCaseVersions(s.tail, prefix + s.head.toUpper)
+    }
+  }
 }

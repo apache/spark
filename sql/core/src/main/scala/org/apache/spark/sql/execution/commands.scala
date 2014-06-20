@@ -121,3 +121,24 @@ case class CacheCommand(tableName: String, doCache: Boolean)(@transient context:
 
   override def output: Seq[Attribute] = Seq.empty
 }
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
+    @transient context: SQLContext)
+  extends LeafNode with Command {
+
+  override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] = {
+    Seq(("# Registered as a temporary table", null, null)) ++
+      child.output.map(field => (field.name, field.dataType.toString, null))
+  }
+
+  override def execute(): RDD[Row] = {
+    val rows = sideEffectResult.map {
+      case (name, dataType, comment) => new GenericRow(Array[Any](name, dataType, comment))
+    }
+    context.sparkContext.parallelize(rows, 1)
+  }
+}
