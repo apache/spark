@@ -143,19 +143,10 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
          * to the BlockManager as an iterator and expect to read it back later. This is because
          * we may end up dropping a partition from memory store before getting it back, e.g.
          * when the entirety of the RDD does not fit in memory. */
-        if (storageLevel.deserialized) {
-          val elements = new ArrayBuffer[Any]
-          elements ++= values
-          updatedBlocks ++= blockManager.put(key, elements, storageLevel, tellMaster = true)
-          elements.iterator
-        } else {
-          /* This RDD is to be cached in memory in the form of serialized bytes. In this case,
-           * we only unroll the serialized form of the data, because the deserialized form may
-           * be much larger and may not fit in memory. */
-          val bytes = blockManager.dataSerialize(key, values)
-          updatedBlocks ++= blockManager.putBytes(key, bytes, storageLevel, tellMaster = true)
-          blockManager.dataDeserialize(key, bytes)
-        }
+        val elements = new ArrayBuffer[Any]
+        elements ++= values
+        updatedBlocks ++= blockManager.put(key, elements, storageLevel, tellMaster = true)
+        elements.iterator
       }
     }
     cachedValues.asInstanceOf[Iterator[T]]
