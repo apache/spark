@@ -563,7 +563,6 @@ private[hive] object HiveQl {
             withWhere)
         }.getOrElse(withWhere)
 
-
         // The projection of the query can either be a normal projection, an aggregation
         // (if there is a group by) or a script transformation.
         val withProject = transformation.getOrElse {
@@ -581,16 +580,10 @@ private[hive] object HiveQl {
         val withDistinct =
           if (selectDistinctClause.isDefined) Distinct(withProject) else withProject
 
-        val withHaving = havingClause.map { h => 
-
-          if (groupByClause == None) {
-            throw new SemanticException("HAVING specified without GROUP BY")
-          }
-
-          val havingExpr = h.getChildren.toSeq match {
-            case Seq(hexpr) => nodeToExpr(hexpr)
-          }
-          
+        val withHaving = havingClause.map { h =>
+          val havingExpr = h.getChildren.toSeq match { case Seq(hexpr) => nodeToExpr(hexpr) }
+          // Note that we added a cast to boolean. If the expression itself is already boolean,
+          // the optimizer will get rid of the unnecessary cast.
           Filter(Cast(havingExpr, BooleanType), withDistinct)
         }.getOrElse(withDistinct)
 
