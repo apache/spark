@@ -99,7 +99,9 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
    */
   def parquetFile(path: String): JavaSchemaRDD =
-    new JavaSchemaRDD(sqlContext, ParquetRelation(path))
+    new JavaSchemaRDD(
+      sqlContext,
+      ParquetRelation(path, Some(sqlContext.sparkContext.hadoopConfiguration)))
 
   /**
    * Loads a JSON file (one object per line), returning the result as a [[JavaSchemaRDD]].
