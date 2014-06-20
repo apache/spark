@@ -78,15 +78,13 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
         // Throw away extra if more than 9 decimal places
         val periodIdx = s.indexOf(".")
         var n = s
-        if (periodIdx != -1) {
-          if (n.length() - periodIdx > 9) {
-            n = n.substring(0, periodIdx + 10)
-          }
+        if (periodIdx != -1 && n.length() - periodIdx > 9) {
+          n = n.substring(0, periodIdx + 10)
         }
         try Timestamp.valueOf(n) catch { case _: java.lang.IllegalArgumentException => null }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => new Timestamp((if(b) 1 else 0) * 1000))
+      buildCast[Boolean](_, b => new Timestamp((if (b) 1 else 0) * 1000))
     case LongType =>
       buildCast[Long](_, l => new Timestamp(l * 1000))
     case IntegerType =>
