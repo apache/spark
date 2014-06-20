@@ -27,9 +27,7 @@ import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
-import scala.util.control.Breaks._
 
-import org.apache.commons.math3.random.RandomDataGenerator
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.FileSystem
@@ -49,7 +47,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
-import org.apache.spark.util.random.{Stratum, Result, StratifiedSampler, PoissonBounds => PB}
+import org.apache.spark.util.random.StratifiedSampler
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
