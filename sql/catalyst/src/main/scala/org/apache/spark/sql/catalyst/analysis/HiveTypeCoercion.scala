@@ -33,7 +33,7 @@ object HiveTypeCoercion {
 }
 
 /**
- * A collection of [[catalyst.rules.Rule Rules]] that can be used to coerce differing types that
+ * A collection of [[Rule Rules]] that can be used to coerce differing types that
  * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
  * but they do not introduce any dependencies on the hive codebase.  For this reason they remain in
  * Catalyst until we have a more standard set of coercions.
@@ -53,8 +53,8 @@ trait HiveTypeCoercion {
     Nil
 
   /**
-   * Applies any changes to [[catalyst.expressions.AttributeReference AttributeReference]] data
-   * types that are made by other rules to instances higher in the query tree.
+   * Applies any changes to [[AttributeReference]] data types that are made by other rules to
+   * instances higher in the query tree.
    */
   object PropagateTypes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -244,7 +244,7 @@ trait HiveTypeCoercion {
   }
 
   /**
-   * Casts to/from [[catalyst.types.BooleanType BooleanType]] are transformed into comparisons since
+   * Casts to/from [[BooleanType]] are transformed into comparisons since
    * the JVM does not consider Booleans to be numeric types.
    */
   object BooleanCasts extends Rule[LogicalPlan] {
