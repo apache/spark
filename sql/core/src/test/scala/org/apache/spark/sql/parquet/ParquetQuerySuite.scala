@@ -33,7 +33,7 @@ import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.TestData
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.expressions.EqualsTo
+import org.apache.spark.sql.catalyst.expressions.EqualTo
 import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.util.Utils
 
@@ -245,7 +245,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
   test("create RecordFilter for simple predicates") {
     val attribute1 = new AttributeReference("first", IntegerType, false)()
-    val predicate1 = new EqualsTo(attribute1, new Literal(1, IntegerType))
+    val predicate1 = new EqualTo(attribute1, new Literal(1, IntegerType))
     val filter1 = ParquetFilters.createFilter(predicate1)
     assert(filter1.isDefined)
     assert(filter1.get.predicate == predicate1, "predicates do not match")

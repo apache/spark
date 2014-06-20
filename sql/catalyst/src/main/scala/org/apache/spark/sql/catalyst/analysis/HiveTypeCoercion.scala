@@ -234,8 +234,8 @@ trait HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      // No need to change EqualsTo operators as that actually makes sense for boolean types.
-      case e: EqualsTo => e
+      // No need to change EqualTo operators as that actually makes sense for boolean types.
+      case e: EqualTo => e
       // Otherwise turn them to Byte types so that there exists and ordering.
       case p: BinaryComparison
           if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
@@ -254,7 +254,7 @@ trait HiveTypeCoercion {
       // Skip if the type is boolean type already. Note that this extra cast should be removed
       // by optimizer.SimplifyCasts.
       case Cast(e, BooleanType) if e.dataType == BooleanType => e
-      case Cast(e, BooleanType) => Not(EqualsTo(e, Literal(0)))
+      case Cast(e, BooleanType) => Not(EqualTo(e, Literal(0)))
       case Cast(e, dataType) if e.dataType == BooleanType =>
         Cast(If(e, Literal(1), Literal(0)), dataType)
     }
