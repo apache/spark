@@ -512,7 +512,7 @@ class RDD(object):
         [('a', 3), ('fleece', 7), ('had', 2), ('lamb', 5), ('little', 4), ('Mary', 1), ('was', 8), ('white', 9), ('whose', 6)]
         """
         if numPartitions is None:
-            numPartitions = self.ctx.defaultParallelism
+            numPartitions = self._defaultReducePartitions()
 
         bounds = list()
 
@@ -1154,7 +1154,7 @@ class RDD(object):
         set([])
         """
         if numPartitions is None:
-            numPartitions = self.ctx.defaultParallelism
+            numPartitions = self._defaultReducePartitions()
 
         if partitionFunc is None:
             partitionFunc = lambda x: 0 if x is None else hash(x)
@@ -1212,7 +1212,7 @@ class RDD(object):
         [('a', '11'), ('b', '1')]
         """
         if numPartitions is None:
-            numPartitions = self.ctx.defaultParallelism
+            numPartitions = self._defaultReducePartitions()
         def combineLocally(iterator):
             combiners = {}
             for x in iterator:
@@ -1474,6 +1474,21 @@ class RDD(object):
                                      java_storage_level.deserialized(),
                                      java_storage_level.replication())
         return storage_level
+
+    def _defaultReducePartitions(self):
+        """
+        Returns the default number of partitions to use during reduce tasks (e.g., groupBy).
+        If spark.default.parallelism is set, then we'll use the value from SparkContext
+        defaultParallelism, otherwise we'll use the number of partitions in this RDD.
+
+        This mirrors the behavior of the Scala Partitioner#defaultPartitioner, intended to reduce
+        the likelihood of OOMs. Once PySpark adopts Partitioner-based APIs, this behavior will
+        be inherent.
+        """
+        if self.ctx._conf.contains("spark.default.parallelism"):
+            return self.ctx.defaultParallelism
+        else:
+            return self.getNumPartitions()
 
     # TODO: `lookup` is disabled because we can't make direct comparisons based
     # on the key; we need to compare the hash of the key to the hash of the
