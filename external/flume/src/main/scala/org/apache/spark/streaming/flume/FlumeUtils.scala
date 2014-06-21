@@ -54,7 +54,9 @@ object FlumeUtils {
       storageLevel: StorageLevel,
       enableDecompression: Boolean
     ): ReceiverInputDStream[SparkFlumeEvent] = {
-    val inputStream = new FlumeInputDStream[SparkFlumeEvent](ssc, hostname, port, storageLevel, enableDecompression)
+    val inputStream = new FlumeInputDStream[SparkFlumeEvent](
+        ssc, hostname, port, storageLevel, enableDecompression)
+        
     inputStream
   }
 
