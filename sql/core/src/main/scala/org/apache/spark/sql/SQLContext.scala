@@ -221,7 +221,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   protected[sql] class SparkPlanner extends SparkStrategies {
-    val sparkContext = self.sparkContext
+    val sparkContext: SparkContext = self.sparkContext
+
+    val sqlContext: SQLContext = self
 
     def numPartitions = self.numShufflePartitions
 
