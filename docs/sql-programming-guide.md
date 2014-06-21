@@ -548,7 +548,6 @@ results = hiveContext.hql("FROM src SELECT key, value").collect()
 </div>
 </div>
 
-
 # Writing Language-Integrated Relational Queries
 
 **Language-Integrated queries are currently only supported in Scala.**
@@ -574,3 +573,41 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 [ScalaDoc](api/scala/index.html#org.apache.spark.sql.SchemaRDD).
 
 <!-- TODO: Include the table of operations here. -->
+
+## Running the Thrift JDBC server
+
+The Thrift JDBC server implemented here corresponds to the [`HiveServer2`]
+(https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2) in Hive 0.12. You can test
+the JDBC server with the beeline script comes with either Spark or Hive 0.12.
+
+To start the JDBC server, run the following in the Spark directory:
+
+    ./sbin/start-thriftserver.sh
+
+The default port the server listens on is 10000.  Now you can use beeline to test the Thrift JDBC
+server:
+
+    ./bin/beeline
+
+Connect to the JDBC server in beeline with:
+
+    beeline> !connect jdbc:hive2://localhost:10000
+
+Beeline will ask you for a username and password. In non-secure mode, simply enter the username on
+your machine and a blank password. For secure mode, please follow the instructions given in the
+[beeline documentation](https://cwiki.apache.org/confluence/display/Hive/HiveServer2+Clients)
+
+Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
+
+You may also use the beeline script comes with Hive.
+
+## Running the Spark SQL CLI
+
+The Spark SQL CLI is a convenient tool to run the Hive metastore service in local mode and execute
+queries input from command line. Note: the Spark SQL CLI cannot talk to the Thrift JDBC server.
+
+To start the Spark SQL CLI, run the following in the Spark directory:
+
+    ./bin/spark-sql
+
+Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.

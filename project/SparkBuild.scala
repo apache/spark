@@ -76,8 +76,9 @@ object SparkBuild extends Build {
 
   lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql)
 
-  lazy val maybeHive: Seq[ClasspathDependency] = if (isHiveEnabled) Seq(hive) else Seq()
-  lazy val maybeHiveRef: Seq[ProjectReference] = if (isHiveEnabled) Seq(hive) else Seq()
+  lazy val thriftServer = Project("hive-thriftserver", file("sql/hive-thriftserver"), settings = thriftServerSettings) dependsOn(hive)
+  lazy val maybeHive: Seq[ClasspathDependency] = if (isHiveEnabled) Seq(hive, thriftServer) else Seq()
+  lazy val maybeHiveRef: Seq[ProjectReference] = if (isHiveEnabled) Seq(hive, thriftServer) else Seq()
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
@@ -534,6 +535,14 @@ object SparkBuild extends Build {
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
+  )
+
+  def thriftServerSettings = sharedSettings ++ Seq(
+    libraryDependencies ++= Seq(
+      "org.spark-project.hive" % "hive-cli"     % hiveVersion,
+      "org.spark-project.hive" % "hive-jdbc"    % hiveVersion excludeAll(excludeCommonsLogging),
+      "org.spark-project.hive" % "hive-beeline" % hiveVersion
+    )
   )
 
   def streamingSettings = sharedSettings ++ Seq(
