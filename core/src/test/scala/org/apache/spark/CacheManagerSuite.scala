@@ -49,8 +49,8 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
   }
 
   test("get uncached rdd") {
-    // Do not mock this test, because matching Array[Any] in blockManager.put is a losing battle.
-    // You have been warned.
+    // Do not mock this test, because attempting to match Array[Any], which is not covariant,
+    // in blockManager.put is a losing battle. You have been warned.
     blockManager = sc.env.blockManager
     cacheManager = sc.env.cacheManager
     val context = new TaskContext(0, 0, 0)
