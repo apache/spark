@@ -25,10 +25,7 @@ import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
-import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage._
 import org.apache.spark.shuffle.ShuffleWriter
 
 private[spark] object ShuffleMapTask {
@@ -150,7 +147,7 @@ private[spark] class ShuffleMapTask(
       for (elem <- rdd.iterator(split, context)) {
         writer.write(elem.asInstanceOf[Product2[Any, Any]])
       }
-      return writer.stop(success = true).get
+      writer.stop(success = true).get
     } catch {
       case e: Exception =>
         if (writer != null) {
