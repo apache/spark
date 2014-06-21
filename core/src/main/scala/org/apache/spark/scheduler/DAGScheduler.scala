@@ -955,7 +955,7 @@ class DAGScheduler(
    * stray fetch failures from possibly retriggering the detection of a node as lost.
    */
   private[scheduler] def handleExecutorLost(execId: String, maybeEpoch: Option[Long] = None) {
-    val currentEpoch = maybeEpoch.getOrElse(shuffleManager.getEpoch)
+    val currentEpoch = maybeEpoch.getOrElse(shuffleManager.mapOutputTracker.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
       failedEpoch(execId) = currentEpoch
       logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
@@ -967,7 +967,7 @@ class DAGScheduler(
         shuffleManager.registerMapOutputs(shuffleId, locs, changeEpoch = true)
       }
       if (shuffleToMapStage.isEmpty) {
-        shuffleManager.incrementEpoch()
+        shuffleManager.mapOutputTracker.incrementEpoch()
       }
       clearCacheLocs()
     } else {

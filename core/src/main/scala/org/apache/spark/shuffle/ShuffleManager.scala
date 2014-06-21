@@ -137,23 +137,6 @@ private[spark] trait ShuffleManager {
       endPartition: Int,
       context: TaskContext): ShuffleReader[K, C]
 
-  def getEpoch = mapOutputTracker.getEpoch
-
-  // TODO: disassociate Epoch with ShuffleManager?
-  def incrementEpoch() {
-    if (isDriver) {
-      mapOutputTracker.incrementEpoch()
-    }
-  }
-
-  def updateEpoch(newEpoch: Long) {
-    mapOutputTracker.updateEpoch(newEpoch)
-  }
-
-  def getServerStatuses(shuffleId: Int, reduceId: Int) = {
-    mapOutputTracker.getServerStatuses(shuffleId, reduceId)
-  }
-
   /** Shut down this ShuffleManager. */
   def stop() {
     mapOutputTracker.stop()

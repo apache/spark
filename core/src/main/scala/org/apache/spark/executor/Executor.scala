@@ -180,7 +180,7 @@ private[spark] class Executor(
 
         attemptedTask = Some(task)
         logDebug("Task " + taskId + "'s epoch is " + task.epoch)
-        env.shuffleManager.updateEpoch(task.epoch)
+        env.shuffleManager.mapOutputTracker.updateEpoch(task.epoch)
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()

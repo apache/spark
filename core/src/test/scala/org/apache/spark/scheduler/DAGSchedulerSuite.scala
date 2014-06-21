@@ -58,7 +58,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     override def stop() = {}
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
-      taskSet.tasks.foreach(_.epoch = shuffleManager.getEpoch)
+      taskSet.tasks.foreach(_.epoch = shuffleManager.mapOutputTracker.getEpoch)
       taskSets += taskSet
     }
     override def cancelTasks(stageId: Int, interruptThread: Boolean) {
@@ -401,7 +401,8 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     // have the 2nd attempt pass
     complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
     // we can see both result blocks now
-    assert(shuffleManager.getServerStatuses(shuffleId, 0).map(_._1.host) === Array("hostA", "hostB"))
+    assert(shuffleManager.mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host)
+      === Array("hostA", "hostB"))
     complete(taskSets(3), Seq((Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty
@@ -414,9 +415,9 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     val reduceRdd = makeRdd(2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
     // pretend we were told hostA went away
-    val oldEpoch = shuffleManager.getEpoch
+    val oldEpoch = shuffleManager.mapOutputTracker.getEpoch
     runEvent(ExecutorLost("exec-hostA"))
-    val newEpoch = shuffleManager.getEpoch
+    val newEpoch = shuffleManager.mapOutputTracker.getEpoch
     assert(newEpoch > oldEpoch)
     val noAccum = Map[Long, Any]()
     val taskSet = taskSets(0)
@@ -429,7 +430,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     // should work because it's a new epoch
     taskSet.tasks(1).epoch = newEpoch
     runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA", 1), noAccum, null, null))
-    assert(shuffleManager.getServerStatuses(shuffleId, 0).map(_._1) ===
+    assert(shuffleManager.mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
     complete(taskSets(1), Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
@@ -528,7 +529,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
        (Success, makeMapStatus("hostB", 1))))
     // have hostC complete the resubmitted task
     complete(taskSets(1), Seq((Success, makeMapStatus("hostC", 1))))
-    assert(shuffleManager.getServerStatuses(shuffleId, 0).map(_._1) ===
+    assert(shuffleManager.mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
     complete(taskSets(2), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
