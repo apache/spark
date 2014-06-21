@@ -694,10 +694,10 @@ def real_main():
     (master_nodes, slave_nodes) = get_existing_cluster(
         conn, opts, cluster_name, die_on_error=False)
 
-    print "Are you sure you want to destroy the cluster " + \
-      cluster_name + "?\nThe following instances will be terminated:"
+    print "Are you sure you want to destroy the cluster %s?" % cluster_name
+    print "The following instances will be terminated:"
     for inst in master_nodes + slave_nodes:
-      print inst
+      print inst.public_dns_name
 
     response = raw_input("ALL DATA ON ALL NODES WILL BE LOST!!\n" +
         "Destroy cluster " + cluster_name + " (y/N): ")
