@@ -17,11 +17,9 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
-import org.apache.spark.mllib.util.MLUtils
 
 /**
  * Regression model trained using LinearRegression.
@@ -29,7 +27,7 @@ import org.apache.spark.mllib.util.MLUtils
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class LinearRegressionModel(
+class LinearRegressionModel private[mllib] (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {
@@ -52,19 +50,21 @@ class LinearRegressionModel(
  * See also the documentation for the precise formulation.
  */
 class LinearRegressionWithSGD private (
-    var stepSize: Double,
-    var numIterations: Int,
-    var miniBatchFraction: Double)
+    private var stepSize: Double,
+    private var numIterations: Int,
+    private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LinearRegressionModel] with Serializable {
 
-  val gradient = new LeastSquaresGradient()
-  val updater = new SimpleUpdater()
-  val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+  private val gradient = new LeastSquaresGradient()
+  private val updater = new SimpleUpdater()
+  override val optimizer = new GradientDescent(gradient, updater)
+    .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setMiniBatchFraction(miniBatchFraction)
 
   /**
-   * Construct a LinearRegression object with default parameters
+   * Construct a LinearRegression object with default parameters: {stepSize: 1.0,
+   * numIterations: 100, miniBatchFraction: 1.0}.
    */
   def this() = this(1.0, 100, 1.0)
 
@@ -153,19 +153,5 @@ object LinearRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int): LinearRegressionModel = {
     train(input, numIterations, 1.0, 1.0)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length != 5) {
-      println("Usage: LinearRegression <master> <input_dir> <step_size> <niters>")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "LinearRegression")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = LinearRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
-    println("Weights: " + model.weights)
-    println("Intercept: " + model.intercept)
-
-    sc.stop()
   }
 }

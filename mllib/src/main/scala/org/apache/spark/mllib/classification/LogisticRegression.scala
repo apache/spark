@@ -17,11 +17,11 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{DataValidators, MLUtils}
+import org.apache.spark.mllib.util.DataValidators
 import org.apache.spark.rdd.RDD
 
 /**
@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class LogisticRegressionModel(
+class LogisticRegressionModel private[mllib] (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
@@ -38,24 +38,28 @@ class LogisticRegressionModel(
   private var threshold: Option[Double] = Some(0.5)
 
   /**
+   * :: Experimental ::
    * Sets the threshold that separates positive predictions from negative predictions. An example
    * with prediction score greater than or equal to this threshold is identified as an positive,
    * and negative otherwise. The default value is 0.5.
    */
+  @Experimental
   def setThreshold(threshold: Double): this.type = {
     this.threshold = Some(threshold)
     this
   }
 
   /**
+   * :: Experimental ::
    * Clears the threshold so that `predict` will output raw prediction scores.
    */
+  @Experimental
   def clearThreshold(): this.type = {
     threshold = None
     this
   }
 
-  override def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
+  override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
       intercept: Double) = {
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
     val score = 1.0/ (1.0 + math.exp(-margin))
@@ -71,27 +75,27 @@ class LogisticRegressionModel(
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
 class LogisticRegressionWithSGD private (
-    var stepSize: Double,
-    var numIterations: Int,
-    var regParam: Double,
-    var miniBatchFraction: Double)
+    private var stepSize: Double,
+    private var numIterations: Int,
+    private var regParam: Double,
+    private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
 
-  val gradient = new LogisticGradient()
-  val updater = new SimpleUpdater()
+  private val gradient = new LogisticGradient()
+  private val updater = new SimpleUpdater()
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
-  override val validators = List(DataValidators.classificationLabels)
+  override protected val validators = List(DataValidators.binaryLabelValidator)
 
   /**
    * Construct a LogisticRegression object with default parameters
    */
   def this() = this(1.0, 100, 0.0, 1.0)
 
-  def createModel(weights: Vector, intercept: Double) = {
+  override protected def createModel(weights: Vector, intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)
   }
 }
@@ -182,20 +186,5 @@ object LogisticRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int): LogisticRegressionModel = {
     train(input, numIterations, 1.0, 1.0)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length != 4) {
-      println("Usage: LogisticRegression <master> <input_dir> <step_size> " +
-        "<niters>")
-      System.exit(1)
-    }
-    val sc = new SparkContext(args(0), "LogisticRegression")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = LogisticRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
-    println("Weights: " + model.weights)
-    println("Intercept: " + model.intercept)
-
-    sc.stop()
   }
 }

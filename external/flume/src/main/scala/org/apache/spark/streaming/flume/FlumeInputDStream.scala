@@ -34,6 +34,8 @@ import org.apache.spark.util.Utils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.Logging
+import org.apache.spark.streaming.receiver.Receiver
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
@@ -41,9 +43,9 @@ class FlumeInputDStream[T: ClassTag](
   host: String,
   port: Int,
   storageLevel: StorageLevel
-) extends NetworkInputDStream[SparkFlumeEvent](ssc_) {
+) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
 
-  override def getReceiver(): NetworkReceiver[SparkFlumeEvent] = {
+  override def getReceiver(): Receiver[SparkFlumeEvent] = {
     new FlumeReceiver(host, port, storageLevel)
   }
 }
@@ -61,7 +63,7 @@ class SparkFlumeEvent() extends Externalizable {
   def readExternal(in: ObjectInput) {
     val bodyLength = in.readInt()
     val bodyBuff = new Array[Byte](bodyLength)
-    in.read(bodyBuff)
+    in.readFully(bodyBuff)
 
     val numHeaders = in.readInt()
     val headers = new java.util.HashMap[CharSequence, CharSequence]
@@ -69,12 +71,12 @@ class SparkFlumeEvent() extends Externalizable {
     for (i <- 0 until numHeaders) {
       val keyLength = in.readInt()
       val keyBuff = new Array[Byte](keyLength)
-      in.read(keyBuff)
+      in.readFully(keyBuff)
       val key : String = Utils.deserialize(keyBuff)
 
       val valLength = in.readInt()
       val valBuff = new Array[Byte](valLength)
-      in.read(valBuff)
+      in.readFully(valBuff)
       val value : String = Utils.deserialize(valBuff)
 
       headers.put(key, value)
@@ -115,13 +117,13 @@ private[streaming] object SparkFlumeEvent {
 private[streaming]
 class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
   override def append(event : AvroFlumeEvent) : Status = {
-    receiver.blockGenerator += SparkFlumeEvent.fromAvroFlumeEvent(event)
+    receiver.store(SparkFlumeEvent.fromAvroFlumeEvent(event))
     Status.OK
   }
 
   override def appendBatch(events : java.util.List[AvroFlumeEvent]) : Status = {
     events.foreach (event =>
-      receiver.blockGenerator += SparkFlumeEvent.fromAvroFlumeEvent(event))
+      receiver.store(SparkFlumeEvent.fromAvroFlumeEvent(event)))
     Status.OK
   }
 }
@@ -133,23 +135,21 @@ class FlumeReceiver(
     host: String,
     port: Int,
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[SparkFlumeEvent] {
+  ) extends Receiver[SparkFlumeEvent](storageLevel) with Logging {
 
-  lazy val blockGenerator = new BlockGenerator(storageLevel)
+  lazy val responder = new SpecificResponder(
+    classOf[AvroSourceProtocol], new FlumeEventServer(this))
+  lazy val server = new NettyServer(responder, new InetSocketAddress(host, port))
 
-  protected override def onStart() {
-    val responder = new SpecificResponder(
-      classOf[AvroSourceProtocol], new FlumeEventServer(this))
-    val server = new NettyServer(responder, new InetSocketAddress(host, port))
-    blockGenerator.start()
+  def onStart() {
     server.start()
     logInfo("Flume receiver started")
   }
 
-  protected override def onStop() {
-    blockGenerator.stop()
+  def onStop() {
+    server.close()
     logInfo("Flume receiver stopped")
   }
 
-  override def getLocationPreference = Some(host)
+  override def preferredLocation = Some(host)
 }

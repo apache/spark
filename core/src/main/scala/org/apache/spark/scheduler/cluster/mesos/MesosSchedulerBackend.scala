@@ -24,7 +24,7 @@ import java.util.Collections
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import com.google.protobuf.ByteString
+import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
@@ -175,7 +175,7 @@ private[spark] class MesosSchedulerBackend(
   override def reregistered(d: SchedulerDriver, masterInfo: MasterInfo) {}
 
   /**
-   * Method called by Mesos to offer resources on slaves. We resond by asking our active task sets
+   * Method called by Mesos to offer resources on slaves. We respond by asking our active task sets
    * for tasks in order of priority. We fill each node with tasks in a round-robin manner so that
    * tasks are balanced across the cluster.
    */
@@ -223,7 +223,7 @@ private[spark] class MesosSchedulerBackend(
         // Reply to the offers
         val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
         for (i <- 0 until offers.size) {
-          d.launchTasks(offers(i).getId, mesosTasks(i), filters)
+          d.launchTasks(Collections.singleton(offers(i).getId), mesosTasks(i), filters)
         }
       }
     } finally {

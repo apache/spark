@@ -90,7 +90,7 @@ trait MutableRow extends Row {
   def setString(ordinal: Int, value: String)
 
   /**
-   * EXPERIMENTAL
+   * Experimental
    *
    * Returns a mutable string builder for the specified column.  A given row should return the
    * result of any mutations made to the returned buffer next time getString is called for the same
@@ -208,12 +208,15 @@ class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
 
 
 class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
+  def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
+    this(ordering.map(BindReferences.bindReference(_, inputSchema)))
+
   def compare(a: Row, b: Row): Int = {
     var i = 0
     while (i < ordering.size) {
       val order = ordering(i)
-      val left = order.child.apply(a)
-      val right = order.child.apply(b)
+      val left = order.child.eval(a)
+      val right = order.child.eval(b)
 
       if (left == null && right == null) {
         // Both null, continue looking.

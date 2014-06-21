@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments}
+import org.apache.spark.deploy.yarn.{Client, ClientArguments, ExecutorLauncher}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 import scala.collection.mutable.ArrayBuffer
@@ -35,10 +35,10 @@ private[spark] class YarnClientSchedulerBackend(
 
   private[spark] def addArg(optionName: String, envVar: String, sysProp: String,
       arrayBuf: ArrayBuffer[String]) {
-    if (System.getProperty(sysProp) != null) {
-      arrayBuf += (optionName, System.getProperty(sysProp))
-    } else if (System.getenv(envVar) != null) {
+    if (System.getenv(envVar) != null) {
       arrayBuf += (optionName, System.getenv(envVar))
+    } else if (sc.getConf.contains(sysProp)) {
+      arrayBuf += (optionName, sc.getConf.get(sysProp))
     }
   }
 
@@ -52,9 +52,9 @@ private[spark] class YarnClientSchedulerBackend(
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
       "--class", "notused",
-      "--jar", null,
+      "--jar", null, // The primary jar will be added dynamically in SparkContext.
       "--args", hostport,
-      "--am-class", "org.apache.spark.deploy.yarn.ExecutorLauncher"
+      "--am-class", classOf[ExecutorLauncher].getName
     )
 
     // process any optional arguments, given either as environment variables
@@ -70,9 +70,7 @@ private[spark] class YarnClientSchedulerBackend(
       ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
       ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
       ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
-      ("--name", "SPARK_YARN_APP_NAME", "spark.app.name"),
-      ("--files", "SPARK_YARN_DIST_FILES", "spark.yarn.dist.files"),
-      ("--archives", "SPARK_YARN_DIST_ARCHIVES", "spark.yarn.dist.archives"))
+      ("--name", "SPARK_YARN_APP_NAME", "spark.app.name"))
     .foreach { case (optName, envVar, sysProp) => addArg(optName, envVar, sysProp, argsArrayBuf) }
 
     logDebug("ClientArguments called with: " + argsArrayBuf)
@@ -112,8 +110,8 @@ private[spark] class YarnClientSchedulerBackend(
 
   override def stop() {
     super.stop()
-    client.stop()
-    logInfo("Stoped")
+    client.stop
+    logInfo("Stopped")
   }
 
 }

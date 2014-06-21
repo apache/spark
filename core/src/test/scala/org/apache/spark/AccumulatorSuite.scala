@@ -20,11 +20,11 @@ package org.apache.spark
 import scala.collection.mutable
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkContext._
 
-class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
+class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
 
 
   implicit def setAccum[A] = new AccumulableParam[mutable.Set[A], A] {

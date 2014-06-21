@@ -19,12 +19,15 @@ package org.apache.spark.storage
 
 import scala.collection.mutable
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 
 /**
- * A SparkListener that maintains executor storage status
+ * :: DeveloperApi ::
+ * A SparkListener that maintains executor storage status.
  */
-private[spark] class StorageStatusListener extends SparkListener {
+@DeveloperApi
+class StorageStatusListener extends SparkListener {
   private val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
 
   def storageStatusList = executorIdToStorageStatus.values.toSeq
@@ -34,7 +37,11 @@ private[spark] class StorageStatusListener extends SparkListener {
     val filteredStatus = storageStatusList.find(_.blockManagerId.executorId == execId)
     filteredStatus.foreach { storageStatus =>
       updatedBlocks.foreach { case (blockId, updatedStatus) =>
-        storageStatus.blocks(blockId) = updatedStatus
+        if (updatedStatus.storageLevel == StorageLevel.NONE) {
+          storageStatus.blocks.remove(blockId)
+        } else {
+          storageStatus.blocks(blockId) = updatedStatus
+        }
       }
     }
   }

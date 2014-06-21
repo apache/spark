@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 
-class QueryTest extends FunSuite {
+class QueryTest extends PlanTest {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param rdd the [[SchemaRDD]] to be executed
@@ -44,23 +42,26 @@ class QueryTest extends FunSuite {
         fail(
           s"""
             |Exception thrown while executing query:
-            |${rdd.logicalPlan}
+            |${rdd.queryExecution}
             |== Exception ==
             |$e
           """.stripMargin)
     }
+
     if(prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
       fail(s"""
         |Results do not match for query:
         |${rdd.logicalPlan}
         |== Analyzed Plan ==
         |${rdd.queryExecution.analyzed}
-        |== RDD ==
-        |$rdd
+        |== Physical Plan ==
+        |${rdd.queryExecution.executedPlan}
         |== Results ==
         |${sideBySide(
-            prepareAnswer(convertedAnswer).map(_.toString),
-            prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+            s"== Correct Answer - ${convertedAnswer.size} ==" +:
+              prepareAnswer(convertedAnswer).map(_.toString),
+            s"== Spark Answer - ${sparkAnswer.size} ==" +:
+              prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
       """.stripMargin)
     }
   }

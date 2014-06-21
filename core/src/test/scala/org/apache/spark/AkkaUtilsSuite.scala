@@ -37,9 +37,8 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
 
     val securityManager = new SecurityManager(conf);
     val hostname = "localhost"
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0, 
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.driver.port", boundPort.toString)    // Will be cleared by LocalSparkContext
     System.setProperty("spark.hostPort", hostname + ":" + boundPort)
     assert(securityManager.isAuthenticationEnabled() === true)
 
@@ -54,14 +53,14 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
 
     assert(securityManagerBad.isAuthenticationEnabled() === true)
 
-    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0, 
+    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0,
       conf = conf, securityManager = securityManagerBad)
-    val slaveTracker = new MapOutputTracker(conf)
+    val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
       s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker")
     val timeout = AkkaUtils.lookupTimeout(conf)
-    intercept[akka.actor.ActorNotFound] { 
-      slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout) 
+    intercept[akka.actor.ActorNotFound] {
+      slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
     }
 
     actorSystem.shutdown()
@@ -75,9 +74,8 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     val securityManager = new SecurityManager(conf);
 
     val hostname = "localhost"
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0, 
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.driver.port", boundPort.toString)    // Will be cleared by LocalSparkContext
     System.setProperty("spark.hostPort", hostname + ":" + boundPort)
 
     assert(securityManager.isAuthenticationEnabled() === false)
@@ -91,9 +89,9 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     badconf.set("spark.authenticate.secret", "good")
     val securityManagerBad = new SecurityManager(badconf);
 
-    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0, 
+    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0,
       conf = badconf, securityManager = securityManagerBad)
-    val slaveTracker = new MapOutputTracker(conf)
+    val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
       s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker")
     val timeout = AkkaUtils.lookupTimeout(conf)
@@ -127,9 +125,8 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     val securityManager = new SecurityManager(conf);
 
     val hostname = "localhost"
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0, 
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.driver.port", boundPort.toString)    // Will be cleared by LocalSparkContext
     System.setProperty("spark.hostPort", hostname + ":" + boundPort)
 
     assert(securityManager.isAuthenticationEnabled() === true)
@@ -147,7 +144,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
 
     val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0,
       conf = goodconf, securityManager = securityManagerGood)
-    val slaveTracker = new MapOutputTracker(conf)
+    val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
       s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker")
     val timeout = AkkaUtils.lookupTimeout(conf)
@@ -180,9 +177,8 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     val securityManager = new SecurityManager(conf);
 
     val hostname = "localhost"
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0, 
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.driver.port", boundPort.toString)    // Will be cleared by LocalSparkContext
     System.setProperty("spark.hostPort", hostname + ":" + boundPort)
 
     assert(securityManager.isAuthenticationEnabled() === true)
@@ -200,12 +196,12 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
 
     val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0,
       conf = badconf, securityManager = securityManagerBad)
-    val slaveTracker = new MapOutputTracker(conf)
+    val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
       s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker")
     val timeout = AkkaUtils.lookupTimeout(conf)
-    intercept[akka.actor.ActorNotFound] { 
-      slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout) 
+    intercept[akka.actor.ActorNotFound] {
+      slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
     }
 
     actorSystem.shutdown()

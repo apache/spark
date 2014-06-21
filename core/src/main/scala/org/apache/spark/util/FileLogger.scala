@@ -17,15 +17,17 @@
 
 package org.apache.spark.util
 
-import java.io._
+import java.io.{BufferedOutputStream, FileOutputStream, IOException, PrintWriter}
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
-import org.apache.hadoop.fs.{FSDataOutputStream, Path}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 
 /**
@@ -36,12 +38,14 @@ import org.apache.spark.io.CompressionCodec
  * @param compress Whether to compress output
  * @param overwrite Whether to overwrite existing files
  */
-class FileLogger(
+private[spark] class FileLogger(
     logDir: String,
-    conf: SparkConf = new SparkConf,
+    sparkConf: SparkConf,
+    hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(),
     outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
-    overwrite: Boolean = true)
+    overwrite: Boolean = true,
+    dirPermissions: Option[FsPermission] = None)
   extends Logging {
 
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -49,17 +53,29 @@ class FileLogger(
   }
 
   private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
-  private var fileIndex = 0
+  var fileIndex = 0
 
   // Only used if compression is enabled
-  private lazy val compressionCodec = CompressionCodec.createCodec(conf)
+  private lazy val compressionCodec = CompressionCodec.createCodec(sparkConf)
 
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
-  private var writer: Option[PrintWriter] = {
+  // The Hadoop APIs have changed over time, so we use reflection to figure out
+  // the correct method to use to flush a hadoop data stream. See SPARK-1518
+  // for details.
+  private val hadoopFlushMethod = {
+    val cls = classOf[FSDataOutputStream]
+    scala.util.Try(cls.getMethod("hflush")).getOrElse(cls.getMethod("sync"))
+  }
+
+  private var writer: Option[PrintWriter] = None
+
+  /**
+   * Start this logger by creating the logging directory.
+   */
+  def start() {
     createLogDir()
-    Some(createWriter())
   }
 
   /**
@@ -79,29 +95,39 @@ class FileLogger(
     if (!fileSystem.mkdirs(path)) {
       throw new IOException("Error in creating log directory: %s".format(logDir))
     }
+    if (dirPermissions.isDefined) {
+      val fsStatus = fileSystem.getFileStatus(path)
+      if (fsStatus.getPermission.toShort != dirPermissions.get.toShort) {
+        fileSystem.setPermission(path, dirPermissions.get)
+      }
+    }
   }
 
   /**
    * Create a new writer for the file identified by the given path.
+   * If the permissions are not passed in, it will default to use the permissions
+   * (dirPermissions) used when class was instantiated.
    */
-  private def createWriter(): PrintWriter = {
-    val logPath = logDir + "/" + fileIndex
+  private def createWriter(fileName: String, perms: Option[FsPermission] = None): PrintWriter = {
+    val logPath = logDir + "/" + fileName
     val uri = new URI(logPath)
+    val path = new Path(logPath)
+    val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
+    val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
      * Therefore, for local files, use FileOutputStream instead. */
-    val dstream = uri.getScheme match {
-      case "file" | null =>
+    val dstream =
+      if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
         // Second parameter is whether to append
-        new FileOutputStream(logPath, !overwrite)
-
-      case _ =>
-        val path = new Path(logPath)
+        new FileOutputStream(uri.getPath, !overwrite)
+      } else {
         hadoopDataStream = Some(fileSystem.create(path, overwrite))
         hadoopDataStream.get
-    }
+      }
 
-    val bstream = new FastBufferedOutputStream(dstream, outputBufferSize)
+    perms.orElse(dirPermissions).foreach { p => fileSystem.setPermission(path, p) }
+    val bstream = new BufferedOutputStream(dstream, outputBufferSize)
     val cstream = if (compress) compressionCodec.compressedOutputStream(bstream) else bstream
     new PrintWriter(cstream)
   }
@@ -112,8 +138,10 @@ class FileLogger(
    * @param withTime Whether to prepend message with a timestamp
    */
   def log(msg: String, withTime: Boolean = false) {
-    val writeInfo = if (!withTime) msg else {
-      val date = new Date(System.currentTimeMillis())
+    val writeInfo = if (!withTime) {
+      msg
+    } else {
+      val date = new Date(System.currentTimeMillis)
       dateFormat.get.format(date) + ": " + msg
     }
     writer.foreach(_.print(writeInfo))
@@ -129,13 +157,13 @@ class FileLogger(
   /**
    * Flush the writer to disk manually.
    *
-   * If the Hadoop FileSystem is used, the underlying FSDataOutputStream (r1.0.4) must be
-   * sync()'ed manually as it does not support flush(), which is invoked by when higher
-   * level streams are flushed.
+   * When using a Hadoop filesystem, we need to invoke the hflush or sync
+   * method. In HDFS, hflush guarantees that the data gets to all the
+   * DataNodes.
    */
   def flush() {
     writer.foreach(_.flush())
-    hadoopDataStream.foreach(_.sync())
+    hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
   }
 
   /**
@@ -147,13 +175,18 @@ class FileLogger(
   }
 
   /**
-   * Start a writer for a new file if one does not already exit.
+   * Start a writer for a new file, closing the existing one if it exists.
+   * @param fileName Name of the new file, defaulting to the file index if not provided.
+   * @param perms Permissions to put on the new file.
    */
-  def start() {
-    writer.getOrElse {
-      fileIndex += 1
-      writer = Some(createWriter())
+  def newFile(fileName: String = "", perms: Option[FsPermission] = None) {
+    fileIndex += 1
+    writer.foreach(_.close())
+    val name = fileName match {
+      case "" => fileIndex.toString
+      case _ => fileName
     }
+    writer = Some(createWriter(name, perms))
   }
 
   /**

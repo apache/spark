@@ -51,6 +51,14 @@ class SparkContextSchedulerCreationSuite
     }
   }
 
+  test("local-*") {
+    val sched = createTaskScheduler("local[*]")
+    sched.backend match {
+      case s: LocalBackend => assert(s.totalCores === Runtime.getRuntime.availableProcessors())
+      case _ => fail()
+    }
+  }
+
   test("local-n") {
     val sched = createTaskScheduler("local[5]")
     assert(sched.maxTaskFailures === 1)

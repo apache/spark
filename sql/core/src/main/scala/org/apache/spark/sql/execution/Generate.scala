@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Generator, JoinedRow, Literal, Projection}
 
 /**
+ * :: DeveloperApi ::
  * Applies a [[catalyst.expressions.Generator Generator]] to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
  * programming with one important additional feature, which allows the input rows to be joined with
@@ -29,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Generator, JoinedRow, Literal,
  * @param outer when true, each input row will be output at least once, even if the output of the
  *              given `generator` is empty. `outer` has no effect when `join` is false.
  */
+@DeveloperApi
 case class Generate(
     generator: Generator,
     join: Boolean,
@@ -36,10 +39,10 @@ case class Generate(
     child: SparkPlan)
   extends UnaryNode {
 
-  def output =
+  override def output =
     if (join) child.output ++ generator.output else generator.output
 
-  def execute() = {
+  override def execute() = {
     if (join) {
       child.execute().mapPartitions { iter =>
         val nullValues = Seq.fill(generator.output.size)(Literal(null))
@@ -52,7 +55,7 @@ case class Generate(
         val joinedRow = new JoinedRow
 
         iter.flatMap {row =>
-          val outputRows = generator(row)
+          val outputRows = generator.eval(row)
           if (outer && outputRows.isEmpty) {
             outerProjection(row) :: Nil
           } else {
@@ -61,7 +64,7 @@ case class Generate(
         }
       }
     } else {
-      child.execute().mapPartitions(iter => iter.flatMap(generator))
+      child.execute().mapPartitions(iter => iter.flatMap(row => generator.eval(row)))
     }
   }
 }

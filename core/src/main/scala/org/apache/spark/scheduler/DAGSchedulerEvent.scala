@@ -20,10 +20,12 @@ package org.apache.spark.scheduler
 import java.util.Properties
 
 import scala.collection.mutable.Map
+import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.CallSite
 
 /**
  * Types of events that can be handled by the DAGScheduler. The DAGScheduler uses an event queue
@@ -39,10 +41,12 @@ private[scheduler] case class JobSubmitted(
     func: (TaskContext, Iterator[_]) => _,
     partitions: Array[Int],
     allowLocal: Boolean,
-    callSite: String,
+    callSite: CallSite,
     listener: JobListener,
     properties: Properties = null)
   extends DAGSchedulerEvent
+
+private[scheduler] case class StageCancelled(stageId: Int) extends DAGSchedulerEvent
 
 private[scheduler] case class JobCancelled(jobId: Int) extends DAGSchedulerEvent
 
@@ -54,7 +58,7 @@ private[scheduler]
 case class BeginEvent(task: Task[_], taskInfo: TaskInfo) extends DAGSchedulerEvent
 
 private[scheduler]
-case class GettingResultEvent(task: Task[_], taskInfo: TaskInfo) extends DAGSchedulerEvent 
+case class GettingResultEvent(taskInfo: TaskInfo) extends DAGSchedulerEvent
 
 private[scheduler] case class CompletionEvent(
     task: Task[_],
@@ -73,5 +77,3 @@ private[scheduler]
 case class TaskSetFailed(taskSet: TaskSet, reason: String) extends DAGSchedulerEvent
 
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent
-
-private[scheduler] case object StopDAGScheduler extends DAGSchedulerEvent

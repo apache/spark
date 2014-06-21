@@ -39,9 +39,9 @@ case class ExampleTGF(input: Seq[Attribute] = Seq('name, 'age)) extends Generato
 
   val Seq(nameAttr, ageAttr) = input
 
-  override def apply(input: Row): TraversableOnce[Row] = {
-    val name = nameAttr.apply(input)
-    val age = ageAttr.apply(input).asInstanceOf[Int]
+  override def eval(input: Row): TraversableOnce[Row] = {
+    val name = nameAttr.eval(input)
+    val age = ageAttr.eval(input).asInstanceOf[Int]
 
     Iterator(
       new GenericRow(Array[Any](s"$name is $age years old")),

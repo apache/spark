@@ -23,6 +23,7 @@ import java.util.Date
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import akka.actor._
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
@@ -64,8 +65,12 @@ private[spark] class Worker(
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
 
-  // Index into masterUrls that we're currently trying to register with.
-  var masterIndex = 0
+  val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", false)
+  // How often worker will clean up old app folders
+  val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
+  // TTL for app folders/data;  after TTL expires it will be cleaned up
+  val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
+
 
   val masterLock: Object = new Object()
   var master: ActorSelection = null
@@ -95,6 +100,8 @@ private[spark] class Worker(
   val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   val workerSource = new WorkerSource(this)
 
+  var registrationRetryTimer: Option[Cancellable] = None
+
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
 
@@ -122,8 +129,8 @@ private[spark] class Worker(
       host, port, cores, Utils.megabytesToString(memory)))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+    webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
     webUi.bind()
     registerWithMaster()
 
@@ -156,21 +163,22 @@ private[spark] class Worker(
 
   def registerWithMaster() {
     tryRegisterAllMasters()
-
     var retries = 0
-    lazy val retryTimer: Cancellable =
+    registrationRetryTimer = Some {
       context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
-        retries += 1
-        if (registered) {
-          retryTimer.cancel()
-        } else if (retries >= REGISTRATION_RETRIES) {
-          logError("All masters are unresponsive! Giving up.")
-          System.exit(1)
-        } else {
-          tryRegisterAllMasters()
+        Utils.tryOrExit {
+          retries += 1
+          if (registered) {
+            registrationRetryTimer.foreach(_.cancel())
+          } else if (retries >= REGISTRATION_RETRIES) {
+            logError("All masters are unresponsive! Giving up.")
+            System.exit(1)
+          } else {
+            tryRegisterAllMasters()
+          }
         }
       }
-    retryTimer // start timer
+    }
   }
 
   override def receive = {
@@ -179,10 +187,26 @@ private[spark] class Worker(
       registered = true
       changeMaster(masterUrl, masterWebUiUrl)
       context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis, self, SendHeartbeat)
+      if (CLEANUP_ENABLED) {
+        context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
+          CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
+      }
 
     case SendHeartbeat =>
       masterLock.synchronized {
         if (connected) { master ! Heartbeat(workerId) }
+      }
+
+    case WorkDirCleanup =>
+      // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
+      val cleanupFuture = concurrent.future {
+        logInfo("Cleaning up oldest application directories in " + workDir + " ...")
+        Utils.findOldFiles(workDir, APP_DATA_RETENTION_SECS)
+          .foreach(Utils.deleteRecursively)
+      }
+      cleanupFuture onFailure {
+        case e: Throwable =>
+          logError("App dir cleanup failed: " + e.getMessage, e)
       }
 
     case MasterChanged(masterUrl, masterWebUiUrl) =>
@@ -211,7 +235,7 @@ private[spark] class Worker(
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
             self, workerId, host,
             appDesc.sparkHome.map(userSparkHome => new File(userSparkHome)).getOrElse(sparkHome),
-            workDir, akkaUrl, ExecutorState.RUNNING)
+            workDir, akkaUrl, conf, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -221,7 +245,7 @@ private[spark] class Worker(
           }
         } catch {
           case e: Exception => {
-            logError("Failed to launch exector %s/%d for %s".format(appId, execId, appDesc.name))
+            logError("Failed to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
@@ -239,14 +263,20 @@ private[spark] class Worker(
       }
       val fullId = appId + "/" + execId
       if (ExecutorState.isFinished(state)) {
-        val executor = executors(fullId)
-        logInfo("Executor " + fullId + " finished with state " + state +
-          message.map(" message " + _).getOrElse("") +
-          exitStatus.map(" exitStatus " + _).getOrElse(""))
-        executors -= fullId
-        finishedExecutors(fullId) = executor
-        coresUsed -= executor.cores
-        memoryUsed -= executor.memory
+        executors.get(fullId) match {
+          case Some(executor) => 
+            logInfo("Executor " + fullId + " finished with state " + state +
+              message.map(" message " + _).getOrElse("") +
+              exitStatus.map(" exitStatus " + _).getOrElse(""))
+            executors -= fullId
+            finishedExecutors(fullId) = executor
+            coresUsed -= executor.cores
+            memoryUsed -= executor.memory
+          case None =>
+            logInfo("Unknown Executor " + fullId + " finished with state " + state +
+              message.map(" message " + _).getOrElse("") +
+              exitStatus.map(" exitStatus " + _).getOrElse(""))
+        }
       }
 
     case KillExecutor(masterUrl, appId, execId) =>
@@ -287,10 +317,14 @@ private[spark] class Worker(
       state match {
         case DriverState.ERROR =>
           logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+        case DriverState.FAILED =>
+          logWarning(s"Driver $driverId exited with failure")
         case DriverState.FINISHED =>
           logInfo(s"Driver $driverId exited successfully")
         case DriverState.KILLED =>
           logInfo(s"Driver $driverId was killed by user")
+        case _ =>
+          logDebug(s"Driver $driverId changed state to $state")
       }
       masterLock.synchronized {
         master ! DriverStateChanged(driverId, state, exception)
@@ -323,6 +357,7 @@ private[spark] class Worker(
   }
 
   override def postStop() {
+    registrationRetryTimer.foreach(_.cancel())
     executors.values.foreach(_.kill())
     drivers.values.foreach(_.kill())
     webUi.stop()
@@ -331,7 +366,6 @@ private[spark] class Worker(
 }
 
 private[spark] object Worker {
-
   def main(argStrings: Array[String]) {
     val args = new WorkerArguments(argStrings)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,

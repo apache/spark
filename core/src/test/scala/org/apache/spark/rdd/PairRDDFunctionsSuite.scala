@@ -30,6 +30,19 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.{Partitioner, SharedSparkContext}
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
+  test("aggregateByKey") {
+    val pairs = sc.parallelize(Array((1, 1), (1, 1), (3, 2), (5, 1), (5, 3)), 2)
+
+    val sets = pairs.aggregateByKey(new HashSet[Int]())(_ += _, _ ++= _).collect()
+    assert(sets.size === 3)
+    val valuesFor1 = sets.find(_._1 == 1).get._2
+    assert(valuesFor1.toList.sorted === List(1))
+    val valuesFor3 = sets.find(_._1 == 3).get._2
+    assert(valuesFor3.toList.sorted === List(2))
+    val valuesFor5 = sets.find(_._1 == 5).get._2
+    assert(valuesFor5.toList.sorted === List(1, 3))
+  }
+
   test("groupByKey") {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)))
     val groups = pairs.groupByKey().collect()
@@ -119,28 +132,30 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
      * relatively tight error bounds to check correctness of functionality rather than checking
      * whether the approximation conforms with the requested bound.
      */
-    val relativeSD = 0.001
+    val p = 20
+    val sp = 0
+    // When p = 20, the relative accuracy is about 0.001. So with high probability, the
+    // relative error should be smaller than the threshold 0.01 we use here.
+    val relativeSD = 0.01
 
     // For each value i, there are i tuples with first element equal to i.
     // Therefore, the expected count for key i would be i.
     val stacked = (1 to 100).flatMap(i => (1 to i).map(j => (i, j)))
     val rdd1 = sc.parallelize(stacked)
-    val counted1 = rdd1.countApproxDistinctByKey(relativeSD).collect()
-    counted1.foreach{
-      case(k, count) => assert(error(count, k) < relativeSD)
-    }
+    val counted1 = rdd1.countApproxDistinctByKey(p, sp).collect()
+    counted1.foreach { case (k, count) => assert(error(count, k) < relativeSD) }
 
-    val rnd = new Random()
+    val rnd = new Random(42)
 
     // The expected count for key num would be num
     val randStacked = (1 to 100).flatMap { i =>
-      val num = rnd.nextInt % 500
+      val num = rnd.nextInt() % 500
       (1 to num).map(j => (num, j))
     }
     val rdd2 = sc.parallelize(randStacked)
-    val counted2 = rdd2.countApproxDistinctByKey(relativeSD, 4).collect()
-    counted2.foreach{
-      case(k, count) => assert(error(count, k) < relativeSD)
+    val counted2 = rdd2.countApproxDistinctByKey(relativeSD).collect()
+    counted2.foreach { case (k, count) =>
+      assert(error(count, k) < relativeSD, s"${error(count, k)} < $relativeSD")
     }
   }
 
@@ -225,21 +240,57 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
     val joined = rdd1.groupWith(rdd2).collect()
     assert(joined.size === 4)
-    assert(joined.toSet === Set(
-      (1, (ArrayBuffer(1, 2), ArrayBuffer('x'))),
-      (2, (ArrayBuffer(1), ArrayBuffer('y', 'z'))),
-      (3, (ArrayBuffer(1), ArrayBuffer())),
-      (4, (ArrayBuffer(), ArrayBuffer('w')))
+    val joinedSet = joined.map(x => (x._1, (x._2._1.toList, x._2._2.toList))).toSet
+    assert(joinedSet === Set(
+      (1, (List(1, 2), List('x'))),
+      (2, (List(1), List('y', 'z'))),
+      (3, (List(1), List())),
+      (4, (List(), List('w')))
+    ))
+  }
+
+  test("groupWith3") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
+    val rdd3 = sc.parallelize(Array((1, 'a'), (3, 'b'), (4, 'c'), (4, 'd')))
+    val joined = rdd1.groupWith(rdd2, rdd3).collect()
+    assert(joined.size === 4)
+    val joinedSet = joined.map(x => (x._1,
+      (x._2._1.toList, x._2._2.toList, x._2._3.toList))).toSet
+    assert(joinedSet === Set(
+      (1, (List(1, 2), List('x'), List('a'))),
+      (2, (List(1), List('y', 'z'), List())),
+      (3, (List(1), List(), List('b'))),
+      (4, (List(), List('w'), List('c', 'd')))
+    ))
+  }
+
+  test("groupWith4") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
+    val rdd3 = sc.parallelize(Array((1, 'a'), (3, 'b'), (4, 'c'), (4, 'd')))
+    val rdd4 = sc.parallelize(Array((2, '@')))
+    val joined = rdd1.groupWith(rdd2, rdd3, rdd4).collect()
+    assert(joined.size === 4)
+    val joinedSet = joined.map(x => (x._1,
+      (x._2._1.toList, x._2._2.toList, x._2._3.toList, x._2._4.toList))).toSet
+    assert(joinedSet === Set(
+      (1, (List(1, 2), List('x'), List('a'), List())),
+      (2, (List(1), List('y', 'z'), List(), List('@'))),
+      (3, (List(1), List(), List('b'), List())),
+      (4, (List(), List('w'), List('c', 'd'), List()))
     ))
   }
 
   test("zero-partition RDD") {
     val emptyDir = Files.createTempDir()
+    emptyDir.deleteOnExit()
     val file = sc.textFile(emptyDir.getAbsolutePath)
     assert(file.partitions.size == 0)
     assert(file.collect().toList === Nil)
     // Test that a shuffle on the file works, because this used to be a bug
     assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
+    emptyDir.delete()
   }
 
   test("keys and values") {
@@ -447,4 +498,3 @@ class ConfigTestFormat() extends FakeFormat() with Configurable {
     super.getRecordWriter(p1)
   }
 }
-

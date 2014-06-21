@@ -210,7 +210,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     var nextMessageToBeUsed = 0
 
     def addMessage(message: Message) {
-      messages.synchronized{
+      messages.synchronized {
         /* messages += message */
         messages.enqueue(message)
         logDebug("Added [" + message + "] to outbox for sending to " +
@@ -223,7 +223,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
         while (!messages.isEmpty) {
           /* nextMessageToBeUsed = nextMessageToBeUsed % messages.size */
           /* val message = messages(nextMessageToBeUsed) */
-          val message = messages.dequeue
+          val message = messages.dequeue()
           val chunk = message.getChunkForSending(defaultChunkSize)
           if (chunk.isDefined) {
             messages.enqueue(message)
@@ -248,14 +248,14 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     }
   }
 
-  // outbox is used as a lock - ensure that it is always used as a leaf (since methods which 
+  // outbox is used as a lock - ensure that it is always used as a leaf (since methods which
   // lock it are invoked in context of other locks)
   private val outbox = new Outbox()
   /*
-    This is orthogonal to whether we have pending bytes to write or not - and satisfies a slightly 
-    different purpose. This flag is to see if we need to force reregister for write even when we 
+    This is orthogonal to whether we have pending bytes to write or not - and satisfies a slightly
+    different purpose. This flag is to see if we need to force reregister for write even when we
     do not have any pending bytes to write to socket.
-    This can happen due to a race between adding pending buffers, and checking for existing of 
+    This can happen due to a race between adding pending buffers, and checking for existing of
     data as detailed in https://github.com/mesos/spark/pull/791
    */
   private var needForceReregister = false

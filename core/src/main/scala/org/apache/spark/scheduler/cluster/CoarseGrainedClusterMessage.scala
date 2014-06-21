@@ -28,9 +28,10 @@ private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 private[spark] object CoarseGrainedClusterMessages {
 
   // Driver to executors
-  case class LaunchTask(task: TaskDescription) extends CoarseGrainedClusterMessage
+  case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
-  case class KillTask(taskId: Long, executor: String) extends CoarseGrainedClusterMessage
+  case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
+    extends CoarseGrainedClusterMessage
 
   case class RegisteredExecutor(sparkProperties: Seq[(String, String)])
     extends CoarseGrainedClusterMessage

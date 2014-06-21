@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 /** Provides a basic/boilerplate Iterator implementation. */
 private[spark] abstract class NextIterator[U] extends Iterator[U] {
-  
+
   private var gotNext = false
   private var nextValue: U = _
   private var closed = false
@@ -34,7 +34,7 @@ private[spark] abstract class NextIterator[U] extends Iterator[U] {
    * This convention is required because `null` may be a valid value,
    * and using `Option` seems like it might create unnecessary Some/None
    * instances, given some iterators might be called in a tight loop.
-   * 
+   *
    * @return U, or set 'finished' when done
    */
   protected def getNext(): U

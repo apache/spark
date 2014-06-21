@@ -17,25 +17,23 @@
 
 package org.apache.spark.examples
 
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import java.util.Random
 
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext._
+
+/**
+  * Usage: GroupByTest [numMappers] [numKVPairs] [KeySize] [numReducers]
+  */
 object GroupByTest {
   def main(args: Array[String]) {
-    if (args.length == 0) {
-      System.err.println(
-        "Usage: GroupByTest <master> [numMappers] [numKVPairs] [KeySize] [numReducers]")
-      System.exit(1)
-    }
-    
-    var numMappers = if (args.length > 1) args(1).toInt else 2
-    var numKVPairs = if (args.length > 2) args(2).toInt else 1000
-    var valSize = if (args.length > 3) args(3).toInt else 1000
-    var numReducers = if (args.length > 4) args(4).toInt else numMappers
+    val sparkConf = new SparkConf().setAppName("GroupBy Test")
+    var numMappers = if (args.length > 0) args(0).toInt else 2
+    var numKVPairs = if (args.length > 1) args(1).toInt else 1000
+    var valSize = if (args.length > 2) args(2).toInt else 1000
+    var numReducers = if (args.length > 3) args(3).toInt else numMappers
 
-    val sc = new SparkContext(args(0), "GroupBy Test",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+    val sc = new SparkContext(sparkConf)
 
     val pairs1 = sc.parallelize(0 until numMappers, numMappers).flatMap { p =>
       val ranGen = new Random
@@ -52,7 +50,6 @@ object GroupByTest {
 
     println(pairs1.groupByKey(numReducers).count)
 
-    System.exit(0)
+    sc.stop()
   }
 }
-

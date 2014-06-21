@@ -47,9 +47,19 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
 
   import CompressionScheme._
 
-  val compressionEncoders = schemes.filter(_.supports(columnType)).map(_.encoder)
+  var compressionEncoders: Seq[Encoder[T]] = _
 
-  protected def isWorthCompressing(encoder: Encoder) = {
+  abstract override def initialize(initialSize: Int, columnName: String, useCompression: Boolean) {
+    compressionEncoders =
+      if (useCompression) {
+        schemes.filter(_.supports(columnType)).map(_.encoder[T])
+      } else {
+        Seq(PassThrough.encoder)
+      }
+    super.initialize(initialSize, columnName, useCompression)
+  }
+
+  protected def isWorthCompressing(encoder: Encoder[T]) = {
     encoder.compressionRatio < 0.8
   }
 
@@ -65,12 +75,14 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
 
   abstract override def appendFrom(row: Row, ordinal: Int) {
     super.appendFrom(row, ordinal)
-    gatherCompressibilityStats(row, ordinal)
+    if (!row.isNullAt(ordinal)) {
+      gatherCompressibilityStats(row, ordinal)
+    }
   }
 
   abstract override def build() = {
     val rawBuffer = super.build()
-    val encoder = {
+    val encoder: Encoder[T] = {
       val candidate = compressionEncoders.minBy(_.compressionRatio)
       if (isWorthCompressing(candidate)) candidate else PassThrough.encoder
     }

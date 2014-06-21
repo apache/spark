@@ -30,7 +30,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 import org.apache.spark.SecurityManager
 import org.apache.spark.ui.JettyUtils._
 
-class MetricsServlet(val property: Properties, val registry: MetricRegistry,
+private[spark] class MetricsServlet(val property: Properties, val registry: MetricRegistry,
     securityMgr: SecurityManager) extends Sink {
   val SERVLET_KEY_PATH = "path"
   val SERVLET_KEY_SAMPLE = "sample"

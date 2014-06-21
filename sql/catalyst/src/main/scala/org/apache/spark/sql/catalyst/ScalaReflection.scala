@@ -41,10 +41,14 @@ object ScalaReflection {
 
   /** Returns a catalyst DataType for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): DataType = tpe match {
+    case t if t <:< typeOf[Option[_]] =>
+      val TypeRef(_, _, Seq(optType)) = t
+      schemaFor(optType)
     case t if t <:< typeOf[Product] =>
       val params = t.member("<init>": TermName).asMethod.paramss
       StructType(
-        params.head.map(p => StructField(p.name.toString, schemaFor(p.typeSignature), true)))
+        params.head.map(p =>
+          StructField(p.name.toString, schemaFor(p.typeSignature), nullable = true)))
     // Need to decide if we actually need a special type here.
     case t if t <:< typeOf[Array[Byte]] => BinaryType
     case t if t <:< typeOf[Array[_]] =>
@@ -58,6 +62,14 @@ object ScalaReflection {
     case t if t <:< typeOf[String] => StringType
     case t if t <:< typeOf[Timestamp] => TimestampType
     case t if t <:< typeOf[BigDecimal] => DecimalType
+    case t if t <:< typeOf[java.lang.Integer] => IntegerType
+    case t if t <:< typeOf[java.lang.Long] => LongType
+    case t if t <:< typeOf[java.lang.Double] => DoubleType
+    case t if t <:< typeOf[java.lang.Float] => FloatType
+    case t if t <:< typeOf[java.lang.Short] => ShortType
+    case t if t <:< typeOf[java.lang.Byte] => ByteType
+    case t if t <:< typeOf[java.lang.Boolean] => BooleanType
+    // TODO: The following datatypes could be marked as non-nullable.
     case t if t <:< definitions.IntTpe => IntegerType
     case t if t <:< definitions.LongTpe => LongType
     case t if t <:< definitions.DoubleTpe => DoubleType

@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
  * An RDD that pipes the contents of each parent partition through an external command
  * (printing them one per line) and returns the output as a collection of strings.
  */
-class PipedRDD[T: ClassTag](
+private[spark] class PipedRDD[T: ClassTag](
     prev: RDD[T],
     command: Seq[String],
     envVars: Map[String, String],
@@ -87,10 +87,10 @@ class PipedRDD[T: ClassTag](
     // When spark.worker.separated.working.directory option is turned on, each
     // task will be run in separate directory. This should be resolve file
     // access conflict issue
-    val taskDirectory = "./tasks/" + java.util.UUID.randomUUID.toString
+    val taskDirectory = "tasks" + File.separator + java.util.UUID.randomUUID.toString
     var workInTaskDirectory = false
     logDebug("taskDirectory = " + taskDirectory)
-    if (separateWorkingDir == true) {
+    if (separateWorkingDir) {
       val currentDir = new File(".")
       logDebug("currentDir = " + currentDir.getAbsolutePath())
       val taskDirFile = new File(taskDirectory)
@@ -106,13 +106,13 @@ class PipedRDD[T: ClassTag](
         for (file <- currentDir.list(tasksDirFilter)) {
           val fileWithDir = new File(currentDir, file)
           Utils.symlink(new File(fileWithDir.getAbsolutePath()),
-            new File(taskDirectory + "/" + fileWithDir.getName()))
+            new File(taskDirectory + File.separator + fileWithDir.getName()))
         }
         pb.directory(taskDirFile)
         workInTaskDirectory = true
       } catch {
         case e: Exception => logError("Unable to setup task working directory: " + e.getMessage +
-          " (" + taskDirectory + ")")
+          " (" + taskDirectory + ")", e)
       }
     }
 

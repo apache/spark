@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst
 
+import scala.language.implicitConversions
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
+import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.input.CharArrayReader.EofCh
 
 import org.apache.spark.sql.catalyst.analysis._
@@ -38,61 +40,42 @@ import org.apache.spark.sql.catalyst.types._
  * This is currently included mostly for illustrative purposes.  Users wanting more complete support
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
-class SqlParser extends StandardTokenParsers {
+class SqlParser extends StandardTokenParsers with PackratParsers {
+
   def apply(input: String): LogicalPlan = {
-    phrase(query)(new lexical.Scanner(input)) match {
-      case Success(r, x) => r
-      case x => sys.error(x.toString)
+    // Special-case out set commands since the value fields can be
+    // complex to handle without RegexParsers. Also this approach
+    // is clearer for the several possible cases of set commands.
+    if (input.trim.toLowerCase.startsWith("set")) {
+      input.trim.drop(3).split("=", 2).map(_.trim) match {
+        case Array("") => // "set"
+          SetCommand(None, None)
+        case Array(key) => // "set key"
+          SetCommand(Some(key), None)
+        case Array(key, value) => // "set key=value"
+          SetCommand(Some(key), Some(value))
+      }
+    } else {
+      phrase(query)(new lexical.Scanner(input)) match {
+        case Success(r, x) => r
+        case x => sys.error(x.toString)
+      }
     }
   }
 
   protected case class Keyword(str: String)
 
   protected implicit def asParser(k: Keyword): Parser[String] =
-    allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
-
-  protected class SqlLexical extends StdLexical {
-    case class FloatLit(chars: String) extends Token {
-      override def toString = chars
-    }
-    override lazy val token: Parser[Token] = (
-        identChar ~ rep( identChar | digit ) ^^
-          { case first ~ rest => processIdent(first :: rest mkString "") }
-      | rep1(digit) ~ opt('.' ~> rep(digit)) ^^ {
-        case i ~ None    => NumericLit(i mkString "")
-        case i ~ Some(d) => FloatLit(i.mkString("") + "." + d.mkString(""))
-      }
-      | '\'' ~ rep( chrExcept('\'', '\n', EofCh) ) ~ '\'' ^^
-        { case '\'' ~ chars ~ '\'' => StringLit(chars mkString "") }
-      | '\"' ~ rep( chrExcept('\"', '\n', EofCh) ) ~ '\"' ^^
-        { case '\"' ~ chars ~ '\"' => StringLit(chars mkString "") }
-      | EofCh ^^^ EOF
-      | '\'' ~> failure("unclosed string literal")
-      | '\"' ~> failure("unclosed string literal")
-      | delim
-      | failure("illegal character")
-    )
-
-    override def identChar = letter | elem('.') | elem('_')
-
-    override def whitespace: Parser[Any] = rep(
-      whitespaceChar
-    | '/' ~ '*' ~ comment
-    | '/' ~ '/' ~ rep( chrExcept(EofCh, '\n') )
-    | '#' ~ rep( chrExcept(EofCh, '\n') )
-    | '-' ~ '-' ~ rep( chrExcept(EofCh, '\n') )
-    | '/' ~ '*' ~ failure("unclosed comment")
-    )
-  }
-
-  override val lexical = new SqlLexical
+    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
 
   protected val ALL = Keyword("ALL")
   protected val AND = Keyword("AND")
   protected val AS = Keyword("AS")
   protected val ASC = Keyword("ASC")
+  protected val APPROXIMATE = Keyword("APPROXIMATE")
   protected val AVG = Keyword("AVG")
   protected val BY = Keyword("BY")
+  protected val CACHE = Keyword("CACHE")
   protected val CAST = Keyword("CAST")
   protected val COUNT = Keyword("COUNT")
   protected val DESC = Keyword("DESC")
@@ -112,6 +95,8 @@ class SqlParser extends StandardTokenParsers {
   protected val JOIN = Keyword("JOIN")
   protected val LEFT = Keyword("LEFT")
   protected val LIMIT = Keyword("LIMIT")
+  protected val MAX = Keyword("MAX")
+  protected val MIN = Keyword("MIN")
   protected val NOT = Keyword("NOT")
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
@@ -119,14 +104,19 @@ class SqlParser extends StandardTokenParsers {
   protected val OVERWRITE = Keyword("OVERWRITE")
   protected val LIKE = Keyword("LIKE")
   protected val RLIKE = Keyword("RLIKE")
+  protected val UPPER = Keyword("UPPER")
+  protected val LOWER = Keyword("LOWER")
   protected val REGEXP = Keyword("REGEXP")
   protected val ORDER = Keyword("ORDER")
   protected val OUTER = Keyword("OUTER")
   protected val RIGHT = Keyword("RIGHT")
   protected val SELECT = Keyword("SELECT")
+  protected val SEMI = Keyword("SEMI")
   protected val STRING = Keyword("STRING")
   protected val SUM = Keyword("SUM")
+  protected val TABLE = Keyword("TABLE")
   protected val TRUE = Keyword("TRUE")
+  protected val UNCACHE = Keyword("UNCACHE")
   protected val UNION = Keyword("UNION")
   protected val WHERE = Keyword("WHERE")
 
@@ -135,24 +125,9 @@ class SqlParser extends StandardTokenParsers {
     this.getClass
       .getMethods
       .filter(_.getReturnType == classOf[Keyword])
-      .map(_.invoke(this).asInstanceOf[Keyword])
+      .map(_.invoke(this).asInstanceOf[Keyword].str)
 
-  /** Generate all variations of upper and lower case of a given string */
-  private def allCaseVersions(s: String, prefix: String = ""): Stream[String] = {
-    if (s == "") {
-      Stream(prefix)
-    } else {
-      allCaseVersions(s.tail, prefix + s.head.toLower) ++
-        allCaseVersions(s.tail, prefix + s.head.toUpper)
-    }
-  }
-
-  lexical.reserved ++= reservedWords.flatMap(w => allCaseVersions(w.str))
-
-  lexical.delimiters += (
-    "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
-    ",", ";", "%", "{", "}", ":"
-  )
+  override val lexical = new SqlLexical(reservedWords)
 
   protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
@@ -161,11 +136,13 @@ class SqlParser extends StandardTokenParsers {
     }
   }
 
-  protected lazy val query: Parser[LogicalPlan] =
+  protected lazy val query: Parser[LogicalPlan] = (
     select * (
-      UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
-      UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
-    ) | insert
+        UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
+        UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
+      )
+    | insert | cache
+  )
 
   protected lazy val select: Parser[LogicalPlan] =
     SELECT ~> opt(DISTINCT) ~ projections ~
@@ -193,6 +170,11 @@ class SqlParser extends StandardTokenParsers {
       case o ~ r ~ s =>
         val overwrite: Boolean = o.getOrElse("") == "OVERWRITE"
         InsertIntoTable(r, Map[String, Option[String]](), s, overwrite)
+    }
+
+  protected lazy val cache: Parser[LogicalPlan] =
+    (CACHE ^^^ true | UNCACHE ^^^ false) ~ TABLE ~ ident ^^ {
+      case doCache ~ _ ~ tableName => CacheCommand(tableName, doCache)
     }
 
   protected lazy val projections: Parser[Seq[Expression]] = repsep(projection, ",")
@@ -234,6 +216,7 @@ class SqlParser extends StandardTokenParsers {
 
    protected lazy val joinType: Parser[JoinType] =
      INNER ^^^ Inner |
+     LEFT ~ SEMI ^^^ LeftSemi |
      LEFT ~ opt(OUTER) ^^^ LeftOuter |
      RIGHT ~ opt(OUTER) ^^^ RightOuter |
      FULL ~ opt(OUTER) ^^^ FullOuter
@@ -275,13 +258,13 @@ class SqlParser extends StandardTokenParsers {
     comparisonExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1,e2) })
 
   protected lazy val comparisonExpression: Parser[Expression] =
-    termExpression ~ "=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Equals(e1, e2) } |
+    termExpression ~ "=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => EqualTo(e1, e2) } |
     termExpression ~ "<" ~ termExpression ^^ { case e1 ~ _ ~ e2 => LessThan(e1, e2) } |
     termExpression ~ "<=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => LessThanOrEqual(e1, e2) } |
     termExpression ~ ">" ~ termExpression ^^ { case e1 ~ _ ~ e2 => GreaterThan(e1, e2) } |
     termExpression ~ ">=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => GreaterThanOrEqual(e1, e2) } |
-    termExpression ~ "!=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(Equals(e1, e2)) } |
-    termExpression ~ "<>" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(Equals(e1, e2)) } |
+    termExpression ~ "!=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(EqualTo(e1, e2)) } |
+    termExpression ~ "<>" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(EqualTo(e1, e2)) } |
     termExpression ~ RLIKE ~ termExpression ^^ { case e1 ~ _ ~ e2 => RLike(e1, e2) } |
     termExpression ~ REGEXP ~ termExpression ^^ { case e1 ~ _ ~ e2 => RLike(e1, e2) } |
     termExpression ~ LIKE ~ termExpression ^^ { case e1 ~ _ ~ e2 => Like(e1, e2) } |
@@ -314,8 +297,18 @@ class SqlParser extends StandardTokenParsers {
     COUNT ~> "(" ~ "*" <~ ")" ^^ { case _ => Count(Literal(1)) } |
     COUNT ~> "(" ~ expression <~ ")" ^^ { case dist ~ exp => Count(exp) } |
     COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => CountDistinct(exp :: Nil) } |
+    APPROXIMATE ~> COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ {
+      case exp => ApproxCountDistinct(exp)
+    } |
+    APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^ {
+      case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble)
+    } |
     FIRST ~> "(" ~> expression <~ ")" ^^ { case exp => First(exp) } |
     AVG ~> "(" ~> expression <~ ")" ^^ { case exp => Average(exp) } |
+    MIN ~> "(" ~> expression <~ ")" ^^ { case exp => Min(exp) } |
+    MAX ~> "(" ~> expression <~ ")" ^^ { case exp => Max(exp) } |
+    UPPER ~> "(" ~> expression <~ ")" ^^ { case exp => Upper(exp) } |
+    LOWER ~> "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) } |
     IF ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case c ~ "," ~ t ~ "," ~ f => If(c,t,f)
     } |
@@ -338,7 +331,10 @@ class SqlParser extends StandardTokenParsers {
   protected lazy val floatLit: Parser[String] =
     elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
 
-  protected lazy val baseExpression: Parser[Expression] =
+  protected lazy val baseExpression: PackratParser[Expression] =
+    expression ~ "[" ~ expression <~ "]" ^^ {
+      case base ~ _ ~ ordinal => GetItem(base, ordinal)
+    } |
     TRUE ^^^ Literal(true, BooleanType) |
     FALSE ^^^ Literal(false, BooleanType) |
     cast |
@@ -351,4 +347,56 @@ class SqlParser extends StandardTokenParsers {
 
   protected lazy val dataType: Parser[DataType] =
     STRING ^^^ StringType
+}
+
+class SqlLexical(val keywords: Seq[String]) extends StdLexical {
+  case class FloatLit(chars: String) extends Token {
+    override def toString = chars
+  }
+
+  reserved ++= keywords.flatMap(w => allCaseVersions(w))
+
+  delimiters += (
+      "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
+      ",", ";", "%", "{", "}", ":", "[", "]"
+  )
+
+  override lazy val token: Parser[Token] = (
+    identChar ~ rep( identChar | digit ) ^^
+      { case first ~ rest => processIdent(first :: rest mkString "") }
+      | rep1(digit) ~ opt('.' ~> rep(digit)) ^^ {
+      case i ~ None    => NumericLit(i mkString "")
+      case i ~ Some(d) => FloatLit(i.mkString("") + "." + d.mkString(""))
+    }
+      | '\'' ~ rep( chrExcept('\'', '\n', EofCh) ) ~ '\'' ^^
+      { case '\'' ~ chars ~ '\'' => StringLit(chars mkString "") }
+      | '\"' ~ rep( chrExcept('\"', '\n', EofCh) ) ~ '\"' ^^
+      { case '\"' ~ chars ~ '\"' => StringLit(chars mkString "") }
+      | EofCh ^^^ EOF
+      | '\'' ~> failure("unclosed string literal")
+      | '\"' ~> failure("unclosed string literal")
+      | delim
+      | failure("illegal character")
+    )
+
+  override def identChar = letter | elem('_') | elem('.')
+
+  override def whitespace: Parser[Any] = rep(
+    whitespaceChar
+      | '/' ~ '*' ~ comment
+      | '/' ~ '/' ~ rep( chrExcept(EofCh, '\n') )
+      | '#' ~ rep( chrExcept(EofCh, '\n') )
+      | '-' ~ '-' ~ rep( chrExcept(EofCh, '\n') )
+      | '/' ~ '*' ~ failure("unclosed comment")
+  )
+
+  /** Generate all variations of upper and lower case of a given string */
+  def allCaseVersions(s: String, prefix: String = ""): Stream[String] = {
+    if (s == "") {
+      Stream(prefix)
+    } else {
+      allCaseVersions(s.tail, prefix + s.head.toLower) ++
+        allCaseVersions(s.tail, prefix + s.head.toUpper)
+    }
+  }
 }

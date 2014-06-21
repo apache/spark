@@ -17,12 +17,10 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{DataInputStream, DataOutputStream}
+import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
-
-import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.TaskMetrics
@@ -35,7 +33,7 @@ import org.apache.spark.util.ByteBufferInputStream
  * - [[org.apache.spark.scheduler.ResultTask]]
  *
  * A Spark job consists of one or more stages. The very last stage in a job consists of multiple
- * ResultTask's, while earlier stages consist of ShuffleMapTasks. A ResultTask executes the task
+ * ResultTasks, while earlier stages consist of ShuffleMapTasks. A ResultTask executes the task
  * and sends the task output back to the driver application. A ShuffleMapTask executes the task
  * and divides the task output to multiple buckets (based on the task's partitioner).
  *
@@ -46,8 +44,9 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
 
   final def run(attemptId: Long): T = {
     context = new TaskContext(stageId, partitionId, attemptId, runningLocally = false)
+    taskThread = Thread.currentThread()
     if (_killed) {
-      kill()
+      kill(interruptThread = false)
     }
     runTask(context)
   }
@@ -64,6 +63,9 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
   // Task context, to be initialized in run().
   @transient protected var context: TaskContext = _
 
+  // The actual Thread on which the task is running, if any. Initialized in run().
+  @volatile @transient private var taskThread: Thread = _
+
   // A flag to indicate whether the task is killed. This is used in case context is not yet
   // initialized when kill() is invoked.
   @volatile @transient private var _killed = false
@@ -77,11 +79,15 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
    * Kills a task by setting the interrupted flag to true. This relies on the upper level Spark
    * code and user code to properly handle the flag. This function should be idempotent so it can
    * be called multiple times.
+   * If interruptThread is true, we will also call Thread.interrupt() on the Task's executor thread.
    */
-  def kill() {
+  def kill(interruptThread: Boolean) {
     _killed = true
     if (context != null) {
       context.interrupted = true
+    }
+    if (interruptThread && taskThread != null) {
+      taskThread.interrupt()
     }
   }
 }
@@ -104,7 +110,7 @@ private[spark] object Task {
       serializer: SerializerInstance)
     : ByteBuffer = {
 
-    val out = new FastByteArrayOutputStream(4096)
+    val out = new ByteArrayOutputStream(4096)
     val dataOut = new DataOutputStream(out)
 
     // Write currentFiles
@@ -125,8 +131,7 @@ private[spark] object Task {
     dataOut.flush()
     val taskBytes = serializer.serialize(task).array()
     out.write(taskBytes)
-    out.trim()
-    ByteBuffer.wrap(out.array)
+    ByteBuffer.wrap(out.toByteArray)
   }
 
   /**

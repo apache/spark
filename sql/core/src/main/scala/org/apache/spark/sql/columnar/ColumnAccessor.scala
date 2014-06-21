@@ -100,20 +100,21 @@ private[sql] class GenericColumnAccessor(buffer: ByteBuffer)
 
 private[sql] object ColumnAccessor {
   def apply(buffer: ByteBuffer): ColumnAccessor = {
+    val dup = buffer.duplicate().order(ByteOrder.nativeOrder)
     // The first 4 bytes in the buffer indicate the column type.
-    val columnTypeId = buffer.getInt()
+    val columnTypeId = dup.getInt()
 
     columnTypeId match {
-      case INT.typeId     => new IntColumnAccessor(buffer)
-      case LONG.typeId    => new LongColumnAccessor(buffer)
-      case FLOAT.typeId   => new FloatColumnAccessor(buffer)
-      case DOUBLE.typeId  => new DoubleColumnAccessor(buffer)
-      case BOOLEAN.typeId => new BooleanColumnAccessor(buffer)
-      case BYTE.typeId    => new ByteColumnAccessor(buffer)
-      case SHORT.typeId   => new ShortColumnAccessor(buffer)
-      case STRING.typeId  => new StringColumnAccessor(buffer)
-      case BINARY.typeId  => new BinaryColumnAccessor(buffer)
-      case GENERIC.typeId => new GenericColumnAccessor(buffer)
+      case INT.typeId     => new IntColumnAccessor(dup)
+      case LONG.typeId    => new LongColumnAccessor(dup)
+      case FLOAT.typeId   => new FloatColumnAccessor(dup)
+      case DOUBLE.typeId  => new DoubleColumnAccessor(dup)
+      case BOOLEAN.typeId => new BooleanColumnAccessor(dup)
+      case BYTE.typeId    => new ByteColumnAccessor(dup)
+      case SHORT.typeId   => new ShortColumnAccessor(dup)
+      case STRING.typeId  => new StringColumnAccessor(dup)
+      case BINARY.typeId  => new BinaryColumnAccessor(dup)
+      case GENERIC.typeId => new GenericColumnAccessor(dup)
     }
   }
 }

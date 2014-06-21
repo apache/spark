@@ -19,15 +19,20 @@ package org.apache.spark.sql.execution
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.{HashPartitioner, SparkConf}
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.util.MutablePair
 
-
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output = projectList.map(_.toAttribute)
 
@@ -37,43 +42,58 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output = child.output
 
   override def execute() = child.execute().mapPartitions { iter =>
-    iter.filter(condition.apply(_).asInstanceOf[Boolean])
+    iter.filter(condition.eval(_).asInstanceOf[Boolean])
   }
 }
 
-case class Sample(fraction: Double, withReplacement: Boolean, seed: Int, child: SparkPlan)
-    extends UnaryNode {
-
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: SparkPlan)
+  extends UnaryNode
+{
   override def output = child.output
 
   // TODO: How to pick seed?
   override def execute() = child.execute().sample(withReplacement, fraction, seed)
 }
 
-case class Union(children: Seq[SparkPlan])(@transient sc: SparkContext) extends SparkPlan {
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class Union(children: Seq[SparkPlan])(@transient sqlContext: SQLContext) extends SparkPlan {
   // TODO: attributes output by union should be distinct for nullability purposes
   override def output = children.head.output
-  override def execute() = sc.union(children.map(_.execute()))
+  override def execute() = sqlContext.sparkContext.union(children.map(_.execute()))
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 }
 
 /**
+ * :: DeveloperApi ::
  * Take the first limit elements. Note that the implementation is different depending on whether
  * this is a terminal operator or not. If it is terminal and is invoked using executeCollect,
  * this operator uses Spark's take method on the Spark driver. If it is not terminal or is
  * invoked using execute, we first take the limit on each partition, and then repartition all the
  * data to a single partition to compute the global limit.
  */
-case class Limit(limit: Int, child: SparkPlan)(@transient sc: SparkContext) extends UnaryNode {
+@DeveloperApi
+case class Limit(limit: Int, child: SparkPlan)(@transient sqlContext: SQLContext)
+  extends UnaryNode {
   // TODO: Implement a partition local limit, and use a strategy to generate the proper limit plan:
   // partition local limit -> exchange into one partition -> partition local limit again
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   override def output = child.output
 
@@ -92,13 +112,15 @@ case class Limit(limit: Int, child: SparkPlan)(@transient sc: SparkContext) exte
 }
 
 /**
+ * :: DeveloperApi ::
  * Take the first limit elements as defined by the sortOrder. This is logically equivalent to
  * having a [[Limit]] operator after a [[Sort]] operator. This could have been named TopK, but
  * Spark's top operator does the opposite in ordering so we name it TakeOrdered to avoid confusion.
  */
+@DeveloperApi
 case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
-                      (@transient sc: SparkContext) extends UnaryNode {
-  override def otherCopyArgs = sc :: Nil
+                      (@transient sqlContext: SQLContext) extends UnaryNode {
+  override def otherCopyArgs = sqlContext :: Nil
 
   override def output = child.output
 
@@ -109,10 +131,13 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
-  override def execute() = sc.makeRDD(executeCollect(), 1)
+  override def execute() = sqlContext.sparkContext.makeRDD(executeCollect(), 1)
 }
 
-
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class Sort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
@@ -135,16 +160,37 @@ case class Sort(
   override def output = child.output
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 object ExistingRdd {
   def convertToCatalyst(a: Any): Any = a match {
+    case o: Option[_] => o.orNull
     case s: Seq[Any] => s.map(convertToCatalyst)
     case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
     case other => other
   }
 
   def productToRowRdd[A <: Product](data: RDD[A]): RDD[Row] = {
-    // TODO: Reuse the row, don't use map on the product iterator.  Maybe code gen?
-    data.map(r => new GenericRow(r.productIterator.map(convertToCatalyst).toArray): Row)
+    data.mapPartitions { iterator =>
+      if (iterator.isEmpty) {
+        Iterator.empty
+      } else {
+        val bufferedIterator = iterator.buffered
+        val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
+
+        bufferedIterator.map { r =>
+          var i = 0
+          while (i < mutableRow.length) {
+            mutableRow(i) = convertToCatalyst(r.productElement(i))
+            i += 1
+          }
+
+          mutableRow
+        }
+      }
+    }
   }
 
   def fromProductRdd[A <: Product : TypeTag](productRdd: RDD[A]) = {
@@ -152,6 +198,10 @@ object ExistingRdd {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
 }

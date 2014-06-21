@@ -21,7 +21,7 @@ import scala.util.Random
 import scala.collection.JavaConversions._
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.LocalSparkContext
@@ -61,7 +61,7 @@ object GradientDescentSuite {
   }
 }
 
-class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers {
 
   test("Assert the loss is decreasing.") {
     val nPoints = 10000
@@ -81,11 +81,11 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Vectors.dense(1.0, features.toArray: _*)
+      label -> Vectors.dense(1.0 +: features.toArray)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
-    val initialWeightsWithIntercept = Vectors.dense(1.0, initialWeights: _*)
+    val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
 
     val (_, loss) = GradientDescent.runMiniBatchSGD(
       dataRDD,
@@ -111,7 +111,7 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(2.0, -1.5, 10000, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Vectors.dense(1.0, features.toArray: _*)
+      label -> Vectors.dense(1.0 +: features.toArray)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()

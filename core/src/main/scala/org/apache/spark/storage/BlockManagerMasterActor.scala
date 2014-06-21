@@ -28,6 +28,7 @@ import akka.actor.{Actor, ActorRef, Cancellable}
 import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -94,8 +95,20 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case GetStorageStatus =>
       sender ! storageStatus
 
+    case GetBlockStatus(blockId, askSlaves) =>
+      sender ! blockStatus(blockId, askSlaves)
+
+    case GetMatchingBlockIds(filter, askSlaves) =>
+      sender ! getMatchingBlockIds(filter, askSlaves)
+
     case RemoveRdd(rddId) =>
       sender ! removeRdd(rddId)
+
+    case RemoveShuffle(shuffleId) =>
+      sender ! removeShuffle(shuffleId)
+
+    case RemoveBroadcast(broadcastId, removeFromDriver) =>
+      sender ! removeBroadcast(broadcastId, removeFromDriver)
 
     case RemoveBlock(blockId) =>
       removeBlockFromWorkers(blockId)
@@ -140,9 +153,41 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     // The dispatcher is used as an implicit argument into the Future sequence construction.
     import context.dispatcher
     val removeMsg = RemoveRdd(rddId)
-    Future.sequence(blockManagerInfo.values.map { bm =>
-      bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
-    }.toSeq)
+    Future.sequence(
+      blockManagerInfo.values.map { bm =>
+        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
+      }.toSeq
+    )
+  }
+
+  private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
+    // Nothing to do in the BlockManagerMasterActor data structures
+    import context.dispatcher
+    val removeMsg = RemoveShuffle(shuffleId)
+    Future.sequence(
+      blockManagerInfo.values.map { bm =>
+        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Boolean]
+      }.toSeq
+    )
+  }
+
+  /**
+   * Delegate RemoveBroadcast messages to each BlockManager because the master may not notified
+   * of all broadcast blocks. If removeFromDriver is false, broadcast blocks are only removed
+   * from the executors, but not from the driver.
+   */
+  private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean): Future[Seq[Int]] = {
+    // TODO: Consolidate usages of <driver>
+    import context.dispatcher
+    val removeMsg = RemoveBroadcast(broadcastId, removeFromDriver)
+    val requiredBlockManagers = blockManagerInfo.values.filter { info =>
+      removeFromDriver || info.blockManagerId.executorId != "<driver>"
+    }
+    Future.sequence(
+      requiredBlockManagers.map { bm =>
+        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
+      }.toSeq
+    )
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {
@@ -159,7 +204,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       val locations = blockLocations.get(blockId)
       locations -= blockManagerId
       if (locations.size == 0) {
-        blockLocations.remove(locations)
+        blockLocations.remove(blockId)
       }
     }
     listenerBus.post(SparkListenerBlockManagerRemoved(blockManagerId))
@@ -205,7 +250,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
           // Remove the block from the slave's BlockManager.
           // Doesn't actually wait for a confirmation and the message might get lost.
           // If message loss becomes frequent, we should add retry logic here.
-          blockManager.get.slaveActor ! RemoveBlock(blockId)
+          blockManager.get.slaveActor.ask(RemoveBlock(blockId))(akkaTimeout)
         }
       }
     }
@@ -223,6 +268,61 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       val blockMap = mutable.Map[BlockId, BlockStatus](info.blocks.toSeq: _*)
       new StorageStatus(blockManagerId, info.maxMem, blockMap)
     }.toArray
+  }
+
+  /**
+   * Return the block's status for all block managers, if any. NOTE: This is a
+   * potentially expensive operation and should only be used for testing.
+   *
+   * If askSlaves is true, the master queries each block manager for the most updated block
+   * statuses. This is useful when the master is not informed of the given block by all block
+   * managers.
+   */
+  private def blockStatus(
+      blockId: BlockId,
+      askSlaves: Boolean): Map[BlockManagerId, Future[Option[BlockStatus]]] = {
+    import context.dispatcher
+    val getBlockStatus = GetBlockStatus(blockId)
+    /*
+     * Rather than blocking on the block status query, master actor should simply return
+     * Futures to avoid potential deadlocks. This can arise if there exists a block manager
+     * that is also waiting for this master actor's response to a previous message.
+     */
+    blockManagerInfo.values.map { info =>
+      val blockStatusFuture =
+        if (askSlaves) {
+          info.slaveActor.ask(getBlockStatus)(akkaTimeout).mapTo[Option[BlockStatus]]
+        } else {
+          Future { info.getStatus(blockId) }
+        }
+      (info.blockManagerId, blockStatusFuture)
+    }.toMap
+  }
+
+  /**
+   * Return the ids of blocks present in all the block managers that match the given filter.
+   * NOTE: This is a potentially expensive operation and should only be used for testing.
+   *
+   * If askSlaves is true, the master queries each block manager for the most updated block
+   * statuses. This is useful when the master is not informed of the given block by all block
+   * managers.
+   */
+  private def getMatchingBlockIds(
+      filter: BlockId => Boolean,
+      askSlaves: Boolean): Future[Seq[BlockId]] = {
+    import context.dispatcher
+    val getMatchingBlockIds = GetMatchingBlockIds(filter)
+    Future.sequence(
+      blockManagerInfo.values.map { info =>
+        val future =
+          if (askSlaves) {
+            info.slaveActor.ask(getMatchingBlockIds)(akkaTimeout).mapTo[Seq[BlockId]]
+          } else {
+            Future { info.blocks.keys.filter(filter).toSeq }
+          }
+        future
+      }
+    ).map(_.flatten.toSeq)
   }
 
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
@@ -312,7 +412,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 }
 
-private[spark] case class BlockStatus(
+@DeveloperApi
+case class BlockStatus(
     storageLevel: StorageLevel,
     memSize: Long,
     diskSize: Long,
@@ -333,6 +434,8 @@ private[spark] class BlockManagerInfo(
 
   logInfo("Registering block manager %s with %s RAM".format(
     blockManagerId.hostPort, Utils.bytesToString(maxMem)))
+
+  def getStatus(blockId: BlockId) = Option(_blocks.get(blockId))
 
   def updateLastSeenMs() {
     _lastSeenMs = System.currentTimeMillis()

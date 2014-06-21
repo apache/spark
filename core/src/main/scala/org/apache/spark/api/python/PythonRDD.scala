@@ -24,7 +24,13 @@ import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collectio
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
+import scala.util.Try
 
+import net.razorvine.pickle.{Pickler, Unpickler}
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.mapred.{InputFormat, JobConf}
+import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
@@ -51,63 +57,24 @@ private[spark] class PythonRDD[T: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
-    val worker = env.createPythonWorker(pythonExec, envVars.toMap)
-
-    @volatile var readerException: Exception = null
+    val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Start a thread to feed the process input from our parent's iterator
-    new Thread("stdin writer for " + pythonExec) {
-      override def run() {
-        try {
-          SparkEnv.set(env)
-          val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
-          val dataOut = new DataOutputStream(stream)
-          // Partition index
-          dataOut.writeInt(split.index)
-          // sparkFilesDir
-          PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
-          // Broadcast variables
-          dataOut.writeInt(broadcastVars.length)
-          for (broadcast <- broadcastVars) {
-            dataOut.writeLong(broadcast.id)
-            dataOut.writeInt(broadcast.value.length)
-            dataOut.write(broadcast.value)
-          }
-          // Python includes (*.zip and *.egg files)
-          dataOut.writeInt(pythonIncludes.length)
-          for (include <- pythonIncludes) {
-            PythonRDD.writeUTF(include, dataOut)
-          }
-          dataOut.flush()
-          // Serialized command:
-          dataOut.writeInt(command.length)
-          dataOut.write(command)
-          // Data values
-          PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
-          dataOut.flush()
-          worker.shutdownOutput()
-        } catch {
-          case e: java.io.FileNotFoundException =>
-            readerException = e
-            // Kill the Python worker process:
-            worker.shutdownOutput()
-          case e: IOException =>
-            // This can happen for legitimate reasons if the Python code stops returning data
-            // before we are done passing elements through, e.g., for take(). Just log a message
-            // to say it happened.
-            logInfo("stdin writer to Python finished early")
-            logDebug("stdin writer to Python finished early", e)
-        }
-      }
-    }.start()
+    val writerThread = new WriterThread(env, worker, split, context)
 
-    /*
-     * Partial fix for SPARK-1019: Attempts to stop reading the input stream since
-     * other completion callbacks might invalidate the input. Because interruption
-     * is not synchronous this still leaves a potential race where the interruption is
-     * processed only after the stream becomes invalid.
-     */
-    context.addOnCompleteCallback(() => context.interrupted = true)
+    context.addOnCompleteCallback { () =>
+      writerThread.shutdownOnTaskCompletion()
+
+      // Cleanup the worker socket. This will also cause the Python worker to exit.
+      try {
+        worker.close()
+      } catch {
+        case e: Exception => logWarning("Failed to close worker socket", e)
+      }
+    }
+
+    writerThread.start()
+    new MonitorThread(env, worker, context).start()
 
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
@@ -115,17 +82,14 @@ private[spark] class PythonRDD[T: ClassTag](
       def next(): Array[Byte] = {
         val obj = _nextObj
         if (hasNext) {
-          // FIXME: can deadlock if worker is waiting for us to
-          // respond to current message (currently irrelevant because
-          // output is shutdown before we read any input)
           _nextObj = read()
         }
         obj
       }
 
       private def read(): Array[Byte] = {
-        if (readerException != null) {
-          throw readerException
+        if (writerThread.exception.isDefined) {
+          throw writerThread.exception.get
         }
         try {
           stream.readInt() match {
@@ -133,6 +97,7 @@ private[spark] class PythonRDD[T: ClassTag](
               val obj = new Array[Byte](length)
               stream.readFully(obj)
               obj
+            case 0 => Array.empty[Byte]
             case SpecialLengths.TIMING_DATA =>
               // Timing data from worker
               val bootTime = stream.readLong()
@@ -144,13 +109,14 @@ private[spark] class PythonRDD[T: ClassTag](
               val total = finishTime - startTime
               logInfo("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot,
                 init, finish))
-              read
+              read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               // Signals that an exception has been thrown in python
               val exLength = stream.readInt()
               val obj = new Array[Byte](exLength)
               stream.readFully(obj)
-              throw new PythonException(new String(obj))
+              throw new PythonException(new String(obj, "utf-8"),
+                writerThread.exception.getOrElse(null))
             case SpecialLengths.END_OF_DATA_SECTION =>
               // We've finished the data section of the output, but we can still
               // read some accumulator updates:
@@ -160,30 +126,127 @@ private[spark] class PythonRDD[T: ClassTag](
                 val update = new Array[Byte](updateLen)
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
-
               }
-              Array.empty[Byte]
+              null
           }
         } catch {
-          case eof: EOFException => {
+
+          case e: Exception if context.interrupted =>
+            logDebug("Exception thrown after task interruption", e)
+            throw new TaskKilledException
+
+          case e: Exception if writerThread.exception.isDefined =>
+            logError("Python worker exited unexpectedly (crashed)", e)
+            logError("This may have been caused by a prior exception:", writerThread.exception.get)
+            throw writerThread.exception.get
+
+          case eof: EOFException =>
             throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
-          }
-          case e: Throwable => throw e
         }
       }
 
       var _nextObj = read()
 
-      def hasNext = _nextObj.length != 0
+      def hasNext = _nextObj != null
     }
-    stdoutIterator
+    new InterruptibleIterator(context, stdoutIterator)
   }
 
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
+
+  /**
+   * The thread responsible for writing the data from the PythonRDD's parent iterator to the
+   * Python process.
+   */
+  class WriterThread(env: SparkEnv, worker: Socket, split: Partition, context: TaskContext)
+    extends Thread(s"stdout writer for $pythonExec") {
+
+    @volatile private var _exception: Exception = null
+
+    setDaemon(true)
+
+    /** Contains the exception thrown while writing the parent iterator to the Python process. */
+    def exception: Option[Exception] = Option(_exception)
+
+    /** Terminates the writer thread, ignoring any exceptions that may occur due to cleanup. */
+    def shutdownOnTaskCompletion() {
+      assert(context.completed)
+      this.interrupt()
+    }
+
+    override def run(): Unit = Utils.logUncaughtExceptions {
+      try {
+        SparkEnv.set(env)
+        val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
+        val dataOut = new DataOutputStream(stream)
+        // Partition index
+        dataOut.writeInt(split.index)
+        // sparkFilesDir
+        PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
+        // Python includes (*.zip and *.egg files)
+        dataOut.writeInt(pythonIncludes.length)
+        for (include <- pythonIncludes) {
+          PythonRDD.writeUTF(include, dataOut)
+        }
+        // Broadcast variables
+        dataOut.writeInt(broadcastVars.length)
+        for (broadcast <- broadcastVars) {
+          dataOut.writeLong(broadcast.id)
+          dataOut.writeInt(broadcast.value.length)
+          dataOut.write(broadcast.value)
+        }
+        dataOut.flush()
+        // Serialized command:
+        dataOut.writeInt(command.length)
+        dataOut.write(command)
+        // Data values
+        PythonRDD.writeIteratorToStream(parent.iterator(split, context), dataOut)
+        dataOut.flush()
+      } catch {
+        case e: Exception if context.completed || context.interrupted =>
+          logDebug("Exception thrown after task completion (likely due to cleanup)", e)
+
+        case e: Exception =>
+          // We must avoid throwing exceptions here, because the thread uncaught exception handler
+          // will kill the whole executor (see org.apache.spark.executor.Executor).
+          _exception = e
+      } finally {
+        Try(worker.shutdownOutput()) // kill Python worker process
+      }
+    }
+  }
+
+  /**
+   * It is necessary to have a monitor thread for python workers if the user cancels with
+   * interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
+   * threads can block indefinitely.
+   */
+  class MonitorThread(env: SparkEnv, worker: Socket, context: TaskContext)
+    extends Thread(s"Worker Monitor for $pythonExec") {
+
+    setDaemon(true)
+
+    override def run() {
+      // Kill the worker if it is interrupted, checking until task completion.
+      // TODO: This has a race condition if interruption occurs, as completed may still become true.
+      while (!context.interrupted && !context.completed) {
+        Thread.sleep(2000)
+      }
+      if (!context.completed) {
+        try {
+          logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
+          env.destroyPythonWorker(pythonExec, envVars.toMap)
+        } catch {
+          case e: Exception =>
+            logError("Exception when trying to kill worker", e)
+        }
+      }
+    }
+  }
 }
 
 /** Thrown for exceptions in user Python code. */
-private class PythonException(msg: String) extends Exception(msg)
+private class PythonException(msg: String, cause: Exception) extends RuntimeException(msg, cause)
 
 /**
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from Python.
@@ -206,8 +269,28 @@ private object SpecialLengths {
   val TIMING_DATA = -3
 }
 
-private[spark] object PythonRDD {
+private[spark] object PythonRDD extends Logging {
   val UTF8 = Charset.forName("UTF-8")
+
+  /**
+   * Adapter for calling SparkContext#runJob from Python.
+   *
+   * This method will return an iterator of an array that contains all elements in the RDD
+   * (effectively a collect()), but allows you to run on a certain subset of partitions,
+   * or to enable local execution.
+   */
+  def runJob(
+      sc: SparkContext,
+      rdd: JavaRDD[Array[Byte]],
+      partitions: JArrayList[Int],
+      allowLocal: Boolean): Iterator[Array[Byte]] = {
+    type ByteArray = Array[Byte]
+    type UnrolledPartition = Array[ByteArray]
+    val allPartitions: Array[UnrolledPartition] =
+      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions, allowLocal)
+    val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
+    flattenedPartition.iterator
+  }
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
   JavaRDD[Array[Byte]] = {
@@ -222,7 +305,6 @@ private[spark] object PythonRDD {
       }
     } catch {
       case eof: EOFException => {}
-      case e: Throwable => throw e
     }
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
@@ -267,6 +349,180 @@ private[spark] object PythonRDD {
     }
   }
 
+  /**
+   * Create an RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]],
+   * key and value class.
+   * A key and/or value converter class can optionally be passed in
+   * (see [[org.apache.spark.api.python.Converter]])
+   */
+  def sequenceFile[K, V](
+      sc: JavaSparkContext,
+      path: String,
+      keyClassMaybeNull: String,
+      valueClassMaybeNull: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
+      minSplits: Int) = {
+    val keyClass = Option(keyClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
+    val valueClass = Option(valueClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
+    implicit val kcm = ClassTag(Class.forName(keyClass)).asInstanceOf[ClassTag[K]]
+    implicit val vcm = ClassTag(Class.forName(valueClass)).asInstanceOf[ClassTag[V]]
+    val kc = kcm.runtimeClass.asInstanceOf[Class[K]]
+    val vc = vcm.runtimeClass.asInstanceOf[Class[V]]
+
+    val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
+    val keyConverter = Converter.getInstance(Option(keyConverterClass))
+    val valueConverter = Converter.getInstance(Option(valueConverterClass))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd, keyConverter, valueConverter)
+    JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
+  }
+
+  /**
+   * Create an RDD from a file path, using an arbitrary [[org.apache.hadoop.mapreduce.InputFormat]],
+   * key and value class.
+   * A key and/or value converter class can optionally be passed in
+   * (see [[org.apache.spark.api.python.Converter]])
+   */
+  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
+      sc: JavaSparkContext,
+      path: String,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
+      confAsMap: java.util.HashMap[String, String]) = {
+    val conf = PythonHadoopUtil.mapToConf(confAsMap)
+    val baseConf = sc.hadoopConfiguration()
+    val mergedConf = PythonHadoopUtil.mergeConfs(baseConf, conf)
+    val rdd =
+      newAPIHadoopRDDFromClassNames[K, V, F](sc,
+        Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
+    val keyConverter = Converter.getInstance(Option(keyConverterClass))
+    val valueConverter = Converter.getInstance(Option(valueConverterClass))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd, keyConverter, valueConverter)
+    JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
+  }
+
+  /**
+   * Create an RDD from a [[org.apache.hadoop.conf.Configuration]] converted from a map that is
+   * passed in from Python, using an arbitrary [[org.apache.hadoop.mapreduce.InputFormat]],
+   * key and value class.
+   * A key and/or value converter class can optionally be passed in
+   * (see [[org.apache.spark.api.python.Converter]])
+   */
+  def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
+      sc: JavaSparkContext,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
+      confAsMap: java.util.HashMap[String, String]) = {
+    val conf = PythonHadoopUtil.mapToConf(confAsMap)
+    val rdd =
+      newAPIHadoopRDDFromClassNames[K, V, F](sc,
+        None, inputFormatClass, keyClass, valueClass, conf)
+    val keyConverter = Converter.getInstance(Option(keyConverterClass))
+    val valueConverter = Converter.getInstance(Option(valueConverterClass))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd, keyConverter, valueConverter)
+    JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
+  }
+
+  private def newAPIHadoopRDDFromClassNames[K, V, F <: NewInputFormat[K, V]](
+      sc: JavaSparkContext,
+      path: Option[String] = None,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      conf: Configuration) = {
+    implicit val kcm = ClassTag(Class.forName(keyClass)).asInstanceOf[ClassTag[K]]
+    implicit val vcm = ClassTag(Class.forName(valueClass)).asInstanceOf[ClassTag[V]]
+    implicit val fcm = ClassTag(Class.forName(inputFormatClass)).asInstanceOf[ClassTag[F]]
+    val kc = kcm.runtimeClass.asInstanceOf[Class[K]]
+    val vc = vcm.runtimeClass.asInstanceOf[Class[V]]
+    val fc = fcm.runtimeClass.asInstanceOf[Class[F]]
+    val rdd = if (path.isDefined) {
+      sc.sc.newAPIHadoopFile[K, V, F](path.get, fc, kc, vc, conf)
+    } else {
+      sc.sc.newAPIHadoopRDD[K, V, F](conf, fc, kc, vc)
+    }
+    rdd
+  }
+
+  /**
+   * Create an RDD from a file path, using an arbitrary [[org.apache.hadoop.mapred.InputFormat]],
+   * key and value class.
+   * A key and/or value converter class can optionally be passed in
+   * (see [[org.apache.spark.api.python.Converter]])
+   */
+  def hadoopFile[K, V, F <: InputFormat[K, V]](
+      sc: JavaSparkContext,
+      path: String,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
+      confAsMap: java.util.HashMap[String, String]) = {
+    val conf = PythonHadoopUtil.mapToConf(confAsMap)
+    val baseConf = sc.hadoopConfiguration()
+    val mergedConf = PythonHadoopUtil.mergeConfs(baseConf, conf)
+    val rdd =
+      hadoopRDDFromClassNames[K, V, F](sc,
+        Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
+    val keyConverter = Converter.getInstance(Option(keyConverterClass))
+    val valueConverter = Converter.getInstance(Option(valueConverterClass))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd, keyConverter, valueConverter)
+    JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
+  }
+
+  /**
+   * Create an RDD from a [[org.apache.hadoop.conf.Configuration]] converted from a map
+   * that is passed in from Python, using an arbitrary [[org.apache.hadoop.mapred.InputFormat]],
+   * key and value class
+   * A key and/or value converter class can optionally be passed in
+   * (see [[org.apache.spark.api.python.Converter]])
+   */
+  def hadoopRDD[K, V, F <: InputFormat[K, V]](
+      sc: JavaSparkContext,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
+      confAsMap: java.util.HashMap[String, String]) = {
+    val conf = PythonHadoopUtil.mapToConf(confAsMap)
+    val rdd =
+      hadoopRDDFromClassNames[K, V, F](sc,
+        None, inputFormatClass, keyClass, valueClass, conf)
+    val keyConverter = Converter.getInstance(Option(keyConverterClass))
+    val valueConverter = Converter.getInstance(Option(valueConverterClass))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd, keyConverter, valueConverter)
+    JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
+  }
+
+  private def hadoopRDDFromClassNames[K, V, F <: InputFormat[K, V]](
+      sc: JavaSparkContext,
+      path: Option[String] = None,
+      inputFormatClass: String,
+      keyClass: String,
+      valueClass: String,
+      conf: Configuration) = {
+    implicit val kcm = ClassTag(Class.forName(keyClass)).asInstanceOf[ClassTag[K]]
+    implicit val vcm = ClassTag(Class.forName(valueClass)).asInstanceOf[ClassTag[V]]
+    implicit val fcm = ClassTag(Class.forName(inputFormatClass)).asInstanceOf[ClassTag[F]]
+    val kc = kcm.runtimeClass.asInstanceOf[Class[K]]
+    val vc = vcm.runtimeClass.asInstanceOf[Class[V]]
+    val fc = fcm.runtimeClass.asInstanceOf[Class[F]]
+    val rdd = if (path.isDefined) {
+      sc.sc.hadoopFile(path.get, fc, kc, vc)
+    } else {
+      sc.sc.hadoopRDD(new JobConf(conf), fc, kc, vc)
+    }
+    rdd
+  }
+
   def writeUTF(str: String, dataOut: DataOutputStream) {
     val bytes = str.getBytes(UTF8)
     dataOut.writeInt(bytes.length)
@@ -284,6 +540,36 @@ private[spark] object PythonRDD {
     file.close()
   }
 
+  /**
+   * Convert an RDD of serialized Python dictionaries to Scala Maps
+   * TODO: Support more Python types.
+   */
+  def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Unpickler
+      // TODO: Figure out why flatMap is necessay for pyspark
+      iter.flatMap { row =>
+        unpickle.loads(row) match {
+          case objs: java.util.ArrayList[JMap[String, _] @unchecked] => objs.map(_.toMap)
+          // Incase the partition doesn't have a collection
+          case obj: JMap[String @unchecked, _] => Seq(obj.toMap)
+        }
+      }
+    }
+  }
+
+  /**
+   * Convert and RDD of Java objects to and RDD of serialized Python objects, that is usable by
+   * PySpark.
+   */
+  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
+    jRDD.rdd.mapPartitions { iter =>
+      val pickle = new Pickler
+      iter.map { row =>
+        pickle.dumps(row)
+      }
+    }
+  }
 }
 
 private

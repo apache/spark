@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst
 
 import java.io.{PrintWriter, ByteArrayOutputStream, FileInputStream, File}
 
+import org.apache.spark.util.{Utils => SparkUtils}
+
 package object util {
   /**
    * Returns a path to a temporary file that probably does not exist.
@@ -54,7 +56,7 @@ package object util {
   def resourceToString(
       resource:String,
       encoding: String = "UTF-8",
-      classLoader: ClassLoader = this.getClass.getClassLoader) = {
+      classLoader: ClassLoader = SparkUtils.getSparkClassLoader) = {
     val inStream = classLoader.getResourceAsStream(resource)
     val outStream = new ByteArrayOutputStream
     try {
@@ -113,7 +115,7 @@ package object util {
   }
 
   /* FIX ME
-  implicit class debugLogging(a: AnyRef) {
+  implicit class debugLogging(a: Any) {
     def debugLogging() {
       org.apache.log4j.Logger.getLogger(a.getClass.getName).setLevel(org.apache.log4j.Level.DEBUG)
     }

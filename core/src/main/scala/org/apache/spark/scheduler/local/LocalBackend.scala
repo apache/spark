@@ -30,7 +30,7 @@ private case class ReviveOffers()
 
 private case class StatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
 
-private case class KillTask(taskId: Long)
+private case class KillTask(taskId: Long, interruptThread: Boolean)
 
 /**
  * Calls to LocalBackend are all serialized through LocalActor. Using an actor makes the calls on
@@ -61,8 +61,8 @@ private[spark] class LocalActor(
         reviveOffers()
       }
 
-    case KillTask(taskId) =>
-      executor.killTask(taskId)
+    case KillTask(taskId, interruptThread) =>
+      executor.killTask(taskId, interruptThread)
   }
 
   def reviveOffers() {
@@ -99,8 +99,8 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
 
   override def defaultParallelism() = totalCores
 
-  override def killTask(taskId: Long, executorId: String) {
-    localActor ! KillTask(taskId)
+  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
+    localActor ! KillTask(taskId, interruptThread)
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {

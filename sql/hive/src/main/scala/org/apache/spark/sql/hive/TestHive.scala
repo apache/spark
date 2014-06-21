@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.hive.test
 
 import java.io.File
 import java.util.{Set => JavaSet}
@@ -32,8 +32,9 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, NativeCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheCommand, LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.hive._
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -57,7 +58,6 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
-  System.clearProperty("spark.driver.port")
   System.clearProperty("spark.hostPort")
 
   override lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
@@ -98,10 +98,17 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
+  hiveFilesTemp.deleteOnExit()
 
-  val inRepoTests = new File("src/test/resources/")
+  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
+  } else {
+    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
+      File.separator + "resources")
+  }
+
   def getHiveFile(path: String): File = {
-    val stripped = path.replaceAll("""\.\.\/""", "")
+    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
     hiveDevHome
       .map(new File(_, stripped))
       .filter(_.exists)
@@ -123,6 +130,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case NativeCommand(describedTable(tbl)) => tbl :: Nil
+        case CacheCommand(tbl, _) => tbl :: Nil
         case _ => Nil
       }
 
@@ -160,12 +168,6 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
     TestTable("src1",
       "CREATE TABLE src1 (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
-    TestTable("dest1",
-      "CREATE TABLE IF NOT EXISTS dest1 (key INT, value STRING)".cmd),
-    TestTable("dest2",
-      "CREATE TABLE IF NOT EXISTS dest2 (key INT, value STRING)".cmd),
-    TestTable("dest3",
-      "CREATE TABLE IF NOT EXISTS dest3 (key INT, value STRING)".cmd),
     TestTable("srcpart", () => {
       runSqlHive(
         "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
@@ -257,6 +259,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
 
   private val loadedTables = new collection.mutable.HashSet[String]
 
+  var cacheTables: Boolean = false
   def loadTestTable(name: String) {
     if (!(loadedTables contains name)) {
       // Marks the table as loaded first to prevent infite mutually recursive table loading.
@@ -265,6 +268,10 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
+
+      if (cacheTables) {
+        cacheTable(name)
+      }
     }
   }
 

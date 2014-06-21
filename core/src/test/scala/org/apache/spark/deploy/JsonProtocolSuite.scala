@@ -28,6 +28,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.SparkConf
 
 class JsonProtocolSuite extends FunSuite {
 
@@ -87,7 +88,7 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   def createAppDesc(): ApplicationDescription = {
-    val cmd = new Command("mainClass", List("arg1", "arg2"), Map())
+    val cmd = new Command("mainClass", List("arg1", "arg2"), Map(), Seq(), Seq())
     new ApplicationDescription("name", Some(4), 1234, cmd, Some("sparkHome"), "appUiUrl")
   }
 
@@ -100,7 +101,7 @@ class JsonProtocolSuite extends FunSuite {
 
   def createDriverCommand() = new Command(
     "org.apache.spark.FakeClass", Seq("some arg --and-some options -g foo"),
-    Map(("K1", "V1"), ("K2", "V2"))
+    Map(("K1", "V1"), ("K2", "V2")), Seq("cp1", "cp2"), Seq("lp1", "lp2"), Some("-Dfoo")
   )
 
   def createDriverDesc() = new DriverDescription("hdfs://some-dir/some.jar", 100, 3,
@@ -116,7 +117,8 @@ class JsonProtocolSuite extends FunSuite {
   }
   def createExecutorRunner(): ExecutorRunner = {
     new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host",
-      new File("sparkHome"), new File("workDir"), "akka://worker", ExecutorState.RUNNING)
+      new File("sparkHome"), new File("workDir"), "akka://worker",
+      new SparkConf, ExecutorState.RUNNING)
   }
   def createDriverRunner(): DriverRunner = {
     new DriverRunner("driverId", new File("workDir"), new File("sparkHome"), createDriverDesc(),
@@ -133,9 +135,12 @@ class JsonProtocolSuite extends FunSuite {
 
   def assertValidDataInJson(validateJson: JValue, expectedJson: JValue) {
     val Diff(c, a, d) = validateJson diff expectedJson
-    assert(c === JNothing, "Json changed")
-    assert(a === JNothing, "Json added")
-    assert(d === JNothing, "Json deleted")
+    val validatePretty = JsonMethods.pretty(validateJson)
+    val expectedPretty = JsonMethods.pretty(expectedJson)
+    val errorMessage = s"Expected:\n$expectedPretty\nFound:\n$validatePretty"
+    assert(c === JNothing, s"$errorMessage\nChanged:\n${JsonMethods.pretty(c)}")
+    assert(a === JNothing, s"$errorMessage\nAdded:\n${JsonMethods.pretty(a)}")
+    assert(d === JNothing, s"$errorMessage\nDelected:\n${JsonMethods.pretty(d)}")
   }
 }
 
@@ -165,7 +170,7 @@ object JsonConstants {
     """
       |{"name":"name","cores":4,"memoryperslave":1234,
       |"user":"%s","sparkhome":"sparkHome",
-      |"command":"Command(mainClass,List(arg1, arg2),Map())"}
+      |"command":"Command(mainClass,List(arg1, arg2),Map(),List(),List(),None)"}
     """.format(System.getProperty("user.name", "<unknown>")).stripMargin
 
   val executorRunnerJsonStr =

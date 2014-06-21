@@ -17,15 +17,29 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.hive.TestHive
+import java.io.File
+
+import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.sql.hive.test.TestHive
 
 /**
  * Runs the test cases that are included in the hive distribution.
  */
-class HiveCompatibilitySuite extends HiveQueryFileTest {
+class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   // TODO: bundle in jar files... get from classpath
-  lazy val hiveQueryDir = TestHive.getHiveFile("ql/src/test/queries/clientpositive")
+  lazy val hiveQueryDir = TestHive.getHiveFile("ql" + File.separator + "src" +
+    File.separator + "test" + File.separator + "queries" + File.separator + "clientpositive")
+
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+
+  override def beforeAll() {
+    TestHive.cacheTables = true
+  }
+
+  override def afterAll() {
+    TestHive.cacheTables = false
+  }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
   override def blackList = Seq(
@@ -64,7 +78,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "alter_merge",
     "alter_concatenate_indexed_table",
     "protectmode2",
-    "describe_table",
+    //"describe_table",
     "describe_comment_nonascii",
     "udf5",
     "udf_java_method",
@@ -98,6 +112,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "stats1.*",
     "stats20",
     "alter_merge_stats",
+    "columnstats.*",
+
 
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
     // http://stackoverflow.com/a/1573715
@@ -153,7 +169,24 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "archive_corrupt",
 
     // No support for case sensitivity is resolution using hive properties atm.
-    "case_sensitivity"
+    "case_sensitivity",
+
+    // Flaky test, Hive sometimes returns different set of 10 rows.
+    "lateral_view_outer",
+
+    // After stop taking the `stringOrError` route, exceptions are thrown from these cases.
+    // See SPARK-2129 for details.
+    "join_view",
+    "mergejoins_mixed",
+
+    // Returning the result of a describe state as a JSON object is not supported.
+    "describe_table_json",
+    "describe_database_json",
+    "describe_formatted_view_partitioned_json",
+
+    // Hive returns the results of describe as plain text. Comments with multiple lines
+    // introduce extra lines in the Hive results, which make the result comparison fail.
+    "describe_comment_indent"
   )
 
   /**
@@ -162,6 +195,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
    */
   override def whiteList = Seq(
     "add_part_exist",
+    "add_part_multiple",
     "add_partition_no_whitelist",
     "add_partition_with_whitelist",
     "alias_casted_column",
@@ -267,15 +301,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "default_partition_name",
     "delimiter",
     "desc_non_existent_tbl",
-    "describe_comment_indent",
-    "describe_database_json",
     "describe_formatted_view_partitioned",
-    "describe_formatted_view_partitioned_json",
-    "describe_table_json",
     "diff_part_input_formats",
     "disable_file_format_check",
     "drop_function",
     "drop_index",
+    "drop_multi_partitions",
     "drop_partitions_filter",
     "drop_partitions_filter2",
     "drop_partitions_filter3",
@@ -288,6 +319,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "escape_orderby1",
     "escape_sortby1",
     "fetch_aggregation",
+    "fileformat_sequencefile",
+    "fileformat_text",
     "filter_join_breaktask",
     "filter_join_breaktask2",
     "groupby1",
@@ -296,6 +329,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "groupby1_map_nomap",
     "groupby1_map_skew",
     "groupby1_noskew",
+    "groupby2",
+    "groupby2_map",
+    "groupby2_map_skew",
+    "groupby2_noskew",
     "groupby4",
     "groupby4_map",
     "groupby4_map_skew",
@@ -319,10 +356,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "groupby8_noskew",
     "groupby9",
     "groupby_distinct_samekey",
+    "groupby_map_ppr",
     "groupby_multi_insert_common_distinct",
     "groupby_multi_single_reducer2",
     "groupby_mutli_insert_common_distinct",
     "groupby_neg_float",
+    "groupby_ppr",
     "groupby_sort_10",
     "groupby_sort_2",
     "groupby_sort_3",
@@ -338,13 +377,17 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "inoutdriver",
     "input",
     "input0",
+    "input1",
+    "input10",
     "input11",
     "input11_limit",
     "input12",
     "input12_hadoop20",
     "input14",
+    "input15",
     "input19",
     "input1_limit",
+    "input2",
     "input21",
     "input22",
     "input23",
@@ -353,6 +396,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "input26",
     "input28",
     "input2_limit",
+    "input3",
+    "input4",
     "input40",
     "input41",
     "input4_cb_delim",
@@ -360,9 +405,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "input7",
     "input8",
     "input9",
-    "inputddl4",
-    "inputddl7",
-    "inputddl8",
     "input_limit",
     "input_part0",
     "input_part1",
@@ -377,6 +419,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "input_part8",
     "input_part9",
     "input_testsequencefile",
+    "inputddl1",
+    "inputddl2",
+    "inputddl3",
+    "inputddl4",
+    "inputddl6",
+    "inputddl7",
+    "inputddl8",
     "insert1",
     "insert2_overwrite_partitions",
     "insert_compressed",
@@ -437,9 +486,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "join_reorder3",
     "join_reorder4",
     "join_star",
-    "join_view",
+    "lateral_view",
     "lateral_view_cp",
     "lateral_view_ppd",
+    "leftsemijoin",
+    "leftsemijoin_mr",
     "lineage1",
     "literal_double",
     "literal_ints",
@@ -449,6 +500,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "loadpart1",
     "louter_join_ppr",
     "mapjoin_distinct",
+    "mapjoin_filter_on_outerjoin",
     "mapjoin_mapjoin",
     "mapjoin_subquery",
     "mapjoin_subquery2",
@@ -464,7 +516,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "merge1",
     "merge2",
     "mergejoins",
-    "mergejoins_mixed",
     "multigroupby_singlemr",
     "multi_insert_gby",
     "multi_insert_gby3",
@@ -554,6 +605,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "select_unquote_and",
     "select_unquote_not",
     "select_unquote_or",
+    "semijoin",
+    "serde_regex",
     "serde_reported_schema",
     "set_variable_sub",
     "show_describe_func_quotes",
@@ -562,6 +615,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "skewjoinopt13",
     "skewjoinopt18",
     "skewjoinopt9",
+    "smb_mapjoin9",
     "smb_mapjoin_1",
     "smb_mapjoin_10",
     "smb_mapjoin_13",
@@ -606,8 +660,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "udf_10_trims",
     "udf2",
     "udf6",
+    "udf7",
     "udf8",
     "udf9",
+    "udf_E",
+    "udf_PI",
     "udf_abs",
     "udf_acos",
     "udf_add",
@@ -631,6 +688,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "udf_ceil",
     "udf_ceiling",
     "udf_concat",
+    "udf_concat_insert1",
     "udf_concat_insert2",
     "udf_concat_ws",
     "udf_conv",
@@ -645,6 +703,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "udf_div",
     "udf_double",
     "udf_E",
+    "udf_elt",
     "udf_exp",
     "udf_field",
     "udf_find_in_set",
@@ -654,9 +713,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "udf_from_unixtime",
     "udf_greaterthan",
     "udf_greaterthanorequal",
+    "udf_hash",
     "udf_hex",
     "udf_if",
     "udf_index",
+    "udf_instr",
     "udf_int",
     "udf_isnotnull",
     "udf_isnull",
@@ -667,6 +728,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "udf_lessthanorequal",
     "udf_like",
     "udf_ln",
+    "udf_locate",
     "udf_log",
     "udf_log10",
     "udf_log2",
@@ -725,9 +787,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "udf_trim",
     "udf_ucase",
     "udf_upper",
-    "udf_variance",
     "udf_var_pop",
     "udf_var_samp",
+    "udf_variance",
     "udf_weekofyear",
     "udf_when",
     "udf_xpath",
@@ -753,6 +815,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "union22",
     "union23",
     "union24",
+    "union25",
     "union26",
     "union27",
     "union28",

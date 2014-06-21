@@ -36,8 +36,8 @@ private[spark] class FileHeader (
     if (FileHeader.HEADER_SIZE - buf.readableBytes > 0 ) {
       buf.writeZero(FileHeader.HEADER_SIZE - buf.readableBytes)
     } else {
-      throw new Exception("too long header " + buf.readableBytes) 
-      logInfo("too long header") 
+      throw new Exception("too long header " + buf.readableBytes)
+      logInfo("too long header")
     }
     buf
   }

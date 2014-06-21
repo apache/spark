@@ -45,14 +45,20 @@ case class BoundReference(ordinal: Int, baseReference: Attribute)
 
   override def toString = s"$baseReference:$ordinal"
 
-  override def apply(input: Row): Any = input(ordinal)
+  override def eval(input: Row): Any = input(ordinal)
 }
+
+/**
+ * Used to denote operators that do their own binding of attributes internally.
+ */
+trait NoBind { self: trees.TreeNode[_] => }
 
 class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {
   import BindReferences._
 
   def apply(plan: TreeNode): TreeNode = {
     plan.transform {
+      case n: NoBind => n.asInstanceOf[TreeNode]
       case leafNode if leafNode.children.isEmpty => leafNode
       case unaryNode if unaryNode.children.size == 1 => unaryNode.transformExpressions { case e =>
         bindReference(e, unaryNode.children.head.output)
@@ -62,7 +68,7 @@ class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {
 }
 
 object BindReferences extends Logging {
-  def bindReference(expression: Expression, input: Seq[Attribute]): Expression = {
+  def bindReference[A <: Expression](expression: A, input: Seq[Attribute]): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
         val ordinal = input.indexWhere(_.exprId == a.exprId)
@@ -77,6 +83,6 @@ object BindReferences extends Logging {
           BoundReference(ordinal, a)
         }
       }
-    }
+    }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
   }
 }

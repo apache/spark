@@ -34,6 +34,13 @@ private[storage] object BlockManagerMessages {
   // Remove all blocks belonging to a specific RDD.
   case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave
 
+  // Remove all blocks belonging to a specific shuffle.
+  case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerSlave
+
+  // Remove all blocks belonging to a specific broadcast.
+  case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
+    extends ToBlockManagerSlave
+
 
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from slaves to the master.
@@ -80,7 +87,8 @@ private[storage] object BlockManagerMessages {
   }
 
   object UpdateBlockInfo {
-    def apply(blockManagerId: BlockManagerId,
+    def apply(
+        blockManagerId: BlockManagerId,
         blockId: BlockId,
         storageLevel: StorageLevel,
         memSize: Long,
@@ -108,7 +116,13 @@ private[storage] object BlockManagerMessages {
 
   case object GetMemoryStatus extends ToBlockManagerMaster
 
-  case object ExpireDeadHosts extends ToBlockManagerMaster
-
   case object GetStorageStatus extends ToBlockManagerMaster
+
+  case class GetBlockStatus(blockId: BlockId, askSlaves: Boolean = true)
+    extends ToBlockManagerMaster
+
+  case class GetMatchingBlockIds(filter: BlockId => Boolean, askSlaves: Boolean = true)
+    extends ToBlockManagerMaster
+
+  case object ExpireDeadHosts extends ToBlockManagerMaster
 }

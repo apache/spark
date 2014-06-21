@@ -24,14 +24,30 @@ import org.apache.spark.{Logging, RangePartitioner}
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through
  * an implicit conversion. Import `org.apache.spark.SparkContext._` at the top of your program to
- * use these functions. They will work with any key type that has a `scala.math.Ordered`
- * implementation.
+ * use these functions. They will work with any key type `K` that has an implicit `Ordering[K]` in
+ * scope.  Ordering objects already exist for all of the standard primitive types.  Users can also
+ * define their own orderings for custom types, or to override the default ordering.  The implicit
+ * ordering that is in the closest scope will be used.
+ *
+ * {{{
+ *   import org.apache.spark.SparkContext._
+ *
+ *   val rdd: RDD[(String, Int)] = ...
+ *   implicit val caseInsensitiveOrdering = new Ordering[String] {
+ *     override def compare(a: String, b: String) = a.toLowerCase.compare(b.toLowerCase)
+ *   }
+ *
+ *   // Sort by key, using the above case insensitive ordering.
+ *   rdd.sortByKey()
+ * }}}
  */
-class OrderedRDDFunctions[K <% Ordered[K]: ClassTag,
+class OrderedRDDFunctions[K : Ordering : ClassTag,
                           V: ClassTag,
                           P <: Product2[K, V] : ClassTag](
     self: RDD[P])
   extends Logging with Serializable {
+
+  private val ordering = implicitly[Ordering[K]]
 
   /**
    * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
@@ -45,9 +61,9 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassTag,
     shuffled.mapPartitions(iter => {
       val buf = iter.toArray
       if (ascending) {
-        buf.sortWith((x, y) => x._1 < y._1).iterator
+        buf.sortWith((x, y) => ordering.lt(x._1, y._1)).iterator
       } else {
-        buf.sortWith((x, y) => x._1 > y._1).iterator
+        buf.sortWith((x, y) => ordering.gt(x._1, y._1)).iterator
       }
     }, preservesPartitioning = true)
   }

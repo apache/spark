@@ -18,9 +18,10 @@
 package org.apache.spark.examples
 
 import scala.math.sqrt
-import cern.jet.math._
+
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
+import cern.jet.math._
 
 /**
  * Alternating least squares matrix factorization.
@@ -120,7 +121,7 @@ object LocalALS {
       }
     }
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
-    
+
     val R = generateR()
 
     // Initialize m and u randomly

@@ -20,6 +20,14 @@ An interactive shell.
 
 This file is designed to be launched as a PYTHONSTARTUP script.
 """
+
+import sys
+if sys.version_info[0] != 2:
+    print("Error: Default Python used is Python%s" % sys.version_info.major)
+    print("\tSet env variable PYSPARK_PYTHON to Python2 binary and re-run it.")
+    sys.exit(1)
+
+
 import os
 import platform
 import pyspark
@@ -29,23 +37,26 @@ from pyspark.storagelevel import StorageLevel
 # this is the equivalent of ADD_JARS
 add_files = os.environ.get("ADD_FILES").split(',') if os.environ.get("ADD_FILES") != None else None
 
-sc = SparkContext(os.environ.get("MASTER", "local"), "PySparkShell", pyFiles=add_files)
+if os.environ.get("SPARK_EXECUTOR_URI"):
+    SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-print """Welcome to
+sc = SparkContext(appName="PySparkShell", pyFiles=add_files)
+
+print("""Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
    /__ / .__/\_,_/_/ /_/\_\   version 1.0.0-SNAPSHOT
       /_/
-"""
-print "Using Python version %s (%s, %s)" % (
+""")
+print("Using Python version %s (%s, %s)" % (
     platform.python_version(),
     platform.python_build()[0],
-    platform.python_build()[1])
-print "Spark context available as sc."
+    platform.python_build()[1]))
+print("SparkContext available as sc.")
 
 if add_files != None:
-    print "Adding files: [%s]" % ", ".join(add_files)
+    print("Adding files: [%s]" % ", ".join(add_files))
 
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
 # which allows us to execute the user's PYTHONSTARTUP file:

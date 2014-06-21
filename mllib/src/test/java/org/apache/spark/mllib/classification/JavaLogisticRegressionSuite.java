@@ -42,7 +42,6 @@ public class JavaLogisticRegressionSuite implements Serializable {
   public void tearDown() {
     sc.stop();
     sc = null;
-    System.clearProperty("spark.driver.port");
   }
 
   int validatePrediction(List<LabeledPoint> validationData, LogisticRegressionModel model) {
@@ -68,6 +67,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
         LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 17);
 
     LogisticRegressionWithSGD lrImpl = new LogisticRegressionWithSGD();
+    lrImpl.setIntercept(true);
     lrImpl.optimizer().setStepSize(1.0)
                       .setRegParam(1.0)
                       .setNumIterations(100);
@@ -80,8 +80,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
   @Test
   public void runLRUsingStaticMethods() {
     int nPoints = 10000;
-    double A = 2.0;
-    double B = -1.5;
+    double A = 0.0;
+    double B = -2.5;
 
     JavaRDD<LabeledPoint> testRDD = sc.parallelize(
         LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
@@ -92,6 +92,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
         testRDD.rdd(), 100, 1.0, 1.0);
 
     int numAccurate = validatePrediction(validationData, model);
+      System.out.println(numAccurate);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
   }
 

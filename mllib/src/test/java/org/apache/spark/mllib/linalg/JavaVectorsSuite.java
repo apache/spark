@@ -36,6 +36,7 @@ public class JavaVectorsSuite implements Serializable {
 
   @Test
   public void sparseArrayConstruction() {
+    @SuppressWarnings("unchecked")
     Vector v = Vectors.sparse(3, Lists.<Tuple2<Integer, Double>>newArrayList(
         new Tuple2<Integer, Double>(0, 2.0),
         new Tuple2<Integer, Double>(2, 3.0)));

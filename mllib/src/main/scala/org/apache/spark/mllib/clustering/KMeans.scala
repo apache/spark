@@ -21,7 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
@@ -37,12 +38,17 @@ import org.apache.spark.util.random.XORShiftRandom
  * to it should be cached by the user.
  */
 class KMeans private (
-    var k: Int,
-    var maxIterations: Int,
-    var runs: Int,
-    var initializationMode: String,
-    var initializationSteps: Int,
-    var epsilon: Double) extends Serializable with Logging {
+    private var k: Int,
+    private var maxIterations: Int,
+    private var runs: Int,
+    private var initializationMode: String,
+    private var initializationSteps: Int,
+    private var epsilon: Double) extends Serializable with Logging {
+
+  /**
+   * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
+   * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4}.
+   */
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
 
   /** Set the number of clusters to create (k). Default: 2. */
@@ -71,10 +77,12 @@ class KMeans private (
   }
 
   /**
+   * :: Experimental ::
    * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
    * this many times with random starting conditions (configured by the initialization mode), then
    * return the best clustering found over any run. Default: 1.
    */
+  @Experimental
   def setRuns(runs: Int): KMeans = {
     if (runs <= 0) {
       throw new IllegalArgumentException("Number of runs must be positive")
@@ -316,13 +324,34 @@ object KMeans {
       data: RDD[Vector],
       k: Int,
       maxIterations: Int,
-      runs: Int = 1,
-      initializationMode: String = K_MEANS_PARALLEL): KMeansModel = {
+      runs: Int,
+      initializationMode: String): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
       .run(data)
+  }
+
+  /**
+   * Trains a k-means model using specified parameters and the default values for unspecified.
+   */
+  def train(
+      data: RDD[Vector],
+      k: Int,
+      maxIterations: Int): KMeansModel = {
+    train(data, k, maxIterations, 1, K_MEANS_PARALLEL)
+  }
+
+  /**
+   * Trains a k-means model using specified parameters and the default values for unspecified.
+   */
+  def train(
+      data: RDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      runs: Int): KMeansModel = {
+    train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
   }
 
   /**
@@ -363,31 +392,10 @@ object KMeans {
    * Returns the squared Euclidean distance between two vectors computed by
    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
    */
-  private[clustering]
-  def fastSquaredDistance(v1: BreezeVectorWithNorm, v2: BreezeVectorWithNorm)
-  : Double = {
+  private[clustering] def fastSquaredDistance(
+      v1: BreezeVectorWithNorm,
+      v2: BreezeVectorWithNorm): Double = {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
-  }
-
-  def main(args: Array[String]) {
-    if (args.length < 4) {
-      println("Usage: KMeans <master> <input_file> <k> <max_iterations> [<runs>]")
-      System.exit(1)
-    }
-    val (master, inputFile, k, iters) = (args(0), args(1), args(2).toInt, args(3).toInt)
-    val runs = if (args.length >= 5) args(4).toInt else 1
-    val sc = new SparkContext(master, "KMeans")
-    val data = sc.textFile(inputFile)
-      .map(line => Vectors.dense(line.split(' ').map(_.toDouble)))
-      .cache()
-    val model = KMeans.train(data, k, iters, runs)
-    val cost = model.computeCost(data)
-    println("Cluster centers:")
-    for (c <- model.clusterCenters) {
-      println("  " + c)
-    }
-    println("Cost: " + cost)
-    System.exit(0)
   }
 }
 

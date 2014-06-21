@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType, NativeType}
 
@@ -28,38 +28,37 @@ abstract class Expression extends TreeNode[Expression] {
   /** The narrowest possible type that is produced when this expression is evaluated. */
   type EvaluatedType <: Any
 
-  def dataType: DataType
-
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
    * executed.
    *
    * The following conditions are used to determine suitability for constant folding:
-   *  - A [[expressions.Coalesce Coalesce]] is foldable if all of its children are foldable
-   *  - A [[expressions.BinaryExpression BinaryExpression]] is foldable if its both left and right
-   *    child are foldable
-   *  - A [[expressions.Not Not]], [[expressions.IsNull IsNull]], or
-   *    [[expressions.IsNotNull IsNotNull]] is foldable if its child is foldable.
-   *  - A [[expressions.Literal]] is foldable.
-   *  - A [[expressions.Cast Cast]] or [[expressions.UnaryMinus UnaryMinus]] is foldable if its
-   *    child is foldable.
+   *  - A [[Coalesce]] is foldable if all of its children are foldable
+   *  - A [[BinaryExpression]] is foldable if its both left and right child are foldable
+   *  - A [[Not]], [[IsNull]], or [[IsNotNull]] is foldable if its child is foldable
+   *  - A [[Literal]] is foldable
+   *  - A [[Cast]] or [[UnaryMinus]] is foldable if its child is foldable
    */
-  // TODO: Supporting more foldable expressions. For example, deterministic Hive UDFs.
   def foldable: Boolean = false
   def nullable: Boolean
   def references: Set[Attribute]
 
   /** Returns the result of evaluating this expression on a given input Row */
-  def apply(input: Row = null): EvaluatedType =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+  def eval(input: Row = null): EvaluatedType
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
-   * and `false` if it is still contains any unresolved placeholders. Implementations of expressions
+   * and `false` if it still contains any unresolved placeholders. Implementations of expressions
    * should override this if the resolution of this type of expression involves more than just
    * the resolution of its children.
    */
   lazy val resolved: Boolean = childrenResolved
+
+  /**
+   * Returns the [[DataType]] of the result of evaluating this expression.  It is
+   * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
+   */
+  def dataType: DataType
 
   /**
    * Returns true if  all the children of this expression have been resolved to a specific schema
@@ -73,7 +72,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   @inline
   def n1(e: Expression, i: Row, f: ((Numeric[Any], Any) => Any)): Any  = {
-    val evalE = e.apply(i)
+    val evalE = e.eval(i)
     if (evalE == null) {
       null
     } else {
@@ -87,7 +86,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Evaluation helper function for 2 Numeric children expressions. Those expressions are supposed 
+   * Evaluation helper function for 2 Numeric children expressions. Those expressions are supposed
    * to be in the same data type, and also the return type.
    * Either one of the expressions result is null, the evaluation result should be null.
    */
@@ -102,11 +101,11 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.apply(i)
+    val evalE1 = e1.eval(i)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.apply(i)
+      val evalE2 = e2.eval(i)
       if (evalE2 == null) {
         null
       } else {
@@ -121,7 +120,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Evaluation helper function for 2 Fractional children expressions. Those expressions are  
+   * Evaluation helper function for 2 Fractional children expressions. Those expressions are
    * supposed to be in the same data type, and also the return type.
    * Either one of the expressions result is null, the evaluation result should be null.
    */
@@ -135,11 +134,11 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.apply(i: Row)
+    val evalE1 = e1.eval(i: Row)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.apply(i: Row)
+      val evalE2 = e2.eval(i: Row)
       if (evalE2 == null) {
         null
       } else {
@@ -154,7 +153,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Evaluation helper function for 2 Integral children expressions. Those expressions are  
+   * Evaluation helper function for 2 Integral children expressions. Those expressions are
    * supposed to be in the same data type, and also the return type.
    * Either one of the expressions result is null, the evaluation result should be null.
    */
@@ -168,11 +167,11 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.apply(i)
+    val evalE1 = e1.eval(i)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.apply(i)
+      val evalE2 = e2.eval(i)
       if (evalE2 == null) {
         null
       } else {
@@ -187,12 +186,12 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Evaluation helper function for 2 Comparable children expressions. Those expressions are  
+   * Evaluation helper function for 2 Comparable children expressions. Those expressions are
    * supposed to be in the same data type, and the return type should be Integer:
    * Negative value: 1st argument less than 2nd argument
    * Zero:  1st argument equals 2nd argument
    * Positive value: 1st argument greater than 2nd argument
-   * 
+   *
    * Either one of the expressions result is null, the evaluation result should be null.
    */
   @inline
@@ -205,16 +204,16 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.apply(i)
+    val evalE1 = e1.eval(i)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.apply(i)
+      val evalE2 = e2.eval(i)
       if (evalE2 == null) {
         null
       } else {
         e1.dataType match {
-          case i: NativeType => 
+          case i: NativeType =>
             f.asInstanceOf[(Ordering[i.JvmType], i.JvmType, i.JvmType) => Boolean](
               i.ordering, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support ordered operations")
@@ -231,7 +230,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 
   override def foldable = left.foldable && right.foldable
 
-  def references = left.references ++ right.references
+  override def references = left.references ++ right.references
 
   override def toString = s"($left $symbol $right)"
 }
@@ -243,5 +242,5 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
 
-  def references = child.references
+  override def references = child.references
 }

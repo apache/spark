@@ -17,16 +17,21 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{HashPartitioner, RangePartitioner, SparkConf}
 import org.apache.spark.rdd.ShuffledRDD
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.{MutableProjection, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{NoBind, MutableProjection, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
 
-case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode with NoBind {
 
   override def outputPartitioning = newPartitioning
 
@@ -37,7 +42,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
       case HashPartitioning(expressions, numPartitions) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
         val rdd = child.execute().mapPartitions { iter =>
-          val hashExpressions = new MutableProjection(expressions)
+          val hashExpressions = new MutableProjection(expressions, child.output)
           val mutablePair = new MutablePair[Row, Row]()
           iter.map(r => mutablePair.update(hashExpressions(r), r))
         }
@@ -48,7 +53,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // TODO: RangePartitioner should take an Ordering.
-        implicit val ordering = new RowOrdering(sortingExpressions)
+        implicit val ordering = new RowOrdering(sortingExpressions, child.output)
 
         val rdd = child.execute().mapPartitions { iter =>
           val mutablePair = new MutablePair[Row, Null](null, null)
@@ -61,7 +66,14 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         shuffled.map(_._1)
 
       case SinglePartition =>
-        child.execute().coalesce(1, shuffle = true)
+        val rdd = child.execute().mapPartitions { iter =>
+          val mutablePair = new MutablePair[Null, Row]()
+          iter.map(r => mutablePair.update(null, r))
+        }
+        val partitioner = new HashPartitioner(1)
+        val shuffled = new ShuffledRDD[Null, Row, MutablePair[Null, Row]](rdd, partitioner)
+        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+        shuffled.map(_._2)
 
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
@@ -70,13 +82,14 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 }
 
 /**
- * Ensures that the [[catalyst.plans.physical.Partitioning Partitioning]] of input data meets the
- * [[catalyst.plans.physical.Distribution Distribution]] requirements for each operator by inserting
- * [[Exchange]] Operators where required.
+ * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
+ * of input data meets the
+ * [[org.apache.spark.sql.catalyst.plans.physical.Distribution Distribution]] requirements for
+ * each operator by inserting [[Exchange]] Operators where required.
  */
-object AddExchange extends Rule[SparkPlan] {
+private[sql] case class AddExchange(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
-  val numPartitions = 8
+  def numPartitions = sqlContext.numShufflePartitions
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case operator: SparkPlan =>

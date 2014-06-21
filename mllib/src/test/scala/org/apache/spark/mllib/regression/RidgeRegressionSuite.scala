@@ -72,10 +72,4 @@ class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
     assert(ridgeErr < linearErr,
       "ridgeError (" + ridgeErr + ") was not less than linearError(" + linearErr + ")")
   }
-
-  test("do not support intercept") {
-    intercept[UnsupportedOperationException] {
-      new RidgeRegressionWithSGD().setIntercept(true)
-    }
-  }
 }

@@ -18,12 +18,16 @@
 package org.apache.spark.examples
 
 import java.util.Random
+
 import scala.math.exp
-import org.apache.spark.util.Vector
+
+import breeze.linalg.{Vector, DenseVector}
+
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.InputFormatInfo
 import org.apache.spark.storage.StorageLevel
+
 
 /**
  * Logistic regression based classification.
@@ -33,7 +37,7 @@ object SparkTachyonHdfsLR {
   val D = 10   // Numer of dimensions
   val rand = new Random(42)
 
-  case class DataPoint(x: Vector, y: Double)
+  case class DataPoint(x: Vector[Double], y: Double)
 
   def parsePoint(line: String): DataPoint = {
     val tok = new java.util.StringTokenizer(line, " ")
@@ -43,38 +47,34 @@ object SparkTachyonHdfsLR {
     while (i < D) {
       x(i) = tok.nextToken.toDouble; i += 1
     }
-    DataPoint(new Vector(x), y)
+    DataPoint(new DenseVector(x), y)
   }
 
   def main(args: Array[String]) {
-    if (args.length < 3) {
-      System.err.println("Usage: SparkTachyonHdfsLR <master> <file> <iters>")
-      System.exit(1)
-    }
-    val inputPath = args(1)
+    val inputPath = args(0)
     val conf = SparkHadoopUtil.get.newConfiguration()
-    val sc = new SparkContext(args(0), "SparkTachyonHdfsLR",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass), Map(),
+    val sparkConf = new SparkConf().setAppName("SparkTachyonHdfsLR")
+    val sc = new SparkContext(sparkConf,
       InputFormatInfo.computePreferredLocations(
         Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))
       ))
     val lines = sc.textFile(inputPath)
     val points = lines.map(parsePoint _).persist(StorageLevel.OFF_HEAP)
-    val ITERATIONS = args(2).toInt
+    val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value
-    var w = Vector(D, _ => 2 * rand.nextDouble - 1)
+    var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {
       println("On iteration " + i)
       val gradient = points.map { p =>
-        (1 / (1 + exp(-p.y * (w dot p.x))) - 1) * p.y * p.x
+        p.x * (1 / (1 + exp(-p.y * (w.dot(p.x)))) - 1) * p.y
       }.reduce(_ + _)
       w -= gradient
     }
 
     println("Final w: " + w)
-    System.exit(0)
+    sc.stop()
   }
 }

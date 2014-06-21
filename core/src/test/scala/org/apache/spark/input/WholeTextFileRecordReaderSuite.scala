@@ -31,6 +31,7 @@ import org.scalatest.FunSuite
 import org.apache.hadoop.io.Text
 
 import org.apache.spark.SparkContext
+import org.apache.spark.util.Utils
 
 /**
  * Tests the correctness of
@@ -42,7 +43,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     sc = new SparkContext("local", "test")
-    
+
     // Set the block size of local file system to test whether files are split right or not.
     sc.hadoopConfiguration.setLong("fs.local.block.size", 32)
   }
@@ -67,13 +68,14 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
   test("Correctness of WholeTextFileRecordReader.") {
 
     val dir = Files.createTempDir()
+    dir.deleteOnExit()
     println(s"Local disk address is ${dir.toString}.")
 
     WholeTextFileRecordReaderSuite.files.foreach { case (filename, contents) =>
       createNativeFile(dir, filename, contents)
     }
 
-    val res = sc.wholeTextFiles(dir.toString).collect()
+    val res = sc.wholeTextFiles(dir.toString, 3).collect()
 
     assert(res.size === WholeTextFileRecordReaderSuite.fileNames.size,
       "Number of files read out does not fit with the actual value.")
@@ -86,7 +88,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
         s"file $filename contents can not match.")
     }
 
-    dir.delete()
+    Utils.deleteRecursively(dir)
   }
 }
 

@@ -19,7 +19,7 @@ package org.apache.spark.metrics.source
 
 import com.codahale.metrics.MetricRegistry
 
-trait Source {
+private[spark] trait Source {
   def sourceName: String
   def metricRegistry: MetricRegistry
 }

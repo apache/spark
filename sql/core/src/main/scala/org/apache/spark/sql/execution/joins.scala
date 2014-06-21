@@ -19,16 +19,25 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable.{ArrayBuffer, BitSet}
 
-import org.apache.spark.SparkContext
-
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Partitioning}
 
+@DeveloperApi
 sealed abstract class BuildSide
+
+@DeveloperApi
 case object BuildLeft extends BuildSide
+
+@DeveloperApi
 case object BuildRight extends BuildSide
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class HashJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
@@ -130,6 +139,116 @@ case class HashJoin(
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ * Build the right table's join keys into a HashSet, and iteratively go through the left
+ * table, to find the if join keys are in the Hash set.
+ */
+@DeveloperApi
+case class LeftSemiJoinHash(
+    leftKeys: Seq[Expression],
+    rightKeys: Seq[Expression],
+    left: SparkPlan,
+    right: SparkPlan) extends BinaryNode {
+
+  override def outputPartitioning: Partitioning = left.outputPartitioning
+
+  override def requiredChildDistribution =
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+
+  val (buildPlan, streamedPlan) = (right, left)
+  val (buildKeys, streamedKeys) = (rightKeys, leftKeys)
+
+  def output = left.output
+
+  @transient lazy val buildSideKeyGenerator = new Projection(buildKeys, buildPlan.output)
+  @transient lazy val streamSideKeyGenerator =
+    () => new MutableProjection(streamedKeys, streamedPlan.output)
+
+  def execute() = {
+
+    buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
+      val hashSet = new java.util.HashSet[Row]()
+      var currentRow: Row = null
+
+      // Create a Hash set of buildKeys
+      while (buildIter.hasNext) {
+        currentRow = buildIter.next()
+        val rowKey = buildSideKeyGenerator(currentRow)
+        if(!rowKey.anyNull) {
+          val keyExists = hashSet.contains(rowKey)
+          if (!keyExists) {
+            hashSet.add(rowKey)
+          }
+        }
+      }
+
+      val joinKeys = streamSideKeyGenerator()
+      streamIter.filter(current => {
+        !joinKeys(current).anyNull && hashSet.contains(joinKeys.currentValue)
+      })
+    }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Using BroadcastNestedLoopJoin to calculate left semi join result when there's no join keys
+ * for hash join.
+ */
+@DeveloperApi
+case class LeftSemiJoinBNL(
+    streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression])
+    (@transient sqlContext: SQLContext)
+  extends BinaryNode {
+  // TODO: Override requiredChildDistribution.
+
+  override def outputPartitioning: Partitioning = streamed.outputPartitioning
+
+  override def otherCopyArgs = sqlContext :: Nil
+
+  def output = left.output
+
+  /** The Streamed Relation */
+  def left = streamed
+  /** The Broadcast relation */
+  def right = broadcast
+
+  @transient lazy val boundCondition =
+    InterpretedPredicate(
+      condition
+        .map(c => BindReferences.bindReference(c, left.output ++ right.output))
+        .getOrElse(Literal(true)))
+
+
+  def execute() = {
+    val broadcastedRelation =
+      sqlContext.sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+
+    streamed.execute().mapPartitions { streamedIter =>
+      val joinedRow = new JoinedRow
+
+      streamedIter.filter(streamedRow => {
+        var i = 0
+        var matched = false
+
+        while (i < broadcastedRelation.value.size && !matched) {
+          val broadcastedRow = broadcastedRelation.value(i)
+          if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
+            matched = true
+          }
+          i += 1
+        }
+        matched
+      })
+    }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   def output = left.output ++ right.output
 
@@ -138,15 +257,19 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class BroadcastNestedLoopJoin(
     streamed: SparkPlan, broadcast: SparkPlan, joinType: JoinType, condition: Option[Expression])
-    (@transient sc: SparkContext)
+    (@transient sqlContext: SQLContext)
   extends BinaryNode {
   // TODO: Override requiredChildDistribution.
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   def output = left.output ++ right.output
 
@@ -163,7 +286,8 @@ case class BroadcastNestedLoopJoin(
 
 
   def execute() = {
-    val broadcastedRelation = sc.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+    val broadcastedRelation =
+      sqlContext.sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
 
     val streamedPlusMatches = streamed.execute().mapPartitions { streamedIter =>
       val matchedRows = new ArrayBuffer[Row]
@@ -214,7 +338,7 @@ case class BroadcastNestedLoopJoin(
       }
 
     // TODO: Breaks lineage.
-    sc.union(
-      streamedPlusMatches.flatMap(_._1), sc.makeRDD(rightOuterMatches))
+    sqlContext.sparkContext.union(
+      streamedPlusMatches.flatMap(_._1), sqlContext.sparkContext.makeRDD(rightOuterMatches))
   }
 }

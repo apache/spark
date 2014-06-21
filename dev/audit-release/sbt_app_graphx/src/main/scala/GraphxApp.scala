@@ -17,14 +17,20 @@
 
 package main.scala
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
 
 object GraphXApp {
   def main(args: Array[String]) {
-    val sc = new SparkContext("local", "Simple GraphX App")
+    val conf = sys.env.get("SPARK_AUDIT_MASTER") match {
+      case Some(master) => new SparkConf().setAppName("Simple GraphX App").setMaster(master)
+      case None => new SparkConf().setAppName("Simple Graphx App")
+    }
+    val sc = new SparkContext(conf)
+    SparkContext.jarOfClass(this.getClass).foreach(sc.addJar)
+
     val users: RDD[(VertexId, (String, String))] =
       sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
                            (5L, ("franklin", "prof")), (2L, ("istoica", "prof")),

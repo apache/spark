@@ -33,7 +33,7 @@ u'My app'
 >>> sc.sparkHome == None
 True
 
->>> conf = SparkConf()
+>>> conf = SparkConf(loadDefaults=False)
 >>> conf.setSparkHome("/path")
 <pyspark.conf.SparkConf object at ...>
 >>> conf.get("spark.home")

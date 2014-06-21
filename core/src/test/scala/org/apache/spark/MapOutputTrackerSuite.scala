@@ -57,12 +57,13 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     tracker.stop()
   }
 
-  test("master register and fetch") {
+  test("master register shuffle and fetch") {
     val actorSystem = ActorSystem("test")
     val tracker = new MapOutputTrackerMaster(conf)
     tracker.trackerActor =
       actorSystem.actorOf(Props(new MapOutputTrackerMasterActor(tracker, conf)))
     tracker.registerShuffle(10, 2)
+    assert(tracker.containsShuffle(10))
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val compressedSize10000 = MapOutputTracker.compressSize(10000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
@@ -77,7 +78,25 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     tracker.stop()
   }
 
-  test("master register and unregister and fetch") {
+  test("master register and unregister shuffle") {
+    val actorSystem = ActorSystem("test")
+    val tracker = new MapOutputTrackerMaster(conf)
+    tracker.trackerActor = actorSystem.actorOf(Props(new MapOutputTrackerMasterActor(tracker, conf)))
+    tracker.registerShuffle(10, 2)
+    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
+    val compressedSize10000 = MapOutputTracker.compressSize(10000L)
+    tracker.registerMapOutput(10, 0, new MapStatus(BlockManagerId("a", "hostA", 1000, 0),
+      Array(compressedSize1000, compressedSize10000)))
+    tracker.registerMapOutput(10, 1, new MapStatus(BlockManagerId("b", "hostB", 1000, 0),
+      Array(compressedSize10000, compressedSize1000)))
+    assert(tracker.containsShuffle(10))
+    assert(tracker.getServerStatuses(10, 0).nonEmpty)
+    tracker.unregisterShuffle(10)
+    assert(!tracker.containsShuffle(10))
+    assert(tracker.getServerStatuses(10, 0).isEmpty)
+  }
+
+  test("master register shuffle and unregister map output and fetch") {
     val actorSystem = ActorSystem("test")
     val tracker = new MapOutputTrackerMaster(conf)
     tracker.trackerActor =
@@ -105,16 +124,13 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0, conf = conf,
       securityManager = new SecurityManager(conf))
 
-    // Will be cleared by LocalSparkContext
-    System.setProperty("spark.driver.port", boundPort.toString)
-
     val masterTracker = new MapOutputTrackerMaster(conf)
     masterTracker.trackerActor = actorSystem.actorOf(
       Props(new MapOutputTrackerMasterActor(masterTracker, conf)), "MapOutputTracker")
 
     val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0, conf = conf,
       securityManager = new SecurityManager(conf))
-    val slaveTracker = new MapOutputTracker(conf)
+    val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
       s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker")
     val timeout = AkkaUtils.lookupTimeout(conf)
