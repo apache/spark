@@ -741,7 +741,7 @@ public class JavaAPISuite implements Serializable {
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
     TaskContext context = new TaskContext(0, 0, 0, false, new TaskMetrics());
-    Assert.assertEquals(1, rdd.iterator(rdd.splits().get(0), context).next().intValue());
+    Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 
   @Test
