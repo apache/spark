@@ -36,8 +36,10 @@ object MimaExcludes {
         case v if v.startsWith("1.1") =>
           Seq(MimaBuild.excludeSparkPackage("graphx")) ++
           Seq(
-            // Adding new method to JavaRDLike trait - we should probably mark this as a developer API.
-            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitions"),
+            // Adding new method to JavaRDLike trait
+            // We should probably mark this as a developer API.
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.partitions"),
             // We made a mistake earlier (ed06500d3) in the Java API to use default parameter values
             // for countApproxDistinct* functions, which does not work in Java. We later removed
             // them, and use the following to tell Mima to not care about them.
@@ -55,8 +57,6 @@ object MimaExcludes {
               "org.apache.spark.api.java.JavaRDDLike.countApproxDistinct$default$1"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.api.java.JavaDoubleRDD.countApproxDistinct$default$1"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.api.java.JavaRDDLike.partitions"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.storage.MemoryStore.Entry"),
             ProblemFilters.exclude[MissingMethodProblem](
