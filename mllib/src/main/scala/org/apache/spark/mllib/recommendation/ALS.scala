@@ -569,14 +569,14 @@ class ALS private (
           qpSolver
         }
         case 4 => {
-          //Qp with linear equality
-          //Qp with smoothness constraint and bounds
-          //"lower and upper bounds 0 <= x <= 1")
-          //"smoothness x1 + x2 + ... + xr = 1")
+          //Qp with linear equality and bounds
+          //smoothness constraint is given by x1 + x2 + ... + xr = 1
+          //Bound constraint is 0 <= x <= 1
           val equalityBuilder = new CSCMatrix.Builder[Double](1, rank)
           for (i <- 0 until rank) equalityBuilder.add(0, i, 1)
           val qpSolver = new QpSolver(rank, 0, false, Some(equalityBuilder.result), None, true, true)
           qpSolver.updateUb(Array.fill[Double](rank)(1.0))
+          qpSolver.updateEquality(Array[Double](1.0))
           qpSolver
         }
         case 5 => {
@@ -608,7 +608,7 @@ class ALS private (
           new DirectQpSolver(rank, Some(lb), Some(ub)).setProximal(1)
         }
         case 4 => {
-          //Direct QP with equality/inequality not tested yet
+          //Direct QP with equality constraint
           val c = Array.fill[Double](rank)(1.0)
           new DirectQpSolver(rank, None, None, Some(c)).setProximal(4)
         }
