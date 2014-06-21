@@ -478,23 +478,15 @@ class ALS private (
         }
     }
 
-  private def diagnose(qpFail: Int, H: DoubleMatrix, f: DoubleMatrix,
+  private def diagnose(H: DoubleMatrix, f: DoubleMatrix,
     qpResult: DenseVector[Double], directQpResult: DenseVector[Double], lsResult: DenseVector[Double]) {
-    qpFail match {
-      case 1 => {
-        println("ECOS QP Failure")
-        println("qpResult " + qpResult)
-      }
-      case 2 => {
-        println("ADMM QP Failure")
-        println("directQpResult " + directQpResult)
-      }
-    }
     println("H")
     println(H)
     println("f")
     println(f)
     println("lsResult " + lsResult)
+    println("qpResult " + qpResult)
+    println("directQpResult " + directQpResult)
   }
   
   /**
@@ -655,13 +647,18 @@ class ALS private (
 
           var qpFail = 0
           if(qpProblem == 1 || qpProblem == 2) {
-        	  if (norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2) qpFail = 1
-              if (norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) qpFail = 2
+        	  if (norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2) {
+        	    println("ECOS QP failed")
+        	    qpFail = 1
+        	  }
+              if (norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) {
+                println("ADMM QP failed")
+                qpFail = 2
+              }
           }
-          if (qpFail > 0) diagnose(qpFail, H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
-          else {
-            if(index % 100 == 0) diagnose(qpFail, H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
-          }
+          if (qpFail > 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
+          else if(index % 100 == 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
+          
           directQpResult.data
         } else {
           val H = fullXtX
@@ -687,15 +684,19 @@ class ALS private (
           lsTime = lsTime + (System.currentTimeMillis() - lsStart)
           
           var qpFail = 0
-          
           if (qpProblem == 1 || qpProblem == 2) {
-        	  if (norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2) qpFail = 1
-        	  if (norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) qpFail = 2
+        	  if (norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2) {
+        	    println("ECOS QP failed")
+        	    qpFail = 1
+        	  }
+        	  if (norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) {
+        	    println("ADMM QP failed")
+        	    qpFail = 2
+        	  }
           }
-          if (qpFail > 0) diagnose(qpFail, H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
-          else {
-            if(index % 100 == 0) diagnose(qpFail, H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
-          }
+          if (qpFail > 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
+          else if(index == 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
+          
           directQpResult.data
         }
         result
