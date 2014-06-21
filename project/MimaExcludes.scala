@@ -68,7 +68,7 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.storage.DiskStore.putValues"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
-              "org.apache.spark.storage.TachyonSTore.putValues"),
+              "org.apache.spark.storage.TachyonStore.putValues"),
             // Ignore some private methods in ALS.
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.recommendation.ALS." +
