@@ -18,6 +18,7 @@
 #
 
 set -o pipefail
+set -e
 
 # Go to the Spark project root directory
 FWDIR="$(cd `dirname $0`/..; pwd)"

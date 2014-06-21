@@ -321,7 +321,7 @@ class RDD(object):
       >>> rdd.getNumPartitions()
       2
       """
-      return self._jrdd.splits().size()
+      return self._jrdd.partitions().size()
 
     def filter(self, f):
         """
@@ -922,7 +922,7 @@ class RDD(object):
         [91, 92, 93]
         """
         items = []
-        totalParts = self._jrdd.splits().size()
+        totalParts = self._jrdd.partitions().size()
         partsScanned = 0
 
         while len(items) < num and partsScanned < totalParts:

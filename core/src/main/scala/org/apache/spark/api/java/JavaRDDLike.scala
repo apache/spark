@@ -43,8 +43,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def rdd: RDD[T]
 
-  /** Set of partitions in this RDD. */
+  @deprecated("Use partitions() instead.", "1.1.0")
   def splits: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
+  
+  /** Set of partitions in this RDD. */
+  def partitions: JList[Partition] = new java.util.ArrayList(rdd.partitions.toSeq)
 
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context: SparkContext = rdd.context
