@@ -105,7 +105,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case InsertIntoCreatedTable(db, tableName, child) =>
-        val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase)
+        val databaseName = db.getOrElse(hive.sessionState.getCurrentDatabase)
 
         createTable(databaseName, tableName, child.output)
 
