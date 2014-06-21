@@ -39,19 +39,22 @@ private[spark] trait ShuffleManager {
 
   /**
    * initialize the mapOutputTracker
-   *
-   * Basic implementation here, the users can implement customized MapOutputTracker and override
-   * this method for customized approach to keep track the map output
    */
   def initMapOutputTracker(conf: SparkConf, isDriver: Boolean, actorSystem: ActorSystem) {
     this.isDriver = isDriver
     if (isDriver) {
-      mapOutputTracker = new MapOutputTrackerMaster(conf)
+      val masterCls = Class.forName(conf.get("spark.shuffle.mapOutputTrackerMasterClass",
+        "org.apache.spark.shuffle.MapOutputTrackerMaster"))
+      mapOutputTracker = masterCls.getConstructor(classOf[SparkConf]).newInstance(conf).
+        asInstanceOf[MapOutputTrackerMaster]
       mapOutputTracker.trackerActor = actorSystem.actorOf(
         Props(new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
           conf)), "MapOutputTracker")
     } else {
-      mapOutputTracker = new MapOutputTrackerWorker(conf)
+      val workerCls = Class.forName(conf.get("spark.shuffle.mapOutputTrackerWorkerClass",
+        "org.apache.spark.shuffle.MapOutputTrackerWorker"))
+      mapOutputTracker = workerCls.getConstructor(classOf[SparkConf]).newInstance(conf).
+        asInstanceOf[MapOutputTrackerWorker]
       val driverHost: String = conf.get("spark.driver.host", "localhost")
       val driverPort: Int = conf.getInt("spark.driver.port", 7077)
       Utils.checkHost(driverHost, "Expected hostname")
