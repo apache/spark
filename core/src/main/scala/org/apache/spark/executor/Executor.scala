@@ -97,10 +97,6 @@ private[spark] class Executor(
   private val urlClassLoader = createClassLoader()
   private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
 
-  // Akka's message frame size. If task result is bigger than this, we use the block manager
-  // to send the result back.
-  private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
-
   // Start worker thread pool
   val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
 
@@ -212,7 +208,12 @@ private[spark] class Executor(
         val serializedDirectResult = ser.serialize(directResult)
         logInfo("Serialized size of result for " + taskId + " is " + serializedDirectResult.limit)
         val serializedResult = {
-          if (serializedDirectResult.limit >= akkaFrameSize - 1024) {
+          // TODO: [SPARK-1112] We use the min frame size to determine whether to use Akka to send
+          // the task result or block manager. Since this is via the backend, whose actor system is
+          // initialized before receiving the Spark conf, and hence it does not know
+          // `spark.akka.frameSize`. A temporary solution is using the min frame size.
+          // [SPARK-2156] We subtract 200K to leave some space for other data in the Akka message.
+          if (serializedDirectResult.limit >= AkkaUtils.minFrameSizeBytes - 200 * 1024) {
             logInfo("Storing result for " + taskId + " in local BlockManager")
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
