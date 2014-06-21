@@ -385,10 +385,17 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.kryoserializer.buffer.mb</code></td>
   <td>2</td>
   <td>
-    Maximum object size to allow within Kryo (the library needs to create a buffer at least as
-    large as the largest single object you'll serialize). Increase this if you get a "buffer limit
-    exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each
-    worker.
+    Object size to allow within Kryo using default (pre-allocated) buffers (the library needs to create
+    a buffer at least as large as the largest single object you'll serialize). Note that there will be 
+    one buffer <i>per core</i> on each worker.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kryoserializer.buffer.max.mb</code></td>
+  <td>64</td>
+  <td>
+    Maximum object size to allow within Kryo by resizing buffers as needed (which has some overhead).
+    Increase this if you get a "buffer limit exceeded" exception inside Kryo.
   </td>
 </tr>
 </table>
