@@ -99,15 +99,16 @@ class ALS private (
   private var rank: Int,
   private var iterations: Int,
   private var lambda: Double,
+  private var lambdaL1: Double,
   private var implicitPrefs: Boolean,
   private var alpha: Double,
   private var seed: Long = System.currentTimeMillis()) extends Serializable with Logging {
 
   /**
    * Constructs an ALS instance with default parameters: {numBlocks: -1, rank: 10, iterations: 10,
-   * lambda: 0.01, implicitPrefs: false, alpha: 1.0}.
+   * lambda: 0.01, lambdaL1: 0.0, implicitPrefs: false, alpha: 1.0}.
    */
-  def this() = this(-1, 10, 10, 0.01, false, 1.0)
+  def this() = this(-1, 10, 10, 0.01, 0.0, false, 1.0)
 
   /**
    * Set the number of blocks to parallelize the computation into; pass -1 for an auto-configured
@@ -136,6 +137,12 @@ class ALS private (
     this
   }
 
+  /* Set the L1 regularization parameter, lambda. Default : 0.0 */
+  def setLambdaL1(lambdaL1: Double): ALS = {
+    this.lambdaL1 = lambdaL1
+    this
+  }
+  
   /** Sets whether to use implicit preference. Default: false. */
   def setImplicitPrefs(implicitPrefs: Boolean): ALS = {
     this.implicitPrefs = implicitPrefs
@@ -243,27 +250,23 @@ class ALS private (
         users.setName(s"users-$iter").persist()
         val YtY = Some(sc.broadcast(computeYtY(users)))
         val previousProducts = products
-        products = updateFeatures(users, userOutLinks, productInLinks, partitioner, rank, lambda,
-          alpha, YtY)
+        products = updateFeatures(users, userOutLinks, productInLinks, partitioner, rank, lambda, lambdaL1, alpha, YtY)
         previousProducts.unpersist()
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         products.setName(s"products-$iter").persist()
         val XtX = Some(sc.broadcast(computeYtY(products)))
         val previousUsers = users
-        users = updateFeatures(products, productOutLinks, userInLinks, partitioner, rank, lambda,
-          alpha, XtX)
+        users = updateFeatures(products, productOutLinks, userInLinks, partitioner, rank, lambda, lambdaL1, alpha, XtX)
         previousUsers.unpersist()
       }
     } else {
       for (iter <- 1 to iterations) {
         // perform ALS update
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
-        products = updateFeatures(users, userOutLinks, productInLinks, partitioner, rank, lambda,
-          alpha, YtY = None)
+        products = updateFeatures(users, userOutLinks, productInLinks, partitioner, rank, lambda, lambdaL1, alpha, YtY = None)
         products.setName(s"products-$iter")
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
-        users = updateFeatures(products, productOutLinks, userInLinks, partitioner, rank, lambda,
-          alpha, YtY = None)
+        users = updateFeatures(products, productOutLinks, userInLinks, partitioner, rank, lambda, lambdaL1, alpha, YtY = None)
         users.setName(s"users-$iter")
       }
     }
@@ -457,6 +460,7 @@ class ALS private (
     partitioner: Partitioner,
     rank: Int,
     lambda: Double,
+    lambdaL1: Double,
     alpha: Double,
     YtY: Option[Broadcast[DoubleMatrix]]): RDD[(Int, Array[Array[Double]])] =
     {
@@ -474,7 +478,7 @@ class ALS private (
         .join(userInLinks)
         .mapValues {
           case (messages, inLinkBlock) =>
-            updateBlock(messages, inLinkBlock, rank, lambda, alpha, YtY)
+            updateBlock(messages, inLinkBlock, rank, lambda, lambdaL1, alpha, YtY)
         }
     }
 
@@ -494,7 +498,7 @@ class ALS private (
    * it received from each product and its InLinkBlock.
    */
   private def updateBlock(messages: Iterable[(Int, Array[Array[Double]])], inLinkBlock: InLinkBlock,
-    rank: Int, lambda: Double, alpha: Double, YtY: Option[Broadcast[DoubleMatrix]]): Array[Array[Double]] =
+    rank: Int, lambda: Double, lambdaL1: Double, alpha: Double, YtY: Option[Broadcast[DoubleMatrix]]): Array[Array[Double]] =
     {
       // Sort the incoming block factor messages by block ID and make them an array
       val blockFactors = messages.toSeq.sortBy(_._1).map(_._2).toArray // Array[Array[Double]]
@@ -612,7 +616,7 @@ class ALS private (
           //Direct QP with L1
           val proximal = 5
           val qpSolverL1 = new DirectQpSolver(rank).setProximal(5)
-          qpSolverL1.setLambda(1.0)
+          qpSolverL1.setLambda(lambdaL1)
           qpSolverL1
         }
       }
@@ -657,7 +661,7 @@ class ALS private (
               }
           }
           if (qpFail > 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
-          else if(index % 100 == 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
+          else if(index == 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
           
           directQpResult.data
         } else {
@@ -753,7 +757,8 @@ object ALS {
    * @param ratings    RDD of (userID, productID, rating) pairs
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
+   * @param lambda     L2 smoothness regularization factor (recommended: 0.01)
+   * @param lambdaL1   L1 sparsity regularization factor (recommended: ???)
    * @param blocks     level of parallelism to split computation into
    * @param seed       random seed
    */
@@ -762,9 +767,10 @@ object ALS {
     rank: Int,
     iterations: Int,
     lambda: Double,
+    lambdaL1: Double,
     blocks: Int,
     seed: Long): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, false, 1.0, seed).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, lambdaL1, false, 1.0, seed).run(ratings)
   }
 
   /**
@@ -777,7 +783,8 @@ object ALS {
    * @param ratings    RDD of (userID, productID, rating) pairs
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
+   * @param lambda     L2 smoothness regularization factor (recommended: 0.01)
+   * @param lambdaL1   L1 sparsity regularization factor (recommended: ???)
    * @param blocks     level of parallelism to split computation into
    */
   def train(
@@ -785,8 +792,9 @@ object ALS {
     rank: Int,
     iterations: Int,
     lambda: Double,
+    lambdaL1: Double,
     blocks: Int): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, false, 1.0).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, lambdaL1, false, 1.0).run(ratings)
   }
 
   /**
@@ -801,8 +809,8 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
-  def train(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double): MatrixFactorizationModel = {
-    train(ratings, rank, iterations, lambda, -1)
+  def train(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, lambdaL1: Double): MatrixFactorizationModel = {
+    train(ratings, rank, iterations, lambda, lambdaL1, -1)
   }
 
   /**
@@ -840,10 +848,11 @@ object ALS {
     rank: Int,
     iterations: Int,
     lambda: Double,
+    lambdaL1: Double,
     blocks: Int,
     alpha: Double,
     seed: Long): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, true, alpha, seed).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, lambdaL1, true, alpha, seed).run(ratings)
   }
 
   /**
@@ -865,9 +874,10 @@ object ALS {
     rank: Int,
     iterations: Int,
     lambda: Double,
+    lambdaL1: Double,
     blocks: Int,
     alpha: Double): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, true, alpha).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, lambdaL1, true, alpha).run(ratings)
   }
 
   /**
@@ -882,8 +892,8 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
-  def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, alpha: Double): MatrixFactorizationModel = {
-    trainImplicit(ratings, rank, iterations, lambda, -1, alpha)
+  def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, lambdaL1: Double, alpha: Double): MatrixFactorizationModel = {
+    trainImplicit(ratings, rank, iterations, lambda, lambdaL1, -1, alpha)
   }
 
   /**

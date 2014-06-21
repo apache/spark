@@ -49,6 +49,7 @@ object MovieLensALS {
       kryo: Boolean = false,
       numIterations: Int = 20,
       lambda: Double = 1.0,
+      lambdaL1: Double = 0.0,
       rank: Int = 10,
       implicitPrefs: Boolean = false,
       qpProblem: Int = 1)
@@ -67,6 +68,9 @@ object MovieLensALS {
       opt[Double]("lambda")
         .text(s"lambda (smoothing constant), default: ${defaultParams.lambda}")
         .action((x, c) => c.copy(lambda = x))
+      opt[Double]("lambdaL1")
+        .text(s"lambdaL1 (sparsity constant), default: ${defaultParams.lambdaL1}")
+        .action((x, c) => c.copy(lambdaL1 = x))
       opt[Unit]("kryo")
         .text(s"use Kryo serialization")
         .action((_, c) => c.copy(kryo = true))
@@ -86,7 +90,7 @@ object MovieLensALS {
           |
           | bin/spark-submit --class org.apache.spark.examples.mllib.MovieLensALS \
           |  examples/target/scala-*/spark-examples-*.jar \
-          |  --rank 5 --numIterations 20 --lambda 1.0 --kryo --qpProblem 2\
+          |  --rank 5 --numIterations 20 --lambda 1.0 --lambdaL1 1.0 --kryo --qpProblem 2\
           |  data/mllib/sample_movielens_data.txt
         """.stripMargin)
     }
@@ -163,6 +167,7 @@ object MovieLensALS {
       .setRank(params.rank)
       .setIterations(params.numIterations)
       .setLambda(params.lambda)
+      .setLambdaL1(params.lambdaL1)
       .setImplicitPrefs(params.implicitPrefs)
     
     //Let's test the explicit options first
@@ -173,7 +178,7 @@ object MovieLensALS {
       case 2 => println("Qp with positivity")
       case 3 => println("Qp with bounds")
       case 4 => println("Qp with equality")
-      case 5 => println("Qp with L1")
+      case 5 => println("Qp with L1 regularization " + params.lambdaL1)
     }
     als.setQpProblem(params.qpProblem)
     
