@@ -22,9 +22,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.util.SizeEstimator
 
 /**
- * A general interface for collections that keeps track of its estimated size in bytes.
+ * A general interface for collections to keep track of their estimated sizes in bytes.
  * We sample with a slow exponential back-off using the SizeEstimator to amortize the time,
- * as each call to SizeEstimator can take a sizable amount of time (order of a few milliseconds).
+ * as each call to SizeEstimator is somewhat expensive (order of a few milliseconds).
  */
 private[spark] trait SizeTracker {
 
@@ -36,7 +36,7 @@ private[spark] trait SizeTracker {
    */
   private val SAMPLE_GROWTH_RATE = 1.1
 
-  /** All samples taken since last resetSamples(). Only the last two are used for extrapolation. */
+  /** Samples taken since last resetSamples(). Only the last two are kept for extrapolation. */
   private val samples = new ArrayBuffer[Sample]
 
   /** The average number of bytes per update between our last two samples. */
@@ -50,7 +50,10 @@ private[spark] trait SizeTracker {
 
   resetSamples()
 
-  /** Called after the collection undergoes a dramatic change in size. */
+  /**
+   * Reset samples collected so far.
+   * This should be called after the collection undergoes a dramatic change in size.
+   */
   protected def resetSamples(): Unit = {
     numUpdates = 1
     nextSampleNum = 1
@@ -58,7 +61,9 @@ private[spark] trait SizeTracker {
     takeSample()
   }
 
-  /** Callback to be invoked after an update. */
+  /**
+   * Callback to be invoked after every update.
+   */
   protected def afterUpdate(): Unit = {
     numUpdates += 1
     if (nextSampleNum == numUpdates) {
@@ -66,7 +71,9 @@ private[spark] trait SizeTracker {
     }
   }
 
-  /** Takes a new sample of the current collection's size. */
+  /**
+   * Take a new sample of the current collection's size.
+   */
   private def takeSample(): Unit = {
     samples += Sample(SizeEstimator.estimate(this), numUpdates)
     // Only use the last two samples to extrapolate
@@ -83,7 +90,9 @@ private[spark] trait SizeTracker {
     nextSampleNum = math.ceil(numUpdates * SAMPLE_GROWTH_RATE).toLong
   }
 
-  /** Estimates the current size of the collection in bytes. O(1) time. */
+  /**
+   * Estimate the current size of the collection in bytes. O(1) time.
+   */
   def estimateSize(): Long = {
     assert(samples.nonEmpty)
     val extrapolatedDelta = bytesPerUpdate * (numUpdates - samples.last.numUpdates)
