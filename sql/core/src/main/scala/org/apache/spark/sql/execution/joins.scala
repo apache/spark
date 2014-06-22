@@ -245,110 +245,7 @@ case class LeftSemiJoinBNL(
   }
 }
 
-/**
- * :: DeveloperApi ::
- *In some case ,data skew happens.SkewJoin  sample the table rdd to find the largest key,then make the largest key
- *rows as a table rdd.The streamed rdd will be made  as mainstreamedtable rdd without the largest key and the maxkeystreamedtable rdd
- *with the largest key.
- *Then,join the two table  with the buildtable.
- *Finally,union the two result rdd.
- */
-@DeveloperApi
-case class SkewJoin(
-                     leftKeys: Seq[Expression],
-                     rightKeys: Seq[Expression],
-                     buildSide: BuildSide,
-                     left: SparkPlan,
-                     right: SparkPlan,
-                     @transient sc: SparkContext) extends BinaryNode {
-  override def outputPartitioning: Partitioning = left.outputPartitioning
 
-  override def requiredChildDistribution =
-    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
-
-  val (buildPlan, streamedPlan) = buildSide match {
-    case BuildLeft => (left, right)
-    case BuildRight => (right, left)
-  }
-  val (buildKeys, streamedKeys) = buildSide match {
-    case BuildLeft => (leftKeys, rightKeys)
-    case BuildRight => (rightKeys, leftKeys)
-  }
-
-  def output = left.output ++ right.output
-
-  @transient lazy val buildSideKeyGenerator = new Projection(buildKeys, buildPlan.output)
-  @transient lazy val streamSideKeyGenerator = new Projection(streamedKeys, streamedPlan.output)
-
-
-  def execute() = {
-    val streamedTable = streamedPlan.execute()
-    //This will later write as configuration
-    val sample = streamedTable.sample(false, 0.3, 9).map(row => streamSideKeyGenerator(row)).collect()
-    val sortedSample = sample.sortWith((row1, row2) => row1.hashCode() > row2.hashCode())
-    var max = 0
-    var num = sample.size - 1
-    var temp = 0
-    var maxrowKey = sortedSample(0)
-    //find the largest key
-    if (sortedSample.size > 1) {
-      for (i <- 1 to num) {
-        if (sortedSample(i - 1) == sortedSample(i)) temp += 1
-        else {
-          if (temp > max) {
-            max = temp
-            maxrowKey = sortedSample(i - 1)
-          }
-          temp = 0
-        }
-      }
-    }
-    val maxKeyStreamedTable = streamedTable.filter(row => {
-      streamSideKeyGenerator(row).toString().equals(maxrowKey.toString())
-    })
-    val mainStreamedTable = streamedTable.filter(row => {
-      !streamSideKeyGenerator(row).toString().equals(maxrowKey.toString())
-    })
-    val buildRdd = buildPlan.execute()
-    val maxKeyJoinedRdd = maxKeyStreamedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())).map {
-      case (l: Row, r: Row) => buildRow(l ++ r)
-    }
-    val mainJoinedRdd = mainStreamedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())).map {
-      case (l: Row, r: Row) => buildRow(l ++ r)
-    }
-    sc.union(maxKeyJoinedRdd, mainJoinedRdd)
-  }
-}
-
-
-object SkewJoin extends Strategy with PredicateHelper {
-  def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    // Find inner joins where at least some predicates can be evaluated by matching hash keys
-    // using the HashFilteredJoin pattern.
-    case SkewFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
-      val hashJoin =
-        execution.SkewJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right), sparkContext)
-      condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
-    case _ => Nil
-  }
-}
-
-object SkewFilteredJoin extends Logging with PredicateHelper {
-  /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
-  type ReturnType =
-  (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    // All predicates can be evaluated for inner join (i.e., those that are in the ON
-    // clause and WHERE clause.)
-    case FilteredOperation(predicates, join@Join(left, right, Inner, condition)) =>
-      logger.debug(s"Considering Skew inner join on: ${predicates ++ condition}")
-      splitPredicates(predicates ++ condition, join)
-    case join@Join(left, right, joinType, condition) =>
-      logger.debug(s"Considering Skew join on: $condition")
-      splitPredicates(condition.toSeq, join)
-    case _ => None
-  }
 /**
  * :: DeveloperApi ::
  */
@@ -445,3 +342,112 @@ case class BroadcastNestedLoopJoin(
       streamedPlusMatches.flatMap(_._1), sc.makeRDD(rightOuterMatches))
   }
 }
+
+
+
+
+
+/**
+ * :: DeveloperApi ::
+ * In some case ,data skew happens.SkewJoin  sample the table rdd to find the largest key,then make the largest key
+ * rows as a table rdd.The streamed rdd will be made  as mainstreamedtable rdd without the largest key and the maxkeystreamedtable rdd
+ * with the largest key.
+ * Then,join the two table  with the buildtable.
+ * Finally,union the two result rdd.
+ */
+@DeveloperApi
+case class SkewJoin(
+                           leftKeys: Seq[Expression],
+                           rightKeys: Seq[Expression],
+                           buildSide: BuildSide,
+                           left: SparkPlan,
+                           right: SparkPlan,
+                           @transient sc: SparkContext) extends BinaryNode {
+    override def outputPartitioning: Partitioning = left.outputPartitioning
+
+    override def requiredChildDistribution =
+        ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+
+    val (buildPlan, streamedPlan) = buildSide match {
+        case BuildLeft => (left, right)
+        case BuildRight => (right, left)
+    }
+    val (buildKeys, streamedKeys) = buildSide match {
+        case BuildLeft => (leftKeys, rightKeys)
+        case BuildRight => (rightKeys, leftKeys)
+    }
+
+    def output = left.output ++ right.output
+
+    @transient lazy val buildSideKeyGenerator = new Projection(buildKeys, buildPlan.output)
+    @transient lazy val streamSideKeyGenerator = new Projection(streamedKeys, streamedPlan.output)
+
+
+    def execute() = {
+        val streamedTable = streamedPlan.execute()
+        //This will later write as configuration
+        val sample = streamedTable.sample(false, 0.3, 9).map(row => streamSideKeyGenerator(row)).collect()
+        val sortedSample = sample.sortWith((row1, row2) => row1.hashCode() > row2.hashCode())
+        var max = 0
+        var num = sample.size - 1
+        var temp = 0
+        var maxrowKey = sortedSample(0)
+        //find the largest key
+        if (sortedSample.size > 1) {
+            for (i <- 1 to num) {
+                if (sortedSample(i - 1) == sortedSample(i)) temp += 1
+                else {
+                    if (temp > max) {
+                        max = temp
+                        maxrowKey = sortedSample(i - 1)
+                    }
+                    temp = 0
+                }
+            }
+        }
+        val maxKeyStreamedTable = streamedTable.filter(row => {
+            streamSideKeyGenerator(row).toString().equals(maxrowKey.toString())
+        })
+        val mainStreamedTable = streamedTable.filter(row => {
+            !streamSideKeyGenerator(row).toString().equals(maxrowKey.toString())
+        })
+        val buildRdd = buildPlan.execute()
+        val maxKeyJoinedRdd = maxKeyStreamedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())).map {
+            case (l: Row, r: Row) => buildRow(l ++ r)
+        }
+        val mainJoinedRdd = mainStreamedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())).map {
+            case (l: Row, r: Row) => buildRow(l ++ r)
+        }
+        sc.union(maxKeyJoinedRdd, mainJoinedRdd)
+    }
+}
+
+
+object SkewJoin extends Strategy with PredicateHelper {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+        // Find inner joins where at least some predicates can be evaluated by matching hash keys
+        // using the HashFilteredJoin pattern.
+        case SkewFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
+            val hashJoin =
+                execution.SkewJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right), sparkContext)
+            condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+        case _ => Nil
+    }
+}
+
+object SkewFilteredJoin extends Logging with PredicateHelper {
+    /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
+    type ReturnType =
+    (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
+
+    def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+        // All predicates can be evaluated for inner join (i.e., those that are in the ON
+        // clause and WHERE clause.)
+        case FilteredOperation(predicates, join@Join(left, right, Inner, condition)) =>
+            logger.debug(s"Considering Skew inner join on: ${predicates ++ condition}")
+            splitPredicates(predicates ++ condition, join)
+        case join@Join(left, right, joinType, condition) =>
+            logger.debug(s"Considering Skew join on: $condition")
+            splitPredicates(condition.toSeq, join)
+        case _ => None
+    }
