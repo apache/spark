@@ -111,6 +111,11 @@ class VertexRDD[@specialized VD: ClassTag](
     partitionsRDD.map(_.size).reduce(_ + _)
   }
 
+  /** Materialize vertices by calling RDD's count method */
+  def materialize(): Long = {
+    super.count()
+  }
+
   /**
    * Provides the `RDD[(VertexId, VD)]` equivalent output.
    */
