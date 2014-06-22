@@ -267,4 +267,4 @@ object SkewJoin extends Strategy with PredicateHelper {
           execution.SkewJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right), sparkContext)
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
       case _ => Nil
-    }
+}
