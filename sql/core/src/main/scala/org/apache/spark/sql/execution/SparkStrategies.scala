@@ -259,12 +259,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 }
 object SkewJoin extends Strategy with PredicateHelper {
- +    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
- +        // Find inner joins where at least some predicates can be evaluated by matching hash keys
- +        // using the HashFilteredJoin pattern.
- +        case SkewFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
- +            val hashJoin =
- +                execution.SkewJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right), sparkContext)
- +            condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
- +        case _ => Nil
- +    }
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+        // Find inner joins where at least some predicates can be evaluated by matching hash keys
+        // using the HashFilteredJoin pattern.
+      case SkewFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
+        val hashJoin =
+          execution.SkewJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right), sparkContext)
+        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+      case _ => Nil
+    }
