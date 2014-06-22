@@ -25,10 +25,10 @@ import scala.reflect._
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
+import com.google.common.io.Files
+
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.logging.{RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy, FileAppender}
-
-import com.google.common.io.Files
 
 class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
 
