@@ -85,6 +85,16 @@ while (( "$#" )); do
 done
 
 if [ -z "$JAVA_HOME" ]; then
+  if which rpm &>/dev/null; then
+    RPM_JAVA_HOME=$(rpm -E %java_home 2>/dev/null)
+    if [ "$RPM_JAVA_HOME" != "%java_home" ]; then
+      JAVA_HOME=$RPM_JAVA_HOME
+      echo "No JAVA_HOME set, guessed and proceeding with $JAVA_HOME"
+    fi
+  fi
+fi
+
+if [ -z "$JAVA_HOME" ]; then
   echo "Error: JAVA_HOME is not set, cannot proceed."
   exit -1
 fi
