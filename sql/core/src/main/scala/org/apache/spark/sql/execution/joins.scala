@@ -349,10 +349,9 @@ case class BroadcastNestedLoopJoin(
 
 /**
  * :: DeveloperApi ::
- * In some case ,data skew happens.SkewJoin  sample the table rdd to find the largest key,then make the largest key
- * rows as a table rdd.The streamed rdd will be made  as mainstreamedtable rdd without the largest key and the maxkeystreamedtable rdd
- * with the largest key.
- * Then,join the two table  with the buildtable.
+ * In some case ,data skew happens.SkewJoin  sample the table rdd to find the largest key,
+ * then make the largest key rows as a table rdd.The streamed rdd will be made  as mainstreamedtable
+ * rdd without the largest key and the maxkeystreamedtable rdd with the largest key.Then,join the two table  with the buildtable.
  * Finally,union the two result rdd.
  */
 @DeveloperApi
