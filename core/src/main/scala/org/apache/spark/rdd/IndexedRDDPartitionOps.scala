@@ -18,12 +18,12 @@
 package org.apache.spark.rdd
 
 import scala.collection.immutable.LongMap
-import scala.collection.immutable.Vector
 import scala.language.higherKinds
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
 import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableVector
 import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 
 import IndexedRDD.Id
@@ -39,7 +39,7 @@ private[spark] trait IndexedRDDPartitionOps[
   implicit def vTag: ClassTag[V]
 
   def withIndex(index: Index): Self[V]
-  def withValues[V2: ClassTag](values: Vector[V2]): Self[V2]
+  def withValues[V2: ClassTag](values: ImmutableVector[V2]): Self[V2]
   def withMask(mask: BitSet): Self[V]
 
   /**
@@ -71,7 +71,7 @@ private[spark] trait IndexedRDDPartitionOps[
       for ((k, v) <- self.iterator ++ kvs) {
         hashMap.setMerge(k, v, (a, b) => merge(k, a, b))
       }
-      this.withIndex(hashMap.keySet).withValues(hashMap._values.toVector)
+      this.withIndex(hashMap.keySet).withValues(ImmutableVector.fromArray(hashMap._values))
         .withMask(hashMap.keySet.getBitSet)
     }
   }
@@ -84,7 +84,7 @@ private[spark] trait IndexedRDDPartitionOps[
       newValues(i) = f(self.index.getValue(i), self.values(i))
       i = self.mask.nextSetBit(i + 1)
     }
-    this.withValues(newValues.toVector)
+    this.withValues(ImmutableVector.fromArray(newValues))
   }
 
   /**
@@ -175,7 +175,7 @@ private[spark] trait IndexedRDDPartitionOps[
         newValues(i) = f(vid, self.values(i), otherV)
         i = self.mask.nextSetBit(i + 1)
       }
-      this.withValues(newValues.toVector)
+      this.withValues(ImmutableVector.fromArray(newValues))
     } else {
       val newValues = new Array[V3](self.capacity)
 
@@ -185,7 +185,7 @@ private[spark] trait IndexedRDDPartitionOps[
         newValues(i) = f(self.index.getValue(i), self.values(i), otherV)
         i = self.mask.nextSetBit(i + 1)
       }
-      this.withValues(newValues.toVector)
+      this.withValues(ImmutableVector.fromArray(newValues))
     }
   }
 
@@ -269,7 +269,7 @@ private[spark] trait IndexedRDDPartitionOps[
         }
         i = self.mask.nextSetBit(i + 1)
       }
-      this.withValues(newValues.toVector).withMask(newMask)
+      this.withValues(ImmutableVector.fromArray(newValues)).withMask(newMask)
     } else {
       val newMask = self.mask & other.mask
       val newValues = new Array[V2](self.capacity)
@@ -278,7 +278,7 @@ private[spark] trait IndexedRDDPartitionOps[
         newValues(i) = f(self.index.getValue(i), self.values(i), other.values(i))
         i = newMask.nextSetBit(i + 1)
       }
-      this.withValues(newValues.toVector).withMask(newMask)
+      this.withValues(ImmutableVector.fromArray(newValues)).withMask(newMask)
     }
   }
 
@@ -305,7 +305,7 @@ private[spark] trait IndexedRDDPartitionOps[
         newValues(pos) = pair._2
       }
     }
-    this.withValues(newValues.toVector).withMask(newMask)
+    this.withValues(ImmutableVector.fromArray(newValues)).withMask(newMask)
   }
 
   /**
@@ -343,7 +343,7 @@ private[spark] trait IndexedRDDPartitionOps[
         }
       }
     }
-    this.withValues(newValues.toVector).withMask(newMask)
+    this.withValues(ImmutableVector.fromArray(newValues)).withMask(newMask)
   }
 
   /**
@@ -355,7 +355,7 @@ private[spark] trait IndexedRDDPartitionOps[
     for ((k, v) <- self.iterator) {
       hashMap.setMerge(k, v, arbitraryMerge)
     }
-    this.withIndex(hashMap.keySet).withValues(hashMap._values.toVector)
+    this.withIndex(hashMap.keySet).withValues(ImmutableVector.fromArray(hashMap._values))
       .withMask(hashMap.keySet.getBitSet)
   }
 }

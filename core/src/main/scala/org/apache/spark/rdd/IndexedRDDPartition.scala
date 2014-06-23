@@ -17,11 +17,11 @@
 
 package org.apache.spark.rdd
 
-import scala.collection.immutable.Vector
 import scala.language.higherKinds
 import scala.reflect.ClassTag
 
 import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableVector
 import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 
@@ -37,7 +37,8 @@ private[spark] object IndexedRDDPartition {
     iter.foreach { pair =>
       map(pair._1) = pair._2
     }
-    new IndexedRDDPartition(map.keySet, map._values.toVector, map.keySet.getBitSet)
+    new IndexedRDDPartition(
+      map.keySet, ImmutableVector.fromArray(map._values), map.keySet.getBitSet)
   }
 
   def apply[V: ClassTag](iter: Iterator[(Id, V)], mergeFunc: (V, V) => V)
@@ -46,13 +47,14 @@ private[spark] object IndexedRDDPartition {
     iter.foreach { pair =>
       map.setMerge(pair._1, pair._2, mergeFunc)
     }
-    new IndexedRDDPartition(map.keySet, map._values.toVector, map.keySet.getBitSet)
+    new IndexedRDDPartition(
+      map.keySet, ImmutableVector.fromArray(map._values), map.keySet.getBitSet)
   }
 }
 
 private[spark] trait IndexedRDDPartitionBase[@specialized(Long, Int, Double) V] {
   def index: Index
-  def values: Vector[V]
+  def values: ImmutableVector[V]
   def mask: BitSet
 
   val capacity: Int = index.capacity
@@ -80,7 +82,7 @@ private[spark] trait IndexedRDDPartitionBase[@specialized(Long, Int, Double) V] 
 
 private[spark] class IndexedRDDPartition[@specialized(Long, Int, Double) V](
     val index: Index,
-    val values: Vector[V],
+    val values: ImmutableVector[V],
     val mask: BitSet)
    (implicit val vTag: ClassTag[V])
   extends IndexedRDDPartitionBase[V]
@@ -92,7 +94,7 @@ private[spark] class IndexedRDDPartition[@specialized(Long, Int, Double) V](
     new IndexedRDDPartition(index, values, mask)
   }
 
-  def withValues[V2: ClassTag](values: Vector[V2]): IndexedRDDPartition[V2] = {
+  def withValues[V2: ClassTag](values: ImmutableVector[V2]): IndexedRDDPartition[V2] = {
     new IndexedRDDPartition(index, values, mask)
   }
 

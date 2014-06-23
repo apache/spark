@@ -22,13 +22,13 @@ import scala.reflect.ClassTag
 object ImmutableVector {
   private val NIL = new LeafNode(Array.empty)
 
-  def empty[A]: VectorNode[A] = NIL
+  def empty[A]: ImmutableVector[A] = NIL
 
-  def fromArray[A](array: Array[A]): VectorNode[A] = {
+  def fromArray[A](array: Array[A]): ImmutableVector[A] = {
     fromArray(array, 0, array.length)
   }
 
-  def fromArray[A](array: Array[A], start: Int, end: Int): VectorNode[A] = {
+  def fromArray[A](array: Array[A], start: Int, end: Int): ImmutableVector[A] = {
     val length = end - start
     if (length == 0) {
       // println("fromArray(%d, %d) => empty".format(start, end))
@@ -60,8 +60,8 @@ object ImmutableVector {
   }
 }
 
-private class VectorIterator[@specialized(Long, Int) +A](v: VectorNode[A]) extends Iterator[A] {
-  private val elemStack: Array[VectorNode[_]] = Array.fill(8)(null)
+private class VectorIterator[@specialized(Long, Int) +A](v: ImmutableVector[A]) extends Iterator[A] {
+  private val elemStack: Array[ImmutableVector[_]] = Array.fill(8)(null)
   private val idxStack: Array[Int] = Array.fill(8)(-1)
   private var pos: Int = 0
   private var _hasNext: Boolean = _
@@ -113,18 +113,18 @@ private class VectorIterator[@specialized(Long, Int) +A](v: VectorNode[A]) exten
   }
 }
 
-sealed trait VectorNode[@specialized(Long, Int) +A] extends Serializable {
+sealed trait ImmutableVector[@specialized(Long, Int) +A] extends Serializable {
   def length: Int
   def iterator: Iterator[A] = new VectorIterator[A](this)
   def apply(index: Int): A
-  def updated[B >: A : ClassTag](index: Int, elem: B): VectorNode[B]
+  def updated[B >: A : ClassTag](index: Int, elem: B): ImmutableVector[B]
   def numChildren: Int
 }
 
 private class InternalNode[@specialized(Long, Int) +A](
-    children: Array[VectorNode[A]],
+    children: Array[ImmutableVector[A]],
     depth: Int)
-  extends VectorNode[A] {
+  extends ImmutableVector[A] {
 
   require(children.length > 0, "InternalNode must have children")
   require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
@@ -152,12 +152,12 @@ private class InternalNode[@specialized(Long, Int) +A](
 
   override def numChildren = children.length
 
-  def childAt(index: Int): VectorNode[A] = children(index)
+  def childAt(index: Int): ImmutableVector[A] = children(index)
 }
 
 private class LeafNode[@specialized(Long, Int) +A](
     children: Array[A])
-  extends VectorNode[A] {
+  extends ImmutableVector[A] {
 
   require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
 

@@ -17,12 +17,15 @@
 
 package org.apache.spark.graphx.impl
 
-import scala.collection.immutable.Vector
 import scala.reflect.ClassTag
 import scala.util.Sorting
 
 import org.apache.spark.rdd.IndexedRDDPartition
-import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveVector, PrimitiveKeyOpenHashMap}
+import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableVector
+import org.apache.spark.util.collection.OpenHashSet
+import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
+import org.apache.spark.util.collection.PrimitiveVector
 
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
@@ -67,7 +70,9 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
     val vertexIds = new OpenHashSet[VertexId]
     vidsIter.foreach(vid => vertexIds.add(vid))
     val vertices = new IndexedRDDPartition(
-      vertexIds, Vector.fill[VD](vertexIds.capacity)(null.asInstanceOf[VD]), vertexIds.getBitSet)
+      vertexIds,
+      ImmutableVector.fromArray(Array.fill[VD](vertexIds.capacity)(null.asInstanceOf[VD])),
+      vertexIds.getBitSet)
 
     new EdgePartition(srcIds, dstIds, data, index, vertices)
   }

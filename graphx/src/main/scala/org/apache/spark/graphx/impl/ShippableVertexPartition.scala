@@ -17,14 +17,15 @@
 
 package org.apache.spark.graphx.impl
 
-import scala.collection.immutable.Vector
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.IndexedRDDPartition
 import org.apache.spark.rdd.IndexedRDDPartition.Index
 import org.apache.spark.rdd.IndexedRDDPartitionBase
 import org.apache.spark.rdd.IndexedRDDPartitionOps
-import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
+import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableVector
+import org.apache.spark.util.collection.PrimitiveVector
 
 import org.apache.spark.graphx._
 
@@ -63,7 +64,7 @@ private[graphx] object ShippableVertexPartition {
  */
 private[graphx] class ShippableVertexPartition[@specialized(Long, Int, Double) VD](
     val index: Index,
-    val values: Vector[VD],
+    val values: ImmutableVector[VD],
     val mask: BitSet,
     val routingTable: RoutingTablePartition)
    (implicit val vTag: ClassTag[VD])
@@ -76,7 +77,7 @@ private[graphx] class ShippableVertexPartition[@specialized(Long, Int, Double) V
     new ShippableVertexPartition(index, values, mask, routingTable)
   }
 
-  def withValues[VD2: ClassTag](values: Vector[VD2]): ShippableVertexPartition[VD2] = {
+  def withValues[VD2: ClassTag](values: ImmutableVector[VD2]): ShippableVertexPartition[VD2] = {
     new ShippableVertexPartition(index, values, mask, routingTable)
   }
 
