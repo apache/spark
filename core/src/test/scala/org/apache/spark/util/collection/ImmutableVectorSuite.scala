@@ -56,4 +56,19 @@ class ImmutableVectorSuite extends FunSuite {
       assert(i == size)
     }
   }
+
+  test("updated") {
+    val sizes = for {
+      shift <- 1 to 15
+      offset <- Array(-1, 0, 1)
+    } yield (1 << shift) + offset
+    for (size <- sizes) {
+      println(size)
+      var v = ImmutableVector.fromArray((0 until size).toArray)
+      for (i <- 0 until size) {
+        v = v.updated(i, 0)
+        assert(v(i) == 0)
+      }
+    }
+  }
 }

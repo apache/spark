@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import scala.reflect.ClassTag
+
 object ImmutableVector {
   private val NIL = new LeafNode(Array.empty)
 
@@ -115,7 +117,7 @@ sealed trait VectorNode[@specialized(Long, Int) +A] extends Serializable {
   def length: Int
   def iterator: Iterator[A] = new VectorIterator[A](this)
   def apply(index: Int): A
-  // def updated(index: Int, elem: A): VectorNode[A]
+  def updated[B >: A : ClassTag](index: Int, elem: B): VectorNode[B]
   def numChildren: Int
 }
 
@@ -138,6 +140,16 @@ private class InternalNode[@specialized(Long, Int) +A](
     children(localIndex)(childIndex)
   }
 
+  override def updated[B >: A : ClassTag](index: Int, elem: B) = {
+    val shift = 5 * depth
+    val localIndex = (index >> shift) & 31
+    val childIndex = index & ~(31 << shift)
+
+    val newChild = children(localIndex).updated(childIndex, elem)
+    val newChildren = children.updated(localIndex, newChild)
+    new InternalNode(newChildren, depth)
+  }
+
   override def numChildren = children.length
 
   def childAt(index: Int): VectorNode[A] = children(index)
@@ -152,6 +164,13 @@ private class LeafNode[@specialized(Long, Int) +A](
   override def length = children.length
 
   override def apply(index: Int): A = children(index)
+
+  override def updated[B >: A : ClassTag](index: Int, elem: B) = {
+    val newChildren = new Array[B](children.length)
+    System.arraycopy(children, 0, newChildren, 0, children.length)
+    newChildren(index) = elem
+    new LeafNode(newChildren)
+  }
 
   override def numChildren = children.length
 }
