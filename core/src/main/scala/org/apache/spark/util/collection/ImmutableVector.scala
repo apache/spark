@@ -58,7 +58,7 @@ object ImmutableVector {
   }
 }
 
-class VectorIterator[@specialized(Long, Int) +A](v: VectorNode[A]) extends Iterator[A] {
+private class VectorIterator[@specialized(Long, Int) +A](v: VectorNode[A]) extends Iterator[A] {
   private val elemStack: Array[VectorNode[_]] = Array.fill(8)(null)
   private val idxStack: Array[Int] = Array.fill(8)(-1)
   private var pos: Int = 0
@@ -113,13 +113,13 @@ class VectorIterator[@specialized(Long, Int) +A](v: VectorNode[A]) extends Itera
 
 sealed trait VectorNode[@specialized(Long, Int) +A] extends Serializable {
   def length: Int
-  def iterator = new VectorIterator[A](this)
+  def iterator: Iterator[A] = new VectorIterator[A](this)
   def apply(index: Int): A
   // def updated(index: Int, elem: A): VectorNode[A]
   def numChildren: Int
 }
 
-class InternalNode[@specialized(Long, Int) +A](
+private class InternalNode[@specialized(Long, Int) +A](
     children: Array[VectorNode[A]],
     depth: Int)
   extends VectorNode[A] {
@@ -143,7 +143,7 @@ class InternalNode[@specialized(Long, Int) +A](
   def childAt(index: Int): VectorNode[A] = children(index)
 }
 
-class LeafNode[@specialized(Long, Int) +A](
+private class LeafNode[@specialized(Long, Int) +A](
     children: Array[A])
   extends VectorNode[A] {
 
