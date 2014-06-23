@@ -217,6 +217,4 @@ case class Subtract(left:SparkPlan,right:SparkPlan) extends SparkPlan {
   override def execute() = {
     left.execute().subtract(right.execute())
   }
-
-  override def otherCopyArgs = sc :: Nil
 }
