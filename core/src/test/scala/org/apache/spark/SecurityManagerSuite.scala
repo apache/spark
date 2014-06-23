@@ -31,7 +31,7 @@ class SecurityManagerSuite extends FunSuite {
     conf.set("spark.ui.view.acls", "user1,user2")
     val securityManager = new SecurityManager(conf);
     assert(securityManager.isAuthenticationEnabled() === true)
-    assert(securityManager.uiAclsEnabled() === true)
+    assert(securityManager.aclsEnabled() === true)
     assert(securityManager.checkUIViewPermissions("user1") === true)
     assert(securityManager.checkUIViewPermissions("user2") === true)
     assert(securityManager.checkUIViewPermissions("user3") === false)
@@ -41,16 +41,16 @@ class SecurityManagerSuite extends FunSuite {
     val conf = new SparkConf
     conf.set("spark.ui.view.acls", "user1,user2")
     val securityManager = new SecurityManager(conf);
-    securityManager.setUIAcls(true)
-    assert(securityManager.uiAclsEnabled() === true)
-    securityManager.setUIAcls(false)
-    assert(securityManager.uiAclsEnabled() === false)
+    securityManager.setAcls(true)
+    assert(securityManager.aclsEnabled() === true)
+    securityManager.setAcls(false)
+    assert(securityManager.aclsEnabled() === false)
 
     // acls are off so doesn't matter what view acls set to
     assert(securityManager.checkUIViewPermissions("user4") === true)
 
-    securityManager.setUIAcls(true)
-    assert(securityManager.uiAclsEnabled() === true)
+    securityManager.setAcls(true)
+    assert(securityManager.aclsEnabled() === true)
     securityManager.setViewAcls(ArrayBuffer[String]("user5"), "user6,user7")
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user5") === true)
@@ -59,5 +59,30 @@ class SecurityManagerSuite extends FunSuite {
     assert(securityManager.checkUIViewPermissions("user8") === false)
     assert(securityManager.checkUIViewPermissions(null) === true)
   }
+
+  test("set security modify acls") {
+    val conf = new SparkConf
+    conf.set("spark.modify.acls", "user1,user2")
+    val securityManager = new SecurityManager(conf);
+    securityManager.setAcls(true)
+    assert(securityManager.aclsEnabled() === true)
+    securityManager.setAcls(false)
+    assert(securityManager.aclsEnabled() === false)
+
+    // acls are off so doesn't matter what view acls set to
+    assert(securityManager.checkModifyPermissions("user4") === true)
+
+    securityManager.setAcls(true)
+    assert(securityManager.aclsEnabled() === true)
+    securityManager.setModifyAcls(ArrayBuffer[String]("user5"), "user6,user7")
+    assert(securityManager.checkModifyPermissions("user1") === false)
+    assert(securityManager.checkModifyPermissions("user5") === true)
+    assert(securityManager.checkModifyPermissions("user6") === true)
+    assert(securityManager.checkModifyPermissions("user7") === true)
+    assert(securityManager.checkModifyPermissions("user8") === false)
+    assert(securityManager.checkModifyPermissions(null) === true)
+  }
+
+
 }
 

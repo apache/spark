@@ -37,7 +37,10 @@ import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
-import org.apache.spark.{SparkException, Logging, SparkConf, SparkContext}
+import org.apache.spark._
+import scala.util.Failure
+import scala.Some
+import scala.util.Success
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
@@ -416,6 +419,12 @@ trait ClientBase extends Logging {
     amContainer.setCommands(printableCommands)
 
     setupSecurityToken(amContainer)
+
+    val securityManager = new SecurityManager(sparkConf)
+    val acls = Map[ApplicationAccessType, String] (
+      ApplicationAccessType.VIEW_APP -> securityManager.getViewAcls,
+      ApplicationAccessType.MODIFY_APP -> securityManager.getModifyAcls)
+    amContainer.setApplicationACLs(acls)
     amContainer
   }
 }
