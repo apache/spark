@@ -89,12 +89,12 @@ if [ -z "$JAVA_HOME" ]; then
   exit -1
 fi
 
-VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
-if [ $? != 0 ]; then
+if ! which mvn &>/dev/null; then
     echo -e "You need Maven installed to build Spark."
     echo -e "Download Maven from https://maven.apache.org/"
     exit -1;
 fi
+VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
 
 JAVA_CMD="$JAVA_HOME"/bin/java
 JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)
