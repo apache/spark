@@ -236,6 +236,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Limit(limit, planLater(child))(sparkContext) :: Nil
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater))(sparkContext) :: Nil
+      case Subtract(left,right) =>                                        //new subtract operator
+        execution.Subtract(left,right) :: Nil 
       case logical.Generate(generator, join, outer, _, child) =>
         execution.Generate(generator, join = join, outer = outer, planLater(child)) :: Nil
       case logical.NoRelation =>
