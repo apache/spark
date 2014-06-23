@@ -209,11 +209,11 @@ case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class Intersect(children: Seq[SparkPlan])(@transient sc: SparkContext) extends SparkPlan {
+case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   // TODO:
   override def output = children.head.output
 
   override def execute() = {
-    children.map(child => child.execute()).foldLeft(children(0).execute())((a, b) => a.intersection(b))
-
+    left.execute().intersection(right.execute())
   }
+}
