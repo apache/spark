@@ -89,6 +89,13 @@ case class Join(
   }
 }
 
+case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  // TODO: These aren't really the same attributes as nullability etc might change.
+  def output = left.output
+
+  def references = Set.empty
+}
+
 case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
