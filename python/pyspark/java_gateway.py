@@ -57,10 +57,10 @@ def launch_gateway():
             error_msg += "Silence the following and try again:\n\n"
             error_msg += "  %s" % gateway_port
             raise Exception(error_msg)
-        except:
+        except Exception as e:
             exit_code = proc.poll()
             exit_code_msg = " Exit code was %d." % exit_code if exit_code else ""
-            raise Exception("Launching GatewayServer failed!" + exit_code_msg)
+            raise Exception("Launching GatewayServer failed!" + exit_code_msg, e)
 
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
