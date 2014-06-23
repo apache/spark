@@ -115,4 +115,7 @@ private[spark] object AkkaUtils {
   def maxFrameSizeBytes(conf: SparkConf): Int = {
     conf.getInt("spark.akka.frameSize", 10) * 1024 * 1024
   }
+
+  /** Space reserved for extra data in an Akka message besides serialized task or task result. */
+  val reservedSizeBytes = 200 * 1024
 }

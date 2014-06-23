@@ -25,4 +25,7 @@ import org.apache.spark.TaskState.TaskState
  */
 private[spark] trait ExecutorBackend {
   def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer)
+
+  // Exists as a work around for SPARK-1112. This only exists in branch-1.x of Spark.
+  def akkaFrameSize(): Long = Long.MaxValue
 }
