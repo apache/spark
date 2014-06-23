@@ -50,8 +50,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
-  var minRegisteredRatio = conf.getDouble("spark.scheduler.minRegisteredRatio", 0)
-  val maxRegisteredWaitingTime = conf.getInt("spark.scheduler.maxRegisteredWaitingTime", 10000)
+  var minRegisteredRatio = conf.getDouble("spark.scheduler.minRegisteredExecutorsRatio", 0)
+  val maxRegisteredWaitingTime = conf.getInt("spark.scheduler.maxRegisteredExecutorsWaitingTime", 30000)
   val createTime = System.currentTimeMillis()
   var ready = if (minRegisteredRatio <= 0) true else false
 

@@ -17,12 +17,11 @@
 
 package org.apache.spark.scheduler.cluster
 
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.deploy.yarn.ApplicationMasterArguments
 import org.apache.spark.scheduler.TaskSchedulerImpl
-
-import scala.collection.mutable.ArrayBuffer
 
 private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -30,7 +29,7 @@ private[spark] class YarnClusterSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
   with Logging {
 
-  private[spark] def addArg(optionName: String, envVar: String, sysProp: String,
+  private def addArg(optionName: String, envVar: String, sysProp: String,
       arrayBuf: ArrayBuffer[String]) {
     if (System.getenv(envVar) != null) {
       arrayBuf += (optionName, System.getenv(envVar))
