@@ -187,10 +187,15 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /** Caches the specified table in-memory. */
   def cacheTable(tableName: String): Unit = {
     val currentTable = catalog.lookupRelation(None, tableName)
-    val useCompression =
-      sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
-    val asInMemoryRelation =
-      InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
+    val asInMemoryRelation = EliminateAnalysisOperators(currentTable.logicalPlan) match {
+      case _: InMemoryRelation =>
+        currentTable.logicalPlan
+
+      case _ =>
+        val useCompression =
+          sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
+        InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
+    }
 
     catalog.registerTable(None, tableName, asInMemoryRelation)
   }
