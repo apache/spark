@@ -96,7 +96,7 @@ class SVMWithSGD private (
    */
   def this() = this(1.0, 100, 1.0, 1.0)
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override def createModel(weights: Vector, intercept: Double) = {
     new SVMModel(weights, intercept)
   }
 }
