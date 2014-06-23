@@ -145,8 +145,9 @@ private class InternalNode[@specialized(Long, Int) +A](
     val localIndex = (index >> shift) & 31
     val childIndex = index & ~(31 << shift)
 
-    val newChild = children(localIndex).updated(childIndex, elem)
-    val newChildren = children.updated(localIndex, newChild)
+    val newChildren = new Array[ImmutableVector[B]](children.length)
+    System.arraycopy(children, 0, newChildren, 0, children.length)
+    newChildren(localIndex) = children(localIndex).updated(childIndex, elem)
     new InternalNode(newChildren, depth)
   }
 
