@@ -189,3 +189,10 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 case object NoRelation extends LeafNode {
   override def output = Nil
 }
+
+case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  // TODO: These aren't really the same attributes as nullability etc might change.
+  def output = left.output
+
+  def references = Set.empty
+}
