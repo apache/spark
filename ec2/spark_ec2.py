@@ -770,12 +770,16 @@ def real_main():
         setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
     elif action == "destroy":
-        response = raw_input("Are you sure you want to destroy the cluster " +
-                             cluster_name + "?\nALL DATA ON ALL NODES WILL BE LOST!!\n" +
-                             "Destroy cluster " + cluster_name + " (y/N): ")
+        print "Are you sure you want to destroy the cluster %s?" % cluster_name
+        print "The following instances will be terminated:"
+        (master_nodes, slave_nodes) = get_existing_cluster(
+            conn, opts, cluster_name, die_on_error=False)
+        for inst in master_nodes + slave_nodes:
+            print "> %s" % inst.public_dns_name
+
+        msg = "ALL DATA ON ALL NODES WILL BE LOST!!\nDestroy cluster %s (y/N): " % cluster_name
+        response = raw_input(msg)
         if response == "y":
-            (master_nodes, slave_nodes) = get_existing_cluster(
-                conn, opts, cluster_name, die_on_error=False)
             print "Terminating master..."
             for inst in master_nodes:
                 inst.terminate()
