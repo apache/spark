@@ -601,7 +601,9 @@ object ClientBase extends Logging {
     YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, path,
             File.pathSeparator)
 
-  // get the list of namenodes the user may access
+  /** 
+   * Get the list of namenodes the user may access.
+   */
   private[yarn] def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
     sparkConf.get("spark.yarn.access.namenodes", "").split(",").map(_.trim()).filter(!_.isEmpty)
       .map(new Path(_)).toSet
@@ -618,7 +620,9 @@ object ClientBase extends Logging {
     delegTokenRenewer
   }
 
-  // obtains tokens for the namenodes passed in and adds them to the credentials
+  /**
+   * Obtains tokens for the namenodes passed in and adds them to the credentials.
+   */
   private[yarn] def obtainTokensForNamenodes(paths: Set[Path], conf: Configuration,
     creds: Credentials) {
     if (UserGroupInformation.isSecurityEnabled()) {

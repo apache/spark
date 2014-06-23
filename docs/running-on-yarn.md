@@ -110,7 +110,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.access.namenodes</code></td>
   <td>(none)</td>
   <td>
-    A list of secure HDFS namenodes your spark application is going to access. For example, spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032. Spark acquires security Tokens for each of the namenodes so that the spark application can access those remote HDFS clusters.  
+    A list of secure HDFS namenodes your Spark application is going to access. For example, `spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032`. The Spark application must have acess to the namenodes listed and Kerberos must be properly configured to be able to access them (either in the same realm or in a trusted realm). Spark acquires security tokens for each of the namenodes so that the Spark application can access those remote HDFS clusters.
   </td>
 </tr>
 </table>
