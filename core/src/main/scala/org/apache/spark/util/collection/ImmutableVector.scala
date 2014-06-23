@@ -42,8 +42,17 @@ object ImmutableVector {
         val shift = 5 * depth
         val numChildren = ((length - 1) >> shift) + 1
         // println("fromArray(%d, %d) => InternalNode(depth=%d, numChildren=%d)".format(start, end, depth, numChildren))
-        val children = (0 until numChildren).toArray.map(i =>
-          fromArray(array, start + (i << shift), math.min(start + ((i + 1) << shift), end)))
+        val children = new Array[ImmutableVector[A]](numChildren)
+        var i = 0
+        while (i < numChildren) {
+          val childStart = start + (i << shift)
+          var childEnd = start + ((i + 1) << shift)
+          if (end < childEnd) {
+            childEnd = end
+          }
+          children(i) = fromArray(array, childStart, childEnd)
+          i += 1
+        }
         new InternalNode(children, depth)
       }
     }
