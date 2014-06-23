@@ -17,9 +17,9 @@
 
 package org.apache.spark.shuffle.hash
 
+import org.apache.spark.{InterruptibleIterator, TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
-import org.apache.spark.TaskContext
 
 class HashShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
@@ -40,12 +40,12 @@ class HashShuffleReader[K, C](
 
     if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
-        dep.aggregator.get.combineCombinersByKey(iter, context)
+        new InterruptibleIterator(context, dep.aggregator.get.combineCombinersByKey(iter, context))
       } else {
-        dep.aggregator.get.combineValuesByKey(iter, context)
+        new InterruptibleIterator(context, dep.aggregator.get.combineValuesByKey(iter, context))
       }
     } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
-      throw new IllegalStateException("Aggregator is empty for reduce-side combine")
+      throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
       iter
     }

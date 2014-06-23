@@ -60,7 +60,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
       NonJavaSerializableClass,
       NonJavaSerializableClass,
       (Int, NonJavaSerializableClass)](b, new HashPartitioner(NUM_BLOCKS))
-      .setSerializer(new KryoSerializer(conf))
+    c.setSerializer(new KryoSerializer(conf))
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
 
     assert(c.count === 10)
@@ -85,7 +85,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
       NonJavaSerializableClass,
       NonJavaSerializableClass,
       (Int, NonJavaSerializableClass)](b, new HashPartitioner(3))
-      .setSerializer(new KryoSerializer(conf))
+    c.setSerializer(new KryoSerializer(conf))
     assert(c.count === 10)
   }
 
