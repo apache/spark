@@ -111,9 +111,16 @@ class VertexRDD[@specialized VD: ClassTag](
     partitionsRDD.map(_.size).reduce(_ + _)
   }
 
-  /** Materialize vertices by calling RDD's count method */
-  def materialize(): Long = {
-    super.count()
+  override def checkpoint() {
+    partitionsRDD.checkpoint()
+  }
+
+  override def getCheckpointFile: Option[String] = {
+    partitionsRDD.getCheckpointFile
+  }
+
+  override def isCheckpointed: Boolean = {
+    partitionsRDD.isCheckpointed
   }
 
   /**
