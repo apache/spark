@@ -210,7 +210,7 @@ case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
  * Return an table with the elements from `this` that are not in `other`.
  */
 @DeveloperApi
-case class Subtract(left:SparkPlan,right:SparkPlan) extends SparkPlan {
+case class Subtract(left:SparkPlan,right:SparkPlan) extends BinaryNode {
   // TODO:The input children:Seq[SparkPlan]  should only contain two SparkPlan
   override def output = children.head.output
 
