@@ -53,14 +53,11 @@ def launch_gateway():
             gateway_port = proc.stdout.readline()
             gateway_port = int(gateway_port)
         except ValueError:
+            (stdout, _) = proc.communicate()
             error_msg = "Launching GatewayServer failed because of stdout interference. "
             error_msg += "Silence the following and try again:\n\n"
-            error_msg += "  %s" % gateway_port
+            error_msg += gateway_port + stdout
             raise Exception(error_msg)
-        except Exception as e:
-            exit_code = proc.poll()
-            exit_code_msg = " Exit code was %d." % exit_code if exit_code else ""
-            raise Exception("Launching GatewayServer failed!" + exit_code_msg, e)
 
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
