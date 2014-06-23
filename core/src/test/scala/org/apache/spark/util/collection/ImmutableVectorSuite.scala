@@ -27,15 +27,33 @@ class ImmutableVectorSuite extends FunSuite {
 
   test("fromArray") {
     val sizes = for {
-      shift <- 0 to 26
+      shift <- 0 to 20
       offset <- Array(-1, 0, 1)
     } yield (1 << shift) + offset
     for (size <- sizes) {
       println(size)
-      val v = VectorNode.fromArray((0 until size).toArray)
+      val v = ImmutableVector.fromArray((0 until size).toArray)
       for (i <- 0 until size) {
         assert(v(i) == i)
       }
+    }
+  }
+
+  test("iterator") {
+    val sizes = for {
+      shift <- 0 to 25
+      offset <- Array(-1, 0, 1)
+    } yield (1 << shift) + offset
+    for (size <- sizes) {
+      println(size)
+      val v = ImmutableVector.fromArray((0 until size).toArray)
+      val iter = v.iterator
+      var i = 0
+      while (iter.hasNext) {
+        assert(iter.next() == i)
+        i += 1
+      }
+      assert(i == size)
     }
   }
 }
