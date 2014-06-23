@@ -22,7 +22,7 @@ import breeze.linalg._
 import breeze.numerics._
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-//import scala.language.existentials // for feature warning in scala 2.10.x
+import scala.language.existentials // for feature warning in scala 2.10.x
 
 /**
  * @author: Kiran Lonikar
@@ -46,41 +46,58 @@ object SparkLRMultiClass {
   */
   def csv2featureVectors(sc: SparkContext, dataFile: String, numFeaturesIn: Int) = {
       val data = sc.textFile(dataFile)
-	  val vectors = data.map { line => 
-		val fields = line.split(",")
-		if(fields(0).contains(":")) {
-			val indVals = (0 to (fields.length-2)).map { i =>
-							val parts = fields(i).split(":")
-							(parts(0).toInt, parts(1).toDouble) // index, value
-						}.unzip
-			// The bias/intercept element is assumed to be part of the index-value encoded vector (for example due to mahout kind of encoding)
-			val vb = new VectorBuilder[Double](indVals._1.toArray, indVals._2.toArray, indVals._1.length, indVals._1.max+1)
-			val yVal = fields(fields.length-1).split(":")(1).toInt
-			(yVal, vb.toSparseVector)
-		}
-		else {
-			val vals = fields.map { _.toDouble }
-			// Bias/intercept of 1.0 added in front
-			val x = DenseVector.vertcat(DenseVector(1.0), DenseVector(vals.slice(0, vals.length-1)))
-			val yVal = vals(vals.length-1).toInt
-			(yVal, x)
-		}
-	  }
-	  val featureVec = vectors.take(1)(0)._2
+	  val dataArrays = data.map { line =>
+								val fields = line.split(",")
+								if(fields(0) contains ":") {
+									val indVals = (0 to (fields.length-2)).map { i =>
+																	val parts = fields(i).split(":")
+																	(parts(0).toInt, parts(1).toDouble) // index, value
+																}.unzip
+									val yVal = fields(fields.length-1).split(":")(1).toInt
+									// The bias/intercept element is assumed to be part of the index-value encoded vector (for example due to mahout kind of encoding)
+									(yVal, (indVals._1.toArray, indVals._2.toArray))
+								}
+								else {
+									val vals = fields.map { _.toDouble }
+									// Bias/intercept of 1.0 added in front
+									val x = 1.0 +: vals.slice(0, vals.length-1)
+									val yVal = vals(vals.length-1).toInt
+									(yVal, x)
+								}
+							}
+	  val featureVec = dataArrays.take(1)(0)._2
 	  val numFeatures = if(numFeaturesIn == 0) {
 							featureVec match {
-								case sv: SparseVector[Double] => vectors.map { p => p._2.length }.reduce((acc, curr) => if(acc > curr) acc else curr) // no bias/intercept
-								case dv: DenseVector[Double] => dv.length - 1 // to account for bias/intercept element
-								case _ => 0 // throw exception?
-							}
+								case (indices, values) => dataArrays.map { p => p.asInstanceOf[Tuple2[Int, Tuple2[Array[Int], Array[Double]]]]._2._1.max+1 }.reduce((acc, curr) => if(acc > curr) acc else curr) // no bias/intercept
+								case values: Array[Double] => values.asInstanceOf[Array[Double]].length - 1 // to account for bias/intercept element
+								case _ => 0 // throw exception
+								}
 						}
-						else numFeaturesIn
-	   val featureVectors = featureVec match {
-								case sv: SparseVector[Double] => vectors.map { p => val sv = p._2.asInstanceOf[SparseVector[Double]]; (p._1, new SparseVector[Double](sv.index, sv.data, sv.activeSize, numFeatures+1)) }
-								case dv: DenseVector[Double] => vectors
-								case _ => vectors // throw exception?
-							}
-	  (numFeatures, featureVectors)
+						else
+							numFeaturesIn
+	  
+	  val featureVectors = featureVec match {
+			case (indices, values) => dataArrays.map { p => 
+										val p1 = p.asInstanceOf[Tuple2[Int, Tuple2[Array[Int], Array[Double]]]]
+										(p1._1, new VectorBuilder[Double](p1._2._1, p1._2._2, p1._2._1.length, numFeatures+1).toSparseVector)
+									}
+			case values: Array[Double] => dataArrays.map { p => val p1 = p.asInstanceOf[Tuple2[Int, Array[Double]]]; (p1._1, DenseVector(p1._2)) }
+		}
+/*	  
+	  // Use this code if the above code to build featureVectors fails to compile due to existiantials feature of scala.
+	  val featureVectors = dataArrays.map { p => 
+	    p._2 match {
+			case (indices: Array[Int], values: Array[Double]) => {
+												(p._1, new VectorBuilder[Double](indices, values, indices.length, numFeatures+1).toSparseVector)
+											}
+			case values: Array[Double] => (p._1, DenseVector(values))
+			//case _ => p // throw exception
+		}
+	  }
+*/
+	  // This will allow the feature vectors to be cached and avoid recomputation.
+	  // Building a SparseVector is expensive operation since it involves sorting.
+	  (numFeatures, featureVectors.cache)
   }
   
   def main(args: Array[String]) {
@@ -113,20 +130,22 @@ object SparkLRMultiClass {
 		var theta = DenseVector.zeros[Double](numFeatures+1)
 		var cost = 0.0
 		breakable { for (i <- 1 to ITERATIONS) {
+			val start = System.currentTimeMillis
 			val grad_cost = featureVectors.map {p =>
 				val (yVal, x) = p
-				val y = if(yVal == c) 1.0 else 0.0
+				val y = if(yVal == c) 1 else 0
 				val z = theta.t*x
 				val h = sigmoid(z)
 				val grad = x*(h - y)
-				val J = -(y*breeze.numerics.log(h) + (1.0-y)*breeze.numerics.log(1.0-h))
+				val J = -(if(y == 1) breeze.numerics.log(h) else breeze.numerics.log(1.0-h))
 				(grad, J)
 			}.reduce {(acc, curr) => ((acc._1 + curr._1), (acc._2 + curr._2))}
+			val end = System.currentTimeMillis
 			var grad = (grad_cost._1 + theta*lambda)/m
 			grad(0) -= theta(0)*lambda/m
 			cost = (grad_cost._2 + lambda*(theta.t*theta - theta(0)*theta(0))/2.0)/m
 			theta -= grad*alpha
-			println("label: " + c + ", Cost: " + cost)
+			println("label: " + c + ", Cost: " + cost + ", time: " + (end-start)/1000.0)
 			if(cost <= costThreshold) {
 				println("Terminating gradient descent for label " + c);
 				break
