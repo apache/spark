@@ -215,6 +215,6 @@ case class Subtract(left:SparkPlan,right:SparkPlan) extends BinaryNode {
   override def output = children.head.output
 
   override def execute() = {
-    left.execute().subtract(right.execute())
+    left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
   }
 }
