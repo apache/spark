@@ -87,7 +87,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         }
 
       case StatusUpdate(executorId, taskId, state, data) =>
-        scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           if (executorActor.contains(executorId)) {
             freeCores(executorId) += scheduler.CPUS_PER_TASK
@@ -98,6 +97,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
             logWarning(msg.format(taskId, state, sender, executorId))
           }
         }
+        scheduler.statusUpdate(taskId, state, data.value)
 
       case ReviveOffers =>
         makeOffers()

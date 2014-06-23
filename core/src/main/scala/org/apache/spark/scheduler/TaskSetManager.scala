@@ -376,7 +376,11 @@ private[spark] class TaskSetManager(
     }
 
     // Finally, if all else has failed, find a speculative task
-    findSpeculativeTask(execId, host, locality)
+    val speculativeTask = findSpeculativeTask(execId, host, locality)
+    if (speculativeTask.isDefined) {
+      logInfo("Pick a speculative task to run: " + speculativeTask.get._1 + " ---lirui")
+    }
+    speculativeTask
   }
 
   /**
