@@ -70,10 +70,10 @@ object ImmutableVector {
 }
 
 private class VectorIterator[@specialized(Long, Int) +A](v: ImmutableVector[A]) extends Iterator[A] {
-  private val elemStack: Array[ImmutableVector[_]] = Array.fill(8)(null)
-  private val idxStack: Array[Int] = Array.fill(8)(-1)
-  private var pos: Int = 0
-  private var _hasNext: Boolean = _
+  private[this] val elemStack: Array[ImmutableVector[A]] = Array.fill(8)(null)
+  private[this] val idxStack: Array[Int] = Array.fill(8)(-1)
+  private[this] var pos: Int = 0
+  private[this] var _hasNext: Boolean = _
 
   elemStack(0) = v
   idxStack(0) = 0
@@ -83,7 +83,7 @@ private class VectorIterator[@specialized(Long, Int) +A](v: ImmutableVector[A]) 
 
   override def next() = {
     if (_hasNext) {
-      val result = elemStack(pos)(idxStack(pos)).asInstanceOf[A]
+      val result = elemStack(pos)(idxStack(pos))
       idxStack(pos) += 1
       maybeAdvance()
       result
