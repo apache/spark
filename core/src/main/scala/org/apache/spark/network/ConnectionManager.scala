@@ -428,15 +428,15 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           connectionsAwaitingSasl -= connection.connectionId
 
           messageStatuses.synchronized {
-            messageStatuses
-              .values.filter(_.connectionManagerId == sendingConnectionManagerId).foreach(status => {
-              logInfo("Notifying " + status)
-              status.synchronized {
-                status.attempted = true
-                status.acked = false
-                status.markDone()
-              }
-            })
+            messageStatuses.values.filter(_.connectionManagerId == sendingConnectionManagerId)
+              .foreach(status => {
+                logInfo("Notifying " + status)
+                status.synchronized {
+                  status.attempted = true
+                  status.acked = false
+                  status.markDone()
+                }
+              })
 
             messageStatuses.retain((i, status) => {
               status.connectionManagerId != sendingConnectionManagerId
@@ -461,7 +461,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           assert(sendingConnectionManagerId == remoteConnectionManagerId)
 
           messageStatuses.synchronized {
-            for (s <- messageStatuses.values if s.connectionManagerId == sendingConnectionManagerId) {
+            for (s <- messageStatuses.values
+                 if s.connectionManagerId == sendingConnectionManagerId) {
               logInfo("Notifying " + s)
               s.synchronized {
                 s.attempted = true
