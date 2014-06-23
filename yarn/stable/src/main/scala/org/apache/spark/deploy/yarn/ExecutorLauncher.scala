@@ -149,7 +149,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
   }
 
   private def registerApplicationMaster(): RegisterApplicationMasterResponse = {
-    val appUIAddress = sparkConf.getOption("spark.driver.appUIAddress").getOrElse("")
+    val appUIAddress = sparkConf.get("spark.driver.appUIAddress", "")
     logInfo(s"Registering the ApplicationMaster with appUIAddress: $appUIAddress")
     amClient.registerApplicationMaster(Utils.localHostName(), 0, appUIAddress)
   }
@@ -158,10 +158,11 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
   private def addAmIpFilter() {
     val proxy = WebAppUtils.getProxyHostAndPort(conf)
     val parts : Array[String] = proxy.split(":")
-    val proxyBase =System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
+    val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
     val uriBase = "http://" + proxy + proxyBase
     val amFilter = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
-    actor ! AddWebUIFilter(amFilter, proxyBase)
+   val amFilterName = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
+    actor ! AddWebUIFilter(amFilterName, amFilter, proxyBase)
   }
 
   private def waitForSparkMaster() {

@@ -117,14 +117,14 @@ private[spark] class YarnClientSchedulerBackend(
     logInfo("Stopped")
   }
 
-  override def addWebUIFilter(filter: String, proxyBase: String) {
-    if (filter != null && filter.nonEmpty && proxyBase != null && proxyBase.nonEmpty) {
-      logInfo(s"Add WebUI Filter. $filter")
-      val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
-      System.setProperty("spark.ui.filters", amFilter)
-      System.setProperty(s"spark.$amFilter.params", filter)
+  override def addWebUIFilter(filterName: String, filterParams: String, proxyBase: String) {
+    if (filterParams != null && filterParams.nonEmpty && proxyBase != null &&
+      proxyBase.nonEmpty && filterName != null && filterName.nonEmpty) {
+      logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
+      conf.set("spark.ui.filters", filterName)
+      conf.set(s"spark.$filterName.params", filterParams)
       System.setProperty("spark.ui.proxyBase", proxyBase)
-      JettyUtils.addFilters(sc.ui.handlers, conf)
+      JettyUtils.addFilters(sc.ui.getHandlers, conf)
     }
   }
 

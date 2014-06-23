@@ -43,7 +43,7 @@ private[spark] abstract class WebUI(
   extends Logging {
 
   protected val tabs = ArrayBuffer[WebUITab]()
-  protected[spark] val handlers = ArrayBuffer[ServletContextHandler]()
+  protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected var serverInfo: Option[ServerInfo] = None
   protected val localHostName = Utils.localHostName()
   protected val publicHostName = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
