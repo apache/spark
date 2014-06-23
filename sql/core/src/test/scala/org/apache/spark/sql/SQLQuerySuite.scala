@@ -373,9 +373,9 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT * FROM lowerCaseData SUBTRACT SELECT * FROM upperCaseData "),
       (1, "a") ::
-              (2, "b") ::
-              (3, "c") ::
-              (4, "d") :: Nil)
+      (2, "b") ::
+      (3, "c") ::
+      4, "d") :: Nil)
     checkAnswer(
       sql("SELECT * FROM lowerCaseData SUBTRACT SELECT * FROM lowerCaseData "), Nil)
   }
