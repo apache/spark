@@ -78,8 +78,8 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
   override def hasExecutorsAliveOnHost(host: String): Boolean = executors.values.exists(_ == host)
 
-  def addExecutor(newExecutors: (String, String)*) {
-    executors ++= newExecutors
+  def addExecutor(execId: String, host: String) {
+    executors.put(execId, host)
   }
 }
 
@@ -403,14 +403,14 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     // Only ANY is valid
     assert(manager.myLocalityLevels.sameElements(Array(ANY)))
     // Add a new executor
-    sched.addExecutor(("execD", "host1"))
+    sched.addExecutor("execD", "host1")
     manager.executorAdded()
     // Task 0 and 1 should be removed from no-pref list
     assert(manager.pendingTasksWithNoPrefs.size === 2)
     // Valid locality should contain NODE_LOCAL and ANY
     assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, ANY)))
     // Add another executor
-    sched.addExecutor(("execC", "host2"))
+    sched.addExecutor("execC", "host2")
     manager.executorAdded()
     // No-pref list now only contains task 3
     assert(manager.pendingTasksWithNoPrefs.size === 1)
