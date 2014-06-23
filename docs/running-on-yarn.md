@@ -128,7 +128,7 @@ For example:
         --num-executors 3 \
         --driver-memory 4g \
         --executor-memory 2g \
-        --executor-cores 1
+        --executor-cores 1 \
         lib/spark-examples*.jar \
         10
 
