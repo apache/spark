@@ -101,7 +101,13 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
         val (localU, localSigma, localVt) = brzSvd(localMat)
         val localV: BDM[Double] = localVt.t.toDenseMatrix
         for (k <- 1 to n) {
-          val svd = mat.computeSVD(k, true, 1e-9, 1e-9, denseSVD)
+          val svd = if (k < n) {
+            if (denseSVD) mat.computeSVD(k, computeU = true)
+            else mat.computeSparseSVD(k, computeU = true)
+          } else {
+            // when k = n, always use dense SVD
+            mat.computeSVD(k, computeU = true)
+          }
           val U = svd.U
           val s = svd.s
           val V = svd.V
@@ -114,7 +120,8 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
           assertColumnEqualUpToSign(V.toBreeze.asInstanceOf[BDM[Double]], localV, k)
           assert(closeToZero(s.toBreeze.asInstanceOf[BDV[Double]] - localSigma(0 until k)))
         }
-        val svdWithoutU = mat.computeSVD(n - 1, false, 1e-9, 1e-9, denseSVD)
+        val svdWithoutU = if (denseSVD) mat.computeSVD(n - 1, computeU = false)
+                          else mat.computeSparseSVD(n - 1, computeU = false)
         assert(svdWithoutU.U === null)
       }
     }
@@ -124,7 +131,8 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     for (denseSVD <- Seq(true, false)) {
       val rows = sc.parallelize(Array.fill(4)(Vectors.dense(1.0, 1.0, 1.0)), 2)
       val mat = new RowMatrix(rows, 4, 3)
-      val svd = mat.computeSVD(2, true, 1e-9, 1e-9, denseSVD)
+      val svd = if (denseSVD) mat.computeSVD(2, computeU = true)
+                else mat.computeSparseSVD(2, computeU = true)
       assert(svd.s.size === 1, "should not return zero singular values")
       assert(svd.U.numRows() === 4)
       assert(svd.U.numCols() === 1)

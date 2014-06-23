@@ -25,13 +25,10 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- * Represents eigenvalue decomposition factors.
+ * Compute eigen-decomposition.
  */
 @Experimental
-case class EigenValueDecomposition[VType](s: Vector, V: VType)
-
-@Experimental
-object EigenValueDecomposition {
+private[mllib] object EigenValueDecomposition {
   /**
    * Compute the leading k eigenvalues and eigenvectors on a symmetric square matrix using ARPACK.
    * The caller needs to ensure that the input matrix is real symmetric. This function requires
@@ -41,6 +38,7 @@ object EigenValueDecomposition {
    * @param n dimension of the square matrix (maximum Int.MaxValue).
    * @param k number of leading eigenvalues required, 0 < k < n.
    * @param tol tolerance of the eigs computation.
+   * @param maxIterations the maximum number of Arnoldi update iterations.
    * @return a dense vector of eigenvalues in descending order and a dense matrix of eigenvectors
    *         (columns of the matrix).
    * @note The number of computed eigenvalues might be smaller than k when some Ritz values do not
@@ -48,8 +46,12 @@ object EigenValueDecomposition {
    *       for more details). The maximum number of Arnoldi update iterations is set to 300 in this
    *       function.
    */
-  private[mllib] def symmetricEigs(mul: DenseVector => DenseVector, n: Int, k: Int, tol: Double)
-    : (BDV[Double], BDM[Double]) = {
+  private[mllib] def symmetricEigs(
+      mul: DenseVector => DenseVector,
+      n: Int,
+      k: Int,
+      tol: Double,
+      maxIterations: Int): (BDV[Double], BDM[Double]) = {
     // TODO: remove this function and use eigs in breeze when switching breeze version
     require(n > k, s"Number of required eigenvalues $k must be smaller than matrix dimension $n")
 
@@ -73,7 +75,7 @@ object EigenValueDecomposition {
     // use exact shift in each iteration
     iparam(0) = 1
     // maximum number of Arnoldi update iterations, or the actual number of iterations on output
-    iparam(2) = 300
+    iparam(2) = maxIterations
     // Mode 1: A*x = lambda*x, A symmetric
     iparam(6) = 1
 
@@ -132,8 +134,8 @@ object EigenValueDecomposition {
     // number of computed eigenvalues, might be smaller than k
     val computed = iparam(4)
 
-    val eigenPairs = java.util.Arrays.copyOfRange(d, 0, computed).zipWithIndex.map {
-      r => (r._1, java.util.Arrays.copyOfRange(z, r._2 * n, r._2 * n + n))
+    val eigenPairs = java.util.Arrays.copyOfRange(d, 0, computed).zipWithIndex.map { r =>
+      (r._1, java.util.Arrays.copyOfRange(z, r._2 * n, r._2 * n + n))
     }
 
     // sort the eigen-pairs in descending order
@@ -141,15 +143,16 @@ object EigenValueDecomposition {
 
     // copy eigenvectors in descending order of eigenvalues
     val sortedU = BDM.zeros[Double](n, computed)
-    sortedEigenPairs.zipWithIndex.foreach {
-      r => {
+    sortedEigenPairs.zipWithIndex.foreach { r => {
         val b = r._2 * n
-        for (i <- 0 until n) {
+        var i = 0
+        while (i < n) {
           sortedU.data(b + i) = r._1._2(i)
+          i += 1
         }
       }
     }
 
-    (BDV(sortedEigenPairs.map(_._1)), sortedU)
+    (BDV[Double](sortedEigenPairs.map(_._1)), sortedU)
   }
 }

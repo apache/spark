@@ -218,6 +218,9 @@ class RowMatrix(
         rBrz match {
           case _: BDV[_] => brzAxpy(a, rBrz.asInstanceOf[BDV[Double]], U)
           case _: BSV[_] => brzAxpy(a, rBrz.asInstanceOf[BSV[Double]], U)
+          case _ =>
+            throw new UnsupportedOperationException(
+              s"Do not support vector operation from type ${rBrz.getClass.getName}.")
         }
         U
       },
@@ -247,43 +250,14 @@ class RowMatrix(
   }
 
   /**
-   * Computes the singular value decomposition of this matrix, using default tolerance (1e-9).
-   *
-   * @param k number of singular values to keep. We might return less than k if there are
-   *          numerically zero singular values. See rCond.
-   * @param computeU whether to compute U
-   * @param rCond the reciprocal condition number. All singular values smaller than rCond * sigma(0)
-   *              are treated as zero, where sigma(0) is the largest singular value.
-   * @return SingularValueDecomposition(U, s, V)
-   */
-  def computeSVD(
-      k: Int,
-      computeU: Boolean = false,
-      rCond: Double = 1e-9): SingularValueDecomposition[RowMatrix, Matrix] = {
-    if (numCols() < 100) {
-      computeSVD(k, computeU, rCond, 1e-9, true)
-    } else {
-      computeSVD(k, computeU, rCond, 1e-9, false)
-    }
-  }
-
-  /**
-   * Computes the singular value decomposition of this matrix.
+   * Computes singular value decomposition of this matrix using dense implementation.
    * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A ~= U * S * V',
    * where S contains the leading singular values, U and V contain the corresponding singular
    * vectors.
    *
-   * There is no restriction on m, but we require `n*(6*k+4)` doubles to fit in memory on the master
-   * node. Further, n should be less than m.
-   *
-   * The decomposition is computed by providing a function that multiples a vector with A'A to
-   * ARPACK, and iteratively invoking ARPACK-dsaupd on master node, from which we recover S and V.
-   * Then we compute U via easy matrix multiplication as U =  A * (V * S^{-1}).
-   * Note that this approach requires approximately `O(k * nnz(A))` time.
-   *
-   * ARPACK requires k to be strictly less than n. Thus when the requested eigenvalues k = n, a
-   * non-sparse implementation will be used, which requires `n^2` doubles to fit in memory and
-   * `O(n^3)` time on the master node.
+   * This approach requires `n^2` doubles to fit in memory and `O(n^3)` time on the master node.
+   * Further, n should be less than m. For problems with small n (e.g. n < 100 and n << m), the
+   * dense implementation might be faster than the sparse implementation.
    *
    * At most k largest non-zero singular values and associated vectors are returned.
    * If there are k such values, then the dimensions of the return will be:
@@ -292,46 +266,125 @@ class RowMatrix(
    * s is a Vector of size k, holding the singular values in descending order,
    * and V is a Matrix of size n x k that satisfies V'V = eye(k).
    *
-   * @param k number of singular values to keep. We might return less than k if there are
-   *          numerically zero singular values. See rCond.
-   * @param computeU whether to compute U
+   * @param k number of leading singular values to keep (0 < k <= n). We might return less than
+   *          k if there are numerically zero singular values. See rCond.
+   * @param computeU whether to compute U.
    * @param rCond the reciprocal condition number. All singular values smaller than rCond * sigma(0)
    *              are treated as zero, where sigma(0) is the largest singular value.
-   * @param tol the numerical tolerance of svd computation. Larger tolerance means fewer iterations,
-   *            but less accurate result.
-   * @param isDenseSVD invoke dense SVD implementation when isDenseSVD = true. This requires
-   *                   `O(n^2)` memory and `O(n^3)` time. For a skinny matrix (m >> n) with small n,
-   *                   dense implementation might be faster.
    * @return SingularValueDecomposition(U, s, V)
    */
   def computeSVD(
       k: Int,
       computeU: Boolean,
-      rCond: Double,
-      tol: Double,
-      isDenseSVD: Boolean): SingularValueDecomposition[RowMatrix, Matrix] = {
+      rCond: Double): SingularValueDecomposition[RowMatrix, Matrix] = {
     val n = numCols().toInt
     require(k > 0 && k <= n, s"Request up to n singular values k=$k n=$n.")
+    val G = computeGramianMatrix()
+    val (uFull: BDM[Double], sigmaSquaresFull: BDV[Double], vFull: BDM[Double]) =
+      brzSvd(G.toBreeze.asInstanceOf[BDM[Double]])
+    computeSVDEffectiveRank(k, n, computeU, rCond, sigmaSquaresFull, uFull)
+  }
 
-    val (sigmaSquares: BDV[Double], u: BDM[Double]) = if (!isDenseSVD && k < n) {
-      EigenValueDecomposition.symmetricEigs(multiplyGramianMatrixBy, n, k, tol)
-    } else {
-      if (!isDenseSVD && k == n) {
-        logWarning(s"Request full SVD (k = n = $k), while ARPACK requires k strictly less than " +
-            s"n. Using non-sparse implementation.")
-      }
-      val G = computeGramianMatrix()
-      val (uFull: BDM[Double], sigmaSquaresFull: BDV[Double], vFull: BDM[Double]) =
-        brzSvd(G.toBreeze.asInstanceOf[BDM[Double]])
-      (sigmaSquaresFull, uFull)
-    }
+  /**
+   * Computes singular value decomposition of this matrix using dense implementation with default
+   * reciprocal condition number (1e-9). See computeSVD for more details.
+   *
+   * @param k number of leading singular values to keep (0 < k <= n). We might return less than
+   *          k if there are numerically zero singular values.
+   * @param computeU whether to compute U.
+   * @return SingularValueDecomposition(U, s, V)
+   */
+  def computeSVD(
+      k: Int,
+      computeU: Boolean = false): SingularValueDecomposition[RowMatrix, Matrix] = {
+    computeSVD(k, computeU, 1e-9)
+  }
+
+  /**
+   * Computes singular value decomposition of this matrix using sparse implementation.
+   * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A ~= U * S * V',
+   * where S contains the leading singular values, U and V contain the corresponding singular
+   * vectors.
+   *
+   * The decomposition is computed by providing a function that multiples a vector with A'A to
+   * ARPACK, and iteratively invoking ARPACK-dsaupd on master node, from which we recover S and V.
+   * Then we compute U via easy matrix multiplication as U =  A * (V * S^{-1}).
+   * Note that this approach requires approximately `O(k * nnz(A))` time.
+   *
+   * There is no restriction on m, but we require `n*(6*k+4)` doubles to fit in memory on the master
+   * node. Further, n should be less than m, and ARPACK requires k to be strictly less than n. If
+   * the requested k = n, please use the dense implementation computeSVD.
+   *
+   * At most k largest non-zero singular values and associated vectors are returned.
+   * If there are k such values, then the dimensions of the return will be:
+   *
+   * U is a RowMatrix of size m x k that satisfies U'U = eye(k),
+   * s is a Vector of size k, holding the singular values in descending order,
+   * and V is a Matrix of size n x k that satisfies V'V = eye(k).
+   *
+   * @param k number of leading singular values to keep (0 < k < n). We might return less than
+   *          k if there are numerically zero singular values. See rCond.
+   * @param computeU whether to compute U.
+   * @param rCond the reciprocal condition number. All singular values smaller than rCond * sigma(0)
+   *              are treated as zero, where sigma(0) is the largest singular value.
+   * @param tol the numerical tolerance of SVD computation. Larger tolerance means fewer iterations,
+   *            but less accurate result.
+   * @param maxIterations the maximum number of Arnoldi update iterations.
+   * @return SingularValueDecomposition(U, s, V)
+   */
+  def computeSparseSVD(
+      k: Int,
+      computeU: Boolean,
+      rCond: Double,
+      tol: Double,
+      maxIterations: Int): SingularValueDecomposition[RowMatrix, Matrix] = {
+    val n = numCols().toInt
+    require(k > 0 && k < n, s"Request up to n - 1 singular values k=$k n=$n. " +
+        s"For full SVD (i.e. k = n), please use dense implementation computeSVD.")
+    val (sigmaSquares: BDV[Double], u: BDM[Double]) =
+      EigenValueDecomposition.symmetricEigs(multiplyGramianMatrixBy, n, k, tol, maxIterations)
+    computeSVDEffectiveRank(k, n, computeU, rCond, sigmaSquares, u)
+  }
+
+  /**
+   * Computes singular value decomposition of this matrix using sparse implementation with default
+   * reciprocal condition number (1e-9), tolerance (1e-10), and maximum number of Arnoldi iterations
+   * (300). See computeSparseSVD for more details.
+   *
+   * @param k number of leading singular values to keep (0 < k < n). We might return less than
+   *          k if there are numerically zero singular values.
+   * @param computeU whether to compute U.
+   * @return SingularValueDecomposition(U, s, V)
+   */
+  def computeSparseSVD(
+      k: Int,
+      computeU: Boolean = false): SingularValueDecomposition[RowMatrix, Matrix] = {
+    computeSparseSVD(k, computeU, 1e-9, 1e-10, 300)
+  }
+
+  /**
+   * Determine effective rank of SVD result and compute left singular vectors if required.
+   */
+  private def computeSVDEffectiveRank(
+      k: Int,
+      n: Int,
+      computeU: Boolean,
+      rCond: Double,
+      sigmaSquares: BDV[Double],
+      u: BDM[Double]): SingularValueDecomposition[RowMatrix, Matrix] = {
     val sigmas: BDV[Double] = brzSqrt(sigmaSquares)
 
     // Determine effective rank.
     val sigma0 = sigmas(0)
     val threshold = rCond * sigma0
     var i = 0
-    while (i < k && sigmas(i) >= threshold) {
+    // sigmas might have a length smaller than k, if some Ritz values do not satisfy the
+    // convergence criterion specified by tol after maxIterations.
+    // Thus use i < min(k, sigmas.length) instead of i < k
+    if (sigmas.length < k) {
+      logWarning(s"Requested $k singular values but only found ${sigmas.length} converged.")
+    }
+    while (i < math.min(k, sigmas.length) && sigmas(i) >= threshold) {
       i += 1
     }
     val sk = i
