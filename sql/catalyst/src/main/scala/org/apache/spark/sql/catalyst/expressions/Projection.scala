@@ -81,6 +81,18 @@ class JoinedRow extends Row {
     this
   }
 
+  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
+  def withLeft(newLeft: Row): Row = {
+    row1 = newLeft
+    this
+  }
+
+  /** Updates this JoinedRow by updating its right base row.  Returns itself. */
+  def withRight(newRight: Row): Row = {
+    row2 = newRight
+    this
+  }
+
   def iterator = row1.iterator ++ row2.iterator
 
   def length = row1.length + row2.length
@@ -123,5 +135,10 @@ class JoinedRow extends Row {
       i += 1
     }
     new GenericRow(copiedValues)
+  }
+
+  override def toString() = {
+    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
+    s"[${row.mkString(",")}]"
   }
 }
