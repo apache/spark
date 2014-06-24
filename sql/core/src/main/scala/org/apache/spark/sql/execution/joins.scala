@@ -170,6 +170,9 @@ case class LeftSemiJoinHash(
 
   val buildSide = BuildRight
 
+  override def requiredChildDistribution =
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+
   override def output = left.output
 
   def execute() = {
