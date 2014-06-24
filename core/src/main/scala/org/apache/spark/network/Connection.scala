@@ -17,11 +17,6 @@
 
 package org.apache.spark.network
 
-import org.apache.spark._
-import org.apache.spark.SparkSaslServer
-
-import scala.collection.mutable.{HashMap, Queue, ArrayBuffer}
-
 import java.net._
 import java.nio._
 import java.nio.channels._
@@ -41,7 +36,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
   def this(channel_ : SocketChannel, selector_ : Selector, id_ : ConnectionId) = {
     this(channel_, selector_,
       ConnectionManagerId.fromSocketAddress(
-        channel_.socket.getRemoteSocketAddress().asInstanceOf[InetSocketAddress]), id_)
+        channel_.socket.getRemoteSocketAddress.asInstanceOf[InetSocketAddress]), id_)
   }
 
   channel.configureBlocking(false)
@@ -89,7 +84,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
 
   private def disposeSasl() {
     if (sparkSaslServer != null) {
-      sparkSaslServer.dispose();
+      sparkSaslServer.dispose()
     }
 
     if (sparkSaslClient != null) {
@@ -328,15 +323,13 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
       // Is highly unlikely unless there was an unclean close of socket, etc
       registerInterest()
       logInfo("Connected to [" + address + "], " + outbox.messages.size + " messages pending")
-      true
     } catch {
       case e: Exception => {
         logWarning("Error finishing connection to " + address, e)
         callOnExceptionCallback(e)
-        // ignore
-        return true
       }
     }
+    true
   }
 
   override def write(): Boolean = {
@@ -546,7 +539,7 @@ private[spark] class ReceivingConnection(
           /* println("Filled buffer at " + System.currentTimeMillis) */
           val bufferMessage = inbox.getMessageForChunk(currentChunk).get
           if (bufferMessage.isCompletelyReceived) {
-            bufferMessage.flip
+            bufferMessage.flip()
             bufferMessage.finishTime = System.currentTimeMillis
             logDebug("Finished receiving [" + bufferMessage + "] from " +
               "[" + getRemoteConnectionManagerId() + "] in " + bufferMessage.timeTaken)
