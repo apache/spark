@@ -201,6 +201,5 @@ object ExistingRdd {
  */
 @DeveloperApi
 case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
-  def tableName: String = s"ExistingRdd(${rdd.name})"
   override def execute() = rdd
 }

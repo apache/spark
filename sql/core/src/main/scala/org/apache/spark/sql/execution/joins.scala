@@ -18,16 +18,15 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.mutable.{ArrayBuffer, BitSet}
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.apache.spark.SparkContext
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Partitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical._
 
 @DeveloperApi
 sealed abstract class BuildSide

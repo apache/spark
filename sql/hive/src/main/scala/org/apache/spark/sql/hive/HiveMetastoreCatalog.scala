@@ -242,8 +242,6 @@ object HiveMetastoreTypes extends RegexParsers {
   }
 }
 
-
-
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: TTable, val partitions: Seq[TPartition])
@@ -253,12 +251,6 @@ private[hive] case class MetastoreRelation
   // Right now, using org.apache.hadoop.hive.ql.metadata.Table and
   // org.apache.hadoop.hive.ql.metadata.Partition will cause a NotSerializableException
   // which indicates the SerDe we used is not Serializable.
-
-  def estimatedSize(context: HiveContext): Long = {
-    val path = hiveQlTable.getPath
-    val fs = path.getFileSystem(context.hiveconf) // TODO: or sc.hadoopConfiguration?
-    fs.getContentSummary(path).getLength // TODO: in bytes or system-dependent?
-  }
 
   def hiveQlTable = new Table(table)
 

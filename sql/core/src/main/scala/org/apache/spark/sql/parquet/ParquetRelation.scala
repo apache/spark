@@ -49,18 +49,9 @@ import scala.collection.JavaConversions._
  */
 private[sql] case class ParquetRelation(
     path: String,
-    @transient conf: Option[Configuration] = None)
-  extends LeafNode
-  with MultiInstanceRelation {
+    @transient conf: Option[Configuration] = None) extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
-
-  def estimatedSize(context: SQLContext): Long = {
-    // TODO: right config?
-    val hdfsPath = new Path(path)
-    val fs = hdfsPath.getFileSystem(context.sparkContext.hadoopConfiguration)
-    fs.getContentSummary(hdfsPath).getLength // TODO: in bytes or system-dependent?
-  }
 
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =
