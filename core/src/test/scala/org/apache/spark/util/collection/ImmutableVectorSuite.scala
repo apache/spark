@@ -33,6 +33,7 @@ class ImmutableVectorSuite extends FunSuite {
     for (size <- sizes) {
       println(size)
       val v = ImmutableVector.fromArray((0 until size).toArray)
+      assert(v.size === size)
       for (i <- 0 until size) {
         assert(v(i) == i)
       }

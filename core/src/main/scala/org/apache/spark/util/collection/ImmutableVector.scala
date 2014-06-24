@@ -123,7 +123,7 @@ private class VectorIterator[@specialized(Long, Int) +A](v: ImmutableVector[A]) 
 }
 
 sealed trait ImmutableVector[@specialized(Long, Int) +A] extends Serializable {
-  def length: Int
+  def size: Int
   def iterator: Iterator[A] = new VectorIterator[A](this)
   def apply(index: Int): A
   def updated[B >: A : ClassTag](index: Int, elem: B): ImmutableVector[B]
@@ -139,7 +139,7 @@ private class InternalNode[@specialized(Long, Int) +A](
   require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
   require(depth >= 1, "InternalNode must have depth >= 1 (got $depth)")
 
-  override def length = (children.length - 1) * 32 + children.last.length
+  override def size = children.map(_.size).sum
 
   override def apply(index: Int): A = {
     val shift = 5 * depth
@@ -171,7 +171,7 @@ private class LeafNode[@specialized(Long, Int) +A](
 
   require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
 
-  override def length = children.length
+  override def size = children.size
 
   override def apply(index: Int): A = children(index)
 
