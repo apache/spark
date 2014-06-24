@@ -214,6 +214,6 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   override def output = children.head.output
 
   override def execute() = {
-    left.execute().intersection(right.execute())
+    left.execute().map(_.copy()).intersection(right.execute().map(_.copy()))
   }
 }
