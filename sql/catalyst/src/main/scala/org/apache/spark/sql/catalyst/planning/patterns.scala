@@ -172,8 +172,8 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       logger.debug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
-      val (joinPredicates, otherPredicates) = condition.map(splitConjunctivePredicates).
-        getOrElse(Nil).partition {
+      val (joinPredicates, otherPredicates) = 
+        condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
           case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
             (canEvaluate(l, right) && canEvaluate(r, left)) => true
           case _ => false
@@ -186,7 +186,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       val leftKeys = joinKeys.map(_._1)
       val rightKeys = joinKeys.map(_._2)
 
-      if(leftKeys.length > 0) {
+      if (leftKeys.length > 0) {
         logger.debug(s"leftKeys:${leftKeys} | rightKeys:${rightKeys}")
         Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
       } else {
