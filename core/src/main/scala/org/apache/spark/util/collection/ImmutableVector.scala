@@ -20,15 +20,13 @@ package org.apache.spark.util.collection
 import scala.reflect.ClassTag
 
 object ImmutableVector {
-  private val NIL = new LeafNode(Array.empty)
+  def empty[A: ClassTag]: ImmutableVector[A] = new LeafNode(Array.empty)
 
-  def empty[A]: ImmutableVector[A] = NIL
-
-  def fromArray[A](array: Array[A]): ImmutableVector[A] = {
+  def fromArray[A: ClassTag](array: Array[A]): ImmutableVector[A] = {
     fromArray(array, 0, array.length)
   }
 
-  def fromArray[A](array: Array[A], start: Int, end: Int): ImmutableVector[A] = {
+  def fromArray[A: ClassTag](array: Array[A], start: Int, end: Int): ImmutableVector[A] = {
     val length = end - start
     if (length == 0) {
       // println("fromArray(%d, %d) => empty".format(start, end))
@@ -69,7 +67,7 @@ object ImmutableVector {
   }
 }
 
-private class VectorIterator[@specialized(Long, Int) +A](v: ImmutableVector[A]) extends Iterator[A] {
+private class VectorIterator[@specialized(Long, Int) A](v: ImmutableVector[A]) extends Iterator[A] {
   private[this] val elemStack: Array[ImmutableVector[A]] = Array.fill(8)(null)
   private[this] val idxStack: Array[Int] = Array.fill(8)(-1)
   private[this] var pos: Int = 0
@@ -122,15 +120,15 @@ private class VectorIterator[@specialized(Long, Int) +A](v: ImmutableVector[A]) 
   }
 }
 
-sealed trait ImmutableVector[@specialized(Long, Int) +A] extends Serializable {
+sealed trait ImmutableVector[@specialized(Long, Int) A] extends Serializable {
   def size: Int
-  def iterator: Iterator[A] = new VectorIterator[A](this)
+  def iterator(a: A = null.asInstanceOf[A]): Iterator[A] = new VectorIterator[A](this)
   def apply(index: Int): A
-  def updated[B >: A : ClassTag](index: Int, elem: B): ImmutableVector[B]
+  def updated(index: Int, elem: A): ImmutableVector[A]
   def numChildren: Int
 }
 
-private class InternalNode[@specialized(Long, Int) +A](
+private class InternalNode[@specialized(Long, Int) A: ClassTag](
     children: Array[ImmutableVector[A]],
     val depth: Int)
   extends ImmutableVector[A] {
@@ -159,12 +157,12 @@ private class InternalNode[@specialized(Long, Int) +A](
     result
   }
 
-  override def updated[B >: A : ClassTag](index: Int, elem: B) = {
+  override def updated(index: Int, elem: A) = {
     val shift = 5 * depth
     val localIndex = (index >> shift) & 31
     val childIndex = index & ~(31 << shift)
 
-    val newChildren = new Array[ImmutableVector[B]](children.length)
+    val newChildren = new Array[ImmutableVector[A]](children.length)
     System.arraycopy(children, 0, newChildren, 0, children.length)
     newChildren(localIndex) = children(localIndex).updated(childIndex, elem)
     new InternalNode(newChildren, depth)
@@ -175,7 +173,7 @@ private class InternalNode[@specialized(Long, Int) +A](
   def childAt(index: Int): ImmutableVector[A] = children(index)
 }
 
-private class LeafNode[@specialized(Long, Int) +A](
+private class LeafNode[@specialized(Long, Int) A: ClassTag](
     children: Array[A])
   extends ImmutableVector[A] {
 
@@ -185,8 +183,8 @@ private class LeafNode[@specialized(Long, Int) +A](
 
   override def apply(index: Int): A = children(index)
 
-  override def updated[B >: A : ClassTag](index: Int, elem: B) = {
-    val newChildren = new Array[B](children.length)
+  override def updated(index: Int, elem: A) = {
+    val newChildren = new Array[A](children.length)
     System.arraycopy(children, 0, newChildren, 0, children.length)
     newChildren(index) = elem
     new LeafNode(newChildren)
