@@ -90,21 +90,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       self.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
-    } else if (mapSideCombine) {
-      val combined = self.mapPartitionsWithContext((context, iter) => {
-        aggregator.combineValuesByKey(iter, context)
-      }, preservesPartitioning = true)
-      val partitioned = new ShuffledRDD[K, C, (K, C)](combined, partitioner)
-        .setSerializer(serializer)
-      partitioned.mapPartitionsWithContext((context, iter) => {
-        new InterruptibleIterator(context, aggregator.combineCombinersByKey(iter, context))
-      }, preservesPartitioning = true)
     } else {
-      // Don't apply map-side combiner.
-      val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializer)
-      values.mapPartitionsWithContext((context, iter) => {
-        new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
-      }, preservesPartitioning = true)
+      new ShuffledRDD[K, V, C, (K, C)](self, partitioner)
+        .setSerializer(serializer)
+        .setAggregator(aggregator)
+        .setMapSideCombine(mapSideCombine)
     }
   }
 
@@ -401,7 +391,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     if (self.partitioner == Some(partitioner)) {
       self
     } else {
-      new ShuffledRDD[K, V, (K, V)](self, partitioner)
+      new ShuffledRDD[K, V, V, (K, V)](self, partitioner)
     }
   }
 
