@@ -119,6 +119,20 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
     executor.pushSingle(dataItem)
   }
 
+  /**
+   * Store a single item of received data to Spark's memory. When the data is successfully stored
+   * in Spark's memory, the callback function is called with arg passed in as its argument.
+   * @param dataItem - The data item to store
+   * @param callback - The function to call when the dataItem has been stored successfully
+   * @param arg - The argument to pass to the callback function. This is typically a transaction
+   *            id or message id that can be used to let the sender know that the data can be
+   *            removed from its own queue/storage. A typical use-case is where this is used as a
+   *            key in a map. The callback function can find the relevant transaction and commit it.
+   */
+  def store(dataItem: T, callback: Any => Unit, arg: Any) {
+    executor.pushSingle(dataItem, callback, arg)
+  }
+
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def store(dataBuffer: ArrayBuffer[T]) {
     executor.pushArrayBuffer(dataBuffer, None, None)

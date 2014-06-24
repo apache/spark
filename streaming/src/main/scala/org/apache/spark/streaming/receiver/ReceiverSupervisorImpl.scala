@@ -102,6 +102,16 @@ private[streaming] class ReceiverSupervisorImpl(
     blockGenerator += (data)
   }
 
+  /**
+   * Reliably store this data and call the callback function when the data is stored reliably.
+   * @param callback - Function to call when the block containing this data is pushed
+   * @param data - The data to push.
+   * @param arg - The argument to pass to the callback function
+   */
+  def pushSingle(data: Any, callback: Any => Unit, arg: Any) {
+    blockGenerator.store(data, callback, arg)
+  }
+
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
       arrayBuffer: ArrayBuffer[_],
