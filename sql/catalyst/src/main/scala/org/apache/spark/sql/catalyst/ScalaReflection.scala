@@ -45,10 +45,15 @@ object ScalaReflection {
       val TypeRef(_, _, Seq(optType)) = t
       schemaFor(optType)
     case t if t <:< typeOf[Product] =>
-      val params = t.member("<init>": TermName).asMethod.paramss
+      val formalTypeArgs = t.typeSymbol.asClass.typeParams
+      val TypeRef(_, _, actualTypeArgs) = t
+      val params = t.member(nme.CONSTRUCTOR).asMethod.paramss
       StructType(
         params.head.map(p =>
-          StructField(p.name.toString, schemaFor(p.typeSignature), nullable = true)))
+          StructField(
+            p.name.toString,
+            schemaFor(p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)),
+            nullable = true)))
     // Need to decide if we actually need a special type here.
     case t if t <:< typeOf[Array[Byte]] => BinaryType
     case t if t <:< typeOf[Array[_]] =>
