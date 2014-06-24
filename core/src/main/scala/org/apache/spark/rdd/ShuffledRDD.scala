@@ -65,11 +65,6 @@ class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
     this
   }
 
-  def setAscendingFlag(ascending: Boolean): ShuffledRDD[K, V, C, P] = {
-    this.ascending = ascending
-    this
-  }
-
   /** Set aggregator for RDD's shuffle. */
   def setAggregator(aggregator: Aggregator[K, V, C]): ShuffledRDD[K, V, C, P] = {
     this.aggregator = Option(aggregator)
@@ -79,6 +74,12 @@ class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
   /** Set mapSideCombine flag for RDD's shuffle. */
   def setMapSideCombine(mapSideCombine: Boolean): ShuffledRDD[K, V, C, P] = {
     this.mapSideCombine = mapSideCombine
+    this
+  }
+
+  /** Set sort flag for RDD's sorting. */
+  def setSortFlag(ascending: Boolean): ShuffledRDD[K, V, C, P] = {
+    this.ascending = ascending
     this
   }
 

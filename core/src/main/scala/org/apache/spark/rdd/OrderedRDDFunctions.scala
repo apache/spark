@@ -59,6 +59,6 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
     val part = new RangePartitioner(numPartitions, self, ascending)
     new ShuffledRDD[K, V, V, P](self, part)
       .setKeyOrdering(ordering)
-      .setAscendingFlag(ascending)
+      .setSortFlag(ascending)
   }
 }

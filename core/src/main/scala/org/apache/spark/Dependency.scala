@@ -66,8 +66,6 @@ class ShuffleDependency[K, V, C](
     val ascending: Boolean = true)
   extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) {
 
-  def isKeySorted = keyOrdering.isDefined
-
   val shuffleId: Int = rdd.context.newShuffleId()
 
   val shuffleHandle: ShuffleHandle = rdd.context.env.shuffleManager.registerShuffle(
