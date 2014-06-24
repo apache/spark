@@ -394,7 +394,7 @@ case class SkewJoin(
         //find the largest key
         if (sortedSample.size > 1) {
             for (i <- 1 to num) {
-                if (sortedSample(i - 1) == sortedSample(i)) temp += 1
+                if (sortedSample(i - 1) == sortedSample(i)){ temp += 1 }
                 else {
                     if (temp > max) {
                         max = temp
@@ -404,11 +404,14 @@ case class SkewJoin(
                 }
             }
         }
-        val maxKeyStreamedTable = streamedTable.filter(row => {
+     //   val maxKeyStreamedTable = streamedTable.filter(row => {
+     //       streamSideKeyGenerator(row).toString().equals(maxrowKey.toString())
+    //    })
+    //    val mainStreamedTable = streamedTable.filter(row => {
+    //        !streamSideKeyGenerator(row).toString().equals(maxrowKey.toString())
+   //     })
+        val (maxKeyStreamedTable, mainStreamedTable) = streamedTable.partition(row => {
             streamSideKeyGenerator(row).toString().equals(maxrowKey.toString())
-        })
-        val mainStreamedTable = streamedTable.filter(row => {
-            !streamSideKeyGenerator(row).toString().equals(maxrowKey.toString())
         })
         val buildRdd = buildPlan.execute()
         val maxKeyJoinedRdd = maxKeyStreamedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())).map {
