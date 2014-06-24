@@ -71,8 +71,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               condition,
               left,
               right @ PhysicalOperation(_, _, b: BaseRelation))
-        if broadcastTables.contains(b.tableName) =>
-          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
+        if broadcastTables.contains(b.tableName)
+          || (right.estimates.size <= sqlContext.autoConvertJoinSize) =>
+            broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
       case ExtractEquiJoinKeys(
               Inner,
@@ -81,7 +82,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               condition,
               left @ PhysicalOperation(_, _, b: BaseRelation),
               right)
-        if broadcastTables.contains(b.tableName) =>
+        if broadcastTables.contains(b.tableName)
+          || (left.estimates.size <= sqlContext.autoConvertJoinSize) =>
           broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>

@@ -19,11 +19,12 @@ package org.apache.spark.sql.hive
 
 import scala.util.parsing.combinator.RegexParsers
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, StorageDescriptor, SerDeInfo}
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.TableDesc
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.Deserializer
 
 import org.apache.spark.annotation.DeveloperApi
@@ -64,9 +65,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
     // Since HiveQL is case insensitive for table names we make them all lowercase.
     MetastoreRelation(
-      databaseName,
-      tblName,
-      alias)(table.getTTable, partitions.map(part => part.getTPartition))
+      databaseName, tblName, alias)(
+      table.getTTable, partitions.map(part => part.getTPartition))(
+      hive.hiveconf, table.getPath)
   }
 
   def createTable(
@@ -251,7 +252,11 @@ object HiveMetastoreTypes extends RegexParsers {
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: TTable, val partitions: Seq[TPartition])
+    (@transient hiveConf: HiveConf, @transient path: Path)
   extends BaseRelation {
+
+  self: Product =>
+
   // TODO: Can we use org.apache.hadoop.hive.ql.metadata.Table as the type of table and
   // use org.apache.hadoop.hive.ql.metadata.Partition as the type of elements of partitions.
   // Right now, using org.apache.hadoop.hive.ql.metadata.Table and
@@ -262,6 +267,19 @@ private[hive] case class MetastoreRelation
 
   def hiveQlPartitions = partitions.map { p =>
     new Partition(hiveQlTable, p)
+  }
+
+  // TODO: are there any stats in hiveQlTable.getSkewedInfo that we can use?
+  @transient override lazy val estimates = new Estimates {
+    // Size getters adapted from
+    // https://github.com/apache/hive/blob/trunk/ql/src/java/org/apache/hadoop/hive/ql/optimizer/SizeBasedBigTableSelectorForAutoSMJ.java
+    override lazy val size: Long =
+      maybeGetSize(hiveConf, hiveQlTable.getProperty("totalSize"), path)
+
+    private[this] def maybeGetSize(conf: HiveConf, size: String, path: Path): Long = {
+      val res = try { Some(size.toLong) } catch { case _: Exception => None }
+      res.getOrElse { path.getFileSystem(conf).getContentSummary(path).getLength }
+    }
   }
 
   val tableDesc = new TableDesc(
@@ -275,14 +293,14 @@ private[hive] case class MetastoreRelation
     hiveQlTable.getMetadata
   )
 
-   implicit class SchemaAttribute(f: FieldSchema) {
-     def toAttribute = AttributeReference(
-       f.getName,
-       HiveMetastoreTypes.toDataType(f.getType),
-       // Since data can be dumped in randomly with no validation, everything is nullable.
-       nullable = true
-     )(qualifiers = tableName +: alias.toSeq)
-   }
+  implicit class SchemaAttribute(f: FieldSchema) {
+    def toAttribute = AttributeReference(
+      f.getName,
+      HiveMetastoreTypes.toDataType(f.getType),
+      // Since data can be dumped in randomly with no validation, everything is nullable.
+      nullable = true
+    )(qualifiers = tableName +: alias.toSeq)
+  }
 
   // Must be a stable value since new attributes are born here.
   val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)

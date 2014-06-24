@@ -22,11 +22,14 @@ import java.io.IOException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
+import org.apache.hadoop.mapreduce.Job
 
 import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.metadata.CompressionCodecName
+import parquet.hadoop.util.ContextUtil
 import parquet.schema.MessageType
 
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
@@ -43,11 +46,21 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
  *
  * @param path The path to the Parquet file.
  */
+// TODO: make me a BaseRelation? For HashJoin strategy.
 private[sql] case class ParquetRelation(
     path: String,
     @transient conf: Option[Configuration] = None) extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
+
+  @transient override lazy val estimates = new Estimates {
+    // TODO: investigate getting encoded column statistics in the parquet file?
+    override lazy val size: Long = {
+      val hdfsPath = new Path(path)
+      val fs = hdfsPath.getFileSystem(conf.getOrElse(ContextUtil.getConfiguration(new Job())))
+      fs.getContentSummary(hdfsPath).getLength // TODO: in bytes or system-dependent?
+    }
+  }
 
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =

@@ -26,6 +26,18 @@ import org.apache.spark.sql.catalyst.trees
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   self: Product =>
 
+  protected class Estimates {
+    lazy val childrenEstimations = children.map(_.estimates)
+    lazy val cardinality: Long = childrenEstimations.map(_.cardinality).sum
+    lazy val numTuples: Long = childrenEstimations.map(_.size).sum
+    lazy val size: Long = childrenEstimations.map(_.numTuples).sum
+  }
+
+  /**
+   * Estimates of various statistics.
+   */
+  lazy val estimates: Estimates = new Estimates
+
   /**
    * Returns the set of attributes that are referenced by this node
    * during evaluation.

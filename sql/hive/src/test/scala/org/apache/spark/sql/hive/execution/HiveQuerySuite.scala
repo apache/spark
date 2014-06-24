@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.execution.{BuildRight, BroadcastHashJoin}
+
 import scala.util.Try
 
+import org.apache.spark.sql.{SchemaRDD, Row}
+import org.apache.spark.sql.hive.MetastoreRelation
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{SchemaRDD, Row}
 
 case class TestData(a: Int, b: String)
 
@@ -46,6 +49,28 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
     assert(hql("SELECT COUNT(*) FROM foo").collect().head.getLong(0) === 1,
       "Incorrect number of rows in created table")
+  }
+
+  // TODO: put me in a separate EstimateSuite?
+  test("BHJ by size") {
+    hql("""SET spark.sql.join.broadcastTables=""") // reset broadcast tables
+    // TODO: use two different tables?
+    // assume src has small size
+    val rdd = hql("""SELECT * FROM src a JOIN src b ON a.key = b.key""")
+    val physical = rdd.queryExecution.sparkPlan
+    val bhj = physical.collect { case j: BroadcastHashJoin => j }
+    println(s"${rdd.queryExecution}")
+    assert(bhj.size === 1)
+  }
+
+  // TODO: put me in a separate EstimateSuite?
+  test("estimates the size of a MetastoreRelation") {
+    val rdd = hql("""SELECT * FROM src""")
+    println(s"${rdd.queryExecution}")
+    val sizes = rdd.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
+      mr.estimates.size
+    }.toSeq
+    assert(sizes.size === 1 && sizes(0) > 0)
   }
 
   createQueryTest("between",
