@@ -314,6 +314,7 @@ private[spark] class TaskSchedulerImpl(
     tid: Long,
     taskResult: DirectTaskResult[_]) = synchronized {
     taskSetManager.handleSuccessfulTask(tid, taskResult)
+    backend.reviveOffers()
   }
 
   def handleFailedTask(
@@ -322,11 +323,12 @@ private[spark] class TaskSchedulerImpl(
     taskState: TaskState,
     reason: TaskEndReason) = synchronized {
     taskSetManager.handleFailedTask(tid, taskState, reason)
-    if (!taskSetManager.isZombie && taskState != TaskState.KILLED) {
+    //if (!taskSetManager.isZombie && taskState != TaskState.KILLED) {
       // Need to revive offers again now that the task set manager state has been updated to
       // reflect failed tasks that need to be re-run.
-      backend.reviveOffers()
-    }
+      //backend.reviveOffers()
+    //}
+    backend.reviveOffers()
   }
 
   def error(message: String) {

@@ -90,7 +90,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         if (TaskState.isFinished(state)) {
           if (executorActor.contains(executorId)) {
             freeCores(executorId) += scheduler.CPUS_PER_TASK
-            makeOffers(executorId)
+            //makeOffers(executorId)
           } else {
             // Ignoring the update since we don't know about the executor.
             val msg = "Ignored task status update (%d state %s) from unknown executor %s with ID %s"
@@ -129,7 +129,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     // Make fake resource offers on all executors
     def makeOffers() {
       launchTasks(scheduler.resourceOffers(
-        executorHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
+        for ((id, host) <- executorHost.toArray if freeCores(id) > 0) yield new WorkerOffer(id, host, freeCores(id))))
+        //executorHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
     }
 
     // Make fake resource offers on just one executor
