@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
-import org.apache.spark.ui.JettyUtils
 import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, ExecutorLauncher}
 import org.apache.spark.scheduler.TaskSchedulerImpl
@@ -115,17 +114,6 @@ private[spark] class YarnClientSchedulerBackend(
     super.stop()
     client.stop
     logInfo("Stopped")
-  }
-
-  override def addWebUIFilter(filterName: String, filterParams: String, proxyBase: String) {
-    if (filterParams != null && filterParams.nonEmpty && proxyBase != null &&
-      proxyBase.nonEmpty && filterName != null && filterName.nonEmpty) {
-      logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
-      conf.set("spark.ui.filters", filterName)
-      conf.set(s"spark.$filterName.params", filterParams)
-      System.setProperty("spark.ui.proxyBase", proxyBase)
-      JettyUtils.addFilters(sc.ui.getHandlers, conf)
-    }
   }
 
 }
