@@ -21,10 +21,10 @@ import org.apache.spark.sql.{SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{SizeEstimatableRelation, BaseRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.parquet._
 import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
+import org.apache.spark.sql.parquet._
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
@@ -52,7 +52,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * evaluated by matching hash keys.
    */
   object HashJoin extends Strategy with PredicateHelper {
-
     private[this] def broadcastHashJoin(
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
@@ -65,10 +64,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
     }
 
-    def broadcastTables: Seq[String] =
-      sparkContext.conf.get("spark.sql.hints.broadcastTables", "").split(",").toBuffer
+    def broadcastTables: Seq[String] = sqlContext.joinBroadcastTables.split(",").toBuffer
 
-    // TODO: how to unit test these conversions?
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case HashFilteredJoin(
               Inner,
@@ -78,7 +75,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               left,
               right @ PhysicalOperation(_, _, b: BaseRelation))
         if broadcastTables.contains(b.tableName) =>
-          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
+            broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
       case HashFilteredJoin(
               Inner,
@@ -88,27 +85,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               left @ PhysicalOperation(_, _, b: BaseRelation),
               right)
         if broadcastTables.contains(b.tableName) =>
-          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
-
-      case HashFilteredJoin(
-              Inner,
-              leftKeys,
-              rightKeys,
-              condition,
-              left,
-              right @ PhysicalOperation(_, _, b: SizeEstimatableRelation[SQLContext]))
-        if b.estimatedSize(sqlContext) <= sqlContext.autoConvertJoinSize =>
-          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
-
-      case HashFilteredJoin(
-              Inner,
-              leftKeys,
-              rightKeys,
-              condition,
-              left @ PhysicalOperation(_, _, b: SizeEstimatableRelation[SQLContext]),
-              right)
-        if b.estimatedSize(sqlContext) <= sqlContext.autoConvertJoinSize =>
-          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
+            broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case HashFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
         val hashJoin =
@@ -125,10 +102,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
         // Collect all aggregate expressions.
         val allAggregates =
-          aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a})
+          aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a })
         // Collect all aggregate expressions that can be computed partially.
         val partialAggregates =
-          aggregateExpressions.flatMap(_ collect { case p: PartialAggregate => p})
+          aggregateExpressions.flatMap(_ collect { case p: PartialAggregate => p })
 
         // Only do partial aggregation if supported by all aggregate expressions.
         if (allAggregates.size == partialAggregates.size) {
@@ -305,7 +282,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.ExistingRdd(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
-      case SparkLogicalPlan(existingPlan) => existingPlan :: Nil
+      case SparkLogicalPlan(existingPlan, _) => existingPlan :: Nil
       case _ => Nil
     }
   }

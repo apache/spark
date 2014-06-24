@@ -38,7 +38,6 @@ case object BuildLeft extends BuildSide
 @DeveloperApi
 case object BuildRight extends BuildSide
 
-
 trait HashJoin {
   val leftKeys: Seq[Expression]
   val rightKeys: Seq[Expression]
@@ -333,7 +332,6 @@ case class BroadcastNestedLoopJoin(
       condition
         .map(c => BindReferences.bindReference(c, left.output ++ right.output))
         .getOrElse(Literal(true)))
-
 
   def execute() = {
     val broadcastedRelation = sc.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)

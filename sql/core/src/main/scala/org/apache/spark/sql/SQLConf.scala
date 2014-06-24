@@ -30,6 +30,7 @@ import scala.collection.JavaConverters._
 trait SQLConf {
 
   /** ************************ Spark SQL Params/Hints ******************* */
+  // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
 
   /** Number of partitions to use for shuffle operators. */
   private[spark] def numShufflePartitions: Int = get("spark.sql.shuffle.partitions", "200").toInt
@@ -42,6 +43,9 @@ trait SQLConf {
    */
   private[spark] def autoConvertJoinSize: Int =
     get("spark.sql.auto.convert.join.size", "10000").toInt
+
+  /** A comma-separated list of table names marked to be broadcasted during joins. */
+  private[spark] def joinBroadcastTables: String = get("spark.sql.join.broadcastTables", "")
 
   /** ********************** SQLConf functionality methods ************ */
 
