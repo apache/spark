@@ -247,8 +247,7 @@ object HiveMetastoreTypes extends RegexParsers {
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: TTable, val partitions: Seq[TPartition])
-  extends BaseRelation
-  with SizeEstimatableRelation[HiveContext] {
+  extends BaseRelation {
   // TODO: Can we use org.apache.hadoop.hive.ql.metadata.Table as the type of table and
   // use org.apache.hadoop.hive.ql.metadata.Partition as the type of elements of partitions.
   // Right now, using org.apache.hadoop.hive.ql.metadata.Table and

@@ -29,9 +29,8 @@ import parquet.schema.MessageType
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{SizeEstimatableRelation, LogicalPlan, LeafNode}
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
 
 // Implicits
 import scala.collection.JavaConversions._
@@ -52,8 +51,7 @@ private[sql] case class ParquetRelation(
     path: String,
     @transient conf: Option[Configuration] = None)
   extends LeafNode
-  with MultiInstanceRelation
-  with SizeEstimatableRelation[SQLContext] {
+  with MultiInstanceRelation {
 
   self: Product =>
 

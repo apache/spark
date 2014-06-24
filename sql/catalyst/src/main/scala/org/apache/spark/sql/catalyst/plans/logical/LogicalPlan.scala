@@ -109,12 +109,3 @@ abstract class UnaryNode extends LogicalPlan with trees.UnaryNode[LogicalPlan] {
 abstract class BinaryNode extends LogicalPlan with trees.BinaryNode[LogicalPlan] {
   self: Product =>
 }
-
-/**
- * A trait that can be mixed in by logical operators representing relations that could
- * estimate their physical sizes.
- * @tparam Ctx input (context) to the size estimator
- */
-trait SizeEstimatableRelation[Ctx] { self: LogicalPlan =>
-  def estimatedSize(context: Ctx): Long
-}
