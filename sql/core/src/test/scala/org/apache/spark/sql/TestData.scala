@@ -30,6 +30,17 @@ object TestData {
     (1 to 100).map(i => TestData(i, i.toString)))
   testData.registerAsTable("testData")
 
+  case class LargeAndSmallInts(a: Int, b: Int)
+  val largeAndSmallInts: SchemaRDD =
+    TestSQLContext.sparkContext.parallelize(
+      LargeAndSmallInts(2147483644, 1) ::
+      LargeAndSmallInts(1, 2) ::
+      LargeAndSmallInts(2147483645, 1) ::
+      LargeAndSmallInts(2, 2) ::
+      LargeAndSmallInts(2147483646, 1) ::
+      LargeAndSmallInts(3, 2) :: Nil)
+  largeAndSmallInts.registerAsTable("largeAndSmallInts")
+  
   case class TestData2(a: Int, b: Int)
   val testData2: SchemaRDD =
     TestSQLContext.sparkContext.parallelize(
@@ -46,6 +57,8 @@ object TestData {
     logical.LocalRelation('a.int, 'b.int).loadData(
       (1, null) ::
       (2, 2) :: Nil)
+
+  val emptyTableData = logical.LocalRelation('a.int, 'b.int)
 
   case class UpperCaseData(N: Int, L: String)
   val upperCaseData =
@@ -104,4 +117,15 @@ object TestData {
       NullInts(null) :: Nil
     )
   nullInts.registerAsTable("nullInts")
+
+  case class NullStrings(n: Int, s: String)
+  val nullStrings =
+    TestSQLContext.sparkContext.parallelize(
+      NullStrings(1, "abc") ::
+      NullStrings(2, "ABC") ::
+      NullStrings(3, null) :: Nil)
+  nullStrings.registerAsTable("nullStrings")
+
+  case class TableName(tableName: String)
+  TestSQLContext.sparkContext.parallelize(TableName("test") :: Nil).registerAsTable("tableName")
 }

@@ -29,9 +29,9 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
   setInitThread()
 
   private def setInitThread() {
-    // Set current thread as init thread - waitForReady will not block this thread
-    // (in case there is non trivial initialization which ends up calling waitForReady as part of
-    // initialization itself)
+    /* Set current thread as init thread - waitForReady will not block this thread
+     * (in case there is non trivial initialization which ends up calling waitForReady
+     * as part of initialization itself) */
     BlockInfo.blockInfoInitThreads.put(this, Thread.currentThread())
   }
 
@@ -42,7 +42,9 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
   def waitForReady(): Boolean = {
     if (pending && initThread != Thread.currentThread()) {
       synchronized {
-        while (pending) this.wait()
+        while (pending) {
+          this.wait()
+        }
       }
     }
     !failed
@@ -50,8 +52,8 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
 
   /** Mark this BlockInfo as ready (i.e. block is finished writing) */
   def markReady(sizeInBytes: Long) {
-    require (sizeInBytes >= 0, "sizeInBytes was negative: " + sizeInBytes)
-    assert (pending)
+    require(sizeInBytes >= 0, s"sizeInBytes was negative: $sizeInBytes")
+    assert(pending)
     size = sizeInBytes
     BlockInfo.blockInfoInitThreads.remove(this)
     synchronized {
@@ -61,7 +63,7 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
 
   /** Mark this BlockInfo as ready but failed */
   def markFailure() {
-    assert (pending)
+    assert(pending)
     size = BlockInfo.BLOCK_FAILED
     BlockInfo.blockInfoInitThreads.remove(this)
     synchronized {
@@ -71,9 +73,9 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
 }
 
 private object BlockInfo {
-  // initThread is logically a BlockInfo field, but we store it here because
-  // it's only needed while this block is in the 'pending' state and we want
-  // to minimize BlockInfo's memory footprint.
+  /* initThread is logically a BlockInfo field, but we store it here because
+   * it's only needed while this block is in the 'pending' state and we want
+   * to minimize BlockInfo's memory footprint. */
   private val blockInfoInitThreads = new ConcurrentHashMap[BlockInfo, Thread]
 
   private val BLOCK_PENDING: Long = -1L

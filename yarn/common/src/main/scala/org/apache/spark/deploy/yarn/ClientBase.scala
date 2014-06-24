@@ -19,10 +19,10 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
-import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
+import scala.util.{Try, Success, Failure}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -36,15 +36,15 @@ import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.util.{Apps, Records}
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.hadoop.yarn.util.Records
+import org.apache.spark.{SparkException, Logging, SparkConf, SparkContext}
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
  * Client submits an application to the YARN ResourceManager.
  *
  * Depending on the deployment mode this will launch one of two application master classes:
- * 1. In standalone mode, it will launch an [[org.apache.spark.deploy.yarn.ApplicationMaster]]
+ * 1. In cluster mode, it will launch an [[org.apache.spark.deploy.yarn.ApplicationMaster]]
  *      which launches a driver program inside of the cluster.
  * 2. In client mode, it will launch an [[org.apache.spark.deploy.yarn.ExecutorLauncher]] to
  *      request executors on behalf of a driver running outside of the cluster.
@@ -65,6 +65,10 @@ trait ClientBase extends Logging {
   val APP_FILE_PERMISSION: FsPermission =
     FsPermission.createImmutable(Integer.parseInt("644", 8).toShort)
 
+  // Additional memory overhead - in mb.
+  protected def memoryOverhead: Int = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
+    YarnAllocationHandler.MEMORY_OVERHEAD)
+
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {
     Map(
@@ -72,14 +76,14 @@ trait ClientBase extends Logging {
           "Error: You must specify a user jar when running in standalone mode!"),
       (args.userClass == null) -> "Error: You must specify a user class!",
       (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!",
-      (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: AM memory size must be" +
-        "greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD),
-      (args.executorMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: Executor memory size" +
-        "must be greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD.toString)
+      (args.amMemory <= memoryOverhead) -> ("Error: AM memory size must be" +
+        "greater than: " + memoryOverhead),
+      (args.executorMemory <= memoryOverhead) -> ("Error: Executor memory size" +
+        "must be greater than: " + memoryOverhead.toString)
     ).foreach { case(cond, errStr) =>
       if (cond) {
         logError(errStr)
-        args.printUsageAndExit(1)
+        throw new IllegalArgumentException(args.getUsageMessage())
       }
     }
   }
@@ -94,15 +98,20 @@ trait ClientBase extends Logging {
 
     // If we have requested more then the clusters max for a single resource then exit.
     if (args.executorMemory > maxMem) {
-      logError("Required executor memory (%d MB), is above the max threshold (%d MB) of this cluster.".
-        format(args.executorMemory, maxMem))
-      System.exit(1)
+      val errorMessage =
+        "Required executor memory (%d MB), is above the max threshold (%d MB) of this cluster."
+          .format(args.executorMemory, maxMem)
+
+      logError(errorMessage)
+      throw new IllegalArgumentException(errorMessage)
     }
-    val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
+    val amMem = args.amMemory + memoryOverhead
     if (amMem > maxMem) {
-      logError("Required AM memory (%d) is above the max threshold (%d) of this cluster".
-        format(args.amMemory, maxMem))
-      System.exit(1)
+
+      val errorMessage = "Required AM memory (%d) is above the max threshold (%d) of this cluster."
+        .format(args.amMemory, maxMem)
+      logError(errorMessage)
+      throw new IllegalArgumentException(errorMessage)
     }
 
     // We could add checks to make sure the entire cluster has enough resources but that involves
@@ -168,14 +177,13 @@ trait ClientBase extends Logging {
     destPath
   }
 
-  def qualifyForLocal(localURI: URI): Path = {
+  private def qualifyForLocal(localURI: URI): Path = {
     var qualifiedURI = localURI
-    // If not specified assume these are in the local filesystem to keep behavior like Hadoop
+    // If not specified, assume these are in the local filesystem to keep behavior like Hadoop
     if (qualifiedURI.getScheme() == null) {
       qualifiedURI = new URI(FileSystem.getLocal(conf).makeQualified(new Path(qualifiedURI)).toString)
     }
-    val qualPath = new Path(qualifiedURI)
-    qualPath
+    new Path(qualifiedURI)
   }
 
   def prepareLocalResources(appStagingDir: String): HashMap[String, LocalResource] = {
@@ -187,8 +195,9 @@ trait ClientBase extends Logging {
     val delegTokenRenewer = Master.getMasterPrincipal(conf)
     if (UserGroupInformation.isSecurityEnabled()) {
       if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
-        logError("Can't get Master Kerberos principal for use as renewer")
-        System.exit(1)
+        val errorMessage = "Can't get Master Kerberos principal for use as renewer"
+        logError(errorMessage)
+        throw new SparkException(errorMessage)
       }
     }
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
@@ -220,10 +229,11 @@ trait ClientBase extends Logging {
       }
     }
 
+    val cachedSecondaryJarLinks = ListBuffer.empty[String]
     val fileLists = List( (args.addJars, LocalResourceType.FILE, true),
       (args.files, LocalResourceType.FILE, false),
       (args.archives, LocalResourceType.ARCHIVE, false) )
-    fileLists.foreach { case (flist, resType, appMasterOnly) =>
+    fileLists.foreach { case (flist, resType, addToClasspath) =>
       if (flist != null && !flist.isEmpty()) {
         flist.split(',').foreach { case file: String =>
           val localURI = new URI(file.trim())
@@ -232,11 +242,15 @@ trait ClientBase extends Logging {
             val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
             val destPath = copyRemoteFile(dst, localPath, replication)
             distCacheMgr.addResource(fs, conf, destPath, localResources, resType,
-              linkname, statCache, appMasterOnly)
+              linkname, statCache)
+            if (addToClasspath) {
+              cachedSecondaryJarLinks += linkname
+            }
           }
         }
       }
     }
+    sparkConf.set(ClientBase.CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
 
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
     localResources
@@ -299,13 +313,13 @@ trait ClientBase extends Logging {
 
     val amMemory = calculateAMMemory(newApp)
 
-    val JAVA_OPTS = ListBuffer[String]()
+    val javaOpts = ListBuffer[String]()
 
     // Add Xmx for AM memory
-    JAVA_OPTS += "-Xmx" + amMemory + "m"
+    javaOpts += "-Xmx" + amMemory + "m"
 
     val tmpDir = new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
-    JAVA_OPTS += "-Djava.io.tmpdir=" + tmpDir
+    javaOpts += "-Djava.io.tmpdir=" + tmpDir
 
     // TODO: Remove once cpuset version is pushed out.
     // The context is, default gc for server class machines ends up using all cores to do gc -
@@ -319,11 +333,11 @@ trait ClientBase extends Logging {
     if (useConcurrentAndIncrementalGC) {
       // In our expts, using (default) throughput collector has severe perf ramifications in
       // multi-tenant machines
-      JAVA_OPTS += "-XX:+UseConcMarkSweepGC"
-      JAVA_OPTS += "-XX:+CMSIncrementalMode"
-      JAVA_OPTS += "-XX:+CMSIncrementalPacing"
-      JAVA_OPTS += "-XX:CMSIncrementalDutyCycleMin=0"
-      JAVA_OPTS += "-XX:CMSIncrementalDutyCycle=10"
+      javaOpts += "-XX:+UseConcMarkSweepGC"
+      javaOpts += "-XX:+CMSIncrementalMode"
+      javaOpts += "-XX:+CMSIncrementalPacing"
+      javaOpts += "-XX:CMSIncrementalDutyCycleMin=0"
+      javaOpts += "-XX:CMSIncrementalDutyCycle=10"
     }
 
     // SPARK_JAVA_OPTS is deprecated, but for backwards compatibility:
@@ -338,22 +352,22 @@ trait ClientBase extends Logging {
       // If we are being launched in client mode, forward the spark-conf options
       // onto the executor launcher
       for ((k, v) <- sparkConf.getAll) {
-        JAVA_OPTS += "-D" + k + "=" + "\\\"" + v + "\\\""
+        javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
       }
     } else {
       // If we are being launched in standalone mode, capture and forward any spark
       // system properties (e.g. set by spark-class).
       for ((k, v) <- sys.props.filterKeys(_.startsWith("spark"))) {
-        JAVA_OPTS += "-D" + k + "=" + "\\\"" + v + "\\\""
+        javaOpts += "-D" + k + "=" + "\\\"" + v + "\\\""
       }
-      sys.props.get("spark.driver.extraJavaOptions").foreach(opts => JAVA_OPTS += opts)
-      sys.props.get("spark.driver.libraryPath").foreach(p => JAVA_OPTS += s"-Djava.library.path=$p")
+      sys.props.get("spark.driver.extraJavaOptions").foreach(opts => javaOpts += opts)
+      sys.props.get("spark.driver.libraryPath").foreach(p => javaOpts += s"-Djava.library.path=$p")
     }
-    JAVA_OPTS += ClientBase.getLog4jConfiguration(localResources)
+    javaOpts += ClientBase.getLog4jConfiguration(localResources)
 
     // Command for the ApplicationMaster
     val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
-      JAVA_OPTS ++
+      javaOpts ++
       Seq(args.amClass, "--class", args.userClass, "--jar ", args.userJar,
         userArgsToString(args),
         "--executor-memory", args.executorMemory.toString,
@@ -373,46 +387,57 @@ trait ClientBase extends Logging {
   }
 }
 
-object ClientBase {
-  val SPARK_JAR: String = "spark.jar"
-  val APP_JAR: String = "app.jar"
+object ClientBase extends Logging {
+  val SPARK_JAR: String = "__spark__.jar"
+  val APP_JAR: String = "__app__.jar"
   val LOG4J_PROP: String = "log4j.properties"
   val LOG4J_CONF_ENV_KEY: String = "SPARK_LOG4J_CONF"
   val LOCAL_SCHEME = "local"
+  val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
 
   def getSparkJar = sys.env.get("SPARK_JAR").getOrElse(SparkContext.jarOfClass(this.getClass).head)
 
-  // Based on code from org.apache.hadoop.mapreduce.v2.util.MRApps
-  def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) {
-    val classpathEntries = Option(conf.getStrings(
-      YarnConfiguration.YARN_APPLICATION_CLASSPATH)).getOrElse(
-        getDefaultYarnApplicationClasspath())
-    if (classpathEntries != null) {
-      for (c <- classpathEntries) {
-        YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
-          File.pathSeparator)
-      }
+  def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) = {
+    val classPathElementsToAdd = getYarnAppClasspath(conf) ++ getMRAppClasspath(conf)
+    for (c <- classPathElementsToAdd.flatten) {
+      YarnSparkHadoopUtil.addToEnvironment(
+        env,
+        Environment.CLASSPATH.name,
+        c.trim,
+        File.pathSeparator)
     }
-
-    val mrClasspathEntries = Option(conf.getStrings(
-      "mapreduce.application.classpath")).getOrElse(
-        getDefaultMRApplicationClasspath())
-    if (mrClasspathEntries != null) {
-      for (c <- mrClasspathEntries) {
-        YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
-          File.pathSeparator)
-      }
-    }
+    classPathElementsToAdd
   }
 
-  def getDefaultYarnApplicationClasspath(): Array[String] = {
-    try {
-      val field = classOf[MRJobConfig].getField("DEFAULT_YARN_APPLICATION_CLASSPATH")
-      field.get(null).asInstanceOf[Array[String]]
-    } catch {
-      case err: NoSuchFieldError => null
-      case err: NoSuchFieldException => null
+  private def getYarnAppClasspath(conf: Configuration): Option[Seq[String]] =
+    Option(conf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH)) match {
+      case Some(s) => Some(s.toSeq)
+      case None => getDefaultYarnApplicationClasspath
+  }
+
+  private def getMRAppClasspath(conf: Configuration): Option[Seq[String]] =
+    Option(conf.getStrings("mapreduce.application.classpath")) match {
+      case Some(s) => Some(s.toSeq)
+      case None => getDefaultMRApplicationClasspath
     }
+
+  def getDefaultYarnApplicationClasspath: Option[Seq[String]] = {
+    val triedDefault = Try[Seq[String]] {
+      val field = classOf[YarnConfiguration].getField("DEFAULT_YARN_APPLICATION_CLASSPATH")
+      val value = field.get(null).asInstanceOf[Array[String]]
+      value.toSeq
+    } recoverWith {
+      case e: NoSuchFieldException => Success(Seq.empty[String])
+    }
+
+    triedDefault match {
+      case f: Failure[_] =>
+        logError("Unable to obtain the default YARN Application classpath.", f.exception)
+      case s: Success[_] =>
+        logDebug(s"Using the default YARN application classpath: ${s.get.mkString(",")}")
+    }
+
+    triedDefault.toOption
   }
 
   /**
@@ -420,19 +445,29 @@ object ClientBase {
    * classpath.  In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
    * So we need to use reflection to retrieve it.
    */
-  def getDefaultMRApplicationClasspath(): Array[String] = {
-    try {
+  def getDefaultMRApplicationClasspath: Option[Seq[String]] = {
+    val triedDefault = Try[Seq[String]] {
       val field = classOf[MRJobConfig].getField("DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH")
-      if (field.getType == classOf[String]) {
-        StringUtils.getStrings(field.get(null).asInstanceOf[String])
+      val value = if (field.getType == classOf[String]) {
+        StringUtils.getStrings(field.get(null).asInstanceOf[String]).toArray
       } else {
         field.get(null).asInstanceOf[Array[String]]
       }
-    } catch {
-      case err: NoSuchFieldError => null
-      case err: NoSuchFieldException => null
+      value.toSeq
+    } recoverWith {
+      case e: NoSuchFieldException => Success(Seq.empty[String])
     }
+
+    triedDefault match {
+      case f: Failure[_] =>
+        logError("Unable to obtain the default MR Application classpath.", f.exception)
+      case s: Success[_] =>
+        logDebug(s"Using the default MR application classpath: ${s.get.mkString(",")}")
+    }
+
+    triedDefault.toOption
   }
+
 
   /**
    * Returns the java command line argument for setting up log4j. If there is a log4j.properties
@@ -475,68 +510,29 @@ object ClientBase {
     def addClasspathEntry(path: String) = YarnSparkHadoopUtil.addToEnvironment(env,
       Environment.CLASSPATH.name, path, File.pathSeparator)
     /** Add entry to the classpath. Interpreted as a path relative to the working directory. */
-    def addPwdClasspathEntry(entry: String) = addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + entry)
+    def addPwdClasspathEntry(entry: String) =
+      addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + entry)
 
     extraClassPath.foreach(addClasspathEntry)
 
-    addClasspathEntry(Environment.PWD.$())
+    val cachedSecondaryJarLinks =
+      sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS).getOrElse("").split(",")
+        .filter(_.nonEmpty)
     // Normally the users app.jar is last in case conflicts with spark jars
     if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
       addPwdClasspathEntry(APP_JAR)
+      cachedSecondaryJarLinks.foreach(addPwdClasspathEntry)
       addPwdClasspathEntry(SPARK_JAR)
       ClientBase.populateHadoopClasspath(conf, env)
     } else {
       addPwdClasspathEntry(SPARK_JAR)
       ClientBase.populateHadoopClasspath(conf, env)
       addPwdClasspathEntry(APP_JAR)
+      cachedSecondaryJarLinks.foreach(addPwdClasspathEntry)
     }
+    // Append all class files and jar files under the working directory to the classpath.
+    addClasspathEntry(Environment.PWD.$())
     addPwdClasspathEntry("*")
-  }
-
-  /**
-   * Adds the user jars which have local: URIs (or alternate names, such as APP_JAR) explicitly
-   * to the classpath.
-   */
-  private def addUserClasspath(args: ClientArguments, env: HashMap[String, String]) = {
-    if (args != null) {
-      addClasspathEntry(args.userJar, APP_JAR, env)
-    }
-
-    if (args != null && args.addJars != null) {
-      args.addJars.split(",").foreach { case file: String =>
-        addClasspathEntry(file, null, env)
-      }
-    }
-  }
-
-  /**
-   * Adds the given path to the classpath, handling "local:" URIs correctly.
-   *
-   * If an alternate name for the file is given, and it's not a "local:" file, the alternate
-   * name will be added to the classpath (relative to the job's work directory).
-   *
-   * If not a "local:" file and no alternate name, the environment is not modified.
-   *
-   * @param path      Path to add to classpath (optional).
-   * @param fileName  Alternate name for the file (optional).
-   * @param env       Map holding the environment variables.
-   */
-  private def addClasspathEntry(path: String, fileName: String,
-      env: HashMap[String, String]) : Unit = {
-    if (path != null) {
-      scala.util.control.Exception.ignoring(classOf[URISyntaxException]) {
-        val localPath = getLocalPath(path)
-        if (localPath != null) {
-          YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, localPath,
-            File.pathSeparator)
-          return
-        }
-      }
-    }
-    if (fileName != null) {
-      YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name,
-        Environment.PWD.$() + Path.SEPARATOR + fileName, File.pathSeparator);
-    }
   }
 
   /**

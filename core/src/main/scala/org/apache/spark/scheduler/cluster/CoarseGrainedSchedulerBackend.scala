@@ -27,10 +27,10 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{Logging, SparkException, TaskState}
+import org.apache.spark.{SparkEnv, Logging, SparkException, TaskState}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{SerializableBuffer, AkkaUtils, Utils}
 
 /**
  * A scheduler backend that waits for coarse grained executors to connect to it through Akka.
@@ -48,6 +48,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   var totalCoreCount = new AtomicInteger(0)
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
+  private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
     private val executorActor = new HashMap[String, ActorRef]
@@ -140,8 +141,26 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     // Launch tasks returned by a set of resource offers
     def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
-        freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
-        executorActor(task.executorId) ! LaunchTask(task)
+        val ser = SparkEnv.get.closureSerializer.newInstance()
+        val serializedTask = ser.serialize(task)
+        if (serializedTask.limit >= akkaFrameSize - 1024) {
+          val taskSetId = scheduler.taskIdToTaskSetId(task.taskId)
+          scheduler.activeTaskSets.get(taskSetId).foreach { taskSet =>
+            try {
+              var msg = "Serialized task %s:%d was %d bytes which " +
+                "exceeds spark.akka.frameSize (%d bytes). " +
+                "Consider using broadcast variables for large values."
+              msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize)
+              taskSet.abort(msg)
+            } catch {
+              case e: Exception => logError("Exception in error callback", e)
+            }
+          }
+        }
+        else {
+          freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
+          executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))
+        }
       }
     }
 

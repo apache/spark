@@ -43,7 +43,7 @@ object RDDRelation {
     sql("SELECT * FROM records").collect().foreach(println)
 
     // Aggregation queries are also supported.
-    val count = sql("SELECT COUNT(*) FROM records").collect().head.getInt(0)
+    val count = sql("SELECT COUNT(*) FROM records").collect().head.getLong(0)
     println(s"COUNT(*): $count")
 
     // The results of SQL queries are themselves RDDs and support all normal RDD functions.  The

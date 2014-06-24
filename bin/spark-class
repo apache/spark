@@ -24,7 +24,7 @@ esac
 
 SCALA_VERSION=2.10
 
-# Figure out where the Scala framework is installed
+# Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 # Export this as SPARK_HOME
@@ -107,23 +107,6 @@ if [ -e "$FWDIR/conf/java-opts" ] ; then
 fi
 export JAVA_OPTS
 # Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in CommandUtils.scala!
-
-if [ ! -f "$FWDIR/RELEASE" ]; then
-  # Exit if the user hasn't compiled Spark
-  num_jars=$(ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/ | grep "spark-assembly.*hadoop.*.jar" | wc -l)
-  jars_list=$(ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/ | grep "spark-assembly.*hadoop.*.jar")
-  if [ "$num_jars" -eq "0" ]; then
-    echo "Failed to find Spark assembly in $FWDIR/assembly/target/scala-$SCALA_VERSION/" >&2
-    echo "You need to build Spark before running this program." >&2
-    exit 1
-  fi
-  if [ "$num_jars" -gt "1" ]; then
-    echo "Found multiple Spark assembly jars in $FWDIR/assembly/target/scala-$SCALA_VERSION:" >&2
-    echo "$jars_list"
-    echo "Please remove all but one jar."
-    exit 1
-  fi
-fi
 
 TOOLS_DIR="$FWDIR"/tools
 SPARK_TOOLS_JAR=""

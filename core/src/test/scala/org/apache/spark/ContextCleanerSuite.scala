@@ -25,7 +25,7 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.{PatienceConfiguration, Eventually}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
@@ -76,7 +76,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     tester.assertCleanup()
 
     // Verify that shuffles can be re-executed after cleaning up
-    assert(rdd.collect().toList === collected)
+    assert(rdd.collect().toList.equals(collected))
   }
 
   test("cleanup broadcast") {
@@ -201,7 +201,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
   def newPairRDD = newRDD.map(_ -> 1)
   def newShuffleRDD = newPairRDD.reduceByKey(_ + _)
   def newBroadcast = sc.broadcast(1 to 100)
-  def newRDDWithShuffleDependencies: (RDD[_], Seq[ShuffleDependency[_, _]]) = {
+  def newRDDWithShuffleDependencies: (RDD[_], Seq[ShuffleDependency[_, _, _]]) = {
     def getAllDependencies(rdd: RDD[_]): Seq[Dependency[_]] = {
       rdd.dependencies ++ rdd.dependencies.flatMap { dep =>
         getAllDependencies(dep.rdd)
@@ -211,8 +211,8 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
 
     // Get all the shuffle dependencies
     val shuffleDeps = getAllDependencies(rdd)
-      .filter(_.isInstanceOf[ShuffleDependency[_, _]])
-      .map(_.asInstanceOf[ShuffleDependency[_, _]])
+      .filter(_.isInstanceOf[ShuffleDependency[_, _, _]])
+      .map(_.asInstanceOf[ShuffleDependency[_, _, _]])
     (rdd, shuffleDeps)
   }
 
@@ -285,7 +285,7 @@ class CleanerTester(
   sc.cleaner.get.attachListener(cleanerListener)
 
   /** Assert that all the stuff has been cleaned up */
-  def assertCleanup()(implicit waitTimeout: Eventually.Timeout) {
+  def assertCleanup()(implicit waitTimeout: PatienceConfiguration.Timeout) {
     try {
       eventually(waitTimeout, interval(100 millis)) {
         assert(isAllCleanedUp)

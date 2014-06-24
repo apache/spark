@@ -15,80 +15,69 @@
  * limitations under the License.
  */
 
+import com.typesafe.tools.mima.core._
+import com.typesafe.tools.mima.core.MissingClassProblem
+import com.typesafe.tools.mima.core.MissingTypesProblem
+import com.typesafe.tools.mima.core.ProblemFilters._
 import com.typesafe.tools.mima.plugin.MimaKeys.{binaryIssueFilters, previousArtifact}
 import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
 import sbt._
 
 object MimaBuild {
 
+  def excludeMember(fullName: String) = Seq(
+      ProblemFilters.exclude[MissingMethodProblem](fullName),
+      ProblemFilters.exclude[MissingFieldProblem](fullName),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](fullName),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](fullName),
+      ProblemFilters.exclude[IncompatibleFieldTypeProblem](fullName)
+    )
+
+  // Exclude a single class and its corresponding object
+  def excludeClass(className: String) = Seq(
+      excludePackage(className),
+      ProblemFilters.exclude[MissingClassProblem](className),
+      ProblemFilters.exclude[MissingTypesProblem](className),
+      excludePackage(className + "$"),
+      ProblemFilters.exclude[MissingClassProblem](className + "$"),
+      ProblemFilters.exclude[MissingTypesProblem](className + "$")
+    )
+
+  // Exclude a Spark class, that is in the package org.apache.spark
+  def excludeSparkClass(className: String) = {
+    excludeClass("org.apache.spark." + className)
+  }
+
+  // Exclude a Spark package, that is in the package org.apache.spark
+  def excludeSparkPackage(packageName: String) = {
+    excludePackage("org.apache.spark." + packageName)
+  }
+
   def ignoredABIProblems(base: File) = {
-    import com.typesafe.tools.mima.core._
-    import com.typesafe.tools.mima.core.ProblemFilters._
 
     // Excludes placed here will be used for all Spark versions
     val defaultExcludes = Seq()
 
     // Read package-private excludes from file
-    val excludeFilePath = (base.getAbsolutePath + "/.mima-excludes")
-    val excludeFile = file(excludeFilePath)
-    val packagePrivateList: Seq[String] =
-      if (!excludeFile.exists()) {
+    val classExcludeFilePath = file(base.getAbsolutePath + "/.generated-mima-class-excludes")
+    val memberExcludeFilePath = file(base.getAbsolutePath + "/.generated-mima-member-excludes")
+
+    val ignoredClasses: Seq[String] =
+      if (!classExcludeFilePath.exists()) {
         Seq()
       } else {
-        IO.read(excludeFile).split("\n")
+        IO.read(classExcludeFilePath).split("\n")
       }
 
-    // Exclude a single class and its corresponding object
-    def excludeClass(className: String) = {
-      Seq(
-        excludePackage(className),
-        ProblemFilters.exclude[MissingClassProblem](className),
-        ProblemFilters.exclude[MissingTypesProblem](className),
-        excludePackage(className + "$"),
-        ProblemFilters.exclude[MissingClassProblem](className + "$"),
-        ProblemFilters.exclude[MissingTypesProblem](className + "$")
-      )
+    val ignoredMembers: Seq[String] =
+      if (!memberExcludeFilePath.exists()) {
+      Seq()
+    } else {
+      IO.read(memberExcludeFilePath).split("\n")
     }
 
-    // Exclude a Spark class, that is in the package org.apache.spark
-    def excludeSparkClass(className: String) = {
-      excludeClass("org.apache.spark." + className)
-    }
-
-    // Exclude a Spark package, that is in the package org.apache.spark
-    def excludeSparkPackage(packageName: String) = {
-      excludePackage("org.apache.spark." + packageName)
-    }
-
-    val packagePrivateExcludes = packagePrivateList.flatMap(excludeClass)
-
-    /* Excludes specific to a given version of Spark. When comparing the given version against
-       its immediate predecessor, the excludes listed here will be applied. */
-    val versionExcludes =
-      SparkBuild.SPARK_VERSION match {
-        case v if v.startsWith("1.0") =>
-          Seq(
-            excludeSparkPackage("api.java"),
-            excludeSparkPackage("mllib"),
-            excludeSparkPackage("streaming")
-          ) ++
-          excludeSparkClass("rdd.ClassTags") ++
-          excludeSparkClass("util.XORShiftRandom") ++
-          excludeSparkClass("graphx.EdgeRDD") ++
-          excludeSparkClass("graphx.VertexRDD") ++
-          excludeSparkClass("graphx.impl.GraphImpl") ++
-          excludeSparkClass("graphx.impl.RoutingTable") ++
-          excludeSparkClass("graphx.util.collection.PrimitiveKeyOpenHashMap") ++
-          excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap") ++
-          excludeSparkClass("mllib.recommendation.MFDataGenerator") ++
-          excludeSparkClass("mllib.optimization.SquaredGradient") ++
-          excludeSparkClass("mllib.regression.RidgeRegressionWithSGD") ++
-          excludeSparkClass("mllib.regression.LassoWithSGD") ++
-          excludeSparkClass("mllib.regression.LinearRegressionWithSGD")
-        case _ => Seq()
-      }
-
-    defaultExcludes ++ packagePrivateExcludes ++ versionExcludes
+    defaultExcludes ++ ignoredClasses.flatMap(excludeClass) ++
+    ignoredMembers.flatMap(excludeMember) ++ MimaExcludes.excludes
   }
 
   def mimaSettings(sparkHome: File) = mimaDefaultSettings ++ Seq(

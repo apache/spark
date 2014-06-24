@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.CallSite
 
 /**
  * A stage is a set of independent tasks all computing the same function that need to run as part
@@ -35,15 +36,20 @@ import org.apache.spark.storage.BlockManagerId
  * Each Stage also has a jobId, identifying the job that first submitted the stage.  When FIFO
  * scheduling is used, this allows Stages from earlier jobs to be computed first or recovered
  * faster on failure.
+ *
+ * The callSite provides a location in user code which relates to the stage. For a shuffle map
+ * stage, the callSite gives the user code that created the RDD being shuffled. For a result
+ * stage, the callSite gives the user code that executes the associated action (e.g. count()).
+ *
  */
 private[spark] class Stage(
     val id: Int,
     val rdd: RDD[_],
     val numTasks: Int,
-    val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
+    val shuffleDep: Option[ShuffleDependency[_, _, _]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
     val jobId: Int,
-    callSite: Option[String])
+    val callSite: CallSite)
   extends Logging {
 
   val isShuffleMap = shuffleDep.isDefined
@@ -100,7 +106,8 @@ private[spark] class Stage(
     id
   }
 
-  val name = callSite.getOrElse(rdd.getCreationSite)
+  val name = callSite.short
+  val details = callSite.long
 
   override def toString = "Stage " + id
 

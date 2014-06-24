@@ -18,13 +18,13 @@
 package org.apache.spark.mllib.optimization
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LocalSparkContext
 
-class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
 
   val nPoints = 10000
   val A = 2.0
@@ -43,7 +43,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
   // Add an extra variable consisting of all 1.0's for the intercept.
   val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
   val data = testData.map { case LabeledPoint(label, features) =>
-    label -> Vectors.dense(1.0, features.toArray: _*)
+    label -> Vectors.dense(1.0 +: features.toArray)
   }
 
   lazy val dataRDD = sc.parallelize(data, 2).cache()
@@ -55,7 +55,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
   test("LBFGS loss should be decreasing and match the result of Gradient Descent.") {
     val regParam = 0
 
-    val initialWeightsWithIntercept = Vectors.dense(1.0, initialWeights: _*)
+    val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
     val convergenceTol = 1e-12
     val maxNumIterations = 10
 

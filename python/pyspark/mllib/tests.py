@@ -23,7 +23,7 @@ from numpy import array, array_equal
 import unittest
 
 from pyspark.mllib._common import _convert_vector, _serialize_double_vector, \
-        _deserialize_double_vector, _dot, _squared_distance
+    _deserialize_double_vector, _dot, _squared_distance
 from pyspark.mllib.linalg import SparseVector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.tests import PySparkTestCase
@@ -46,12 +46,9 @@ class VectorTests(unittest.TestCase):
         self.assertTrue(sv is _convert_vector(sv))
         self.assertTrue(dv is _convert_vector(dv))
         self.assertTrue(array_equal(dv, _convert_vector(lst)))
-        self.assertEquals(sv,
-                _deserialize_double_vector(_serialize_double_vector(sv)))
-        self.assertTrue(array_equal(dv,
-                _deserialize_double_vector(_serialize_double_vector(dv))))
-        self.assertTrue(array_equal(dv,
-                _deserialize_double_vector(_serialize_double_vector(lst))))
+        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(sv)))
+        self.assertTrue(array_equal(dv, _deserialize_double_vector(_serialize_double_vector(dv))))
+        self.assertTrue(array_equal(dv, _deserialize_double_vector(_serialize_double_vector(lst))))
 
     def test_dot(self):
         sv = SparseVector(4, {1: 1, 3: 2})
@@ -132,7 +129,7 @@ class ListTests(PySparkTestCase):
 
     def test_regression(self):
         from pyspark.mllib.regression import LinearRegressionWithSGD, LassoWithSGD, \
-                RidgeRegressionWithSGD
+            RidgeRegressionWithSGD
         data = [
             LabeledPoint(-1.0, [0, -1]),
             LabeledPoint(1.0, [0, 1]),
@@ -179,14 +176,10 @@ class SciPyTests(PySparkTestCase):
         self.assertEquals(sv, _convert_vector(lil.tocoo()))
         self.assertEquals(sv, _convert_vector(lil.tocsr()))
         self.assertEquals(sv, _convert_vector(lil.todok()))
-        self.assertEquals(sv,
-                _deserialize_double_vector(_serialize_double_vector(lil)))
-        self.assertEquals(sv,
-                _deserialize_double_vector(_serialize_double_vector(lil.tocsc())))
-        self.assertEquals(sv,
-                _deserialize_double_vector(_serialize_double_vector(lil.tocsr())))
-        self.assertEquals(sv,
-                _deserialize_double_vector(_serialize_double_vector(lil.todok())))
+        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil)))
+        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil.tocsc())))
+        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil.tocsr())))
+        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil.todok())))
 
     def test_dot(self):
         from scipy.sparse import lil_matrix
@@ -265,7 +258,7 @@ class SciPyTests(PySparkTestCase):
 
     def test_regression(self):
         from pyspark.mllib.regression import LinearRegressionWithSGD, LassoWithSGD, \
-                RidgeRegressionWithSGD
+            RidgeRegressionWithSGD
         data = [
             LabeledPoint(-1.0, self.scipy_matrix(2, {1: -1.0})),
             LabeledPoint(1.0, self.scipy_matrix(2, {1: 1.0})),

@@ -139,10 +139,13 @@ class HadoopRDD[K, V](
       // Create a JobConf that will be cached and used across this RDD's getJobConf() calls in the
       // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
       // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary objects.
-      val newJobConf = new JobConf(broadcastedConf.value.value)
-      initLocalJobConfFuncOpt.map(f => f(newJobConf))
-      HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
-      newJobConf
+      // synchronize to prevent ConcurrentModificationException (Spark-1097, Hadoop-10456)
+      broadcastedConf.synchronized {
+        val newJobConf = new JobConf(broadcastedConf.value.value)
+        initLocalJobConfFuncOpt.map(f => f(newJobConf))
+        HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
+        newJobConf
+      }
     }
   }
 
