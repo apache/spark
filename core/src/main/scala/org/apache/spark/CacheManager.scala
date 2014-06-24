@@ -112,7 +112,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           logInfo(s"Whoever was loading $id failed; we'll try it ourselves")
           loading.add(id)
         }
-        values.data.map(_.asInstanceOf[Iterator[T]])
+        values.map(_.data.asInstanceOf[Iterator[T]])
       }
     }
   }

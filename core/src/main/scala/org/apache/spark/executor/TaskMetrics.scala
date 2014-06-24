@@ -109,7 +109,7 @@ private[spark] object DataReadMethod extends Enumeration with Serializable {
  * Metrics about reading input data.
  */
 @DeveloperApi
-case class InputMetrics(val readMethod: DataReadMethod.Value) {
+case class InputMetrics(readMethod: DataReadMethod.Value) {
   /**
    * Total bytes read.
    */
