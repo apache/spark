@@ -45,10 +45,14 @@ import org.apache.spark.deploy.SparkHadoopUtil
  * control the behavior of the acls. Note that the person who started the application
  * always has view access to the UI.
  *
- * Spark has a set of modify acls that controls which users have permission to modify a single
- * application. This would include things like killing the application. By default the person who
- * started the application has modify access. For modify access through the UI, you must have a
- * filter that does authentication in place for the modify acls to work properly.
+ * Spark has a set of modify acls (`spark.modify.acls`) that controls which users have permission
+ * to  modify a single application. This would include things like killing the application. By
+ * default the person who started the application has modify access. For modify access through
+ * the UI, you must have a filter that does authentication in place for the modify acls to work
+ * properly.
+ *
+ * Spark also has a set of admin acls (`spark.admin.acls`) which is a set of users/administrators
+ * who always have permission to view or modify the Spark application.
  *
  * Spark does not currently support encryption after authentication.
  *
@@ -146,6 +150,10 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   private var aclsOn = sparkConf.getOption("spark.acls.enable").getOrElse(
     sparkConf.get("spark.ui.acls.enable", "false")).toBoolean
 
+  // admin acls should be set before view or modify acls
+  private var adminAcls: Set[String] =
+    stringToSet(sparkConf.get("spark.admin.acls", ""))
+
   private var viewAcls: Set[String] = _
 
   // list of users who have permission to modify the application. This should
@@ -153,8 +161,9 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   private var modifyAcls: Set[String] = _
 
   // always add the current user and SPARK_USER to the viewAcls
-  private val defaultAclUsers = Seq[String](System.getProperty("user.name", ""),
+  private val defaultAclUsers = Set[String](System.getProperty("user.name", ""),
     Option(System.getenv("SPARK_USER")).getOrElse(""))
+
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
   setModifyAcls(defaultAclUsers, sparkConf.get("spark.modify.acls", ""))
 
@@ -183,23 +192,39 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
     )
   }
 
-  private[spark] def setViewAcls(defaultUsers: Seq[String], allowedUsers: String) {
-    viewAcls = (defaultUsers ++ allowedUsers.split(',')).map(_.trim()).filter(!_.isEmpty).toSet
+  /**
+   * Split a comma separated String, filter out any empty items, and return a Set of strings
+   */
+  private def stringToSet(list: String): Set[String] = {
+    (list.split(',')).map(_.trim()).filter(!_.isEmpty).toSet
+  }
+
+  private[spark] def setViewAcls(defaultUsers: Set[String], allowedUsers: String) {
+    viewAcls = (adminAcls ++ defaultUsers ++ stringToSet(allowedUsers))
     logInfo("Changing view acls to: " + viewAcls.mkString(","))
   }
 
   private[spark] def setViewAcls(defaultUser: String, allowedUsers: String) {
-    setViewAcls(Seq[String](defaultUser), allowedUsers)
+    setViewAcls(Set[String](defaultUser), allowedUsers)
   }
 
   private[spark] def getViewAcls: String = viewAcls.mkString(",")
 
-  private[spark] def setModifyAcls(defaultUsers: Seq[String], allowedUsers: String) {
-    modifyAcls = (defaultUsers ++ allowedUsers.split(',')).map(_.trim()).filter(!_.isEmpty).toSet
+  private[spark] def setModifyAcls(defaultUsers: Set[String], allowedUsers: String) {
+    modifyAcls = (adminAcls ++ defaultUsers ++ stringToSet(allowedUsers))
     logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
   }
 
   private[spark] def getModifyAcls: String = modifyAcls.mkString(",")
+
+  /**
+   * Admin acls should be set before the view or modify acls.  If you modify the admin
+   * acls you should also set the view and modify acls again to pick up the changes.
+   */
+  private[spark] def setAdminAcls(adminUsers: String) {
+    adminAcls = stringToSet(adminUsers)
+    logInfo("Changing admin acls to: " + adminAcls.mkString(","))
+  }
 
   private[spark] def setAcls(aclSetting: Boolean) {
     aclsOn = aclSetting
@@ -252,7 +277,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   /**
    * Checks the given user against the view acl list to see if they have
    * authorization to view the UI. If the UI acls are disabled
-   * via spark.acls.enable, all users have view access.
+   * via spark.acls.enable, all users have view access. If the user is null
+   * it is assumed authentication isn't turned on and all users have access.
    *
    * @param user to see if is authorized
    * @return true is the user has permission, otherwise false
@@ -266,7 +292,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
   /**
    * Checks the given user against the modify acl list to see if they have
    * authorization to modify the application. If the UI acls are disabled
-   * via spark.acls.enable, all users have modify access.
+   * via spark.acls.enable, all users have modify access. If the user is null
+   * it is assumed authentication isn't turned on and all users have access.
    *
    * @param user to see if is authorized
    * @return true is the user has permission, otherwise false

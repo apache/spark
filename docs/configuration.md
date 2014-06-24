@@ -768,6 +768,15 @@ Apart from these, the following properties are also available, and may be useful
     user that started the Spark job has access to modify it (kill it for example).
   </td>
 </tr>
+<tr>
+  <td><code>spark.admin.acls</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users/administrators that have view and modify access to all Spark jobs.
+    This can be used if you run on a shared cluster and have a set of administrators or devs who
+    help debug when things work.
+  </td>
+</tr>
 </table>
 
 #### Spark Streaming
