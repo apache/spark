@@ -234,6 +234,37 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     logInfo("--------------------------------")
     assert(output.sum === numTotalRecords)
   }
+
+  /**
+   * Test to ensure callbacks are called when the store which has a callback specified is called.
+   */
+  test("receiver with callbacks") {
+    val limit = 100
+    val testReceiver = new CallbackReceiver(limit)
+    // set up the network stream using the test receiver
+    val ssc = new StreamingContext(conf, batchDuration)
+    val networkStream = ssc.receiverStream[AnyVal](testReceiver)
+    val outputBuffer = new ArrayBuffer[Seq[AnyVal]]
+    val outputStream = new TestOutputStream(networkStream, outputBuffer)
+    def output = outputBuffer.flatten
+    outputStream.register()
+    ssc.start()
+
+    // Let the data from the receiver be received
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val startTime = System.currentTimeMillis()
+    while((output.size < limit * 2) &&
+      System.currentTimeMillis() - startTime < 5000) {
+      Thread.sleep(50)
+      clock.addToTime(batchDuration.milliseconds)
+    }
+    Thread.sleep(1000)
+    logInfo("Stopping context")
+    assert(output.size === limit * 2)
+    // Sum would be (sum(1..limit)) * 2 since each number appears twice.
+    assert(output.asInstanceOf[ArrayBuffer[Int]].sum === limit * (limit + 1))
+    ssc.stop()
+  }
 }
 
 
@@ -330,4 +361,26 @@ class MultiThreadTestReceiver(numThreads: Int, numRecordsPerThread: Int)
 
 object MultiThreadTestReceiver {
   var haveAllThreadsFinished = false
+}
+
+class CallbackReceiver(val limit: Int)
+  extends Receiver[AnyVal](StorageLevel.MEMORY_ONLY_SER) with Logging {
+
+  lazy val executor = Executors.newSingleThreadExecutor()
+
+  override def onStart(): Unit = {
+    executor.submit(new Runnable {
+      override def run(): Unit = {
+        (1 to limit).map(i => {
+          store(i, k => {
+            store(k.asInstanceOf[Int]) // Store again
+          }, i)
+        })
+      }
+    })
+  }
+
+  override def onStop(): Unit = {
+    executor.shutdownNow()
+  }
 }

@@ -17,7 +17,8 @@
 
 package org.apache.spark.streaming.receiver
 
-import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
+import java.util
+import java.util.concurrent.{ConcurrentHashMap, ArrayBlockingQueue, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -48,6 +49,13 @@ private[streaming] class BlockGenerator(
 
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
 
+  /**
+   * Internal representation of a callback function and its argument.
+   * @param function - The callback function
+   * @param arg - Argument to pass to pass to the function
+   */
+  private class Callback(val function: Any => Unit, val arg: Any)
+
   private val clock = new SystemClock()
   private val blockInterval = conf.getLong("spark.streaming.blockInterval", 200)
   private val blockIntervalTimer =
@@ -58,6 +66,11 @@ private[streaming] class BlockGenerator(
 
   @volatile private var currentBuffer = new ArrayBuffer[Any]
   @volatile private var stopped = false
+  private var currentBlockId: StreamBlockId = StreamBlockId(receiverId,
+    clock.currentTime() - blockInterval)
+
+  // Removes might happen from the map while other threads are inserting.
+  private val callbacks = new util.HashMap[StreamBlockId, ArrayBuffer[Callback]]()
 
   /** Start block generating and pushing threads. */
   def start() {
@@ -84,14 +97,35 @@ private[streaming] class BlockGenerator(
     currentBuffer += data
   }
 
+  /**
+   * Store the data asynchronously and call callback(arg),
+   * when the data has been successfully stored
+   * @param data - The data to be stored
+   * @param callback - The function to call when the data is stored
+   * @param arg - The argument to pass to callback function when it is called.
+   */
+  def store(data: Any, callback: Any => Unit, arg: Any): Unit = synchronized {
+    currentBuffer += data
+    val functionToCall = new Callback(callback, arg)
+    Option(callbacks.get(currentBlockId)) match {
+      case Some(buffer) =>
+        buffer += functionToCall
+      case None =>
+        val buffer = new ArrayBuffer[Callback]()
+        buffer += functionToCall
+        callbacks.put(currentBlockId, buffer)
+    }
+  }
+
   /** Change the buffer to which single records are added to. */
   private def updateCurrentBuffer(time: Long): Unit = synchronized {
     try {
       val newBlockBuffer = currentBuffer
       currentBuffer = new ArrayBuffer[Any]
       if (newBlockBuffer.size > 0) {
-        val blockId = StreamBlockId(receiverId, time - blockInterval)
+        val blockId = currentBlockId
         val newBlock = new Block(blockId, newBlockBuffer)
+        currentBlockId = StreamBlockId(receiverId, time - blockInterval)
         blocksForPushing.put(newBlock)  // put is blocking when queue is full
         logDebug("Last element in " + blockId + " is " + newBlockBuffer.last)
       }
@@ -134,9 +168,26 @@ private[streaming] class BlockGenerator(
     logError(message, t)
     listener.onError(message, t)
   }
-  
+
   private def pushBlock(block: Block) {
     listener.onPushBlock(block.id, block.buffer)
+
+    var callbackBufferOpt: Option[ArrayBuffer[Callback]] = None
+    // Remove the buffer from the callbacks map. This must be synchronized to ensure no one else
+    // is editing the buffer or the map at that time.
+    synchronized {
+      callbackBufferOpt = Option(callbacks.remove(block.id))
+    }
+
+    // Call the callbacks
+    callbackBufferOpt match {
+      case Some(callbackBuffer) =>
+        callbackBuffer.map(callback => {
+          logDebug("Called callback for block: " + block.id)
+          callback.function(callback.arg)
+        })
+      case None =>
+    }
     logInfo("Pushed block " + block.id)
   }
 }
