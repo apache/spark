@@ -29,8 +29,6 @@ import org.apache.spark.sql.parquet._
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
-  val sqlContext: SQLContext
-
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Find left semi joins where at least some predicates can be evaluated by matching hash
