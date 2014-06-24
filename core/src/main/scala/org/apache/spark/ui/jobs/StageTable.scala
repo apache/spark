@@ -111,7 +111,7 @@ private[ui] class StageTableBase(
     // Too many nested map/flatMaps with options are just annoying to read. Do this imperatively.
     if (stageDataOption.isDefined && stageDataOption.get.description.isDefined) {
       val desc = stageDataOption.get.description
-      <div><em>{desc}</em></div><div>{nameLink} {killLink}</div>
+      <div><em>{desc}</em></div><div>{killLink} {nameLink} {details}</div>
     } else {
       <div>{killLink} {nameLink} {details}</div>
     }
