@@ -44,12 +44,12 @@ trait HashJoin {
   val left: SparkPlan
   val right: SparkPlan
 
-  val (buildPlan, streamedPlan) = buildSide match {
+  lazy val (buildPlan, streamedPlan) = buildSide match {
     case BuildLeft => (left, right)
     case BuildRight => (right, left)
   }
 
-  val (buildKeys, streamedKeys) = buildSide match {
+  lazy val (buildKeys, streamedKeys) = buildSide match {
     case BuildLeft => (leftKeys, rightKeys)
     case BuildRight => (rightKeys, leftKeys)
   }
@@ -59,7 +59,6 @@ trait HashJoin {
   @transient lazy val buildSideKeyGenerator = new Projection(buildKeys, buildPlan.output)
   @transient lazy val streamSideKeyGenerator =
     () => new MutableProjection(streamedKeys, streamedPlan.output)
-
 
   def joinIterators(buildIter: Iterator[Row], streamIter: Iterator[Row]): Iterator[Row] = {
     // TODO: Use Spark's HashMap implementation.
@@ -167,19 +166,13 @@ case class LeftSemiJoinHash(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode {
+    right: SparkPlan) extends BinaryNode with HashJoin {
 
-  val (buildPlan, streamedPlan) = (right, left)
-  val (buildKeys, streamedKeys) = (rightKeys, leftKeys)
+  val buildSide = BuildRight
 
-  def output = left.output
-
-  @transient lazy val buildSideKeyGenerator = new Projection(buildKeys, buildPlan.output)
-  @transient lazy val streamSideKeyGenerator =
-    () => new MutableProjection(streamedKeys, streamedPlan.output)
+  override def output = left.output
 
   def execute() = {
-
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
       val hashSet = new java.util.HashSet[Row]()
       var currentRow: Row = null
