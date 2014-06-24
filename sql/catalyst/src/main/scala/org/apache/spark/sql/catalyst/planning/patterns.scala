@@ -160,6 +160,43 @@ object HashFilteredJoin extends Logging with PredicateHelper {
 }
 
 /**
+ * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
+ */
+object ExtractEquiJoinKeys extends Logging with PredicateHelper {
+  /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
+  type ReturnType =
+    (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    case join @ Join(left, right, joinType, condition) =>
+      logger.debug(s"Considering join on: $condition")
+      // Find equi-join predicates that can be evaluated before the join, and thus can be used
+      // as join keys.
+      val (joinPredicates, otherPredicates) = condition.map(splitConjunctivePredicates).
+        getOrElse(Nil).partition {
+          case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
+            (canEvaluate(l, right) && canEvaluate(r, left)) => true
+          case _ => false
+        }
+
+      val joinKeys = joinPredicates.map {
+        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
+        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
+      }
+      val leftKeys = joinKeys.map(_._1)
+      val rightKeys = joinKeys.map(_._2)
+
+      if(leftKeys.length > 0) {
+        logger.debug(s"leftKeys:${leftKeys} | rightKeys:${rightKeys}")
+        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
+      } else {
+        None
+      }
+    case _ => None
+  }
+}
+
+/**
  * A pattern that collects all adjacent unions and returns their children as a Seq.
  */
 object Unions {
