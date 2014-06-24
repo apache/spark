@@ -54,8 +54,10 @@ def launch_gateway():
             gateway_port = int(gateway_port)
         except ValueError:
             (stdout, _) = proc.communicate()
-            error_msg = "Launching GatewayServer failed because of stdout interference. "
-            error_msg += "Silence the following and try again:\n\n"
+            exit_code = proc.poll()
+            error_msg = "Launching GatewayServer failed"
+            error_msg += " with exit code %d!" % exit_code if exit_code else "! "
+            error_msg += "(Warning: unexpected output detected.)\n\n"
             error_msg += gateway_port + stdout
             raise Exception(error_msg)
 
