@@ -38,8 +38,6 @@ import scala.collection.JavaConversions._
  */
 private[hive] case object NativePlaceholder extends Command
 
-private[hive] case class DfsCommand(cmd: String) extends Command
-
 private[hive] case class ShellCommand(cmd: String) extends Command
 
 private[hive] case class SourceCommand(filePath: String) extends Command
@@ -227,15 +225,15 @@ private[hive] object HiveQl {
             SetCommand(Some(key), Some(value))
         }
       } else if (sql.trim.toLowerCase.startsWith("cache table")) {
-        CacheCommand(sql.drop(12).trim, true)
+        CacheCommand(sql.trim.drop(12).trim, true)
       } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
-        CacheCommand(sql.drop(14).trim, false)
+        CacheCommand(sql.trim.drop(14).trim, false)
       } else if (sql.trim.toLowerCase.startsWith("add jar")) {
-        AddJar(sql.drop(8))
+        AddJar(sql.trim.drop(8))
       } else if (sql.trim.toLowerCase.startsWith("add file")) {
-        AddFile(sql.drop(9))
-      } else if (sql.trim.startsWith("dfs")) {
-        DfsCommand(sql)
+        AddFile(sql.trim.drop(9))
+      } else if (sql.trim.toLowerCase.startsWith("dfs")) {
+        NativeCommand(sql)
       } else if (sql.trim.startsWith("source")) {
         SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
       } else if (sql.trim.startsWith("!")) {
