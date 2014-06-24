@@ -34,7 +34,10 @@ object MimaExcludes {
     val excludes =
       SparkBuild.SPARK_VERSION match {
         case v if v.startsWith("1.1") =>
-          Seq(MimaBuild.excludeSparkPackage("graphx")) ++
+          Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("graphx")
+          ) ++
           Seq(
             // Adding new method to JavaRDLike trait - we should probably mark this as a developer API.
             ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitions"),

@@ -105,7 +105,7 @@ case class Limit(limit: Int, child: SparkPlan)(@transient sqlContext: SQLContext
       iter.take(limit).map(row => mutablePair.update(false, row))
     }
     val part = new HashPartitioner(1)
-    val shuffled = new ShuffledRDD[Boolean, Row, MutablePair[Boolean, Row]](rdd, part)
+    val shuffled = new ShuffledRDD[Boolean, Row, Row, MutablePair[Boolean, Row]](rdd, part)
     shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
     shuffled.mapPartitions(_.take(limit).map(_._2))
   }

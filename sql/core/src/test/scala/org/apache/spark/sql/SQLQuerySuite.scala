@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -405,4 +407,22 @@ class SQLQuerySuite extends QueryTest {
     clear()
   }
 
+  test("SPARK-1669: cacheTable should be idempotent") {
+    assume(!table("testData").logicalPlan.isInstanceOf[InMemoryRelation])
+
+    cacheTable("testData")
+    EliminateAnalysisOperators(table("testData").logicalPlan) match {
+      case _: InMemoryRelation =>
+      case _ =>
+        fail("testData should be cached")
+    }
+
+    cacheTable("testData")
+    EliminateAnalysisOperators(table("testData").logicalPlan) match {
+      case InMemoryRelation(_, _, _: InMemoryColumnarTableScan) =>
+        fail("cacheTable is not idempotent")
+
+      case _ =>
+    }
+  }
 }

@@ -35,11 +35,13 @@ If Spark is run on Mesos or YARN, it is still possible to reconstruct the UI of 
 application through Spark's history server, provided that the application's event logs exist.
 You can start a the history server by executing:
 
-    ./sbin/start-history-server.sh <base-logging-directory>
+    ./sbin/start-history-server.sh
 
-The base logging directory must be supplied, and should contain sub-directories that each
-represents an application's event logs. This creates a web interface at
-`http://<server-url>:18080` by default. The history server can be configured as follows:
+When using the file-system provider class (see spark.history.provider below), the base logging
+directory must be supplied in the <code>spark.history.fs.logDirectory</code> configuration option,
+and should contain sub-directories that each represents an application's event logs. This creates a
+web interface at `http://<server-url>:18080` by default. The history server can be configured as
+follows:
 
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
@@ -69,7 +71,14 @@ represents an application's event logs. This creates a web interface at
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
-    <td>spark.history.updateInterval</td>
+    <td>spark.history.provider</td>
+    <td>org.apache.spark.deploy.history.FsHistoryProvider</td>
+    <td>Name of the class implementing the application history backend. Currently there is only
+    one implementation, provided by Spark, which looks for application logs stored in the
+    file system.</td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.updateInterval</td>
     <td>10</td>
     <td>
       The period, in seconds, at which information displayed by this history server is updated.
@@ -78,7 +87,7 @@ represents an application's event logs. This creates a web interface at
   </tr>
   <tr>
     <td>spark.history.retainedApplications</td>
-    <td>250</td>
+    <td>50</td>
     <td>
       The number of application UIs to retain. If this cap is exceeded, then the oldest
       applications will be removed.

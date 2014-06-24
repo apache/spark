@@ -144,10 +144,8 @@ private[spark] class ShuffleMapTask(
     try {
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
-      for (elem <- rdd.iterator(split, context)) {
-        writer.write(elem.asInstanceOf[Product2[Any, Any]])
-      }
-      writer.stop(success = true).get
+      writer.write(rdd.iterator(split, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
+      return writer.stop(success = true).get
     } catch {
       case e: Exception =>
         if (writer != null) {
