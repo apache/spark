@@ -124,6 +124,14 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     set("spark.home", home)
   }
 
+  /**
+   * Set the max number of submission retries the Spark client will attempt
+   * before giving up
+   */
+  def setMaxAppAttempts(max: Int): SparkConf = {
+    set("spark.maxappattempts", max.toString())
+  }
+
   /** Set multiple parameters together */
   def setAll(settings: Traversable[(String, String)]) = {
     this.settings ++= settings
