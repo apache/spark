@@ -132,7 +132,7 @@ sealed trait ImmutableVector[@specialized(Long, Int) +A] extends Serializable {
 
 private class InternalNode[@specialized(Long, Int) +A](
     children: Array[ImmutableVector[A]],
-    depth: Int)
+    val depth: Int)
   extends ImmutableVector[A] {
 
   require(children.length > 0, "InternalNode must have children")
@@ -142,11 +142,21 @@ private class InternalNode[@specialized(Long, Int) +A](
   override def size = children.map(_.size).sum
 
   override def apply(index: Int): A = {
-    val shift = 5 * depth
-    val localIndex = (index >> shift) & 31
-    val childIndex = index & ~(31 << shift)
-    // println("InternalNode(depth=%d, numChildren=%d).apply(%d): localIndex=%d, childIndex=%d".format(depth, children.length, index, localIndex, childIndex))
-    children(localIndex)(childIndex)
+    var cur: ImmutableVector[A] = this
+    var continue: Boolean = true
+    var result: A = null.asInstanceOf[A]
+    while (continue) {
+      cur match {
+        case internal: InternalNode[A] =>
+          val shift = 5 * internal.depth
+          val localIndex = (index >> shift) & 31
+          cur = internal.childAt(localIndex)
+        case leaf: LeafNode[A] =>
+          continue = false
+          result = leaf(index & 31)
+      }
+    }
+    result
   }
 
   override def updated[B >: A : ClassTag](index: Int, elem: B) = {
