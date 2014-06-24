@@ -24,7 +24,9 @@ import org.apache.spark.sql.test.TestSQLContext
 class CachedTableSuite extends QueryTest {
   TestData // Load test tables.
 
-  test("read from cached table and uncache") {
+  // NOTE: ALL TESTS ARE IGNORED PENDING SPARK-2264
+
+  ignore("read from cached table and uncache") {
     TestSQLContext.cacheTable("testData")
 
     checkAnswer(
@@ -51,20 +53,20 @@ class CachedTableSuite extends QueryTest {
     }
   }
 
-  test("correct error on uncache of non-cached table") {
+  ignore("correct error on uncache of non-cached table") {
     intercept[IllegalArgumentException] {
       TestSQLContext.uncacheTable("testData")
     }
   }
 
-  test("SELECT Star Cached Table") {
+  ignore("SELECT Star Cached Table") {
     TestSQLContext.sql("SELECT * FROM testData").registerAsTable("selectStar")
     TestSQLContext.cacheTable("selectStar")
     TestSQLContext.sql("SELECT * FROM selectStar WHERE key = 1").collect()
     TestSQLContext.uncacheTable("selectStar")
   }
 
-  test("Self-join cached") {
+  ignore("Self-join cached") {
     val unCachedAnswer =
       TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key").collect()
     TestSQLContext.cacheTable("testData")
@@ -74,7 +76,7 @@ class CachedTableSuite extends QueryTest {
     TestSQLContext.uncacheTable("testData")
   }
 
-  test("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
+  ignore("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
     TestSQLContext.sql("CACHE TABLE testData")
     TestSQLContext.table("testData").queryExecution.executedPlan match {
       case _: InMemoryColumnarTableScan => // Found evidence of caching
