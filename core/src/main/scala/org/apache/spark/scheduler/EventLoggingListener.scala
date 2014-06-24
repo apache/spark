@@ -32,12 +32,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
-<<<<<<< HEAD
-import org.apache.spark.SPARK_VERSION
-import org.apache.spark.util.{FileLogger, JsonProtocol, Utils}
-=======
 import org.apache.spark.util.{JsonProtocol, Utils}
->>>>>>> Make event logger use a single file.
 
 /**
  * A SparkListener that logs events to persistent storage.
@@ -65,17 +60,11 @@ private[spark] class EventLoggingListener(
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   private val logBaseDir = sparkConf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
-<<<<<<< HEAD
-  private val name = appName.replaceAll("[ :/]", "-").replaceAll("[${}'\"]", "_")
-    .toLowerCase + "-" + System.currentTimeMillis
-  val logDir = Utils.resolveURI(logBaseDir) + "/" + name.stripSuffix("/")
-=======
   private val fileSystem = Utils.getHadoopFileSystem(new URI(logBaseDir))
   private lazy val compressionCodec = CompressionCodec.createCodec(sparkConf)
 
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
->>>>>>> Make event logger use a single file.
 
   private var writer: Option[PrintWriter] = None
 
@@ -100,17 +89,6 @@ private[spark] class EventLoggingListener(
     }
 
   /**
-<<<<<<< HEAD
-   * Return only the unique application directory without the base directory.
-   */
-  def getApplicationLogDir(): String = {
-    name
-  }
-
-  /**
-   * Begin logging events.
-   * If compression is used, log a file that indicates which compression library is used.
-=======
    * Creates the log file in the configured log directory.
    *
    * The file name contains some metadata about its contents. It follows the following
@@ -128,16 +106,11 @@ private[spark] class EventLoggingListener(
    *   used to write the file
    * - ".inprogress" will be present while the log file is still being written to, and
    *   removed after the application is finished.
->>>>>>> Make event logger use a single file.
    */
   def start() {
     if (!fileSystem.isDirectory(new Path(logBaseDir))) {
       throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.");
     }
-<<<<<<< HEAD
-    logger.newFile(SPARK_VERSION_PREFIX + SPARK_VERSION)
-    logger.newFile(LOG_PREFIX + logger.fileIndex)
-=======
 
     val workingPath = logPath + IN_PROGRESS
     val uri = new URI(workingPath)
@@ -162,25 +135,17 @@ private[spark] class EventLoggingListener(
     writer = Some(new PrintWriter(cstream))
 
     logInfo("Logging events to %s".format(logPath))
->>>>>>> Make event logger use a single file.
   }
 
   /** Log the event as JSON. */
-  private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
+  private def logEvent(event: SparkListenerEvent) {
     val eventJson = JsonProtocol.sparkEventToJson(event)
-
     writer.foreach(_.println(compact(render(eventJson))))
-    if (flushLogger) {
-      writer.foreach(_.flush())
-      hadoopDataStream.foreach(_.sync())
-    }
-
     if (testing) {
       loggedEvents += eventJson
     }
   }
 
-  // Events that do not trigger a flush
   override def onStageSubmitted(event: SparkListenerStageSubmitted) =
     logEvent(event)
   override def onTaskStart(event: SparkListenerTaskStart) =
@@ -191,24 +156,22 @@ private[spark] class EventLoggingListener(
     logEvent(event)
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate) =
     logEvent(event)
-
-  // Events that trigger a flush
   override def onStageCompleted(event: SparkListenerStageCompleted) =
-    logEvent(event, flushLogger = true)
+    logEvent(event)
   override def onJobStart(event: SparkListenerJobStart) =
-    logEvent(event, flushLogger = true)
+    logEvent(event)
   override def onJobEnd(event: SparkListenerJobEnd) =
-    logEvent(event, flushLogger = true)
+    logEvent(event)
   override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded) =
-    logEvent(event, flushLogger = true)
+    logEvent(event)
   override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved) =
-    logEvent(event, flushLogger = true)
+    logEvent(event)
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD) =
-    logEvent(event, flushLogger = true)
+    logEvent(event)
   override def onApplicationStart(event: SparkListenerApplicationStart) =
-    logEvent(event, flushLogger = true)
+    logEvent(event)
   override def onApplicationEnd(event: SparkListenerApplicationEnd) =
-    logEvent(event, flushLogger = true)
+    logEvent(event)
   // No-op because logging every update would be overkill
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate) { }
 
@@ -234,7 +197,7 @@ private[spark] object EventLoggingListener extends Logging {
   val LOG_FILE_PERMISSIONS = FsPermission.createImmutable(Integer.parseInt("770", 8).toShort)
 
   // Regex for parsing log file names. See description of log file name format in start().
-  val LOG_FILE_NAME_REGEX = s".+-[0-9]+-([0-9](?:\\.[0-9])*)(?:-(.+?))?(\\$IN_PROGRESS)?".r
+  val LOG_FILE_NAME_REGEX = s"(.+)-([0-9]+)-([0-9](?:\\.[0-9])*)(?:-(.+?))?(\\$IN_PROGRESS)?".r
 
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = new mutable.HashMap[String, CompressionCodec]
@@ -248,7 +211,7 @@ private[spark] object EventLoggingListener extends Logging {
    */
   def parseLoggingInfo(log: Path): EventLoggingInfo = {
     try {
-      val LOG_FILE_NAME_REGEX(version, codecName, inprogress) = log.getName()
+      val LOG_FILE_NAME_REGEX(_, _, version, codecName, inprogress) = log.getName()
       val codec: Option[CompressionCodec] = if (codecName != null) {
           val conf = new SparkConf()
           conf.set("spark.io.compression.codec", codecName)
@@ -259,13 +222,8 @@ private[spark] object EventLoggingListener extends Logging {
       EventLoggingInfo(log, version, codec, inprogress == null)
     } catch {
       case e: Exception =>
-<<<<<<< HEAD
-        logError("Exception in parsing logging info from directory %s".format(logDir), e)
-        EventLoggingInfo.empty
-=======
         logError("Exception in parsing logging info from file %s".format(log), e)
         null
->>>>>>> Make event logger use a single file.
     }
   }
 

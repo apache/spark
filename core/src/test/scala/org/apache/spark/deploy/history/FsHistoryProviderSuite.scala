@@ -23,14 +23,14 @@ import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkConf
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{JsonProtocol, Utils}
 
-class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with ShouldMatchers {
+class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers {
 
   private var testDir: File = null
 
@@ -54,15 +54,15 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with ShouldMat
     val provider = new FsHistoryProvider(conf)
 
     // Write a new-style application log.
-    val logFile1 = new File(testDir, "app1-1-1.0")
+    val logFile1 = new File(testDir, "app1-1-2-1.0")
     writeFile(logFile1,
-      SparkListenerApplicationStart("app1", 1L, "test"),
+      SparkListenerApplicationStart("app1-1", 1L, "test"),
       SparkListenerApplicationEnd(2L)
       )
 
     // Write an unfinished app, new-style.
-    writeFile(new File(testDir, "app2-1-1.0.inprogress"),
-      SparkListenerApplicationStart("app2", 1L, "test")
+    writeFile(new File(testDir, "app2-2-1-1.0.inprogress"),
+      SparkListenerApplicationStart("app2-2", 1L, "test")
       )
 
     // Write an old-style application log.
@@ -93,7 +93,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with ShouldMat
 
     list(0) should be (ApplicationHistoryInfo(oldLog.getName(), "app3", 2L, 3L,
       oldLog.lastModified(), "test"))
-    list(1) should be (ApplicationHistoryInfo(logFile1.getName(), "app1", 1L, 2L,
+    list(1) should be (ApplicationHistoryInfo(logFile1.getName(), "app1-1", 1L, 2L,
       logFile1.lastModified(), "test"))
 
     // Make sure the UI can be rendered.

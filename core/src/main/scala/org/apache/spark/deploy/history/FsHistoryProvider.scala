@@ -163,7 +163,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
           fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
         } else {
           try {
-            val matcher(version, codecName, inprogress) = entry.getPath().getName()
+            val matcher(_, _, version, codecName, inprogress) = entry.getPath().getName()
             inprogress == null
           } catch {
             case e: Exception => false
@@ -247,16 +247,21 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       return (null, null)
     }
 
-    val (logFile, lastUpdated) = if (log.isFile()) {
-        (elogInfo.path, log.getModificationTime())
+    val (appName, logFile, lastUpdated) = if (log.isFile()) {
+        // Due to SPARK-2169, we need to provide the name of the application to be shown in
+        // the SparkUI constructor; setting it afterwards has no effect. So get the portion
+        // of the log file name that contains that information.
+        val EventLoggingListener.LOG_FILE_NAME_REGEX(appName, timestamp, _, _, _) =
+          log.getPath().getName()
+
+        (s"$appName-$timestamp", elogInfo.path, log.getModificationTime())
       } else {
         // For old-style log directories, need to find the actual log file.
         val status = fs.listStatus(elogInfo.path)
           .filter(e => e.getPath().getName().startsWith(LOG_PREFIX))(0)
-        (status.getPath(), status.getModificationTime())
+        (elogInfo.path.getName(), status.getPath(), status.getModificationTime())
       }
 
-    val appId = elogInfo.path.getName
     val replayBus = new ReplayListenerBus(logFile, fs, elogInfo.compressionCodec)
     val appListener = new ApplicationEventListener
     replayBus.addListener(appListener)
@@ -264,7 +269,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     val ui: SparkUI = if (renderUI) {
         val conf = this.conf.clone()
         val appSecManager = new SecurityManager(conf)
-        new SparkUI(conf, appSecManager, replayBus, appId, "/history/" + appId)
+        new SparkUI(conf, appSecManager, replayBus, appName, "/history/" + elogInfo.path.getName())
         // Do not call ui.bind() to avoid creating a new server for each application
       } else {
         null
@@ -272,7 +277,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
     replayBus.replay()
     val appInfo = ApplicationHistoryInfo(
-      appId,
+      elogInfo.path.getName(),
       appListener.appName,
       appListener.startTime,
       appListener.endTime,
