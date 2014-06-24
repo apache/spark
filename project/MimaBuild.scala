@@ -15,12 +15,16 @@
  * limitations under the License.
  */
 
+import sbt._
+import sbt.Keys.version
+
 import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.core.MissingClassProblem
 import com.typesafe.tools.mima.core.MissingTypesProblem
 import com.typesafe.tools.mima.core.ProblemFilters._
 import com.typesafe.tools.mima.plugin.MimaKeys.{binaryIssueFilters, previousArtifact}
 import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
+
 
 object MimaBuild {
 
@@ -76,7 +80,7 @@ object MimaBuild {
     }
 
     defaultExcludes ++ ignoredClasses.flatMap(excludeClass) ++
-    ignoredMembers.flatMap(excludeMember) ++ MimaExcludes.excludes
+    ignoredMembers.flatMap(excludeMember) ++ MimaExcludes.excludes(currentSparkVersion)
   }
 
   def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
