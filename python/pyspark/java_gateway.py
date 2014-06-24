@@ -56,6 +56,10 @@ def launch_gateway():
             raise Exception("Launching GatewayServer failed with exit code %d: %s" %
                 (error_code, "".join(proc.stderr.readlines())))
 
+        # close stderr, otherwise it fills an internal buffer and causes SPARK-2244
+        # TODO: work out a -verbose option and create EchoOutputThread(proc.stderr).start() instead
+        proc.stderr.close()
+
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
         class EchoOutputThread(Thread):
