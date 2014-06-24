@@ -17,22 +17,31 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.URI
 
+import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-
+import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse
+import org.apache.hadoop.yarn.api.records.ContainerLaunchContext
+import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.mockito.Matchers._
+import org.mockito.Mockito._
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers._
+import org.scalatest.Matchers
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ HashMap => MutableHashMap }
 import scala.util.Try
 
+import org.apache.spark.SparkConf
+import org.apache.spark.util.Utils
 
-class ClientBaseSuite extends FunSuite {
+class ClientBaseSuite extends FunSuite with Matchers {
 
   test("default Yarn application classpath") {
     ClientBase.getDefaultYarnApplicationClasspath should be(Some(Fixtures.knownDefYarnAppCP))
@@ -65,6 +74,67 @@ class ClientBaseSuite extends FunSuite {
       val env = newEnv
       ClientBase.populateHadoopClasspath(conf, env)
       classpath(env) should be(flatten(Fixtures.knownYARNAppCP, Fixtures.knownMRAppCP))
+    }
+  }
+
+  private val SPARK = "local:/sparkJar"
+  private val USER = "local:/userJar"
+  private val ADDED = "local:/addJar1,local:/addJar2,/addJar3"
+
+  test("Local jar URIs") {
+    val conf = new Configuration()
+    val sparkConf = new SparkConf().set(ClientBase.CONF_SPARK_JAR, SPARK)
+    val env = new MutableHashMap[String, String]()
+    val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
+
+    ClientBase.populateClasspath(args, conf, sparkConf, env, None)
+
+    val cp = env("CLASSPATH").split(File.pathSeparator)
+    s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
+      val uri = new URI(entry)
+      if (ClientBase.LOCAL_SCHEME.equals(uri.getScheme())) {
+        cp should contain (uri.getPath())
+      } else {
+        cp should not contain (uri.getPath())
+      }
+    })
+    cp should contain (Environment.PWD.$())
+    cp should contain (s"${Environment.PWD.$()}${File.separator}*")
+    cp should not contain (ClientBase.SPARK_JAR)
+    cp should not contain (ClientBase.APP_JAR)
+  }
+
+  test("Jar path propagation through SparkConf") {
+    val conf = new Configuration()
+    val sparkConf = new SparkConf().set(ClientBase.CONF_SPARK_JAR, SPARK)
+    val yarnConf = new YarnConfiguration()
+    val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
+
+    val client = spy(new DummyClient(args, conf, sparkConf, yarnConf))
+    doReturn(new Path("/")).when(client).copyRemoteFile(any(classOf[Path]),
+      any(classOf[Path]), anyShort(), anyBoolean())
+
+    var tempDir = Files.createTempDir();
+    try {
+      client.prepareLocalResources(tempDir.getAbsolutePath())
+      sparkConf.getOption(ClientBase.CONF_SPARK_USER_JAR) should be (Some(USER))
+
+      // The non-local path should be propagated by name only, since it will end up in the app's
+      // staging dir.
+      val expected = ADDED.split(",")
+        .map(p => {
+          val uri = new URI(p)
+          if (ClientBase.LOCAL_SCHEME == uri.getScheme()) {
+            p
+          } else {
+            Option(uri.getFragment()).getOrElse(new File(p).getName())
+          }
+        })
+        .mkString(",")
+
+      sparkConf.getOption(ClientBase.CONF_SPARK_YARN_SECONDARY_JARS) should be (Some(expected))
+    } finally {
+      Utils.deleteRecursively(tempDir)
     }
   }
 
@@ -108,5 +178,19 @@ class ClientBaseSuite extends FunSuite {
 
   def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B =
     Try(clazz.getField(field)).map(_.get(null).asInstanceOf[A]).toOption.map(mapTo).getOrElse(defaults)
+
+  private class DummyClient(
+      val args: ClientArguments,
+      val conf: Configuration,
+      val sparkConf: SparkConf,
+      val yarnConf: YarnConfiguration) extends ClientBase {
+
+    override def calculateAMMemory(newApp: GetNewApplicationResponse): Int =
+      throw new UnsupportedOperationException()
+
+    override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit =
+      throw new UnsupportedOperationException()
+
+  }
 
 }

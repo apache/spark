@@ -22,8 +22,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.concurrent.duration._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -218,9 +218,9 @@ case class BroadcastHashJoin(
      rightKeys: Seq[Expression],
      buildSide: BuildSide,
      left: SparkPlan,
-     right: SparkPlan)(@transient sc: SparkContext) extends BinaryNode with HashJoin {
+     right: SparkPlan)(@transient sqlContext: SQLContext) extends BinaryNode with HashJoin {
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
@@ -229,7 +229,7 @@ case class BroadcastHashJoin(
 
   @transient
   lazy val broadcastFuture = future {
-    sc.broadcast(buildPlan.executeCollect())
+    sqlContext.sparkContext.broadcast(buildPlan.executeCollect())
   }
 
   def execute() = {
@@ -249,13 +249,13 @@ case class BroadcastHashJoin(
 @DeveloperApi
 case class LeftSemiJoinBNL(
     streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression])
-    (@transient sc: SparkContext)
+    (@transient sqlContext: SQLContext)
   extends BinaryNode {
   // TODO: Override requiredChildDistribution.
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   def output = left.output
 
@@ -271,7 +271,8 @@ case class LeftSemiJoinBNL(
         .getOrElse(Literal(true)))
 
   def execute() = {
-    val broadcastedRelation = sc.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+    val broadcastedRelation =
+      sqlContext.sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
 
     streamed.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow
@@ -311,13 +312,13 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
 @DeveloperApi
 case class BroadcastNestedLoopJoin(
     streamed: SparkPlan, broadcast: SparkPlan, joinType: JoinType, condition: Option[Expression])
-    (@transient sc: SparkContext)
+    (@transient sqlContext: SQLContext)
   extends BinaryNode {
   // TODO: Override requiredChildDistribution.
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   def output = left.output ++ right.output
 
@@ -333,7 +334,8 @@ case class BroadcastNestedLoopJoin(
         .getOrElse(Literal(true)))
 
   def execute() = {
-    val broadcastedRelation = sc.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+    val broadcastedRelation =
+      sqlContext.sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
 
     val streamedPlusMatches = streamed.execute().mapPartitions { streamedIter =>
       val matchedRows = new ArrayBuffer[Row]
@@ -384,7 +386,7 @@ case class BroadcastNestedLoopJoin(
       }
 
     // TODO: Breaks lineage.
-    sc.union(
-      streamedPlusMatches.flatMap(_._1), sc.makeRDD(rightOuterMatches))
+    sqlContext.sparkContext.union(
+      streamedPlusMatches.flatMap(_._1), sqlContext.sparkContext.makeRDD(rightOuterMatches))
   }
 }

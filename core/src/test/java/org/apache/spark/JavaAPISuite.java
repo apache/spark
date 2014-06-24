@@ -18,6 +18,7 @@
 package org.apache.spark;
 
 import java.io.*;
+import java.net.URI;
 import java.util.*;
 
 import scala.Tuple2;
@@ -741,7 +742,7 @@ public class JavaAPISuite implements Serializable {
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
     TaskContext context = new TaskContext(0, 0, 0, false, new TaskMetrics());
-    Assert.assertEquals(1, rdd.iterator(rdd.splits().get(0), context).next().intValue());
+    Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 
   @Test
@@ -768,7 +769,7 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void wholeTextFiles() throws IOException {
+  public void wholeTextFiles() throws Exception {
     byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
     byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
 
@@ -784,7 +785,7 @@ public class JavaAPISuite implements Serializable {
     List<Tuple2<String, String>> result = readRDD.collect();
 
     for (Tuple2<String, String> res : result) {
-      Assert.assertEquals(res._2(), container.get(res._1()));
+      Assert.assertEquals(res._2(), container.get(new URI(res._1()).getPath()));
     }
   }
 
