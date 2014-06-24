@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.receiver
 
 import java.util
-import java.util.concurrent.{ConcurrentHashMap, ArrayBlockingQueue, TimeUnit}
+import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -183,8 +183,8 @@ private[streaming] class BlockGenerator(
     callbackBufferOpt match {
       case Some(callbackBuffer) =>
         callbackBuffer.map(callback => {
-          logDebug("Called callback for block: " + block.id)
           callback.function(callback.arg)
+          logDebug("Called callback for block: " + block.id)
         })
       case None =>
     }
