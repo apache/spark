@@ -1038,7 +1038,7 @@ class DAGScheduler(
   private def failJobAndIndependentStages(job: ActiveJob, failureReason: String,
       resultStage: Option[Stage]) {
     val error = new SparkException(failureReason)
-    var unableToCancelStages = false
+    var ableToCancelStages = true
 
     val shouldInterruptThread =
       if (job.properties == null) false
@@ -1070,14 +1070,14 @@ class DAGScheduler(
             } catch {
               case e: UnsupportedOperationException =>
                 logInfo(s"Could not cancel tasks for stage $stageId", e)
-              unableToCancelStages = true
+              ableToCancelStages = false
             }
           }
         }
       }
     }
 
-    if (!unableToCancelStages) {
+    if (ableToCancelStages) {
       job.listener.jobFailed(error)
       cleanupStateForJobAndIndependentStages(job, resultStage)
       listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
