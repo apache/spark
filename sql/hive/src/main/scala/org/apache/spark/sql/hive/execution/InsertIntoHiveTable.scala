@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConversions._
 
+import java.util.{HashMap => JHashMap}
+
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.Context
@@ -87,6 +89,12 @@ case class InsertIntoHiveTable(
     case (s: Seq[_], oi: ListObjectInspector) =>
       val wrappedSeq = s.map(wrap(_, oi.getListElementObjectInspector))
       seqAsJavaList(wrappedSeq)
+
+    case (m: Map[_, _], oi: MapObjectInspector) =>
+      val keyOi = oi.getMapKeyObjectInspector
+      val valueOi = oi.getMapValueObjectInspector
+      val wrappedMap = m.map { case (key, value) => wrap(key, keyOi) -> wrap(value, valueOi) }
+      mapAsJavaMap(wrappedMap)
 
     case (obj, _) =>
       obj
