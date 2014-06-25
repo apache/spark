@@ -74,7 +74,29 @@ object SparkBuild extends PomBuild {
   lazy val sharedSettings = graphSettings ++ ScalaStyleSettings ++ Seq (
     javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
     incOptions := incOptions.value.withNameHashing(true),
+    retrieveManaged := true,
+    retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true
+  )
+
+  /** Following project only exists to pull previous artifacts of Spark for generating
+    Mima ignores. For more information see: SPARK 2071 */
+  lazy val oldDeps = Project("oldDeps", file("dev"), settings = oldDepsSettings)
+
+  def versionArtifact(id: String): Option[sbt.ModuleID] = {
+    val fullId = id + "_2.10"
+    Some("org.apache.spark" % fullId % "1.0.0")
+  }
+
+  def oldDepsSettings() = Defaults.defaultSettings ++ Seq(
+    name := "old-deps",
+    scalaVersion := "2.10.4",
+    retrieveManaged := true,
+    retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
+    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
+      "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
+      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
+      "spark-core").map(versionArtifact(_).get intransitive())
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -107,7 +129,7 @@ object SparkBuild extends PomBuild {
     super.projectDefinitions(baseDirectory).map { x =>
       if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
       else x.settings(Seq[Setting[_]](): _*)
-    }
+    } ++ Seq[Project](oldDeps)
   }
 
 }
