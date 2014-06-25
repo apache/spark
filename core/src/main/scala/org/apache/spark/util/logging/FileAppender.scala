@@ -125,16 +125,16 @@ private[spark] object FileAppender extends Logging {
       val validatedParams: Option[(Long, String)] = rollingInterval match {
         case "daily" =>
           logInfo(s"Rolling executor logs enabled for $file with daily rolling")
-          Some(24 * 60 * 60 * 1000L, "--YYYY-MM-dd")
+          Some(24 * 60 * 60 * 1000L, "--yyyy-MM-dd")
         case "hourly" =>
           logInfo(s"Rolling executor logs enabled for $file with hourly rolling")
-          Some(60 * 60 * 1000L, "--YYYY-MM-dd--HH")
+          Some(60 * 60 * 1000L, "--yyyy-MM-dd--HH")
         case "minutely" =>
           logInfo(s"Rolling executor logs enabled for $file with rolling every minute")
-          Some(60 * 1000L, "--YYYY-MM-dd--HH-mm")
+          Some(60 * 1000L, "--yyyy-MM-dd--HH-mm")
         case IntParam(seconds) =>
           logInfo(s"Rolling executor logs enabled for $file with rolling $seconds seconds")
-          Some(seconds * 1000L, "--YYYY-MM-dd--HH-mm-ss")
+          Some(seconds * 1000L, "--yyyy-MM-dd--HH-mm-ss")
         case _ =>
           logWarning(s"Illegal interval for rolling executor logs [$rollingInterval], " +
               s"rolling logs not enabled")

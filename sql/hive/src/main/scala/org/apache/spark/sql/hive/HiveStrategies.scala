@@ -64,7 +64,6 @@ private[hive] trait HiveStrategies {
         val partitionKeyIds = relation.partitionKeys.map(_.exprId).toSet
         val (pruningPredicates, otherPredicates) = predicates.partition {
           _.references.map(_.exprId).subsetOf(partitionKeyIds)
-
         }
 
         pruneFilterProject(
@@ -74,6 +73,24 @@ private[hive] trait HiveStrategies {
           HiveTableScan(_, relation, pruningPredicates.reduceLeftOption(And))(hiveContext)) :: Nil
       case _ =>
         Nil
+    }
+  }
+
+  case class HiveCommandStrategy(context: HiveContext) extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.NativeCommand(sql) =>
+        NativeCommand(sql, plan.output)(context) :: Nil
+
+      case describe: logical.DescribeCommand =>
+        val resolvedTable = context.executePlan(describe.table).analyzed
+        resolvedTable match {
+          case t: MetastoreRelation =>
+            Seq(DescribeHiveTableCommand(t, describe.output, describe.isExtended)(context))
+          case o: LogicalPlan =>
+            Seq(DescribeCommand(planLater(o), describe.output)(context))
+        }
+
+      case _ => Nil
     }
   }
 }

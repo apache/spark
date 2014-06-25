@@ -77,6 +77,7 @@ private[spark] class ExecutorRunner(
    * @param message the exception message which caused the executor's death 
    */
   private def killProcess(message: Option[String]) {
+    var exitCode: Option[Int] = None
     if (process != null) {
       logInfo("Killing process!")
       process.destroy()
@@ -87,9 +88,9 @@ private[spark] class ExecutorRunner(
       if (stderrAppender != null) {
         stderrAppender.stop()
       }
-      val exitCode = process.waitFor()
-      worker ! ExecutorStateChanged(appId, execId, state, message, Some(exitCode))
+      exitCode = Some(process.waitFor())
     }
+    worker ! ExecutorStateChanged(appId, execId, state, message, exitCode)
   }
 
   /** Stop this executor runner, including killing the process it launched */
@@ -154,11 +155,10 @@ private[spark] class ExecutorRunner(
       Files.write(header, stderr, Charsets.UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
-      // Wait for it to exit; this is actually a bad thing if it happens, because we expect to run
-      // long-lived processes only. However, in the future, we might restart the executor a few
-      // times on the same machine.
+      // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
+      // or with nonzero exit code
       val exitCode = process.waitFor()
-      state = ExecutorState.FAILED
+      state = ExecutorState.EXITED
       val message = "Command exited with code " + exitCode
       worker ! ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode))
     } catch {

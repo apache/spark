@@ -21,6 +21,8 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.log4j.Level
 
+import org.apache.spark.util.MemoryParam
+
 /**
  * Command-line parser for the driver client.
  */
@@ -51,8 +53,8 @@ private[spark] class ClientArguments(args: Array[String]) {
       cores = value.toInt
       parse(tail)
 
-    case ("--memory" | "-m") :: value :: tail =>
-      memory = value.toInt
+    case ("--memory" | "-m") :: MemoryParam(value) :: tail =>
+      memory = value
       parse(tail)
 
     case ("--supervise" | "-s") :: tail =>

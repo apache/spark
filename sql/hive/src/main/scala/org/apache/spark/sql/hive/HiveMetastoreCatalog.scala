@@ -105,7 +105,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case InsertIntoCreatedTable(db, tableName, child) =>
-        val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase)
+        val databaseName = db.getOrElse(hive.sessionState.getCurrentDatabase)
 
         createTable(databaseName, tableName, child.output)
 
@@ -208,7 +208,9 @@ object HiveMetastoreTypes extends RegexParsers {
     }
 
   protected lazy val structType: Parser[DataType] =
-    "struct" ~> "<" ~> repsep(structField,",") <~ ">" ^^ StructType
+    "struct" ~> "<" ~> repsep(structField,",") <~ ">"  ^^ {
+      case fields => new StructType(fields)
+    }
 
   protected lazy val dataType: Parser[DataType] =
     arrayType |
@@ -237,6 +239,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case BinaryType => "binary"
     case BooleanType => "boolean"
     case DecimalType => "decimal"
+    case TimestampType => "timestamp"
   }
 }
 

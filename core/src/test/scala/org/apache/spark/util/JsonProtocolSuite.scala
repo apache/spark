@@ -117,6 +117,17 @@ class JsonProtocolSuite extends FunSuite {
     testBlockId(StreamBlockId(1, 2L))
   }
 
+  test("Backward compatibility") {
+    // StageInfo.details was added after 1.0.0.
+    val info = makeStageInfo(1, 2, 3, 4L, 5L)
+    assert(info.details.nonEmpty)
+    val newJson = JsonProtocol.stageInfoToJson(info)
+    val oldJson = newJson.removeField { case (field, _) => field == "Details" }
+    val newInfo = JsonProtocol.stageInfoFromJson(oldJson)
+    assert(info.name === newInfo.name)
+    assert("" === newInfo.details)
+  }
+
 
   /** -------------------------- *
    | Helper test running methods |
@@ -235,6 +246,7 @@ class JsonProtocolSuite extends FunSuite {
     (0 until info1.rddInfos.size).foreach { i =>
       assertEquals(info1.rddInfos(i), info2.rddInfos(i))
     }
+    assert(info1.details === info2.details)
   }
 
   private def assertEquals(info1: RDDInfo, info2: RDDInfo) {
@@ -354,7 +366,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private def assertJsonStringEquals(json1: String, json2: String) {
     val formatJsonString = (json: String) => json.replaceAll("[\\s|]", "")
-    formatJsonString(json1) === formatJsonString(json2)
+    assert(formatJsonString(json1) === formatJsonString(json2))
   }
 
   private def assertSeqEquals[T](seq1: Seq[T], seq2: Seq[T], assertEquals: (T, T) => Unit) {
@@ -437,8 +449,8 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
-    val rddInfos = (1 to a % 5).map { i => makeRddInfo(a % i, b % i, c % i, d % i, e % i) }
-    new StageInfo(a, "greetings", b, rddInfos)
+    val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
+    new StageInfo(a, "greetings", b, rddInfos, "details")
   }
 
   private def makeTaskInfo(a: Long, b: Int, c: Long) = {
@@ -481,20 +493,19 @@ class JsonProtocolSuite extends FunSuite {
   private val stageSubmittedJsonString =
     """
       {"Event":"SparkListenerStageSubmitted","Stage Info":{"Stage ID":100,"Stage Name":
-      "greetings","Number of Tasks":200,"RDD Info":{"RDD ID":100,"Name":"mayor","Storage
-      Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
-      "Replication":1},"Number of Partitions":200,"Number of Cached Partitions":300,
-      "Memory Size":400,"Disk Size":500,"Tachyon Size":0},"Emitted Task Size Warning":false},
-      "Properties":{"France":"Paris","Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
+      "greetings","Number of Tasks":200,"RDD Info":[],"Details":"details",
+      "Emitted Task Size Warning":false},"Properties":{"France":"Paris","Germany":"Berlin",
+      "Russia":"Moscow","Ukraine":"Kiev"}}
     """
 
   private val stageCompletedJsonString =
     """
       {"Event":"SparkListenerStageCompleted","Stage Info":{"Stage ID":101,"Stage Name":
-      "greetings","Number of Tasks":201,"RDD Info":{"RDD ID":101,"Name":"mayor","Storage
+      "greetings","Number of Tasks":201,"RDD Info":[{"RDD ID":101,"Name":"mayor","Storage
       Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
       "Replication":1},"Number of Partitions":201,"Number of Cached Partitions":301,
-      "Memory Size":401,"Disk Size":501,"Tachyon Size":0},"Emitted Task Size Warning":false}}
+      "Memory Size":401,"Tachyon Size":0,"Disk Size":501}],"Details":"details",
+      "Emitted Task Size Warning":false}}
     """
 
   private val taskStartJsonString =
@@ -526,9 +537,9 @@ class JsonProtocolSuite extends FunSuite {
       900,"Total Blocks Fetched":1500,"Remote Blocks Fetched":800,"Local Blocks Fetched":
       700,"Fetch Wait Time":900,"Remote Bytes Read":1000},"Shuffle Write Metrics":
       {"Shuffle Bytes Written":1200,"Shuffle Write Time":1500},"Updated Blocks":
-      [{"Block ID":{"Type":"RDDBlockId","RDD ID":0,"Split Index":0},"Status":
-      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,
-      "Deserialized":false,"Replication":2},"Memory Size":0,"Disk Size":0,"Tachyon Size":0}}]}}
+      [{"Block ID":"rdd_0_0","Status":{"Storage Level":{"Use Disk":true,"Use Memory":true,
+      "Use Tachyon":false,"Deserialized":false,"Replication":2},"Memory Size":0,"Tachyon Size":0,
+      "Disk Size":0}}]}}
     """
 
   private val jobStartJsonString =

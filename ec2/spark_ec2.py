@@ -689,9 +689,23 @@ def ssh(host, opts, command):
             time.sleep(30)
             tries = tries + 1
 
+# Backported from Python 2.7 for compatiblity with 2.6 (See SPARK-1990)
+def _check_output(*popenargs, **kwargs):
+    if 'stdout' in kwargs:
+        raise ValueError('stdout argument not allowed, it will be overridden.')
+    process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)
+    output, unused_err = process.communicate()
+    retcode = process.poll()
+    if retcode:
+        cmd = kwargs.get("args")
+        if cmd is None:
+            cmd = popenargs[0]
+        raise subprocess.CalledProcessError(retcode, cmd, output=output)
+    return output
+
 
 def ssh_read(host, opts, command):
-    return subprocess.check_output(
+    return _check_output(
         ssh_command(opts) + ['%s@%s' % (opts.user, host), stringify_command(command)])
 
 
@@ -756,12 +770,16 @@ def real_main():
         setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
     elif action == "destroy":
-        response = raw_input("Are you sure you want to destroy the cluster " +
-                             cluster_name + "?\nALL DATA ON ALL NODES WILL BE LOST!!\n" +
-                             "Destroy cluster " + cluster_name + " (y/N): ")
+        print "Are you sure you want to destroy the cluster %s?" % cluster_name
+        print "The following instances will be terminated:"
+        (master_nodes, slave_nodes) = get_existing_cluster(
+            conn, opts, cluster_name, die_on_error=False)
+        for inst in master_nodes + slave_nodes:
+            print "> %s" % inst.public_dns_name
+
+        msg = "ALL DATA ON ALL NODES WILL BE LOST!!\nDestroy cluster %s (y/N): " % cluster_name
+        response = raw_input(msg)
         if response == "y":
-            (master_nodes, slave_nodes) = get_existing_cluster(
-                conn, opts, cluster_name, die_on_error=False)
             print "Terminating master..."
             for inst in master_nodes:
                 inst.terminate()

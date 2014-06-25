@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types._
 
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
-class ConstantFoldingSuite extends OptimizerTest {
+class ConstantFoldingSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -194,8 +195,8 @@ class ConstantFoldingSuite extends OptimizerTest {
           Add(Literal(null, IntegerType), 1) as 'c9,
           Add(1, Literal(null, IntegerType)) as 'c10,
 
-          Equals(Literal(null, IntegerType), 1) as 'c11,
-          Equals(1, Literal(null, IntegerType)) as 'c12,
+          EqualTo(Literal(null, IntegerType), 1) as 'c11,
+          EqualTo(1, Literal(null, IntegerType)) as 'c12,
 
           Like(Literal(null, StringType), "abc") as 'c13,
           Like("abc", Literal(null, StringType)) as 'c14,
