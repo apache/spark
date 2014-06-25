@@ -691,7 +691,7 @@ class JsonProtocolSuite extends FunSuite {
   private val blockManagerRemovedJsonString =
     """
       {"Event":"SparkListenerBlockManagerRemoved","Block Manager ID":{"Executor ID":"Scarce",
-      "Host":"to be counted...","Port":100,"Netty Port":200},"Timestamp":1}
+      "Host":"to be counted...","Port":100,"Netty Port":200},"Timestamp":2}
     """
 
   private val unpersistRDDJsonString =
