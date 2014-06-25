@@ -64,6 +64,9 @@ class KryoSerializer(conf: SparkConf)
       kryo.register(cls)
     }
 
+    // For results returned by asJavaIterable. See JavaIterableWrapperSerializer.
+    kryo.register(JavaIterableWrapperSerializer.wrapperClass, new JavaIterableWrapperSerializer)
+
     // Allow sending SerializableWritable
     kryo.register(classOf[SerializableWritable[_]], new KryoJavaSerializer())
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
@@ -182,4 +185,51 @@ private[serializer] object KryoSerializer {
     classOf[BlockManagerId],
     classOf[Array[Byte]]
   )
+}
+
+/**
+ * A Kryo serializer for serializing results returned by asJavaIterable.
+ *
+ * The underlying object is scala.collection.convert.Wrappers$IterableWrapper.
+ * Kryo deserializes this into an AbstractCollection, which unfortunately doesn't work.
+ */
+private class JavaIterableWrapperSerializer
+  extends com.esotericsoftware.kryo.Serializer[java.lang.Iterable[_]] {
+
+  import JavaIterableWrapperSerializer._
+
+  override def write(kryo: Kryo, out: KryoOutput, obj: java.lang.Iterable[_]): Unit = {
+    // If the object is the wrapper, simply serialize the underlying Scala Iterable object.
+    // Otherwise, serialize the object itself.
+    if (obj.getClass == wrapperClass && underlyingMethodOpt.isDefined) {
+      kryo.writeClassAndObject(out, underlyingMethodOpt.get.invoke(obj))
+    } else {
+      kryo.writeClassAndObject(out, obj)
+    }
+  }
+
+  override def read(kryo: Kryo, in: KryoInput, clz: Class[java.lang.Iterable[_]])
+    : java.lang.Iterable[_] = {
+    kryo.readClassAndObject(in) match {
+      case scalaIterable: Iterable[_] =>
+        scala.collection.JavaConversions.asJavaIterable(scalaIterable)
+      case javaIterable: java.lang.Iterable[_] =>
+        javaIterable
+    }
+  }
+}
+
+private object JavaIterableWrapperSerializer extends Logging {
+  // The class returned by asJavaIterable (scala.collection.convert.Wrappers$IterableWrapper).
+  val wrapperClass =
+    scala.collection.convert.WrapAsJava.asJavaIterable(Seq(1)).getClass
+
+  // Get the underlying method so we can use it to get the Scala collection for serialization.
+  private val underlyingMethodOpt = {
+    try Some(wrapperClass.getDeclaredMethod("underlying")) catch {
+      case e: Exception =>
+        logError("Failed to find the underlying field in " + wrapperClass, e)
+        None
+    }
+  }
 }
