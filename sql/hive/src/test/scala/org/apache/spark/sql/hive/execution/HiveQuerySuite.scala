@@ -373,7 +373,7 @@ class HiveQuerySuite extends HiveComparisonTest {
   test("SPARK-2263: Insert Map<K, V> values") {
     hql("CREATE TABLE m(value MAP<INT, STRING>)")
     hql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
-    hql("SELECT * FROM m").zip(hql("SELECT * FROM src LIMIT 10")).map {
+    hql("SELECT * FROM m").collect().zip(hql("SELECT * FROM src LIMIT 10").collect()).map {
       case (Row(map: Map[Int, String]), Row(key: Int, value: String)) =>
         assert(map.size === 1)
         assert(map.head === (key, value))
