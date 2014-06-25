@@ -60,8 +60,11 @@ private[deploy] object DeployMessages {
       exception: Option[Exception])
     extends DeployMessage
 
-  case class WorkerSchedulerStateResponse(id: String, executors: List[ExecutorDescription],
-     driverIds: Seq[String])
+  case class WorkerSchedulerStateResponse(
+      id: String,
+      executors: List[ExecutorDescription],
+      driverIds: Seq[String])
+    extends DeployMessage
 
   case class Heartbeat(workerId: String) extends DeployMessage
 
@@ -88,28 +91,38 @@ private[deploy] object DeployMessages {
 
   // Worker internal
 
-  case object WorkDirCleanup      // Sent to Worker actor periodically for cleaning up app folders
+  // Sent to Worker actor periodically for cleaning up app folders
+  case object WorkDirCleanup extends DeployMessage
 
   // AppClient to Master
 
-  case class RegisterApplication(appDescription: ApplicationDescription)
-    extends DeployMessage
+  case class RegisterApplication(appDescription: ApplicationDescription) extends DeployMessage
 
-  case class MasterChangeAcknowledged(appId: String)
+  case class MasterChangeAcknowledged(appId: String) extends DeployMessage
 
   // Master to AppClient
 
   case class RegisteredApplication(appId: String, masterUrl: String) extends DeployMessage
 
   // TODO(matei): replace hostPort with host
-  case class ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) {
+  case class ExecutorAdded(
+      id: Int,
+      workerId: String,
+      hostPort: String,
+      cores: Int,
+      memory: Int)
+    extends DeployMessage {
     Utils.checkHostPort(hostPort, "Required hostport")
   }
 
-  case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String],
-    exitStatus: Option[Int])
+  case class ExecutorUpdated(
+      id: Int,
+      state: ExecutorState,
+      message: Option[String],
+      exitStatus: Option[Int])
+    extends DeployMessage
 
-  case class ApplicationRemoved(message: String)
+  case class ApplicationRemoved(message: String) extends DeployMessage
 
   // DriverClient <-> Master
 
@@ -125,50 +138,69 @@ private[deploy] object DeployMessages {
 
   case class RequestDriverStatus(driverId: String) extends DeployMessage
 
-  case class DriverStatusResponse(found: Boolean, state: Option[DriverState],
-    workerId: Option[String], workerHostPort: Option[String], exception: Option[Exception])
+  case class DriverStatusResponse(
+      found: Boolean,
+      state: Option[DriverState],
+      workerId: Option[String],
+      workerHostPort: Option[String],
+      exception: Option[Exception])
+    extends DeployMessage
 
   // Internal message in AppClient
 
-  case object StopAppClient
+  case object StopAppClient extends DeployMessage
 
   // Master to Worker & AppClient
 
-  case class MasterChanged(masterUrl: String, masterWebUiUrl: String)
+  case class MasterChanged(masterUrl: String, masterWebUiUrl: String) extends DeployMessage
 
   // MasterWebUI To Master
 
-  case object RequestMasterState
+  case object RequestMasterState extends DeployMessage
 
   // Master to MasterWebUI
 
-  case class MasterStateResponse(host: String, port: Int, workers: Array[WorkerInfo],
-    activeApps: Array[ApplicationInfo], completedApps: Array[ApplicationInfo],
-    activeDrivers: Array[DriverInfo], completedDrivers: Array[DriverInfo],
-    status: MasterState) {
-
+  case class MasterStateResponse(
+      host: String,
+      port: Int,
+      workers: Array[WorkerInfo],
+      activeApps: Array[ApplicationInfo],
+      completedApps: Array[ApplicationInfo],
+      activeDrivers: Array[DriverInfo],
+      completedDrivers: Array[DriverInfo],
+      status: MasterState)
+    extends DeployMessage {
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)
-
     def uri = "spark://" + host + ":" + port
   }
 
   //  WorkerWebUI to Worker
 
-  case object RequestWorkerState
+  case object RequestWorkerState extends DeployMessage
 
   // Worker to WorkerWebUI
 
-  case class WorkerStateResponse(host: String, port: Int, workerId: String,
-    executors: List[ExecutorRunner], finishedExecutors: List[ExecutorRunner],
-    drivers: List[DriverRunner], finishedDrivers: List[DriverRunner], masterUrl: String,
-    cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String) {
-
+  case class WorkerStateResponse(
+      host: String,
+      port: Int,
+      workerId: String,
+      executors: List[ExecutorRunner],
+      finishedExecutors: List[ExecutorRunner],
+      drivers: List[DriverRunner],
+      finishedDrivers: List[DriverRunner],
+      masterUrl: String,
+      cores: Int,
+      memory: Int,
+      coresUsed: Int,
+      memoryUsed: Int,
+      masterWebUiUrl: String)
+    extends DeployMessage {
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)
   }
 
   // Liveness checks in various places
 
-  case object SendHeartbeat
+  case object SendHeartbeat extends DeployMessage
 }
