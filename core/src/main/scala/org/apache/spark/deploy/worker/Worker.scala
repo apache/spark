@@ -52,6 +52,7 @@ private[spark] class Worker(
     val conf: SparkConf,
     val securityMgr: SecurityManager)
   extends Actor with Logging {
+
   import context.dispatcher
 
   Utils.checkHost(host, "Expected hostname")
@@ -70,7 +71,6 @@ private[spark] class Worker(
   val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
   val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
-
 
   val masterLock: Object = new Object()
   var master: ActorSelection = null
@@ -96,7 +96,6 @@ private[spark] class Worker(
 
   var coresUsed = 0
   var memoryUsed = 0
-
   val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   val workerSource = new WorkerSource(this)
 
@@ -201,8 +200,7 @@ private[spark] class Worker(
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
       val cleanupFuture = concurrent.future {
         logInfo("Cleaning up oldest application directories in " + workDir + " ...")
-        Utils.findOldFiles(workDir, APP_DATA_RETENTION_SECS)
-          .foreach(Utils.deleteRecursively)
+        Utils.findOldFiles(workDir, APP_DATA_RETENTION_SECS).foreach(Utils.deleteRecursively)
       }
       cleanupFuture onFailure {
         case e: Throwable =>
@@ -212,9 +210,9 @@ private[spark] class Worker(
     case MasterChanged(masterUrl, masterWebUiUrl) =>
       logInfo("Master has changed, new master is at " + masterUrl)
       changeMaster(masterUrl, masterWebUiUrl)
-
-      val execs = executors.values.
-        map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
+      val execs = executors.values.map { e =>
+        new ExecutorDescription(e.appId, e.execId, e.cores, e.state)
+      }
       sender ! WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq)
 
     case Heartbeat =>
@@ -232,10 +230,10 @@ private[spark] class Worker(
       } else {
         try {
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
-          val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-            self, workerId, host,
-            appDesc.sparkHome.map(userSparkHome => new File(userSparkHome)).getOrElse(sparkHome),
-            workDir, akkaUrl, conf, ExecutorState.RUNNING)
+          val executorSparkHome =
+            appDesc.sparkHome.map(userSparkHome => new File(userSparkHome)).getOrElse(sparkHome)
+          val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_, self,
+            workerId, host, executorSparkHome, workDir, akkaUrl, conf, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -244,7 +242,7 @@ private[spark] class Worker(
             master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
           }
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             logError("Failed to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
@@ -253,7 +251,6 @@ private[spark] class Worker(
             masterLock.synchronized {
               master ! ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None)
             }
-          }
         }
       }
 
@@ -293,17 +290,15 @@ private[spark] class Worker(
         }
       }
 
-    case LaunchDriver(driverId, driverDesc) => {
+    case LaunchDriver(driverId, driverDesc) =>
       logInfo(s"Asked to launch driver $driverId")
       val driver = new DriverRunner(driverId, workDir, sparkHome, driverDesc, self, akkaUrl)
       drivers(driverId) = driver
       driver.start()
-
       coresUsed += driverDesc.cores
       memoryUsed += driverDesc.mem
-    }
 
-    case KillDriver(driverId) => {
+    case KillDriver(driverId) =>
       logInfo(s"Asked to kill driver $driverId")
       drivers.get(driverId) match {
         case Some(runner) =>
@@ -311,9 +306,8 @@ private[spark] class Worker(
         case None =>
           logError(s"Asked to kill unknown driver $driverId")
       }
-    }
 
-    case DriverStateChanged(driverId, state, exception) => {
+    case DriverStateChanged(driverId, state, exception) =>
       state match {
         case DriverState.ERROR =>
           logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
@@ -333,18 +327,20 @@ private[spark] class Worker(
       finishedDrivers(driverId) = driver
       memoryUsed -= driver.driverDesc.mem
       coresUsed -= driver.driverDesc.cores
-    }
 
-    case x: DisassociatedEvent if x.remoteAddress == masterAddress =>
-      logInfo(s"$x Disassociated !")
-      masterDisconnected()
+    case d @ DisassociatedEvent(localAddress, remoteAddress, inbound) =>
+      if (remoteAddress == masterAddress) {
+        logInfo(s"$d Disassociated!")
+        masterDisconnected()
+      } else {
+        logWarning(s"Received unknown dissociation event: $d")
+      }
 
-    case RequestWorkerState => {
+    case RequestWorkerState =>
       sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
         coresUsed, memoryUsed, activeMasterWebUiUrl)
-    }
   }
 
   def masterDisconnected() {

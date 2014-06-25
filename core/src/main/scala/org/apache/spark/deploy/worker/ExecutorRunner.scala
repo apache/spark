@@ -77,6 +77,7 @@ private[spark] class ExecutorRunner(
    * @param message the exception message which caused the executor's death 
    */
   private def killProcess(message: Option[String]) {
+    var exitCode: Option[Int] = None
     if (process != null) {
       logInfo("Killing process!")
       process.destroy()
@@ -87,9 +88,9 @@ private[spark] class ExecutorRunner(
       if (stderrAppender != null) {
         stderrAppender.stop()
       }
-      val exitCode = process.waitFor()
-      worker ! ExecutorStateChanged(appId, execId, state, message, Some(exitCode))
+      exitCode = Some(process.waitFor())
     }
+    worker ! ExecutorStateChanged(appId, execId, state, message, exitCode)
   }
 
   /** Stop this executor runner, including killing the process it launched */
@@ -113,9 +114,12 @@ private[spark] class ExecutorRunner(
   }
 
   def getCommandSeq = {
-    val command = Command(appDesc.command.mainClass,
-      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId), appDesc.command.environment,
-      appDesc.command.classPathEntries, appDesc.command.libraryPathEntries,
+    val command = Command(
+      appDesc.command.mainClass,
+      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId),
+      appDesc.command.environment,
+      appDesc.command.classPathEntries,
+      appDesc.command.libraryPathEntries,
       appDesc.command.extraJavaOptions)
     CommandUtils.buildCommandSeq(command, memory, sparkHome.getAbsolutePath)
   }
@@ -161,16 +165,14 @@ private[spark] class ExecutorRunner(
       val message = "Command exited with code " + exitCode
       worker ! ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode))
     } catch {
-      case interrupted: InterruptedException => {
+      case interrupted: InterruptedException =>
         logInfo("Runner thread for executor " + fullId + " interrupted")
         state = ExecutorState.KILLED
         killProcess(None)
-      }
-      case e: Exception => {
+      case e: Exception =>
         logError("Error running executor", e)
         state = ExecutorState.FAILED
         killProcess(Some(e.toString))
-      }
     }
   }
 }
