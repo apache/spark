@@ -100,6 +100,15 @@ if [ -z "$JAVA_HOME" ]; then
   exit -1
 fi
 
+if which git &>/dev/null; then
+    # Git returns all its error codes on STDERR, which causes the script
+    # to fail if the current directory has an invalid .git directory. So
+    # dying on error is momentarily disabled.
+    set +e
+    GITREVSTRING=$(GITREV=$(git rev-parse --short HEAD 2>/dev/null) && echo " (git revision $GITREV)" )
+    set -e
+fi
+
 if ! which mvn &>/dev/null; then
     echo -e "You need Maven installed to build Spark."
     echo -e "Download Maven from https://maven.apache.org/"
@@ -186,7 +195,7 @@ ${BUILD_COMMAND}
 # Make directories
 rm -rf "$DISTDIR"
 mkdir -p "$DISTDIR/lib"
-echo "Spark $VERSION built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
+echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
 
 # Copy jars
 cp $FWDIR/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
