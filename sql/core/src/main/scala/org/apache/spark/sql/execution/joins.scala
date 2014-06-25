@@ -98,7 +98,10 @@ trait HashJoin {
           (streamIter.hasNext && fetchNext())
 
       override final def next() = {
-        val ret = joinRow(currentStreamedRow, currentHashMatches(currentMatchPosition))
+        val ret = buildSide match {
+          case BuildRight => joinRow(currentStreamedRow, currentHashMatches(currentMatchPosition))
+          case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
+        }
         currentMatchPosition += 1
         ret
       }
