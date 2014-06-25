@@ -176,18 +176,16 @@ object Unions {
 
 object SkewFilteredJoin extends Logging with PredicateHelper {
     /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
-  type ReturnType =
+    type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
 
-  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-        // All predicates can be evaluated for inner join (i.e., those that are in the ON
-        // clause and WHERE clause.)
-    case FilteredOperation(predicates, join@Join(left, right, Inner, condition)) =>
-          logger.debug(s"Considering Skew inner join on: ${predicates ++ condition}")
-          splitPredicates(predicates ++ condition, join)
-    case join@Join(left, right, joinType, condition) =>
-          logger.debug(s"Considering Skew join on: $condition")
-          splitPredicates(condition.toSeq, join)
-    case _ => None
-}
+    def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+        case FilteredOperation(predicates, join @ Join(left, right, Skew, condition)) =>
+            logger.debug(s"Considering hash inner join on: ${predicates ++ condition}")
+            splitPredicates(predicates ++ condition, join)
+        case join @ Join(left, right,joinType, condition) =>
+            logger.debug(s"Considering hash join on: $condition")
+            splitPredicates(condition.toSeq, join)
+        case _ => None
+    }
 
