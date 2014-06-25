@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.immutable.{BitSet => ImmutableBitSet}
+import scala.collection.immutable.{BitSet => ScalaBitSet}
 import scala.reflect._
 import com.google.common.hash.Hashing
 
@@ -36,7 +36,7 @@ class ImmutableLongOpenHashSet(
     /** Underlying array of elements used as a hash table. */
     val data: Vector[Long],
     /** Whether or not there is an element at the corresponding position in `data`. */
-    val bitset: ImmutableBitSet,
+    val bitset: ScalaBitSet,
     /**
      * Position of a focused element. This is useful when returning a modified set along with a
      * pointer to the location of modification.
@@ -160,7 +160,7 @@ class ImmutableLongOpenHashSet(
       allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit): ImmutableLongOpenHashSet = {
     val newCapacity = capacity * 2
     allocateFunc(newCapacity)
-    var newBitset = ImmutableBitSet.empty
+    var newBitset = ScalaBitSet.empty
     val newData = new Array[Long](newCapacity)
     val newMask = newCapacity - 1
 
@@ -207,7 +207,7 @@ class ImmutableLongOpenHashSet(
 object ImmutableLongOpenHashSet {
   def empty(initialCapacity: Int, loadFactor: Double): ImmutableLongOpenHashSet =
     new ImmutableLongOpenHashSet(
-      Vector.fill[Long](initialCapacity)(0L), ImmutableBitSet.empty, -1, loadFactor)
+      Vector.fill[Long](initialCapacity)(0L), ScalaBitSet.empty, -1, loadFactor)
 
   def empty(initialCapacity: Int): ImmutableLongOpenHashSet = empty(initialCapacity, 0.7)
 

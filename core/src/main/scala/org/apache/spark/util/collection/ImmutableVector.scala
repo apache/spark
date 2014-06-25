@@ -122,7 +122,7 @@ private class VectorIterator[@specialized(Long, Int) A](v: ImmutableVector[A]) e
 
 sealed trait ImmutableVector[@specialized(Long, Int) A] extends Serializable {
   def size: Int
-  def iterator(a: A = null.asInstanceOf[A]): Iterator[A] = new VectorIterator[A](this)
+  def iterator: Iterator[A] = new VectorIterator[A](this)
   def apply(index: Int): A
   def updated(index: Int, elem: A): ImmutableVector[A]
   def numChildren: Int
