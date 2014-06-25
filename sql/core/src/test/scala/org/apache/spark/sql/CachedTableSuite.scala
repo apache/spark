@@ -20,13 +20,31 @@ package org.apache.spark.sql
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext._
 
 class CachedTableSuite extends QueryTest {
   TestData // Load test tables.
 
-  // NOTE: ALL TESTS ARE IGNORED PENDING SPARK-2264
+  test("SPARK-1669: cacheTable should be idempotent") {
+    assume(!table("testData").logicalPlan.isInstanceOf[InMemoryRelation])
 
-  ignore("read from cached table and uncache") {
+    cacheTable("testData")
+    table("testData").queryExecution.analyzed match {
+      case _: InMemoryRelation =>
+      case _ =>
+        fail("testData should be cached")
+    }
+
+    cacheTable("testData")
+    table("testData").queryExecution.analyzed match {
+      case InMemoryRelation(_, _, _: InMemoryColumnarTableScan) =>
+        fail("cacheTable is not idempotent")
+
+      case _ =>
+    }
+  }
+
+  test("read from cached table and uncache") {
     TestSQLContext.cacheTable("testData")
 
     checkAnswer(
@@ -53,20 +71,20 @@ class CachedTableSuite extends QueryTest {
     }
   }
 
-  ignore("correct error on uncache of non-cached table") {
+  test("correct error on uncache of non-cached table") {
     intercept[IllegalArgumentException] {
       TestSQLContext.uncacheTable("testData")
     }
   }
 
-  ignore("SELECT Star Cached Table") {
+  test("SELECT Star Cached Table") {
     TestSQLContext.sql("SELECT * FROM testData").registerAsTable("selectStar")
     TestSQLContext.cacheTable("selectStar")
     TestSQLContext.sql("SELECT * FROM selectStar WHERE key = 1").collect()
     TestSQLContext.uncacheTable("selectStar")
   }
 
-  ignore("Self-join cached") {
+  test("Self-join cached") {
     val unCachedAnswer =
       TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key").collect()
     TestSQLContext.cacheTable("testData")
@@ -76,7 +94,7 @@ class CachedTableSuite extends QueryTest {
     TestSQLContext.uncacheTable("testData")
   }
 
-  ignore("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
+  test("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
     TestSQLContext.sql("CACHE TABLE testData")
     TestSQLContext.table("testData").queryExecution.executedPlan match {
       case _: InMemoryColumnarTableScan => // Found evidence of caching
