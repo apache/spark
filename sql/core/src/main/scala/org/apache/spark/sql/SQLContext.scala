@@ -186,8 +186,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Caches the specified table in-memory. */
   def cacheTable(tableName: String): Unit = {
-    val currentTable = catalog.lookupRelation(None, tableName)
-    val asInMemoryRelation = EliminateAnalysisOperators(currentTable.logicalPlan) match {
+    val currentTable = table(tableName).queryExecution.analyzed
+    val asInMemoryRelation = currentTable match {
       case _: InMemoryRelation =>
         currentTable.logicalPlan
 
@@ -202,7 +202,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Removes the specified table from the in-memory cache. */
   def uncacheTable(tableName: String): Unit = {
-    EliminateAnalysisOperators(catalog.lookupRelation(None, tableName)) match {
+    table(tableName).queryExecution.analyzed match {
       // This is kind of a hack to make sure that if this was just an RDD registered as a table,
       // we reregister the RDD as a table.
       case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
@@ -218,8 +218,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Returns true if the table is currently cached in-memory. */
   def isCached(tableName: String): Boolean = {
-    val relation = catalog.lookupRelation(None, tableName)
-    EliminateAnalysisOperators(relation) match {
+    val relation = table(tableName).queryExecution.analyzed
+    relation match {
       case _: InMemoryRelation => true
       case _ => false
     }
