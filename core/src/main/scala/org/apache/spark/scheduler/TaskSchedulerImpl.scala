@@ -314,7 +314,6 @@ private[spark] class TaskSchedulerImpl(
     tid: Long,
     taskResult: DirectTaskResult[_]) = synchronized {
     taskSetManager.handleSuccessfulTask(tid, taskResult)
-    backend.reviveOffers()
   }
 
   def handleFailedTask(
