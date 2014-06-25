@@ -61,6 +61,30 @@ class DslQuerySuite extends QueryTest {
       Seq(Seq("1")))
   }
 
+  test("select with functions") {
+    checkAnswer(
+      testData.select(Sum('value)),
+      Seq(Seq(5050.0)))
+
+    checkAnswer(
+      testData.select(Average('value)),
+      Seq(Seq(50.5)))
+
+    checkAnswer(
+      testData.select(Count(1)),
+      Seq(Seq(100)))
+
+    checkAnswer(
+      testData2.select('a + 'b, 'a < 'b),
+      Seq(
+        Seq(2, false),
+        Seq(3, true),
+        Seq(3, false),
+        Seq(4, false),
+        Seq(4, false),
+        Seq(5, false)))
+  }
+
   test("sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
