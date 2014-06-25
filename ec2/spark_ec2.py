@@ -36,6 +36,7 @@ from sys import stderr
 import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
 from boto import ec2
+from boto import vpc
 
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
@@ -135,6 +136,12 @@ def parse_args():
         "--master-opts", type="string", default="",
         help="Extra options to give to master through SPARK_MASTER_OPTS variable " +
              "(e.g -Dspark.worker.timeout=180)")
+    parser.add_option(
+        "--subnet-id", type="string", default="", help="VPC subnet ID to launch this cluster in")
+    parser.add_option(
+        "--vpc-id", type="string", default="", help="VPC ID to launch this cluster in")
+    parser.add_option(
+        "--placement-group", type="string", default=None, help="placement-group to launch this cluster in")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -159,14 +166,19 @@ def parse_args():
 
 
 # Get the EC2 security group of the given name, creating it if it doesn't exist
-def get_or_make_group(conn, name):
+def get_or_make_group(conn, name,vpc_id=None):
     groups = conn.get_all_security_groups()
     group = [g for g in groups if g.name == name]
     if len(group) > 0:
         return group[0]
     else:
-        print "Creating security group " + name
-        return conn.create_security_group(name, "Spark EC2 group")
+       
+        if (vpc_id is None):  
+         print "Creating EC2-Classic security group " + name 
+         return conn.create_security_group(name, "Spark EC2 group")
+        else: 
+         return conn.create_security_group(name, "Spark EC2 group", vpc_id=vpc_id)
+         print "Creating VPC security group " + name 
 
 
 # Wait for a set of launched instances to exit the "pending" state
@@ -247,6 +259,7 @@ def get_spark_ami(opts):
 
     ami_path = "%s/%s/%s" % (AMI_PREFIX, opts.region, instance_type)
     try:
+        print "AMI Path:" + ami_path
         ami = urllib2.urlopen(ami_path).read().strip()
         print "Spark AMI: " + ami
     except:
@@ -267,30 +280,58 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.key_pair is None:
         print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
         sys.exit(1)
-    print "Setting up security groups..."
-    master_group = get_or_make_group(conn, cluster_name + "-master")
-    slave_group = get_or_make_group(conn, cluster_name + "-slaves")
-    if master_group.rules == []:  # Group was just now created
-        master_group.authorize(src_group=master_group)
-        master_group.authorize(src_group=slave_group)
-        master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
-        master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-        master_group.authorize('tcp', 19999, 19999, '0.0.0.0/0')
-        master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
-        master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
-        master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
-        master_group.authorize('tcp', 4040, 4045, '0.0.0.0/0')
-        if opts.ganglia:
-            master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
-    if slave_group.rules == []:  # Group was just now created
-        slave_group.authorize(src_group=master_group)
-        slave_group.authorize(src_group=slave_group)
-        slave_group.authorize('tcp', 22, 22, '0.0.0.0/0')
-        slave_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-        slave_group.authorize('tcp', 50060, 50060, '0.0.0.0/0')
-        slave_group.authorize('tcp', 50075, 50075, '0.0.0.0/0')
-        slave_group.authorize('tcp', 60060, 60060, '0.0.0.0/0')
-        slave_group.authorize('tcp', 60075, 60075, '0.0.0.0/0')
+
+    if opts.vpc_id is None: 
+        print "Setting up EC2-Classic security groups..."
+        master_group = get_or_make_group(conn, cluster_name + "-master")
+        slave_group = get_or_make_group(conn, cluster_name + "-slaves")
+        if master_group.rules == []:  # Group was just now created
+            master_group.authorize(src_group=master_group)
+            master_group.authorize(src_group=slave_group)
+            master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
+            master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
+            master_group.authorize('tcp', 19999, 19999, '0.0.0.0/0')
+            master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
+            master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
+            master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
+            master_group.authorize('tcp', 4040, 4045, '0.0.0.0/0')
+            if opts.ganglia:
+                master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
+        if slave_group.rules == []:  # Group was just now created
+            slave_group.authorize(src_group=master_group)
+            slave_group.authorize(src_group=slave_group)
+            slave_group.authorize('tcp', 22, 22, '0.0.0.0/0')
+            slave_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
+            slave_group.authorize('tcp', 50060, 50060, '0.0.0.0/0')
+            slave_group.authorize('tcp', 50075, 50075, '0.0.0.0/0')
+            slave_group.authorize('tcp', 60060, 60060, '0.0.0.0/0')
+            slave_group.authorize('tcp', 60075, 60075, '0.0.0.0/0')
+
+    else: 
+        print "Setting up VPC security groups..."
+        master_group = get_or_make_group(conn, cluster_name + "-master",vpc_id=opts.vpc_id)
+        slave_group = get_or_make_group(conn, cluster_name + "-slaves",vpc_id=opts.vpc_id)
+        if master_group.rules == []:  # Group was just now created
+            master_group.authorize(ip_protocol="tcp",from_port=1, to_port=65535, src_group=master_group)
+            master_group.authorize(ip_protocol="tcp",from_port=1, to_port=65535, src_group=slave_group)
+            master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
+            master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
+            master_group.authorize('tcp', 19999, 19999, '0.0.0.0/0')
+            master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
+            master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
+            master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
+            master_group.authorize('tcp', 4040, 4045, '0.0.0.0/0')
+            if opts.ganglia:
+                master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
+        if slave_group.rules == []:  # Group was just now created
+            slave_group.authorize(ip_protocol="tcp",from_port=1, to_port=65535, src_group=master_group)
+            slave_group.authorize(ip_protocol="tcp",from_port=1, to_port=65535, src_group=slave_group)
+            slave_group.authorize('tcp', 22, 22, '0.0.0.0/0')
+            slave_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
+            slave_group.authorize('tcp', 50060, 50060, '0.0.0.0/0')
+            slave_group.authorize('tcp', 50075, 50075, '0.0.0.0/0')
+            slave_group.authorize('tcp', 60060, 60060, '0.0.0.0/0')
+            slave_group.authorize('tcp', 60075, 60075, '0.0.0.0/0')
 
     # Check if instances are already running in our groups
     existing_masters, existing_slaves = get_existing_cluster(conn, opts, cluster_name,
@@ -319,6 +360,12 @@ def launch_cluster(conn, opts, cluster_name):
         device.delete_on_termination = True
         block_map["/dev/sdv"] = device
 
+    #Hack to set VPC private hostname //fix later
+
+    user_data="""#!/bin/bash
+    hostname $(curl http://169.254.169.254/latest/meta-data/local-hostname)
+    """
+
     # Launch slaves
     if opts.spot_price is not None:
         # Launch spot instances with the requested price
@@ -330,16 +377,40 @@ def launch_cluster(conn, opts, cluster_name):
         my_req_ids = []
         for zone in zones:
             num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
-            slave_reqs = conn.request_spot_instances(
-                price=opts.spot_price,
-                image_id=opts.ami,
-                launch_group="launch-group-%s" % cluster_name,
-                placement=zone,
-                count=num_slaves_this_zone,
-                key_name=opts.key_pair,
-                security_groups=[slave_group],
-                instance_type=opts.instance_type,
-                block_device_map=block_map)
+            if opts.vpc_id is None:
+                slave_reqs = conn.request_spot_instances(
+                    price=opts.spot_price,
+                    image_id=opts.ami,
+                    launch_group="launch-group-%s" % cluster_name,
+                    placement=zone,
+                    count=num_slaves_this_zone,
+                    key_name=opts.key_pair,
+                    security_groups=[slave_group],
+                    instance_type=opts.instance_type,
+                    block_device_map=block_map,
+                    placement_group=opts.placement_group)
+
+            if opts.vpc_id is not None:
+
+                 interface = ec2.networkinterface.NetworkInterfaceSpecification(
+                    device_index=0, 
+                    subnet_id=opts.subnet_id, 
+                    groups=[slave_group.id], 
+                    associate_public_ip_address=True)
+                 
+                 interfaces= ec2.networkinterface.NetworkInterfaceCollection(interface)
+
+                 slave_reqs = conn.request_spot_instances(
+                    price=opts.spot_price,
+                    image_id=opts.ami,
+                    launch_group="launch-group-%s" % cluster_name,
+                    count=num_slaves_this_zone,
+                    key_name=opts.key_pair,
+                    instance_type=opts.instance_type,
+                    block_device_map=block_map,
+                    network_interfaces=interfaces,
+                    user_data=user_data,
+                    placement_group=opts.placement_group)
             my_req_ids += [req.id for req in slave_reqs]
             i += 1
 
@@ -384,13 +455,35 @@ def launch_cluster(conn, opts, cluster_name):
         for zone in zones:
             num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
             if num_slaves_this_zone > 0:
-                slave_res = image.run(key_name=opts.key_pair,
-                                      security_groups=[slave_group],
-                                      instance_type=opts.instance_type,
-                                      placement=zone,
-                                      min_count=num_slaves_this_zone,
-                                      max_count=num_slaves_this_zone,
-                                      block_device_map=block_map)
+                if opts.vpc_id is None:
+                    slave_res = image.run(key_name=opts.key_pair,
+                                          security_groups=[slave_group],
+                                          instance_type=opts.instance_type,
+                                          placement=zone,
+                                          min_count=num_slaves_this_zone,
+                                          max_count=num_slaves_this_zone,
+                                          block_device_map=block_map,
+                                          placement_group=opts.placement_group)
+                    
+                if opts.vpc_id is not None: 
+
+                    interface = ec2.networkinterface.NetworkInterfaceSpecification(
+                        device_index=0, 
+                        subnet_id=opts.subnet_id, 
+                        groups=[slave_group.id], 
+                        associate_public_ip_address=True)
+                    interfaces= ec2.networkinterface.NetworkInterfaceCollection(interface)
+                    
+                    slave_res = conn.run_instances(image_id=opts.ami,
+                                          key_name=opts.key_pair,   
+                                          instance_type=opts.instance_type,
+                                          min_count=num_slaves_this_zone,
+                                          max_count=num_slaves_this_zone,
+                                          block_device_map=block_map,
+                                          network_interfaces=interfaces,
+                                          user_data=user_data,
+                                          placement_group=opts.placement_group)
+                
                 slave_nodes += slave_res.instances
                 print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
                                                                 zone, slave_res.id)
@@ -409,14 +502,34 @@ def launch_cluster(conn, opts, cluster_name):
             master_type = opts.instance_type
         if opts.zone == 'all':
             opts.zone = random.choice(conn.get_all_zones()).name
-        master_res = image.run(key_name=opts.key_pair,
-                               security_groups=[master_group],
-                               instance_type=master_type,
-                               placement=opts.zone,
-                               min_count=1,
-                               max_count=1,
-                               block_device_map=block_map)
-        master_nodes = master_res.instances
+        if opts.vpc_id is None:
+            master_res = image.run(key_name=opts.key_pair,
+                                   security_groups=[master_group],
+                                   instance_type=master_type,
+                                   placement=opts.zone,
+                                   min_count=1,
+                                   max_count=1,
+                                   block_device_map=block_map)
+         
+        if opts.vpc_id is not None:
+
+             interface = ec2.networkinterface.NetworkInterfaceSpecification(
+                device_index=0, 
+                subnet_id=opts.subnet_id, 
+                groups=[master_group.id], 
+                associate_public_ip_address=True)
+             interfaces= ec2.networkinterface.NetworkInterfaceCollection(interface)
+             
+             master_res = conn.run_instances(image_id=opts.ami, 
+                                   key_name=opts.key_pair,
+                                   instance_type=master_type,
+                                   min_count=1,
+                                   max_count=1,
+                                   block_device_map=block_map,
+                                   network_interfaces=interfaces,
+                                   user_data=user_data)         
+        
+             master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
     # Give the instances descriptive names
@@ -635,7 +748,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
                                 text = text.replace("{{" + key + "}}", template_vars[key])
                             dest.write(text)
                             dest.close()
-    # rsync the whole directory over to the master machine
+    # /Initializing ganglia the whole directory over to the master machine
     command = [
         'rsync', '-rv',
         '-e', stringify_command(ssh_command(opts)),
@@ -749,7 +862,12 @@ def get_partition(total, num_partitions, current_partitions):
 def real_main():
     (opts, action, cluster_name) = parse_args()
     try:
-        conn = ec2.connect_to_region(opts.region)
+        if (opts.vpc_id is None):
+            conn = ec2.connect_to_region(opts.region)
+        else:
+            print ("Debug: Making VPC conncetion")
+            conn = vpc.connect_to_region(opts.region)
+    
     except Exception as e:
         print >> stderr, (e)
         sys.exit(1)
