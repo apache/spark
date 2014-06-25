@@ -20,16 +20,16 @@ package org.apache.spark.rdd
 import scala.language.higherKinds
 import scala.reflect.ClassTag
 
-import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableBitSet
+import org.apache.spark.util.collection.ImmutableLongOpenHashSet
 import org.apache.spark.util.collection.ImmutableVector
-import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 
 import IndexedRDD.Id
 import IndexedRDDPartition.Index
 
 private[spark] object IndexedRDDPartition {
-  type Index = OpenHashSet[Id]
+  type Index = ImmutableLongOpenHashSet
 
   // Same as apply(iter, (a, b) => b)
   def apply[V: ClassTag](iter: Iterator[(Id, V)]): IndexedRDDPartition[V] = {
@@ -38,7 +38,9 @@ private[spark] object IndexedRDDPartition {
       map(pair._1) = pair._2
     }
     new IndexedRDDPartition(
-      map.keySet, ImmutableVector.fromArray(map._values), map.keySet.getBitSet)
+      ImmutableLongOpenHashSet.fromLongOpenHashSet(map.keySet),
+      ImmutableVector.fromArray(map._values),
+      map.keySet.getBitSet.toImmutableBitSet)
   }
 
   def apply[V: ClassTag](iter: Iterator[(Id, V)], mergeFunc: (V, V) => V)
@@ -48,14 +50,16 @@ private[spark] object IndexedRDDPartition {
       map.setMerge(pair._1, pair._2, mergeFunc)
     }
     new IndexedRDDPartition(
-      map.keySet, ImmutableVector.fromArray(map._values), map.keySet.getBitSet)
+      ImmutableLongOpenHashSet.fromLongOpenHashSet(map.keySet),
+      ImmutableVector.fromArray(map._values),
+      map.keySet.getBitSet.toImmutableBitSet)
   }
 }
 
 private[spark] trait IndexedRDDPartitionBase[@specialized(Long, Int, Double) V] {
   def index: Index
   def values: ImmutableVector[V]
-  def mask: BitSet
+  def mask: ImmutableBitSet
 
   val capacity: Int = index.capacity
 
@@ -83,7 +87,7 @@ private[spark] trait IndexedRDDPartitionBase[@specialized(Long, Int, Double) V] 
 private[spark] class IndexedRDDPartition[@specialized(Long, Int, Double) V](
     val index: Index,
     val values: ImmutableVector[V],
-    val mask: BitSet)
+    val mask: ImmutableBitSet)
    (implicit val vTag: ClassTag[V])
   extends IndexedRDDPartitionBase[V]
   with IndexedRDDPartitionOps[V, IndexedRDDPartition] {
@@ -98,7 +102,7 @@ private[spark] class IndexedRDDPartition[@specialized(Long, Int, Double) V](
     new IndexedRDDPartition(index, values, mask)
   }
 
-  def withMask(mask: BitSet): IndexedRDDPartition[V] = {
+  def withMask(mask: ImmutableBitSet): IndexedRDDPartition[V] = {
     new IndexedRDDPartition(index, values, mask)
   }
 }

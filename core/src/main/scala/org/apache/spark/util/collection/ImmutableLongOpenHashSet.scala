@@ -213,6 +213,10 @@ object ImmutableLongOpenHashSet {
 
   def empty(): ImmutableLongOpenHashSet = empty(64, 0.7)
 
+  def fromLongOpenHashSet(set: OpenHashSet[Long]): ImmutableLongOpenHashSet =
+    new ImmutableLongOpenHashSet(
+      ImmutableVector.fromArray(set.data), set.getBitSet.toImmutableBitSet, -1, set.loadFactor)
+
   private def grow1(newSize: Int) {}
   private def move1(oldPos: Int, newPos: Int) { }
 
