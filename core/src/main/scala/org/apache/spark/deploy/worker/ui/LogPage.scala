@@ -120,7 +120,7 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") w
           </div>
         </body>
       </html>
-    UIUtils.basicSparkPage(content, logType + " log page for " + appId)
+    UIUtils.basicSparkPage(content, logType + " log page for " + appId.getOrElse("unknown app"))
   }
 
   /** Get the part of the log files given the offset and desired length of bytes */
