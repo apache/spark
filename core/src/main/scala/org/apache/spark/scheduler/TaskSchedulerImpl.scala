@@ -32,7 +32,6 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
-import scala.collection.mutable
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
