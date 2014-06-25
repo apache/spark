@@ -404,5 +404,14 @@ class SQLQuerySuite extends QueryTest {
     )
     clear()
   }
+  
+   test("Skew join") {
+    checkAnswer(
+      sql("SELECT * FROM upperCaseData SKEW JOIN lowerCaseData "),
+      (1, "A", 1, "a") ::
+      (2, "B", 2, "b") ::
+      (3, "C", 3, "c") ::
+      (4, "D", 4, "d") ::Nil)
+  }
 
 }
