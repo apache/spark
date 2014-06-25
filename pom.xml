@@ -536,6 +536,10 @@
             <artifactId>servlet-api-2.5</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
           </exclusion>
@@ -619,6 +623,10 @@
         <version>${yarn.version}</version>
         <exclusions>
           <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>asm</groupId>
             <artifactId>asm</artifactId>
           </exclusion>
@@ -641,6 +649,10 @@
         <artifactId>hadoop-yarn-common</artifactId>
         <version>${yarn.version}</version>
         <exclusions>
+          <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>asm</groupId>
             <artifactId>asm</artifactId>
@@ -669,6 +681,10 @@
         <version>${yarn.version}</version>
         <exclusions>
           <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>asm</groupId>
             <artifactId>asm</artifactId>
           </exclusion>
@@ -695,6 +711,10 @@
         <artifactId>hadoop-yarn-client</artifactId>
         <version>${yarn.version}</version>
         <exclusions>
+          <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>asm</groupId>
             <artifactId>asm</artifactId>
