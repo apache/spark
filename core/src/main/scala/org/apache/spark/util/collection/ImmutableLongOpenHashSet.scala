@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.immutable.{BitSet => ScalaBitSet}
 import scala.reflect._
 import com.google.common.hash.Hashing
 
@@ -27,16 +26,16 @@ import com.google.common.hash.Hashing
  * building block for higher level data structures such as a hash map (for example,
  * IndexedRDDPartition).
  *
- * It uses Scala's immutable Vector data structure as its backing store, and it uses quadratic
- * probing with a power-of-2 hash table size, which is guaranteed to explore all spaces for each key
- * (see http://en.wikipedia.org/wiki/Quadratic_probing).
+ * It uses ImmutableVector as its backing store, and it uses quadratic probing with a power-of-2
+ * hash table size, which is guaranteed to explore all spaces for each key (see
+ * http://en.wikipedia.org/wiki/Quadratic_probing).
  */
 private[spark]
 class ImmutableLongOpenHashSet(
     /** Underlying array of elements used as a hash table. */
-    val data: Vector[Long],
+    val data: ImmutableVector[Long],
     /** Whether or not there is an element at the corresponding position in `data`. */
-    val bitset: ScalaBitSet,
+    val bitset: ImmutableBitSet,
     /**
      * Position of a focused element. This is useful when returning a modified set along with a
      * pointer to the location of modification.
@@ -61,7 +60,7 @@ class ImmutableLongOpenHashSet(
     new ImmutableLongOpenHashSet(data, bitset, focus, loadFactor)
 
   /** The number of elements in the set. */
-  def size: Int = bitset.size
+  def size: Int = bitset.cardinality
 
   /** The capacity of the set (i.e. size of the underlying vector). */
   def capacity: Int = data.size
@@ -78,9 +77,9 @@ class ImmutableLongOpenHashSet(
     var i = 1
     var result: ImmutableLongOpenHashSet = null
     while (result == null) {
-      if (!bitset(pos)) {
+      if (!bitset.get(pos)) {
         // This is a new key.
-        result = new ImmutableLongOpenHashSet(data.updated(pos, k), bitset + pos, pos | NONEXISTENCE_MASK, loadFactor)
+        result = new ImmutableLongOpenHashSet(data.updated(pos, k), bitset.set(pos), pos | NONEXISTENCE_MASK, loadFactor)
       } else if (data(pos) == k) {
         // Found an existing key.
         result = this.withFocus(pos)
@@ -116,7 +115,7 @@ class ImmutableLongOpenHashSet(
     var i = 1
     val maxProbe = data.size
     while (i < maxProbe) {
-      if (!bitset(pos)) {
+      if (!bitset.get(pos)) {
         return INVALID_POS
       } else if (k == data(pos)) {
         return pos
@@ -137,7 +136,7 @@ class ImmutableLongOpenHashSet(
 
   /** Return the value at the specified position. */
   def getValueSafe(pos: Int): Long = {
-    assert(bitset(pos))
+    assert(bitset.get(pos))
     data(pos)
   }
 
@@ -160,13 +159,13 @@ class ImmutableLongOpenHashSet(
       allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit): ImmutableLongOpenHashSet = {
     val newCapacity = capacity * 2
     allocateFunc(newCapacity)
-    var newBitset = ScalaBitSet.empty
+    val newBitset = new BitSet(newCapacity)
     val newData = new Array[Long](newCapacity)
     val newMask = newCapacity - 1
 
     var oldPos = 0
     while (oldPos < capacity) {
-      if (bitset(oldPos)) {
+      if (bitset.get(oldPos)) {
         val key = data(oldPos)
         var newPos = hashcode(hasher.hash(key)) & newMask
         var i = 1
@@ -174,10 +173,10 @@ class ImmutableLongOpenHashSet(
         // No need to check for equality here when we insert so this has one less if branch than
         // the similar code path in addWithoutResize.
         while (keepGoing) {
-          if (!newBitset(newPos)) {
+          if (!newBitset.get(newPos)) {
             // Inserting the key at newPos
             newData(newPos) = key
-            newBitset += newPos
+            newBitset.set(newPos)
             moveFunc(oldPos, newPos)
             keepGoing = false
           } else {
@@ -190,7 +189,7 @@ class ImmutableLongOpenHashSet(
       oldPos += 1
     }
 
-    new ImmutableLongOpenHashSet(newData.toVector, newBitset, -1, loadFactor)
+    new ImmutableLongOpenHashSet(ImmutableVector.fromArray(newData), newBitset.toImmutableBitSet, -1, loadFactor)
   }
 
   /**
@@ -207,7 +206,8 @@ class ImmutableLongOpenHashSet(
 object ImmutableLongOpenHashSet {
   def empty(initialCapacity: Int, loadFactor: Double): ImmutableLongOpenHashSet =
     new ImmutableLongOpenHashSet(
-      Vector.fill[Long](initialCapacity)(0L), ScalaBitSet.empty, -1, loadFactor)
+      ImmutableVector.fromArray(new Array[Long](initialCapacity)),
+      new ImmutableBitSet(initialCapacity), -1, loadFactor)
 
   def empty(initialCapacity: Int): ImmutableLongOpenHashSet = empty(initialCapacity, 0.7)
 

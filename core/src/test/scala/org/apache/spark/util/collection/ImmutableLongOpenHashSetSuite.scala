@@ -33,10 +33,10 @@ class ImmutableLongOpenHashSetSuite extends FunSuite with ShouldMatchers {
     assert(set.size === 1024)
     assert(set.capacity > 1024)
     val actualSize = SizeEstimator.estimate(set)
-    // 64 bits per long + 1 bit per long for the bitset + O(n) pointers for the vector structure
-    val expectedSize = set.capacity * (64 * 2 + 1) / 8
+    // 64 bits per long + 1 bit per long for the bitset
+    val expectedSize = set.capacity * (64 + 1) / 8
     // Make sure we are not allocating a significant amount of memory beyond our expected.
-    actualSize should be <= (expectedSize * 1.1).toLong
+    actualSize should be <= (expectedSize * 1.5).toLong
   }
 
   test("primitive long") {
