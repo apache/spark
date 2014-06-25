@@ -37,8 +37,7 @@ function post_message {
     $COMMENTS_URL | head -n 8
 }
 
-start_message="QA tests have started for PR $ghprbPullId:<br>"
-start_message="${start_message}<br>For more information see test ouptut:"
+start_message="QA tests have started for PR $ghprbPullId. For more information see test ouptut:"
 start_message="${start_message}<br>${BUILD_URL}consoleFull"
 
 post_message "$start_message"
