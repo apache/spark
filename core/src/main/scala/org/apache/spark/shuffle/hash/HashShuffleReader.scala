@@ -38,7 +38,7 @@ class HashShuffleReader[K, C](
     val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context,
       Serializer.getSerializer(dep.serializer))
 
-    val aggregatedIter = if (dep.aggregator.isDefined) {
+    val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         new InterruptibleIterator(context, dep.aggregator.get.combineCombinersByKey(iter, context))
       } else {
