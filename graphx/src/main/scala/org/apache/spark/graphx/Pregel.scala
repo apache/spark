@@ -243,7 +243,7 @@ object Pregel extends Logging {
           activeAndData
         } else {
           // The vertex program is either active or received a message (or both).
-          val ctx = new PregelContext(vid, 0)
+          val ctx = new PregelContext(vid, i)
           // A vertex program should vote to halt again even if it has previously voted to halt
           val newVertexVal = vprog(ctx, vdata, msg)
           val isActive = !ctx.halt
