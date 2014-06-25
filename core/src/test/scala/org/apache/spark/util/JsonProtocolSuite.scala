@@ -615,12 +615,11 @@ class JsonProtocolSuite extends FunSuite {
       false,"Serialized Size":0},"Task Metrics":{"Host Name":"localhost",
       "Executor Deserialize Time":300,"Executor Run Time":400,"Result Size":500,
       "JVM GC Time":600,"Result Serialization Time":700,"Memory Bytes Spilled":
-      800,"Disk Bytes Spilled":0,"Shuffle Read Metrics":[],"Shuffle Write Metrics":
-      {"Shuffle Bytes Written":1200,"Shuffle Write Time":1500},"Input Metrics":
-      {"Data Read Method":Hdfs,"Bytes Read":1500},"Updated Blocks":
-      [{"Block ID":{"Type":"RDDBlockId","RDD ID":0,"Split Index":0},"Status":
-      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,
-      "Deserialized":false,"Replication":2},"Memory Size":0,"Disk Size":0,"Tachyon Size":0}}]}}
+      800,"Disk Bytes Spilled":0,"Shuffle Write Metrics":{"Shuffle Bytes Written":1200,
+      "Shuffle Write Time":1500},"Input Metrics":{"Data Read Method":"Hdfs","Bytes Read":2100},
+      "Updated Blocks":[{"Block ID":"rdd_0_0","Status":{"Storage Level":{"Use Disk":true,
+      "Use Memory":true,"Use Tachyon":false,"Deserialized":false,"Replication":2},"Memory Size":0,
+      "Tachyon Size":0,"Disk Size":0}}]}}
     """
 
   private val jobStartJsonString =
