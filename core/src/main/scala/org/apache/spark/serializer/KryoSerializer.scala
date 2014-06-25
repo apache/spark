@@ -64,9 +64,7 @@ class KryoSerializer(conf: SparkConf)
       kryo.register(cls)
     }
 
-    // For results returned by asJavaIterable (scala.collection.convert.Wrappers$IterableWrapper)
-    // Kryo by default deserializes this into an AbstractCollection that won't work.
-    // We might be able to remove this once we contribute the patch back to chill.
+    // For results returned by asJavaIterable. See JavaIterableWrapperSerializer.
     kryo.register(JavaIterableWrapperSerializer.wrapperClass, new JavaIterableWrapperSerializer)
 
     // Allow sending SerializableWritable
