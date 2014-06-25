@@ -51,7 +51,7 @@ class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
 
   private var mapSideCombine: Boolean = false
 
-  private var ascending: Boolean = true
+  private var ascending: Option[Boolean] = None
 
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): ShuffledRDD[K, V, C, P] = {
@@ -79,7 +79,7 @@ class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
 
   /** Set sort flag for RDD's sorting. */
   def setSortFlag(ascending: Boolean): ShuffledRDD[K, V, C, P] = {
-    this.ascending = ascending
+    this.ascending = Option(ascending)
     this
   }
 

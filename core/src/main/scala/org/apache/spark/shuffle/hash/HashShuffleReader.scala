@@ -50,16 +50,16 @@ class HashShuffleReader[K, C](
       iter
     }
 
-    dep.keyOrdering.map { ordering =>
+    val sortedIter = for (asc <- dep.ascending; ordering <- dep.keyOrdering) yield {
       val buf = aggregatedIter.toArray
-      if (dep.ascending) {
+      if (asc) {
         buf.sortWith((x, y) => ordering.lt(x._1, y._1)).iterator
       } else {
         buf.sortWith((x, y) => ordering.gt(x._1, y._1)).iterator
       }
-    }.getOrElse {
-      aggregatedIter
     }
+
+    sortedIter.getOrElse(aggregatedIter)
   }
 
   /** Close this reader */
