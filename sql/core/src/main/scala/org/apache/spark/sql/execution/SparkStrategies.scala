@@ -58,7 +58,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         condition: Option[Expression],
         side: BuildSide) = {
       val broadcastHashJoin = execution.BroadcastHashJoin(
-        leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))(sqlContext)
+        leftKeys, rightKeys, side, planLater(left), planLater(right))(sqlContext)
       condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
     }
 
@@ -73,7 +73,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               left,
               right @ PhysicalOperation(_, _, b: BaseRelation))
         if broadcastTables.contains(b.tableName) =>
-            broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
+          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
       case HashFilteredJoin(
               Inner,
@@ -83,7 +83,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               left @ PhysicalOperation(_, _, b: BaseRelation),
               right)
         if broadcastTables.contains(b.tableName) =>
-            broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
+          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case HashFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
         val hashJoin =
