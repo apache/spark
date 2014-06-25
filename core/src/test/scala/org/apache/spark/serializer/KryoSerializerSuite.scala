@@ -128,6 +128,21 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check(1.0 until 1000000.0 by 2.0)
   }
 
+  test("asJavaIterable") {
+    // Serialize a collection wrapped by asJavaIterable
+    val ser = new KryoSerializer(conf).newInstance()
+    val a = ser.serialize(scala.collection.convert.WrapAsJava.asJavaIterable(Seq(12345)))
+    val b = ser.deserialize[java.lang.Iterable[Int]](a)
+    assert(b.iterator().next() === 12345)
+
+    // Serialize a normal Java collection
+    val col = new java.util.ArrayList[Int]
+    col.add(54321)
+    val c = ser.serialize(col)
+    val d = ser.deserialize[java.lang.Iterable[Int]](c)
+    assert(b.iterator().next() === 12345)
+  }
+
   test("custom registrator") {
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
