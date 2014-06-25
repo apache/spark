@@ -155,7 +155,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val UNCACHE = Keyword("UNCACHE")
   protected val UNION = Keyword("UNION")
   protected val WHERE = Keyword("WHERE")
-
+  protected val SKEW=Keyword("SKEW")
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
     this.getClass
@@ -259,8 +259,13 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
    protected lazy val joinedRelation: Parser[LogicalPlan] =
      relationFactor ~ opt(joinType) ~ JOIN ~ relationFactor ~ opt(joinConditions) ^^ {
       case r1 ~ jt ~ _ ~ r2 ~ cond =>
-        Join(r1, r2, joinType = jt.getOrElse(Inner), cond)
-     }
+        Join(r1, r2, joinType = jt.getOrElse(Inner), cond) 
+        
+     } |
+     relationFactor ~ SKEW ~ JOIN ~ relationFactor ~ opt(joinConditions) ^^ {
+      case r1 ~ jt ~ _ ~ r2 ~ cond =>
+        Join(r1, r2, Skew, cond)
+     }    
 
    protected lazy val joinConditions: Parser[Expression] =
      ON ~> expression
