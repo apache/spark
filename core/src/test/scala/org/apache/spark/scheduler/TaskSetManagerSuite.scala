@@ -65,12 +65,17 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   val endedTasks = new mutable.HashMap[Long, TaskEndReason]
   val finishedManagers = new ArrayBuffer[TaskSetManager]
   val taskSetsFailed = new ArrayBuffer[String]
+  val hostToRack = new mutable.HashMap[String, String]()
 
   val executors = new mutable.HashMap[String, String] ++ liveExecutors
 
   dagScheduler = new FakeDAGScheduler(sc, this)
 
   def removeExecutor(execId: String): Unit = executors -= execId
+
+  def assignHostToRack(host: String, rack: String) {
+    hostToRack(host) = rack
+  }
 
   override def taskSetFinished(manager: TaskSetManager): Unit = finishedManagers += manager
 
@@ -80,7 +85,12 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
   def addExecutor(execId: String, host: String) {
     executors.put(execId, host)
+    for (rack <- getRackForHost(host)) {
+      hostsByRack.getOrElseUpdate(rack, new mutable.HashSet[String]()) += host
+    }
   }
+
+  override def getRackForHost(value: String): Option[String] = hostToRack.get(value)
 }
 
 class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
@@ -412,6 +422,8 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
       Seq(TaskLocation("host1", "execB")),
       Seq(TaskLocation("host2", "execC")),
       Seq())
+    // Assign host2 to rack2
+    sched.assignHostToRack("host2", "rack2")
     val clock = new FakeClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
     // All tasks added to no-pref list since no preferred location is available
@@ -430,8 +442,9 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     manager.executorAdded()
     // No-pref list now only contains task 3
     assert(manager.pendingTasksWithNoPrefs.size === 1)
-    // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL and ANY
-    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
+    // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL and ANY
+    assert(manager.myLocalityLevels.sameElements(
+      Array(PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY)))
   }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {

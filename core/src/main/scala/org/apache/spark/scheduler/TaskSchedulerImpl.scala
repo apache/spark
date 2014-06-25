@@ -32,6 +32,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
+import scala.collection.mutable
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -87,6 +88,8 @@ private[spark] class TaskSchedulerImpl(
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
   private val executorsByHost = new HashMap[String, HashSet[String]]
+
+  protected val hostsByRack = new HashMap[String, HashSet[String]]
 
   private val executorIdToHost = new HashMap[String, String]
 
@@ -218,6 +221,9 @@ private[spark] class TaskSchedulerImpl(
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
         newExecAvail = true
+      }
+      for (rack <- getRackForHost(o.host)) {
+        hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
       }
     }
 
@@ -414,6 +420,12 @@ private[spark] class TaskSchedulerImpl(
     execs -= executorId
     if (execs.isEmpty) {
       executorsByHost -= host
+      for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
+        hosts -= host
+        if (hosts.isEmpty) {
+          hostsByRack -= rack
+        }
+      }
     }
     executorIdToHost -= executorId
     rootPool.executorLost(executorId, host)
@@ -429,6 +441,10 @@ private[spark] class TaskSchedulerImpl(
 
   def hasExecutorsAliveOnHost(host: String): Boolean = synchronized {
     executorsByHost.contains(host)
+  }
+
+  def hasHostOnRack(rack: String): Boolean = synchronized {
+    hostsByRack.contains(rack)
   }
 
   def isExecutorAlive(execId: String): Boolean = synchronized {

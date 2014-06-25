@@ -189,7 +189,9 @@ private[spark] class TaskSetManager(
       addTo(pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer))
       for (rack <- sched.getRackForHost(loc.host)) {
         addTo(pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer))
-        hadAliveLocations = true
+        if(sched.hasHostOnRack(rack)){
+          hadAliveLocations = true
+        }
       }
     }
 
@@ -731,7 +733,8 @@ private[spark] class TaskSetManager(
         pendingTasksForHost.keySet.exists(sched.hasExecutorsAliveOnHost(_))) {
       levels += NODE_LOCAL
     }
-    if (!pendingTasksForRack.isEmpty && getLocalityWait(RACK_LOCAL) != 0) {
+    if (!pendingTasksForRack.isEmpty && getLocalityWait(RACK_LOCAL) != 0 &&
+        pendingTasksForRack.keySet.exists(sched.hasHostOnRack(_))) {
       levels += RACK_LOCAL
     }
     levels += ANY
@@ -744,7 +747,7 @@ private[spark] class TaskSetManager(
     def newLocAvail(index: Int): Boolean = {
       for (loc <- tasks(index).preferredLocations) {
         if (sched.hasExecutorsAliveOnHost(loc.host) ||
-            sched.getRackForHost(loc.host).isDefined) {
+            sched.hasHostOnRack(sched.getRackForHost(loc.host).getOrElse(null))) {
           return true
         }
       }
