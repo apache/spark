@@ -73,12 +73,13 @@ private[spark] class ExecutorRunner(
    * @param message the exception message which caused the executor's death 
    */
   private def killProcess(message: Option[String]) {
+    var exitCode: Option[Int] = None
     if (process != null) {
       logInfo("Killing process!")
       process.destroy()
-      val exitCode = process.waitFor()
-      worker ! ExecutorStateChanged(appId, execId, state, message, Some(exitCode))
+      val exitCode = Some(process.waitFor())
     }
+    worker ! ExecutorStateChanged(appId, execId, state, message, exitCode)
   }
 
   /** Stop this executor runner, including killing the process it launched */
