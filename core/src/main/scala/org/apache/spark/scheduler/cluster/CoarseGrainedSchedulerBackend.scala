@@ -50,9 +50,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
-  // Submit stage only after (registered executors / total executors) arrived the ratio.
+  // Submit tasks only after (registered executors / total executors) arrived the ratio.
   var minRegisteredRatio = conf.getDouble("spark.scheduler.minRegisteredExecutorsRatio", 0)
-  // Whatever minRegisteredExecutorsRatio is arrived, submit stage after the time(milliseconds).
+  // Whatever minRegisteredExecutorsRatio is arrived, submit tasks after the time(milliseconds).
   val maxRegisteredWaitingTime =
     conf.getInt("spark.scheduler.maxRegisteredExecutorsWaitingTime", 30000)
   val createTime = System.currentTimeMillis()

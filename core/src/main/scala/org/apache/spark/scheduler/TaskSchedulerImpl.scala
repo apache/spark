@@ -147,6 +147,7 @@ private[spark] class TaskSchedulerImpl(
 
   override def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
+    waitBackendReady
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
       val manager = new TaskSetManager(this, taskSet, maxTaskFailures)
@@ -432,7 +433,7 @@ private[spark] class TaskSchedulerImpl(
   // By default, rack is unknown
   def getRackForHost(value: String): Option[String] = None
 
-  override def waitBackendReady(): Unit = {
+  private def waitBackendReady(): Unit = {
     if (backend.isReady) {
       return
     }
