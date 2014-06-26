@@ -72,9 +72,10 @@ class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
   /**
    *  Return a sampler with is the complement of the range specified of the current sampler.
    */
-  def cloneComplement():  BernoulliSampler[T] = new BernoulliSampler[T](lb, ub, !complement)
+  def cloneComplement():  BernoulliSampler[T] =
+    new BernoulliSampler[T](lb, ub, !complement)(new XORShiftRandom)
 
-  override def clone = new BernoulliSampler[T](lb, ub, complement)
+  override def clone = new BernoulliSampler[T](lb, ub, complement)(new XORShiftRandom)
 }
 
 /**
@@ -104,5 +105,5 @@ class PoissonSampler[T](mean: Double)
     }
   }
 
-  override def clone = new PoissonSampler[T](mean)
+  override def clone = new PoissonSampler[T](mean)(new Poisson(mean, new DRand))
 }
