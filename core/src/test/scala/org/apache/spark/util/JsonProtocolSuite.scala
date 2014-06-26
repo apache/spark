@@ -270,10 +270,12 @@ class JsonProtocolSuite extends FunSuite {
   private def assertEquals(info1: TaskInfo, info2: TaskInfo) {
     assert(info1.taskId === info2.taskId)
     assert(info1.index === info2.index)
+    assert(info1.attempt === info2.attempt)
     assert(info1.launchTime === info2.launchTime)
     assert(info1.executorId === info2.executorId)
     assert(info1.host === info2.host)
     assert(info1.taskLocality === info2.taskLocality)
+    assert(info1.speculative === info2.speculative)
     assert(info1.gettingResultTime === info2.gettingResultTime)
     assert(info1.finishTime === info2.finishTime)
     assert(info1.failed === info2.failed)
