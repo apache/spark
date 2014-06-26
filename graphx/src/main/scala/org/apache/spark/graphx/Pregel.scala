@@ -276,8 +276,11 @@ object Pregel extends Logging {
       numActive = activeVertices.count()
 
       // Unpersist the RDDs hidden by newly-materialized RDDs
-      prevG.unpersistVertices(blocking=false)
-      prevG.edges.unpersist(blocking=false)
+//      prevG.unpersistVertices(blocking=false)
+//      prevG.edges.unpersist(blocking=false)
+
+      println("Finished Iteration " + i)
+      g.vertices.foreach(println(_))
 
       logInfo("Pregel finished iteration " + i)
       // count the iteration

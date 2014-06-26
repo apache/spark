@@ -265,4 +265,19 @@ object GraphGenerators {
     Graph.fromEdgeTuples(edges, 1)
   } // end of starGraph
 
+
+  /**
+   * Create a cycle graph.
+   *
+   * @param sc the spark context in which to construct the graph
+   * @param nverts the number of vertices in the cycle
+   *
+   * @return A cycle graph containing `nverts` vertices with vertex 0
+   * being the center vertex.
+   */
+  def cycleGraph(sc: SparkContext, nverts: Int): Graph[Int, Int] = {
+    val edges: RDD[(VertexId, VertexId)] = sc.parallelize(0 until nverts).map(vid => (vid, (vid + 1) % nverts))
+    Graph.fromEdgeTuples(edges, 1)
+  } // end of starGraph
+
 } // end of Graph Generators

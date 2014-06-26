@@ -90,6 +90,7 @@ object PageRank extends Logging {
       // Set the vertex attributes to the initial pagerank values
       .mapVertices( (id, attr) => resetProb )
 
+
     var iteration = 0
     var prevRankGraph: Graph[Double, Double] = null
     while (iteration < numIter) {
@@ -146,19 +147,19 @@ object PageRank extends Logging {
       // Set the weight on the edges based on the degree
       .mapTriplets( e => 1.0 / e.srcAttr )
       // Set the vertex attributes to (currentPr, deltaToSend)
-      .mapVertices( (id, attr) => (resetProb, 1.0 - resetProb) )
+      .mapVertices( (id, attr) => (resetProb, (1.0 - resetProb) * resetProb) )
       .cache()
 
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
     def vertexProgram(id: VertexId, attr: (Double, Double), msgSum: Option[Double], ctx: VertexContext) = {
       var (oldPR, pendingDelta) = attr
-      val newPR = oldPR + (1.0 - resetProb) * msgSum.getOrElse(0.0)
+      val newPR = oldPR + msgSum.getOrElse(0.0)
       // if we were active then we sent the pending delta on the last iteration
       if (ctx.wasActive) {
         pendingDelta = 0.0
       }
-      pendingDelta += msgSum.getOrElse(0.0)
+      pendingDelta += (1.0 - resetProb) * msgSum.getOrElse(0.0)
       if (math.abs(pendingDelta) <= tol) {
         ctx.deactivate()
       }
@@ -173,12 +174,12 @@ object PageRank extends Logging {
 
     def messageCombiner(a: Double, b: Double): Double = a + b
 
-    // The initial message received by all vertices in PageRank
-    val initialMessage = resetProb / (1.0 - resetProb)
-
     // Execute a dynamic version of Pregel.
-    Pregel.run(pagerankGraph, activeDirection = EdgeDirection.Out)(
+    val prGraph = Pregel.run(pagerankGraph, activeDirection = EdgeDirection.Out)(
       vertexProgram, sendMessage, messageCombiner)
       .mapVertices((vid, attr) => attr._1)
+      .cache()
+    val normalizer: Double = prGraph.vertices.map(x => x._2).reduce(_ + _)
+    prGraph.mapVertices((id, pr) => pr / normalizer)
   } // end of deltaPageRank
 }
