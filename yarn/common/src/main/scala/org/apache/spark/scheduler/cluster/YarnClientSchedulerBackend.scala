@@ -63,7 +63,7 @@ private[spark] class YarnClientSchedulerBackend(
     // variables.
     List(("--driver-memory", "SPARK_MASTER_MEMORY", "spark.master.memory"),
       ("--driver-memory", "SPARK_DRIVER_MEMORY", "spark.driver.memory"),
-      ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.worker.instances"),
+      ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.executor.instances"),
       ("--num-executors", "SPARK_EXECUTOR_INSTANCES", "spark.executor.instances"),
       ("--executor-memory", "SPARK_WORKER_MEMORY", "spark.executor.memory"),
       ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
