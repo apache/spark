@@ -67,6 +67,24 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
       .map { case (id, error) => error }.sum
   }
 
+  test("Simple Chain") {
+    withSpark { sc =>
+      val chain1 = Array((0, 1), (1, 2), (2, 3), (4, 3))
+      val rawEdges = sc.parallelize(chain1, 1).map { case (s, d) => (s.toLong, d.toLong)}
+      val chain = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
+      val resetProb = 0.15
+      val tol = 0.0001
+      val numIter = 10
+      val errorTol = 1.0e-5
+      val vertices = chain.staticPageRank(numIter, resetProb).vertices.collect
+      val normalizer = vertices.map { case (id, p) => p }.sum
+      val normalizedRanks = vertices.map { case (id, p) => (id, p / normalizer) }
+      normalizedRanks.foreach(println(_))
+      //     val dynamicRanks = chain.pageRank(tol, resetProb).vertices.collect
+    }
+  }
+
+
   test("Star PageRank") {
     withSpark { sc =>
       val nVertices = 100
@@ -94,7 +112,6 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
       assert(compareRanks(staticRanks2, dynamicRanks) < errorTol)
     }
   } // end of test Star PageRank
-
 
 
   test("Grid PageRank") {
