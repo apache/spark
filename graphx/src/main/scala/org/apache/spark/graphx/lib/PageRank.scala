@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.Pregel._
 
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
@@ -150,21 +151,23 @@ object PageRank extends Logging {
 
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
-    def vertexProgram(id: VertexId, attr: ((Double, Double), Boolean), msgSum: Option[Double], ctx: PregelContext) = {
-      var ((oldPR, pendingDelta), wasActive) = attr
+    def vertexProgram(id: VertexId, attr: (Double, Double), msgSum: Option[Double], ctx: VertexContext) = {
+      var (oldPR, pendingDelta) = attr
       val newPR = oldPR + (1.0 - resetProb) * msgSum.getOrElse(0.0)
       // if we were active then we sent the pending delta on the last iteration
-      if (wasActive) {
+      if (ctx.wasActive) {
         pendingDelta = 0.0
       }
       pendingDelta += msgSum.getOrElse(0.0)
-      val isActive = math.abs(pendingDelta) >= tol
-      ((newPR, pendingDelta), isActive)
+      if (math.abs(pendingDelta) <= tol) {
+        ctx.deactivate()
+      }
+      (newPR, pendingDelta)
     }
 
-    def sendMessage(edge: EdgeTriplet[((Double, Double), Boolean), Double], ctx: PregelContext) = {
-      val ((srcPr, srcDelta), srcIsActive) = edge.srcAttr
-      assert(srcIsActive)
+    def sendMessage(edge: EdgeTriplet[(Double, Double), Double], ctx: EdgeContext) = {
+      val (srcPr, srcDelta) = edge.srcAttr
+      assert(ctx.srcIsActive)
       Iterator((edge.dstId, srcDelta * edge.attr))
     }
 

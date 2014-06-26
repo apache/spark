@@ -17,4 +17,3 @@
 
 package org.apache.spark.graphx
 
-class PregelContext(val iteration: Int)

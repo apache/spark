@@ -55,6 +55,16 @@ import org.apache.spark.Logging
  */
 object Pregel extends Logging {
 
+  class Context(val iteration: Int)
+
+  class VertexContext(iteration: Int, val wasActive: Boolean, var isActive: Boolean = true) extends Context(iteration) {
+    def deactivate() { isActive = false }
+  }
+
+  class EdgeContext(iteration: Int, val srcIsActive: Boolean, val dstIsActive: Boolean) extends Context(iteration)
+
+
+
   /**
    * Execute a Pregel-like iterative vertex-parallel abstraction.  The
    * user-defined vertex-program `vprog` is executed in parallel on
@@ -217,8 +227,8 @@ object Pregel extends Logging {
   (graph: Graph[VD, ED],
    maxIterations: Int = Int.MaxValue,
    activeDirection: EdgeDirection = EdgeDirection.Either)
-  (vertexProgram: (VertexId, (VD, Boolean), Option[A], PregelContext) => (VD, Boolean),
-   sendMsg: (EdgeTriplet[(VD, Boolean), ED], PregelContext) => Iterator[(VertexId, A)],
+  (vertexProgram: (VertexId, VD, Option[A], VertexContext) => VD,
+   sendMsg: (EdgeTriplet[VD, ED], EdgeContext) => Iterator[(VertexId, A)],
    mergeMsg: (A, A) => A)
   : Graph[VD, ED] =
   {
@@ -229,9 +239,18 @@ object Pregel extends Logging {
     var numActive = activeVertices.count()
     var i = 0
     while (numActive > 0 && i < maxIterations) {
-      val ctx = new PregelContext(i)
+      // The send message wrapper removes the active fields from the triplet and places them in the edge context.
+      def sendMessageWrapper(triplet: EdgeTriplet[(VD, Boolean),ED]): Iterator[(VertexId, A)] = {
+        val simpleTriplet = new EdgeTriplet[VD, ED]()
+        simpleTriplet.set(triplet)
+        simpleTriplet.srcAttr = triplet.srcAttr._1
+        simpleTriplet.dstAttr = triplet.dstAttr._1
+        val ctx = new EdgeContext(i, triplet.srcAttr._2, triplet.dstAttr._2)
+        sendMsg(simpleTriplet, ctx)
+      }
+
       // Compute the messages for all the active vertices
-      val messages = g.mapReduceTriplets(t => sendMsg(t, ctx), mergeMsg, Some((activeVertices, activeDirection)))
+      val messages = g.mapReduceTriplets(sendMessageWrapper, mergeMsg, Some((activeVertices, activeDirection)))
 
       // get a reference to the current graph so that we can unpersist it once the new graph is created.
       val prevG = g
@@ -243,9 +262,10 @@ object Pregel extends Logging {
         if (!active && msgOpt.isEmpty) {
           dataAndActive
         } else {
+          val ctx = new VertexContext(i, active)
           // The vertex program is either active or received a message (or both).
           // A vertex program should vote to halt again even if it has previously voted to halt
-          vertexProgram(vid, dataAndActive, msgOpt, ctx)
+          (vertexProgram(vid, vdata, msgOpt, ctx), ctx.isActive)
         }
       }.cache()
 
