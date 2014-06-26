@@ -133,7 +133,7 @@ class ScalaReflectionSuite extends FunSuite {
   }
 
   test("generic data") {
-    val schema = ScalaReflection.schemaFor[GenericData[Int]]
+    val schema = schemaFor[GenericData[Int]]
     assert(schema === Schema(
       StructType(Seq(
         StructField("genericField", IntegerType, nullable = false))),
@@ -141,7 +141,7 @@ class ScalaReflectionSuite extends FunSuite {
   }
 
   test("tuple data") {
-    val schema = ScalaReflection.schemaFor[(Int, String)]
+    val schema = schemaFor[(Int, String)]
     assert(schema === Schema(
       StructType(Seq(
         StructField("_1", IntegerType, nullable = false),
