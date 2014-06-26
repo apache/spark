@@ -342,7 +342,7 @@ class SparkContext(config: SparkConf) extends Logging {
     localProperties.set(props)
   }
 
-  @deprecated("Properties no longer need to be explicitly initialized.", "1.0.1")
+  @deprecated("Properties no longer need to be explicitly initialized.", "1.0.0")
   def initLocalProperties() {
     localProperties.set(new Properties())
   }
@@ -1265,7 +1265,7 @@ class SparkContext(config: SparkConf) extends Logging {
  */
 object SparkContext extends Logging {
 
-  private[spark] val SPARK_VERSION = "1.0.0"
+  private[spark] val SPARK_VERSION = "1.0.1"
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
