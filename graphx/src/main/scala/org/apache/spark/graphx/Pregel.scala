@@ -249,11 +249,11 @@ object Pregel extends Logging {
         sendMsg(simpleTriplet, ctx)
       }
 
-      // Compute the messages for all the active vertices
-      val messages = g.mapReduceTriplets(sendMessageWrapper, mergeMsg, Some((activeVertices, activeDirection)))
-
       // get a reference to the current graph so that we can unpersist it once the new graph is created.
       val prevG = g
+
+      // Compute the messages for all the active vertices
+      val messages = g.mapReduceTriplets(sendMessageWrapper, mergeMsg, Some((activeVertices, activeDirection)))
 
       // Receive the messages to the subset of active vertices
       g = g.outerJoinVertices(messages){ (vid, dataAndActive, msgOpt) =>
@@ -276,11 +276,11 @@ object Pregel extends Logging {
       numActive = activeVertices.count()
 
       // Unpersist the RDDs hidden by newly-materialized RDDs
-//      prevG.unpersistVertices(blocking=false)
-//      prevG.edges.unpersist(blocking=false)
+      //prevG.unpersistVertices(blocking=false)
+      //prevG.edges.unpersist(blocking=false)
 
-      println("Finished Iteration " + i)
-      g.vertices.foreach(println(_))
+      //println("Finished Iteration " + i)
+      // g.vertices.foreach(println(_))
 
       logInfo("Pregel finished iteration " + i)
       // count the iteration

@@ -68,7 +68,7 @@ class PageRankSuite extends FunSuite with LocalSparkContext with Matchers {
     a.leftJoin(b) { case (id, a, bOpt) => (a - bOpt.getOrElse(0.0)) * (a - bOpt.getOrElse(0.0)) }
       .map { case (id, error) => error }.sum
   }
-
+/*
 
   test("Static Star PageRank") {
     withSpark { sc =>
@@ -137,7 +137,7 @@ class PageRankSuite extends FunSuite with LocalSparkContext with Matchers {
       }
     }
   }
-
+*/
 
   test("Grid Static PageRank") {
     withSpark { sc =>
@@ -157,7 +157,7 @@ class PageRankSuite extends FunSuite with LocalSparkContext with Matchers {
     }
   } // end of Grid PageRank
 
-
+/*
   test("Grid Dynamic PageRank") {
     withSpark { sc =>
       val rows = 5
@@ -176,6 +176,6 @@ class PageRankSuite extends FunSuite with LocalSparkContext with Matchers {
       }
     }
   } // end of Grid PageRank
-
+*/
 
 }
