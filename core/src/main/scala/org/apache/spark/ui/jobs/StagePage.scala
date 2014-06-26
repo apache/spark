@@ -210,10 +210,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
   def taskRow(shuffleRead: Boolean, shuffleWrite: Boolean, bytesSpilled: Boolean)
       (taskData: TaskUIData): Seq[Node] = {
-    def fmtStackTrace(trace: Seq[StackTraceElement]): Seq[Node] =
-      trace.map(e => <span style="display:block;">{e.toString}</span>)
-
-    taskData match { case TaskUIData(info, metrics, exception) =>
+    taskData match { case TaskUIData(info, metrics, errorMessage) =>
       val duration = if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
         else metrics.map(_.executorRunTime).getOrElse(1L)
       val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
@@ -283,12 +280,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           </td>
         }}
         <td>
-          {exception.map { e =>
-            <span>
-              {e.className} ({e.description})<br/>
-              {fmtStackTrace(e.stackTrace)}
-            </span>
-          }.getOrElse("")}
+          {errorMessage.map { e => <pre>{e}</pre> }.getOrElse("")}
         </td>
       </tr>
     }
