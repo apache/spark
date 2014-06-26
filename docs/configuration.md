@@ -343,7 +343,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.locality.wait.process</td>
-  <td>spark.locality.wait</td>
+  <td>3000</td>
   <td>
     Customize the locality wait for process locality. This affects tasks that attempt to access
     cached data in a particular executor process.
@@ -351,7 +351,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.locality.wait.node</td>
-  <td>spark.locality.wait</td>
+  <td>3000</td>
   <td>
     Customize the locality wait for node locality. For example, you can set this to 0 to skip
     node locality and search immediately for rack locality (if your cluster has rack information).
@@ -359,7 +359,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.locality.wait.rack</td>
-  <td>spark.locality.wait</td>
+  <td>3000</td>
   <td>
     Customize the locality wait for rack locality.
   </td>
