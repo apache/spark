@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -148,103 +147,5 @@ class DslQuerySuite extends QueryTest {
 
   test("zero count") {
     assert(emptyTableData.count() === 0)
-  }
-
-  test("inner join where, one match per row") {
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, Inner).where('n === 'N),
-      Seq(
-        (1, "A", 1, "a"),
-        (2, "B", 2, "b"),
-        (3, "C", 3, "c"),
-        (4, "D", 4, "d")
-      ))
-  }
-
-  test("inner join ON, one match per row") {
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, Inner, Some('n === 'N)),
-      Seq(
-        (1, "A", 1, "a"),
-        (2, "B", 2, "b"),
-        (3, "C", 3, "c"),
-        (4, "D", 4, "d")
-      ))
-  }
-
-  test("inner join, where, multiple matches") {
-    val x = testData2.where('a === 1).as('x)
-    val y = testData2.where('a === 1).as('y)
-    checkAnswer(
-      x.join(y).where("x.a".attr === "y.a".attr),
-      (1,1,1,1) ::
-      (1,1,1,2) ::
-      (1,2,1,1) ::
-      (1,2,1,2) :: Nil
-    )
-  }
-
-  test("inner join, no matches") {
-    val x = testData2.where('a === 1).as('x)
-    val y = testData2.where('a === 2).as('y)
-    checkAnswer(
-      x.join(y).where("x.a".attr === "y.a".attr),
-      Nil)
-  }
-
-  test("big inner join, 4 matches per row") {
-    val bigData = testData.unionAll(testData).unionAll(testData).unionAll(testData)
-    val bigDataX = bigData.as('x)
-    val bigDataY = bigData.as('y)
-
-    checkAnswer(
-      bigDataX.join(bigDataY).where("x.key".attr === "y.key".attr),
-      testData.flatMap(
-        row => Seq.fill(16)((row ++ row).toSeq)).collect().toSeq)
-  }
-
-  test("cartisian product join") {
-    checkAnswer(
-      testData3.join(testData3),
-      (1, null, 1, null) ::
-      (1, null, 2, 2) ::
-      (2, 2, 1, null) ::
-      (2, 2, 2, 2) :: Nil)
-  }
-
-  test("left outer join") {
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N)),
-      (1, "A", 1, "a") ::
-      (2, "B", 2, "b") ::
-      (3, "C", 3, "c") ::
-      (4, "D", 4, "d") ::
-      (5, "E", null, null) ::
-      (6, "F", null, null) :: Nil)
-  }
-
-  test("right outer join") {
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N)),
-      (1, "a", 1, "A") ::
-      (2, "b", 2, "B") ::
-      (3, "c", 3, "C") ::
-      (4, "d", 4, "D") ::
-      (null, null, 5, "E") ::
-      (null, null, 6, "F") :: Nil)
-  }
-
-  test("full outer join") {
-    val left = upperCaseData.where('N <= 4).as('left)
-    val right = upperCaseData.where('N >= 3).as('right)
-
-    checkAnswer(
-      left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),
-      (1, "A", null, null) ::
-      (2, "B", null, null) ::
-      (3, "C", 3, "C") ::
-      (4, "D", 4, "D") ::
-      (null, null, 5, "E") ::
-      (null, null, 6, "F") :: Nil)
   }
 }

@@ -170,7 +170,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(None, tableName, rdd.logicalPlan)
+    val name = tableName
+    val newPlan = rdd.logicalPlan transform {
+      case s @ SparkLogicalPlan(ExistingRdd(_, _), _) => s.copy(tableName = name)
+    }
+    catalog.registerTable(None, tableName, newPlan)
   }
 
   /**
