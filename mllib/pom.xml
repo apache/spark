@@ -78,9 +78,6 @@
     </plugins>
     <resources>
       <resource>
-        <directory>src/main/resources</directory>
-      </resource>
-      <resource>
         <directory>../python</directory>
         <includes>
           <include>pyspark/mllib/*.py</include>
