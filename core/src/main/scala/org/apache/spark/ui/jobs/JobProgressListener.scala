@@ -185,12 +185,15 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
 
       val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
         taskEnd.reason match {
+          case org.apache.spark.Success =>
+            stageIdToTasksComplete(sid) = stageIdToTasksComplete.getOrElse(sid, 0) + 1
+            (None, Option(taskEnd.taskMetrics))
           case e: ExceptionFailure =>
             stageIdToTasksFailed(sid) = stageIdToTasksFailed.getOrElse(sid, 0) + 1
             (Some(e), e.metrics)
-          case _ =>
-            stageIdToTasksComplete(sid) = stageIdToTasksComplete.getOrElse(sid, 0) + 1
-            (None, Option(taskEnd.taskMetrics))
+          case e: org.apache.spark.TaskEndReason =>
+            stageIdToTasksFailed(sid) = stageIdToTasksFailed.getOrElse(sid, 0) + 1
+            (None, None)
         }
 
       stageIdToTime.getOrElseUpdate(sid, 0L)
