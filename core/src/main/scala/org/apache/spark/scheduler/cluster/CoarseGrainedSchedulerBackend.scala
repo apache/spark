@@ -46,11 +46,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
-  var totalExecutors = new AtomicInteger(0)
+  var totalExpectedExecutors = new AtomicInteger(0)
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
-  // Submit tasks only after (registered executors / total executors) arrived the ratio.
+  // Submit tasks only after (registered executors / total expected executors) 
+  // is equal to at least this value.
   var minRegisteredRatio = conf.getDouble("spark.scheduler.minRegisteredExecutorsRatio", 0)
   // Whatever minRegisteredExecutorsRatio is arrived, submit tasks after the time(milliseconds).
   val maxRegisteredWaitingTime =
@@ -91,7 +92,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
-          if (executorActor.size >= totalExecutors.get() * minRegisteredRatio) {
+          if (executorActor.size >= totalExpectedExecutors.get() * minRegisteredRatio) {
             ready = true
           }
           makeOffers()

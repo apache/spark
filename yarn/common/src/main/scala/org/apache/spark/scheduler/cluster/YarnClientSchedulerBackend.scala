@@ -77,7 +77,7 @@ private[spark] class YarnClientSchedulerBackend(
 
     logDebug("ClientArguments called with: " + argsArrayBuf)
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
-    totalExecutors.set(args.numExecutors)
+    totalExpectedExecutors.set(args.numExecutors)
     client = new Client(args, conf)
     appId = client.runApp()
     waitForApp()

@@ -17,34 +17,23 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.deploy.yarn.ApplicationMasterArguments
+import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.util.IntParam
 
 private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
-  with Logging {
-
-  private def addArg(optionName: String, envVar: String, sysProp: String,
-      arrayBuf: ArrayBuffer[String]) {
-    if (System.getenv(envVar) != null) {
-      arrayBuf += (optionName, System.getenv(envVar))
-    } else if (sc.getConf.contains(sysProp)) {
-      arrayBuf += (optionName, sc.getConf.get(sysProp))
-    }
-  }
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem) {
 
   override def start() {
     super.start()
-    val argsArrayBuf = new ArrayBuffer[String]()
-    List(("--num-executors", "SPARK_EXECUTOR_INSTANCES", "spark.executor.instances"),
-      ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.worker.instances"))
-      .foreach { case (optName, envVar, sysProp) => addArg(optName, envVar, sysProp, argsArrayBuf) }
-    val args = new ApplicationMasterArguments(argsArrayBuf.toArray)
-    totalExecutors.set(args.numExecutors)
+    var numExecutors = 2
+    if (sc.getConf.contains("spark.executor.instances")) {
+      numExecutors = sc.getConf.getInt("spark.executor.instances", 2)
+    } else if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
+      IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES")).map(_.toInt).getOrElse(2)
+    }
+    totalExpectedExecutors.set(numExecutors)
   }
 }

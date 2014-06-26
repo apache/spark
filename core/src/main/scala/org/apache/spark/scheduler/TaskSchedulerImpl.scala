@@ -143,11 +143,11 @@ private[spark] class TaskSchedulerImpl(
         Utils.tryOrExit { checkSpeculatableTasks() }
       }
     }
+    waitBackendReady
   }
 
   override def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
-    waitBackendReady
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
       val manager = new TaskSetManager(this, taskSet, maxTaskFailures)
