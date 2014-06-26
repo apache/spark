@@ -122,6 +122,13 @@ trait SparkILoopInit {
          @transient val sc = org.apache.spark.repl.Main.interp.createSparkContext();
         """)
       command("import org.apache.spark.SparkContext._")
+      command(
+        """def exit: Unit = {
+          |  import Predef.{exit => scalaDefaultExit}
+          |  org.apache.spark.repl.Main.interp.closeInterpreter()
+          |  scalaDefaultExit
+          |}
+        """.stripMargin)
     }
     echo("Spark context available as sc.")
   }
