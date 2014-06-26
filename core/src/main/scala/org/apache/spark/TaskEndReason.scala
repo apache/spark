@@ -99,8 +99,7 @@ case class ExceptionFailure(
  */
 @DeveloperApi
 case object TaskResultLost extends TaskFailedReason {
-  override def toErrorString: String =
-    "TaskResultLost (result lost from block manager)"
+  override def toErrorString: String = "TaskResultLost (result lost from block manager)"
 }
 
 /**
