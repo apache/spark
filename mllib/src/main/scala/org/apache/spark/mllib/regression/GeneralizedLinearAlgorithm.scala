@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.RDD
