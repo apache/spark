@@ -17,8 +17,4 @@
 
 package org.apache.spark.graphx
 
-class PregelContext(val id: VertexId, val iteration: Int, var halt: Boolean = false) {
-  def voteToHalt() {
-    halt = true
-  }
-}
+class PregelContext(val iteration: Int)

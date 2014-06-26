@@ -109,6 +109,7 @@ object Pregel extends Logging {
    * @return the resulting graph at the end of the computation
    *
    */
+  @deprecated ("Switching to Pregel.run.", "1.1")
   def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
      (graph: Graph[VD, ED],
       initialMsg: A,
@@ -212,47 +213,44 @@ object Pregel extends Logging {
    * @return the resulting graph at the end of the computation
    *
    */
-  def pregel[VD: ClassTag, ED: ClassTag, A: ClassTag]
+  def run[VD: ClassTag, ED: ClassTag, A: ClassTag]
   (graph: Graph[VD, ED],
    maxIterations: Int = Int.MaxValue,
    activeDirection: EdgeDirection = EdgeDirection.Either)
-  (vprog: (PregelContext, VD, Option[A]) => VD,
-   sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
+  (vertexProgram: (VertexId, (VD, Boolean), Option[A], PregelContext) => (VD, Boolean),
+   sendMsg: (EdgeTriplet[(VD, Boolean), ED], PregelContext) => Iterator[(VertexId, A)],
    mergeMsg: (A, A) => A)
   : Graph[VD, ED] =
   {
     // Initialize the graph with all vertices active
-    var g: Graph[(Boolean, VD), ED] = graph.mapVertices { (vid, vdata) => (true, vdata) }.cache()
+    var g: Graph[(VD, Boolean), ED] = graph.mapVertices { (vid, vdata) => (vdata, true) }.cache()
     // Determine the set of vertices that did not vote to halt
     var activeVertices = g.vertices
     var numActive = activeVertices.count()
     var i = 0
     while (numActive > 0 && i < maxIterations) {
+      val ctx = new PregelContext(i)
       // Compute the messages for all the active vertices
-      val messages = g.mapVertices((vid, vdata) => vdata._2) // remove the active boolean
-        .mapReduceTriplets(sendMsg, mergeMsg, Some((activeVertices, activeDirection)))  // Construct messages
+      val messages = g.mapReduceTriplets(t => sendMsg(t, ctx), mergeMsg, Some((activeVertices, activeDirection)))
 
       // get a reference to the current graph so that we can unpersist it once the new graph is created.
       val prevG = g
 
       // Receive the messages to the subset of active vertices
-      g = g.outerJoinVertices(messages){ (vid, activeAndData, msg) =>
-        val (active, vdata) = activeAndData
+      g = g.outerJoinVertices(messages){ (vid, dataAndActive, msgOpt) =>
+        val (vdata, active) = dataAndActive
         // If the vertex voted to halt and received no message then we can skip the vertex program
-        if (!active && msg.isEmpty) {
-          activeAndData
+        if (!active && msgOpt.isEmpty) {
+          dataAndActive
         } else {
           // The vertex program is either active or received a message (or both).
-          val ctx = new PregelContext(vid, i)
           // A vertex program should vote to halt again even if it has previously voted to halt
-          val newVertexVal = vprog(ctx, vdata, msg)
-          val isActive = !ctx.halt
-          (isActive, newVertexVal)
+          vertexProgram(vid, dataAndActive, msgOpt, ctx)
         }
       }.cache()
 
       // Recompute the active vertices (those that have not voted to halt)
-      activeVertices = g.vertices.filter(v => v._2._1)
+      activeVertices = g.vertices.filter(v => v._2._2)
 
       // Force all computation!
       numActive = activeVertices.count()
@@ -265,7 +263,7 @@ object Pregel extends Logging {
       // count the iteration
       i += 1
     }
-    g.mapVertices((id, vdata) => vdata._2)
+    g.mapVertices((id, vdata) => vdata._1)
   } // end of apply
 
 
