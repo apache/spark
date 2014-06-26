@@ -1,6 +1,784 @@
 Spark Change Log
 ----------------
 
+Release 1.0.1
+
+  Fixing AWS instance type information based upon current EC2 data
+  Zichuan Ye <jerry@tangentds.com>
+  2014-06-26 15:21:29 -0700
+  Commit: 0bc8321, github.com/apache/spark/pull/1156
+
+  [SPARK-2286][UI] Report exception/errors for failed tasks that are not ExceptionFailure
+  Reynold Xin <rxin@apache.org>
+  2014-06-26 14:00:45 -0700
+  Commit: ddf9a78, github.com/apache/spark/pull/1225
+
+  [SPARK-2295] [SQL] Make JavaBeans nullability stricter.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-06-26 13:37:19 -0700
+  Commit: a7bebd1, github.com/apache/spark/pull/1235
+
+  [SPARK-2251] fix concurrency issues in random sampler (branch-1.0)
+  Xiangrui Meng <meng@databricks.com>
+  2014-06-26 13:32:50 -0700
+  Commit: 45bf910, github.com/apache/spark/pull/1234
+
+  Remove use of spark.worker.instances
+  Kay Ousterhout <kayousterhout@gmail.com>
+  2014-06-26 08:20:27 -0500
+  Commit: 2d30808, github.com/apache/spark/pull/1214
+
+  [SPARK-2254] [SQL] ScalaRefection should mark primitive types as non-nullable.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-06-25 23:55:31 -0700
+  Commit: 47f8829, github.com/apache/spark/pull/1193
+
+  [SPARK-2284][UI] Mark all failed tasks as failures.
+  Reynold Xin <rxin@apache.org>
+  2014-06-25 22:35:03 -0700
+  Commit: c445b3a, github.com/apache/spark/pull/1224
+
+  [SPARK-2172] PySpark cannot import mllib modules in YARN-client mode
+  Szul, Piotr <Piotr.Szul@csiro.au>
+  2014-06-25 21:55:49 -0700
+  Commit: fa16719, github.com/apache/spark/pull/1223
+
+  [SPARK-1749] Job cancellation when SchedulerBackend does not implement killTask
+  Mark Hamstra <markhamstra@gmail.com>, Kay Ousterhout <kayousterhout@gmail.com>
+  2014-06-25 20:57:48 -0700
+  Commit: 92b0125, github.com/apache/spark/pull/1219
+
+  [SPARK-2283][SQL] Reset test environment before running PruningSuite
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-06-25 18:41:47 -0700
+  Commit: 5869f8b, github.com/apache/spark/pull/1221
+
+  [SPARK-1912] fix compress memory issue during reduce
+  Wenchen Fan(Cloud) <cloud0fan@gmail.com>
+  2014-06-03 13:18:20 -0700
+  Commit: abb62f0, github.com/apache/spark/pull/860
+
+  [SPARK-2204] Launch tasks on the proper executors in mesos fine-grained mode
+  Sebastien Rainville <sebastien@hopper.com>
+  2014-06-25 13:21:18 -0700
+  Commit: b4b0a54, github.com/apache/spark/pull/1140
+
+  [SPARK-2270] Kryo cannot serialize results returned by asJavaIterable
+  Reynold Xin <rxin@apache.org>
+  2014-06-25 12:43:22 -0700
+  Commit: 15fd9f2, github.com/apache/spark/pull/1206
+
+  [SPARK-2258 / 2266] Fix a few worker UI bugs
+  Andrew Or <andrewor14@gmail.com>
+  2014-06-25 12:23:08 -0700
+  Commit: bb0b164, github.com/apache/spark/pull/1213
+
+  Replace doc reference to Shark with Spark SQL.
+  Reynold Xin <rxin@apache.org>
+  2014-06-25 01:01:23 -0700
+  Commit: 731a788
+
+  [SPARK-2267] Log exception when TaskResultGetter fails to fetch/deserialze task result
+  Reynold Xin <rxin@apache.org>
+  2014-06-25 00:19:33 -0700
+  Commit: c68be53, github.com/apache/spark/pull/1202
+
+  [BUGFIX][SQL] Should match java.math.BigDecimal when wnrapping Hive output
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-06-25 00:17:28 -0700
+  Commit: 65a559c, github.com/apache/spark/pull/1199
+
+  [SPARK-2263][SQL] Support inserting MAP<K, V> to Hive tables
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-06-25 00:14:34 -0700
+  Commit: a31def1, github.com/apache/spark/pull/1205
+
+  Fix possible null pointer in acumulator toString
+  Michael Armbrust <michael@databricks.com>
+  2014-06-24 19:39:19 -0700
+  Commit: d3dbaf5, github.com/apache/spark/pull/1204
+
+  [SPARK-2264][SQL] Fix failing CachedTableSuite
+  Michael Armbrust <michael@databricks.com>
+  2014-06-24 19:04:29 -0700
+  Commit: e199a02, github.com/apache/spark/pull/1201
+
+  [SQL]Add base row updating methods for JoinedRow
+  Cheng Hao <hao.cheng@intel.com>
+  2014-06-24 19:07:02 -0700
+  Commit: c3ebf8e, github.com/apache/spark/pull/1187
+
+  [SPARK-2252] Fix MathJax for HTTPs.
+  Reynold Xin <rxin@apache.org>
+  2014-06-23 23:18:47 -0700
+  Commit: 05f84e2, github.com/apache/spark/pull/1189
+
+  [SPARK-2227] Support dfs command in SQL.
+  Reynold Xin <rxin@apache.org>
+  2014-06-23 18:34:54 -0700
+  Commit: c438353, github.com/apache/spark/pull/1167
+
+  [SPARK-1669][SQL]  Made cacheTable idempotent
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-06-23 13:24:33 -0700
+  Commit: 6d821f0, github.com/apache/spark/pull/1183
+
+  Fix mvn detection
+  Matthew Farrellee <matt@redhat.com>
+  2014-06-23 11:24:05 -0700
+  Commit: cf2fa4f, github.com/apache/spark/pull/1181
+
+  Fixed small running on YARN docs typo
+  Vlad <frolvlad@gmail.com>
+  2014-06-23 10:55:49 -0500
+  Commit: d51eba5, github.com/apache/spark/pull/1158
+
+  SPARK-2241: quote command line args in ec2 script
+  Ori Kremer <ori.kremer@gmail.com>
+  2014-06-22 20:21:23 -0700
+  Commit: dedd709, github.com/apache/spark/pull/1169
+
+  [SPARK-1112, 2156] (1.0 edition) Use correct akka frame size and overhead amounts.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-06-22 19:31:15 -0700
+  Commit: 67bffd3, github.com/apache/spark/pull/1172
+
+  SPARK-2034. KafkaInputDStream doesn't close resources and may prevent JVM shutdown
+  Sean Owen <sowen@cloudera.com>
+  2014-06-22 01:12:15 -0700
+  Commit: 64316af, github.com/apache/spark/pull/980
+
+  [SQL] Break hiveOperators.scala into multiple files.
+  Reynold Xin <rxin@apache.org>
+  2014-06-21 12:04:18 -0700
+  Commit: 4881fc6, github.com/apache/spark/pull/1166
+
+  [SQL] Pass SQLContext instead of SparkContext into physical operators.
+  Reynold Xin <rxin@apache.org>
+  2014-06-20 22:49:48 -0700
+  Commit: 1829ec4, github.com/apache/spark/pull/1164
+
+  [SQL] Use hive.SessionState, not the thread local SessionState
+  Aaron Davidson <aaron@databricks.com>
+  2014-06-20 17:55:54 -0700
+  Commit: 3666866, github.com/apache/spark/pull/1148
+
+  Move ScriptTransformation into the appropriate place.
+  Reynold Xin <rxin@apache.org>
+  2014-06-20 17:16:56 -0700
+  Commit: 91dc064, github.com/apache/spark/pull/1162
+
+  [SPARK-2225] Turn HAVING without GROUP BY into WHERE.
+  Reynold Xin <rxin@apache.org>
+  2014-06-20 15:38:02 -0700
+  Commit: bb71415, github.com/apache/spark/pull/1161
+
+  SPARK-2180:  support HAVING clauses in Hive queries
+  William Benton <willb@redhat.com>
+  2014-06-20 13:41:38 -0700
+  Commit: c3cda49, github.com/apache/spark/pull/1136
+
+  [SPARK-2163] class LBFGS optimize with Double tolerance instead of Int
+  Gang Bai <me@baigang.net>
+  2014-06-20 08:52:20 -0700
+  Commit: b1ea9e5, github.com/apache/spark/pull/1104
+
+  [SPARK-2218] rename Equals to EqualTo in Spark SQL expressions.
+  Reynold Xin <rxin@apache.org>
+  2014-06-20 00:34:59 -0700
+  Commit: 7594b3f, github.com/apache/spark/pull/1146
+
+  [SPARK-2196] [SQL] Fix nullability of CaseWhen.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-06-20 00:12:52 -0700
+  Commit: 0d05e13, github.com/apache/spark/pull/1133
+
+  [SPARK-2209][SQL] Cast shouldn't do null check twice.
+  Reynold Xin <rxin@apache.org>
+  2014-06-20 00:01:19 -0700
+  Commit: 86c4f5a, github.com/apache/spark/pull/1143
+
+  [SPARK-2210] cast to boolean on boolean value gets turned into NOT((boolean_condition) = 0)
+  Reynold Xin <rxin@apache.org>
+  2014-06-19 23:58:23 -0700
+  Commit: a803e00, github.com/apache/spark/pull/1144
+
+  SPARK-1293 [SQL] Parquet support for nested types
+  Andre Schumacher <andre.schumacher@iki.fi>, Michael Armbrust <michael@databricks.com>
+  2014-06-19 23:47:45 -0700
+  Commit: 357d16b, github.com/apache/spark/pull/360
+
+  [SPARK-2177][SQL] describe table result contains only one column
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-06-19 23:41:38 -0700
+  Commit: ff4d5a2, github.com/apache/spark/pull/1118
+
+  [SQL] Improve Speed of InsertIntoHiveTable
+  Michael Armbrust <michael@databricks.com>
+  2014-06-19 23:39:03 -0700
+  Commit: cc2e4ca, github.com/apache/spark/pull/1130
+
+  More minor scaladoc cleanup for Spark SQL.
+  Reynold Xin <rxin@apache.org>
+  2014-06-19 22:34:21 -0700
+  Commit: a0e22d3, github.com/apache/spark/pull/1142
+
+  A few minor Spark SQL Scaladoc fixes.
+  Reynold Xin <rxin@apache.org>
+  2014-06-19 18:24:05 -0700
+  Commit: 8aa5951, github.com/apache/spark/pull/1139
+
+  [SPARK-2151] Recognize memory format for spark-submit
+  nravi <nravi@c1704.halxg.cloudera.com>
+  2014-06-19 17:11:06 -0700
+  Commit: 46660cc, github.com/apache/spark/pull/1095
+
+  [SPARK-2191][SQL] Make sure InsertIntoHiveTable doesn't execute more than once.
+  Michael Armbrust <michael@databricks.com>
+  2014-06-19 14:14:03 -0700
+  Commit: 58d0684, github.com/apache/spark/pull/1129
+
+  [SPARK-2187] Explain should not run the optimizer twice.
+  Reynold Xin <rxin@apache.org>
+  2014-06-18 22:44:12 -0700
+  Commit: a4c3a80, github.com/apache/spark/pull/1123
+
+  Squishing a typo bug before it causes real harm
+  Doris Xin <doris.s.xin@gmail.com>
+  2014-06-18 22:19:06 -0700
+  Commit: d0dde92, github.com/apache/spark/pull/1125
+
+  [SPARK-2184][SQL] AddExchange isn't idempotent
+  Michael Armbrust <michael@databricks.com>
+  2014-06-18 17:52:42 -0700
+  Commit: 0e39c88, github.com/apache/spark/pull/1122
+
+  [SPARK-2176][SQL] Extra unnecessary exchange operator in the result of an explain command
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-06-18 10:51:32 -0700
+  Commit: 086ca9c, github.com/apache/spark/pull/1116
+
+  [STREAMING] SPARK-2009 Key not found exception when slow receiver starts
+  Vadim Chekan <kot.begemot@gmail.com>
+  2014-06-17 22:03:50 -0700
+  Commit: 26f6b98, github.com/apache/spark/pull/961
+
+  [SPARK-2060][SQL] Querying JSON Datasets with SQL and DSL in Spark SQL
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-06-17 19:14:59 -0700
+  Commit: d1e22b3, github.com/apache/spark/pull/999
+
+  HOTFIX: bug caused by #941
+  Patrick Wendell <pwendell@gmail.com>
+  2014-06-17 15:09:24 -0700
+  Commit: ac6c10e, github.com/apache/spark/pull/1108
+
+  [SPARK-2147 / 2161] Show removed executors on the UI
+  Andrew Or <andrewor14@gmail.com>
+  2014-06-17 12:25:55 -0700
+  Commit: e6c9058, github.com/apache/spark/pull/1102
+
+  SPARK-2146.  Fix takeOrdered doc
+  Sandy Ryza <sandy@cloudera.com>
+  2014-06-17 12:03:22 -0700
+  Commit: 7f5df6a, github.com/apache/spark/pull/1086
+
+  [SPARK-2053][SQL] Add Catalyst expressions for CASE WHEN.
+  Zongheng Yang <zongheng.y@gmail.com>
+  2014-06-17 13:30:17 +0200
+  Commit: 6ece39b, github.com/apache/spark/pull/1055
+
+  [SPARK-2164][SQL] Allow Hive UDF on columns of type struct
+  Xi Liu <xil@conviva.com>
+  2014-06-17 13:14:40 +0200
+  Commit: 8e6b77f, github.com/apache/spark/pull/796
+
+  [SPARK-2144] ExecutorsPage reports incorrect # of RDD blocks
+  Andrew Or <andrewor14@gmail.com>
+  2014-06-17 01:28:22 -0700
+  Commit: 3d4fa2d, github.com/apache/spark/pull/1080
+
+  SPARK-1990: added compatibility for python 2.6 for ssh_read command
+  Anant <anant.asty@gmail.com>
+  2014-06-16 23:42:27 -0700
+  Commit: 6b5f64a, github.com/apache/spark/pull/941
+
+  MLlib documentation fix
+  Anatoli Fomenko <fa@apache.org>
+  2014-06-16 23:10:36 -0700
+  Commit: d7db2e6, github.com/apache/spark/pull/1098
+
+  Minor fix: made "EXPLAIN" output to play well with JDBC output format
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-06-16 16:42:17 -0700
+  Commit: 235cfd0, github.com/apache/spark/pull/1097
+
+  [SQL][SPARK-2094] Follow up of PR #1071 for Java API
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-06-16 21:30:29 +0200
+  Commit: 9c675de, github.com/apache/spark/pull/1085
+
+  [SPARK-1930] The Container is running beyond physical memory limits, so as to be killed
+  witgo <witgo@qq.com>
+  2014-06-16 14:27:31 -0500
+  Commit: d7f94b9, github.com/apache/spark/pull/894
+
+  [SPARK-2010] Support for nested data in PySpark SQL
+  Kan Zhang <kzhang@apache.org>
+  2014-06-16 11:11:29 -0700
+  Commit: 33db842, github.com/apache/spark/pull/1041
+
+  Updating docs to include missing information about reducers and clarify ...
+  Ali Ghodsi <alig@cs.berkeley.edu>
+  2014-06-15 23:44:30 -0700
+  Commit: 078d503, github.com/apache/spark/pull/1089
+
+  SPARK-2148 Add link to requirements for custom equals() and hashcode() methods
+  Andrew Ash <andrew@andrewash.com>
+  2014-06-15 23:32:55 -0700
+  Commit: b1c2199, github.com/apache/spark/pull/1092
+
+  SPARK-1999: StorageLevel in storage tab and RDD Storage Info never changes
+  CrazyJvm <crazyjvm@gmail.com>
+  2014-06-15 23:23:26 -0700
+  Commit: 5e85f87, github.com/apache/spark/pull/968
+
+  [SPARK-937] adding EXITED executor state and not relaunching cleanly exited executors
+  Kan Zhang <kzhang@apache.org>
+  2014-06-15 14:55:34 -0700
+  Commit: 609e5ff, github.com/apache/spark/pull/306
+
+  [SQL] Support transforming TreeNodes with Option children.
+  Michael Armbrust <michael@databricks.com>, Zongheng Yang <zongheng.y@gmail.com>
+  2014-06-15 11:28:34 +0200
+  Commit: 868cf42, github.com/apache/spark/pull/1074
+
+  [SPARK-2013] Documentation for saveAsPickleFile and pickleFile in Python
+  Kan Zhang <kzhang@apache.org>
+  2014-06-14 13:22:30 -0700
+  Commit: 05d85c8, github.com/apache/spark/pull/983
+
+  [SPARK-2079] Support batching when serializing SchemaRDD to Python
+  Kan Zhang <kzhang@apache.org>
+  2014-06-14 13:17:22 -0700
+  Commit: b1a7e99, github.com/apache/spark/pull/1023
+
+  [Spark-2137][SQL] Timestamp UDFs broken
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-06-13 23:28:57 -0700
+  Commit: 8285993, github.com/apache/spark/pull/1081
+
+  [SQL] Update SparkSQL and ScalaTest in branch-1.0 to match master.
+  Michael Armbrust <michael@databricks.com>, witgo <witgo@qq.com>
+  2014-06-13 16:09:47 -0700
+  Commit: 7e3e9af, github.com/apache/spark/pull/1078
+
+  Small correction in Streaming Programming Guide doc
+  akkomar <ak.komar@gmail.com>
+  2014-06-13 15:37:26 -0700
+  Commit: 00b4317, github.com/apache/spark/pull/1079
+
+  [SPARK-1964][SQL] Add timestamp to HiveMetastoreTypes.toMetastoreType
+  Michael Armbrust <michael@databricks.com>
+  2014-06-13 12:55:15 -0700
+  Commit: eb2f5c5, github.com/apache/spark/pull/1061
+
+  Workaround in Spark for ConcurrentModification issue (JIRA Hadoop-10456, Spark-1097)
+  nravi <nravi@c1704.halxg.cloudera.com>
+  2014-06-13 10:52:21 -0700
+  Commit: bc8d24a, github.com/apache/spark/pull/1000
+
+  [SPARK-2135][SQL] Use planner for in-memory scans
+  Michael Armbrust <michael@databricks.com>
+  2014-06-12 23:09:41 -0700
+  Commit: 57526e4, github.com/apache/spark/pull/1072
+
+  [SPARK-2080] Yarn: report HS URL in client mode, correct user in cluster mode.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2014-06-12 16:28:00 -0500
+  Commit: 3962aba, github.com/apache/spark/pull/1002
+
+  [SPARK-2088] fix NPE in toString
+  Doris Xin <doris.s.xin@gmail.com>
+  2014-06-12 12:53:07 -0700
+  Commit: 358e7e5, github.com/apache/spark/pull/1028
+
+  [SPARK-2052] [SQL] Add optimization for CaseConversionExpression's.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-06-11 17:58:35 -0700
+  Commit: e395564, github.com/apache/spark/pull/990
+
+  HOTFIX: PySpark tests should be order insensitive.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-06-11 15:54:41 -0700
+  Commit: 81049eb, github.com/apache/spark/pull/1054
+
+  [SQL] Code Cleanup: Left Semi Hash Join
+  Daoyuan <daoyuan.wang@intel.com>
+  2014-06-11 12:08:28 -0700
+  Commit: 597c7ef, github.com/apache/spark/pull/1049
+
+  [SPARK-2042] Prevent unnecessary shuffle triggered by take()
+  Sameer Agarwal <sameer@databricks.com>
+  2014-06-11 12:01:04 -0700
+  Commit: cc00448, github.com/apache/spark/pull/1048
+
+  SPARK-2113: awaitTermination() after stop() will hang in Spark Stremaing
+  Lars Albertsson <lalle@spotify.com>
+  2014-06-11 10:54:42 -0700
+  Commit: 684a93a, github.com/apache/spark/pull/1001
+
+  [SPARK-2108] Mark SparkContext methods that return block information as developer API's
+  Prashant Sharma <prashant.s@imaginea.com>
+  2014-06-11 10:49:34 -0700
+  Commit: 9ef0765, github.com/apache/spark/pull/1047
+
+  SPARK-2107: FilterPushdownSuite doesn't need Junit jar.
+  Qiuzhuang.Lian <Qiuzhuang.Lian@gmail.com>
+  2014-06-11 00:36:06 -0700
+  Commit: 54ff005, github.com/apache/spark/pull/1046
+
+  [SPARK-1968][SQL] SQL/HiveQL command for caching/uncaching tables
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-06-11 00:06:50 -0700
+  Commit: 65ed779, github.com/apache/spark/pull/1038
+
+  [SPARK-2093] [SQL] NullPropagation should use exact type value.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-06-10 23:13:48 -0700
+  Commit: 6d15e9f, github.com/apache/spark/pull/1034
+
+  HOTFIX: clear() configs in SQLConf-related unit tests.
+  Zongheng Yang <zongheng.y@gmail.com>
+  2014-06-10 21:59:01 -0700
+  Commit: 2cdce7c, github.com/apache/spark/pull/1040
+
+  [SPARK-1998] SparkFlumeEvent with body bigger than 1020 bytes are not re...
+  joyyoj <sunshch@gmail.com>
+  2014-06-10 17:26:17 -0700
+  Commit: ac8c27b, github.com/apache/spark/pull/951
+
+  [SQL] Add average overflow test case from #978
+  egraldlo <egraldlo@gmail.com>, Michael Armbrust <michael@databricks.com>
+  2014-06-10 14:07:55 -0700
+  Commit: 86c4a79, github.com/apache/spark/pull/1033
+
+  [SPARK-2076][SQL] Pushdown the join filter & predication for outer join
+  Cheng Hao <hao.cheng@intel.com>
+  2014-06-10 12:59:52 -0700
+  Commit: f397ffb, github.com/apache/spark/pull/1015
+
+  HOTFIX: Increase time limit for Bagel test
+  Ankur Dave <ankurdave@gmail.com>
+  2014-06-10 13:15:06 -0700
+  Commit: 5bc186d, github.com/apache/spark/pull/1037
+
+  HOTFIX: Fix Python tests on Jenkins.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-06-10 13:13:17 -0700
+  Commit: 1d9b765, github.com/apache/spark/pull/1036
+
+  [SPARK-1978] In some cases, spark-yarn does not automatically restart the failed container
+  witgo <witgo@qq.com>
+  2014-06-10 10:34:57 -0500
+  Commit: 35894af, github.com/apache/spark/pull/921
+
+  Moved hiveOperators.scala to the right package folder
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-06-10 01:14:44 -0700
+  Commit: 89caa40, github.com/apache/spark/pull/1029
+
+  [SPARK-1508][SQL] Add SQLConf to SQLContext.
+  Zongheng Yang <zongheng.y@gmail.com>
+  2014-06-10 00:49:09 -0700
+  Commit: d5da81c, github.com/apache/spark/pull/956
+
+  [SPARK-1704][SQL] Fully support EXPLAIN commands as SchemaRDD.
+  Zongheng Yang <zongheng.y@gmail.com>
+  2014-06-09 16:47:44 -0700
+  Commit: 5a79ba1, github.com/apache/spark/pull/1003
+
+  [SQL] Simple framework for debugging query execution
+  Michael Armbrust <michael@databricks.com>
+  2014-06-09 14:24:19 -0700
+  Commit: 65fa7bc, github.com/apache/spark/pull/1005
+
+  [SPARK-1495][SQL]add support for left semi join
+  Daoyuan <daoyuan.wang@intel.com>, Michael Armbrust <michael@databricks.com>, Daoyuan Wang <daoyuan.wang@intel.com>
+  2014-06-09 11:31:36 -0700
+  Commit: 73cd1f8, github.com/apache/spark/pull/837
+
+  SPARK-1944 Document --verbose in spark-shell -h
+  Andrew Ash <andrew@andrewash.com>
+  2014-06-09 10:21:21 -0700
+  Commit: a5848d3, github.com/apache/spark/pull/1020
+
+  [SPARK-2067] use relative path for Spark logo in UI
+  Neville Li <neville@spotify.com>
+  2014-06-08 23:18:27 -0700
+  Commit: 502a8f7, github.com/apache/spark/pull/1006
+
+  Update run-example
+  maji2014 <maji3@asiainfo-linkage.com>
+  2014-06-08 15:14:27 -0700
+  Commit: 3f8450e, github.com/apache/spark/pull/1011
+
+  [SPARK-1994][SQL] Weird data corruption bug when running Spark SQL on data in HDFS
+  Michael Armbrust <michael@databricks.com>
+  2014-06-07 14:20:33 -0700
+  Commit: 39cfa9c, github.com/apache/spark/pull/1004
+
+  [SPARK-2050 - 2][SQL] DIV and BETWEEN should not be case sensitive.
+  Michael Armbrust <michael@databricks.com>
+  2014-06-06 11:31:37 -0700
+  Commit: d746748, github.com/apache/spark/pull/994
+
+  [SPARK-2050][SQL] LIKE, RLIKE and IN in HQL should not be case sensitive.
+  Michael Armbrust <michael@databricks.com>
+  2014-06-05 23:20:59 -0700
+  Commit: d3717be, github.com/apache/spark/pull/989
+
+  SPARK-2043: ExternalAppendOnlyMap doesn't always find matching keys
+  Matei Zaharia <matei@databricks.com>
+  2014-06-05 23:01:48 -0700
+  Commit: 16e3910, github.com/apache/spark/pull/986
+
+  [SPARK-2025] Unpersist edges of previous graph in Pregel
+  Ankur Dave <ankurdave@gmail.com>
+  2014-06-05 17:45:38 -0700
+  Commit: 715fbfa, github.com/apache/spark/pull/972
+
+  [SPARK-2041][SQL] Correctly analyze queries where columnName == tableName.
+  Michael Armbrust <michael@databricks.com>
+  2014-06-05 17:42:08 -0700
+  Commit: 4ac8135, github.com/apache/spark/pull/985
+
+  [SPARK-2036] [SQL] CaseConversionExpression should check if the evaluated value is null.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-06-05 12:00:31 -0700
+  Commit: 70383b1, github.com/apache/spark/pull/982
+
+  SPARK-1677: allow user to disable output dir existence checking
+  CodingCat <zhunansjtu@gmail.com>
+  2014-06-05 11:39:35 -0700
+  Commit: 8100cbd, github.com/apache/spark/pull/947
+
+  [SPARK-2030] Bump SparkBuild.scala version number of branch-1.0 to 1.0.1-SNAPSHOT.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-06-05 11:28:48 -0700
+  Commit: d365fbf, github.com/apache/spark/pull/975
+
+  SPARK-1790: Update EC2 scripts to support r3 instance types
+  Varakhedi Sujeet <svarakhedi@gopivotal.com>
+  2014-06-04 16:01:56 -0700
+  Commit: 914d98e, github.com/apache/spark/pull/960
+
+  SPARK-1518: FileLogger: Fix compile against Hadoop trunk
+  Colin McCabe <cmccabe@cloudera.com>
+  2014-06-04 15:56:29 -0700
+  Commit: 3df55cb, github.com/apache/spark/pull/898
+
+  fix java.lang.ClassCastException
+  baishuo(白硕) <vc_java@hotmail.com>
+  2014-06-03 13:39:47 -0700
+  Commit: d967941, github.com/apache/spark/pull/949
+
+  [SPARK-1468] Modify the partition function used by partitionBy.
+  Erik Selin <erik.selin@jadedpixel.com>
+  2014-06-03 13:31:16 -0700
+  Commit: 350cfd3, github.com/apache/spark/pull/371
+
+  Add support for Pivotal HD in the Maven build: SPARK-1992
+  tzolov <christian.tzolov@gmail.com>
+  2014-06-03 13:26:29 -0700
+  Commit: 316d026, github.com/apache/spark/pull/942
+
+  SPARK-2001 : Remove docs/spark-debugger.md from master
+  Henry Saputra <henry.saputra@gmail.com>
+  2014-06-03 13:03:51 -0700
+  Commit: af0a89c, github.com/apache/spark/pull/953
+
+  Avoid dynamic dispatching when unwrapping Hive data.
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-06-02 19:20:23 -0700
+  Commit: 6db0d5c, github.com/apache/spark/pull/935
+
+  [SPARK-1995][SQL] system function upper and lower can be supported
+  egraldlo <egraldlo@gmail.com>
+  2014-06-02 18:02:57 -0700
+  Commit: 9d0fae9, github.com/apache/spark/pull/936
+
+  [SPARK-1958] Calling .collect() on a SchemaRDD should call executeCollect() on the underlying query plan.
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-06-02 12:09:43 -0700
+  Commit: 8857489, github.com/apache/spark/pull/939
+
+  Add landmark-based Shortest Path algorithm to graphx.lib
+  Ankur Dave <ankurdave@gmail.com>, Andres Perez <andres@tresata.com>
+  2014-06-02 00:00:24 -0700
+  Commit: af73922, github.com/apache/spark/pull/933
+
+  Improve maven plugin configuration
+  witgo <witgo@qq.com>
+  2014-05-31 14:36:27 -0700
+  Commit: a54a48f, github.com/apache/spark/pull/786
+
+  updated java code blocks in spark SQL guide such that ctx will refer to ...
+  Yadid Ayzenberg <yadid@media.mit.edu>
+  2014-05-31 19:44:13 -0700
+  Commit: 3d79166, github.com/apache/spark/pull/932
+
+  SPARK-1917: fix PySpark import of scipy.special functions
+  Uri Laserson <laserson@cloudera.com>
+  2014-05-31 14:59:09 -0700
+  Commit: 46825cd, github.com/apache/spark/pull/866
+
+  Super minor: Close inputStream in SparkSubmitArguments
+  Aaron Davidson <aaron@databricks.com>
+  2014-05-31 12:36:58 -0700
+  Commit: 5ef94eb, github.com/apache/spark/pull/914
+
+  [SQL] SPARK-1964 Add timestamp to hive metastore type parser.
+  Michael Armbrust <michael@databricks.com>
+  2014-05-31 12:34:22 -0700
+  Commit: 8575d88, github.com/apache/spark/pull/913
+
+  Optionally include Hive as a dependency of the REPL.
+  Michael Armbrust <michael@databricks.com>
+  2014-05-31 12:24:35 -0700
+  Commit: cefc640, github.com/apache/spark/pull/801
+
+  [SPARK-1947] [SQL] Child of SumDistinct or Average should be widened to prevent overflows the same as Sum.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-05-31 11:30:03 -0700
+  Commit: f9fdf32, github.com/apache/spark/pull/902
+
+  correct tiny comment error
+  Chen Chao <crazyjvm@gmail.com>
+  2014-05-31 00:06:49 -0700
+  Commit: 91a64eb, github.com/apache/spark/pull/928
+
+  [SPARK-1959] String "NULL" shouldn't be interpreted as null value
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-05-30 22:13:11 -0700
+  Commit: b65e8f3, github.com/apache/spark/pull/909
+
+  SPARK-1976: fix the misleading part in  streaming docs
+  CodingCat <zhunansjtu@gmail.com>
+  2014-05-30 22:06:08 -0700
+  Commit: 3faa084, github.com/apache/spark/pull/924
+
+  updated link to mailing list
+  nchammas <nicholas.chammas@gmail.com>
+  2014-05-30 22:04:57 -0700
+  Commit: 4b12737, github.com/apache/spark/pull/923
+
+  Typo: and -> an
+  Andrew Ash <andrew@andrewash.com>
+  2014-05-30 22:02:04 -0700
+  Commit: 8f8cea7, github.com/apache/spark/pull/927
+
+  [SPARK-1901] worker should make sure executor has exited before updating executor's info
+  Zhen Peng <zhenpeng01@baidu.com>
+  2014-05-30 10:11:02 -0700
+  Commit: 1696a44, github.com/apache/spark/pull/854
+
+  [SPARK-1566] consolidate programming guide, and general doc updates
+  Matei Zaharia <matei@databricks.com>
+  2014-05-30 00:34:33 -0700
+  Commit: 80721fb, github.com/apache/spark/pull/896
+
+  [SPARK-1368][SQL] Optimized HiveTableScan
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-05-29 15:24:03 -0700
+  Commit: 0f56aad, github.com/apache/spark/pull/758
+
+  SPARK-1935: Explicitly add commons-codec 1.5 as a dependency.
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-05-29 09:07:39 -0700
+  Commit: 8bb9390, github.com/apache/spark/pull/889
+
+  Added doctest and method description in context.py
+  Jyotiska NK <jyotiska123@gmail.com>
+  2014-05-28 23:08:39 -0700
+  Commit: 7179180, github.com/apache/spark/pull/187
+
+  [SPARK-1712]: TaskDescription instance is too big causes Spark to hang
+  witgo <witgo@qq.com>
+  2014-05-28 15:57:05 -0700
+  Commit: 386fd83, github.com/apache/spark/pull/694
+
+  Spark 1916
+  David Lemieux <david.lemieux@radialpoint.com>
+  2014-05-28 15:50:35 -0700
+  Commit: 0b769b7, github.com/apache/spark/pull/865
+
+  Organize configuration docs
+  Patrick Wendell <pwendell@gmail.com>
+  2014-05-28 15:49:54 -0700
+  Commit: 032493e, github.com/apache/spark/pull/880
+
+  Fix doc about NetworkWordCount/JavaNetworkWordCount usage of spark streaming
+  jmu <jmujmu@gmail.com>
+  2014-05-27 22:41:47 -0700
+  Commit: 3669bb8, github.com/apache/spark/pull/826
+
+  [SPARK-1938] [SQL] ApproxCountDistinctMergeFunction should return Int value.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-05-27 22:17:50 -0700
+  Commit: 24a1cac, github.com/apache/spark/pull/893
+
+  [SQL] SPARK-1922
+  LY Lai <ly.lai@vpon.com>
+  2014-05-27 16:08:38 -0700
+  Commit: 5d63825, github.com/apache/spark/pull/873
+
+  [SPARK-1915] [SQL] AverageFunction should not count if the evaluated value is null.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-05-27 14:55:23 -0700
+  Commit: 50e234b, github.com/apache/spark/pull/862
+
+  [SPARK-1926] [SQL] Nullability of Max/Min/First should be true.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-05-27 14:53:57 -0700
+  Commit: f539963, github.com/apache/spark/pull/881
+
+  bugfix worker DriverStateChanged state should match DriverState.FAILED
+  lianhuiwang <lianhuiwang09@gmail.com>
+  2014-05-27 11:53:38 -0700
+  Commit: 30be37c, github.com/apache/spark/pull/864
+
+  SPARK-1932: Fix race conditions in onReceiveCallback and cachedPeers
+  zsxwing <zsxwing@gmail.com>
+  2014-05-26 23:17:39 -0700
+  Commit: 214f90e, github.com/apache/spark/pull/887
+
+  SPARK-1933: Throw a more meaningful exception when a directory is passed to addJar/addFile.
+  Reynold Xin <rxin@apache.org>
+  2014-05-26 22:05:23 -0700
+  Commit: fcb3750, github.com/apache/spark/pull/888
+
+  Updated dev Python scripts to make them PEP8 compliant.
+  Reynold Xin <rxin@apache.org>
+  2014-05-26 21:40:52 -0700
+  Commit: 9bcd999, github.com/apache/spark/pull/875
+
+  [SPARK-1931] Reconstruct routing tables in Graph.partitionBy
+  Ankur Dave <ankurdave@gmail.com>
+  2014-05-26 16:10:22 -0700
+  Commit: f268548, github.com/apache/spark/pull/885
+
+  SPARK-1925: Replace '&' with '&&'
+  zsxwing <zsxwing@gmail.com>
+  2014-05-26 14:34:58 -0700
+  Commit: f09cb85, github.com/apache/spark/pull/879
+
+  [SPARK-1914] [SQL] Simplify CountFunction not to traverse to evaluate all child expressions.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-05-26 00:17:20 -0700
+  Commit: 7a83163, github.com/apache/spark/pull/861
+
+
 Release 1.0.0
 
   HOTFIX: Add no-arg SparkContext constructor in Java
