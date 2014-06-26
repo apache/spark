@@ -263,7 +263,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
         </td>
         <!--
-        TODO: Add this back after we add support to hive certain columns.
+        TODO: Add this back after we add support to hide certain columns.
         <td sorttable_customkey={serializationTime.toString}>
           {if (serializationTime > 0) UIUtils.formatDuration(serializationTime) else ""}
         </td>

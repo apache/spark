@@ -454,8 +454,8 @@ class JsonProtocolSuite extends FunSuite {
     new StageInfo(a, "greetings", b, rddInfos, "details")
   }
 
-  private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, e: Boolean) = {
-    new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL, e)
+  private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
+    new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL, speculative)
   }
 
   private def makeTaskMetrics(a: Long, b: Long, c: Long, d: Long, e: Int, f: Int) = {
@@ -511,37 +511,60 @@ class JsonProtocolSuite extends FunSuite {
 
   private val taskStartJsonString =
     """
-      {"Event":"SparkListenerTaskStart","Stage ID":111,"Task Info":{"Task ID":222,
-      "Index":333,"Launch Time":444,"Executor ID":"executor","Host":"your kind sir",
-      "Locality":"NODE_LOCAL","Getting Result Time":0,"Finish Time":0,"Failed":false,
-      "Serialized Size":0}}
-    """
+      |{"Event":"SparkListenerTaskStart","Stage ID":111,"Task Info":{"Task ID":222,
+      |"Index":333,"Attempt":1,"Launch Time":444,"Executor ID":"executor","Host":"your kind sir",
+      |"Locality":"NODE_LOCAL","Speculative":false,"Getting Result Time":0,"Finish Time":0,
+      |"Failed":false,"Serialized Size":0}}
+    """.stripMargin
 
   private val taskGettingResultJsonString =
     """
-      {"Event":"SparkListenerTaskGettingResult","Task Info":{"Task ID":1000,"Index":
-      2000,"Launch Time":3000,"Executor ID":"executor","Host":"your kind sir",
-      "Locality":"NODE_LOCAL","Getting Result Time":0,"Finish Time":0,"Failed":false,
-      "Serialized Size":0}}
-    """
+      |{"Event":"SparkListenerTaskGettingResult","Task Info":
+      |  {"Task ID":1000,"Index":2000,"Attempt":5,"Launch Time":3000,"Executor ID":"executor",
+      |   "Host":"your kind sir","Locality":"NODE_LOCAL","Speculative":true,"Getting Result Time":0,
+      |   "Finish Time":0,"Failed":false,"Serialized Size":0
+      |  }
+      |}
+    """.stripMargin
 
   private val taskEndJsonString =
     """
-      {"Event":"SparkListenerTaskEnd","Stage ID":1,"Task Type":"ShuffleMapTask",
-      "Task End Reason":{"Reason":"Success"},"Task Info":{"Task ID":123,"Index":
-      234,"Launch Time":345,"Executor ID":"executor","Host":"your kind sir",
-      "Locality":"NODE_LOCAL","Getting Result Time":0,"Finish Time":0,"Failed":
-      false,"Serialized Size":0},"Task Metrics":{"Host Name":"localhost",
-      "Executor Deserialize Time":300,"Executor Run Time":400,"Result Size":500,
-      "JVM GC Time":600,"Result Serialization Time":700,"Memory Bytes Spilled":
-      800,"Disk Bytes Spilled":0,"Shuffle Read Metrics":{"Shuffle Finish Time":
-      900,"Total Blocks Fetched":1500,"Remote Blocks Fetched":800,"Local Blocks Fetched":
-      700,"Fetch Wait Time":900,"Remote Bytes Read":1000},"Shuffle Write Metrics":
-      {"Shuffle Bytes Written":1200,"Shuffle Write Time":1500},"Updated Blocks":
-      [{"Block ID":"rdd_0_0","Status":{"Storage Level":{"Use Disk":true,"Use Memory":true,
-      "Use Tachyon":false,"Deserialized":false,"Replication":2},"Memory Size":0,"Tachyon Size":0,
-      "Disk Size":0}}]}}
-    """
+      |{"Event":"SparkListenerTaskEnd","Stage ID":1,"Task Type":"ShuffleMapTask",
+      |"Task End Reason":{"Reason":"Success"},
+      |"Task Info":{
+      |  "Task ID":123,"Index":234,"Attempt":67,"Launch Time":345,"Executor ID":"executor",
+      |  "Host":"your kind sir","Locality":"NODE_LOCAL","Speculative":false,
+      |  "Getting Result Time":0,"Finish Time":0,"Failed":false,"Serialized Size":0
+      |},
+      |"Task Metrics":{
+      |  "Host Name":"localhost","Executor Deserialize Time":300,"Executor Run Time":400,
+      |  "Result Size":500,"JVM GC Time":600,"Result Serialization Time":700,
+      |  "Memory Bytes Spilled":800,"Disk Bytes Spilled":0,
+      |  "Shuffle Read Metrics":{
+      |    "Shuffle Finish Time":900,
+      |    "Total Blocks Fetched":1500,
+      |    "Remote Blocks Fetched":800,
+      |    "Local Blocks Fetched":700,
+      |    "Fetch Wait Time":900,
+      |    "Remote Bytes Read":1000
+      |  },
+      |  "Shuffle Write Metrics":{
+      |    "Shuffle Bytes Written":1200,
+      |    "Shuffle Write Time":1500},
+      |    "Updated Blocks":[
+      |    {"Block ID":"rdd_0_0",
+      |      "Status":{
+      |        "Storage Level":{
+      |          "Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":false,
+      |          "Replication":2
+      |        },
+      |        "Memory Size":0,"Tachyon Size":0,"Disk Size":0
+      |      }
+      |    }
+      |    ]
+      |  }
+      |}
+    """.stripMargin
 
   private val jobStartJsonString =
     """
