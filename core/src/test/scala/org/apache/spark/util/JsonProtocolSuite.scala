@@ -35,10 +35,11 @@ class JsonProtocolSuite extends FunSuite {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
     val stageCompleted = SparkListenerStageCompleted(makeStageInfo(101, 201, 301, 401L, 501L))
-    val taskStart = SparkListenerTaskStart(111, makeTaskInfo(222L, 333, 444L))
-    val taskGettingResult = SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 3000L))
+    val taskStart = SparkListenerTaskStart(111, makeTaskInfo(222L, 333, 1, 444L, false))
+    val taskGettingResult =
+      SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
     val taskEnd = SparkListenerTaskEnd(1, "ShuffleMapTask", Success,
-      makeTaskInfo(123L, 234, 345L), makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800))
+      makeTaskInfo(123L, 234, 67, 345L, false), makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800))
     val jobStart = SparkListenerJobStart(10, Seq[Int](1, 2, 3, 4), properties)
     val jobEnd = SparkListenerJobEnd(20, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
@@ -73,7 +74,7 @@ class JsonProtocolSuite extends FunSuite {
   test("Dependent Classes") {
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
-    testTaskInfo(makeTaskInfo(999L, 888, 777L))
+    testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500, 1000))
 
@@ -453,8 +454,8 @@ class JsonProtocolSuite extends FunSuite {
     new StageInfo(a, "greetings", b, rddInfos, "details")
   }
 
-  private def makeTaskInfo(a: Long, b: Int, c: Long) = {
-    new TaskInfo(a, b, c, "executor", "your kind sir", TaskLocality.NODE_LOCAL)
+  private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, e: Boolean) = {
+    new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL, e)
   }
 
   private def makeTaskMetrics(a: Long, b: Long, c: Long, d: Long, e: Int, f: Int) = {
