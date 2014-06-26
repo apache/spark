@@ -38,7 +38,7 @@ case object Resubmitted extends TaskEndReason // Task was finished earlier but w
 
 @DeveloperApi
 case class FetchFailed(
-    bmAddress: BlockManagerId,
+    bmAddress: BlockManagerId,  // Note that bmAddress can be null
     shuffleId: Int,
     mapId: Int,
     reduceId: Int)
