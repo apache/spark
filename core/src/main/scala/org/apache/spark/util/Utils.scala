@@ -20,7 +20,7 @@ package org.apache.spark.util
 import java.io._
 import java.net.{InetAddress, Inet4Address, NetworkInterface, URI, URL, URLConnection}
 import java.nio.ByteBuffer
-import java.util.{Locale, Random, UUID}
+import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
 import scala.collection.JavaConversions._
@@ -1283,6 +1283,29 @@ private[spark] object Utils extends Logging {
           case _ => true
         }
       }
+    }
+  }
+
+  /** Load properties present in the given file. */
+  def getPropertiesFromFile(file: File): Seq[(String, String)] = {
+    require(file.exists(), s"Properties file $file does not exist")
+    require(file.isFile(), s"Properties file $file is not a normal file")
+    val inputStream = new FileInputStream(file)
+    getPropertiesFromInputStream(inputStream)
+  }
+
+  /** Load properties present in the given inputStream. */
+  def getPropertiesFromInputStream(inputStream: InputStream): Seq[(String, String)] = {
+    try {
+      val properties = new Properties()
+      properties.load(inputStream)
+      properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
+    } catch {
+      case e: IOException =>
+        val message = s"Failed when loading Spark properties file $file"
+        throw new SparkException(message, e)
+    } finally {
+      inputStream.close()
     }
   }
 

@@ -17,8 +17,10 @@
 
 package org.apache.spark
 
+import java.io.File
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import org.apache.spark.util.Utils
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -46,6 +48,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   private val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
+    loadDefaultProperties()
     // Load any spark.* system properties
     for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
       settings(k) = v
@@ -291,4 +294,26 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def toDebugString: String = {
     settings.toArray.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
   }
+
+  def loadDefaultProperties() {
+    var seq = Seq[(String, String)]()
+
+    val defaultConfigFile = "spark-defaults.conf"
+    Option(Utils.getSparkClassLoader.getResourceAsStream("/spark-defaults.conf")).foreach { in =>
+      seq = seq ++ Utils.getPropertiesFromInputStream(in)
+    }
+
+    sys.env.get("SPARK_HOME").foreach { sparkHome =>
+      val file = new File(Seq(sparkHome, "conf", defaultConfigFile).mkString(File.separator))
+      if (file.exists() && file.isFile()) {
+        seq = seq ++ Utils.getPropertiesFromFile(file)
+
+      }
+    }
+
+    for ((k, v) <- seq if k.startsWith("spark.")) {
+      settings(k) = v
+    }
+  }
+
 }
