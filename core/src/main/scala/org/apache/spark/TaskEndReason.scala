@@ -70,8 +70,10 @@ case class FetchFailed(
     mapId: Int,
     reduceId: Int)
   extends TaskFailedReason {
-  override def toErrorString: String =
-    s"FetchFailed(bmAddress, shuffleId=$shuffleId, mapId=$mapId, reduceId=$reduceId)"
+  override def toErrorString: String = {
+    val bmAddressString = if (bmAddress == null) "null" else bmAddress.toString
+    s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapId=$mapId, reduceId=$reduceId)"
+  }
 }
 
 /**
@@ -87,7 +89,7 @@ case class ExceptionFailure(
     metrics: Option[TaskMetrics])
   extends TaskFailedReason {
   override def toErrorString: String = {
-    val stackTraceString = stackTrace.mkString("\n")
+    val stackTraceString = if (stackTrace == null) "null" else stackTrace.mkString("\n")
     s"$className ($description}\n$stackTraceString"
   }
 }
