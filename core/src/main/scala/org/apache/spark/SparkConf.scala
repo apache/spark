@@ -307,7 +307,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       val file = new File(Seq(sparkHome, "conf", defaultConfigFile).mkString(File.separator))
       if (file.exists() && file.isFile()) {
         seq = seq ++ Utils.getPropertiesFromFile(file)
-
       }
     }
 

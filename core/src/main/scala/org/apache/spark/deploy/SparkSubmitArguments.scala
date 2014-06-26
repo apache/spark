@@ -66,7 +66,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     Option(propertiesFile).foreach { filename =>
       val file = new File(filename)
       SparkSubmitArguments.getPropertiesFromFile(file).foreach { case (k, v) =>
-        if (k.startsWith("spark")) {
+        if (k.startsWith("spark.")) {
           defaultProperties(k) = v
           if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
         } else {

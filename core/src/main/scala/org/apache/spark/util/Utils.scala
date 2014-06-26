@@ -1302,7 +1302,7 @@ private[spark] object Utils extends Logging {
       properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
     } catch {
       case e: IOException =>
-        val message = s"Failed when loading Spark properties file $file"
+        val message = s"Failed when loading Spark properties"
         throw new SparkException(message, e)
     } finally {
       inputStream.close()
