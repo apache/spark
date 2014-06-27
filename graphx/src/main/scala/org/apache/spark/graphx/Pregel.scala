@@ -22,6 +22,21 @@ import org.apache.spark.Logging
 
 
 /**
+ * The Pregel Vertex class contains the vertex attribute and the boolean flag indicating whether
+ * the vertex is active.
+ *
+ * @param attr
+ * @param isActive
+ * @tparam T
+ */
+sealed case class PregelVertex[T] (attr: T, isActive: Boolean = true)
+    extends Product2[T, Boolean] {
+  override def _1: T = attr
+  override def _2: Boolean = isActive
+}
+
+
+/**
  * Implements a Pregel-like bulk-synchronous message-passing API.
  *
  * Unlike the original Pregel API, the GraphX Pregel API factors the sendMessage computation over
@@ -54,7 +69,6 @@ import org.apache.spark.Logging
  *
  */
 object Pregel extends Logging {
-
 
   /**
    * Execute a Pregel-like iterative vertex-parallel abstraction.  The
@@ -219,14 +233,14 @@ object Pregel extends Logging {
   (graph: Graph[VD, ED],
    maxIterations: Int = Int.MaxValue,
    activeDirection: EdgeDirection = EdgeDirection.Either)
-  (vertexProgram: (Int, VertexId, VD, Boolean, Option[A]) => (VD, Boolean),
-   sendMsg: (Int, EdgeTriplet[(VD, Boolean), ED]) => Iterator[(VertexId, A)],
+  (vertexProgram: (Int, VertexId, PregelVertex[VD], Option[A]) => PregelVertex[VD],
+   sendMsg: (Int, EdgeTriplet[PregelVertex[VD], ED]) => Iterator[(VertexId, A)],
    mergeMsg: (A, A) => A)
   : Graph[VD, ED] =
   {
     // Initialize the graph with all vertices active
-    var currengGraph: Graph[(VD, Boolean), ED] =
-      graph.mapVertices { (vid, vdata) => (vdata, true) }.cache()
+    var currengGraph: Graph[PregelVertex[VD], ED] =
+      graph.mapVertices { (vid, vdata) => PregelVertex(vdata) }.cache()
     // Determine the set of vertices that did not vote to halt
     var activeVertices = currengGraph.vertices
     var numActive = activeVertices.count()
@@ -240,15 +254,14 @@ object Pregel extends Logging {
         Some((activeVertices, activeDirection)))
 
       // Receive the messages to the subset of active vertices
-      currengGraph = currengGraph.outerJoinVertices(messages){ (vid, dataAndActive, msgOpt) =>
-        val (vdata, active) = dataAndActive
+      currengGraph = currengGraph.outerJoinVertices(messages){ (vid, pVertex, msgOpt) =>
         // If the vertex voted to halt and received no message then we can skip the vertex program
-        if (!active && msgOpt.isEmpty) {
-          dataAndActive
+        if (!pVertex.isActive && msgOpt.isEmpty) {
+          pVertex
         } else {
           // The vertex program is either active or received a message (or both).
           // A vertex program should vote to halt again even if it has previously voted to halt
-          vertexProgram(iteration, vid, vdata, active, msgOpt)
+          vertexProgram(iteration, vid, pVertex, msgOpt)
         }
       }.cache()
 
@@ -269,7 +282,7 @@ object Pregel extends Logging {
       // count the iteration
       iteration += 1
     }
-    currengGraph.mapVertices((id, vdata) => vdata._1)
+    currengGraph.mapVertices((id, vdata) => vdata.attr)
   } // end of apply
 
 

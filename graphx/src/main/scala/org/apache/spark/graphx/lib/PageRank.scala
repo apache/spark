@@ -151,21 +151,21 @@ object PageRank extends Logging {
 
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
-    def vertexProgram(iter: Int, id: VertexId, attr: (Double, Double), wasActive: Boolean,
+    def vertexProgram(iter: Int, id: VertexId, vertex: PregelVertex[(Double, Double)],
                       msgSum: Option[Double]) = {
-      var (oldPR, pendingDelta) = attr
+      var (oldPR, pendingDelta) = vertex.attr
       val newPR = oldPR + msgSum.getOrElse(0.0)
       // if we were active then we sent the pending delta on the last iteration
-      if (wasActive) {
+      if (vertex.isActive) {
         pendingDelta = 0.0
       }
       pendingDelta += (1.0 - resetProb) * msgSum.getOrElse(0.0)
       val isActive = math.abs(pendingDelta) >= tol
-      ((newPR, pendingDelta), isActive)
+      PregelVertex((newPR, pendingDelta), isActive)
     }
 
-    def sendMessage(iter: Int, edge: EdgeTriplet[((Double, Double), Boolean), Double]) = {
-      val ((srcPr, srcDelta), srcIsActive) = edge.srcAttr
+    def sendMessage(iter: Int, edge: EdgeTriplet[PregelVertex[(Double, Double)], Double]) = {
+      val PregelVertex((srcPr, srcDelta), srcIsActive) = edge.srcAttr
       assert(srcIsActive)
       Iterator((edge.dstId, srcDelta * edge.attr))
     }
