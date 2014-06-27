@@ -639,7 +639,7 @@ class JsonProtocolSuite extends FunSuite {
       |      }
       |    }
       |  ]}
-      |  }
+      |}
     """
 
   private val jobStartJsonString =
