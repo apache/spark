@@ -49,13 +49,7 @@ private[streaming] class BlockGenerator(
 
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
 
-  /**
-   * Internal representation of a callback function and its argument.
-   * @param function - The callback function
-   * @param arg - Argument to pass to pass to the function
-   */
-  private class Callback(val function: Any => Unit, val arg: Any)
-
+  private type FuncWithNoArgToUnit = () => Unit
   private val clock = new SystemClock()
   private val blockInterval = conf.getLong("spark.streaming.blockInterval", 200)
   private val blockIntervalTimer =
@@ -69,8 +63,7 @@ private[streaming] class BlockGenerator(
   private var currentBlockId: StreamBlockId = StreamBlockId(receiverId,
     clock.currentTime() - blockInterval)
 
-  // Removes might happen from the map while other threads are inserting.
-  private val callbacks = new util.HashMap[StreamBlockId, ArrayBuffer[Callback]]()
+  private val callbacks = new util.HashMap[StreamBlockId, ArrayBuffer[FuncWithNoArgToUnit]]()
 
   /** Start block generating and pushing threads. */
   def start() {
@@ -100,18 +93,19 @@ private[streaming] class BlockGenerator(
   /**
    * Store the data asynchronously and call callback(arg),
    * when the data has been successfully stored
+   *
    * @param data - The data to be stored
    * @param callback - The function to call when the data is stored
-   * @param arg - The argument to pass to callback function when it is called.
+   *
    */
-  def store(data: Any, callback: Any => Unit, arg: Any): Unit = synchronized {
+  def store(data: Any, callback: () => Unit): Unit = synchronized {
     currentBuffer += data
-    val functionToCall = new Callback(callback, arg)
+    val functionToCall = callback
     Option(callbacks.get(currentBlockId)) match {
       case Some(buffer) =>
         buffer += functionToCall
       case None =>
-        val buffer = new ArrayBuffer[Callback]()
+        val buffer = new ArrayBuffer[FuncWithNoArgToUnit]()
         buffer += functionToCall
         callbacks.put(currentBlockId, buffer)
     }
@@ -172,7 +166,7 @@ private[streaming] class BlockGenerator(
   private def pushBlock(block: Block) {
     listener.onPushBlock(block.id, block.buffer)
 
-    var callbackBufferOpt: Option[ArrayBuffer[Callback]] = None
+    var callbackBufferOpt: Option[ArrayBuffer[FuncWithNoArgToUnit]] = None
     // Remove the buffer from the callbacks map. This must be synchronized to ensure no one else
     // is editing the buffer or the map at that time.
     synchronized {
@@ -180,14 +174,13 @@ private[streaming] class BlockGenerator(
     }
 
     // Call the callbacks
-    callbackBufferOpt match {
-      case Some(callbackBuffer) =>
-        callbackBuffer.map(callback => {
-          callback.function(callback.arg)
-          logDebug("Called callback for block: " + block.id)
-        })
-      case None =>
-    }
+    callbackBufferOpt.foreach(callbackBuffer => {
+      callbackBuffer.foreach(callback => {
+        callback()
+        logDebug("Called callback for block: " + block.id)
+      })
+    })
+
     logInfo("Pushed block " + block.id)
   }
 }

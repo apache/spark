@@ -231,7 +231,7 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
       errors += throwable
     }
 
-    override def pushSingle(data: Any, f: (Any) => Unit, arg: Any): Unit = {
+    override def pushSingle(data: Any, f: () => Unit): Unit = {
     }
   }
 

@@ -372,9 +372,9 @@ class CallbackReceiver(val limit: Int)
     executor.submit(new Runnable {
       override def run(): Unit = {
         (1 to limit).map(i => {
-          store(i, k => {
-            store(k.asInstanceOf[Int]) // Store again
-          }, i)
+          store(i, () => {
+            store(i) // Store again
+          })
         })
       }
     })

@@ -64,7 +64,7 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Push a single data item to backend data store. */
   def pushSingle(data: Any)
 
-  def pushSingle(data: Any, f: Any => Unit, arg: Any)
+  def pushSingle(data: Any, callback: () => Unit)
 
   /** Store the bytes of received data as a data block into Spark's memory. */
   def pushBytes(
