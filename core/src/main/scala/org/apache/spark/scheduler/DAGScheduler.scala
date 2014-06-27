@@ -124,8 +124,11 @@ class DAGScheduler(
 
   // Whether to enable remove stage barrier
   val removeStageBarrier = env.conf.getBoolean("spark.scheduler.removeStageBarrier", false)
-  //track the pre-started stages depending on a stage (the key)
-  val dependantStagePreStarted = new mutable.HashMap[Stage, ArrayBuffer[Stage]]()
+  // Track the pre-started stages depending on a stage (the key)
+  private val dependantStagePreStarted = new mutable.HashMap[Stage, ArrayBuffer[Stage]]()
+
+  // Temporarily added for test
+  private var failureGenerated = false
 
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
@@ -883,7 +886,9 @@ class DAGScheduler(
                   changeEpoch = true)
               }
               clearCacheLocs()
-              if (stage.outputLocs.exists(_ == Nil)) {
+              if (stage.outputLocs.exists(_ == Nil) || !failureGenerated) {
+                stage.outputLocs(0) = Nil
+                failureGenerated = true
                 // Some tasks had failed; let's resubmit this stage
                 // TODO: Lower-level scheduler should also deal with this
                 logInfo("Resubmitting " + stage + " (" + stage.name +

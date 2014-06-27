@@ -575,6 +575,7 @@ private[spark] class TaskSetManager(
       case TaskResultLost =>
         failureReason = "Lost result for TID %s on host %s".format(tid, info.host)
         logWarning(failureReason)
+        // TODO: may cause some sort of "deadlock" if we lost the reuslt of a shuffle map task
 
       case _ =>
         failureReason = "TID %s on host %s failed for unknown reason".format(tid, info.host)
