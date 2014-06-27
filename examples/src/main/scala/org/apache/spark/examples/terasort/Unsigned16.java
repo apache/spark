@@ -18,21 +18,15 @@
 
 package org.apache.spark.examples.terasort;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
-import org.apache.hadoop.io.Writable;
-
 /**
- * This file is copied from Hadoop package org.apache.hadoop.examples.terasort.
+ * This file is copied and simplified from Hadoop package org.apache.hadoop.examples.terasort.
  */
 
 /**
  * An unsigned 16 byte integer class that supports addition, multiplication,
  * and left shifts.
  */
-class Unsigned16 implements Writable {
+class Unsigned16 {
   private long hi8;
   private long lo8;
 
@@ -120,24 +114,6 @@ class Unsigned16 implements Writable {
       return ch - 'A' + 10;
     }
     throw new NumberFormatException(ch + " is not a valid hex digit");
-  }
-
-  private static final Unsigned16 TEN = new Unsigned16(10);
-
-  public static Unsigned16 fromDecimal(String s) throws NumberFormatException {
-    Unsigned16 result = new Unsigned16();
-    Unsigned16 tmp = new Unsigned16();
-    for(int i=0; i < s.length(); i++) {
-      char ch = s.charAt(i);
-      if (ch < '0' || ch > '9') {
-        throw new NumberFormatException(ch + " not a valid decimal digit");
-      }
-      int digit = ch - '0';
-      result.multiply(TEN);
-      tmp.set(digit);
-      result.add(tmp);
-    }
-    return result;
   }
 
   /**
@@ -284,18 +260,4 @@ class Unsigned16 implements Writable {
       }
     }
   }
-
-  @Override
-  public void readFields(DataInput in) throws IOException {
-    hi8 = in.readLong();
-    lo8 = in.readLong();
-  }
-
-  @Override
-  public void write(DataOutput out) throws IOException {
-    out.writeLong(hi8);
-    out.writeLong(lo8);
-  }
-
-
 }
