@@ -42,7 +42,7 @@ class JsonProtocolSuite extends FunSuite {
       makeTaskInfo(123L, 234, 67, 345L, false),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHdfsInput = false))
     val taskEndWithHdfsInput = SparkListenerTaskEnd(1, "ShuffleMapTask", Success,
-      makeTaskInfo(123L, 234, 345L),
+      makeTaskInfo(123L, 234, 67, 345L, false),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHdfsInput = true))
     val jobStart = SparkListenerJobStart(10, Seq[Int](1, 2, 3, 4), properties)
     val jobEnd = SparkListenerJobEnd(20, JobSucceeded)
@@ -79,7 +79,7 @@ class JsonProtocolSuite extends FunSuite {
   test("Dependent Classes") {
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
-    testTaskInfo(makeTaskInfo(999L, 888, 777L, false))
+    testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, hasHdfsInput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500, 1000))
 
@@ -491,7 +491,13 @@ class JsonProtocolSuite extends FunSuite {
    * set to true) or read data from a shuffle otherwise.
    */
   private def makeTaskMetrics(
-      a: Long, b: Long, c: Long, d: Long, e: Int, f: Int, hasHdfsInput: Boolean) = {
+      a: Long,
+      b: Long,
+      c: Long,
+      d: Long,
+      e: Int,
+      f: Int,
+      hasHdfsInput: Boolean) = {
     val t = new TaskMetrics
     val sw = new ShuffleWriteMetrics
     t.hostname = "localhost"

@@ -41,7 +41,9 @@ private[spark] case class IteratorValues(iterator: Iterator[Any]) extends BlockV
 private[spark] case class ArrayBufferValues(buffer: ArrayBuffer[Any]) extends BlockValues
 
 /* Class for returning a fetched block and associated metrics. */
-private[spark] class BlockResult(val data: Iterator[Any], readMethod: DataReadMethod.Value,
+private[spark] class BlockResult(
+    val data: Iterator[Any],
+    readMethod: DataReadMethod.Value,
     bytes: Long) {
   val inputMetrics = new InputMetrics(readMethod)
   inputMetrics.bytesRead = bytes
@@ -469,7 +471,7 @@ private[spark] class BlockManager(
                     case Left(values2) =>
                       return Some(new BlockResult(values2, DataReadMethod.Disk, info.size))
                     case _ =>
-                      throw new Exception("Memory store did not return back an iterator")
+                      throw new SparkException("Memory store did not return back an iterator")
                   }
               } else {
                 return Some(new BlockResult(values, DataReadMethod.Disk, info.size))

@@ -72,10 +72,10 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
               {UIUtils.formatDuration(listener.stageIdToTime.getOrElse(stageId, 0L) + activeTime)}
             </li>
             {if (hasInput)
-            <li>
-              <strong>Input: </strong>
-              {Utils.bytesToString(inputBytes)}
-            </li>
+              <li>
+                <strong>Input: </strong>
+                {Utils.bytesToString(inputBytes)}
+              </li>
             }
             {if (hasShuffleRead)
               <li>
@@ -224,9 +224,12 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
     }
   }
 
-  def taskRow(shuffleRead: Boolean, shuffleWrite: Boolean, bytesSpilled: Boolean)
-      (taskData: TaskUIData): Seq[Node] = {
-    taskData match { case TaskUIData(info, metrics, exception) =>
+  def taskRow(
+    hasInput: Boolean,
+    hasShuffleRead: Boolean,
+    hasShuffleWrite: Boolean,
+    hasBytesSpilled: Boolean)(taskData: TaskUIData): Seq[Node] = {
+    taskData match { case TaskUIData(info, metrics, errorMessage) =>
       val duration = if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
         else metrics.map(_.executorRunTime).getOrElse(1L)
       val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
