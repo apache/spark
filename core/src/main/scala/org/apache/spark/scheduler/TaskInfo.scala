@@ -27,10 +27,12 @@ import org.apache.spark.annotation.DeveloperApi
 class TaskInfo(
     val taskId: Long,
     val index: Int,
+    val attempt: Int,
     val launchTime: Long,
     val executorId: String,
     val host: String,
-    val taskLocality: TaskLocality.TaskLocality) {
+    val taskLocality: TaskLocality.TaskLocality,
+    val speculative: Boolean) {
 
   /**
    * The time when the task started remotely getting the result. Will not be set if the
