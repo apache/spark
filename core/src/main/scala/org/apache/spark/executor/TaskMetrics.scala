@@ -67,8 +67,8 @@ class TaskMetrics extends Serializable {
   var diskBytesSpilled: Long = _
 
   /**
-   * If this task reads from a HadoopRDD, from cached data, or from a parallelized collection,
-   * metrics on how much data was read are stored here.
+   * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read
+   * are stored here.
    */
   var inputMetrics: Option[InputMetrics] = None
 
