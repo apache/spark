@@ -119,23 +119,23 @@ object SparkSubmit {
 
     // For mesos, only client mode is supported
     if (clusterManager == MESOS && deployOnCluster) {
-      printErrorAndExit("Mesos cluster mode is currently not supported.")
+      printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
     }
 
     // For standalone, only client mode is supported
     if (clusterManager == STANDALONE && deployOnCluster) {
-      printErrorAndExit("Standalone cluster mode is currently not supported.")
+      printErrorAndExit("Cluster deploy mode is currently not supported for standalone clusters.")
     }
 
     // For shells, only client mode is applicable
     if (isShell(args.primaryResource) && deployOnCluster) {
-      printErrorAndExit("Cluster mode is not applicable to Spark shells.")
+      printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
     }
 
     // If we're running a python app, set the main class to our specific python runner
     if (isPython) {
       if (deployOnCluster) {
-        printErrorAndExit("Cluster mode is currently not supported for python.")
+        printErrorAndExit("Cluster deploy mode is currently not supported for python.")
       }
       if (args.primaryResource == PYSPARK_SHELL) {
         args.mainClass = "py4j.GatewayServer"
