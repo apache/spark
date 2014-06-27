@@ -224,6 +224,27 @@ class HiveQuerySuite extends HiveComparisonTest {
     TestHive.reset()
   }
 
+  test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
+    val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
+      .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
+    TestHive.sparkContext.parallelize(fixture).registerAsTable("having_test")
+    val results =
+      hql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
+      .collect()
+      .map(x => Pair(x.getString(0), x.getInt(1)))
+
+    assert(results === Array(Pair("foo", 4)))
+    TestHive.reset()
+  }
+
+  test("SPARK-2180: HAVING with non-boolean clause raises no exceptions") {
+    hql("select key, count(*) c from src group by key having c").collect()
+  }
+
+  test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
+    assert(hql("select key from src having key > 490").collect().size < 100)
+  }
+
   test("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 
@@ -349,6 +370,16 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
   }
 
+  test("SPARK-2263: Insert Map<K, V> values") {
+    hql("CREATE TABLE m(value MAP<INT, STRING>)")
+    hql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
+    hql("SELECT * FROM m").collect().zip(hql("SELECT * FROM src LIMIT 10").collect()).map {
+      case (Row(map: Map[Int, String]), Row(key: Int, value: String)) =>
+        assert(map.size === 1)
+        assert(map.head === (key, value))
+    }
+  }
+
   test("parse HQL set commands") {
     // Adapted from its SQL counterpart.
     val testKey = "spark.sql.key.usedfortestonly"
@@ -439,5 +470,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   // Put tests that depend on specific Hive settings before these last two test,
   // since they modify /clear stuff.
-
 }
+
+// for SPARK-2180 test
+case class HavingRow(key: Int, value: String, attr: Int)

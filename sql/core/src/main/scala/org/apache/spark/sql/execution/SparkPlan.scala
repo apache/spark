@@ -23,9 +23,9 @@ import org.apache.spark.sql.{Logging, Row}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.plans.{QueryPlan, logical}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 
 /**
  * :: DeveloperApi ::
@@ -66,19 +66,20 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
  * linking.
  */
 @DeveloperApi
-case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
-  extends logical.LogicalPlan with MultiInstanceRelation {
+case class SparkLogicalPlan(alreadyPlanned: SparkPlan, tableName: String = "SparkLogicalPlan")
+  extends BaseRelation with MultiInstanceRelation {
 
   def output = alreadyPlanned.output
-  def references = Set.empty
-  def children = Nil
+  override def references = Set.empty
+  override def children = Nil
 
   override final def newInstance: this.type = {
     SparkLogicalPlan(
       alreadyPlanned match {
         case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
         case _ => sys.error("Multiple instance of the same relation detected.")
-      }).asInstanceOf[this.type]
+      }, tableName)
+      .asInstanceOf[this.type]
   }
 }
 

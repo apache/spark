@@ -136,21 +136,31 @@
 
         <!-- MathJax Section -->
         <script type="text/x-mathjax-config">
-              MathJax.Hub.Config({
+            MathJax.Hub.Config({
                 TeX: { equationNumbers: { autoNumber: "AMS" } }
-              });
-            </script>
-        <script type="text/javascript"
-         src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+            });
+        </script>
         <script>
-          MathJax.Hub.Config({
-            tex2jax: {
-              inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
-              displayMath: [ ["$$","$$"], ["\\[", "\\]"] ], 
-              processEscapes: true,
-              skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
-            }
-          });
+            // Note that we load MathJax this way to work with local file (file://), HTTP and HTTPS.
+            // We could use "//cdn.mathjax...", but that won't support "file://".
+            (function(d, script) {
+                script = d.createElement('script');
+                script.type = 'text/javascript';
+                script.async = true;
+                script.onload = function(){
+                    MathJax.Hub.Config({
+                        tex2jax: {
+                            inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
+                            displayMath: [ ["$$","$$"], ["\\[", "\\]"] ], 
+                            processEscapes: true,
+                            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+                        }
+                    });
+                };
+                script.src = ('https:' == document.location.protocol ? 'https://' : 'http://') +
+                    'cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML';
+                d.getElementsByTagName('head')[0].appendChild(script);
+            }(document));
         </script>
     </body>
 </html>

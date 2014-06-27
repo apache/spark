@@ -77,6 +77,22 @@ class SparkContextSchedulerCreationSuite
     }
   }
 
+  test("local-default-parallelism") {
+    val defaultParallelism = System.getProperty("spark.default.parallelism")
+    System.setProperty("spark.default.parallelism", "16")
+    val sched = createTaskScheduler("local")
+
+    sched.backend match {
+      case s: LocalBackend => assert(s.defaultParallelism() === 16)
+      case _ => fail()
+    }
+
+    Option(defaultParallelism) match {
+      case Some(v) => System.setProperty("spark.default.parallelism", v)
+      case _ => System.clearProperty("spark.default.parallelism")
+    }
+  }
+
   test("simr") {
     createTaskScheduler("simr://uri").backend match {
       case s: SimrSchedulerBackend => // OK

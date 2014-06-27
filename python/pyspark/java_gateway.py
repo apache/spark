@@ -43,18 +43,23 @@ def launch_gateway():
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
-            proc = Popen(command, stdout=PIPE, stdin=PIPE, stderr=PIPE, preexec_fn=preexec_func)
+            proc = Popen(command, stdout=PIPE, stdin=PIPE, preexec_fn=preexec_func)
         else:
             # preexec_fn not supported on Windows
-            proc = Popen(command, stdout=PIPE, stdin=PIPE, stderr=PIPE)
-        
+            proc = Popen(command, stdout=PIPE, stdin=PIPE)
+
         try:
             # Determine which ephemeral port the server started on:
-            gateway_port = int(proc.stdout.readline())
-        except:
-            error_code = proc.poll()
-            raise Exception("Launching GatewayServer failed with exit code %d: %s" %
-                (error_code, "".join(proc.stderr.readlines())))
+            gateway_port = proc.stdout.readline()
+            gateway_port = int(gateway_port)
+        except ValueError:
+            (stdout, _) = proc.communicate()
+            exit_code = proc.poll()
+            error_msg = "Launching GatewayServer failed"
+            error_msg += " with exit code %d!" % exit_code if exit_code else "! "
+            error_msg += "(Warning: unexpected output detected.)\n\n"
+            error_msg += gateway_port + stdout
+            raise Exception(error_msg)
 
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
