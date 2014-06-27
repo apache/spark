@@ -293,7 +293,7 @@ private[spark] class TaskSchedulerImpl(
                 }
               } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
                 taskSet.removeRunningTask(tid)
-                taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+                taskResultGetter.enqueueFailedTaskSync(taskSet, tid, state, serializedData)
               }
             }
           case None =>
