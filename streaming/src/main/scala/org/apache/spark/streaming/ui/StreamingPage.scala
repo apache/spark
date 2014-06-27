@@ -42,8 +42,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <h4>Statistics over last {listener.retainedCompletedBatches.size} processed batches</h4> ++
       generateReceiverStats() ++
       generateBatchStatsTable()
-    UIUtils.headerSparkPage(
-      content, parent.basePath, parent.appName, "Streaming", parent.headerTabs, parent, Some(5000))
+    UIUtils.headerSparkPage(content, parent.getBasePath(), parent.getAppName(), "Streaming",
+      parent.headerTabs, parent, Some(5000))
   }
 
   /** Generate basic stats of the streaming program */

@@ -27,14 +27,13 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
-  private val appName = parent.appName
-  private val basePath = parent.basePath
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
     val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
-    UIUtils.headerSparkPage(content, basePath, appName, "Storage ", parent.headerTabs, parent)
+    UIUtils.headerSparkPage(content, parent.getBasePath(), parent.getAppName(), "Storage ",
+      parent.headerTabs, parent)
   }
 
   /** Header fields for the RDD table */
@@ -52,7 +51,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     // scalastyle:off
     <tr>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(basePath), rdd.id)}>
+        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.getBasePath()), rdd.id)}>
           {rdd.name}
         </a>
       </td>
