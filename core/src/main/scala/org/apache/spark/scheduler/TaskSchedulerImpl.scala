@@ -282,7 +282,15 @@ private[spark] class TaskSchedulerImpl(
             activeTaskSets.get(taskSetId).foreach { taskSet =>
               if (state == TaskState.FINISHED) {
                 taskSet.removeRunningTask(tid)
-                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+                // Temporarily added for test only
+                // This is the last task in the task set
+                // It reports success, but may fail retrieving the result
+                if (taskSet.tasksSuccessful + 1 == taskSet.numTasks) {
+                  logInfo("Fail the last successful task for test. ---lirui")
+                  taskResultGetter.enqueueFailedTask(taskSet, tid, state, null)
+                } else {
+                  taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+                }
               } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
                 taskSet.removeRunningTask(tid)
                 taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)

@@ -1016,7 +1016,7 @@ class DAGScheduler(
       for ((shuffleId, stage) <- shuffleToMapStage) {
         stage.removeOutputsOnExecutor(execId)
         val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
-        mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
+        mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true, isPartial = true)
       }
       if (shuffleToMapStage.isEmpty) {
         mapOutputTracker.incrementEpoch()
