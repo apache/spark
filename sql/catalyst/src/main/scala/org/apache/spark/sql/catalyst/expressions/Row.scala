@@ -208,6 +208,9 @@ class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
 
 
 class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
+  def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
+    this(ordering.map(BindReferences.bindReference(_, inputSchema)))
+
   def compare(a: Row, b: Row): Int = {
     var i = 0
     while (i < ordering.size) {

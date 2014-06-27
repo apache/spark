@@ -47,8 +47,20 @@ def launch_gateway():
         else:
             # preexec_fn not supported on Windows
             proc = Popen(command, stdout=PIPE, stdin=PIPE)
-        # Determine which ephemeral port the server started on:
-        gateway_port = int(proc.stdout.readline())
+
+        try:
+            # Determine which ephemeral port the server started on:
+            gateway_port = proc.stdout.readline()
+            gateway_port = int(gateway_port)
+        except ValueError:
+            (stdout, _) = proc.communicate()
+            exit_code = proc.poll()
+            error_msg = "Launching GatewayServer failed"
+            error_msg += " with exit code %d!" % exit_code if exit_code else "! "
+            error_msg += "(Warning: unexpected output detected.)\n\n"
+            error_msg += gateway_port + stdout
+            raise Exception(error_msg)
+
         # Create a thread to echo output from the GatewayServer, which is required
         # for Java log output to show up:
         class EchoOutputThread(Thread):

@@ -31,12 +31,6 @@ class JavaHiveContext(sparkContext: JavaSparkContext) extends JavaSQLContext(spa
   /**
     * Executes a query expressed in HiveQL, returning the result as a JavaSchemaRDD.
     */
-  def hql(hqlQuery: String): JavaSchemaRDD = {
-    val result = new JavaSchemaRDD(sqlContext, HiveQl.parseSql(hqlQuery))
-    // We force query optimization to happen right away instead of letting it happen lazily like
-    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-    // generates the RDD lineage for DML queries, but do not perform any execution.
-    result.queryExecution.toRdd
-    result
-  }
+  def hql(hqlQuery: String): JavaSchemaRDD =
+    new JavaSchemaRDD(sqlContext, HiveQl.parseSql(hqlQuery))
 }

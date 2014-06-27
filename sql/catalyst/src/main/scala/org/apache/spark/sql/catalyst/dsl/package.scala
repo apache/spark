@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.types._
  *
  *  // These unresolved attributes can be used to create more complicated expressions.
  *  scala> 'a === 'b
- *  res2: org.apache.spark.sql.catalyst.expressions.Equals = ('a = 'b)
+ *  res2: org.apache.spark.sql.catalyst.expressions.EqualTo = ('a = 'b)
  *
  *  // SQL verbs can be used to construct logical query plans.
  *  scala> import org.apache.spark.sql.catalyst.plans.logical._
@@ -76,8 +76,8 @@ package object dsl {
     def <= (other: Expression) = LessThanOrEqual(expr, other)
     def > (other: Expression) = GreaterThan(expr, other)
     def >= (other: Expression) = GreaterThanOrEqual(expr, other)
-    def === (other: Expression) = Equals(expr, other)
-    def !== (other: Expression) = Not(Equals(expr, other))
+    def === (other: Expression) = EqualTo(expr, other)
+    def !== (other: Expression) = Not(EqualTo(expr, other))
 
     def like(other: Expression) = Like(expr, other)
     def rlike(other: Expression) = RLike(expr, other)
@@ -174,6 +174,8 @@ package object dsl {
     def select(exprs: NamedExpression*) = Project(exprs, logicalPlan)
 
     def where(condition: Expression) = Filter(condition, logicalPlan)
+
+    def limit(limitExpr: Expression) = Limit(limitExpr, logicalPlan)
 
     def join(
         otherPlan: LogicalPlan,

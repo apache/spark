@@ -85,16 +85,27 @@ while (( "$#" )); do
 done
 
 if [ -z "$JAVA_HOME" ]; then
+  # Fall back on JAVA_HOME from rpm, if found
+  if which rpm &>/dev/null; then
+    RPM_JAVA_HOME=$(rpm -E %java_home 2>/dev/null)
+    if [ "$RPM_JAVA_HOME" != "%java_home" ]; then
+      JAVA_HOME=$RPM_JAVA_HOME
+      echo "No JAVA_HOME set, proceeding with '$JAVA_HOME' learned from rpm"
+    fi
+  fi
+fi
+
+if [ -z "$JAVA_HOME" ]; then
   echo "Error: JAVA_HOME is not set, cannot proceed."
   exit -1
 fi
 
-VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
-if [ $? != 0 ]; then
+if ! which mvn &>/dev/null; then
     echo -e "You need Maven installed to build Spark."
     echo -e "Download Maven from https://maven.apache.org/"
     exit -1;
 fi
+VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
 
 JAVA_CMD="$JAVA_HOME"/bin/java
 JAVA_VERSION=$("$JAVA_CMD" -version 2>&1)

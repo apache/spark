@@ -32,6 +32,8 @@ import org.apache.spark.storage._
 import org.apache.spark._
 
 private[spark] object JsonProtocol {
+  // TODO: Remove this file and put JSON serialization into each individual class.
+
   private implicit val format = DefaultFormats
 
   /** ------------------------------------------------- *
@@ -184,6 +186,7 @@ private[spark] object JsonProtocol {
     ("Stage Name" -> stageInfo.name) ~
     ("Number of Tasks" -> stageInfo.numTasks) ~
     ("RDD Info" -> rddInfo) ~
+    ("Details" -> stageInfo.details) ~
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
     ("Failure Reason" -> failureReason) ~
@@ -193,10 +196,12 @@ private[spark] object JsonProtocol {
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
     ("Task ID" -> taskInfo.taskId) ~
     ("Index" -> taskInfo.index) ~
+    ("Attempt" -> taskInfo.attempt) ~
     ("Launch Time" -> taskInfo.launchTime) ~
     ("Executor ID" -> taskInfo.executorId) ~
     ("Host" -> taskInfo.host) ~
     ("Locality" -> taskInfo.taskLocality.toString) ~
+    ("Speculative" -> taskInfo.speculative) ~
     ("Getting Result Time" -> taskInfo.gettingResultTime) ~
     ("Finish Time" -> taskInfo.finishTime) ~
     ("Failed" -> taskInfo.failed) ~
@@ -469,12 +474,13 @@ private[spark] object JsonProtocol {
     val stageName = (json \ "Stage Name").extract[String]
     val numTasks = (json \ "Number of Tasks").extract[Int]
     val rddInfos = (json \ "RDD Info").extract[List[JValue]].map(rddInfoFromJson)
+    val details = (json \ "Details").extractOpt[String].getOrElse("")
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val failureReason = Utils.jsonOption(json \ "Failure Reason").map(_.extract[String])
     val emittedTaskSizeWarning = (json \ "Emitted Task Size Warning").extract[Boolean]
 
-    val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfos)
+    val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfos, details)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.failureReason = failureReason
@@ -485,16 +491,19 @@ private[spark] object JsonProtocol {
   def taskInfoFromJson(json: JValue): TaskInfo = {
     val taskId = (json \ "Task ID").extract[Long]
     val index = (json \ "Index").extract[Int]
+    val attempt = (json \ "Attempt").extractOpt[Int].getOrElse(1)
     val launchTime = (json \ "Launch Time").extract[Long]
     val executorId = (json \ "Executor ID").extract[String]
     val host = (json \ "Host").extract[String]
     val taskLocality = TaskLocality.withName((json \ "Locality").extract[String])
+    val speculative = (json \ "Speculative").extractOpt[Boolean].getOrElse(false)
     val gettingResultTime = (json \ "Getting Result Time").extract[Long]
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
     val serializedSize = (json \ "Serialized Size").extract[Int]
 
-    val taskInfo = new TaskInfo(taskId, index, launchTime, executorId, host, taskLocality)
+    val taskInfo =
+      new TaskInfo(taskId, index, attempt, launchTime, executorId, host, taskLocality, speculative)
     taskInfo.gettingResultTime = gettingResultTime
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed

@@ -487,6 +487,14 @@ Apart from these, the following properties are also available, and may be useful
     this duration will be cleared as well.
   </td>
 </tr>
+<tr>
+    <td>spark.hadoop.validateOutputSpecs</td>
+    <td>true</td>
+    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists) 
+    used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing 
+    output directories. We recommend that users do not disable this except if trying to achieve compatibility with 
+    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
+</tr>
 </table>
 
 #### Networking
@@ -774,6 +782,45 @@ Apart from these, the following properties are also available, and may be useful
     Setting this to false will allow the raw data and persisted RDDs to be accessible outside the
     streaming application as they will not be cleared automatically. But it comes at the cost of
     higher memory usage in Spark.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.strategy</code></td>
+  <td>(none)</td>
+  <td>
+    Set the strategy of rolling of executor logs. By default it is disabled. It can
+    be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
+    use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
+    For "size", use <code>spark.executor.logs.rolling.size.maxBytes</code> to set
+    the maximum file size for rolling.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.time.interval</code></td>
+  <td>daily</td>
+  <td>
+    Set the time interval by which the executor logs will be rolled over.
+    Rolling is disabled by default. Valid values are `daily`, `hourly`, `minutely` or
+    any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.size.maxBytes</code></td>
+  <td>(none)</td>
+  <td>
+    Set the max size of the file by which the executor logs will be rolled over.
+    Rolling is disabled by default. Value is set in terms of bytes.
+    See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
+  <td>(none)</td>
+  <td>
+    Sets the number of latest rolling log files that are going to be retained by the system.
+    Older log files will be deleted. Disabled by default.
   </td>
 </tr>
 </table>

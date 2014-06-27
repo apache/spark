@@ -18,9 +18,13 @@
 package org.apache.spark;
 
 import java.io.*;
+import java.net.URI;
 import java.util.*;
 
 import scala.Tuple2;
+import scala.Tuple3;
+import scala.Tuple4;
+
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
@@ -181,6 +185,39 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void sortBy() {
+    List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
+    pairs.add(new Tuple2<Integer, Integer>(0, 4));
+    pairs.add(new Tuple2<Integer, Integer>(3, 2));
+    pairs.add(new Tuple2<Integer, Integer>(-1, 1));
+
+    JavaRDD<Tuple2<Integer, Integer>> rdd = sc.parallelize(pairs);
+
+    // compare on first value
+    JavaRDD<Tuple2<Integer, Integer>> sortedRDD = rdd.sortBy(new Function<Tuple2<Integer, Integer>, Integer>() {
+      public Integer call(Tuple2<Integer, Integer> t) throws Exception {
+        return t._1();
+      }
+    }, true, 2);
+
+    Assert.assertEquals(new Tuple2<Integer, Integer>(-1, 1), sortedRDD.first());
+    List<Tuple2<Integer, Integer>> sortedPairs = sortedRDD.collect();
+    Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(1));
+    Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
+
+    // compare on second value
+    sortedRDD = rdd.sortBy(new Function<Tuple2<Integer, Integer>, Integer>() {
+      public Integer call(Tuple2<Integer, Integer> t) throws Exception {
+        return t._2();
+      }
+    }, true, 2);
+    Assert.assertEquals(new Tuple2<Integer, Integer>(-1, 1), sortedRDD.first());
+    sortedPairs = sortedRDD.collect();
+    Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(1));
+    Assert.assertEquals(new Tuple2<Integer, Integer>(0, 4), sortedPairs.get(2));
+  }
+
+  @Test
   public void foreach() {
     final Accumulator<Integer> accum = sc.accumulator(0);
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
@@ -273,6 +310,66 @@ public class JavaAPISuite implements Serializable {
 
   @SuppressWarnings("unchecked")
   @Test
+  public void cogroup3() {
+    JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, String>("Apples", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Citrus")
+      ));
+    JavaPairRDD<String, Integer> prices = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 2),
+      new Tuple2<String, Integer>("Apples", 3)
+    ));
+    JavaPairRDD<String, Integer> quantities = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 21),
+      new Tuple2<String, Integer>("Apples", 42)
+    ));
+
+    JavaPairRDD<String, Tuple3<Iterable<String>, Iterable<Integer>, Iterable<Integer>>> cogrouped =
+        categories.cogroup(prices, quantities);
+    Assert.assertEquals("[Fruit, Citrus]",
+                        Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
+    Assert.assertEquals("[42]", Iterables.toString(cogrouped.lookup("Apples").get(0)._3()));
+
+
+    cogrouped.collect();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void cogroup4() {
+    JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, String>("Apples", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Citrus")
+      ));
+    JavaPairRDD<String, Integer> prices = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 2),
+      new Tuple2<String, Integer>("Apples", 3)
+    ));
+    JavaPairRDD<String, Integer> quantities = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 21),
+      new Tuple2<String, Integer>("Apples", 42)
+    ));
+    JavaPairRDD<String, String> countries = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, String>("Oranges", "BR"),
+      new Tuple2<String, String>("Apples", "US")
+    ));
+
+    JavaPairRDD<String, Tuple4<Iterable<String>, Iterable<Integer>, Iterable<Integer>, Iterable<String>>> cogrouped =
+        categories.cogroup(prices, quantities, countries);
+    Assert.assertEquals("[Fruit, Citrus]",
+                        Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
+    Assert.assertEquals("[42]", Iterables.toString(cogrouped.lookup("Apples").get(0)._3()));
+    Assert.assertEquals("[BR]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._4()));
+
+    cogrouped.collect();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
   public void leftOuterJoin() {
     JavaPairRDD<Integer, Integer> rdd1 = sc.parallelizePairs(Arrays.asList(
       new Tuple2<Integer, Integer>(1, 1),
@@ -315,6 +412,37 @@ public class JavaAPISuite implements Serializable {
 
     sum = rdd.reduce(add);
     Assert.assertEquals(33, sum);
+  }
+
+  @Test
+  public void aggregateByKey() {
+    JavaPairRDD<Integer, Integer> pairs = sc.parallelizePairs(
+      Arrays.asList(
+        new Tuple2<Integer, Integer>(1, 1),
+        new Tuple2<Integer, Integer>(1, 1),
+        new Tuple2<Integer, Integer>(3, 2),
+        new Tuple2<Integer, Integer>(5, 1),
+        new Tuple2<Integer, Integer>(5, 3)), 2);
+
+    Map<Integer, Set<Integer>> sets = pairs.aggregateByKey(new HashSet<Integer>(),
+      new Function2<Set<Integer>, Integer, Set<Integer>>() {
+        @Override
+        public Set<Integer> call(Set<Integer> a, Integer b) {
+          a.add(b);
+          return a;
+        }
+      },
+      new Function2<Set<Integer>, Set<Integer>, Set<Integer>>() {
+        @Override
+        public Set<Integer> call(Set<Integer> a, Set<Integer> b) {
+          a.addAll(b);
+          return a;
+        }
+      }).collectAsMap();
+    Assert.assertEquals(3, sets.size());
+    Assert.assertEquals(new HashSet<Integer>(Arrays.asList(1)), sets.get(1));
+    Assert.assertEquals(new HashSet<Integer>(Arrays.asList(2)), sets.get(3));
+    Assert.assertEquals(new HashSet<Integer>(Arrays.asList(1, 3)), sets.get(5));
   }
 
   @SuppressWarnings("unchecked")
@@ -614,7 +742,7 @@ public class JavaAPISuite implements Serializable {
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
     TaskContext context = new TaskContext(0, 0, 0, false, new TaskMetrics());
-    Assert.assertEquals(1, rdd.iterator(rdd.splits().get(0), context).next().intValue());
+    Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 
   @Test
@@ -641,7 +769,7 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void wholeTextFiles() throws IOException {
+  public void wholeTextFiles() throws Exception {
     byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
     byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
 
@@ -657,7 +785,7 @@ public class JavaAPISuite implements Serializable {
     List<Tuple2<String, String>> result = readRDD.collect();
 
     for (Tuple2<String, String> res : result) {
-      Assert.assertEquals(res._2(), container.get(res._1()));
+      Assert.assertEquals(res._2(), container.get(new URI(res._1()).getPath()));
     }
   }
 

@@ -205,9 +205,9 @@ object ParquetFilters {
             Some(new AndFilter(leftFilter.get, rightFilter.get))
         }
       }
-      case p @ Equals(left: Literal, right: NamedExpression) if !right.nullable =>
+      case p @ EqualTo(left: Literal, right: NamedExpression) if !right.nullable =>
         Some(createEqualityFilter(right.name, left, p))
-      case p @ Equals(left: NamedExpression, right: Literal) if !left.nullable =>
+      case p @ EqualTo(left: NamedExpression, right: Literal) if !left.nullable =>
         Some(createEqualityFilter(left.name, right, p))
       case p @ LessThan(left: Literal, right: NamedExpression) if !right.nullable =>
         Some(createLessThanFilter(right.name, left, p))

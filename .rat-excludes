@@ -4,6 +4,8 @@ target
 .classpath
 .mima-excludes
 .generated-mima-excludes
+.generated-mima-class-excludes
+.generated-mima-member-excludes
 .rat-excludes
 .*md
 derby.log
@@ -22,6 +24,7 @@ spark-env.sh.template
 log4j-defaults.properties
 sorttable.js
 .*txt
+.*json
 .*data
 .*log
 cloudpickle.py

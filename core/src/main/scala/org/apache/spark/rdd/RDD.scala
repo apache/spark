@@ -40,9 +40,9 @@ import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, CallSite, Utils}
 import org.apache.spark.util.collection.OpenHashMap
-import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
+import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -340,7 +340,7 @@ abstract class RDD[T: ClassTag](
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
+        new ShuffledRDD[Int, T, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
         numPartitions).values
     } else {
@@ -378,46 +378,56 @@ abstract class RDD[T: ClassTag](
     }.toArray
   }
 
-  def takeSample(withReplacement: Boolean, num: Int, seed: Long = Utils.random.nextLong): Array[T] =
-  {
-    var fraction = 0.0
-    var total = 0
-    val multiplier = 3.0
-    val initialCount = this.count()
-    var maxSelected = 0
+  /**
+   * Return a fixed-size sampled subset of this RDD in an array
+   *
+   * @param withReplacement whether sampling is done with replacement
+   * @param num size of the returned sample
+   * @param seed seed for the random number generator
+   * @return sample of specified size in an array
+   */
+  def takeSample(withReplacement: Boolean,
+      num: Int,
+      seed: Long = Utils.random.nextLong): Array[T] = {
+    val numStDev =  10.0
 
     if (num < 0) {
       throw new IllegalArgumentException("Negative number of elements requested")
+    } else if (num == 0) {
+      return new Array[T](0)
     }
 
+    val initialCount = this.count()
     if (initialCount == 0) {
       return new Array[T](0)
     }
 
-    if (initialCount > Integer.MAX_VALUE - 1) {
-      maxSelected = Integer.MAX_VALUE - 1
-    } else {
-      maxSelected = initialCount.toInt
-    }
-
-    if (num > initialCount && !withReplacement) {
-      total = maxSelected
-      fraction = multiplier * (maxSelected + 1) / initialCount
-    } else {
-      fraction = multiplier * (num + 1) / initialCount
-      total = num
+    val maxSampleSize = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
+    if (num > maxSampleSize) {
+      throw new IllegalArgumentException("Cannot support a sample size > Int.MaxValue - " +
+        s"$numStDev * math.sqrt(Int.MaxValue)")
     }
 
     val rand = new Random(seed)
+    if (!withReplacement && num >= initialCount) {
+      return Utils.randomizeInPlace(this.collect(), rand)
+    }
+
+    val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
+      withReplacement)
+
     var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
 
     // If the first sample didn't turn out large enough, keep trying to take samples;
     // this shouldn't happen often because we use a big multiplier for the initial size
-    while (samples.length < total) {
+    var numIters = 0
+    while (samples.length < num) {
+      logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
       samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+      numIters += 1
     }
 
-    Utils.randomizeInPlace(samples, rand).take(total)
+    Utils.randomizeInPlace(samples, rand).take(num)
   }
 
   /**
@@ -431,6 +441,18 @@ abstract class RDD[T: ClassTag](
    * times (use `.distinct()` to eliminate them).
    */
   def ++(other: RDD[T]): RDD[T] = this.union(other)
+
+  /**
+   * Return this RDD sorted by the given key function.
+   */
+  def sortBy[K](
+      f: (T) => K,
+      ascending: Boolean = true,
+      numPartitions: Int = this.partitions.size)
+      (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] =
+    this.keyBy[K](f)
+        .sortByKey(ascending, numPartitions)
+        .values
 
   /**
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
@@ -1052,11 +1074,11 @@ abstract class RDD[T: ClassTag](
    * Returns the top K (largest) elements from this RDD as defined by the specified
    * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
    * {{{
-   *   sc.parallelize([10, 4, 2, 12, 3]).top(1)
-   *   // returns [12]
+   *   sc.parallelize(Seq(10, 4, 2, 12, 3)).top(1)
+   *   // returns Array(12)
    *
-   *   sc.parallelize([2, 3, 4, 5, 6]).top(2)
-   *   // returns [6, 5]
+   *   sc.parallelize(Seq(2, 3, 4, 5, 6)).top(2)
+   *   // returns Array(6, 5)
    * }}}
    *
    * @param num the number of top elements to return
@@ -1070,11 +1092,11 @@ abstract class RDD[T: ClassTag](
    * implicit Ordering[T] and maintains the ordering. This does the opposite of [[top]].
    * For example:
    * {{{
-   *   sc.parallelize([10, 4, 2, 12, 3]).takeOrdered(1)
-   *   // returns [12]
+   *   sc.parallelize(Seq(10, 4, 2, 12, 3)).takeOrdered(1)
+   *   // returns Array(2)
    *
-   *   sc.parallelize([2, 3, 4, 5, 6]).takeOrdered(2)
-   *   // returns [2, 3]
+   *   sc.parallelize(Seq(2, 3, 4, 5, 6)).takeOrdered(2)
+   *   // returns Array(2, 3)
    * }}}
    *
    * @param num the number of top elements to return
@@ -1179,8 +1201,8 @@ abstract class RDD[T: ClassTag](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
-  @transient private[spark] val creationSiteInfo = Utils.getCallSiteInfo
-  private[spark] def getCreationSite: String = creationSiteInfo.toString
+  @transient private[spark] val creationSite = Utils.getCallSite
+  private[spark] def getCreationSite: String = Option(creationSite).map(_.short).getOrElse("")
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 
