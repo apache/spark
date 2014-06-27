@@ -59,7 +59,8 @@ private[spark] trait ShuffleManager {
       Utils.checkHost(driverHost, "Expected hostname")
       val url = s"akka.tcp://spark@$driverHost:$driverPort/user/MapOutputTracker"
       val timeout = AkkaUtils.lookupTimeout(conf)
-      Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
+      mapOutputTracker.trackerActor = Await.result(
+        actorSystem.actorSelection(url).resolveOne(timeout), timeout)
     }
   }
 
