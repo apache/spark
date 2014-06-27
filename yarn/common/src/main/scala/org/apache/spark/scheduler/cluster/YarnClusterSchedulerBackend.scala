@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.yarn.ApplicationMasterArguments
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.IntParam
 
@@ -28,12 +29,12 @@ private[spark] class YarnClusterSchedulerBackend(
 
   override def start() {
     super.start()
-    var numExecutors = 2
-    if (sc.getConf.contains("spark.executor.instances")) {
-      numExecutors = sc.getConf.getInt("spark.executor.instances", 2)
-    } else if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
-      IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES")).map(_.toInt).getOrElse(2)
+    var numExecutors = ApplicationMasterArguments.DEFAULT_NUMBER_EXECUTORS
+    if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
+      numExecutors = IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES")).getOrElse(numExecutors)
     }
+    // System property can override environment variable.
+    numExecutors = sc.getConf.getInt("spark.executor.instances", numExecutors)
     totalExpectedExecutors.set(numExecutors)
   }
 }
