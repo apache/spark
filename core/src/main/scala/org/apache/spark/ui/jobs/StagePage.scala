@@ -104,7 +104,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         // scalastyle:on
       val taskHeaders: Seq[String] =
         Seq(
-          "Task Index", "Task ID", "Attempt", "Status", "Locality Level", "Executor",
+          "Index", "ID", "Attempt", "Status", "Locality Level", "Executor",
           "Launch Time", "Duration", "GC Time") ++
         {if (hasInput) Seq("Input") else Nil} ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
