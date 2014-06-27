@@ -111,6 +111,8 @@ private[spark] class TaskSchedulerImpl(
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
 
+  private var failureGenerated = false
+
   override def setDAGScheduler(dagScheduler: DAGScheduler) {
     this.dagScheduler = dagScheduler
   }
@@ -285,7 +287,8 @@ private[spark] class TaskSchedulerImpl(
                 // Temporarily added for test only
                 // This is the last task in the task set
                 // It reports success, but may fail retrieving the result
-                if (taskSet.tasksSuccessful + 1 == taskSet.numTasks) {
+                if (taskSet.tasksSuccessful + 1 == taskSet.numTasks && !failureGenerated) {
+                  failureGenerated = true
                   logInfo("Fail the last successful task for test. ---lirui")
                   taskResultGetter.enqueueFailedTask(taskSet, tid, TaskState.FAILED, null)
                 } else {
