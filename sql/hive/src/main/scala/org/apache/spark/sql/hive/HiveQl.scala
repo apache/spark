@@ -614,8 +614,6 @@ private[hive] object HiveQl {
       queries.reduceLeft(Union)
 
     case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
-    
-    case Token("TOK_EXCEPT", left :: right :: Nil) => Subtract(nodeToPlan(left), nodeToPlan(right)) 
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
