@@ -45,7 +45,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Uses the HashFilteredJoin pattern to find joins where at least some of the predicates can be
+   * Uses the ExtractEquiJoinKeys pattern to find joins where at least some of the predicates can be
    * evaluated by matching hash keys.
    */
   object HashJoin extends Strategy with PredicateHelper {
