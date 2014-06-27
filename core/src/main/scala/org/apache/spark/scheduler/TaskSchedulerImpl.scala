@@ -287,7 +287,7 @@ private[spark] class TaskSchedulerImpl(
                 // It reports success, but may fail retrieving the result
                 if (taskSet.tasksSuccessful + 1 == taskSet.numTasks) {
                   logInfo("Fail the last successful task for test. ---lirui")
-                  taskResultGetter.enqueueFailedTask(taskSet, tid, state, null)
+                  taskResultGetter.enqueueFailedTask(taskSet, tid, TaskState.FAILED, null)
                 } else {
                   taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
                 }
