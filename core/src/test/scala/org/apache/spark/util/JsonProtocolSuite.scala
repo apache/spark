@@ -40,10 +40,10 @@ class JsonProtocolSuite extends FunSuite {
       SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
     val taskEnd = SparkListenerTaskEnd(1, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHdfsInput = false))
-    val taskEndWithHdfsInput = SparkListenerTaskEnd(1, "ShuffleMapTask", Success,
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false))
+    val taskEndWithHadoopInput = SparkListenerTaskEnd(1, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHdfsInput = true))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true))
     val jobStart = SparkListenerJobStart(10, Seq[Int](1, 2, 3, 4), properties)
     val jobEnd = SparkListenerJobEnd(20, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
@@ -65,7 +65,7 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(taskStart, taskStartJsonString)
     testEvent(taskGettingResult, taskGettingResultJsonString)
     testEvent(taskEnd, taskEndJsonString)
-    testEvent(taskEndWithHdfsInput, taskEndWithHdfsInputJsonString)
+    testEvent(taskEndWithHadoopInput, taskEndWithHadoopInputJsonString)
     testEvent(jobStart, jobStartJsonString)
     testEvent(jobEnd, jobEndJsonString)
     testEvent(environmentUpdate, environmentUpdateJsonString)
@@ -80,7 +80,7 @@ class JsonProtocolSuite extends FunSuite {
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
-    testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, hasHdfsInput = false))
+    testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500, 1000))
 
     // StorageLevel
@@ -136,7 +136,7 @@ class JsonProtocolSuite extends FunSuite {
 
   test("InputMetrics backward compatibility") {
     // InputMetrics were added after 1.0.1.
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHdfsInput = true)
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true)
     assert(metrics.inputMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Input Metrics" }
@@ -487,7 +487,7 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   /**
-   * Creates a TaskMetrics object describing a task that read data from HDFS (if hasHdfsInput is
+   * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
    * set to true) or read data from a shuffle otherwise.
    */
   private def makeTaskMetrics(
@@ -497,7 +497,7 @@ class JsonProtocolSuite extends FunSuite {
       d: Long,
       e: Int,
       f: Int,
-      hasHdfsInput: Boolean) = {
+      hasHadoopInput: Boolean) = {
     val t = new TaskMetrics
     val sw = new ShuffleWriteMetrics
     t.hostname = "localhost"
@@ -508,7 +508,7 @@ class JsonProtocolSuite extends FunSuite {
     t.resultSerializationTime = a + b
     t.memoryBytesSpilled = a + c
 
-    if (hasHdfsInput) {
+    if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       inputMetrics.bytesRead = d + e + f
       t.inputMetrics = Some(inputMetrics)
@@ -596,8 +596,9 @@ class JsonProtocolSuite extends FunSuite {
       |  },
       |  "Shuffle Write Metrics":{
       |    "Shuffle Bytes Written":1200,
-      |    "Shuffle Write Time":1500},
-      |    "Updated Blocks":[
+      |    "Shuffle Write Time":1500
+      |  },
+      |  "Updated Blocks":[
       |    {"Block ID":"rdd_0_0",
       |      "Status":{
       |        "Storage Level":{
@@ -612,20 +613,33 @@ class JsonProtocolSuite extends FunSuite {
       |}
     """.stripMargin
 
-  private val taskEndWithHdfsInputJsonString =
+  private val taskEndWithHadoopInputJsonString =
     """
-      {"Event":"SparkListenerTaskEnd","Stage ID":1,"Task Type":"ShuffleMapTask",
-      "Task End Reason":{"Reason":"Success"},"Task Info":{"Task ID":123,"Index":
-      234,"Launch Time":345,"Executor ID":"executor","Host":"your kind sir",
-      "Locality":"NODE_LOCAL","Getting Result Time":0,"Finish Time":0,"Failed":
-      false,"Serialized Size":0},"Task Metrics":{"Host Name":"localhost",
-      "Executor Deserialize Time":300,"Executor Run Time":400,"Result Size":500,
-      "JVM GC Time":600,"Result Serialization Time":700,"Memory Bytes Spilled":
-      800,"Disk Bytes Spilled":0,"Shuffle Write Metrics":{"Shuffle Bytes Written":1200,
-      "Shuffle Write Time":1500},"Input Metrics":{"Data Read Method":"Hdfs","Bytes Read":2100},
-      "Updated Blocks":[{"Block ID":"rdd_0_0","Status":{"Storage Level":{"Use Disk":true,
-      "Use Memory":true,"Use Tachyon":false,"Deserialized":false,"Replication":2},"Memory Size":0,
-      "Tachyon Size":0,"Disk Size":0}}]}}
+      |{"Event":"SparkListenerTaskEnd","Stage ID":1,"Task Type":"ShuffleMapTask",
+      |"Task End Reason":{"Reason":"Success"},
+      |"Task Info":{
+      |  "Task ID":123,"Index":234,"Attempt":67,"Launch Time":345,"Executor ID":"executor",
+      |  "Host":"your kind sir","Locality":"NODE_LOCAL","Speculative":false,
+      |  "Getting Result Time":0,"Finish Time":0,"Failed":false,"Serialized Size":0
+      |},
+      |"Task Metrics":{
+      |  "Host Name":"localhost","Executor Deserialize Time":300,"Executor Run Time":400,
+      |  "Result Size":500,"JVM GC Time":600,"Result Serialization Time":700,
+      |  "Memory Bytes Spilled":800,"Disk Bytes Spilled":0,
+      |  "Shuffle Write Metrics":{"Shuffle Bytes Written":1200,"Shuffle Write Time":1500},
+      |  "Input Metrics":{"Data Read Method":"Hadoop","Bytes Read":2100},
+      |  "Updated Blocks":[
+      |    {"Block ID":"rdd_0_0",
+      |      "Status":{
+      |        "Storage Level":{
+      |          "Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":false,
+      |          "Replication":2
+      |        },
+      |        "Memory Size":0,"Tachyon Size":0,"Disk Size":0
+      |      }
+      |    }
+      |  ]}
+      |  }
     """
 
   private val jobStartJsonString =
