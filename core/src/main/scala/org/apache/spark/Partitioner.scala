@@ -17,14 +17,11 @@
 
 package org.apache.spark
 
-import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CollectionsUtils
 import org.apache.spark.util.Utils
-import org.apache.spark.serializer.JavaSerializer
 
 /**
  * An object that defines how the elements in a key-value pair RDD are partitioned by key.
@@ -99,15 +96,15 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  * the value of `partitions`.
  */
 class RangePartitioner[K : Ordering : ClassTag, V](
-    var partitions: Int,
+    partitions: Int,
     @transient rdd: RDD[_ <: Product2[K,V]],
     private val ascending: Boolean = true)
   extends Partitioner {
 
-  private var ordering = implicitly[Ordering[K]]
+  private val ordering = implicitly[Ordering[K]]
 
   // An array of upper bounds for the first (partitions - 1) partitions
-  var rangeBounds: Array[K] = {
+  private val rangeBounds: Array[K] = {
     if (partitions == 1) {
       Array()
     } else {
@@ -128,47 +125,9 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     }
   }
 
-  @throws(classOf[IOException])
-  private def writeObject(out: ObjectOutputStream): Unit = {
-    val sfactory = SparkEnv.get.serializer
-    // Treat java serializer with default action rather than going thru serialization, to avoid a
-    // separate serialization header.
-    sfactory match {
-      case js: JavaSerializer => out.defaultWriteObject()
-      case _ =>
-        out.writeInt(partitions)
-        val ser = sfactory.newInstance()
-        Utils.serializeViaNestedStream(out, ser) { stream =>
-          stream.writeObject(ordering)
-          stream.writeObject(scala.reflect.classTag[K])
-          stream.writeObject(rangeBounds)
-        }
-    }
-  }
-
-  @throws(classOf[IOException])
-  private def readObject(in: ObjectInputStream): Unit = {
-
-    val sfactory = SparkEnv.get.serializer
-    sfactory match {
-      case js: JavaSerializer => in.defaultReadObject()
-      case _ =>
-        partitions = in.readInt()
-
-        val ser = sfactory.newInstance()
-        Utils.deserializeViaNestedStream(in, ser) { ds =>
-          println(ds)
-          ordering = ds.readObject[Ordering[K]]()
-          implicit val classTag = ds.readObject[ClassTag[Array[K]]]()
-          rangeBounds = ds.readObject[Array[K]]()(classTag)
-          binarySearch = CollectionsUtils.makeBinarySearch[K]
-        }
-    }
-  }
-
   def numPartitions = rangeBounds.length + 1
 
-  private var binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
+  private val binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
 
   def getPartition(key: Any): Int = {
     val k = key.asInstanceOf[K]
