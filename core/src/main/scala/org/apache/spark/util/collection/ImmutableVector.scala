@@ -56,6 +56,11 @@ object ImmutableVector {
     }
   }
 
+  def fill[A: ClassTag](n: Int)(a: A): ImmutableVector[A] = {
+    // TODO: Implement this without allocating an extra array
+    fromArray(Array.fill(n)(a), 0, n)
+  }
+
   private def depthOf(size: Int): Int = {
     var depth = 0
     var sizeLeft = (size - 1) >> 5

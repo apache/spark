@@ -73,6 +73,17 @@ class ImmutableLongOpenHashSet(
    * after the insertion, grows the set and rehashes all elements.
    */
   def add(k: Long): ImmutableLongOpenHashSet = {
+    addWithoutResize(k).rehashIfNeeded(ImmutableLongOpenHashSet.grow, ImmutableLongOpenHashSet.move)
+  }
+
+  /**
+   * Add an element to the set. This one differs from add in that it doesn't trigger rehashing.
+   * The caller is responsible for calling rehashIfNeeded.
+   *
+   * Use (retval.focus & POSITION_MASK) to get the actual position, and
+   * (retval.focus & NONEXISTENCE_MASK) == 0 for prior existence.
+   */
+  def addWithoutResize(k: Long): ImmutableLongOpenHashSet = {
     var pos = hashcode(hasher.hash(k)) & mask
     var i = 1
     var result: ImmutableLongOpenHashSet = null
@@ -89,7 +100,7 @@ class ImmutableLongOpenHashSet(
         i += 1
       }
     }
-    result.rehashIfNeeded(ImmutableLongOpenHashSet.grow, ImmutableLongOpenHashSet.move)
+    result
   }
 
   /**

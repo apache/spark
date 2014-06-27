@@ -26,6 +26,7 @@ import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
 import org.apache.spark.util.collection.ImmutableLongOpenHashSet
 import org.apache.spark.util.collection.ImmutableVector
+import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 
 import IndexedRDD.Id
@@ -64,18 +65,47 @@ private[spark] trait IndexedRDDPartitionOps[
    * Updates keys ks to have values vs, running `merge` on old and new values if necessary.
    */
   def multiput(kvs: Seq[(Id, V)], merge: (Id, V, V) => V): Self[V] = {
-    // TODO: switch to purely functional index to avoid a full reindex on insertions
     if (kvs.forall(kv => self.isDefined(kv._1))) {
-      // Pure updates can be implemented more efficiently
+      // Pure updates can be implemented by modifying only the values
       join(kvs.iterator)(merge)
     } else {
-      val hashMap = new PrimitiveKeyOpenHashMap[Id, V]
-      for ((k, v) <- self.iterator ++ kvs) {
-        hashMap.setMerge(k, v, (a, b) => merge(k, a, b))
+      var newIndex = self.index
+      var newValues = self.values
+      var newMask = self.mask
+
+      var preMoveValues: ImmutableVector[V] = null
+      var preMoveMask: ImmutableBitSet = null
+      def grow(newSize: Int) {
+        preMoveValues = newValues
+        preMoveMask = newMask
+
+        newValues = ImmutableVector.fill(newSize)(null.asInstanceOf[V])
+        newMask = new ImmutableBitSet(newSize)
       }
-      this.withIndex(ImmutableLongOpenHashSet.fromLongOpenHashSet(hashMap.keySet))
-        .withValues(ImmutableVector.fromArray(hashMap._values))
-        .withMask(hashMap.keySet.getBitSet.toImmutableBitSet)
+      def move(oldPos: Int, newPos: Int) {
+        newValues = newValues.updated(newPos, preMoveValues(oldPos))
+        if (preMoveMask.get(oldPos)) newMask = newMask.set(newPos)
+      }
+
+      for (kv <- kvs) {
+        val id = kv._1
+        val otherValue = kv._2
+        newIndex = newIndex.addWithoutResize(id)
+        if ((newIndex.focus & OpenHashSet.NONEXISTENCE_MASK) != 0) {
+          // This is a new key - need to update index
+          val pos = newIndex.focus & OpenHashSet.POSITION_MASK
+          newValues = newValues.updated(pos, otherValue)
+          newMask = newMask.set(pos)
+          newIndex = newIndex.rehashIfNeeded(grow, move)
+        } else {
+          // Existing key - just need to set value and ensure it appears in newMask
+          val pos = newIndex.focus
+          newValues = newValues.updated(pos, otherValue)
+          newMask = newMask.set(pos)
+        }
+      }
+
+      this.withIndex(newIndex).withValues(newValues).withMask(newMask)
     }
   }
 
