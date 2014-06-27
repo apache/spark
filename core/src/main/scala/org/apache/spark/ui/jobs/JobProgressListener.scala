@@ -19,7 +19,7 @@ package org.apache.spark.ui.jobs
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
-import org.apache.spark.{ExceptionFailure, SparkConf, SparkContext, Success}
+import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
@@ -51,6 +51,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
   var totalShuffleRead = 0L
   var totalShuffleWrite = 0L
 
+  // TODO: Should probably consolidate all following into a single hash map.
   val stageIdToTime = HashMap[Int, Long]()
   val stageIdToShuffleRead = HashMap[Int, Long]()
   val stageIdToShuffleWrite = HashMap[Int, Long]()
@@ -183,14 +184,17 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
       // Remove by taskId, rather than by TaskInfo, in case the TaskInfo is from storage
       tasksActive.remove(info.taskId)
 
-      val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
+      val (errorMessage, metrics): (Option[String], Option[TaskMetrics]) =
         taskEnd.reason match {
-          case e: ExceptionFailure =>
-            stageIdToTasksFailed(sid) = stageIdToTasksFailed.getOrElse(sid, 0) + 1
-            (Some(e), e.metrics)
-          case _ =>
+          case org.apache.spark.Success =>
             stageIdToTasksComplete(sid) = stageIdToTasksComplete.getOrElse(sid, 0) + 1
             (None, Option(taskEnd.taskMetrics))
+          case e: ExceptionFailure =>  // Handle ExceptionFailure because we might have metrics
+            stageIdToTasksFailed(sid) = stageIdToTasksFailed.getOrElse(sid, 0) + 1
+            (Some(e.toErrorString), e.metrics)
+          case e: TaskFailedReason =>  // All other failure cases
+            stageIdToTasksFailed(sid) = stageIdToTasksFailed.getOrElse(sid, 0) + 1
+            (Some(e.toErrorString), None)
         }
 
       stageIdToTime.getOrElseUpdate(sid, 0L)
@@ -218,7 +222,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
       stageIdToDiskBytesSpilled(sid) += diskBytesSpilled
 
       val taskMap = stageIdToTaskData.getOrElse(sid, HashMap[Long, TaskUIData]())
-      taskMap(info.taskId) = new TaskUIData(info, metrics, failureInfo)
+      taskMap(info.taskId) = new TaskUIData(info, metrics, errorMessage)
       stageIdToTaskData(sid) = taskMap
     }
   }
@@ -253,7 +257,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
 case class TaskUIData(
     taskInfo: TaskInfo,
     taskMetrics: Option[TaskMetrics] = None,
-    exception: Option[ExceptionFailure] = None)
+    errorMessage: Option[String] = None)
 
 private object JobProgressListener {
   val DEFAULT_POOL_NAME = "default"

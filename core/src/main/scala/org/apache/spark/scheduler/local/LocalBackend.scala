@@ -97,7 +97,8 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
     localActor ! ReviveOffers
   }
 
-  override def defaultParallelism() = totalCores
+  override def defaultParallelism() =
+    scheduler.conf.getInt("spark.default.parallelism", totalCores)
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
     localActor ! KillTask(taskId, interruptThread)
