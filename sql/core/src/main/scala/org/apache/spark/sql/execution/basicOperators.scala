@@ -210,7 +210,6 @@ case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
  */
 @DeveloperApi
 case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
-  // TODO:
   override def output = children.head.output
 
   override def execute() = {
