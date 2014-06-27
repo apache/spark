@@ -29,8 +29,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   protected class Estimates {
     lazy val childrenEstimations = children.map(_.estimates)
     lazy val cardinality: Long = childrenEstimations.map(_.cardinality).sum
-    lazy val numTuples: Long = childrenEstimations.map(_.numTuples).sum
-    lazy val size: Long = childrenEstimations.map(_.size).sum
+    lazy val sizeInBytes: Long = childrenEstimations.map(_.sizeInBytes).sum
   }
 
   /**

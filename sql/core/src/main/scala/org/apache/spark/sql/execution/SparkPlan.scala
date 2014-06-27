@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 
 /**
@@ -66,8 +66,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
  * linking.
  */
 @DeveloperApi
-case class SparkLogicalPlan(alreadyPlanned: SparkPlan, tableName: String = "SparkLogicalPlan")
-  extends BaseRelation with MultiInstanceRelation {
+case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
+  extends LogicalPlan with MultiInstanceRelation {
 
   def output = alreadyPlanned.output
   override def references = Set.empty
@@ -78,8 +78,7 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan, tableName: String = "Spar
       alreadyPlanned match {
         case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
         case _ => sys.error("Multiple instance of the same relation detected.")
-      }, tableName)
-      .asInstanceOf[this.type]
+      }).asInstanceOf[this.type]
   }
 }
 

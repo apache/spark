@@ -21,7 +21,7 @@ import org.apache.spark.sql.{SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 import org.apache.spark.sql.parquet._
@@ -61,8 +61,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
     }
 
-    def broadcastTables: Seq[String] = sqlContext.joinBroadcastTables.split(",").toBuffer
-
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(
               Inner,
@@ -70,20 +68,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               rightKeys,
               condition,
               left,
-              right @ PhysicalOperation(_, _, b: BaseRelation))
-        if broadcastTables.contains(b.tableName)
-          || (right.estimates.size <= sqlContext.autoConvertJoinSize) =>
-            broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
+              right)
+        if right.estimates.sizeInBytes <= sqlContext.autoConvertJoinSize =>
+          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
       case ExtractEquiJoinKeys(
               Inner,
               leftKeys,
               rightKeys,
               condition,
-              left @ PhysicalOperation(_, _, b: BaseRelation),
+              left,
               right)
-        if broadcastTables.contains(b.tableName)
-          || (left.estimates.size <= sqlContext.autoConvertJoinSize) =>
+        if left.estimates.sizeInBytes <= sqlContext.autoConvertJoinSize =>
           broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
@@ -285,7 +281,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.ExistingRdd(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
-      case SparkLogicalPlan(existingPlan, _) => existingPlan :: Nil
+      case SparkLogicalPlan(existingPlan) => existingPlan :: Nil
       case _ => Nil
     }
   }

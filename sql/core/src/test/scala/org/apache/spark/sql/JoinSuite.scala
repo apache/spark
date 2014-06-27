@@ -19,23 +19,12 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter, FullOuter, Inner}
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
 class JoinSuite extends QueryTest {
 
   // Ensures tables are loaded.
   TestData
-
-  test("parquet") {
-    val data = parquetFile("../../points.parquet") // local file!
-    val sizes = data.logicalPlan.collect { case j: ParquetRelation =>
-      j.newInstance.estimates.size // also works without .newInstance
-    }.toSeq
-    assert(sizes.size === 1 && sizes(0) > 0)
-  }
 
   test("equi-join is hash-join") {
     val x = testData2.as('x)

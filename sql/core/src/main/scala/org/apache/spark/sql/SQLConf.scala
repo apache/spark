@@ -46,9 +46,6 @@ trait SQLConf {
    */
   private[spark] def autoConvertJoinSize: Int = get(AUTO_CONVERT_JOIN_SIZE, "10000").toInt
 
-  /** A comma-separated list of table names marked to be broadcasted during joins. */
-  private[spark] def joinBroadcastTables: String = get(JOIN_BROADCAST_TABLES, "")
-
   /** ********************** SQLConf functionality methods ************ */
 
   @transient
@@ -94,7 +91,6 @@ trait SQLConf {
 object SQLConf {
   val AUTO_CONVERT_JOIN_SIZE = "spark.sql.auto.convert.join.size"
   val SHUFFLE_PARTITIONS = "spark.sql.shuffle.partitions"
-  val JOIN_BROADCAST_TABLES = "spark.sql.join.broadcastTables"
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"

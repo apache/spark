@@ -253,7 +253,7 @@ private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: TTable, val partitions: Seq[TPartition])
     (@transient hiveConf: HiveConf, @transient path: Path)
-  extends BaseRelation {
+  extends LeafNode {
 
   self: Product =>
 
@@ -271,9 +271,8 @@ private[hive] case class MetastoreRelation
 
   // TODO: are there any stats in hiveQlTable.getSkewedInfo that we can use?
   @transient override lazy val estimates = new Estimates {
-    // Size getters adapted from
-    // https://github.com/apache/hive/blob/trunk/ql/src/java/org/apache/hadoop/hive/ql/optimizer/SizeBasedBigTableSelectorForAutoSMJ.java
-    override lazy val size: Long =
+    // Size getters adapted from SizeBasedBigTableSelectorForAutoSMJ.java in Hive (version 0.13).
+    override lazy val sizeInBytes: Long =
       maybeGetSize(hiveConf, hiveQlTable.getProperty("totalSize"), path)
 
     private[this] def maybeGetSize(conf: HiveConf, size: String, path: Path): Long = {
