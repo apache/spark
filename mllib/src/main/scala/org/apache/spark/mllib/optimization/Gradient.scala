@@ -175,3 +175,37 @@ class HingeGradient extends Gradient {
     }
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ * Poisson Negative Log-Likelihood Gradient.
+ * Compute the gradient and loss for the negative log-likelihood as used in Poisson regression.
+ * The log-likelihood is: 
+ *     \ell(\theta\mid X,Y) = \sum_{i=1}^m \left( y_i \theta' x_i - e^{\theta' x_i}\right).
+ * The gradient is: -\sum_{i=1}^m theta' \left( e^{theta' x_i} - y_i \right).
+ */
+@DeveloperApi
+class PoissonNLLGradient extends Gradient {
+  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val dotProduct = brzWeights dot brzData
+    val mean = math.exp(dotProduct)
+    val grad = Vectors.fromBreeze(brzData * (mean - label))
+    val loss = mean - label * dotProduct
+    (grad, loss)
+  }
+
+  override def compute(
+      data: Vector,
+      label: Double,
+      weights: Vector,
+      cumGradient: Vector): Double = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val dotProduct = brzWeights dot brzData
+    val mean = math.exp(dotProduct)
+    brzAxpy(mean - label, brzData, cumGradient.toBreeze)
+    mean - label * dotProduct
+  }
+}
