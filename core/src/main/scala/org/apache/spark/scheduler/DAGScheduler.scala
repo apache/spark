@@ -867,7 +867,6 @@ class DAGScheduler(
               }
             }
             if (runningStages.contains(stage) && pendingTasks(stage).isEmpty) {
-              dependantStagePreStarted -= stage
               markStageAsFinished(stage)
               logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
@@ -896,16 +895,16 @@ class DAGScheduler(
                   stage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
                 // Pre-started dependant stages should fail
                 if (dependantStagePreStarted.contains(stage)) {
+                  if (failedStages.isEmpty && eventProcessActor != null) {
+                    import env.actorSystem.dispatcher
+                    env.actorSystem.scheduler.scheduleOnce(
+                      RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
+                  }
                   for (preStartedStage <- dependantStagePreStarted.get(stage).get) {
                     runningStages -= preStartedStage
                     // TODO: Cancel running tasks in the stage
                     logInfo("Marking " + preStartedStage + " (" + preStartedStage.name +
                       ") for resubmision due to parent stage resubmission")
-                    if (failedStages.isEmpty && eventProcessActor != null) {
-                      import env.actorSystem.dispatcher
-                      env.actorSystem.scheduler.scheduleOnce(
-                        RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
-                    }
                     failedStages += preStartedStage
                   }
                 }
@@ -928,6 +927,7 @@ class DAGScheduler(
                   submitMissingTasks(stage, jobId)
                 }
               }
+              dependantStagePreStarted -= stage
             } else {
               // ShuffleMap stage not finished yet. Maybe we can remove the stage barrier here.
               if(removeStageBarrier && taskScheduler.isInstanceOf[TaskSchedulerImpl]){
