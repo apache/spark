@@ -20,41 +20,45 @@ package org.apache.spark.examples.terasort
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.ShuffledRDD
+import org.apache.spark.util.Utils
 
-
-class RecordWrapper(val bytes: Array[Byte]) extends Product2[Array[Byte], Array[Byte]] {
-  override def _1 = bytes
-  override def _2 = bytes
-  override def canEqual(that: Any): Boolean = ???
-}
-
-
+/**
+ * An application that generates data according to the terasort spec and shuffles them.
+ * This is a great example program to stress test Spark's shuffle mechanism.
+ *
+ * See http://sortbenchmark.org/
+ */
 object TeraSort {
 
   def main(args: Array[String]) {
 
     if (args.length < 3) {
       println("usage:")
-      println("MASTER=[spark-master] TeraSort " +
-        " [num-records] [input-parts] [output-parts]")
+      println("DRIVER_MEMORY=[mem] bin/run-example org.apache.spark.examples.terasort.TeraSort " +
+        "[input-size] [input-parts] [output-parts]")
+      println(" ")
+      println("example:")
+      println("DRIVER_MEMORY=50g bin/run-example org.apache.spark.examples.terasort.TeraSort " +
+        "1T 8000 8000")
       System.exit(0)
     }
 
     // Process command line arguments
     val master = sys.env.getOrElse("MASTER", "local")
-    val numRecords = args(0).toLong
+    val inputSize = Utils.memoryStringToMb(args(0)).toLong * 1024 * 1024 // in bytes
     val parts = args(1).toInt
-    val recordsPerPartition = numRecords / parts.toLong
+    val recordsPerPartition = inputSize / 100 / parts.toLong
     val outputParts = args(2).toInt
+    val numRecords = recordsPerPartition * parts.toLong
 
     println("===========================================================================")
     println("===========================================================================")
+    println(s"Input size: ${Utils.bytesToString(inputSize)}")
     println(s"Total number of records: $numRecords")
     println(s"Number of input partitions: $parts")
     println(s"Number of output partitions: $outputParts")
     println("Number of records/input partition: " + (numRecords / parts))
     println("Number of records/output partition: " + (numRecords / outputParts))
-    println("Total sorting size: " + (numRecords * 100) + " bytes")
     println("===========================================================================")
     println("===========================================================================")
 
@@ -85,38 +89,13 @@ object TeraSort {
     }
 
     val partitioner = new TeraSortPartitioner(outputParts)
-    val output = new ShuffledRDD[Array[Byte], Array[Byte], RecordWrapper](dataset, partitioner)
+    val output =
+      new ShuffledRDD[Array[Byte], Array[Byte], Array[Byte], RecordWrapper](dataset, partitioner)
     output.setSerializer(new TeraSortSerializer)
 
-    println("Number of records after sorting: " + output.count())
+    println("Number of records after shuffling: " + output.count())
 
-    // Convert the data to key, value pair to be sorted
-//    val pairs = dataset.map { row =>
-//      val key = new Array[Byte](10)
-//      val value = new Array[Byte](90)
-//      System.arraycopy(row, 0, key, 0, 10)
-//      System.arraycopy(row, 10, value, 0, 90)
-//      (key, value)
-//    }
-
-//    val p = new TeraSortPartitioner(100)
-//    pairs.map { case (key, value) =>
-//      p.getPartition(key)
-//    }.countByValue().foreach(println)
-//
-//    // Now sort the data, and count the number of records after sorting.
-//    implicit val ordering = new Ordering[BytesWritable] {
-//      override def compare(x: BytesWritable, y: BytesWritable): Int = x.compareTo(y)
-//    }
-//
-//    val sorted = pairs.sortByKey(ascending = true, numPartitions = outputParts)
-//
-//    println("ranges: " + sorted.partitioner.get.asInstanceOf[RangePartitioner[_, _]].rangeBounds.toSeq)
-//
-//    val finalCount = sorted.count()
-//    println("Number of records after sorting: " + finalCount)
-
-    Thread.sleep(10* 3600 * 1000)
+    // TODO: Add partition-local (external) sorting using TeraSortRecordOrdering.
   }
 
   /**
