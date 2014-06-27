@@ -109,6 +109,17 @@ private[spark] trait IndexedRDDPartitionOps[
     }
   }
 
+  def delete(ks: Array[Id]): Self[V] = {
+    var newMask = self.mask
+    for (k <- ks) {
+      val pos = self.index.getPos(k)
+      if (pos != -1) {
+        newMask = newMask.unset(pos)
+      }
+    }
+    this.withMask(newMask)
+  }
+
   def map[V2: ClassTag](f: (Id, V) => V2): Self[V2] = {
     // Construct a view of the map transformation
     val newValues = new Array[V2](self.capacity)

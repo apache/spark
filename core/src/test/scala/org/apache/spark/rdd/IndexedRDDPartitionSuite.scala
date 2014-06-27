@@ -49,6 +49,12 @@ class IndexedRDDPartitionSuite extends FunSuite {
       Set(0L -> 1, 1L -> 1, 2L -> 2, 100L -> 1))
   }
 
+  test("delete") {
+    val vp = IndexedRDDPartition(Iterator((0L, 0), (1L, 1), (2L, 2)))
+    assert(vp.delete(Array(0L)).iterator.toSet === Set(1L -> 1, 2L -> 2))
+    assert(vp.delete(Array(3L)).iterator.toSet === Set(0L -> 0, 1L -> 1, 2L -> 2))
+  }
+
   test("map") {
     val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1))).map { (vid, attr) => 2 }
     assert(vp(0) === 2)

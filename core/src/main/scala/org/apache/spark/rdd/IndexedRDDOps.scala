@@ -101,6 +101,11 @@ trait IndexedRDDOps[
     zipPartitionsWithOther(updates)(new MultiputZipper(merge))
   }
 
+  def delete(ks: Array[Id]): Self[V] = {
+    val deletions = self.context.parallelize(ks.map(k => (k, ()))).partitionBy(self.partitioner.get)
+    zipPartitionsWithOther(deletions)(new DeleteZipper)
+  }
+
   /**
    * Applies a function to each partition of this IndexedRDD.
    */
@@ -216,6 +221,14 @@ trait IndexedRDDOps[
       val thisPart = thisIter.next()
       val updates = otherIter.toSeq
       Iterator(thisPart.multiput(updates, merge))
+    }
+  }
+
+  private class DeleteZipper extends OtherZipPartitionsFunction[Unit, V] with Serializable {
+    def apply(thisIter: Iterator[P[V]], otherIter: Iterator[(Id, Unit)]): Iterator[P[V]] = {
+      val thisPart = thisIter.next()
+      val deletions = otherIter.map(_._1).toArray
+      Iterator(thisPart.delete(deletions))
     }
   }
 

@@ -60,6 +60,13 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
       Set(0L -> 1) ++ (1 to n).map(x => (x.toLong, x)).toSet)
   }
 
+  test("delete") {
+    val n = 100
+    val ps = pairs(sc, n).cache()
+    assert(ps.delete(Array(0L)).collect.toSet === (1 to n).map(x => (x.toLong, x)).toSet)
+    assert(ps.delete(Array(-1L)).collect.toSet === (0 to n).map(x => (x.toLong, x)).toSet)
+  }
+
   test("filter") {
     val n = 100
     val ps = pairs(sc, n)
