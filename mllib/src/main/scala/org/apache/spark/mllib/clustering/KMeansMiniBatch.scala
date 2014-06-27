@@ -30,10 +30,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
- * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
- * they are executed together with joint passes over the data for efficiency.
- *
+ * K-means clustering with support for multiple parallel runs, a k-means++ like initialization
+ * mode (the k-means|| algorithm by Bahmani et al), and randomly-sampled mini-batches of points
+ * in each iteration instead of all points for speed (Web-Scale K-Means Clustering by Sculley).
+ * 
  * This is an iterative algorithm that will make multiple passes over the data, so any RDDs given
  * to it should be cached by the user.
  */
