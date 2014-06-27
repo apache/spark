@@ -124,7 +124,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     cancelledStages.clear()
     cacheLocations.clear()
     results.clear()
-    shuffleManager = new HashShuffleManager(conf)
+    shuffleManager = sc.env.shuffleManager
     scheduler = new DAGScheduler(
         sc,
         taskScheduler,
