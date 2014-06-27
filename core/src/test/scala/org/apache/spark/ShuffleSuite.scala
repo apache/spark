@@ -234,7 +234,6 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     val b = a.map { x =>
       (new NonJavaSerializableClass(x), x)
     }
-    // If the Kryo serializer is not used correctly, the shuffle would fail because the
     // default Java serializer cannot handle the non serializable class.
     val thrown = intercept[SparkException] {
       b.sortByKey().collect()
