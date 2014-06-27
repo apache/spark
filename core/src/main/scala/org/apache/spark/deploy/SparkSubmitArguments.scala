@@ -55,6 +55,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
+  var sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
   parseOpts(args.toList)
   loadDefaults()
@@ -304,6 +305,14 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
             case v if v.startsWith("--") && v.contains("=") && v.split("=").size == 2 =>
               val parts = v.split("=")
               parse(Seq(parts(0), parts(1)) ++ tail)
+            // spark config property
+            case v if v.startsWith("--spark.") =>
+              if (tail.isEmpty) {
+                val errMessage = s"Spark config without value: $v"
+                SparkSubmit.printErrorAndExit(errMessage)
+              }
+              sparkProperties(v.substring(2)) = tail.head
+              parse(tail.tail)
             case v if v.startsWith("-") =>
               val errMessage = s"Unrecognized option '$value'."
               SparkSubmit.printErrorAndExit(errMessage)
