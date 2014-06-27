@@ -336,6 +336,18 @@ object KMeansMiniBatch {
       runs: Int): KMeansModel = {
     train(data, k, 1000, maxIterations, runs, K_MEANS_PARALLEL)
   }
+  
+    /**
+   * Trains a k-means model using specified parameters and the default values for unspecified.
+   */
+  def train(
+      data: RDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      runs: Int,
+      initializationMode: String): KMeansModel = {
+    train(data, k, 1000, maxIterations, runs, initializationMode)
+  }
 
   /**
    * Returns the index of the closest center to the given point, as well as the squared distance.
