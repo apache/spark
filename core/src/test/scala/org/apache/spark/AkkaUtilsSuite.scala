@@ -21,12 +21,9 @@ import scala.concurrent.Await
 
 import akka.actor._
 import org.scalatest.FunSuite
-
-import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
-import org.apache.spark.shuffle.{MapOutputTracker, MapOutputTrackerWorker, MapOutputTrackerMaster,
-MapOutputTrackerMasterActor}
+import org.apache.spark.shuffle._
 
 
 /**

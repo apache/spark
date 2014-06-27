@@ -17,12 +17,11 @@
 
 package org.apache.spark.shuffle.hash
 
-import org.apache.spark.shuffle.{MapOutputTracker, BaseShuffleHandle, ShuffleWriter}
+import org.apache.spark.shuffle.{MapStatus, MapOutputTracker, BaseShuffleHandle, ShuffleWriter}
 import org.apache.spark.{Logging, SparkEnv, TaskContext}
 import org.apache.spark.storage.{BlockObjectWriter}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.scheduler.MapStatus
 
 class HashShuffleWriter[K, V](
     handle: BaseShuffleHandle[K, V, _],

@@ -238,6 +238,32 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.manager</code></td>
+  <td>org.apache.spark.shuffle.hash.HashShuffleManager</td>
+  <td>
+    Specify the ShuffleManager class in SparkEnv. The default HashShuffleManager uses hashing and creates 
+    one output file per reduce partition on each mapper.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.mapOutputTrackerMasterClass</code></td>
+  <td>org.apache.spark.shuffle.MapOutputTrackerMaster</td>
+  <td>
+    Specify the MapOutputTrackerMaster initialized in ShuffleManager. The default MapOutputTrackerMaster runs on the 
+    driver and uses TimeStampedHashMap to keep track of map output information (includes the block manager address that 
+    the task ran on as well as the sizes of outputs for each reducer), which allows old output information based on 
+    a TTL.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.mapOutputTrackerWorkerClass</code></td>
+  <td>org.apache.spark.shuffle.MapOutputTrackerWorker</td>
+  <td>
+    Specify the MapOutputTrackerWorker initialized in ShuffleManager. The default MapOutputTrackerWorker runs on workers
+     and fetches map output information from the driver's MapOutputTrackerMaster.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>

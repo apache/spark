@@ -26,7 +26,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark._
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
-import org.apache.spark.shuffle.ShuffleWriter
+import org.apache.spark.shuffle.{ShuffleWriter, MapStatus}
 
 private[spark] object ShuffleMapTask {
 

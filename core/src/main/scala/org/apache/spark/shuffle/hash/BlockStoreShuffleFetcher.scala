@@ -39,7 +39,8 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
     val blockManager = SparkEnv.get.blockManager
 
     val startTime = System.currentTimeMillis
-    val statuses = SparkEnv.get.shuffleManager.getServerStatuses(shuffleId, reduceId)
+    val statuses = SparkEnv.get.shuffleManager.mapOutputTracker.getServerStatuses(shuffleId,
+      reduceId)
     logDebug("Fetching map output location for shuffle %d, reduce %d took %d ms".format(
       shuffleId, reduceId, System.currentTimeMillis - startTime))
 

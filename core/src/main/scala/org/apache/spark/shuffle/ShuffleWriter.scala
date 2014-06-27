@@ -17,8 +17,6 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.scheduler.MapStatus
-
 /**
  * Obtained inside a map task to write out records to the shuffle system.
  */

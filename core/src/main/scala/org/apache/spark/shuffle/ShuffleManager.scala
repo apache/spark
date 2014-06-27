@@ -22,7 +22,6 @@ import scala.concurrent.Await
 import akka.actor.{Props, ActorSystem}
 
 import org.apache.spark._
-import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AkkaUtils, Utils}
 

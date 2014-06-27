@@ -27,7 +27,7 @@ import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
 
 import org.apache.spark._
 import org.apache.spark.broadcast.HttpBroadcast
-import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.shuffle.MapStatus
 import org.apache.spark.storage._
 import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock}
 

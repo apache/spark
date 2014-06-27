@@ -20,13 +20,18 @@ package org.apache.spark.shuffle
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
+import scala.collection.mutable.{HashMap, HashSet, Map}
+import scala.concurrent.Await
+
 import akka.actor._
 import akka.pattern.ask
 
+import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.util._
-import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.BlockManagerId
+
+import scala.collection.mutable
+import scala.concurrent.Await
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)

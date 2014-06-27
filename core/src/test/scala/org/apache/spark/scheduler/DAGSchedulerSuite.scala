@@ -30,7 +30,7 @@ import org.scalatest.{BeforeAndAfter, FunSuiteLike}
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.shuffle.{ShuffleManager, MapOutputTrackerMaster}
+import org.apache.spark.shuffle.{MapStatus, ShuffleManager, MapOutputTrackerMaster}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.CallSite
 
@@ -339,7 +339,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       sc,
       noKillTaskScheduler,
       sc.listenerBus,
-      mapOutputTracker,
+      shuffleManager,
       blockManagerMaster,
       sc.env) {
       override def runLocally(job: ActiveJob) {
@@ -374,7 +374,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     complete(taskSets(0), Seq(
         (Success, makeMapStatus("hostA", 1)),
         (Success, makeMapStatus("hostB", 1))))
-    assert(shuffleManager.getServerStatuses(shuffleId, 0).map(_._1) ===
+    assert(shuffleManager.mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     complete(taskSets(1), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
