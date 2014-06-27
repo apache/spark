@@ -170,7 +170,8 @@ class PageRankSuite extends FunSuite with LocalSparkContext with Matchers {
       val nVertices = 10
       val starGraph = GraphGenerators.cycleGraph(sc, nVertices)
       val resetProb = 0.15
-      val staticRanks: VertexRDD[Double] = starGraph.staticPageRank(numIter = 10, resetProb).vertices
+      val staticRanks: VertexRDD[Double] =
+        starGraph.staticPageRank(numIter = 10, resetProb).vertices
       // Check the static pagerank
       val pageranks: Map[VertexId, Double] = staticRanks.collect().toMap
       for (i <- 0 until nVertices) {

@@ -55,15 +55,6 @@ import org.apache.spark.Logging
  */
 object Pregel extends Logging {
 
-  class Context(val iteration: Int)
-
-  class VertexContext(iteration: Int, val wasActive: Boolean, var isActive: Boolean = true) extends Context(iteration) {
-    def deactivate() { isActive = false }
-  }
-
-  class EdgeContext(iteration: Int, val srcIsActive: Boolean, val dstIsActive: Boolean) extends Context(iteration)
-
-
 
   /**
    * Execute a Pregel-like iterative vertex-parallel abstraction.  The
@@ -169,6 +160,7 @@ object Pregel extends Logging {
     g
   } // end of apply
 
+
   /**
    * Execute a Pregel-like iterative vertex-parallel abstraction.  The
    * user-defined vertex-program `vprog` is executed in parallel on
@@ -227,50 +219,41 @@ object Pregel extends Logging {
   (graph: Graph[VD, ED],
    maxIterations: Int = Int.MaxValue,
    activeDirection: EdgeDirection = EdgeDirection.Either)
-  (vertexProgram: (VertexId, VD, Option[A], VertexContext) => VD,
-   sendMsg: (EdgeTriplet[VD, ED], EdgeContext) => Iterator[(VertexId, A)],
+  (vertexProgram: (Int, VertexId, VD, Boolean, Option[A]) => (VD, Boolean),
+   sendMsg: (Int, EdgeTriplet[(VD, Boolean), ED]) => Iterator[(VertexId, A)],
    mergeMsg: (A, A) => A)
   : Graph[VD, ED] =
   {
     // Initialize the graph with all vertices active
-    var g: Graph[(VD, Boolean), ED] = graph.mapVertices { (vid, vdata) => (vdata, true) }.cache()
+    var currengGraph: Graph[(VD, Boolean), ED] =
+      graph.mapVertices { (vid, vdata) => (vdata, true) }.cache()
     // Determine the set of vertices that did not vote to halt
-    var activeVertices = g.vertices
+    var activeVertices = currengGraph.vertices
     var numActive = activeVertices.count()
-    var i = 0
-    while (numActive > 0 && i < maxIterations) {
-      // The send message wrapper removes the active fields from the triplet and places them in the edge context.
-      def sendMessageWrapper(triplet: EdgeTriplet[(VD, Boolean),ED]): Iterator[(VertexId, A)] = {
-        val simpleTriplet = new EdgeTriplet[VD, ED]()
-        simpleTriplet.set(triplet)
-        simpleTriplet.srcAttr = triplet.srcAttr._1
-        simpleTriplet.dstAttr = triplet.dstAttr._1
-        val ctx = new EdgeContext(i, triplet.srcAttr._2, triplet.dstAttr._2)
-        sendMsg(simpleTriplet, ctx)
-      }
-
-      // get a reference to the current graph so that we can unpersist it once the new graph is created.
-      val prevG = g
+    var iteration = 0
+    while (numActive > 0 && iteration < maxIterations) {
+      // get a reference to the current graph to enable unprecistance.
+      val prevG = currengGraph
 
       // Compute the messages for all the active vertices
-      val messages = g.mapReduceTriplets(sendMessageWrapper, mergeMsg, Some((activeVertices, activeDirection)))
+      val messages = currengGraph.mapReduceTriplets( t => sendMsg(iteration, t), mergeMsg,
+        Some((activeVertices, activeDirection)))
 
       // Receive the messages to the subset of active vertices
-      g = g.outerJoinVertices(messages){ (vid, dataAndActive, msgOpt) =>
+      currengGraph = currengGraph.outerJoinVertices(messages){ (vid, dataAndActive, msgOpt) =>
         val (vdata, active) = dataAndActive
         // If the vertex voted to halt and received no message then we can skip the vertex program
         if (!active && msgOpt.isEmpty) {
           dataAndActive
         } else {
-          val ctx = new VertexContext(i, active)
           // The vertex program is either active or received a message (or both).
           // A vertex program should vote to halt again even if it has previously voted to halt
-          (vertexProgram(vid, vdata, msgOpt, ctx), ctx.isActive)
+          vertexProgram(iteration, vid, vdata, active, msgOpt)
         }
       }.cache()
 
       // Recompute the active vertices (those that have not voted to halt)
-      activeVertices = g.vertices.filter(v => v._2._2)
+      activeVertices = currengGraph.vertices.filter(v => v._2._2)
 
       // Force all computation!
       numActive = activeVertices.count()
@@ -282,11 +265,11 @@ object Pregel extends Logging {
       //println("Finished Iteration " + i)
       // g.vertices.foreach(println(_))
 
-      logInfo("Pregel finished iteration " + i)
+      logInfo("Pregel finished iteration " + iteration)
       // count the iteration
-      i += 1
+      iteration += 1
     }
-    g.mapVertices((id, vdata) => vdata._1)
+    currengGraph.mapVertices((id, vdata) => vdata._1)
   } // end of apply
 
 
