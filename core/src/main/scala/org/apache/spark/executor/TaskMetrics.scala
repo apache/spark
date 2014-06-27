@@ -99,7 +99,7 @@ private[spark] object TaskMetrics {
  * from a remote block manager (which may have stored the data on-disk or in-memory).
  */
 @DeveloperApi
-private[spark] object DataReadMethod extends Enumeration with Serializable {
+object DataReadMethod extends Enumeration with Serializable {
   type DataReadMethod = Value
   val Memory, Disk, Hadoop, Network = Value
 }
