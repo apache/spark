@@ -95,8 +95,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         </div>
         // scalastyle:on
       val taskHeaders: Seq[String] =
-        Seq("Task Index", "Task ID", "Status", "Locality Level", "Executor", "Launch Time") ++
-        Seq("Duration", "GC Time", "Result Ser Time") ++
+        Seq(
+          "Index", "ID", "Attempt", "Status", "Locality Level", "Executor",
+          "Launch Time", "Duration", "GC Time") ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
         {if (hasBytesSpilled) Seq("Shuffle Spill (Memory)", "Shuffle Spill (Disk)") else Nil} ++
@@ -210,10 +211,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
   def taskRow(shuffleRead: Boolean, shuffleWrite: Boolean, bytesSpilled: Boolean)
       (taskData: TaskUIData): Seq[Node] = {
-    def fmtStackTrace(trace: Seq[StackTraceElement]): Seq[Node] =
-      trace.map(e => <span style="display:block;">{e.toString}</span>)
-
-    taskData match { case TaskUIData(info, metrics, exception) =>
+    taskData match { case TaskUIData(info, metrics, errorMessage) =>
       val duration = if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
         else metrics.map(_.executorRunTime).getOrElse(1L)
       val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
@@ -248,6 +246,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       <tr>
         <td>{info.index}</td>
         <td>{info.taskId}</td>
+        <td sorttable_customkey={info.attempt.toString}>{
+          if (info.speculative) s"${info.attempt} (speculative)" else info.attempt.toString
+        }</td>
         <td>{info.status}</td>
         <td>{info.taskLocality}</td>
         <td>{info.host}</td>
@@ -258,9 +259,12 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         <td sorttable_customkey={gcTime.toString}>
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
         </td>
+        <!--
+        TODO: Add this back after we add support to hide certain columns.
         <td sorttable_customkey={serializationTime.toString}>
           {if (serializationTime > 0) UIUtils.formatDuration(serializationTime) else ""}
         </td>
+        -->
         {if (shuffleRead) {
            <td sorttable_customkey={shuffleReadSortable}>
              {shuffleReadReadable}
@@ -283,12 +287,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           </td>
         }}
         <td>
-          {exception.map { e =>
-            <span>
-              {e.className} ({e.description})<br/>
-              {fmtStackTrace(e.stackTrace)}
-            </span>
-          }.getOrElse("")}
+          {errorMessage.map { e => <pre>{e}</pre> }.getOrElse("")}
         </td>
       </tr>
     }
