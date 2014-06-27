@@ -237,9 +237,11 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
 
-      val maybeInput = metrics.flatMap(_.inputMetrics).map(_.bytesRead)
-      val inputSortable = maybeInput.map(_.toString).getOrElse("")
-      val inputReadable = maybeInput.map(Utils.bytesToString).getOrElse("")
+      val maybeInput = metrics.flatMap(_.inputMetrics)
+      val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
+      val inputReadable = maybeInput
+        .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
+        .getOrElse("")
 
       val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)
       val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")

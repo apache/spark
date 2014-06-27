@@ -509,7 +509,7 @@ class JsonProtocolSuite extends FunSuite {
     t.memoryBytesSpilled = a + c
 
     if (hasHdfsInput) {
-      val inputMetrics = new InputMetrics(DataReadMethod.Hdfs)
+      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       inputMetrics.bytesRead = d + e + f
       t.inputMetrics = Some(inputMetrics)
     } else {

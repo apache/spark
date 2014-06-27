@@ -198,8 +198,9 @@ class HadoopRDD[K, V](
       val key: K = reader.createKey()
       val value: V = reader.createValue()
 
+      if (split.inputSplit.isInstanceOf[FileSplit])
       // Set the task input metrics.
-      val inputMetrics = new InputMetrics(DataReadMethod.Hdfs)
+      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       try {
         inputMetrics.bytesRead = split.inputSplit.value.getLength()
       } catch {

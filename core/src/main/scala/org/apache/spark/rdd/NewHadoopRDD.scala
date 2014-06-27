@@ -113,7 +113,7 @@ class NewHadoopRDD[K, V](
         split.serializableHadoopSplit.value, hadoopAttemptContext)
       reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
 
-      val inputMetrics = new InputMetrics(DataReadMethod.Hdfs)
+      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       try {
         inputMetrics.bytesRead = split.serializableHadoopSplit.value.getLength()
       } catch {
