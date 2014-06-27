@@ -207,12 +207,12 @@ case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
 /**
  * :: DeveloperApi ::
  * This operator support the substract function .
- * Return an table with the elements from `this` that are not in `other`.
+ * Return an table with the elements from `left` that are not in `right`.
  */
 @DeveloperApi
-case class Subtract(left:SparkPlan,right:SparkPlan) extends BinaryNode {
+case class Subtract(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   // TODO:The input children:Seq[SparkPlan]  should only contain two SparkPlan
-  override def output = children.head.output
+  override def output = left.output
 
   override def execute() = {
     left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
