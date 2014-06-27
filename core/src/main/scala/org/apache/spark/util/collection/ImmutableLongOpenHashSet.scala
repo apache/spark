@@ -47,7 +47,7 @@ class ImmutableLongOpenHashSet(
 
   require(loadFactor < 1.0, "Load factor must be less than 1.0")
   require(loadFactor > 0.0, "Load factor must be greater than 0.0")
-  require(data.size == nextPowerOf2(data.size), "data capacity must be a power of 2")
+  require(capacity == nextPowerOf2(capacity), "data capacity must be a power of 2")
 
   import OpenHashSet.{INVALID_POS, NONEXISTENCE_MASK, POSITION_MASK, Hasher, LongHasher}
 
@@ -124,7 +124,7 @@ class ImmutableLongOpenHashSet(
   def getPos(k: Long): Int = {
     var pos = hashcode(hasher.hash(k)) & mask
     var i = 1
-    val maxProbe = data.size
+    val maxProbe = capacity
     while (i < maxProbe) {
       if (!bitset.get(pos)) {
         return INVALID_POS

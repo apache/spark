@@ -20,17 +20,26 @@ package org.apache.spark.util.collection
 import scala.reflect.ClassTag
 
 object ImmutableVector {
-  def empty[A: ClassTag]: ImmutableVector[A] = new LeafNode(Array.empty)
+  def empty[A: ClassTag]: ImmutableVector[A] = new ImmutableVector(0, emptyNode)
 
   def fromArray[A: ClassTag](array: Array[A]): ImmutableVector[A] = {
     fromArray(array, 0, array.length)
   }
 
   def fromArray[A: ClassTag](array: Array[A], start: Int, end: Int): ImmutableVector[A] = {
+    new ImmutableVector(end - start, nodeFromArray(array, start, end))
+  }
+
+  def fill[A: ClassTag](n: Int)(a: A): ImmutableVector[A] = {
+    // TODO: Implement this without allocating an extra array
+    fromArray(Array.fill(n)(a), 0, n)
+  }
+
+  private def nodeFromArray[A: ClassTag](array: Array[A], start: Int, end: Int): VectorNode[A] = {
     val length = end - start
     if (length == 0) {
       // println("fromArray(%d, %d) => empty".format(start, end))
-      empty
+      emptyNode
     } else {
       val depth = depthOf(length)
       if (depth == 0) {
@@ -40,7 +49,7 @@ object ImmutableVector {
         val shift = 5 * depth
         val numChildren = ((length - 1) >> shift) + 1
         // println("fromArray(%d, %d) => InternalNode(depth=%d, numChildren=%d)".format(start, end, depth, numChildren))
-        val children = new Array[ImmutableVector[A]](numChildren)
+        val children = new Array[VectorNode[A]](numChildren)
         var i = 0
         while (i < numChildren) {
           val childStart = start + (i << shift)
@@ -48,7 +57,7 @@ object ImmutableVector {
           if (end < childEnd) {
             childEnd = end
           }
-          children(i) = fromArray(array, childStart, childEnd)
+          children(i) = nodeFromArray(array, childStart, childEnd)
           i += 1
         }
         new InternalNode(children, depth)
@@ -56,10 +65,7 @@ object ImmutableVector {
     }
   }
 
-  def fill[A: ClassTag](n: Int)(a: A): ImmutableVector[A] = {
-    // TODO: Implement this without allocating an extra array
-    fromArray(Array.fill(n)(a), 0, n)
-  }
+  private def emptyNode[A: ClassTag] = new LeafNode(Array.empty)
 
   private def depthOf(size: Int): Int = {
     var depth = 0
@@ -72,8 +78,8 @@ object ImmutableVector {
   }
 }
 
-private class VectorIterator[@specialized(Long, Int) A](v: ImmutableVector[A]) extends Iterator[A] {
-  private[this] val elemStack: Array[ImmutableVector[A]] = Array.fill(8)(null)
+private class VectorIterator[@specialized(Long, Int) A](v: VectorNode[A]) extends Iterator[A] {
+  private[this] val elemStack: Array[VectorNode[A]] = Array.fill(8)(null)
   private[this] val idxStack: Array[Int] = Array.fill(8)(-1)
   private[this] var pos: Int = 0
   private[this] var _hasNext: Boolean = _
@@ -125,27 +131,32 @@ private class VectorIterator[@specialized(Long, Int) A](v: ImmutableVector[A]) e
   }
 }
 
-sealed trait ImmutableVector[@specialized(Long, Int) A] extends Serializable {
-  def size: Int
-  def iterator: Iterator[A] = new VectorIterator[A](this)
+class ImmutableVector[@specialized(Long, Int) A](val size: Int, root: VectorNode[A])
+  extends Serializable {
+
+  def iterator: Iterator[A] = new VectorIterator[A](root)
+  def apply(index: Int): A = root(index)
+  def updated(index: Int, elem: A): ImmutableVector[A] =
+    new ImmutableVector(size, root.updated(index, elem))
+}
+
+private sealed trait VectorNode[@specialized(Long, Int) A] extends Serializable {
   def apply(index: Int): A
-  def updated(index: Int, elem: A): ImmutableVector[A]
+  def updated(index: Int, elem: A): VectorNode[A]
   def numChildren: Int
 }
 
 private class InternalNode[@specialized(Long, Int) A: ClassTag](
-    children: Array[ImmutableVector[A]],
+    children: Array[VectorNode[A]],
     val depth: Int)
-  extends ImmutableVector[A] {
+  extends VectorNode[A] {
 
   require(children.length > 0, "InternalNode must have children")
   require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
   require(depth >= 1, "InternalNode must have depth >= 1 (got $depth)")
 
-  override def size = children.map(_.size).sum
-
   override def apply(index: Int): A = {
-    var cur: ImmutableVector[A] = this
+    var cur: VectorNode[A] = this
     var continue: Boolean = true
     var result: A = null.asInstanceOf[A]
     while (continue) {
@@ -167,7 +178,7 @@ private class InternalNode[@specialized(Long, Int) A: ClassTag](
     val localIndex = (index >> shift) & 31
     val childIndex = index & ~(31 << shift)
 
-    val newChildren = new Array[ImmutableVector[A]](children.length)
+    val newChildren = new Array[VectorNode[A]](children.length)
     System.arraycopy(children, 0, newChildren, 0, children.length)
     newChildren(localIndex) = children(localIndex).updated(childIndex, elem)
     new InternalNode(newChildren, depth)
@@ -175,16 +186,14 @@ private class InternalNode[@specialized(Long, Int) A: ClassTag](
 
   override def numChildren = children.length
 
-  def childAt(index: Int): ImmutableVector[A] = children(index)
+  def childAt(index: Int): VectorNode[A] = children(index)
 }
 
 private class LeafNode[@specialized(Long, Int) A: ClassTag](
     children: Array[A])
-  extends ImmutableVector[A] {
+  extends VectorNode[A] {
 
   require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
-
-  override def size = children.size
 
   override def apply(index: Int): A = children(index)
 
