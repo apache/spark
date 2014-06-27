@@ -21,8 +21,11 @@ MLlib supports
 the most commonly used clustering algorithms that clusters the data points into
 predefined number of clusters. The MLlib implementation includes a parallelized
 variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
-called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
-The implementation in MLlib has the following parameters:  
+called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf)
+as well as a higher-performance [mini-batch](http://dl.acm.org/citation.cfm?id=1772862)
+version that uses a randomly-sampled subset of the data points in each iteration
+instead of the full set of data points. The implementation in MLlib has the
+following parameters:  
 
 * *k* is the number of desired clusters.
 * *maxIterations* is the maximum number of iterations to run.
@@ -33,6 +36,10 @@ guaranteed to find a globally optimal solution, and when run multiple times on
 a given dataset, the algorithm returns the best clustering result).
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged. 
+
+The mini-batch version takes an additional paramater:
+
+* *batchSize* is the number of points to randomly sample in each iteration.
 
 ## Examples
 
