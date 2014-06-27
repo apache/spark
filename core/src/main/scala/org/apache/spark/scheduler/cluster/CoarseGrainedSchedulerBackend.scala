@@ -283,11 +283,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
   // Add filters to the SparkUI
   def addWebUIFilter(filterName: String, filterParams: String, proxyBase: String) {
-    if (Seq(filterName, filterParams, proxyBase).forall(t => t != null && t.nonEmpty)) {
+    if (proxyBase != null && proxyBase.nonEmpty) {
+      System.setProperty("spark.ui.proxyBase", proxyBase)
+    }
+
+    if (Seq(filterName, filterParams).forall(t => t != null && t.nonEmpty)) {
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
       conf.set("spark.ui.filters", filterName)
       conf.set(s"spark.$filterName.params", filterParams)
-      System.setProperty("spark.ui.proxyBase", proxyBase)
       JettyUtils.addFilters(scheduler.sc.ui.getHandlers, conf)
     }
   }
