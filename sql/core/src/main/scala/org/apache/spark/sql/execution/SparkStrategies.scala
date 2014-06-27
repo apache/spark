@@ -31,9 +31,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      // Find left semi joins where at least some predicates can be evaluated by matching hash
-      // keys using the HashFilteredJoin pattern.
-      case HashFilteredJoin(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
+      // Find left semi joins where at least some predicates can be evaluated by matching join keys
+      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
         val semiJoin = execution.LeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
@@ -46,7 +45,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Uses the HashFilteredJoin pattern to find joins where at least some of the predicates can be
+   * Uses the ExtractEquiJoinKeys pattern to find joins where at least some of the predicates can be
    * evaluated by matching hash keys.
    */
   object HashJoin extends Strategy with PredicateHelper {
@@ -65,7 +64,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def broadcastTables: Seq[String] = sqlContext.joinBroadcastTables.split(",").toBuffer
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case HashFilteredJoin(
+      case ExtractEquiJoinKeys(
               Inner,
               leftKeys,
               rightKeys,
@@ -75,7 +74,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if broadcastTables.contains(b.tableName) =>
           broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
-      case HashFilteredJoin(
+      case ExtractEquiJoinKeys(
               Inner,
               leftKeys,
               rightKeys,
@@ -85,7 +84,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if broadcastTables.contains(b.tableName) =>
           broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
-      case HashFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val hashJoin =
           execution.ShuffledHashJoin(
             leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
