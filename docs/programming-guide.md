@@ -145,7 +145,7 @@ that contains information about your application.
 
 {% highlight python %}
 conf = SparkConf().setAppName(appName).setMaster(master)
-sc = SparkContext(conf)
+sc = SparkContext(conf=conf)
 {% endhighlight %}
 
 </div>
