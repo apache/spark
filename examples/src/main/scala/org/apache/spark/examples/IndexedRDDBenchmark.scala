@@ -17,10 +17,15 @@
 
 package org.apache.spark.examples
 
-import java.io.{PrintWriter, FileOutputStream}
-import org.apache.spark.rdd._
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd._
+import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableBitSet
+import org.apache.spark.util.collection.ImmutableLongOpenHashSet
+import org.apache.spark.util.collection.ImmutableVector
+import org.apache.spark.util.collection.OpenHashSet
 
 object IndexedRDDBenchmark {
 
@@ -33,15 +38,17 @@ object IndexedRDDBenchmark {
         }
     }
 
-    var numPartitions = 1000
+    var numPartitions = 8
     var elemsPerPartition = 1000000
-    var trials = 100
-    var microTrials = 100000
+    var trials = 10
+    var miniTrials = 1000
+    var microTrials = 1000000
 
     options.foreach {
       case ("numPartitions", v) => numPartitions = v.toInt
       case ("elemsPerPartition", v) => elemsPerPartition = v.toInt
       case ("trials", v) => trials = v.toInt
+      case ("miniTrials", v) => miniTrials = v.toInt
       case ("microTrials", v) => microTrials = v.toInt
       case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
     }
@@ -56,6 +63,101 @@ object IndexedRDDBenchmark {
 
     val r = new util.Random(0)
 
+    var start = 0L
+    var end = 0L
+
+    println("========== ImmutableVector ==========")
+    println("Constructing Array[Long]...")
+    val array = new Array[Long](elemsPerPartition)
+    println("Constructing ImmutableVector[Long]...")
+    val vector = ImmutableVector.fromArray(array)
+    println(s"Done. Generated ${elemsPerPartition} elements.")
+
+    println("Testing array lookup performance...")
+    start = System.nanoTime
+    for (i <- 0 until elemsPerPartition) array(i)
+    end = System.nanoTime
+    println(s"Done. ${(end - start).toDouble / microTrials / 1000000} ms per lookup.")
+
+    println("Testing vector lookup performance...")
+    start = System.nanoTime
+    for (i <- 0 until elemsPerPartition) vector(i)
+    end = System.nanoTime
+    println(s"Done. ${(end - start).toDouble / microTrials / 1000000} ms per lookup.")
+
+    println("Testing array scan performance...")
+    start = System.nanoTime
+    for (t <- 1 to trials) {
+      array.iterator.foreach(x => {})
+    }
+    end = System.nanoTime
+    println(s"Done. ${(end - start).toDouble / trials / 1000000} ms per scan.")
+
+    println("Testing vector scan performance...")
+    start = System.nanoTime
+    for (t <- 1 to trials) {
+      vector.iterator.foreach(x => {})
+    }
+    end = System.nanoTime
+    println(s"Done. ${(end - start).toDouble / trials / 1000000} ms per scan.")
+
+    println("========== ImmutableBitSet ==========")
+    println("Constructing BitSet...")
+    val bs = new BitSet(elemsPerPartition)
+    for (i <- 0L until 100) bs.set(r.nextInt(elemsPerPartition))
+    println("Constructing ImmutableBitSet...")
+    val ibs = bs.toImmutableBitSet
+    println(s"Done. Generated bitsets with capacity ${elemsPerPartition} and 100 set elements.")
+
+    println("Testing bitset lookup performance...")
+    start = System.nanoTime
+    for (i <- 0 until elemsPerPartition) bs.get(i)
+    end = System.nanoTime
+    println(s"Done. ${(end - start).toDouble / microTrials / 1000000} ms per lookup.")
+
+    println("Testing immutable bitset lookup performance...")
+    start = System.nanoTime
+    for (i <- 0 until elemsPerPartition) ibs.get(i)
+    end = System.nanoTime
+    println(s"Done. ${(end - start).toDouble / microTrials / 1000000} ms per lookup.")
+
+    println("Testing bitset scan performance...")
+    start = System.nanoTime
+    for (t <- 1 to trials) {
+      bs.iterator.foreach(x => {})
+    }
+    end = System.nanoTime
+    println(s"Done. ${(end - start).toDouble / trials / 1000000} ms per scan.")
+
+    println("Testing immutable bitset scan performance...")
+    start = System.nanoTime
+    for (t <- 1 to trials) {
+      ibs.iterator.foreach(x => {})
+    }
+    end = System.nanoTime
+    println(s"Done. ${(end - start).toDouble / trials / 1000000} ms per scan.")
+
+    println("========== ImmutableLongOpenHashSet ==========")
+    println("Constructing OpenHashSet...")
+    val ohs = new OpenHashSet[Long]
+    for (i <- 0L until elemsPerPartition) ohs.add(i)
+    println("Constructing ImmutableLongOpenHashSet...")
+    var ilohs = ImmutableLongOpenHashSet.fromLongOpenHashSet(ohs)
+    println("Done. Generated ${elemsPerPartition} elements.")
+
+    println("Testing OpenHashSet lookup performance (OpenHashSet.getPos)...")
+    start = System.nanoTime
+    for (i <- 0L until elemsPerPartition) ohs.getPos(i)
+    end = System.nanoTime
+    println(s"Done. ${(end - start).toDouble / elemsPerPartition / 1000000} ms per lookup.")
+
+    println("Testing ImmutableLongOpenHashSet lookup performance (ILOHS.getPos)...")
+    start = System.nanoTime
+    for (i <- 0L until elemsPerPartition) ilohs.getPos(i)
+    end = System.nanoTime
+    println(s"Done. ${(end - start).toDouble / elemsPerPartition / 1000000} ms per lookup.")
+
+    println("========== IndexedRDD ==========")
     println("Constructing vanilla RDD...")
     val vanilla = sc.parallelize(0 until numPartitions, numPartitions).flatMap(p =>
       (p * elemsPerPartition) until ((p + 1) * elemsPerPartition))
@@ -65,12 +167,12 @@ object IndexedRDDBenchmark {
     println(s"Done. Generated ${vanilla.count}, ${indexed.count} elements.")
 
     println(s"Scanning vanilla RDD with mapValues ($trials trials)...")
-    var start = System.currentTimeMillis
+    start = System.currentTimeMillis
     for (i <- 1 to trials) {
       val doubled = vanilla.mapValues(_ * 2)
       doubled.foreach(x => {})
     }
-    var end = System.currentTimeMillis
+    end = System.currentTimeMillis
     println(s"Done. ${(end - start) / trials} ms per scan.")
 
     println(s"Scanning vanilla RDD with mapValues and count ($trials trials)...")
@@ -158,6 +260,7 @@ object IndexedRDDBenchmark {
     indexed.unpersist()
     indexed2.unpersist()
 
+    println("========== IndexedRDDPartition ==========")
     println(s"Testing scaling for IndexedRDDPartition.get ($microTrials trials)...")
     println("partition size\tget time (ms)")
     for (n <- 1 to elemsPerPartition by elemsPerPartition / 100) {
@@ -186,17 +289,17 @@ object IndexedRDDBenchmark {
     }
     println("Done.")
 
-    println(s"Testing scaling for IndexedRDDPartition.put - insert ($microTrials trials)...")
+    println(s"Testing scaling for IndexedRDDPartition.put - insert ($miniTrials trials)...")
     println("partition size\tinsert time (ms)")
     for (n <- 1 to elemsPerPartition by elemsPerPartition / 100) {
       val partition = IndexedRDDPartition((0 until n).iterator.map(x => (x.toLong, x)))
       start = System.nanoTime
-      for (i <- 1 to microTrials) {
+      for (i <- 1 to miniTrials) {
         val elem = r.nextInt(n).toLong + n
         partition.multiput(Array(elem -> 0), (id, a, b) => b)
       }
       end = System.nanoTime
-      println(s"$n\t${(end - start).toDouble / microTrials / 1000000}")
+      println(s"$n\t${(end - start).toDouble / miniTrials / 1000000}")
     }
     println("Done.")
 
@@ -249,47 +352,6 @@ object IndexedRDDBenchmark {
       n *= 10
     }
     println("Done.")
-
-    // println(s"Get on vanilla RDD ($trials trials)...")
-    // var start = System.currentTimeMillis
-    // for (i <- 1 to trials) {
-    //   val elem = r.nextInt(numElements)
-    //   val value = large.get(elem)
-    //   assert(value == Some(elem), s"get($elem) was $value")
-    // }
-    // var end = System.currentTimeMillis
-    // println(s"Done. ${(end - start) / trials} ms per get.")
-
-    // println(s"Update on large dataset ($trials trials)...")
-    // start = System.currentTimeMillis
-    // for (i <- 1 to trials) {
-    //   val elem = r.nextInt(numElements)
-    //   large = large.put(elem, 0).cache()
-    // }
-    // large.foreach(x => {})
-    // end = System.currentTimeMillis
-    // println(s"Done. ${(end - start) / trials} ms per update.")
-    // val largeDerived = large.cache()
-
-    // println(s"Insert on large dataset ($trials trials)...")
-    // start = System.currentTimeMillis
-    // for (i <- 1 to trials) {
-    //   val elem = numElements + r.nextInt(numElements)
-    //   large = large.put(elem, elem).cache()
-    // }
-    // large.foreach(x => {})
-    // end = System.currentTimeMillis
-    // println(s"Done. ${(end - start) / trials} ms per insert.")
-
-    // println(s"Join derived dataset with original ($trials trials)...")
-    // start = System.currentTimeMillis
-    // for (i <- 1 to trials) {
-    //   val joined = largeOrig.join(largeDerived) { (id, a, b) => a + b }.cache()
-    //   joined.foreach(x => {})
-    //   joined.unpersist(blocking = true)
-    // }
-    // end = System.currentTimeMillis
-    // println(s"Done. ${(end - start) / trials} ms per join.")
 
     sc.stop()
   }
