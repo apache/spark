@@ -17,8 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, FileInputStream, IOException}
-import java.util.Properties
+import java.io.File
 import java.util.jar.JarFile
 
 import scala.collection.JavaConversions._
@@ -67,7 +66,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     Option(propertiesFile).foreach { filename =>
       val file = new File(filename)
       SparkSubmitArguments.getPropertiesFromFile(file).foreach { case (k, v) =>
-        if (k.startsWith("spark")) {
+        if (k.startsWith("spark.")) {
           defaultProperties(k) = v
           if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
         } else {
@@ -384,20 +383,5 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
 object SparkSubmitArguments {
   /** Load properties present in the given file. */
-  def getPropertiesFromFile(file: File): Seq[(String, String)] = {
-    require(file.exists(), s"Properties file $file does not exist")
-    require(file.isFile(), s"Properties file $file is not a normal file")
-    val inputStream = new FileInputStream(file)
-    try {
-      val properties = new Properties()
-      properties.load(inputStream)
-      properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
-    } catch {
-      case e: IOException =>
-        val message = s"Failed when loading Spark properties file $file"
-        throw new SparkException(message, e)
-    } finally {
-      inputStream.close()
-    }
-  }
+  def getPropertiesFromFile(file: File) = Utils.getPropertiesFromFile(file)
 }
