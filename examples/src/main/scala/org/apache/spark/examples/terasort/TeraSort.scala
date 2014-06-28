@@ -19,7 +19,6 @@ package org.apache.spark.examples.terasort
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.ShuffledRDD
-import org.apache.spark.util.Utils
 
 /**
  * An application that generates data according to the terasort spec and shuffles them.
@@ -38,21 +37,24 @@ object TeraSort {
       println(" ")
       println("example:")
       println("DRIVER_MEMORY=50g bin/run-example org.apache.spark.examples.terasort.TeraSort " +
-        "1T 8000 8000")
+        "1g 8000 8000")
       System.exit(0)
     }
 
     // Process command line arguments
     val master = sys.env.getOrElse("MASTER", "local")
-    val inputSize = Utils.memoryStringToMb(args(0)).toLong * 1024 * 1024 // in bytes
+
+    val inputSizeInBytes = sizeStrToBytes(args(0))
     val parts = args(1).toInt
-    val recordsPerPartition = inputSize / 100 / parts.toLong
+    val recordsPerPartition = inputSizeInBytes / 100 / parts.toLong
     val outputParts = args(2).toInt
     val numRecords = recordsPerPartition * parts.toLong
+    val numGBs = inputSizeInBytes / (1000 * 1000 * 1000)
+    val size = if (numGBs > 2000) (numGBs/1000).toFloat + " TB" else numGBs + " GB"
 
     println("===========================================================================")
     println("===========================================================================")
-    println(s"Input size: ${Utils.bytesToString(inputSize)}")
+    println(s"Input size: $size")
     println(s"Total number of records: $numRecords")
     println(s"Number of input partitions: $parts")
     println(s"Number of output partitions: $outputParts")
@@ -63,7 +65,7 @@ object TeraSort {
 
     assert(recordsPerPartition < Int.MaxValue, s"records per partition > ${Int.MaxValue}")
 
-    val conf = new SparkConf().setMaster(master).setAppName(s"TeraSort ($numRecords records)")
+    val conf = new SparkConf().setMaster(master).setAppName(s"TeraSort ($size)")
     val sc = new SparkContext(conf)
 
     // Generate the data on the fly.
@@ -96,6 +98,22 @@ object TeraSort {
     println("Number of records after shuffling: " + output.count())
 
     // TODO: Add partition-local (external) sorting using TeraSortRecordOrdering.
+  }
+
+  def sizeStrToBytes(str: String): Long = {
+    val lower = str.toLowerCase
+    if (lower.endsWith("k")) {
+      lower.substring(0, lower.length - 1).toLong * 1000
+    } else if (lower.endsWith("m")) {
+      lower.substring(0, lower.length - 1).toInt * 1000 * 1000
+    } else if (lower.endsWith("g")) {
+      lower.substring(0, lower.length - 1).toInt * 1000 * 1000 * 1000
+    } else if (lower.endsWith("t")) {
+      lower.substring(0, lower.length - 1).toInt * 1000 * 1000 * 1000 * 1000
+    } else {
+      // no suffix, so it's just a number in bytes
+      lower.toLong
+    }
   }
 
   /**
