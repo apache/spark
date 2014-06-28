@@ -77,13 +77,14 @@ object TeraSort {
       lastRecordNumber.add(recordsToGenerate)
 
       val rand = Random16.skipAhead(firstRecordNumber)
-      val row: Array[Byte] = new Array[Byte](100)
+      val rowBytes: Array[Byte] = new Array[Byte](100)
+      val row = new RecordWrapper(rowBytes)
 
       Iterator.tabulate(recordsPerPartition.toInt) { offset =>
         Random16.nextRand(rand)
-        generateRecord(row, rand, recordNumber)
+        generateRecord(rowBytes, rand, recordNumber)
         recordNumber.add(one)
-        new RecordWrapper(row)
+        row
       }
     }
 
