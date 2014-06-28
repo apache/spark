@@ -30,6 +30,7 @@ import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.shuffle.{ShuffleManager}
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util._
@@ -47,7 +48,7 @@ private[spark] class BlockManager(
     maxMemory: Long,
     val conf: SparkConf,
     securityManager: SecurityManager,
-    mapOutputTracker: MapOutputTracker)
+    shuffleManager: ShuffleManager)
   extends Logging {
 
   val shuffleBlockManager = new ShuffleBlockManager(this)
@@ -98,7 +99,7 @@ private[spark] class BlockManager(
   private val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
 
   private val slaveActor = actorSystem.actorOf(
-    Props(new BlockManagerSlaveActor(this, mapOutputTracker)),
+    Props(new BlockManagerSlaveActor(this, shuffleManager)),
     name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
 
   // Pending re-registration action being executed asynchronously or null if none is pending.
@@ -139,9 +140,9 @@ private[spark] class BlockManager(
       serializer: Serializer,
       conf: SparkConf,
       securityManager: SecurityManager,
-      mapOutputTracker: MapOutputTracker) = {
+      shuffleManager: ShuffleManager) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
-      conf, securityManager, mapOutputTracker)
+      conf, securityManager, shuffleManager)
   }
 
   /**

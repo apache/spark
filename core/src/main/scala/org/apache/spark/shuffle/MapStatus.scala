@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.shuffle
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 

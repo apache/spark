@@ -20,24 +20,21 @@ package org.apache.spark.storage
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
+import scala.language.{implicitConversions, postfixOps}
+
 import akka.actor._
-import org.apache.spark.SparkConf
-import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
-import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.SpanSugar._
+import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
 
-import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
+import org.apache.spark.shuffle.hash.HashShuffleManager
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
-
-import scala.language.implicitConversions
-import scala.language.postfixOps
 
 class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   with PrivateMethodTester {
@@ -49,7 +46,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   var oldArch: String = null
   conf.set("spark.authenticate", "false")
   val securityMgr = new SecurityManager(conf)
-  val mapOutputTracker = new MapOutputTrackerMaster(conf)
+  val shuffleManager = new HashShuffleManager(conf)
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   conf.set("spark.kryoserializer.buffer.mb", "1")
@@ -137,7 +134,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("master + 1 manager interaction") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -168,9 +165,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("master + 2 managers interaction") {
     store = new BlockManager("exec1", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     store2 = new BlockManager("exec2", actorSystem, master, new KryoSerializer(conf), 2000, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
 
     val peers = master.getPeers(store.blockManagerId, 1)
     assert(peers.size === 1, "master did not return the other manager as a peer")
@@ -186,7 +183,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("removing block") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -235,7 +232,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("removing rdd") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -269,10 +266,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("removing broadcast") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val driverStore = store
     val executorStore = new BlockManager("executor", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -342,7 +339,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   test("reregistration on heart beat") {
     val heartBeat = PrivateMethod[Unit]('heartBeat)
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
 
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
@@ -359,7 +356,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("reregistration on block update") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
 
@@ -379,7 +376,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   test("reregistration doesn't dead lock") {
     val heartBeat = PrivateMethod[Unit]('heartBeat)
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = List(new Array[Byte](400))
 
@@ -417,7 +414,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("in-memory LRU storage") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -437,7 +434,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("in-memory LRU storage with serialization") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -457,7 +454,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("in-memory LRU for partitions of same RDD") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -477,7 +474,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("in-memory LRU for partitions of multiple RDDs") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     store.putSingle(rdd(0, 1), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
     store.putSingle(rdd(0, 2), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
     store.putSingle(rdd(1, 1), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
@@ -504,7 +501,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val tachyonUnitTestEnabled = conf.getBoolean("spark.test.tachyon.enable", false)
     if (tachyonUnitTestEnabled) {
       store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-        securityMgr, mapOutputTracker)
+        securityMgr, shuffleManager)
       val a1 = new Array[Byte](400)
       val a2 = new Array[Byte](400)
       val a3 = new Array[Byte](400)
@@ -521,7 +518,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("on-disk storage") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -535,7 +532,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("disk and memory storage") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -551,7 +548,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("disk and memory storage with getLocalBytes") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -567,7 +564,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("disk and memory storage with serialization") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -583,7 +580,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("disk and memory storage with serialization and getLocalBytes") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -599,7 +596,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("LRU with mixed storage levels") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -622,7 +619,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("in-memory LRU with streams") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
     val list2 = List(new Array[Byte](200), new Array[Byte](200))
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
@@ -647,7 +644,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("LRU with mixed storage levels and streams") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
     val list2 = List(new Array[Byte](200), new Array[Byte](200))
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
@@ -694,7 +691,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("overly large block") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 500, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     store.putSingle("a1", new Array[Byte](1000), StorageLevel.MEMORY_ONLY)
     assert(store.getSingle("a1") === None, "a1 was in store")
     store.putSingle("a2", new Array[Byte](1000), StorageLevel.MEMORY_AND_DISK)
@@ -706,7 +703,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     try {
       conf.set("spark.shuffle.compress", "true")
       store = new BlockManager("exec1", actorSystem, master, serializer, 2000, conf,
-        securityMgr, mapOutputTracker)
+        securityMgr, shuffleManager)
       store.putSingle(ShuffleBlockId(0, 0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(ShuffleBlockId(0, 0, 0)) <= 100,
         "shuffle_0_0_0 was not compressed")
@@ -715,7 +712,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
       conf.set("spark.shuffle.compress", "false")
       store = new BlockManager("exec2", actorSystem, master, serializer, 2000, conf,
-        securityMgr, mapOutputTracker)
+        securityMgr, shuffleManager)
       store.putSingle(ShuffleBlockId(0, 0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(ShuffleBlockId(0, 0, 0)) >= 1000,
         "shuffle_0_0_0 was compressed")
@@ -724,7 +721,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
       conf.set("spark.broadcast.compress", "true")
       store = new BlockManager("exec3", actorSystem, master, serializer, 2000, conf,
-        securityMgr, mapOutputTracker)
+        securityMgr, shuffleManager)
       store.putSingle(BroadcastBlockId(0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(BroadcastBlockId(0)) <= 100,
         "broadcast_0 was not compressed")
@@ -733,7 +730,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
       conf.set("spark.broadcast.compress", "false")
       store = new BlockManager("exec4", actorSystem, master, serializer, 2000, conf,
-        securityMgr, mapOutputTracker)
+        securityMgr, shuffleManager)
       store.putSingle(BroadcastBlockId(0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(BroadcastBlockId(0)) >= 1000, "broadcast_0 was compressed")
       store.stop()
@@ -741,7 +738,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
       conf.set("spark.rdd.compress", "true")
       store = new BlockManager("exec5", actorSystem, master, serializer, 2000, conf,
-        securityMgr, mapOutputTracker)
+        securityMgr, shuffleManager)
       store.putSingle(rdd(0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(rdd(0, 0)) <= 100, "rdd_0_0 was not compressed")
       store.stop()
@@ -749,7 +746,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
       conf.set("spark.rdd.compress", "false")
       store = new BlockManager("exec6", actorSystem, master, serializer, 2000, conf,
-        securityMgr, mapOutputTracker)
+        securityMgr, shuffleManager)
       store.putSingle(rdd(0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(rdd(0, 0)) >= 1000, "rdd_0_0 was compressed")
       store.stop()
@@ -757,7 +754,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
       // Check that any other block types are also kept uncompressed
       store = new BlockManager("exec7", actorSystem, master, serializer, 2000, conf,
-        securityMgr, mapOutputTracker)
+        securityMgr, shuffleManager)
       store.putSingle("other_block", new Array[Byte](1000), StorageLevel.MEMORY_ONLY)
       assert(store.memoryStore.getSize("other_block") >= 1000, "other_block was compressed")
       store.stop()
@@ -772,7 +769,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
     store = new BlockManager("<driver>", actorSystem, master, new JavaSerializer(conf), 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
 
     // The put should fail since a1 is not serializable.
     class UnserializableClass
@@ -836,7 +833,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   
   test("updated block statuses") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val list = List.fill(2)(new Array[Byte](200))
     val bigList = List.fill(8)(new Array[Byte](200))
 
@@ -891,7 +888,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("query block statuses") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val list = List.fill(2)(new Array[Byte](200))
 
     // Tell master. By LRU, only list2 and list3 remains.
@@ -931,7 +928,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("get matching blocks") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     val list = List.fill(2)(new Array[Byte](10))
 
     // insert some blocks
@@ -965,7 +962,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("SPARK-1194 regression: fix the same-RDD rule for cache replacement") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker)
+      securityMgr, shuffleManager)
     store.putSingle(rdd(0, 0), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
     store.putSingle(rdd(1, 0), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
     // Access rdd_1_0 to ensure it's not least recently used.

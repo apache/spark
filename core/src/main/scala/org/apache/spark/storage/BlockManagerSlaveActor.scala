@@ -21,8 +21,9 @@ import scala.concurrent.Future
 
 import akka.actor.{ActorRef, Actor}
 
-import org.apache.spark.{Logging, MapOutputTracker}
+import org.apache.spark.Logging
 import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.shuffle.ShuffleManager
 
 /**
  * An actor to take commands from the master to execute options. For example,
@@ -31,7 +32,7 @@ import org.apache.spark.storage.BlockManagerMessages._
 private[storage]
 class BlockManagerSlaveActor(
     blockManager: BlockManager,
-    mapOutputTracker: MapOutputTracker)
+    shuffleManager: ShuffleManager)
   extends Actor with Logging {
 
   import context.dispatcher
@@ -51,8 +52,8 @@ class BlockManagerSlaveActor(
 
     case RemoveShuffle(shuffleId) =>
       doAsync[Boolean]("removing shuffle " + shuffleId, sender) {
-        if (mapOutputTracker != null) {
-          mapOutputTracker.unregisterShuffle(shuffleId)
+        if (shuffleManager != null) {
+          shuffleManager.unregisterShuffle(shuffleId)
         }
         blockManager.shuffleBlockManager.removeShuffle(shuffleId)
       }

@@ -32,6 +32,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BroadcastBlockId, RDDBlockId, ShuffleBlockId}
+import org.apache.spark.shuffle.MapOutputTrackerMaster
 
 class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
@@ -413,5 +414,6 @@ class CleanerTester(
   }
 
   private def blockManager = sc.env.blockManager
-  private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+  private def mapOutputTrackerMaster = sc.env.shuffleManager.mapOutputTracker.
+    asInstanceOf[MapOutputTrackerMaster]
 }

@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.shuffle.MapStatus
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.CallSite
 

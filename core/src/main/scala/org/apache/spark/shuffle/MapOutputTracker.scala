@@ -15,21 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.shuffle
 
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.{HashSet, HashMap, Map}
+import scala.collection.mutable.{HashMap, HashSet, Map}
 import scala.concurrent.Await
 
 import akka.actor._
 import akka.pattern.ask
 
+import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.util._
-import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.BlockManagerId
+
+import scala.collection.mutable
+import scala.concurrent.Await
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
@@ -187,6 +189,13 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
+  def incrementEpoch() {
+    epochLock.synchronized {
+      epoch += 1
+      logDebug("Increasing epoch to " + epoch)
+    }
+  }
+
   /**
    * Called from executors to update the epoch number, potentially clearing old outputs
    * because of a fetch failure. Each worker task calls this with the latest epoch
@@ -279,13 +288,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   /** Check if the given shuffle is being tracked */
   def containsShuffle(shuffleId: Int): Boolean = {
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
-  }
-
-  def incrementEpoch() {
-    epochLock.synchronized {
-      epoch += 1
-      logDebug("Increasing epoch to " + epoch)
-    }
   }
 
   def getSerializedMapOutputStatuses(shuffleId: Int): Array[Byte] = {

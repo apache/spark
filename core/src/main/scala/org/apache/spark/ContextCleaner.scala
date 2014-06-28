@@ -150,7 +150,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean) {
     try {
       logDebug("Cleaning shuffle " + shuffleId)
-      mapOutputTrackerMaster.unregisterShuffle(shuffleId)
+      shuffleManager.unregisterShuffle(shuffleId)
       blockManagerMaster.removeShuffle(shuffleId, blocking)
       listeners.foreach(_.shuffleCleaned(shuffleId))
       logInfo("Cleaned shuffle " + shuffleId)
@@ -173,7 +173,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   private def blockManagerMaster = sc.env.blockManager.master
   private def broadcastManager = sc.env.broadcastManager
-  private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+  private def shuffleManager = sc.env.shuffleManager
 
   // Used for testing. These methods explicitly blocks until cleanup is completed
   // to ensure that more reliable testing.

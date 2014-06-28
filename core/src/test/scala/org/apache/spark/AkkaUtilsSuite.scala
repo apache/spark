@@ -17,13 +17,14 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
+import scala.concurrent.Await
 
 import akka.actor._
-import org.apache.spark.scheduler.MapStatus
+import org.scalatest.FunSuite
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
-import scala.concurrent.Await
+import org.apache.spark.shuffle._
+
 
 /**
   * Test the AkkaUtils with various security settings.
