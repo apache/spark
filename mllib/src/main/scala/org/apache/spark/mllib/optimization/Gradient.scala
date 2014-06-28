@@ -184,15 +184,12 @@ class HingeGradient extends Gradient {
  */
 @DeveloperApi
 class PoissonGradient extends Gradient {
-  def fact(n: Int): Int =
-    (1 to n).foldLeft(1) { _ * _ }
-
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val brzData = data.toBreeze
     val brzWeights = weights.toBreeze
     val dotProd = brzWeights.dot(brzData)
     val diff = math.exp(dotProd) - label
-    val loss = -dotProd * label + math.exp(dotProd) + fact(label.toInt)
+    val loss = -dotProd * label + math.exp(dotProd)
     val gradient = brzData * diff
 
     (Vectors.fromBreeze(gradient), loss)
@@ -207,7 +204,7 @@ class PoissonGradient extends Gradient {
     val brzWeights = weights.toBreeze
     val dotProd = brzWeights.dot(brzData)
     val diff = math.exp(dotProd) - label
-    val loss = -dotProd * label + math.exp(dotProd) + fact(label.toInt)
+    val loss = -dotProd * label + math.exp(dotProd)
 
     brzAxpy(diff, brzData, cumGradient.toBreeze)
 
