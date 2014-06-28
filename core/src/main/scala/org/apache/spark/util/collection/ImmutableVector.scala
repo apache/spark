@@ -83,6 +83,7 @@ private class VectorIterator[@specialized(Long, Int) A](v: VectorNode[A]) extend
   private[this] val idxStack: Array[Int] = Array.fill(8)(-1)
   private[this] var pos: Int = 0
   private[this] var _hasNext: Boolean = _
+  private[this] var numLeafChildren = 0
 
   elemStack(0) = v
   idxStack(0) = 0
@@ -94,7 +95,7 @@ private class VectorIterator[@specialized(Long, Int) A](v: VectorNode[A]) extend
     if (_hasNext) {
       val result = elemStack(pos)(idxStack(pos))
       idxStack(pos) += 1
-      maybeAdvance()
+      if (idxStack(pos) >= numLeafChildren) maybeAdvance()
       result
     } else {
       throw new NoSuchElementException("end of iterator")
@@ -124,6 +125,7 @@ private class VectorIterator[@specialized(Long, Int) A](v: VectorNode[A]) extend
             idxStack(pos) = 0
           case leaf: LeafNode[_] =>
             // Done - reached the next element
+            numLeafChildren = leaf.numChildren
             continue = false
         }
       }
