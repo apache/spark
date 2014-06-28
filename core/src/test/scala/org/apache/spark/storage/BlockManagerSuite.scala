@@ -66,7 +66,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     conf.set("spark.driver.port", boundPort.toString)
 
     master = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
+      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus(conf)))),
       conf)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
