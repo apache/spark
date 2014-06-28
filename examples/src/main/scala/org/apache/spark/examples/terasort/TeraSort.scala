@@ -105,11 +105,11 @@ object TeraSort {
     if (lower.endsWith("k")) {
       lower.substring(0, lower.length - 1).toLong * 1000
     } else if (lower.endsWith("m")) {
-      lower.substring(0, lower.length - 1).toInt * 1000 * 1000
+      lower.substring(0, lower.length - 1).toLong * 1000 * 1000
     } else if (lower.endsWith("g")) {
-      lower.substring(0, lower.length - 1).toInt * 1000 * 1000 * 1000
+      lower.substring(0, lower.length - 1).toLong * 1000 * 1000 * 1000
     } else if (lower.endsWith("t")) {
-      lower.substring(0, lower.length - 1).toInt * 1000 * 1000 * 1000 * 1000
+      lower.substring(0, lower.length - 1).toLong * 1000 * 1000 * 1000 * 1000
     } else {
       // no suffix, so it's just a number in bytes
       lower.toLong
