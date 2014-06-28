@@ -101,12 +101,11 @@ if [ -z "$JAVA_HOME" ]; then
 fi
 
 if which git &>/dev/null; then
-    # Git returns all its error codes on STDERR, which causes the script
-    # to fail if the current directory has an invalid .git directory. So
-    # dying on error is momentarily disabled.
-    set +e
-    GITREVSTRING=$(GITREV=$(git rev-parse --short HEAD 2>/dev/null) && echo " (git revision $GITREV)" )
-    set -e
+    GITREV=$(git rev-parse --short HEAD 2>/dev/null || :)
+    if [ ! -z $GITREV ]; then
+	 GITREVSTRING=" (git revision $GITREV)"
+    fi
+    unset GITREV
 fi
 
 if ! which mvn &>/dev/null; then
