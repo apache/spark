@@ -37,7 +37,11 @@ class StorageStatusListener extends SparkListener {
     val filteredStatus = storageStatusList.find(_.blockManagerId.executorId == execId)
     filteredStatus.foreach { storageStatus =>
       updatedBlocks.foreach { case (blockId, updatedStatus) =>
-        storageStatus.blocks(blockId) = updatedStatus
+        if (updatedStatus.storageLevel == StorageLevel.NONE) {
+          storageStatus.blocks.remove(blockId)
+        } else {
+          storageStatus.blocks(blockId) = updatedStatus
+        }
       }
     }
   }
@@ -47,7 +51,7 @@ class StorageStatusListener extends SparkListener {
     storageStatusList.foreach { storageStatus =>
       val unpersistedBlocksIds = storageStatus.rddBlocks.keys.filter(_.rddId == unpersistedRDDId)
       unpersistedBlocksIds.foreach { blockId =>
-        storageStatus.blocks(blockId) = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+        storageStatus.blocks.remove(blockId)
       }
     }
   }
