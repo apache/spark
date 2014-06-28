@@ -35,7 +35,4 @@ sbt/sbt clean assembly test
 echo "========================================================================="
 echo "Running PySpark tests"
 echo "========================================================================="
-if [ -z "$PYSPARK_PYTHON" ]; then
-  export PYSPARK_PYTHON=/usr/local/bin/python2.7
-fi
 ./python/run-tests
