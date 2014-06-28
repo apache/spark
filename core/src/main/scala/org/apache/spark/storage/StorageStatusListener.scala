@@ -28,13 +28,14 @@ import org.apache.spark.scheduler._
  */
 @DeveloperApi
 class StorageStatusListener extends SparkListener {
+  // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
 
   def storageStatusList = executorIdToStorageStatus.values.toSeq
 
   /** Update storage status list to reflect updated block statuses */
-  def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
-    val filteredStatus = storageStatusList.find(_.blockManagerId.executorId == execId)
+  private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
+    val filteredStatus = executorIdToStorageStatus.get(execId)
     filteredStatus.foreach { storageStatus =>
       updatedBlocks.foreach { case (blockId, updatedStatus) =>
         if (updatedStatus.storageLevel == StorageLevel.NONE) {
@@ -47,7 +48,7 @@ class StorageStatusListener extends SparkListener {
   }
 
   /** Update storage status list to reflect the removal of an RDD from the cache */
-  def updateStorageStatus(unpersistedRDDId: Int) {
+  private def updateStorageStatus(unpersistedRDDId: Int) {
     storageStatusList.foreach { storageStatus =>
       val unpersistedBlocksIds = storageStatus.rddBlocks.keys.filter(_.rddId == unpersistedRDDId)
       unpersistedBlocksIds.foreach { blockId =>
