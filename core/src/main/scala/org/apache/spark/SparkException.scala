@@ -22,3 +22,6 @@ class SparkException(message: String, cause: Throwable)
 
   def this(message: String) = this(message, null)
 }
+
+private[spark] class SparkDriverExecutionException(cause: Throwable)
+  extends SparkException("Execution error", cause)
