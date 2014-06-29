@@ -70,8 +70,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
   import ExternalAppendOnlyMap._
 
-  protected var currentMap = new SizeTrackingAppendOnlyMap[K, C]
-  protected val spilledMaps = new ArrayBuffer[DiskMapIterator]
+  private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
+  private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
   private val diskBlockManager = blockManager.diskBlockManager
 
@@ -107,8 +107,8 @@ class ExternalAppendOnlyMap[K, V, C](
   private var _diskBytesSpilled = 0L
 
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
-  protected val comparator = if (customizedComparator == null) new KCComparator[K, C] 
-    else customizedComparator
+  private val comparator = 
+    if (customizedComparator == null) new KCComparator[K, C] else customizedComparator
   private val ser = serializer.newInstance()
 
   /**
@@ -217,7 +217,16 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   override def iterator: Iterator[(K, C)] = {
     if (spilledMaps.isEmpty) {
+      println("empty")
       currentMap.iterator
+    } else {
+      new ExternalIterator()
+    }
+  }
+
+  def sortIterator: Iterator[(K, C)] = {
+    if (spilledMaps.isEmpty) {
+      currentMap.destructiveSortedIterator(comparator)
     } else {
       new ExternalIterator()
     }
@@ -226,7 +235,7 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * An iterator that sort-merges (K, C) pairs from the in-memory map and the spilled maps
    */
-  protected class ExternalIterator extends Iterator[(K, C)] {
+  private class ExternalIterator extends Iterator[(K, C)] {
 
     // A queue that maintains a buffer for each stream we are currently merging
     // This queue maintains the invariant that it only contains non-empty buffers
@@ -253,7 +262,7 @@ class ExternalAppendOnlyMap[K, V, C](
     private def getMorePairs(it: BufferedIterator[(K, C)]): ArrayBuffer[(K, C)] = {
       val kcPairs = new ArrayBuffer[(K, C)]
       if (it.hasNext) {
-        var kc = it.next()
+        val kc = it.next()
         kcPairs += kc
 //<<<<<<< HEAD
 //        val minHash = getKeyHashCode(kc)
@@ -311,13 +320,13 @@ class ExternalAppendOnlyMap[K, V, C](
 //      assert(getKeyHashCode(minPair) == minHash)
 //=======
       val minPairs = minBuffer.pairs
-      var (minKey, minCombiner) = minPairs.remove(0)
-//>>>>>>> Fix JIRA-983 and support exteranl sort for sortByKey
+      val minPair = minPairs.remove(0)
+      var (minKey, minCombiner) = minPair
 
       // For all other streams that may have this key (i.e. have the same minimum key hash),
       // merge in the corresponding value (if any) from that stream
       val mergedBuffers = ArrayBuffer[StreamBuffer](minBuffer)
-      while (mergeHeap.length > 0 && comparator.compare(mergeHeap.head.pairs.head, (minKey, minCombiner)) == 0) {
+      while (mergeHeap.length > 0 && comparator.compare(mergeHeap.head.pairs.head, minPair) == 0) {
         val newBuffer = mergeHeap.dequeue()
         minCombiner = mergeIfKeyExists(minKey, minCombiner, newBuffer)
         mergedBuffers += newBuffer
@@ -350,12 +359,15 @@ class ExternalAppendOnlyMap[K, V, C](
 
       def isEmpty = pairs.length == 0
 
+<<<<<<< HEAD
       // Invalid if there are no more pairs in this stream
       def minKeyHash: Int = {
         assert(pairs.length > 0)
         getKeyHashCode(pairs.head)
       }
 
+=======
+>>>>>>> fix unit test failure
       override def compareTo(other: StreamBuffer): Int = {
         // descending order because mutable.PriorityQueue dequeues the max, not the min
         comparator.compare(other.pairs.head, pairs.head)
@@ -366,7 +378,7 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * An iterator that returns (K, C) pairs in sorted order from an on-disk map
    */
-  protected class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
+  private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
     extends Iterator[(K, C)] {
     private val fileStream = new FileInputStream(file)
     private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
