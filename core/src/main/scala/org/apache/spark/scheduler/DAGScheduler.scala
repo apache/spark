@@ -820,7 +820,6 @@ class DAGScheduler(
     }
     event.reason match {
       case Success =>
-        logInfo("Completed " + task)
         if (event.accumUpdates != null) {
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
         }
