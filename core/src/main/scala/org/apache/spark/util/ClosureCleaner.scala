@@ -163,7 +163,7 @@ private[spark] object ClosureCleaner extends Logging {
     try {
       SparkEnv.get.closureSerializer.newInstance().serialize(func)
     } catch {
-      case ex: Exception => throw new SparkException("Task not serializable: " + ex.toString)
+      case ex: Exception => throw new SparkException("Task not serializable", ex)
     }
   }
 
