@@ -63,14 +63,14 @@ private[ui] class StageTableBase(
     </table>
   }
 
-  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] =
+  private def makeProgressBar(started: Int, completed: Int, failed: Int, total: Int): Seq[Node] =
   {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 
     <div class="progress">
       <span style="text-align:center; position:absolute; width:100%; left:0;">
-        {completed}/{total} {failed}
+        {completed}/{total} { if (failed > 0) s"($failed failed)" else "" }
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
       <div class="bar bar-running" style={startWidth}></div>
@@ -99,13 +99,14 @@ private[ui] class StageTableBase(
       <pre class="stage-details collapsed">{s.details}</pre>
     }
 
-    listener.stageIdToDescription.get(s.stageId)
-      .map(d => <div><em>{d}</em></div><div>{nameLink} {killLink}</div>)
-      .getOrElse(<div>{killLink} {nameLink} {details}</div>)
+    listener.stageUIData(s.stageId).description match {
+      case Some(desc) => <div><em>{desc}</em></div><div>{nameLink} {killLink}</div>
+      case None => <div>{killLink} {nameLink} {details}</div>
+    }
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {
-    val poolName = listener.stageIdToPool.get(s.stageId)
+    val stageData = listener.stageUIData(s.stageId)
     val submissionTime = s.submissionTime match {
       case Some(t) => UIUtils.formatDate(new Date(t))
       case None => "Unknown"
@@ -115,30 +116,17 @@ private[ui] class StageTableBase(
       if (finishTime > t) finishTime - t else System.currentTimeMillis - t
     }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
-    val startedTasks =
-      listener.stageIdToTasksActive.getOrElse(s.stageId, HashMap[Long, TaskInfo]()).size
-    val completedTasks = listener.stageIdToTasksComplete.getOrElse(s.stageId, 0)
-    val failedTasks = listener.stageIdToTasksFailed.getOrElse(s.stageId, 0) match {
-      case f if f > 0 => "(%s failed)".format(f)
-      case _ => ""
-    }
-    val totalTasks = s.numTasks
-    val shuffleReadSortable = listener.stageIdToShuffleRead.getOrElse(s.stageId, 0L)
-    val shuffleRead = shuffleReadSortable match {
-      case 0 => ""
-      case b => Utils.bytesToString(b)
-    }
-    val shuffleWriteSortable = listener.stageIdToShuffleWrite.getOrElse(s.stageId, 0L)
-    val shuffleWrite = shuffleWriteSortable match {
-      case 0 => ""
-      case b => Utils.bytesToString(b)
-    }
+
+    val shuffleRead = stageData.shuffleReadBytes
+    val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
+    val shuffleWrite = stageData.shuffleWriteBytes
+    val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
     <td>{s.stageId}</td> ++
     {if (isFairScheduler) {
       <td>
         <a href={"%s/stages/pool?poolname=%s"
-          .format(UIUtils.prependBaseUri(basePath), poolName.get)}>
-          {poolName.get}
+          .format(UIUtils.prependBaseUri(basePath), stageData.schedulingPool)}>
+          {stageData.schedulingPool}
         </a>
       </td>
     } else {
@@ -148,10 +136,11 @@ private[ui] class StageTableBase(
     <td valign="middle">{submissionTime}</td>
     <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
     <td class="progress-cell">
-      {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
+      {makeProgressBar(stageData.numActiveTasks, stageData.numCompleteTasks,
+        stageData.numFailedTasks, s.numTasks)}
     </td>
-    <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
-    <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
+    <td sorttable_customekey={shuffleRead.toString}>{shuffleReadWithUnit}</td>
+    <td sorttable_customekey={shuffleWrite.toString}>{shuffleWriteWithUnit}</td>
   }
 
   /** Render an HTML row that represents a stage */
@@ -168,7 +157,7 @@ private[ui] class FailedStageTable(
 
   override protected def stageRow(s: StageInfo): Seq[Node] = {
     val basicColumns = super.stageRow(s)
-    val failureReason = <td valign="middle">{s.failureReason.getOrElse("")}</td>
+    val failureReason = <td valign="middle"><pre>{s.failureReason.getOrElse("")}</pre></td>
     basicColumns ++ failureReason
   }
 }

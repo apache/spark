@@ -34,19 +34,20 @@ private[jobs] object UIData {
     var diskBytesSpilled : Long = 0
   }
 
-  class StageData {
+  class StageUIData {
+    var numActiveTasks: Int = _
+    var numCompleteTasks: Int = _
+    var numFailedTasks: Int = _
+
     var executorRunTime: Long = _
+
     var shuffleReadBytes: Long = _
     var shuffleWriteBytes: Long = _
     var memoryBytesSpilled: Long = _
     var diskBytesSpilled: Long = _
 
-    var numActiveTasks: Int = _
-    var numCompleteTasks: Int = _
-    var numFailedTasks: Int = _
-
-    var schedulingPool: String = _
-    var description: String = _
+    var schedulingPool: String = ""
+    var description: Option[String] = None
 
     var taskData = new HashMap[Long, TaskUIData]
     var executorSummary = new HashMap[String, ExecutorSummary]

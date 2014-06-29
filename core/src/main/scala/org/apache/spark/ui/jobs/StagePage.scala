@@ -23,6 +23,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
@@ -34,8 +35,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
+      val stageData = listener.stageUIData(stageId)
 
-      if (!listener.stageIdToTaskData.contains(stageId)) {
+      if (stageData.taskData.isEmpty) {
         val content =
           <div>
             <h4>Summary Metrics</h4> No tasks have started yet
@@ -45,21 +47,13 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           "Details for Stage %s".format(stageId), parent.headerTabs, parent)
       }
 
-      val tasks = listener.stageIdToTaskData(stageId).values.toSeq.sortBy(_.taskInfo.launchTime)
+      val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val shuffleReadBytes = listener.stageIdToShuffleRead.getOrElse(stageId, 0L)
-      val hasShuffleRead = shuffleReadBytes > 0
-      val shuffleWriteBytes = listener.stageIdToShuffleWrite.getOrElse(stageId, 0L)
-      val hasShuffleWrite = shuffleWriteBytes > 0
-      val memoryBytesSpilled = listener.stageIdToMemoryBytesSpilled.getOrElse(stageId, 0L)
-      val diskBytesSpilled = listener.stageIdToDiskBytesSpilled.getOrElse(stageId, 0L)
-      val hasBytesSpilled = memoryBytesSpilled > 0 && diskBytesSpilled > 0
 
-      var activeTime = 0L
-      val now = System.currentTimeMillis
-      val tasksActive = listener.stageIdToTasksActive(stageId).values
-      tasksActive.foreach(activeTime += _.timeRunning(now))
+      val hasShuffleRead = stageData.shuffleReadBytes > 0
+      val hasShuffleWrite = stageData.shuffleWriteBytes > 0
+      val hasBytesSpilled = stageData.memoryBytesSpilled > 0 && stageData.diskBytesSpilled > 0
 
       // scalastyle:off
       val summary =
@@ -67,28 +61,28 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           <ul class="unstyled">
             <li>
               <strong>Total task time across all tasks: </strong>
-              {UIUtils.formatDuration(listener.stageIdToTime.getOrElse(stageId, 0L) + activeTime)}
+              {UIUtils.formatDuration(stageData.executorRunTime)}
             </li>
             {if (hasShuffleRead)
               <li>
                 <strong>Shuffle read: </strong>
-                {Utils.bytesToString(shuffleReadBytes)}
+                {Utils.bytesToString(stageData.shuffleReadBytes)}
               </li>
             }
             {if (hasShuffleWrite)
               <li>
                 <strong>Shuffle write: </strong>
-                {Utils.bytesToString(shuffleWriteBytes)}
+                {Utils.bytesToString(stageData.shuffleWriteBytes)}
               </li>
             }
             {if (hasBytesSpilled)
             <li>
               <strong>Shuffle spill (memory): </strong>
-              {Utils.bytesToString(memoryBytesSpilled)}
+              {Utils.bytesToString(stageData.memoryBytesSpilled)}
             </li>
             <li>
               <strong>Shuffle spill (disk): </strong>
-              {Utils.bytesToString(diskBytesSpilled)}
+              {Utils.bytesToString(stageData.diskBytesSpilled)}
             </li>
             }
           </ul>
