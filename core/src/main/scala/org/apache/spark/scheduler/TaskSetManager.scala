@@ -55,12 +55,6 @@ private[spark] class TaskSetManager(
 
   val conf = sched.sc.conf
 
-  // Stage prefix to be used in log messages.=
-  // If this is the first attempt of a stage, the prefix is "123", where 123 is the stage id.
-  // If this is a retry, the prefix is "123.1", where 1 is the attempt number (2nd attempt).
-  private val stagePrefix =
-    if (taskSet.attempt > 0) taskSet.stageId + "." + taskSet.attempt else taskSet.stageId
-
   /*
    * Sometimes if an executor is dead or in an otherwise invalid state, the driver
    * does not realize right away leading to repeated task failures. If enabled,
