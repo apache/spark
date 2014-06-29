@@ -512,7 +512,7 @@ private[spark] class TaskSetManager(
     copiesRunning(index) -= 1
     var taskMetrics : TaskMetrics = null
 
-    val failureReason = s"Lost TID $tid (task ${taskSet.id}:$index) on executor ${info.host}: " +
+    val failureReason = s"Lost task ${taskSet.id}:$index (TID $tid) on executor ${info.host}: " +
       reason.asInstanceOf[TaskFailedReason].toErrorString
     reason match {
       case fetchFailed: FetchFailed =>
@@ -528,10 +528,10 @@ private[spark] class TaskSetManager(
         taskMetrics = ef.metrics.orNull
         if (ef.className == classOf[NotSerializableException].getName()) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
-          logError("Task %s:%s had a not serializable result: %s; not retrying".format(
-            taskSet.id, index, ef.description))
-          abort("Task %s:%s had a not serializable result: %s".format(
-            taskSet.id, index, ef.description))
+          logError("Task %s:%s (TID %d) had a not serializable result: %s; not retrying".format(
+            taskSet.id, index, tid, ef.description))
+          abort("Task %s:%s (TID %d) had a not serializable result: %s".format(
+            taskSet.id, index, tid, ef.description))
           return
         }
         val key = ef.description
@@ -554,7 +554,7 @@ private[spark] class TaskSetManager(
         if (printFull) {
           logWarning(failureReason)
         } else {
-          logInfo(s"Lost TID $tid (task ${taskSet.id}:$index) on executor ${info.host}: " +
+          logInfo(s"Lost task ${taskSet.id}:$index (TID $tid) on executor ${info.host}: " +
             s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
 
