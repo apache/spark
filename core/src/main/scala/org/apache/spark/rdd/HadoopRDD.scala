@@ -201,6 +201,9 @@ class HadoopRDD[K, V](
       // Set the task input metrics.
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       try {
+        /* bytesRead may not exactly equal the bytes read by a task: split boundaries aren't
+         * always at record boundaries, so tasks may need to read into other splits to complete
+         * a record. */
         inputMetrics.bytesRead = split.inputSplit.value.getLength()
       } catch {
         case e: java.io.IOException =>

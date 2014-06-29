@@ -115,6 +115,9 @@ class NewHadoopRDD[K, V](
 
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       try {
+        /* bytesRead may not exactly equal the bytes read by a task: split boundaries aren't
+         * always at record boundaries, so tasks may need to read into other splits to complete
+         * a record. */
         inputMetrics.bytesRead = split.serializableHadoopSplit.value.getLength()
       } catch {
         case e: Exception =>
