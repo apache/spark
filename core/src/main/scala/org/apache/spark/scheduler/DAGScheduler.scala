@@ -861,7 +861,7 @@ class DAGScheduler(
               stage.addOutputLoc(smt.partitionId, status)
               // Temporarily added for test
               if (pendingTasks(stage).isEmpty && !failureGenerated) {
-                stage.removeOutputLoc(smt.partitionId, null)
+                stage.removeOutputLoc(smt.partitionId, status.location)
                 failureGenerated = true
                 logInfo("Remove some map status to created a failuer. ---lirui")
               }
