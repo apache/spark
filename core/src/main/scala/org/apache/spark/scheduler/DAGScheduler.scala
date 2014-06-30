@@ -123,7 +123,7 @@ class DAGScheduler(
   private[scheduler] var eventProcessActor: ActorRef = _
 
   // Whether to enable remove stage barrier
-  val removeStageBarrier = env.conf.getBoolean("spark.scheduler.removeStageBarrier", false)
+  private val removeStageBarrier = env.conf.getBoolean("spark.scheduler.removeStageBarrier", false)
   // Track the pre-started stages depending on a stage (the key)
   private val dependantStagePreStarted = new mutable.HashMap[Stage, ArrayBuffer[Stage]]()
 
@@ -859,12 +859,6 @@ class DAGScheduler(
               logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
             } else {
               stage.addOutputLoc(smt.partitionId, status)
-              // Temporarily added for test
-              if (pendingTasks(stage).isEmpty && !failureGenerated) {
-                stage.removeOutputLoc(smt.partitionId, status.location)
-                failureGenerated = true
-                logInfo("Remove some map status to created a failuer. ---lirui")
-              }
               // Need to register map outputs progressively if remove stage barrier is enabled
               if (removeStageBarrier && dependantStagePreStarted.contains(stage) && stage.shuffleDep.isDefined) {
                 mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
@@ -888,7 +882,7 @@ class DAGScheduler(
                 mapOutputTracker.registerMapOutputs(
                   stage.shuffleDep.get.shuffleId,
                   stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-                  changeEpoch = true,isPartial = true)
+                  changeEpoch = true)
               }
               clearCacheLocs()
               if (stage.outputLocs.exists(_ == Nil)) {
@@ -974,6 +968,7 @@ class DAGScheduler(
           mapStage.removeOutputLoc(mapId, bmAddress)
           mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
         }
+        runningStages -= mapStage
         logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
           "); marking it for resubmission")
         if (failedStages.isEmpty && eventProcessActor != null) {
