@@ -23,7 +23,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 private[spark] object ReceiverTest {
   def main(args: Array[String]) {
     val conf = new SparkConf
-    val manager = new ConnectionManager(conf.getInt("spark.network.connectionmanager.port",9999), conf, new SecurityManager(conf))
+    val manager = new ConnectionManager(conf.getInt("spark.network.connectionmanager.port", 9999), conf, new SecurityManager(conf))
     println("Started connection manager with id = " + manager.id)
 
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
