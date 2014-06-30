@@ -98,7 +98,7 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  * the value of `partitions`.
  */
 class RangePartitioner[K : Ordering : ClassTag, V](
-    var partitions: Int,
+    @transient partitions: Int,
     @transient rdd: RDD[_ <: Product2[K,V]],
     private var ascending: Boolean = true)
   extends Partitioner {
@@ -182,7 +182,6 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     sfactory match {
       case js: JavaSerializer => out.defaultWriteObject()
       case _ =>
-        out.writeInt(partitions)
         out.writeBoolean(ascending)
         out.writeObject(ordering)
         out.writeObject(binarySearch)
@@ -201,7 +200,6 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     sfactory match {
       case js: JavaSerializer => in.defaultReadObject()
       case _ =>
-        partitions = in.readInt()
         ascending = in.readBoolean()
         ordering = in.readObject().asInstanceOf[Ordering[K]]
         binarySearch = in.readObject().asInstanceOf[(Array[K], K) => Int]
