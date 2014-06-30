@@ -27,7 +27,7 @@ import org.apache.spark.SparkContext._
  * for compatibility with model.predict that returns Double
  * and MLUtils.loadLibSVMFile that loads class labels as Double
  *
- * @param predictionAndLabels an RDD of pairs (predictions, labels) sets.
+ * @param predictionAndLabels an RDD of (predictions, labels) pairs, both are non-null sets.
  */
 class MultilabelMetrics(predictionAndLabels:RDD[(Set[Double], Set[Double])]) extends Logging{
 
