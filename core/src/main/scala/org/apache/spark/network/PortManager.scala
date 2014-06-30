@@ -51,7 +51,7 @@ private[spark] object PortManager extends Logging
             offset == (maxRetries-1)) {
             throw e
           }
-          logInfo("Could not bind on port: " + tryPort + ". Attempting port " + (tryPort+1))
+          logInfo("Could not bind on port: " + tryPort + ". Attempting port " + (tryPort + 1))
         }
         case e: Exception => throw e
       }
