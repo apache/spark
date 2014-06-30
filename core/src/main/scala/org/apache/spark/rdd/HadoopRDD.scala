@@ -38,6 +38,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.util.NextIterator
 
 /**
@@ -196,6 +197,20 @@ class HadoopRDD[K, V](
       context.addOnCompleteCallback{ () => closeIfNeeded() }
       val key: K = reader.createKey()
       val value: V = reader.createValue()
+
+      // Set the task input metrics.
+      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
+      try {
+        /* bytesRead may not exactly equal the bytes read by a task: split boundaries aren't
+         * always at record boundaries, so tasks may need to read into other splits to complete
+         * a record. */
+        inputMetrics.bytesRead = split.inputSplit.value.getLength()
+      } catch {
+        case e: java.io.IOException =>
+          logWarning("Unable to get input size to set InputMetrics for task", e)
+      }
+      context.taskMetrics.inputMetrics = Some(inputMetrics)
+
       override def getNext() = {
         try {
           finished = !reader.next(key, value)

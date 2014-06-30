@@ -29,6 +29,7 @@ import akka.actor.{ActorSystem, Cancellable, Props}
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark._
+import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
@@ -38,6 +39,15 @@ private[spark] sealed trait BlockValues
 private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
 private[spark] case class IteratorValues(iterator: Iterator[Any]) extends BlockValues
 private[spark] case class ArrayBufferValues(buffer: ArrayBuffer[Any]) extends BlockValues
+
+/* Class for returning a fetched block and associated metrics. */
+private[spark] class BlockResult(
+    val data: Iterator[Any],
+    readMethod: DataReadMethod.Value,
+    bytes: Long) {
+  val inputMetrics = new InputMetrics(readMethod)
+  inputMetrics.bytesRead = bytes
+}
 
 private[spark] class BlockManager(
     executorId: String,
@@ -334,9 +344,9 @@ private[spark] class BlockManager(
   /**
    * Get block from local block manager.
    */
-  def getLocal(blockId: BlockId): Option[Iterator[Any]] = {
+  def getLocal(blockId: BlockId): Option[BlockResult] = {
     logDebug(s"Getting local block $blockId")
-    doGetLocal(blockId, asValues = true).asInstanceOf[Option[Iterator[Any]]]
+    doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
   }
 
   /**
@@ -355,11 +365,11 @@ private[spark] class BlockManager(
             blockId, s"Block $blockId not found on disk, though it should be")
       }
     } else {
-      doGetLocal(blockId, asValues = false).asInstanceOf[Option[ByteBuffer]]
+      doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
     }
   }
 
-  private def doGetLocal(blockId: BlockId, asValues: Boolean): Option[Any] = {
+  private def doGetLocal(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
@@ -386,14 +396,14 @@ private[spark] class BlockManager(
         // Look for the block in memory
         if (level.useMemory) {
           logDebug(s"Getting block $blockId from memory")
-          val result = if (asValues) {
-            memoryStore.getValues(blockId)
+          val result = if (asBlockResult) {
+            memoryStore.getValues(blockId).map(new BlockResult(_, DataReadMethod.Memory, info.size))
           } else {
             memoryStore.getBytes(blockId)
           }
           result match {
             case Some(values) =>
-              return Some(values)
+              return result
             case None =>
               logDebug(s"Block $blockId not found in memory")
           }
@@ -405,10 +415,11 @@ private[spark] class BlockManager(
           if (tachyonStore.contains(blockId)) {
             tachyonStore.getBytes(blockId) match {
               case Some(bytes) =>
-                if (!asValues) {
+                if (!asBlockResult) {
                   return Some(bytes)
                 } else {
-                  return Some(dataDeserialize(blockId, bytes))
+                  return Some(new BlockResult(
+                    dataDeserialize(blockId, bytes), DataReadMethod.Memory, info.size))
                 }
               case None =>
                 logDebug(s"Block $blockId not found in tachyon")
@@ -429,14 +440,15 @@ private[spark] class BlockManager(
 
           if (!level.useMemory) {
             // If the block shouldn't be stored in memory, we can just return it
-            if (asValues) {
-              return Some(dataDeserialize(blockId, bytes))
+            if (asBlockResult) {
+              return Some(new BlockResult(dataDeserialize(blockId, bytes), DataReadMethod.Disk,
+                info.size))
             } else {
               return Some(bytes)
             }
           } else {
             // Otherwise, we also have to store something in the memory store
-            if (!level.deserialized || !asValues) {
+            if (!level.deserialized || !asBlockResult) {
               /* We'll store the bytes in memory if the block's storage level includes
                * "memory serialized", or if it should be cached as objects in memory
                * but we only requested its serialized bytes. */
@@ -445,7 +457,7 @@ private[spark] class BlockManager(
               memoryStore.putBytes(blockId, copyForMemory, level)
               bytes.rewind()
             }
-            if (!asValues) {
+            if (!asBlockResult) {
               return Some(bytes)
             } else {
               val values = dataDeserialize(blockId, bytes)
@@ -457,12 +469,12 @@ private[spark] class BlockManager(
                 memoryStore.putValues(blockId, valuesBuffer, level, returnValues = true).data
                   match {
                     case Left(values2) =>
-                      return Some(values2)
+                      return Some(new BlockResult(values2, DataReadMethod.Disk, info.size))
                     case _ =>
-                      throw new SparkException("Memory store did not return an iterator")
+                      throw new SparkException("Memory store did not return back an iterator")
                   }
               } else {
-                return Some(values)
+                return Some(new BlockResult(values, DataReadMethod.Disk, info.size))
               }
             }
           }
@@ -477,9 +489,9 @@ private[spark] class BlockManager(
   /**
    * Get block from remote block managers.
    */
-  def getRemote(blockId: BlockId): Option[Iterator[Any]] = {
+  def getRemote(blockId: BlockId): Option[BlockResult] = {
     logDebug(s"Getting remote block $blockId")
-    doGetRemote(blockId, asValues = true).asInstanceOf[Option[Iterator[Any]]]
+    doGetRemote(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
   }
 
   /**
@@ -487,10 +499,10 @@ private[spark] class BlockManager(
    */
   def getRemoteBytes(blockId: BlockId): Option[ByteBuffer] = {
     logDebug(s"Getting remote block $blockId as bytes")
-    doGetRemote(blockId, asValues = false).asInstanceOf[Option[ByteBuffer]]
+    doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
   }
 
-  private def doGetRemote(blockId: BlockId, asValues: Boolean): Option[Any] = {
+  private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
     require(blockId != null, "BlockId is null")
     val locations = Random.shuffle(master.getLocations(blockId))
     for (loc <- locations) {
@@ -498,8 +510,11 @@ private[spark] class BlockManager(
       val data = BlockManagerWorker.syncGetBlock(
         GetBlock(blockId), ConnectionManagerId(loc.host, loc.port))
       if (data != null) {
-        if (asValues) {
-          return Some(dataDeserialize(blockId, data))
+        if (asBlockResult) {
+          return Some(new BlockResult(
+            dataDeserialize(blockId, data),
+            DataReadMethod.Network,
+            data.limit()))
         } else {
           return Some(data)
         }
@@ -513,7 +528,7 @@ private[spark] class BlockManager(
   /**
    * Get a block from the block manager (either local or remote).
    */
-  def get(blockId: BlockId): Option[Iterator[Any]] = {
+  def get(blockId: BlockId): Option[BlockResult] = {
     val local = getLocal(blockId)
     if (local.isDefined) {
       logInfo(s"Found block $blockId locally")
@@ -792,7 +807,7 @@ private[spark] class BlockManager(
    * Read a block consisting of a single object.
    */
   def getSingle(blockId: BlockId): Option[Any] = {
-    get(blockId).map(_.next())
+    get(blockId).map(_.data.next())
   }
 
   /**

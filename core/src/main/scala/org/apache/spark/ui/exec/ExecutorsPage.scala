@@ -72,6 +72,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     "Complete Tasks",
     "Total Tasks",
     "Task Time",
+    "Input Bytes",
     "Shuffle Read",
     "Shuffle Write")
 
@@ -97,6 +98,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       <td>{values("Complete Tasks")}</td>
       <td>{values("Total Tasks")}</td>
       <td sorttable_customkey={values("Task Time")}>{Utils.msDurationToString(values("Task Time").toLong)}</td>
+      <td sorttable_customkey={values("Input Bytes")}>{Utils.bytesToString(values("Input Bytes").toLong)}</td>
       <td sorttable_customkey={values("Shuffle Read")}>{Utils.bytesToString(values("Shuffle Read").toLong)}</td>
       <td sorttable_customkey={values("Shuffle Write")} >{Utils.bytesToString(values("Shuffle Write").toLong)}</td>
     </tr>
@@ -119,6 +121,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
     val totalTasks = activeTasks + failedTasks + completedTasks
     val totalDuration = listener.executorToDuration.getOrElse(execId, 0)
+    val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0)
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0)
 
@@ -136,6 +139,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       completedTasks,
       totalTasks,
       totalDuration,
+      totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
       maxMem
