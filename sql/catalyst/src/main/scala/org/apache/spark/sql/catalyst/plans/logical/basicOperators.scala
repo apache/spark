@@ -46,10 +46,21 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
-  protected def generatorOutput: Seq[Attribute] =
-    alias
+  protected def generatorOutput: Seq[Attribute] = {
+    val output = alias
       .map(a => generator.output.map(_.withQualifiers(a :: Nil)))
       .getOrElse(generator.output)
+    if (outer) {
+      output.map {
+        case attr if !attr.nullable =>
+          AttributeReference(
+            attr.name, attr.dataType, nullable = true)(attr.exprId, attr.qualifiers)
+        case attr => attr
+      }
+    } else {
+      output
+    }
+  }
 
   override def output =
     if (join) child.output ++ generatorOutput else generatorOutput
