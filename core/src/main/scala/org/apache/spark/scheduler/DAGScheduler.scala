@@ -893,21 +893,17 @@ class DAGScheduler(
                 logInfo("Resubmitting " + stage + " (" + stage.name +
                   ") because some of its tasks had failed: " +
                   stage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
-                // Pre-started dependant stages should fail
+                val stages = new ArrayBuffer[Stage]()
+                // Pre-started dependant stages should fail as well
                 if (dependantStagePreStarted.contains(stage)) {
-                  if (failedStages.isEmpty && eventProcessActor != null) {
-                    import env.actorSystem.dispatcher
-                    env.actorSystem.scheduler.scheduleOnce(
-                      RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
-                  }
                   for (preStartedStage <- dependantStagePreStarted.get(stage).get) {
-                    runningStages -= preStartedStage
-                    // TODO: Cancel running tasks in the stage
                     logInfo("Marking " + preStartedStage + " (" + preStartedStage.name +
                       ") for resubmision due to parent stage resubmission")
-                    failedStages += preStartedStage
+                    runningStages -= preStartedStage
+                    stages += preStartedStage
                   }
                 }
+                failStages(stages.toArray)
                 submitStage(stage)
               } else {
                 val newlyRunnable = new ArrayBuffer[Stage]
@@ -1226,6 +1222,20 @@ class DAGScheduler(
       }
     }
     false
+  }
+
+  // Mark some stages as failed and resubmit them
+  private def failStages(stages: Array[Stage]) {
+    // Let's first kill all the running tasks in the failed stage
+    for (failedStage <- stages) {
+      taskScheduler.killTasks(failedStage.id, true)
+    }
+    if (failedStages.isEmpty && eventProcessActor != null) {
+      import env.actorSystem.dispatcher
+      env.actorSystem.scheduler.scheduleOnce(
+        RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
+    }
+    failedStages ++= stages
   }
 }
 

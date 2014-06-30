@@ -54,4 +54,8 @@ private[spark] trait TaskScheduler {
 
   // Get the default level of parallelism to use in the cluster, as a hint for sizing jobs.
   def defaultParallelism(): Int
+
+  // Kill the running tasks in a stage, without aborting the job
+  // This is used for resubmitting a failed stage
+  def killTasks(stageId: Int, interruptThread: Boolean): Unit = {}
 }

@@ -435,6 +435,17 @@ private[spark] class TaskSchedulerImpl(
 
   // By default, rack is unknown
   def getRackForHost(value: String): Option[String] = None
+
+  override def killTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
+    logInfo("Killing tasks in stage " + stageId)
+    activeTaskSets.find(_._2.stageId == stageId).foreach { case (_, tsm) =>
+      tsm.runningTasksSet.foreach { tid =>
+        val execId = taskIdToExecutorId(tid)
+        backend.killTask(tid, execId, interruptThread)
+      }
+      tsm.kill()
+    }
+  }
 }
 
 
