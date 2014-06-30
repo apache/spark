@@ -594,6 +594,31 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assertDataStructuresEmpty
   }
 
+  // TODO: Fix this and un-ignore the test.
+  ignore("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
+    val acc = new Accumulator[Int](0, new AccumulatorParam[Int] {
+      override def addAccumulator(t1: Int, t2: Int): Int = t1 + t2
+      override def zero(initialValue: Int): Int = 0
+      override def addInPlace(r1: Int, r2: Int): Int = {
+        throw new DAGSchedulerSuiteDummyException
+      }
+    })
+
+    // Run this on executors
+    intercept[SparkDriverExecutionException] {
+      sc.parallelize(1 to 10, 2).foreach { item => acc.add(1) }
+    }
+
+    // Run this within a local thread
+    intercept[SparkDriverExecutionException] {
+      sc.parallelize(1 to 10, 2).map { item => acc.add(1) }.take(1)
+    }
+
+    // Make sure we can still run local commands as well as cluster commands.
+    assert(sc.parallelize(1 to 10, 2).count() === 10)
+    assert(sc.parallelize(1 to 10, 2).first() === 1)
+  }
+
   test("misbehaved resultHandler should not crash DAGScheduler and SparkContext") {
     val e1 = intercept[SparkDriverExecutionException] {
       val rdd = sc.parallelize(1 to 10, 2)
