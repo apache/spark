@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{LeftSemi, JoinType}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.types._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
@@ -81,11 +81,28 @@ case class Join(
   condition: Option[Expression]) extends BinaryNode {
 
   override def references = condition.map(_.references).getOrElse(Set.empty)
-  override def output = joinType match {
-    case LeftSemi =>
-      left.output
-    case _ =>
-      left.output ++ right.output
+  override def output = {
+    def nullabilize(output: Seq[Attribute]) = {
+      output.map {
+        case attr if !attr.nullable =>
+          AttributeReference(
+            attr.name, attr.dataType, nullable = true)(attr.exprId, attr.qualifiers)
+        case attr => attr
+      }
+    }
+
+    joinType match {
+      case LeftSemi =>
+        left.output
+      case LeftOuter =>
+        left.output ++ nullabilize(right.output)
+      case RightOuter =>
+        nullabilize(left.output) ++ right.output
+      case FullOuter =>
+        nullabilize(left.output) ++ nullabilize(right.output)
+      case _ =>
+        left.output ++ right.output
+    }
   }
 }
 
