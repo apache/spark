@@ -143,7 +143,10 @@ private[spark] class TaskSchedulerImpl(
         Utils.tryOrExit { checkSpeculatableTasks() }
       }
     }
-    waitBackendReady
+  }
+
+  override def postStartHook() {
+    waitBackendReady()
   }
 
   override def submitTasks(taskSet: TaskSet) {
