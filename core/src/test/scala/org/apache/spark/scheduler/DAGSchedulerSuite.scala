@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import scala.Tuple2
 import scala.collection.mutable.{HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 
@@ -36,6 +35,8 @@ class BuggyDAGEventProcessActor extends Actor {
     case _ => throw new SparkException("error")
   }
 }
+
+class DAGSchedulerSuiteDummyException extends Exception
 
 class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuiteLike
   with ImplicitSender with BeforeAndAfter with LocalSparkContext {
@@ -576,6 +577,59 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     complete(taskSets(4), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
+  }
+
+  // TODO: Fix this and un-ignore the test.
+  ignore("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
+    val acc = new Accumulator[Int](0, new AccumulatorParam[Int] {
+      override def addAccumulator(t1: Int, t2: Int): Int = t1 + t2
+      override def zero(initialValue: Int): Int = 0
+      override def addInPlace(r1: Int, r2: Int): Int = {
+        throw new DAGSchedulerSuiteDummyException
+      }
+    })
+
+    // Run this on executors
+    intercept[SparkDriverExecutionException] {
+      sc.parallelize(1 to 10, 2).foreach { item => acc.add(1) }
+    }
+
+    // Run this within a local thread
+    intercept[SparkDriverExecutionException] {
+      sc.parallelize(1 to 10, 2).map { item => acc.add(1) }.take(1)
+    }
+
+    // Make sure we can still run local commands as well as cluster commands.
+    assert(sc.parallelize(1 to 10, 2).count() === 10)
+    assert(sc.parallelize(1 to 10, 2).first() === 1)
+  }
+
+  test("misbehaved resultHandler should not crash DAGScheduler and SparkContext") {
+    val e1 = intercept[SparkDriverExecutionException] {
+      val rdd = sc.parallelize(1 to 10, 2)
+      sc.runJob[Int, Int](
+        rdd,
+        (context: TaskContext, iter: Iterator[Int]) => iter.size,
+        Seq(0),
+        allowLocal = true,
+        (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
+    }
+    assert(e1.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
+
+    val e2 = intercept[SparkDriverExecutionException] {
+      val rdd = sc.parallelize(1 to 10, 2)
+      sc.runJob[Int, Int](
+        rdd,
+        (context: TaskContext, iter: Iterator[Int]) => iter.size,
+        Seq(0, 1),
+        allowLocal = false,
+        (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
+    }
+    assert(e2.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
+
+    // Make sure we can still run local commands as well as cluster commands.
+    assert(sc.parallelize(1 to 10, 2).count() === 10)
+    assert(sc.parallelize(1 to 10, 2).first() === 1)
   }
 
   test("DAGSchedulerActorSupervisor closes the SparkContext when EventProcessActor crashes") {
