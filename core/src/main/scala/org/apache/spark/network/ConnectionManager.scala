@@ -854,7 +854,8 @@ private[spark] object ConnectionManager {
 
   def main(args: Array[String]) {
     val conf = new SparkConf
-    val manager = new ConnectionManager(9999, conf, new SecurityManager(conf))
+    val manager = new ConnectionManager(conf.getInt("spark.network.connectionmanager.port", 9999),
+      conf, new SecurityManager(conf))
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       println("Received [" + msg + "] from [" + id + "]")
       None
