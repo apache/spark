@@ -363,7 +363,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
 }
 
-object ApplicationMaster {
+object ApplicationMaster extends Logging {
   // Number of times to wait for the allocator loop to complete.
   // Each loop iteration waits for 100ms, so maximum of 3 seconds.
   // This is to ensure that we have reasonable number of containers before we start
