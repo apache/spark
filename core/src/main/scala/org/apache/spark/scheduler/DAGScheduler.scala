@@ -956,10 +956,11 @@ class DAGScheduler(
         pendingTasks(stage) += task
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
+        val stages = new ArrayBuffer[Stage]()
         // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
         runningStages -= failedStage
-        // TODO: Cancel running tasks in the stage
+        stages += failedStage
         logInfo("Marking " + failedStage + " (" + failedStage.name +
           ") for resubmision due to a fetch failure")
         // Mark the map whose fetch failed as broken in the map stage
@@ -969,18 +970,10 @@ class DAGScheduler(
           mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
         }
         runningStages -= mapStage
+        stages += mapStage
         logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
           "); marking it for resubmission")
-        if (failedStages.isEmpty && eventProcessActor != null) {
-          // Don't schedule an event to resubmit failed stages if failed isn't empty, because
-          // in that case the event will already have been scheduled. eventProcessActor may be
-          // null during unit tests.
-          import env.actorSystem.dispatcher
-          env.actorSystem.scheduler.scheduleOnce(
-            RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
-        }
-        failedStages += failedStage
-        failedStages += mapStage
+        failStages(stages.toArray)
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
           handleExecutorLost(bmAddress.executorId, Some(task.epoch))
@@ -1230,6 +1223,9 @@ class DAGScheduler(
       taskScheduler.killTasks(failedStage.id, true)
     }
     if (failedStages.isEmpty && eventProcessActor != null) {
+      // Don't schedule an event to resubmit failed stages if failed isn't empty, because
+      // in that case the event will already have been scheduled. eventProcessActor may be
+      // null during unit tests.
       import env.actorSystem.dispatcher
       env.actorSystem.scheduler.scheduleOnce(
         RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
