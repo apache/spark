@@ -180,25 +180,31 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
         // Merge the new apps with the existing ones, discarding any duplicates. The new map
         // is created in descending end time order.
-        var currentApps = appList.values.iterator
+        val currentApps = appList.values.iterator
+        var current = if (currentApps.hasNext) currentApps.next else null
+        def addOldInfo(oldInfo: FsApplicationHistoryInfo) = {
+          if (!newAppList.contains(oldInfo.id)) {
+            newAppList += (oldInfo.id -> oldInfo)
+          }
+        }
+
+
         logInfos.foreach { info =>
           if (info != null) {
-            currentApps
-              .takeWhile(oldInfo => oldInfo.endTime > info.endTime)
-              .foreach { oldInfo =>
-                if (!newAppList.contains(oldInfo.id)) {
-                  newAppList += (oldInfo.id -> oldInfo)
-                }
-              }
+            while (current != null && current.endTime > info.endTime) {
+              addOldInfo(current)
+              current = if (currentApps.hasNext) currentApps.next else null
+            }
 
             newAppList += (info.id -> info)
           }
         }
 
+        if (current != null) {
+          addOldInfo(current)
+        }
         currentApps.foreach { oldInfo =>
-          if (!newAppList.contains(oldInfo.id)) {
-            newAppList += (oldInfo.id -> oldInfo)
-          }
+          addOldInfo(oldInfo)
         }
 
         appList = newAppList
