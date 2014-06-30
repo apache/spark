@@ -47,17 +47,26 @@ class MultilabelMetricsSuite extends FunSuite with LocalSparkContext {
     val f1measure0 = 2 * precision0 * recall0 / (precision0 + recall0)
     val f1measure1 = 2 * precision1 * recall1 / (precision1 + recall1)
     val f1measure2 = 2 * precision2 * recall2 / (precision2 + recall2)
-    val microPrecisionClass = (4.0 + 2.0 + 2.0) / (4 + 0 + 2 + 1 + 2 + 2)
-    val microRecallClass = (4.0 + 2.0 + 2.0) / (4 + 1 + 2 + 1 + 2 + 2)
-    val microF1MeasureClass = 2 * microPrecisionClass * microRecallClass / (microPrecisionClass + microRecallClass)
+    val sumTp = 4 + 2 + 2
+    assert(sumTp == (1 + 1 + 0 + 1 + 2 + 2 + 1))
+    val microPrecisionClass = sumTp.toDouble / (4 + 0 + 2 + 1 + 2 + 2)
+    val microRecallClass = sumTp.toDouble / (4 + 1 + 2 + 1 + 2 + 2)
+    val microF1MeasureClass = 2.0 * sumTp.toDouble /
+      (2 * sumTp.toDouble + (1 + 1 + 2) + (0 + 1 + 2))
 
-    val macroPrecisionDoc = 1.0 / 7 * (1.0 / 2 + 1.0 / 2 + 0 + 1.0 / 1 + 2.0 / 2 + 2.0 / 3 + 1.0 / 1.0)
-    val macroRecallDoc = 1.0 / 7 * (1.0 / 2 + 1.0 / 2 + 0 / 1 + 1.0 / 1 + 2.0 / 2 + 2.0 / 2 + 1.0 / 2)
+    val macroPrecisionDoc = 1.0 / 7 *
+      (1.0 / 2 + 1.0 / 2 + 0 + 1.0 / 1 + 2.0 / 2 + 2.0 / 3 + 1.0 / 1.0)
+    val macroRecallDoc = 1.0 / 7 *
+      (1.0 / 2 + 1.0 / 2 + 0 / 1 + 1.0 / 1 + 2.0 / 2 + 2.0 / 2 + 1.0 / 2)
+    val macroF1MeasureDoc = (1.0 / 7) *
+      2 * ( 1.0 / (2 + 2) + 1.0 / (2 + 2) + 0 + 1.0 / (1 + 1) +
+        2.0 / (2 + 2) + 2.0 / (3 + 2) + 1.0 / (1 + 2) )
 
-    println("Ev" + metrics.macroPrecisionDoc)
-    println(macroPrecisionDoc)
-    println("Ev" + metrics.macroRecallDoc)
-    println(macroRecallDoc)
+    val hammingLoss = (1.0 / (7 * 3)) * (2 + 2 + 1 + 0 + 0 + 1 + 1)
+
+    val strictAccuracy = 2.0 / 7
+    val accuracy = 1.0 / 7 * (1.0 / 3 + 1.0 /3 + 0 + 1.0 / 1 + 2.0 / 2 + 2.0 / 3 + 1.0 / 2)
+
     assert(math.abs(metrics.precisionClass(0.0) - precision0) < delta)
     assert(math.abs(metrics.precisionClass(1.0) - precision1) < delta)
     assert(math.abs(metrics.precisionClass(2.0) - precision2) < delta)
@@ -74,6 +83,11 @@ class MultilabelMetricsSuite extends FunSuite with LocalSparkContext {
 
     assert(math.abs(metrics.macroPrecisionDoc - macroPrecisionDoc) < delta)
     assert(math.abs(metrics.macroRecallDoc - macroRecallDoc) < delta)
+    assert(math.abs(metrics.macroF1MeasureDoc - macroF1MeasureDoc) < delta)
+
+    assert(math.abs(metrics.hammingLoss - hammingLoss) < delta)
+    assert(math.abs(metrics.strictAccuracy - strictAccuracy) < delta)
+    assert(math.abs(metrics.accuracy - accuracy) < delta)
 
 
   }

@@ -31,7 +31,33 @@ import org.apache.spark.SparkContext._
  */
 class MultilabelMetrics(predictionAndLabels:RDD[(Set[Double], Set[Double])]) extends Logging{
 
-  private lazy val numDocs = predictionAndLabels.count()
+  private lazy val numDocs = predictionAndLabels.count
+
+  private lazy val numLabels = predictionAndLabels.flatMap{case(_, labels) => labels}.distinct.count
+
+  /**
+   * Returns strict Accuracy
+   * (for equal sets of labels)
+   * @return strictAccuracy.
+   */
+  lazy val strictAccuracy = predictionAndLabels.filter{case(predictions, labels) =>
+    predictions == labels}.count.toDouble / numDocs
+
+  /**
+   * Returns Accuracy
+   * @return Accuracy.
+   */
+  lazy val accuracy = predictionAndLabels.map{ case(predictions, labels) =>
+    labels.intersect(predictions).size.toDouble / labels.union(predictions).size}.
+    fold(0.0)(_ + _) / numDocs
+
+  /**
+   * Returns Hamming-loss
+   * @return hammingLoss.
+   */
+  lazy val hammingLoss = (predictionAndLabels.map{ case(predictions, labels) =>
+    labels.diff(predictions).size + predictions.diff(labels).size}.
+    fold(0)(_ + _)).toDouble / (numDocs * numLabels)
 
   /**
    * Returns Document-based Precision averaged by the number of documents
@@ -47,31 +73,36 @@ class MultilabelMetrics(predictionAndLabels:RDD[(Set[Double], Set[Double])]) ext
    * @return macroRecallDoc.
    */
   lazy val macroRecallDoc = (predictionAndLabels.map{ case(predictions, labels) =>
-    predictions.intersect(labels).size.toDouble / labels.size}.fold(0.0)(_ + _)) / numDocs
+    labels.intersect(predictions).size.toDouble / labels.size}.fold(0.0)(_ + _)) / numDocs
+
+  /**
+   * Returns Document-based F1-measure averaged by the number of documents
+   * @return macroRecallDoc.
+   */
+  lazy val macroF1MeasureDoc = (predictionAndLabels.map{ case(predictions, labels) =>
+    2.0 * predictions.intersect(labels).size /
+      (predictions.size + labels.size)}.fold(0.0)(_ + _)) / numDocs
 
   /**
    * Returns micro-averaged document-based Precision
+   * (equals to label-based microPrecision)
    * @return microPrecisionDoc.
    */
-  lazy val microPrecisionDoc = {
-    val (sumTp, sumPredictions) = predictionAndLabels.map{ case(predictions, labels) =>
-      (predictions.intersect(labels).size, predictions.size)}.
-      fold((0, 0)){ case((tp1, predictions1), (tp2, predictions2)) =>
-      (tp1 + tp2, predictions1 + predictions2)}
-    sumTp.toDouble / sumPredictions
-  }
+  lazy val microPrecisionDoc = microPrecisionClass
 
   /**
    * Returns micro-averaged document-based Recall
+   * (equals to label-based microRecall)
    * @return microRecallDoc.
    */
-  lazy val microRecallDoc = {
-    val (sumTp, sumLabels) = predictionAndLabels.map{ case(predictions, labels) =>
-      (predictions.intersect(labels).size, labels.size)}.
-      fold((0, 0)){ case((tp1, labels1), (tp2, labels2)) =>
-      (tp1 + tp2, labels1 + labels2)}
-    sumTp.toDouble / sumLabels
-  }
+  lazy val microRecallDoc = microRecallClass
+
+  /**
+   * Returns micro-averaged document-based F1-measure
+   * (equals to label-based microF1measure)
+   * @return microF1MeasureDoc.
+   */
+  lazy val microF1MeasureDoc = microF1MeasureClass
 
   private lazy val tpPerClass = predictionAndLabels.flatMap{ case(predictions, labels) =>
     predictions.intersect(labels).map(category => (category, 1))}.reduceByKey(_ + _).collectAsMap()
@@ -110,7 +141,9 @@ class MultilabelMetrics(predictionAndLabels:RDD[(Set[Double], Set[Double])]) ext
     if((precision + recall) == 0) 0 else 2 * precision * recall / (precision + recall)
   }
 
-  private lazy val sumTp = tpPerClass.foldLeft(0L){ case(sumTp, (_, tp)) => sumTp + tp}
+  private lazy val sumTp = tpPerClass.foldLeft(0L){ case(sum, (_, tp)) => sum + tp}
+  private lazy val sumFpClass = fpPerClass.foldLeft(0L){ case(sum, (_, fp)) => sum + fp}
+  private lazy val sumFnClass = fnPerClass.foldLeft(0L){ case(sum, (_, fn)) => sum + fn}
 
   /**
    * Returns micro-averaged label-based Precision
@@ -134,10 +167,6 @@ class MultilabelMetrics(predictionAndLabels:RDD[(Set[Double], Set[Double])]) ext
    * Returns micro-averaged label-based F1-measure
    * @return microRecallClass.
    */
-  lazy val microF1MeasureClass = {
-    val precision = microPrecisionClass
-    val recall = microRecallClass
-    if((precision + recall) == 0) 0 else 2 * precision * recall / (precision + recall)
-  }
+  lazy val microF1MeasureClass = 2.0 * sumTp / (2 * sumTp + sumFnClass + sumFpClass)
 
 }
