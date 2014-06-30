@@ -26,7 +26,6 @@ import java.util.Properties
 private[spark] class TaskSet(
     val tasks: Array[Task[_]],
     val stageId: Int,
-    val stageName: String,
     val attempt: Int,
     val priority: Int,
     val properties: Properties) {

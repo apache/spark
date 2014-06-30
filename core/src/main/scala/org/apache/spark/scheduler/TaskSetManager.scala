@@ -423,9 +423,9 @@ private[spark] class TaskSetManager(
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
               !emittedTaskSizeWarning) {
             emittedTaskSizeWarning = true
-            logWarning(s"Stage ${task.stageId} (${taskSet.stageName}}) contains a task of very " +
-              s"large size (${serializedTask.limit / 1024} KB). The maximum recommended task " +
-              s"size is ${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+            logWarning(s"Stage ${task.stageId} contains a task of very large size " +
+              s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+              s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
           }
           val timeTaken = clock.getTime() - startTime
           addRunningTask(taskId)

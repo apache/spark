@@ -465,7 +465,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
 
-    val taskSet = new TaskSet(Array(new LargeTask(0)), 0, "taskSetWithLargeTask", 0, 0, null)
+    val taskSet = new TaskSet(Array(new LargeTask(0)), 0, 0, 0, null)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     assert(!manager.emittedTaskSizeWarning)
