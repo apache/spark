@@ -616,7 +616,7 @@ class JsonProtocolSuite extends FunSuite {
       |"Task Info":{
       |  "Task ID":123,"Index":234,"Attempt":67,"Launch Time":345,"Executor ID":"executor",
       |  "Host":"your kind sir","Locality":"NODE_LOCAL","Speculative":false,
-      |  "Getting Result Time":0,"Finish Time":0,"Failed":false,"Serialized Size":0
+      |  "Getting Result Time":0,"Finish Time":0,"Failed":false
       |},
       |"Task Metrics":{
       |  "Host Name":"localhost","Executor Deserialize Time":300,"Executor Run Time":400,
