@@ -859,6 +859,12 @@ class DAGScheduler(
               logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
             } else {
               stage.addOutputLoc(smt.partitionId, status)
+              // Temporarily added for test
+              if (pendingTasks(stage).isEmpty && !failureGenerated) {
+                stage.removeOutputLoc(smt.partitionId, null)
+                failureGenerated = true
+                logInfo("Remove some map status to created a failuer. ---lirui")
+              }
               // Need to register map outputs progressively if remove stage barrier is enabled
               if (removeStageBarrier && dependantStagePreStarted.contains(stage) && stage.shuffleDep.isDefined) {
                 mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
@@ -882,19 +888,17 @@ class DAGScheduler(
                 mapOutputTracker.registerMapOutputs(
                   stage.shuffleDep.get.shuffleId,
                   stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-                  changeEpoch = true)
+                  changeEpoch = true,isPartial = true)
               }
               clearCacheLocs()
-              if (stage.outputLocs.exists(_ == Nil) || !failureGenerated) {
-                stage.outputLocs(0) = Nil
-                failureGenerated = true
+              if (stage.outputLocs.exists(_ == Nil)) {
                 // Some tasks had failed; let's resubmit this stage
                 // TODO: Lower-level scheduler should also deal with this
                 logInfo("Resubmitting " + stage + " (" + stage.name +
                   ") because some of its tasks had failed: " +
                   stage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
+                // Pre-started dependant stages should fail
                 val stages = new ArrayBuffer[Stage]()
-                // Pre-started dependant stages should fail as well
                 if (dependantStagePreStarted.contains(stage)) {
                   for (preStartedStage <- dependantStagePreStarted.get(stage).get) {
                     logInfo("Marking " + preStartedStage + " (" + preStartedStage.name +

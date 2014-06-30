@@ -254,7 +254,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     true
   }
 
-  // Compute the completeness of a shuffle
+  // Compute the completeness of map statuses for a shuffle
   def completenessForShuffle(shuffleId: Int): Int = {
     if (mapStatuses.get(shuffleId).isDefined) {
       return mapStatuses.get(shuffleId).get.count(_ != null)
