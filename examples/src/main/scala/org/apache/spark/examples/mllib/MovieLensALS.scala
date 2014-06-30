@@ -175,7 +175,10 @@ object MovieLensALS {
     
     params.qpProblem match {
       case 1 => println("Unbounded Qp")
-      case 2 => println("Qp with positivity")
+      case 2 => {
+        println("Qp with positivity")
+        als.setNonnegative(true)
+      }
       case 3 => println("Qp with bounds")
       case 4 => println("Qp with equality")
       case 5 => println("Qp with L1 regularization " + params.lambdaL1)

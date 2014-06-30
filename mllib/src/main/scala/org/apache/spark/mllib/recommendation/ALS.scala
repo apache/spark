@@ -142,7 +142,7 @@ class ALS private (
     this.lambdaL1 = lambdaL1
     this
   }
-  
+
   /** Sets whether to use implicit preference. Default: false. */
   def setImplicitPrefs(implicitPrefs: Boolean): ALS = {
     this.implicitPrefs = implicitPrefs
@@ -492,7 +492,7 @@ class ALS private (
     println("qpResult " + qpResult)
     println("directQpResult " + directQpResult)
   }
-  
+
   /**
    * Compute the new feature vectors for a block of the users matrix given the list of factors
    * it received from each product and its InLinkBlock.
@@ -554,7 +554,8 @@ class ALS private (
       var qpTime: Long = 0
       var lsTime: Long = 0
       var directQpTime: Long = 0
-
+      var failed: Long = 0
+      
       val ws = if (nonnegative) NNLS.createWorkspace(rank)
       else null
 
@@ -593,29 +594,31 @@ class ALS private (
             inequalityBuilder.add(2 * i + 1, i, 1)
             inequalityBuilder.add(2 * i + 1, rank + i, -1)
           }
-          val qpSolver = new QpSolver(rank, rank, false, None, Some(inequalityBuilder.result), false)
+          val qpSolver = new QpSolver(rank, rank, false, None, Some(inequalityBuilder.result))
           qpSolver
         }
       }
 
       val directQpSolver = qpProblem match {
         case 1 => new DirectQpSolver(rank)
-        case 2 => new DirectQpSolver(rank).setProximal(2)
+        case 2 => new DirectQpSolver(rank, None, None, None, 1.0, 1.0).setProximal(1)
         case 3 => {
           //Direct QP with bounds
           val lb = DoubleMatrix.zeros(rank, 1)
           val ub = DoubleMatrix.zeros(rank, 1).addi(1.0)
-          new DirectQpSolver(rank, Some(lb), Some(ub)).setProximal(1)
+          new DirectQpSolver(rank, Some(lb), Some(ub), None, 1.0, 1.0).setProximal(2)
         }
         case 4 => {
           //Direct QP with equality constraint
-          val c = Array.fill[Double](rank)(1.0)
-          new DirectQpSolver(rank, None, None, Some(c)).setProximal(4)
+          val Aeq = DoubleMatrix.ones(1, rank)
+          val lbeq = DoubleMatrix.zeros(rank, 1)
+          val ubeq = DoubleMatrix.ones(rank, 1)
+          val directQpMl = new DirectQpSolver(rank, Some(lbeq), Some(ubeq), Some(Aeq), 1.0, 1.0, true).setProximal(2)
+          directQpMl
         }
         case 5 => {
           //Direct QP with L1
-          val proximal = 5
-          val qpSolverL1 = new DirectQpSolver(rank).setProximal(5)
+          val qpSolverL1 = new DirectQpSolver(rank, None, None, None, 1.0, 1.0).setProximal(4)
           qpSolverL1.setLambda(lambdaL1)
           qpSolverL1
         }
@@ -636,32 +639,49 @@ class ALS private (
         val result = if (implicitPrefs) {
           val H = fullXtX.add(YtY.get.value)
           val f = userXy(index).mul(-1)
-
+          
+          val falpha = if (qpProblem == 5) {
+            f.data ++ Array.fill[Double](rank)(lambdaL1)
+          } else {
+            f.data
+          }
+          
           val qpStart = System.currentTimeMillis()
-          val qpResult = qpSolver.solve(H, f.data)._2
+          val qpResult = DenseVector(qpSolver.solve(H, falpha)._2)
           qpTime = qpTime + (System.currentTimeMillis() - qpStart)
-
+          
           val directQpStart = System.currentTimeMillis()
-          val directQpResult = directQpSolver.solve(H, f)
+          val directQpResult = if(qpProblem == 4) {
+            val beq = DoubleMatrix.ones(1,1)
+            DenseVector(directQpSolver.solve(H, f, Some(beq)).data)
+          } else {
+            DenseVector(directQpSolver.solve(H, f).data)
+          }
           directQpTime = directQpTime + (System.currentTimeMillis() - directQpStart)
 
           val lsStart = System.currentTimeMillis()
-          val result = solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws)
+          val result = DenseVector(solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws))
           lsTime = lsTime + (System.currentTimeMillis() - lsStart)
-
+          
           var qpFail = 0
           if(qpProblem == 1 || qpProblem == 2) {
-        	  if (norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2) {
+        	  if (norm(qpResult - result, 2) > 1E-2) {
         	    println("ECOS QP failed")
+        	    failed = failed + 1
         	    qpFail = 1
         	  }
-              if (norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) {
+              if (norm(directQpResult - result, 2) > 1E-2) {
                 println("ADMM QP failed")
+                failed = failed + 1
                 qpFail = 2
               }
           }
-          if (qpFail > 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
-          else if(index == 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
+          if (qpFail > 0) diagnose(H, f, qpResult, directQpResult, result)
+          else if(norm(qpResult - directQpResult, 2) > 1E-2) {
+            println("Mismatch on qpProblem " + qpProblem)
+            diagnose(H, f, qpResult, directQpResult, result)
+            failed = failed + 1
+          }
           
           directQpResult.data
         } else {
@@ -669,43 +689,52 @@ class ALS private (
           val f = userXy(index).mul(-1)
 
           val falpha = if (qpProblem == 5) {
-            directQpSolver.setLambda(alpha)
-            f.data ++ Array.fill[Double](rank)(alpha)
+            f.data ++ Array.fill[Double](rank)(lambdaL1)
           } else {
             f.data
           }
-
-          val directQpStart = System.currentTimeMillis()
-          val directQpResult = directQpSolver.solve(H, f)
-          directQpTime = directQpTime + (System.currentTimeMillis() - directQpStart)
-
+          
           val qpStart = System.currentTimeMillis()
-          val qpResult = qpSolver.solve(H, falpha)._2
+          val qpResult = DenseVector(qpSolver.solve(H, falpha)._2)
           qpTime = qpTime + (System.currentTimeMillis() - qpStart)
 
-          val lsStart = System.currentTimeMillis()
-          val result = solveLeastSquares(fullXtX, userXy(index), ws)
-          lsTime = lsTime + (System.currentTimeMillis() - lsStart)
+          val directQpStart = System.currentTimeMillis()
+          val directQpResult = if(qpProblem == 4) {
+            val beq = DoubleMatrix.ones(1,1)
+            DenseVector(directQpSolver.solve(H, f, Some(beq)).data)
+          } else {
+            DenseVector(directQpSolver.solve(H, f).data)
+          }
+          directQpTime = directQpTime + (System.currentTimeMillis() - directQpStart)
           
+          val lsStart = System.currentTimeMillis()
+          val result = DenseVector(solveLeastSquares(fullXtX, userXy(index), ws))
+          lsTime = lsTime + (System.currentTimeMillis() - lsStart)
+
           var qpFail = 0
           if (qpProblem == 1 || qpProblem == 2) {
-        	  if (norm(DenseVector(qpResult) - DenseVector(result), 2) > 1E-2) {
+        	  if (norm(qpResult - result, 2) > 1E-2) {
         	    println("ECOS QP failed")
         	    qpFail = 1
+        	    failed = failed + 1
         	  }
-        	  if (norm(DenseVector(directQpResult.data) - DenseVector(result), 2) > 1E-2) {
+        	  if (norm(directQpResult - result, 2) > 1E-2) {
         	    println("ADMM QP failed")
         	    qpFail = 2
+        	    failed = failed + 1
         	  }
           }
-          if (qpFail > 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
-          else if(index == 0) diagnose(H, f, DenseVector(qpResult), DenseVector(directQpResult.data), DenseVector(result))
-          
+          if (qpFail > 0) diagnose(H, f, qpResult, directQpResult,result)
+          else if(norm(qpResult - directQpResult, 2) > 1E-2) {
+            println("Mismatch on qpProblem " + qpProblem)
+            diagnose(H, f, qpResult, directQpResult, result)
+            failed = failed + 1
+          }
           directQpResult.data
         }
         result
       }
-      println("lsTime " + lsTime + " qpTime " + qpTime + " directQpTime " + directQpTime)
+      println("lsTime " + lsTime + " qpTime " + qpTime + " directQpTime " + directQpTime + " failed " + failed)
       factors
     }
 
