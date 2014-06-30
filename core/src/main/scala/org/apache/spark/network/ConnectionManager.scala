@@ -104,7 +104,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
 
   private def startService(port: Int) = {
     serverChannel.socket.bind(new InetSocketAddress(port))
-    serverChannel
+    (serverChannel, port)
   }
   PortManager.startWithIncrements(port, 3, startService)
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)

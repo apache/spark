@@ -38,13 +38,12 @@ private[spark] object PortManager extends Logging
    * @throws SparkException When unable to start service in the given number of attempts
    * @return
    */
-  def startWithIncrements[T](startPort: Int, maxRetries: Int, startService: Int => T):
+  def startWithIncrements[T](startPort: Int, maxRetries: Int, startService: Int => (T, Int)):
       (T, Int) = {
     for( offset <- 0 to maxRetries) {
       val tryPort = startPort + offset
       try {
-        val service: T = startService(tryPort)
-        return (service, tryPort)
+        return startService(tryPort)
       } catch {
         case e: java.net.BindException => {
           if (!e.getMessage.contains("Address already in use") ||

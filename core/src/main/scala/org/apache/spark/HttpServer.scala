@@ -48,7 +48,7 @@ private[spark] class HttpServer(resourceBase: File,
   private var server: Server = null
   private var port: Int = localPort
 
-  private def startOnPort(startPort: Int): Server = {
+  private def startOnPort(startPort: Int): (Server, Int) = {
     val server = new Server()
     val connector = new SocketConnector
     connector.setMaxIdleTime(60*1000)
@@ -79,7 +79,7 @@ private[spark] class HttpServer(resourceBase: File,
     server.start()
     val actualPort = server.getConnectors()(0).getLocalPort()
 
-    server
+    (server, actualPort)
   }
 
   def start() {
