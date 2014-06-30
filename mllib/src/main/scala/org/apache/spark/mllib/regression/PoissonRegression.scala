@@ -38,6 +38,142 @@ class PoissonRegressionModel private[mllib] (
       intercept: Double): Double = {
     math.exp(weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept)
   }
+
+  override def toString = {
+    "Log-linear model: (" + weights.toString + ", " + intercept + ")"
+  }
+}
+
+class PoissonRegressionWithLBFGS private (
+    private var numCorrections: Int,
+    private var numIters: Int,
+    private var convergenceTol: Double,
+    private var regParam: Double)
+  extends GeneralizedLinearAlgorithm[PoissonRegressionModel] with Serializable {
+  
+  private val gradient = new PoissonGradient()
+  private val updater = new SimpleUpdater()
+  
+  override val optimizer = new LBFGS(gradient, updater)
+    .setNumCorrections(numCorrections)
+    .setConvergenceTol(convergenceTol)
+    .setMaxNumIterations(numIters)
+    .setRegParam(regParam)
+  
+  def this() = this(10, 100, 1e-4, 0.0)
+  
+  override protected def createModel(weights: Vector, intercept: Double) = {
+    new PoissonRegressionModel(weights, intercept)
+  }
+}
+
+/**
+ * Entry for calling Poisson regression.
+ */
+object PoissonRegressionWithLBFGS {
+  
+  /**
+   * Train a PoissonRegression model given an RDD of (label, features) pairs. We run a L-BFGS to
+   * estimate the weights. The weights are initialized using the initial weights provided.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param numIterations The maximum number of iterations carried out by L-BFGS.
+   * @param numCorrections Specific parameter for LBFGS.
+   * @param convergTol The convergence tolerance of iterations for L-BFGS.
+   * @param regParam The regularization parameter for L-BFGS.
+   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
+   *        the number of features in the data.
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      numCorrections: Int,
+      convergTol: Double,
+      regParam: Double,
+      initialWeights: Vector): PoissonRegressionModel = {
+    new PoissonRegressionWithLBFGS(
+        numCorrections,
+        numIterations,
+        convergTol,
+        regParam)
+      .setIntercept(true)
+      .run(input, initialWeights)
+  }
+  
+   /**
+   * Train a PoissonRegression model given an RDD of (label, features) pairs. We run a L-BFGS to
+   * estimate the weights.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param numIterations The maximum number of iterations carried out by L-BFGS.
+   * @param numCorrections Specific parameter for LBFGS.
+   * @param convergTol The convergence tolerance of iterations for L-BFGS.
+   * @param regParam The regularization parameter for L-BFGS.
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      numCorrections: Int,
+      convergTol: Double,
+      regParam: Double): PoissonRegressionModel = {
+    new PoissonRegressionWithLBFGS(
+        numCorrections,
+        numIterations,
+        convergTol,
+        regParam)
+      .setIntercept(true)
+      .run(input)
+  }
+  
+  /**
+   * Train a PoissonRegression model given an RDD of (label, features) pairs. We run a L-BFGS to
+   * estimate the weights.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param numIterations The maximum number of iterations carried out by L-BFGS.
+   * @param numCorrections Specific parameter for LBFGS.
+   * @param convergTol The convergence tolerance of iterations for L-BFGS.
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      numCorrections: Int,
+      convergTol: Double): PoissonRegressionModel = {
+    train(input, numIterations, numCorrections, convergTol, 0.0)
+  }
+  
+  /**
+   * Train a PoissonRegression model given an RDD of (label, features) pairs. We run a L-BFGS to
+   * estimate the weights.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param numIterations The maximum number of iterations carried out by L-BFGS.
+   * @param numCorrections Specific parameter for LBFGS.
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      numCorrections: Int): PoissonRegressionModel = {
+    train(input, numIterations, numCorrections, 1e-4, 0.0)
+  }
+  
+  /**
+   * Train a PoissonRegression model given an RDD of (label, features) pairs. We run a L-BFGS to
+   * estimate the weights.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param numIterations The maximum number of iterations carried out by L-BFGS.
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int): PoissonRegressionModel = {
+    train(input, numIterations, 10, 1e-4, 0.0)
+  }
 }
 
 /**
