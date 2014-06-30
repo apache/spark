@@ -323,7 +323,8 @@ case class BroadcastNestedLoopJoin(
     def nullabilize(output: Seq[Attribute]) = {
       output.map {
         case attr if !attr.nullable =>
-          AttributeReference(attr.name, attr.dataType, nullable = true)(attr.exprId, attr.qualifiers)
+          AttributeReference(
+            attr.name, attr.dataType, nullable = true)(attr.exprId, attr.qualifiers)
         case attr => attr
       }
     }
