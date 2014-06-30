@@ -37,7 +37,7 @@ import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SignalLogger, Utils}
 
 
 /**
@@ -455,6 +455,7 @@ object ApplicationMaster {
   }
 
   def main(argStrings: Array[String]) {
+    SignalLogger.register(log)
     val args = new ApplicationMasterArguments(argStrings)
     SparkHadoopUtil.get.runAsSparkUser { () =>
       new ApplicationMaster(args).run()
