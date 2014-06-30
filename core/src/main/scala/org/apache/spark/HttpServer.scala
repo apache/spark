@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 
+import org.apache.spark.network.PortManager
 import org.eclipse.jetty.util.security.{Constraint, Password}
 import org.eclipse.jetty.security.authentication.DigestAuthenticator
 import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService, SecurityHandler}
@@ -47,7 +48,7 @@ private[spark] class HttpServer(resourceBase: File,
   private var server: Server = null
   private var port: Int = localPort
 
-  private def startOnPort(startPort: Int): Tuple2[Server,Int] = {
+  private def startOnPort(startPort: Int): Server = {
     val server = new Server()
     val connector = new SocketConnector
     connector.setMaxIdleTime(60*1000)
@@ -78,26 +79,7 @@ private[spark] class HttpServer(resourceBase: File,
     server.start()
     val actualPort = server.getConnectors()(0).getLocalPort()
 
-    return (server, actualPort)
-  }
-
-  private def startWithIncrements(startPort: Int, maxRetries: Int): Tuple2[Server,Int] = {
-    for( offset <- 0 to maxRetries) {
-      try {
-        val (server, actualPort) = startOnPort(startPort + offset)
-        return (server, actualPort)
-      } catch {
-        case e: java.net.BindException => {
-          if (!e.getMessage.contains("Address already in use") ||
-            offset == (maxRetries-1)) {
-            throw e
-          }
-          logInfo("Could not bind on port: " + (startPort + offset))
-        }
-        case e: Exception => throw e
-      }
-    }
-    return (null, -1)
+    server
   }
 
   def start() {
@@ -105,7 +87,7 @@ private[spark] class HttpServer(resourceBase: File,
       throw new ServerStateException("Server is already started")
     } else {
       logInfo("Starting HTTP Server")
-      val (actualServer, actualPort) = startWithIncrements(localPort, 3)
+      val (actualServer, actualPort) = PortManager.startWithIncrements(localPort, 3, startOnPort)
       server = actualServer
       port = actualPort
     }
