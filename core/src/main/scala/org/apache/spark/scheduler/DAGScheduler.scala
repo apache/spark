@@ -960,27 +960,28 @@ class DAGScheduler(
         pendingTasks(stage) += task
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
-        val stages = new ArrayBuffer[Stage]()
         // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
-        runningStages -= failedStage
-        stages += failedStage
-        logInfo("Marking " + failedStage + " (" + failedStage.name +
-          ") for resubmision due to a fetch failure")
-        // Mark the map whose fetch failed as broken in the map stage
-        val mapStage = shuffleToMapStage(shuffleId)
-        if (mapId != -1) {
-          mapStage.removeOutputLoc(mapId, bmAddress)
-          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
-        }
-        runningStages -= mapStage
-        stages += mapStage
-        logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
-          "); marking it for resubmission")
-        failStages(stages.toArray)
-        // TODO: mark the executor as failed only if there were lots of fetch failures on it
-        if (bmAddress != null) {
-          handleExecutorLost(bmAddress.executorId, Some(task.epoch))
+        if(runningStages.remove(failedStage)){
+          val stages = new ArrayBuffer[Stage]()
+          stages += failedStage
+          logInfo("Marking " + failedStage + " (" + failedStage.name +
+            ") for resubmision due to a fetch failure")
+          // Mark the map whose fetch failed as broken in the map stage
+          val mapStage = shuffleToMapStage(shuffleId)
+          if (mapId != -1) {
+            mapStage.removeOutputLoc(mapId, bmAddress)
+            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+          }
+          runningStages -= mapStage
+          stages += mapStage
+          logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
+            "); marking it for resubmission")
+          failStages(stages.toArray)
+          // TODO: mark the executor as failed only if there were lots of fetch failures on it
+          if (bmAddress != null) {
+            handleExecutorLost(bmAddress.executorId, Some(task.epoch))
+          }
         }
 
       case ExceptionFailure(className, description, stackTrace, metrics) =>
