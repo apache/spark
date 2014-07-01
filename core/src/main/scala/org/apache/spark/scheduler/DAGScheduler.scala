@@ -937,7 +937,10 @@ class DAGScheduler(
                     // Register map output finished so far
                     mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
                       stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-                      changeEpoch = false, isPartial = true)
+                      changeEpoch = false, isPartial = failureGenerated)
+                    if (!failureGenerated) {
+                      failureGenerated = true
+                    }
                     waitingStages -= preStartedStage
                     runningStages += preStartedStage
                     // Inform parent stages that the dependant stage has been pre-started
