@@ -204,3 +204,16 @@ case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
 }
 
+/**
+ * :: DeveloperApi ::
+ * This operator support the substract function .
+ * Return an table with the elements from `left` that are not in `right`.
+ */
+@DeveloperApi
+case class Subtract(left: SparkPlan, right: SparkPlan) extends BinaryNode {
+  override def output = left.output
+
+  override def execute() = {
+    left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
+  }
+}
