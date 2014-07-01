@@ -12,7 +12,7 @@ import org.apache.spark.util.random.XORShiftRandom
 
 trait KMeansCommons {
     /**
-   * Initialize `runs` sets of cluster centers at random.
+   * Initialize cluster centers for one run at random.
    */
   protected def initRandom(data: RDD[BreezeVectorWithNorm], k: Int)
   : Array[BreezeVectorWithNorm] = {
@@ -24,7 +24,7 @@ trait KMeansCommons {
   }
 
   /**
-   * Initialize `runs` sets of cluster centers using the k-means|| algorithm by Bahmani et al.
+   * Initialize cluster centers for one run using the k-means|| algorithm by Bahmani et al.
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). This is a variant of k-means++ that tries
    * to find with dissimilar cluster centers by starting with a random center and then doing
    * passes where more centers are chosen with probability proportional to their squared distance
