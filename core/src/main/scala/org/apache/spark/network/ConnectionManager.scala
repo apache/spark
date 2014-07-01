@@ -249,7 +249,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   def run() {
     try {
       while(!selectorThread.isInterrupted) {
-        while (! registerRequests.isEmpty) {
+        while (!registerRequests.isEmpty) {
           val conn: SendingConnection = registerRequests.dequeue()
           addListeners(conn)
           conn.connect()
@@ -308,7 +308,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
               // Some keys within the selectors list are invalid/closed. clear them.
               val allKeys = selector.keys().iterator()
 
-              while (allKeys.hasNext()) {
+              while (allKeys.hasNext) {
                 val key = allKeys.next()
                 try {
                   if (! key.isValid) {
@@ -341,7 +341,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
 
         if (0 != selectedKeysCount) {
           val selectedKeys = selector.selectedKeys().iterator()
-          while (selectedKeys.hasNext()) {
+          while (selectedKeys.hasNext) {
             val key = selectedKeys.next
             selectedKeys.remove()
             try {
@@ -419,62 +419,63 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     connectionsByKey -= connection.key
 
     try {
-      if (connection.isInstanceOf[SendingConnection]) {
-        val sendingConnection = connection.asInstanceOf[SendingConnection]
-        val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
-        logInfo("Removing SendingConnection to " + sendingConnectionManagerId)
+      connection match {
+        case sendingConnection: SendingConnection =>
+          val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
+          logInfo("Removing SendingConnection to " + sendingConnectionManagerId)
 
-        connectionsById -= sendingConnectionManagerId
-        connectionsAwaitingSasl -= connection.connectionId
+          connectionsById -= sendingConnectionManagerId
+          connectionsAwaitingSasl -= connection.connectionId
 
-        messageStatuses.synchronized {
-          messageStatuses
-            .values.filter(_.connectionManagerId == sendingConnectionManagerId).foreach(status => {
-              logInfo("Notifying " + status)
-              status.synchronized {
-              status.attempted = true
-               status.acked = false
-               status.markDone()
-              }
+          messageStatuses.synchronized {
+            messageStatuses.values.filter(_.connectionManagerId == sendingConnectionManagerId)
+              .foreach(status => {
+                logInfo("Notifying " + status)
+                status.synchronized {
+                  status.attempted = true
+                  status.acked = false
+                  status.markDone()
+                }
+              })
+
+            messageStatuses.retain((i, status) => {
+              status.connectionManagerId != sendingConnectionManagerId
             })
+          }
+        case receivingConnection: ReceivingConnection =>
+          val remoteConnectionManagerId = receivingConnection.getRemoteConnectionManagerId()
+          logInfo("Removing ReceivingConnection to " + remoteConnectionManagerId)
 
-          messageStatuses.retain((i, status) => {
-            status.connectionManagerId != sendingConnectionManagerId
-          })
-        }
-      } else if (connection.isInstanceOf[ReceivingConnection]) {
-        val receivingConnection = connection.asInstanceOf[ReceivingConnection]
-        val remoteConnectionManagerId = receivingConnection.getRemoteConnectionManagerId()
-        logInfo("Removing ReceivingConnection to " + remoteConnectionManagerId)
-
-        val sendingConnectionOpt = connectionsById.get(remoteConnectionManagerId)
-          if (! sendingConnectionOpt.isDefined) {
-          logError("Corresponding SendingConnectionManagerId not found")
-          return
-        }
-
-        val sendingConnection = sendingConnectionOpt.get
-        connectionsById -= remoteConnectionManagerId
-        sendingConnection.close()
-
-        val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
-
-        assert (sendingConnectionManagerId == remoteConnectionManagerId)
-
-        messageStatuses.synchronized {
-          for (s <- messageStatuses.values if s.connectionManagerId == sendingConnectionManagerId) {
-            logInfo("Notifying " + s)
-            s.synchronized {
-              s.attempted = true
-              s.acked = false
-              s.markDone()
-            }
+          val sendingConnectionOpt = connectionsById.get(remoteConnectionManagerId)
+          if (!sendingConnectionOpt.isDefined) {
+            logError("Corresponding SendingConnectionManagerId not found")
+            return
           }
 
-          messageStatuses.retain((i, status) => {
-            status.connectionManagerId != sendingConnectionManagerId
-          })
-        }
+          val sendingConnection = sendingConnectionOpt.get
+          connectionsById -= remoteConnectionManagerId
+          sendingConnection.close()
+
+          val sendingConnectionManagerId = sendingConnection.getRemoteConnectionManagerId()
+
+          assert(sendingConnectionManagerId == remoteConnectionManagerId)
+
+          messageStatuses.synchronized {
+            for (s <- messageStatuses.values
+                 if s.connectionManagerId == sendingConnectionManagerId) {
+              logInfo("Notifying " + s)
+              s.synchronized {
+                s.attempted = true
+                s.acked = false
+                s.markDone()
+              }
+            }
+
+            messageStatuses.retain((i, status) => {
+              status.connectionManagerId != sendingConnectionManagerId
+            })
+          }
+        case _ => logError("Unsupported type of connection.")
       }
     } finally {
       // So that the selection keys can be removed.
@@ -517,13 +518,13 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       logDebug("Client sasl completed for id: "  + waitingConn.connectionId)
       connectionsAwaitingSasl -= waitingConn.connectionId
       waitingConn.getAuthenticated().synchronized {
-        waitingConn.getAuthenticated().notifyAll();
+        waitingConn.getAuthenticated().notifyAll()
       }
       return
     } else {
       var replyToken : Array[Byte] = null
       try {
-        replyToken = waitingConn.sparkSaslClient.saslResponse(securityMsg.getToken);
+        replyToken = waitingConn.sparkSaslClient.saslResponse(securityMsg.getToken)
         if (waitingConn.isSaslComplete()) {
           logDebug("Client sasl completed after evaluate for id: " + waitingConn.connectionId)
           connectionsAwaitingSasl -= waitingConn.connectionId
@@ -533,7 +534,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           return
         }
         val securityMsgResp = SecurityMessage.fromResponse(replyToken,
-          securityMsg.getConnectionId.toString())
+          securityMsg.getConnectionId.toString)
         val message = securityMsgResp.toBufferMessage
         if (message == null) throw new Exception("Error creating security message")
         sendSecurityMessage(waitingConn.getRemoteConnectionManagerId(), message)
@@ -630,13 +631,13 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       case bufferMessage: BufferMessage => {
         if (authEnabled) {
           val res = handleAuthentication(connection, bufferMessage)
-          if (res == true) {
+          if (res) {
             // message was security negotiation so skip the rest
             logDebug("After handleAuth result was true, returning")
             return
           }
         }
-        if (bufferMessage.hasAckId) {
+        if (bufferMessage.hasAckId()) {
           val sentMessageStatus = messageStatuses.synchronized {
             messageStatuses.get(bufferMessage.ackId) match {
               case Some(status) => {
@@ -646,7 +647,6 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
               case None => {
                 throw new Exception("Could not find reference for received ack message " +
                   message.id)
-                null
               }
             }
           }
@@ -668,7 +668,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           if (ackMessage.isDefined) {
             if (!ackMessage.get.isInstanceOf[BufferMessage]) {
               logDebug("Response to " + bufferMessage + " is not a buffer message, it is of type "
-                + ackMessage.get.getClass())
+                + ackMessage.get.getClass)
             } else if (!ackMessage.get.asInstanceOf[BufferMessage].hasAckId) {
               logDebug("Response to " + bufferMessage + " does not have ack id set")
               ackMessage.get.asInstanceOf[BufferMessage].ackId = bufferMessage.id

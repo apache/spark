@@ -38,8 +38,6 @@ class StageInfo(
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None
 
-  var emittedTaskSizeWarning = false
-
   def stageFailed(reason: String) {
     failureReason = Some(reason)
     completionTime = Some(System.currentTimeMillis)
