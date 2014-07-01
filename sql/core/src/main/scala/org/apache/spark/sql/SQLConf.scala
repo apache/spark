@@ -50,8 +50,7 @@ trait SQLConf {
   /** ********************** SQLConf functionality methods ************ */
 
   @transient
-  private val settings = java.util.Collections.synchronizedMap(
-    new java.util.HashMap[String, String]())
+  private val settings = new java.util.concurrent.ConcurrentHashMap[String, String]()
 
   def set(props: Properties): Unit = {
     props.asScala.foreach { case (k, v) => this.settings.put(k, v) }
