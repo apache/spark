@@ -108,8 +108,9 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     appContext.setApplicationId(appId)
     appContext.setApplicationName(args.appName)
-    if(!sparkConf.get("spark.maxappattempts", "false").equals("false")) {
-      appContext.setMaxAppAttempts(sparkConf.getInt("spark.maxappattempts", -1))
+    sparkConf.getIntOption("spark.maxappattempts") match {
+      case Some(v) => appContext.setMaxAppAttempts(v)
+      case None => logDebug("Not setting max app attempts.")
     }
     appContext
   }

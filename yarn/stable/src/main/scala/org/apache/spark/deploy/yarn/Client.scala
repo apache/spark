@@ -81,8 +81,9 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
     appContext.setApplicationType("SPARK")
-    if(!sparkConf.get("spark.maxappattempts", "false").equals("false")) {
-      appContext.setMaxAppAttempts(sparkConf.getInt("spark.maxappattempts", -1))
+    sparkConf.getIntOption("spark.maxappattempts") match {
+      case Some(v) => appContext.setMaxAppAttempts(v)
+      case None => logDebug("Not setting max app attempts.")
     }
 
     // Memory for the ApplicationMaster.
