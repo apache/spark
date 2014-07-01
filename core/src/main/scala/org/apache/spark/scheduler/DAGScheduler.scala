@@ -127,9 +127,6 @@ class DAGScheduler(
   // Track the pre-started stages depending on a stage (the key)
   private val dependantStagePreStarted = new mutable.HashMap[Stage, ArrayBuffer[Stage]]()
 
-  // Temporarily added for test
-  private var failureGenerated = false
-
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
     // not null before any job is submitted
@@ -937,11 +934,7 @@ class DAGScheduler(
                     // Register map output finished so far
                     mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
                       stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-                      changeEpoch = false, isPartial = failureGenerated)
-                    if (!failureGenerated) {
-                      failureGenerated = true
-                      removeStageBarrier = false
-                    }
+                      changeEpoch = false, isPartial = true)
                     waitingStages -= preStartedStage
                     runningStages += preStartedStage
                     // Inform parent stages that the dependant stage has been pre-started
