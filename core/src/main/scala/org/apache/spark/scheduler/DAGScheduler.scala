@@ -1225,7 +1225,7 @@ class DAGScheduler(
   private def failStages(stages: Array[Stage]) {
     // Let's first kill all the running tasks in the failed stage
     for (failedStage <- stages) {
-      taskScheduler.killTasks(failedStage.id, true)
+      taskScheduler.killTasks(failedStage.id, false)
     }
     if (failedStages.isEmpty && eventProcessActor != null) {
       // Don't schedule an event to resubmit failed stages if failed isn't empty, because
