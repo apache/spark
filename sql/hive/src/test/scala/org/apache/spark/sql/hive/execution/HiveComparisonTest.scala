@@ -144,6 +144,12 @@ abstract class HiveComparisonTest
       case _: SetCommand => Seq("0")
       case _: LogicalNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
+      case _: DescribeCommand =>
+        // Filter out non-deterministic lines and lines which do not have actual results but
+        // can introduce problems because of the way Hive formats these lines.
+        // Then, remove empty lines. Do not sort the results.
+        answer.filterNot(
+          r => nonDeterministicLine(r) || ignoredLine(r)).map(_.trim).filterNot(_ == "")
       case plan => if (isSorted(plan)) answer else answer.sorted
     }
     orderedAnswer.map(cleanPaths)
@@ -168,6 +174,16 @@ abstract class HiveComparisonTest
   )
   protected def nonDeterministicLine(line: String) =
     nonDeterministicLineIndicators.exists(line contains _)
+
+  // This list contains indicators for those lines which do not have actual results and we
+  // want to ignore.
+  lazy val ignoredLineIndicators = Seq(
+    "# Partition Information",
+    "# col_name"
+  )
+
+  protected def ignoredLine(line: String) =
+    ignoredLineIndicators.exists(line contains _)
 
   /**
    * Removes non-deterministic paths from `str` so cached answers will compare correctly.
@@ -329,10 +345,16 @@ abstract class HiveComparisonTest
 
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) && preparedHive != catalyst) {
 
-              val hivePrintOut = s"== HIVE - ${hive.size} row(s) ==" +: preparedHive
+              val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive
               val catalystPrintOut = s"== CATALYST - ${catalyst.size} row(s) ==" +: catalyst
 
               val resultComparison = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
+
+              println("hive output")
+              hive.foreach(println)
+
+              println("catalyst printout")
+              catalyst.foreach(println)
 
               if (recomputeCache) {
                 logger.warn(s"Clearing cache files for failed test $testCaseName")

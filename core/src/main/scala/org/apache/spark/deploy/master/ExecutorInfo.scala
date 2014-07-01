@@ -34,4 +34,19 @@ private[spark] class ExecutorInfo(
   }
 
   def fullId: String = application.id + "/" + id
+
+  override def equals(other: Any): Boolean = {
+    other match {
+      case info: ExecutorInfo =>
+        fullId == info.fullId &&
+        worker.id == info.worker.id &&
+        cores == info.cores &&
+        memory == info.memory
+      case _ => false
+    }
+  }
+
+  override def toString: String = fullId
+
+  override def hashCode: Int = toString.hashCode()
 }

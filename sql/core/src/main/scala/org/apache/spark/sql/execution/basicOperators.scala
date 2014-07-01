@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
+import org.apache.spark.{HashPartitioner, SparkConf}
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
@@ -70,12 +71,12 @@ case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child:
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class Union(children: Seq[SparkPlan])(@transient sc: SparkContext) extends SparkPlan {
+case class Union(children: Seq[SparkPlan])(@transient sqlContext: SQLContext) extends SparkPlan {
   // TODO: attributes output by union should be distinct for nullability purposes
   override def output = children.head.output
-  override def execute() = sc.union(children.map(_.execute()))
+  override def execute() = sqlContext.sparkContext.union(children.map(_.execute()))
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 }
 
 /**
@@ -87,11 +88,12 @@ case class Union(children: Seq[SparkPlan])(@transient sc: SparkContext) extends 
  * data to a single partition to compute the global limit.
  */
 @DeveloperApi
-case class Limit(limit: Int, child: SparkPlan)(@transient sc: SparkContext) extends UnaryNode {
+case class Limit(limit: Int, child: SparkPlan)(@transient sqlContext: SQLContext)
+  extends UnaryNode {
   // TODO: Implement a partition local limit, and use a strategy to generate the proper limit plan:
   // partition local limit -> exchange into one partition -> partition local limit again
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   override def output = child.output
 
@@ -103,7 +105,7 @@ case class Limit(limit: Int, child: SparkPlan)(@transient sc: SparkContext) exte
       iter.take(limit).map(row => mutablePair.update(false, row))
     }
     val part = new HashPartitioner(1)
-    val shuffled = new ShuffledRDD[Boolean, Row, MutablePair[Boolean, Row]](rdd, part)
+    val shuffled = new ShuffledRDD[Boolean, Row, Row, MutablePair[Boolean, Row]](rdd, part)
     shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
     shuffled.mapPartitions(_.take(limit).map(_._2))
   }
@@ -117,8 +119,8 @@ case class Limit(limit: Int, child: SparkPlan)(@transient sc: SparkContext) exte
  */
 @DeveloperApi
 case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
-                      (@transient sc: SparkContext) extends UnaryNode {
-  override def otherCopyArgs = sc :: Nil
+                      (@transient sqlContext: SQLContext) extends UnaryNode {
+  override def otherCopyArgs = sqlContext :: Nil
 
   override def output = child.output
 
@@ -129,7 +131,7 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
-  override def execute() = sc.makeRDD(executeCollect(), 1)
+  override def execute() = sqlContext.sparkContext.makeRDD(executeCollect(), 1)
 }
 
 /**
@@ -203,4 +205,3 @@ object ExistingRdd {
 case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
 }
-

@@ -340,7 +340,7 @@ abstract class RDD[T: ClassTag](
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
+        new ShuffledRDD[Int, T, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
         numPartitions).values
     } else {
@@ -441,6 +441,18 @@ abstract class RDD[T: ClassTag](
    * times (use `.distinct()` to eliminate them).
    */
   def ++(other: RDD[T]): RDD[T] = this.union(other)
+
+  /**
+   * Return this RDD sorted by the given key function.
+   */
+  def sortBy[K](
+      f: (T) => K,
+      ascending: Boolean = true,
+      numPartitions: Int = this.partitions.size)
+      (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] =
+    this.keyBy[K](f)
+        .sortByKey(ascending, numPartitions)
+        .values
 
   /**
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
@@ -1125,11 +1137,11 @@ abstract class RDD[T: ClassTag](
    * Returns the top K (largest) elements from this RDD as defined by the specified
    * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
    * {{{
-   *   sc.parallelize([10, 4, 2, 12, 3]).top(1)
-   *   // returns [12]
+   *   sc.parallelize(Seq(10, 4, 2, 12, 3)).top(1)
+   *   // returns Array(12)
    *
-   *   sc.parallelize([2, 3, 4, 5, 6]).top(2)
-   *   // returns [6, 5]
+   *   sc.parallelize(Seq(2, 3, 4, 5, 6)).top(2)
+   *   // returns Array(6, 5)
    * }}}
    *
    * @param num the number of top elements to return
@@ -1143,11 +1155,11 @@ abstract class RDD[T: ClassTag](
    * implicit Ordering[T] and maintains the ordering. This does the opposite of [[top]].
    * For example:
    * {{{
-   *   sc.parallelize([10, 4, 2, 12, 3]).takeOrdered(1)
-   *   // returns [12]
+   *   sc.parallelize(Seq(10, 4, 2, 12, 3)).takeOrdered(1)
+   *   // returns Array(2)
    *
-   *   sc.parallelize([2, 3, 4, 5, 6]).takeOrdered(2)
-   *   // returns [2, 3]
+   *   sc.parallelize(Seq(2, 3, 4, 5, 6)).takeOrdered(2)
+   *   // returns Array(2, 3)
    * }}}
    *
    * @param num the number of top elements to return

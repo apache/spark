@@ -78,7 +78,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_merge",
     "alter_concatenate_indexed_table",
     "protectmode2",
-    "describe_table",
+    //"describe_table",
     "describe_comment_nonascii",
     "udf5",
     "udf_java_method",
@@ -177,7 +177,16 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // After stop taking the `stringOrError` route, exceptions are thrown from these cases.
     // See SPARK-2129 for details.
     "join_view",
-    "mergejoins_mixed"
+    "mergejoins_mixed",
+
+    // Returning the result of a describe state as a JSON object is not supported.
+    "describe_table_json",
+    "describe_database_json",
+    "describe_formatted_view_partitioned_json",
+
+    // Hive returns the results of describe as plain text. Comments with multiple lines
+    // introduce extra lines in the Hive results, which make the result comparison fail.
+    "describe_comment_indent"
   )
 
   /**
@@ -292,11 +301,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "default_partition_name",
     "delimiter",
     "desc_non_existent_tbl",
-    "describe_comment_indent",
-    "describe_database_json",
     "describe_formatted_view_partitioned",
-    "describe_formatted_view_partitioned_json",
-    "describe_table_json",
     "diff_part_input_formats",
     "disable_file_format_check",
     "drop_function",

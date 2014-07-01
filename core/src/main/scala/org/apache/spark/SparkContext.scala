@@ -224,7 +224,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration: Configuration = {
-    val env = SparkEnv.get
     val hadoopConf = SparkHadoopUtil.get.newConfiguration()
     // Explicitly check for S3 environment variables
     if (System.getenv("AWS_ACCESS_KEY_ID") != null &&
@@ -1204,9 +1203,17 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
+   * If <tt>checkSerializable</tt> is set, <tt>clean</tt> will also proactively 
+   * check to see if <tt>f</tt> is serializable and throw a <tt>SparkException</tt> 
+   * if not.
+   * 
+   * @param f the closure to clean
+   * @param checkSerializable whether or not to immediately check <tt>f</tt> for serializability
+   * @throws <tt>SparkException<tt> if <tt>checkSerializable</tt> is set but <tt>f</tt> is not
+   *   serializable
    */
-  private[spark] def clean[F <: AnyRef](f: F): F = {
-    ClosureCleaner.clean(f)
+  private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
+    ClosureCleaner.clean(f, checkSerializable)
     f
   }
 
