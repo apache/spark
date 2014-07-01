@@ -190,8 +190,7 @@ private[spark] object JsonProtocol {
     ("Details" -> stageInfo.details) ~
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
-    ("Failure Reason" -> failureReason) ~
-    ("Emitted Task Size Warning" -> stageInfo.emittedTaskSizeWarning)
+    ("Failure Reason" -> failureReason)
   }
 
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
@@ -205,8 +204,7 @@ private[spark] object JsonProtocol {
     ("Speculative" -> taskInfo.speculative) ~
     ("Getting Result Time" -> taskInfo.gettingResultTime) ~
     ("Finish Time" -> taskInfo.finishTime) ~
-    ("Failed" -> taskInfo.failed) ~
-    ("Serialized Size" -> taskInfo.serializedSize)
+    ("Failed" -> taskInfo.failed)
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
@@ -487,13 +485,11 @@ private[spark] object JsonProtocol {
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val failureReason = Utils.jsonOption(json \ "Failure Reason").map(_.extract[String])
-    val emittedTaskSizeWarning = (json \ "Emitted Task Size Warning").extract[Boolean]
 
     val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfos, details)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.failureReason = failureReason
-    stageInfo.emittedTaskSizeWarning = emittedTaskSizeWarning
     stageInfo
   }
 
@@ -509,14 +505,12 @@ private[spark] object JsonProtocol {
     val gettingResultTime = (json \ "Getting Result Time").extract[Long]
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
-    val serializedSize = (json \ "Serialized Size").extract[Int]
 
     val taskInfo =
       new TaskInfo(taskId, index, attempt, launchTime, executorId, host, taskLocality, speculative)
     taskInfo.gettingResultTime = gettingResultTime
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed
-    taskInfo.serializedSize = serializedSize
     taskInfo
   }
 

@@ -623,16 +623,6 @@ class DAGScheduler(
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
-    for (stage <- stageIdToStage.get(task.stageId); stageInfo <- stageToInfos.get(stage)) {
-      if (taskInfo.serializedSize > DAGScheduler.TASK_SIZE_TO_WARN * 1024 &&
-        !stageInfo.emittedTaskSizeWarning) {
-        stageInfo.emittedTaskSizeWarning = true
-        logWarning(("Stage %d (%s) contains a task of very large " +
-          "size (%d KB). The maximum recommended task size is %d KB.").format(
-            task.stageId, stageInfo.name, taskInfo.serializedSize / 1024,
-            DAGScheduler.TASK_SIZE_TO_WARN))
-      }
-    }
     listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
     submitWaitingStages()
   }
@@ -1254,7 +1244,4 @@ private[spark] object DAGScheduler {
   // The time, in millis, to wake up between polls of the completion queue in order to potentially
   // resubmit failed stages
   val POLL_TIMEOUT = 10L
-
-  // Warns the user if a stage contains a task with size greater than this value (in KB)
-  val TASK_SIZE_TO_WARN = 100
 }
