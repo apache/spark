@@ -53,9 +53,7 @@ trait SQLConf {
   private val settings = new java.util.concurrent.ConcurrentHashMap[String, String]()
 
   def set(props: Properties): Unit = {
-    settings.synchronized {
       props.asScala.foreach { case (k, v) => this.settings.put(k, v) }
-    }
   }
 
   def set(key: String, value: String): Unit = {
@@ -70,7 +68,7 @@ trait SQLConf {
 
   def get(key: String, defaultValue: String): String = {
     settings.synchronized {
-      if (!settings.containsKey(key)) defaultValue else settings.get(key)
+      Option(settings.get(key)).getOrElse(defaultValue)
     }
   }
 
@@ -78,7 +76,7 @@ trait SQLConf {
 
   def getOption(key: String): Option[String] = {
     settings.synchronized {
-      if (!settings.containsKey(key)) None else Some(settings.get(key))
+      Option(settings.get(key))
     }
   }
 
