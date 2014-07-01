@@ -91,7 +91,6 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * On the workers, it simply serves as a cache, in which a miss triggers a fetch from the
    * master's corresponding HashMap.
    */
-  //TODO: we should also record if the output for a shuffle is partial
   protected val mapStatuses: Map[Int, Array[MapStatus]]
 
   // Track if we have partial map outputs for a shuffle
