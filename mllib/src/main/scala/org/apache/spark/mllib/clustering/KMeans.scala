@@ -43,7 +43,7 @@ class KMeans private (
     private var runs: Int,
     private var initializationMode: String,
     private var initializationSteps: Int,
-    private var epsilon: Double) extends Serializable with Logging {
+    private var epsilon: Double) extends Serializable with KMeansCommons with Logging {
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
@@ -138,9 +138,11 @@ class KMeans private (
     val initStartTime = System.nanoTime()
 
     val centers = if (initializationMode == KMeans.RANDOM) {
-      initRandom(data)
+      val flatCenters = initRandom(data, k * runs)
+      
+      Array.tabulate(runs)(r => flatCenters.slice(r * k, (r + 1) * k).toArray)
     } else {
-      initKMeansParallel(data)
+      Array.tabulate(runs)(r => initParallel(data, k, initializationSteps))
     }
 
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
@@ -230,74 +232,6 @@ class KMeans private (
     logInfo(s"The cost for the best run is $minCost.")
 
     new KMeansModel(centers(bestRun).map(c => Vectors.fromBreeze(c.vector)))
-  }
-
-  /**
-   * Initialize `runs` sets of cluster centers at random.
-   */
-  private def initRandom(data: RDD[BreezeVectorWithNorm])
-  : Array[Array[BreezeVectorWithNorm]] = {
-    // Sample all the cluster centers in one pass to avoid repeated scans
-    val sample = data.takeSample(true, runs * k, new XORShiftRandom().nextInt()).toSeq
-    Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k).map { v =>
-      new BreezeVectorWithNorm(v.vector.toDenseVector, v.norm)
-    }.toArray)
-  }
-
-  /**
-   * Initialize `runs` sets of cluster centers using the k-means|| algorithm by Bahmani et al.
-   * (Bahmani et al., Scalable K-Means++, VLDB 2012). This is a variant of k-means++ that tries
-   * to find with dissimilar cluster centers by starting with a random center and then doing
-   * passes where more centers are chosen with probability proportional to their squared distance
-   * to the current cluster set. It results in a provable approximation to an optimal clustering.
-   *
-   * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
-   */
-  private def initKMeansParallel(data: RDD[BreezeVectorWithNorm])
-  : Array[Array[BreezeVectorWithNorm]] = {
-    // Initialize each run's center to a random point
-    val seed = new XORShiftRandom().nextInt()
-    val sample = data.takeSample(true, runs, seed).toSeq
-    val centers = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDense))
-
-    // On each step, sample 2 * k points on average for each run with probability proportional
-    // to their squared distance from that run's current centers
-    var step = 0
-    while (step < initializationSteps) {
-      val sumCosts = data.flatMap { point =>
-        (0 until runs).map { r =>
-          (r, KMeans.pointCost(centers(r), point))
-        }
-      }.reduceByKey(_ + _).collectAsMap()
-      val chosen = data.mapPartitionsWithIndex { (index, points) =>
-        val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
-        points.flatMap { p =>
-          (0 until runs).filter { r =>
-            rand.nextDouble() < 2.0 * KMeans.pointCost(centers(r), p) * k / sumCosts(r)
-          }.map((_, p))
-        }
-      }.collect()
-      chosen.foreach { case (r, p) =>
-        centers(r) += p.toDense
-      }
-      step += 1
-    }
-
-    // Finally, we might have a set of more than k candidate centers for each run; weigh each
-    // candidate by the number of points in the dataset mapping to it and run a local k-means++
-    // on the weighted centers to pick just k of them
-    val weightMap = data.flatMap { p =>
-      (0 until runs).map { r =>
-        ((r, KMeans.findClosest(centers(r), p)._1), 1.0)
-      }
-    }.reduceByKey(_ + _).collectAsMap()
-    val finalCenters = (0 until runs).map { r =>
-      val myCenters = centers(r).toArray
-      val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), 0.0)).toArray
-      LocalKMeans.kMeansPlusPlus(r, myCenters, myWeights, k, 30)
-    }
-
-    finalCenters.toArray
   }
 }
 
