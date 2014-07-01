@@ -1,0 +1,1 @@
+covar_pop(x,y) - Returns the population covariance of a set of number pairs

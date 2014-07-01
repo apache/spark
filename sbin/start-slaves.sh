@@ -38,9 +38,7 @@ done
 
 . "$sbin/spark-config.sh"
 
-if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
-  . "${SPARK_CONF_DIR}/spark-env.sh"
-fi
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 # Find the port number for the master
 if [ "$SPARK_MASTER_PORT" = "" ]; then

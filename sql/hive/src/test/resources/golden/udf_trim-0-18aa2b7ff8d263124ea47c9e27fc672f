@@ -1,0 +1,1 @@
+trim(str) - Removes the leading and trailing space characters from str 

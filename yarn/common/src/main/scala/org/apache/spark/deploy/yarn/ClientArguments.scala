@@ -20,9 +20,8 @@ package org.apache.spark.deploy.yarn
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.scheduler.{InputFormatInfo, SplitInfo}
-import org.apache.spark.util.IntParam
-import org.apache.spark.util.MemoryParam
+import org.apache.spark.scheduler.InputFormatInfo
+import org.apache.spark.util.{Utils, IntParam, MemoryParam}
 
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
@@ -40,12 +39,22 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var amMemory: Int = 512 // MB
   var amClass: String = "org.apache.spark.deploy.yarn.ApplicationMaster"
   var appName: String = "Spark"
-  // TODO
   var inputFormatInfo: List[InputFormatInfo] = null
-  // TODO(harvey)
   var priority = 0
 
   parseArgs(args.toList)
+
+  // env variable SPARK_YARN_DIST_ARCHIVES/SPARK_YARN_DIST_FILES set in yarn-client then
+  // it should default to hdfs://
+  files = Option(files).getOrElse(sys.env.get("SPARK_YARN_DIST_FILES").orNull)
+  archives = Option(archives).getOrElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES").orNull)
+
+  // spark.yarn.dist.archives/spark.yarn.dist.files defaults to use file:// if not specified,
+  // for both yarn-client and yarn-cluster
+  files = Option(files).getOrElse(sparkConf.getOption("spark.yarn.dist.files").
+    map(p => Utils.resolveURIs(p)).orNull)
+  archives = Option(archives).getOrElse(sparkConf.getOption("spark.yarn.dist.archives").
+    map(p => Utils.resolveURIs(p)).orNull)
 
   private def parseArgs(inputArgs: List[String]): Unit = {
     val userArgsBuffer: ArrayBuffer[String] = new ArrayBuffer[String]()
@@ -63,7 +72,10 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           userClass = value
           args = tail
 
-        case ("--args") :: value :: tail =>
+        case ("--args" | "--arg") :: value :: tail =>
+          if (args(0) == "--args") {
+            println("--args is deprecated. Use --arg instead.")
+          }
           userArgsBuffer += value
           args = tail
 
@@ -124,11 +136,11 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
 
         case Nil =>
           if (userClass == null) {
-            printUsageAndExit(1)
+            throw new IllegalArgumentException(getUsageMessage())
           }
 
         case _ =>
-          printUsageAndExit(1, args)
+          throw new IllegalArgumentException(getUsageMessage(args))
       }
     }
 
@@ -137,17 +149,16 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   }
 
 
-  def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
-    if (unknownParam != null) {
-      System.err.println("Unknown/unsupported param " + unknownParam)
-    }
-    System.err.println(
+  def getUsageMessage(unknownParam: Any = null): String = {
+    val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
+
+    message +
       "Usage: org.apache.spark.deploy.yarn.Client [options] \n" +
       "Options:\n" +
       "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-cluster mode)\n" +
       "  --class CLASS_NAME         Name of your application's main class (required)\n" +
-      "  --args ARGS                Arguments to be passed to your application's main class.\n" +
-      "                             Mutliple invocations are possible, each will be passed in order.\n" +
+      "  --arg ARGS                 Argument to be passed to your application's main class.\n" +
+      "                             Multiple invocations are possible, each will be passed in order.\n" +
       "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
       "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +
       "  --driver-memory MEM        Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
@@ -157,8 +168,5 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
       "  --addJars jars             Comma separated list of local jars that want SparkContext.addJar to work with.\n" +
       "  --files files              Comma separated list of files to be distributed with the job.\n" +
       "  --archives archives        Comma separated list of archives to be distributed with the job."
-      )
-    System.exit(exitCode)
   }
-
 }

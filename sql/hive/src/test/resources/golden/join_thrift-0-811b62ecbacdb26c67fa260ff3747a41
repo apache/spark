@@ -1,0 +1,6 @@
+aint                	int                 	from deserializer   
+astring             	string              	from deserializer   
+lint                	array<int>          	from deserializer   
+lstring             	array<string>       	from deserializer   
+lintstring          	array<struct<myint:int,mystring:string,underscore_int:int>>	from deserializer   
+mstringstring       	map<string,string>  	from deserializer   

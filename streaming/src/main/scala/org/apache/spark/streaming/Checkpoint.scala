@@ -59,7 +59,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   }
 }
 
-private[streaming]  
+private[streaming]
 object Checkpoint extends Logging {
   val PREFIX = "checkpoint-"
   val REGEX = (PREFIX + """([\d]+)([\w\.]*)""").r
@@ -79,7 +79,7 @@ object Checkpoint extends Logging {
     def sortFunc(path1: Path, path2: Path): Boolean = {
       val (time1, bk1) = path1.getName match { case REGEX(x, y) => (x.toLong, !y.isEmpty) }
       val (time2, bk2) = path2.getName match { case REGEX(x, y) => (x.toLong, !y.isEmpty) }
-      (time1 < time2) || (time1 == time2 && bk1) 
+      (time1 < time2) || (time1 == time2 && bk1)
     }
 
     val path = new Path(checkpointDir)
@@ -95,7 +95,7 @@ object Checkpoint extends Logging {
       }
     } else {
       logInfo("Checkpoint directory " + path + " does not exist")
-      Seq.empty 
+      Seq.empty
     }
   }
 }
@@ -160,7 +160,7 @@ class CheckpointWriter(
             })
           }
 
-          // All done, print success 
+          // All done, print success
           val finishTime = System.currentTimeMillis()
           logInfo("Checkpoint for time " + checkpointTime + " saved to file '" + checkpointFile +
             "', took " + bytes.length + " bytes and " + (finishTime - startTime) + " ms")
@@ -194,19 +194,19 @@ class CheckpointWriter(
     }
   }
 
-  def stop() {
-    synchronized {
-      if (stopped) {
-        return
-      }
-      stopped = true
-    }
+  def stop(): Unit = synchronized {
+    if (stopped) return
+
     executor.shutdown()
     val startTime = System.currentTimeMillis()
     val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
+    if (!terminated) {
+      executor.shutdownNow()
+    }
     val endTime = System.currentTimeMillis()
     logInfo("CheckpointWriter executor terminated ? " + terminated +
       ", waited for " + (endTime - startTime) + " ms.")
+    stopped = true
   }
 
   private def fs = synchronized {
@@ -227,14 +227,14 @@ object CheckpointReader extends Logging {
   {
     val checkpointPath = new Path(checkpointDir)
     def fs = checkpointPath.getFileSystem(hadoopConf)
-    
-    // Try to find the checkpoint files 
+
+    // Try to find the checkpoint files
     val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, fs).reverse
     if (checkpointFiles.isEmpty) {
       return None
     }
 
-    // Try to read the checkpoint files in the order  
+    // Try to read the checkpoint files in the order
     logInfo("Checkpoint files found: " + checkpointFiles.mkString(","))
     val compressionCodec = CompressionCodec.createCodec(conf)
     checkpointFiles.foreach(file => {

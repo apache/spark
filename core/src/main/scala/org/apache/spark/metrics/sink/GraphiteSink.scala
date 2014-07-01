@@ -27,7 +27,7 @@ import com.codahale.metrics.graphite.{Graphite, GraphiteReporter}
 import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
-class GraphiteSink(val property: Properties, val registry: MetricRegistry,
+private[spark] class GraphiteSink(val property: Properties, val registry: MetricRegistry,
     securityMgr: SecurityManager) extends Sink {
   val GRAPHITE_DEFAULT_PERIOD = 10
   val GRAPHITE_DEFAULT_UNIT = "SECONDS"
@@ -39,7 +39,7 @@ class GraphiteSink(val property: Properties, val registry: MetricRegistry,
   val GRAPHITE_KEY_UNIT = "unit"
   val GRAPHITE_KEY_PREFIX = "prefix"
 
-  def propertyToOption(prop: String) = Option(property.getProperty(prop))
+  def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
 
   if (!propertyToOption(GRAPHITE_KEY_HOST).isDefined) {
     throw new Exception("Graphite sink requires 'host' property.")
@@ -57,7 +57,7 @@ class GraphiteSink(val property: Properties, val registry: MetricRegistry,
     case None => GRAPHITE_DEFAULT_PERIOD
   }
 
-  val pollUnit = propertyToOption(GRAPHITE_KEY_UNIT) match {
+  val pollUnit: TimeUnit = propertyToOption(GRAPHITE_KEY_UNIT) match {
     case Some(s) => TimeUnit.valueOf(s.toUpperCase())
     case None => TimeUnit.valueOf(GRAPHITE_DEFAULT_UNIT)
   }

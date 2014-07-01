@@ -32,7 +32,7 @@ case class Time(private val millis: Long) {
   def <= (that: Time): Boolean = (this.millis <= that.millis)
 
   def > (that: Time): Boolean = (this.millis > that.millis)
-  
+
   def >= (that: Time): Boolean = (this.millis >= that.millis)
 
   def + (that: Duration): Time = new Time(millis + that.milliseconds)
@@ -43,7 +43,7 @@ case class Time(private val millis: Long) {
 
   def floor(that: Duration): Time = {
     val t = that.milliseconds
-    val m = math.floor(this.millis / t).toLong 
+    val m = math.floor(this.millis / t).toLong
     new Time(m * t)
   }
 
@@ -68,5 +68,5 @@ case class Time(private val millis: Long) {
 }
 
 object Time {
-  val ordering = Ordering.by((time: Time) => time.millis)
+  implicit val ordering = Ordering.by((time: Time) => time.millis)
 }

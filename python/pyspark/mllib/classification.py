@@ -17,53 +17,96 @@
 
 import numpy
 
-from numpy import array, dot, shape
+from numpy import array, shape
 from pyspark import SparkContext
 from pyspark.mllib._common import \
-    _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
+    _dot, _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
     _serialize_double_matrix, _deserialize_double_matrix, \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
-    LinearModel, _linear_predictor_typecheck
+    _linear_predictor_typecheck, _get_unmangled_labeled_point_rdd
+from pyspark.mllib.linalg import SparseVector
+from pyspark.mllib.regression import LabeledPoint, LinearModel
 from math import exp, log
+
 
 class LogisticRegressionModel(LinearModel):
     """A linear binary classification model derived from logistic regression.
 
-    >>> data = array([0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0, 3.0]).reshape(4,2)
+    >>> data = [
+    ...     LabeledPoint(0.0, [0.0]),
+    ...     LabeledPoint(1.0, [1.0]),
+    ...     LabeledPoint(1.0, [2.0]),
+    ...     LabeledPoint(1.0, [3.0])
+    ... ]
     >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(data))
     >>> lrm.predict(array([1.0])) > 0
+    True
+    >>> lrm.predict(array([0.0])) <= 0
+    True
+    >>> sparse_data = [
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
+    ... ]
+    >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data))
+    >>> lrm.predict(array([0.0, 1.0])) > 0
+    True
+    >>> lrm.predict(array([0.0, 0.0])) <= 0
+    True
+    >>> lrm.predict(SparseVector(2, {1: 1.0})) > 0
+    True
+    >>> lrm.predict(SparseVector(2, {1: 0.0})) <= 0
     True
     """
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
-        margin = dot(x, self._coeff) + self._intercept
+        margin = _dot(x, self._coeff) + self._intercept
         prob = 1/(1 + exp(-margin))
         return 1 if prob > 0.5 else 0
 
+
 class LogisticRegressionWithSGD(object):
     @classmethod
-    def train(cls, data, iterations=100, step=1.0,
-              miniBatchFraction=1.0, initialWeights=None):
+    def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0, initialWeights=None):
         """Train a logistic regression model on the given data."""
         sc = data.context
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(d._jrdd,
-                        iterations, step, miniBatchFraction, i),
-                LogisticRegressionModel, data, initialWeights)
+        train_func = lambda d, i: sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(
+            d._jrdd, iterations, step, miniBatchFraction, i)
+        return _regression_train_wrapper(sc, train_func, LogisticRegressionModel, data,
+                                         initialWeights)
+
 
 class SVMModel(LinearModel):
     """A support vector machine.
 
-    >>> data = array([0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0, 3.0]).reshape(4,2)
+    >>> data = [
+    ...     LabeledPoint(0.0, [0.0]),
+    ...     LabeledPoint(1.0, [1.0]),
+    ...     LabeledPoint(1.0, [2.0]),
+    ...     LabeledPoint(1.0, [3.0])
+    ... ]
     >>> svm = SVMWithSGD.train(sc.parallelize(data))
     >>> svm.predict(array([1.0])) > 0
+    True
+    >>> sparse_data = [
+    ...     LabeledPoint(0.0, SparseVector(2, {0: -1.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
+    ... ]
+    >>> svm = SVMWithSGD.train(sc.parallelize(sparse_data))
+    >>> svm.predict(SparseVector(2, {1: 1.0})) > 0
+    True
+    >>> svm.predict(SparseVector(2, {0: -1.0})) <= 0
     True
     """
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
-        margin = dot(x, self._coeff) + self._intercept
+        margin = _dot(x, self._coeff) + self._intercept
         return 1 if margin >= 0 else 0
+
 
 class SVMWithSGD(object):
     @classmethod
@@ -71,10 +114,10 @@ class SVMWithSGD(object):
               miniBatchFraction=1.0, initialWeights=None):
         """Train a support vector machine on the given data."""
         sc = data.context
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainSVMModelWithSGD(d._jrdd,
-                        iterations, step, regParam, miniBatchFraction, i),
-                SVMModel, data, initialWeights)
+        train_func = lambda d, i: sc._jvm.PythonMLLibAPI().trainSVMModelWithSGD(
+            d._jrdd, iterations, step, regParam, miniBatchFraction, i)
+        return _regression_train_wrapper(sc, train_func, SVMModel, data, initialWeights)
+
 
 class NaiveBayesModel(object):
     """
@@ -84,21 +127,37 @@ class NaiveBayesModel(object):
     - pi: vector of logs of class priors (dimension C)
     - theta: matrix of logs of class conditional probabilities (CxD)
 
-    >>> data = array([0.0, 0.0, 1.0, 0.0, 0.0, 2.0, 1.0, 1.0, 0.0]).reshape(3,3)
+    >>> data = [
+    ...     LabeledPoint(0.0, [0.0, 0.0]),
+    ...     LabeledPoint(0.0, [0.0, 1.0]),
+    ...     LabeledPoint(1.0, [1.0, 0.0]),
+    ... ]
     >>> model = NaiveBayes.train(sc.parallelize(data))
     >>> model.predict(array([0.0, 1.0]))
-    0
+    0.0
     >>> model.predict(array([1.0, 0.0]))
-    1
+    1.0
+    >>> sparse_data = [
+    ...     LabeledPoint(0.0, SparseVector(2, {1: 0.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {1: 1.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {0: 1.0}))
+    ... ]
+    >>> model = NaiveBayes.train(sc.parallelize(sparse_data))
+    >>> model.predict(SparseVector(2, {1: 1.0}))
+    0.0
+    >>> model.predict(SparseVector(2, {0: 1.0}))
+    1.0
     """
 
-    def __init__(self, pi, theta):
+    def __init__(self, labels, pi, theta):
+        self.labels = labels
         self.pi = pi
         self.theta = theta
 
     def predict(self, x):
         """Return the most likely class for a data vector x"""
-        return numpy.argmax(self.pi + dot(x, self.theta))
+        return self.labels[numpy.argmax(self.pi + _dot(x, self.theta.transpose()))]
+
 
 class NaiveBayes(object):
     @classmethod
@@ -118,19 +177,19 @@ class NaiveBayes(object):
         @param lambda_: The smoothing parameter
         """
         sc = data.context
-        dataBytes = _get_unmangled_double_vector_rdd(data)
+        dataBytes = _get_unmangled_labeled_point_rdd(data)
         ans = sc._jvm.PythonMLLibAPI().trainNaiveBayes(dataBytes._jrdd, lambda_)
         return NaiveBayesModel(
             _deserialize_double_vector(ans[0]),
-            _deserialize_double_matrix(ans[1]))
+            _deserialize_double_vector(ans[1]),
+            _deserialize_double_matrix(ans[2]))
 
 
 def _test():
     import doctest
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs,
-            optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

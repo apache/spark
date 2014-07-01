@@ -18,26 +18,25 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
 import scala.xml.Node
 
 import org.apache.spark.scheduler.{Schedulable, StageInfo}
 import org.apache.spark.ui.UIUtils
 
 /** Table showing list of pools */
-private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressListener) {
+private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressTab) {
+  private val basePath = parent.basePath
+  private val listener = parent.listener
 
-  var poolToActiveStages: HashMap[String, HashSet[StageInfo]] = listener.poolToActiveStages
-
-  def toNodeSeq(): Seq[Node] = {
+  def toNodeSeq: Seq[Node] = {
     listener.synchronized {
       poolTable(poolRow, pools)
     }
   }
 
-  private def poolTable(makeRow: (Schedulable, HashMap[String, HashSet[StageInfo]]) => Seq[Node],
-    rows: Seq[Schedulable]
-    ): Seq[Node] = {
+  private def poolTable(
+      makeRow: (Schedulable, HashMap[String, HashMap[Int, StageInfo]]) => Seq[Node],
+      rows: Seq[Schedulable]): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable table-fixed">
       <thead>
         <th>Pool Name</th>
@@ -48,20 +47,23 @@ private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressLis
         <th>SchedulingMode</th>
       </thead>
       <tbody>
-        {rows.map(r => makeRow(r, poolToActiveStages))}
+        {rows.map(r => makeRow(r, listener.poolToActiveStages))}
       </tbody>
     </table>
   }
 
-  private def poolRow(p: Schedulable, poolToActiveStages: HashMap[String, HashSet[StageInfo]])
-    : Seq[Node] = {
+  private def poolRow(
+      p: Schedulable,
+      poolToActiveStages: HashMap[String, HashMap[Int, StageInfo]]): Seq[Node] = {
     val activeStages = poolToActiveStages.get(p.name) match {
       case Some(stages) => stages.size
       case None => 0
     }
     <tr>
       <td>
-        <a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(),p.name)}>{p.name}</a>
+        <a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(basePath), p.name)}>
+          {p.name}
+        </a>
       </td>
       <td>{p.minShare}</td>
       <td>{p.weight}</td>

@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import com.codahale.metrics.MetricRegistry
 import com.codahale.metrics.ganglia.GangliaReporter
 import info.ganglia.gmetric4j.gmetric.GMetric
+import info.ganglia.gmetric4j.gmetric.GMetric.UDPAddressingMode
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
@@ -33,10 +34,10 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
   val GANGLIA_DEFAULT_PERIOD = 10
 
   val GANGLIA_KEY_UNIT = "unit"
-  val GANGLIA_DEFAULT_UNIT = TimeUnit.SECONDS
+  val GANGLIA_DEFAULT_UNIT: TimeUnit = TimeUnit.SECONDS
 
   val GANGLIA_KEY_MODE = "mode"
-  val GANGLIA_DEFAULT_MODE = GMetric.UDPAddressingMode.MULTICAST
+  val GANGLIA_DEFAULT_MODE: UDPAddressingMode = GMetric.UDPAddressingMode.MULTICAST
 
   // TTL for multicast messages. If listeners are X hops away in network, must be at least X.
   val GANGLIA_KEY_TTL = "ttl"
@@ -45,7 +46,7 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
   val GANGLIA_KEY_HOST = "host"
   val GANGLIA_KEY_PORT = "port"
 
-  def propertyToOption(prop: String) = Option(property.getProperty(prop))
+  def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
 
   if (!propertyToOption(GANGLIA_KEY_HOST).isDefined) {
     throw new Exception("Ganglia sink requires 'host' property.")
@@ -58,11 +59,12 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
   val host = propertyToOption(GANGLIA_KEY_HOST).get
   val port = propertyToOption(GANGLIA_KEY_PORT).get.toInt
   val ttl = propertyToOption(GANGLIA_KEY_TTL).map(_.toInt).getOrElse(GANGLIA_DEFAULT_TTL)
-  val mode = propertyToOption(GANGLIA_KEY_MODE)
+  val mode: UDPAddressingMode = propertyToOption(GANGLIA_KEY_MODE)
     .map(u => GMetric.UDPAddressingMode.valueOf(u.toUpperCase)).getOrElse(GANGLIA_DEFAULT_MODE)
   val pollPeriod = propertyToOption(GANGLIA_KEY_PERIOD).map(_.toInt)
     .getOrElse(GANGLIA_DEFAULT_PERIOD)
-  val pollUnit = propertyToOption(GANGLIA_KEY_UNIT).map(u => TimeUnit.valueOf(u.toUpperCase))
+  val pollUnit: TimeUnit = propertyToOption(GANGLIA_KEY_UNIT)
+    .map(u => TimeUnit.valueOf(u.toUpperCase))
     .getOrElse(GANGLIA_DEFAULT_UNIT)
 
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)

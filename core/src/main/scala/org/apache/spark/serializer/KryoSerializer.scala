@@ -31,8 +31,14 @@ import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage._
 import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock}
 
+import scala.reflect.ClassTag
+
 /**
  * A Spark serializer that uses the [[https://code.google.com/p/kryo/ Kryo serialization library]].
+ *
+ * Note that this serializer is not guaranteed to be wire-compatible across different versions of
+ * Spark. It is intended to be used to serialize/de-serialize data within a single
+ * Spark application.
  */
 class KryoSerializer(conf: SparkConf)
   extends org.apache.spark.serializer.Serializer
@@ -54,7 +60,12 @@ class KryoSerializer(conf: SparkConf)
     // Do this before we invoke the user registrator so the user registrator can override this.
     kryo.setReferences(referenceTracking)
 
-    for (cls <- KryoSerializer.toRegister) kryo.register(cls)
+    for (cls <- KryoSerializer.toRegister) {
+      kryo.register(cls)
+    }
+
+    // For results returned by asJavaIterable. See JavaIterableWrapperSerializer.
+    kryo.register(JavaIterableWrapperSerializer.wrapperClass, new JavaIterableWrapperSerializer)
 
     // Allow sending SerializableWritable
     kryo.register(classOf[SerializableWritable[_]], new KryoJavaSerializer())
@@ -73,7 +84,7 @@ class KryoSerializer(conf: SparkConf)
     }
 
     // Register Chill's classes; we do this after our ranges and the user's own classes to let
-    // our code override the generic serialziers in Chill for things like Seq
+    // our code override the generic serializers in Chill for things like Seq
     new AllScalaRegistrar().apply(kryo)
 
     kryo.setClassLoader(classLoader)
@@ -89,7 +100,7 @@ private[spark]
 class KryoSerializationStream(kryo: Kryo, outStream: OutputStream) extends SerializationStream {
   val output = new KryoOutput(outStream)
 
-  def writeObject[T](t: T): SerializationStream = {
+  def writeObject[T: ClassTag](t: T): SerializationStream = {
     kryo.writeClassAndObject(output, t)
     this
   }
@@ -102,12 +113,13 @@ private[spark]
 class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends DeserializationStream {
   val input = new KryoInput(inStream)
 
-  def readObject[T](): T = {
+  def readObject[T: ClassTag](): T = {
     try {
       kryo.readClassAndObject(input).asInstanceOf[T]
     } catch {
       // DeserializationStream uses the EOF exception to indicate stopping condition.
-      case _: KryoException => throw new EOFException
+      case e: KryoException if e.getMessage.toLowerCase.contains("buffer underflow") =>
+        throw new EOFException
     }
   }
 
@@ -124,18 +136,18 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
   lazy val output = ks.newKryoOutput()
   lazy val input = new KryoInput()
 
-  def serialize[T](t: T): ByteBuffer = {
+  def serialize[T: ClassTag](t: T): ByteBuffer = {
     output.clear()
     kryo.writeClassAndObject(output, t)
     ByteBuffer.wrap(output.toBytes)
   }
 
-  def deserialize[T](bytes: ByteBuffer): T = {
+  def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     input.setBuffer(bytes.array)
     kryo.readClassAndObject(input).asInstanceOf[T]
   }
 
-  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
+  def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
     val oldClassLoader = kryo.getClassLoader
     kryo.setClassLoader(loader)
     input.setBuffer(bytes.array)
@@ -171,10 +183,53 @@ private[serializer] object KryoSerializer {
     classOf[GetBlock],
     classOf[MapStatus],
     classOf[BlockManagerId],
-    classOf[Array[Byte]],
-    (1 to 10).getClass,
-    (1 until 10).getClass,
-    (1L to 10L).getClass,
-    (1L until 10L).getClass
+    classOf[Array[Byte]]
   )
+}
+
+/**
+ * A Kryo serializer for serializing results returned by asJavaIterable.
+ *
+ * The underlying object is scala.collection.convert.Wrappers$IterableWrapper.
+ * Kryo deserializes this into an AbstractCollection, which unfortunately doesn't work.
+ */
+private class JavaIterableWrapperSerializer
+  extends com.esotericsoftware.kryo.Serializer[java.lang.Iterable[_]] {
+
+  import JavaIterableWrapperSerializer._
+
+  override def write(kryo: Kryo, out: KryoOutput, obj: java.lang.Iterable[_]): Unit = {
+    // If the object is the wrapper, simply serialize the underlying Scala Iterable object.
+    // Otherwise, serialize the object itself.
+    if (obj.getClass == wrapperClass && underlyingMethodOpt.isDefined) {
+      kryo.writeClassAndObject(out, underlyingMethodOpt.get.invoke(obj))
+    } else {
+      kryo.writeClassAndObject(out, obj)
+    }
+  }
+
+  override def read(kryo: Kryo, in: KryoInput, clz: Class[java.lang.Iterable[_]])
+    : java.lang.Iterable[_] = {
+    kryo.readClassAndObject(in) match {
+      case scalaIterable: Iterable[_] =>
+        scala.collection.JavaConversions.asJavaIterable(scalaIterable)
+      case javaIterable: java.lang.Iterable[_] =>
+        javaIterable
+    }
+  }
+}
+
+private object JavaIterableWrapperSerializer extends Logging {
+  // The class returned by asJavaIterable (scala.collection.convert.Wrappers$IterableWrapper).
+  val wrapperClass =
+    scala.collection.convert.WrapAsJava.asJavaIterable(Seq(1)).getClass
+
+  // Get the underlying method so we can use it to get the Scala collection for serialization.
+  private val underlyingMethodOpt = {
+    try Some(wrapperClass.getDeclaredMethod("underlying")) catch {
+      case e: Exception =>
+        logError("Failed to find the underlying field in " + wrapperClass, e)
+        None
+    }
+  }
 }

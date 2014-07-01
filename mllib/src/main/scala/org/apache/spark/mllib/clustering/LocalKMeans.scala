@@ -19,35 +19,37 @@ package org.apache.spark.mllib.clustering
 
 import scala.util.Random
 
-import org.jblas.{DoubleMatrix, SimpleBlas}
+import breeze.linalg.{Vector => BV, DenseVector => BDV, norm => breezeNorm}
+
+import org.apache.spark.Logging
 
 /**
  * An utility object to run K-means locally. This is private to the ML package because it's used
  * in the initialization of KMeans but not meant to be publicly exposed.
  */
-private[mllib] object LocalKMeans {
+private[mllib] object LocalKMeans extends Logging {
+
   /**
    * Run K-means++ on the weighted point set `points`. This first does the K-means++
-   * initialization procedure and then roudns of Lloyd's algorithm.
+   * initialization procedure and then rounds of Lloyd's algorithm.
    */
   def kMeansPlusPlus(
       seed: Int,
-      points: Array[Array[Double]],
+      points: Array[BreezeVectorWithNorm],
       weights: Array[Double],
       k: Int,
-      maxIterations: Int)
-    : Array[Array[Double]] =
-  {
+      maxIterations: Int
+  ): Array[BreezeVectorWithNorm] = {
     val rand = new Random(seed)
-    val dimensions = points(0).length
-    val centers = new Array[Array[Double]](k)
+    val dimensions = points(0).vector.length
+    val centers = new Array[BreezeVectorWithNorm](k)
 
-    // Initialize centers by sampling using the k-means++ procedure
-    centers(0) = pickWeighted(rand, points, weights)
+    // Initialize centers by sampling using the k-means++ procedure.
+    centers(0) = pickWeighted(rand, points, weights).toDense
     for (i <- 1 until k) {
       // Pick the next center with a probability proportional to cost under current centers
-      val curCenters = centers.slice(0, i)
-      val sum = points.zip(weights).map { case (p, w) =>
+      val curCenters = centers.view.take(i)
+      val sum = points.view.zip(weights).map { case (p, w) =>
         w * KMeans.pointCost(curCenters, p)
       }.sum
       val r = rand.nextDouble() * sum
@@ -57,7 +59,7 @@ private[mllib] object LocalKMeans {
         cumulativeScore += weights(j) * KMeans.pointCost(curCenters, points(j))
         j += 1
       }
-      centers(i) = points(j-1)
+      centers(i) = points(j-1).toDense
     }
 
     // Run up to maxIterations iterations of Lloyd's algorithm
@@ -66,27 +68,41 @@ private[mllib] object LocalKMeans {
     var moved = true
     while (moved && iteration < maxIterations) {
       moved = false
-      val sums = Array.fill(k)(new DoubleMatrix(dimensions))
       val counts = Array.fill(k)(0.0)
-      for ((p, i) <- points.zipWithIndex) {
+      val sums = Array.fill(k)(
+        BDV.zeros[Double](dimensions).asInstanceOf[BV[Double]]
+      )
+      var i = 0
+      while (i < points.length) {
+        val p = points(i)
         val index = KMeans.findClosest(centers, p)._1
-        SimpleBlas.axpy(weights(i), new DoubleMatrix(p), sums(index))
+        breeze.linalg.axpy(weights(i), p.vector, sums(index))
         counts(index) += weights(i)
         if (index != oldClosest(i)) {
           moved = true
           oldClosest(i) = index
         }
+        i += 1
       }
       // Update centers
-      for (i <- 0 until k) {
-        if (counts(i) == 0.0) {
+      var j = 0
+      while (j < k) {
+        if (counts(j) == 0.0) {
           // Assign center to a random point
-          centers(i) = points(rand.nextInt(points.length))
+          centers(j) = points(rand.nextInt(points.length)).toDense
         } else {
-          centers(i) = sums(i).divi(counts(i)).data
+          sums(j) /= counts(j)
+          centers(j) = new BreezeVectorWithNorm(sums(j))
         }
+        j += 1
       }
       iteration += 1
+    }
+
+    if (iteration == maxIterations) {
+      logInfo(s"Local KMeans++ reached the max number of iterations: $maxIterations.")
+    } else {
+      logInfo(s"Local KMeans++ converged in $iteration iterations.")
     }
 
     centers

@@ -43,7 +43,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
   ) extends DStream[(K,V)](parent.ssc) {
 
   assert(_windowDuration.isMultipleOf(parent.slideDuration),
-    "The window duration of ReducedWindowedDStream (" + _slideDuration + ") " +
+    "The window duration of ReducedWindowedDStream (" + _windowDuration + ") " +
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
@@ -78,7 +78,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
 
   override def checkpoint(interval: Duration): DStream[(K, V)] = {
     super.checkpoint(interval)
-    //reducedStream.checkpoint(interval)
+    // reducedStream.checkpoint(interval)
     this
   }
 
@@ -128,7 +128,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
     // Cogroup the reduced RDDs and merge the reduced values
     val cogroupedRDD = new CoGroupedRDD[K](allRDDs.toSeq.asInstanceOf[Seq[RDD[(K, _)]]],
       partitioner)
-    //val mergeValuesFunc = mergeValues(oldRDDs.size, newRDDs.size) _
+    // val mergeValuesFunc = mergeValues(oldRDDs.size, newRDDs.size) _
 
     val numOldValues = oldRDDs.size
     val numNewValues = newRDDs.size

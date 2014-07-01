@@ -22,9 +22,7 @@ sbin=`cd "$sbin"; pwd`
 
 . "$sbin/spark-config.sh"
 
-if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
-  . "${SPARK_CONF_DIR}/spark-env.sh"
-fi
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 # do before the below calls as they exec
 if [ -e "$sbin"/../tachyon/bin/tachyon ]; then

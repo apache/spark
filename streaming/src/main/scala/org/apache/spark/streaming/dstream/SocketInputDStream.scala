@@ -24,7 +24,9 @@ import org.apache.spark.util.NextIterator
 import scala.reflect.ClassTag
 
 import java.io._
-import java.net.Socket
+import java.net.{UnknownHostException, Socket}
+import org.apache.spark.Logging
+import org.apache.spark.streaming.receiver.Receiver
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](
@@ -33,9 +35,9 @@ class SocketInputDStream[T: ClassTag](
     port: Int,
     bytesToObjects: InputStream => Iterator[T],
     storageLevel: StorageLevel
-  ) extends NetworkInputDStream[T](ssc_) {
+  ) extends ReceiverInputDStream[T](ssc_) {
 
-  def getReceiver(): NetworkReceiver[T] = {
+  def getReceiver(): Receiver[T] = {
     new SocketReceiver(host, port, bytesToObjects, storageLevel)
   }
 }
@@ -46,28 +48,46 @@ class SocketReceiver[T: ClassTag](
     port: Int,
     bytesToObjects: InputStream => Iterator[T],
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[T] {
+  ) extends Receiver[T](storageLevel) with Logging {
 
-  lazy protected val blockGenerator = new BlockGenerator(storageLevel)
+  def onStart() {
+    // Start the thread that receives data over a connection
+    new Thread("Socket Receiver") {
+      setDaemon(true)
+      override def run() { receive() }
+    }.start()
+  }
 
-  override def getLocationPreference = None
+  def onStop() {
+    // There is nothing much to do as the thread calling receive()
+    // is designed to stop by itself isStopped() returns false
+  }
 
-  protected def onStart() {
-    logInfo("Connecting to " + host + ":" + port)
-    val socket = new Socket(host, port)
-    logInfo("Connected to " + host + ":" + port)
-    blockGenerator.start()
-    val iterator = bytesToObjects(socket.getInputStream())
-    while(iterator.hasNext) {
-      val obj = iterator.next
-      blockGenerator += obj
+  /** Create a socket connection and receive data until receiver is stopped */
+  def receive() {
+    var socket: Socket = null
+    try {
+      logInfo("Connecting to " + host + ":" + port)
+      socket = new Socket(host, port)
+      logInfo("Connected to " + host + ":" + port)
+      val iterator = bytesToObjects(socket.getInputStream())
+      while(!isStopped && iterator.hasNext) {
+        store(iterator.next)
+      }
+      logInfo("Stopped receiving")
+      restart("Retrying connecting to " + host + ":" + port)
+    } catch {
+      case e: java.net.ConnectException =>
+        restart("Error connecting to " + host + ":" + port, e)
+      case t: Throwable =>
+        restart("Error receiving data", t)
+    } finally {
+      if (socket != null) {
+        socket.close()
+        logInfo("Closed socket to " + host + ":" + port)
+      }
     }
   }
-
-  protected def onStop() {
-    blockGenerator.stop()
-  }
-
 }
 
 private[streaming]

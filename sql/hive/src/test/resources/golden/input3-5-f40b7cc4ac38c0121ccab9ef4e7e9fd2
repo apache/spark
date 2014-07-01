@@ -1,0 +1,14 @@
+ABSTRACT SYNTAX TREE:
+  (TOK_ALTERTABLE_ADDCOLS TEST3b (TOK_TABCOLLIST (TOK_TABCOL X TOK_DOUBLE)))
+
+STAGE DEPENDENCIES:
+  Stage-0 is a root stage
+
+STAGE PLANS:
+  Stage: Stage-0
+      Alter Table Operator:
+        Alter Table
+          type: add columns
+          new columns: x double
+          old name: TEST3b
+

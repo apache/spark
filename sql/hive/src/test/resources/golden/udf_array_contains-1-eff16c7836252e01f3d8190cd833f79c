@@ -1,0 +1,4 @@
+array_contains(array, value) - Returns TRUE if the array contains value.
+Example:
+  > SELECT array_contains(array(1, 2, 3), 2) FROM src LIMIT 1;
+  true

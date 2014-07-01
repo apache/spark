@@ -26,7 +26,7 @@ import com.codahale.metrics.{CsvReporter, MetricRegistry}
 import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
-class CsvSink(val property: Properties, val registry: MetricRegistry,
+private[spark] class CsvSink(val property: Properties, val registry: MetricRegistry,
     securityMgr: SecurityManager) extends Sink {
   val CSV_KEY_PERIOD = "period"
   val CSV_KEY_UNIT = "unit"
@@ -41,11 +41,11 @@ class CsvSink(val property: Properties, val registry: MetricRegistry,
     case None => CSV_DEFAULT_PERIOD
   }
 
-  val pollUnit = Option(property.getProperty(CSV_KEY_UNIT)) match {
+  val pollUnit: TimeUnit = Option(property.getProperty(CSV_KEY_UNIT)) match {
     case Some(s) => TimeUnit.valueOf(s.toUpperCase())
     case None => TimeUnit.valueOf(CSV_DEFAULT_UNIT)
   }
-  
+
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
   val pollDir = Option(property.getProperty(CSV_KEY_DIR)) match {

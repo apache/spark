@@ -33,8 +33,8 @@ private[spark] object TestClient {
       System.exit(0)
     }
 
-    def dead() {
-      logInfo("Could not connect to master")
+    def dead(reason: String) {
+      logInfo("Application died with error: " + reason)
       System.exit(0)
     }
 
@@ -49,8 +49,8 @@ private[spark] object TestClient {
     val (actorSystem, port) = AkkaUtils.createActorSystem("spark", Utils.localIpAddress, 0,
       conf = conf, securityManager = new SecurityManager(conf))
     val desc = new ApplicationDescription(
-      "TestClient", Some(1), 512, Command("spark.deploy.client.TestExecutor", Seq(), Map()),
-      Some("dummy-spark-home"), "ignored")
+      "TestClient", Some(1), 512, Command("spark.deploy.client.TestExecutor", Seq(), Map(), Seq(),
+        Seq()), Some("dummy-spark-home"), "ignored")
     val listener = new TestListener
     val client = new AppClient(actorSystem, Array(url), desc, listener, new SparkConf)
     client.start()

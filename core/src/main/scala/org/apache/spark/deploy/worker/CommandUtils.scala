@@ -46,21 +46,36 @@ object CommandUtils extends Logging {
    * the way the JAVA_OPTS are assembled there.
    */
   def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
-    val libraryOpts = getEnv("SPARK_LIBRARY_PATH", command)
-      .map(p => List("-Djava.library.path=" + p))
-      .getOrElse(Nil)
-    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS"))
-      .map(Utils.splitCommandString).getOrElse(Nil)
-    val userOpts = getEnv("SPARK_JAVA_OPTS", command).map(Utils.splitCommandString).getOrElse(Nil)
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
+    val extraOpts = command.extraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq())
+
+    // Exists for backwards compatibility with older Spark versions
+    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString)
+      .getOrElse(Nil)
+    if (workerLocalOpts.length > 0) {
+      logWarning("SPARK_JAVA_OPTS was set on the worker. It is deprecated in Spark 1.0.")
+      logWarning("Set SPARK_LOCAL_DIRS for node-specific storage locations.")
+    }
+
+    val libraryOpts =
+      if (command.libraryPathEntries.size > 0) {
+        val joined = command.libraryPathEntries.mkString(File.pathSeparator)
+        Seq(s"-Djava.library.path=$joined")
+      } else {
+         Seq()
+      }
+
+    val permGenOpt = Seq("-XX:MaxPermSize=128m")
 
     // Figure out our classpath with the external compute-classpath script
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
       Seq(sparkHome + "/bin/compute-classpath" + ext),
       extraEnvironment=command.environment)
+    val userClassPath = command.classPathEntries ++ Seq(classPath)
 
-    Seq("-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts
+    Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
+      permGenOpt ++ libraryOpts ++ extraOpts ++ workerLocalOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */

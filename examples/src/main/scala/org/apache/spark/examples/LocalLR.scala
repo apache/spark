@@ -18,7 +18,8 @@
 package org.apache.spark.examples
 
 import java.util.Random
-import org.apache.spark.util.Vector
+
+import breeze.linalg.{Vector, DenseVector}
 
 /**
  * Logistic regression based classification.
@@ -30,12 +31,12 @@ object LocalLR {
   val ITERATIONS = 5
   val rand = new Random(42)
 
-  case class DataPoint(x: Vector, y: Double)
+  case class DataPoint(x: Vector[Double], y: Double)
 
   def generateData = {
     def generatePoint(i: Int) = {
       val y = if(i % 2 == 0) -1 else 1
-      val x = Vector(D, _ => rand.nextGaussian + y * R)
+      val x = DenseVector.fill(D){rand.nextGaussian + y * R}
       DataPoint(x, y)
     }
     Array.tabulate(N)(generatePoint)
@@ -45,15 +46,15 @@ object LocalLR {
     val data = generateData
 
     // Initialize w to a random value
-    var w = Vector(D, _ => 2 * rand.nextDouble - 1)
+    var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {
       println("On iteration " + i)
-      var gradient = Vector.zeros(D)
+      var gradient = DenseVector.zeros[Double](D)
       for (p <- data) {
-        val scale = (1 / (1 + math.exp(-p.y * (w dot p.x))) - 1) * p.y
-        gradient +=  scale * p.x
+        val scale = (1 / (1 + math.exp(-p.y * (w.dot(p.x)))) - 1) * p.y
+        gradient +=  p.x * scale
       }
       w -= gradient
     }

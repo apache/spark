@@ -1,0 +1,29 @@
+ABSTRACT SYNTAX TREE:
+  (TOK_ALTERTABLE_ADDPARTS add_part_test TOK_IFNOTEXISTS (TOK_PARTSPEC (TOK_PARTVAL ds '2010-01-01')) (TOK_PARTITIONLOCATION 'A') (TOK_PARTSPEC (TOK_PARTVAL ds '2010-02-01')) (TOK_PARTITIONLOCATION 'B') (TOK_PARTSPEC (TOK_PARTVAL ds '2010-03-01')) (TOK_PARTSPEC (TOK_PARTVAL ds '2010-04-01')) (TOK_PARTITIONLOCATION 'C'))
+
+STAGE DEPENDENCIES:
+  Stage-0 is a root stage
+  Stage-1 is a root stage
+  Stage-2 is a root stage
+  Stage-3 is a root stage
+
+STAGE PLANS:
+  Stage: Stage-0
+      Add Partition Operator:
+          Location: A
+          Spec: {ds=2010-01-01}
+
+  Stage: Stage-1
+      Add Partition Operator:
+          Location: B
+          Spec: {ds=2010-02-01}
+
+  Stage: Stage-2
+      Add Partition Operator:
+          Spec: {ds=2010-03-01}
+
+  Stage: Stage-3
+      Add Partition Operator:
+          Location: C
+          Spec: {ds=2010-04-01}
+

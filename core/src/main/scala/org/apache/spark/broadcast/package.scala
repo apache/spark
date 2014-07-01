@@ -18,7 +18,7 @@
 package org.apache.spark
 
 /**
- * Package for broadcast variables. See [[broadcast.Broadcast]] for details.
+ * Spark's broadcast variables, used to broadcast immutable datasets to all nodes.
  */
 package object broadcast {
   // For package docs only

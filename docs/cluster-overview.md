@@ -4,7 +4,8 @@ title: Cluster Mode Overview
 ---
 
 This document gives a short overview of how Spark runs on clusters, to make it easier to understand
-the components involved.
+the components involved. Read through the [application submission guide](submitting-applications.html)
+to submit applications to a cluster.
 
 # Components
 
@@ -50,24 +51,10 @@ The system currently supports three cluster managers:
 In addition, Spark's [EC2 launch scripts](ec2-scripts.html) make it easy to launch a standalone
 cluster on Amazon EC2.
 
-# Shipping Code to the Cluster
+# Submitting Applications
 
-The recommended way to ship your code to the cluster is to pass it through SparkContext's constructor,
-which takes a list of JAR files (Java/Scala) or .egg and .zip libraries (Python) to disseminate to
-worker nodes. You can also dynamically add new files to be sent to executors with `SparkContext.addJar`
-and `addFile`.
-
-## URIs for addJar / addFile
-
-- **file:** - Absolute paths and `file:/` URIs are served by the driver's HTTP file server, and every executor
-  pulls the file from the driver HTTP server
-- **hdfs:**, **http:**, **https:**, **ftp:** - these pull down files and JARs from the URI as expected
-- **local:** - a URI starting with local:/ is expected to exist as a local file on each worker node.  This
-  means that no network IO will be incurred, and works well for large files/JARs that are pushed to each worker,
-  or shared via NFS, GlusterFS, etc.
-
-Note that JARs and files are copied to the working directory for each SparkContext on the executor nodes.
-Over time this can use up a significant amount of space and will need to be cleaned up.
+Applications can be submitted to a cluster of any type using the `spark-submit` script.
+The [application submission guide](submitting-applications.html) describes how to do this.
 
 # Monitoring
 
@@ -95,12 +82,26 @@ The following table summarizes terms you'll see used to refer to cluster concept
       <td>User program built on Spark. Consists of a <em>driver program</em> and <em>executors</em> on the cluster.</td>
     </tr>
     <tr>
+      <td>Application jar</td>
+      <td>
+        A jar containing the user's Spark application. In some cases users will want to create
+        an "uber jar" containing their application along with its dependencies. The user's jar
+        should never include Hadoop or Spark libraries, however, these will be added at runtime.
+      </td>
+    </tr>
+    <tr>
       <td>Driver program</td>
       <td>The process running the main() function of the application and creating the SparkContext</td>
     </tr>
     <tr>
       <td>Cluster manager</td>
       <td>An external service for acquiring resources on the cluster (e.g. standalone manager, Mesos, YARN)</td>
+    </tr>
+    <tr>
+      <td>Deploy mode</td>
+      <td>Distinguishes where the driver process runs. In "cluster" mode, the framework launches
+        the driver inside of the cluster. In "client" mode, the submitter launches the driver
+        outside of the cluster.</td>
     </tr>
     <tr>
       <td>Worker node</td>

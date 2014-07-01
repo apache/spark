@@ -1,0 +1,11 @@
+NULL	NULL
+[0,0,0]	[{"myint":0,"mystring":"0","underscore_int":0}]
+[1,2,3]	[{"myint":1,"mystring":"1","underscore_int":1}]
+[2,4,6]	[{"myint":4,"mystring":"8","underscore_int":2}]
+[3,6,9]	[{"myint":9,"mystring":"27","underscore_int":3}]
+[4,8,12]	[{"myint":16,"mystring":"64","underscore_int":4}]
+[5,10,15]	[{"myint":25,"mystring":"125","underscore_int":5}]
+[6,12,18]	[{"myint":36,"mystring":"216","underscore_int":6}]
+[7,14,21]	[{"myint":49,"mystring":"343","underscore_int":7}]
+[8,16,24]	[{"myint":64,"mystring":"512","underscore_int":8}]
+[9,18,27]	[{"myint":81,"mystring":"729","underscore_int":9}]

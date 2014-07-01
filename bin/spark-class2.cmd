@@ -17,6 +17,8 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
+setlocal enabledelayedexpansion
+
 set SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
@@ -45,13 +47,16 @@ if "x%OUR_JAVA_MEM%"=="x" set OUR_JAVA_MEM=512m
 
 set SPARK_DAEMON_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% -Dspark.akka.logLifecycleEvents=true
 
-rem Add java opts and memory settings for master, worker, executors, and repl.
-rem Master and Worker use SPARK_DAEMON_JAVA_OPTS (and specific opts) + SPARK_DAEMON_MEMORY.
+rem Add java opts and memory settings for master, worker, history server, executors, and repl.
+rem Master, Worker and HistoryServer use SPARK_DAEMON_JAVA_OPTS (and specific opts) + SPARK_DAEMON_MEMORY.
 if "%1"=="org.apache.spark.deploy.master.Master" (
   set OUR_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% %SPARK_MASTER_OPTS%
   if not "x%SPARK_DAEMON_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DAEMON_MEMORY%
 ) else if "%1"=="org.apache.spark.deploy.worker.Worker" (
   set OUR_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% %SPARK_WORKER_OPTS%
+  if not "x%SPARK_DAEMON_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DAEMON_MEMORY%
+) else if "%1"=="org.apache.spark.deploy.history.HistoryServer" (
+  set OUR_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% %SPARK_HISTORY_OPTS%
   if not "x%SPARK_DAEMON_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DAEMON_MEMORY%
 
 rem Executors use SPARK_JAVA_OPTS + SPARK_EXECUTOR_MEMORY.
@@ -72,8 +77,8 @@ rem All drivers use SPARK_JAVA_OPTS + SPARK_DRIVER_MEMORY. The repl also uses SP
 )
 
 rem Set JAVA_OPTS to be able to load native libraries and to set heap size
-set JAVA_OPTS=%OUR_JAVA_OPTS% -Djava.library.path=%SPARK_LIBRARY_PATH% -Xms%OUR_JAVA_MEM% -Xmx%OUR_JAVA_MEM%
-rem Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in ExecutorRunner.scala!
+set JAVA_OPTS=-XX:MaxPermSize=128m %OUR_JAVA_OPTS% -Djava.library.path=%SPARK_LIBRARY_PATH% -Xms%OUR_JAVA_MEM% -Xmx%OUR_JAVA_MEM%
+rem Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in CommandUtils.scala!
 
 rem Test whether the user has built Spark
 if exist "%FWDIR%RELEASE" goto skip_build_test

@@ -43,7 +43,6 @@ public class JavaRidgeRegressionSuite implements Serializable {
   public void tearDown() {
       sc.stop();
       sc = null;
-      System.clearProperty("spark.driver.port");
   }
 
   double predictionError(List<LabeledPoint> validationData, RidgeRegressionModel model) {
@@ -55,30 +54,27 @@ public class JavaRidgeRegressionSuite implements Serializable {
     return errorSum / validationData.size();
   }
 
-  List<LabeledPoint> generateRidgeData(int numPoints, int nfeatures, double eps) {
+  List<LabeledPoint> generateRidgeData(int numPoints, int numFeatures, double std) {
     org.jblas.util.Random.seed(42);
     // Pick weights as random values distributed uniformly in [-0.5, 0.5]
-    DoubleMatrix w = DoubleMatrix.rand(nfeatures, 1).subi(0.5);
-    // Set first two weights to eps
-    w.put(0, 0, eps);
-    w.put(1, 0, eps);
-    return LinearDataGenerator.generateLinearInputAsList(0.0, w.data, numPoints, 42, eps);
+    DoubleMatrix w = DoubleMatrix.rand(numFeatures, 1).subi(0.5);
+    return LinearDataGenerator.generateLinearInputAsList(0.0, w.data, numPoints, 42, std);
   }
 
   @Test
   public void runRidgeRegressionUsingConstructor() {
-    int nexamples = 200;
-    int nfeatures = 20;
-    double eps = 10.0;
-    List<LabeledPoint> data = generateRidgeData(2*nexamples, nfeatures, eps);
+    int numExamples = 50;
+    int numFeatures = 20;
+    List<LabeledPoint> data = generateRidgeData(2*numExamples, numFeatures, 10.0);
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(data.subList(0, nexamples));
-    List<LabeledPoint> validationData = data.subList(nexamples, 2*nexamples);
+    JavaRDD<LabeledPoint> testRDD = sc.parallelize(data.subList(0, numExamples));
+    List<LabeledPoint> validationData = data.subList(numExamples, 2 * numExamples);
 
     RidgeRegressionWithSGD ridgeSGDImpl = new RidgeRegressionWithSGD();
-    ridgeSGDImpl.optimizer().setStepSize(1.0)
-                            .setRegParam(0.0)
-                            .setNumIterations(200);
+    ridgeSGDImpl.optimizer()
+      .setStepSize(1.0)
+      .setRegParam(0.0)
+      .setNumIterations(200);
     RidgeRegressionModel model = ridgeSGDImpl.run(testRDD.rdd());
     double unRegularizedErr = predictionError(validationData, model);
 
@@ -91,13 +87,12 @@ public class JavaRidgeRegressionSuite implements Serializable {
 
   @Test
   public void runRidgeRegressionUsingStaticMethods() {
-    int nexamples = 200;
-    int nfeatures = 20;
-    double eps = 10.0;
-    List<LabeledPoint> data = generateRidgeData(2*nexamples, nfeatures, eps);
+    int numExamples = 50;
+    int numFeatures = 20;
+    List<LabeledPoint> data = generateRidgeData(2 * numExamples, numFeatures, 10.0);
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(data.subList(0, nexamples));
-    List<LabeledPoint> validationData = data.subList(nexamples, 2*nexamples);
+    JavaRDD<LabeledPoint> testRDD = sc.parallelize(data.subList(0, numExamples));
+    List<LabeledPoint> validationData = data.subList(numExamples, 2 * numExamples);
 
     RidgeRegressionModel model = RidgeRegressionWithSGD.train(testRDD.rdd(), 200, 1.0, 0.0);
     double unRegularizedErr = predictionError(validationData, model);

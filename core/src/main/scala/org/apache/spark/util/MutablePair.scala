@@ -17,15 +17,19 @@
 
 package org.apache.spark.util
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
+ * :: DeveloperApi ::
  * A tuple of 2 elements. This can be used as an alternative to Scala's Tuple2 when we want to
  * minimize object allocation.
  *
  * @param  _1   Element 1 of this MutablePair
  * @param  _2   Element 2 of this MutablePair
  */
-case class MutablePair[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/) T1,
-                       @specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/) T2]
+@DeveloperApi
+case class MutablePair[@specialized(Int, Long, Double, Char, Boolean/* , AnyRef */) T1,
+                       @specialized(Int, Long, Double, Char, Boolean/* , AnyRef */) T2]
   (var _1: T1, var _2: T2)
   extends Product2[T1, T2]
 {

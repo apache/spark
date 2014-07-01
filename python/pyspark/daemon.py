@@ -74,6 +74,17 @@ def worker(listen_sock):
                 raise
     signal.signal(SIGCHLD, handle_sigchld)
 
+    # Blocks until the socket is closed by draining the input stream
+    # until it raises an exception or returns EOF.
+    def waitSocketClose(sock):
+        try:
+            while True:
+                # Empty string is returned upon EOF (and only then).
+                if sock.recv(4096) == '':
+                    return
+        except:
+            pass
+
     # Handle clients
     while not should_exit():
         # Wait until a client arrives or we have to exit
@@ -92,6 +103,7 @@ def worker(listen_sock):
             if os.fork() == 0:
                 # Leave the worker pool
                 signal.signal(SIGHUP, SIG_DFL)
+                signal.signal(SIGCHLD, SIG_DFL)
                 listen_sock.close()
                 # Read the socket using fdopen instead of socket.makefile() because the latter
                 # seems to be very slow; note that we need to dup() the file descriptor because
@@ -105,7 +117,8 @@ def worker(listen_sock):
                     exit_code = exc.code
                 finally:
                     outfile.flush()
-                    sock.close()
+                    # The Scala side will close the socket upon task completion.
+                    waitSocketClose(sock)
                     os._exit(compute_real_exit_code(exit_code))
             else:
                 sock.close()

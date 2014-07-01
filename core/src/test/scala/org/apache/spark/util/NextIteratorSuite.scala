@@ -22,9 +22,9 @@ import java.util.NoSuchElementException
 import scala.collection.mutable.Buffer
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
-class NextIteratorSuite extends FunSuite with ShouldMatchers {
+class NextIteratorSuite extends FunSuite with Matchers {
   test("one iteration") {
     val i = new StubIterator(Buffer(1))
     i.hasNext should be === true
@@ -32,7 +32,7 @@ class NextIteratorSuite extends FunSuite with ShouldMatchers {
     i.hasNext should be === false
     intercept[NoSuchElementException] { i.next() }
   }
-  
+
   test("two iterations") {
     val i = new StubIterator(Buffer(1, 2))
     i.hasNext should be === true
@@ -70,7 +70,7 @@ class NextIteratorSuite extends FunSuite with ShouldMatchers {
 
   class StubIterator(ints: Buffer[Int])  extends NextIterator[Int] {
     var closeCalled = 0
-    
+
     override def getNext() = {
       if (ints.size == 0) {
         finished = true
