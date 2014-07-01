@@ -32,7 +32,7 @@ trait KMeansCommons {
    *
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
-  protected def initKMeansMiniBatchParallel(data: RDD[BreezeVectorWithNorm],
+  protected def initParallel(data: RDD[BreezeVectorWithNorm],
       k: Int,
       initializationSteps: Int)
   : Array[BreezeVectorWithNorm] = {

@@ -152,7 +152,7 @@ class KMeansMiniBatch private (
     val centers = if (initializationMode == KMeansMiniBatch.RANDOM) {
       initRandom(data, k)
     } else {
-      initKMeansMiniBatchParallel(data, k, initializationSteps)
+      initParallel(data, k, initializationSteps)
     }
 
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
