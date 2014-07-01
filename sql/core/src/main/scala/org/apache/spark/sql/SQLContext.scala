@@ -164,6 +164,36 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Use string interpolation to perform SQL queries that yield SchemaRDDs. Directly referenced
+   * SchemaRDD's will be automatically registered as a tables. This implicit class extends
+   * StringContext.
+   *
+   * {{{
+   *   val sqlContext = new SQLContext(...)
+   *   import sqlContext._
+   *
+   *   case class Person(name: String, age: Int)
+   *   val people: RDD[Person] = ...
+   *   val srdd = sql"SELECT * FROM $people"
+   * }}}
+   *
+   * @return SchemaRDD
+   */
+  @Experimental
+  implicit class SqlInterpolator(val strCtx: StringContext) {
+
+    def sql(args: SchemaRDD*): SchemaRDD = {
+      val processedArgs = args.map { srdd =>
+       val tableName = s"tmp_${srdd.id}"
+       srdd.registerAsTable(tableName)
+       tableName
+      }
+      val query = strCtx.standardInterpolator(identity, processedArgs)
+      self.sql(query)
+    }
+  }
+
+  /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
    * during the lifetime of this instance of SQLContext.
    *
