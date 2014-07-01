@@ -52,6 +52,7 @@ trait SQLConf {
   @transient
   private val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
+
   def set(props: Properties): Unit = {
     props.asScala.foreach { case (k, v) => this.settings.put(k, v) }
   }
