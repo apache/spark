@@ -50,7 +50,7 @@ case class Generate(
     val output = alias
       .map(a => generator.output.map(_.withQualifiers(a :: Nil)))
       .getOrElse(generator.output)
-    if (outer) {
+    if (join && outer) {
       output.map {
         case attr if !attr.nullable =>
           AttributeReference(
