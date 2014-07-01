@@ -138,9 +138,7 @@ class KMeans private (
     val initStartTime = System.nanoTime()
 
     val centers = if (initializationMode == KMeans.RANDOM) {
-      val flatCenters = initRandom(data, k * runs)
-      
-      Array.tabulate(runs)(r => flatCenters.slice(r * k, (r + 1) * k).toArray)
+      Array.tabulate(runs)(r => initRandom(data, k))
     } else {
       Array.tabulate(runs)(r => initParallel(data, k, initializationSteps))
     }
