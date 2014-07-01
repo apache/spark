@@ -67,17 +67,13 @@ trait SQLConf {
   }
 
   def get(key: String, defaultValue: String): String = {
-    settings.synchronized {
       Option(settings.get(key)).getOrElse(defaultValue)
-    }
   }
 
   def getAll: Array[(String, String)] = settings.asScala.toArray
 
   def getOption(key: String): Option[String] = {
-    settings.synchronized {
       Option(settings.get(key))
-    }
   }
 
   def contains(key: String): Boolean = settings.containsKey(key)
