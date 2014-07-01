@@ -181,7 +181,7 @@ class RDD(object):
         """
         A unique ID for this RDD (within its SparkContext).
         """
-        return self._id
+        return self._jrdd.id()
 
     def __repr__(self):
         return self._jrdd.toString()
