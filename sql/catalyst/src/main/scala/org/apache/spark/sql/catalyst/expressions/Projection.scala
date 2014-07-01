@@ -45,8 +45,10 @@ class Projection(expressions: Seq[Expression]) extends (Row => Row) {
  * that schema.
  *
  * In contrast to a normal projection, a MutableProjection reuses the same underlying row object
- * each time an input row is added.  This significatly reduces the cost of calcuating the
- * projection, but means that it is not safe
+ * each time an input row is added.  This significantly reduces the cost of calculating the
+ * projection, but means that it is not safe to hold on to a reference to a [[Row]] after `next()`
+ * has been called on the [[Iterator]] that produced it. Instead, the user must call `Row.copy()`
+ * and hold on to the returned [[Row]] before calling `next()`.
  */
 case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
@@ -67,7 +69,7 @@ case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) 
 }
 
 /**
- * A mutable wrapper that makes two rows appear appear as a single concatenated row.  Designed to
+ * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
  * be instantiated once per thread and reused.
  */
 class JoinedRow extends Row {

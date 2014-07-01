@@ -41,7 +41,7 @@ import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 private[spark] class Master(
     host: String,
@@ -756,12 +756,13 @@ private[spark] class Master(
   }
 }
 
-private[spark] object Master {
+private[spark] object Master extends Logging {
   val systemName = "sparkMaster"
   private val actorName = "Master"
   val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
 
   def main(argStrings: Array[String]) {
+    SignalLogger.register(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
     val (actorSystem, _, _) = startSystemAndActor(args.host, args.port, args.webUiPort, conf)

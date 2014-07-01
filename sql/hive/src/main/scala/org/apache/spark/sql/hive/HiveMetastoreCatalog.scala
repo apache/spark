@@ -34,9 +34,8 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.hive.execution.{HiveTableScan, InsertIntoHiveTable}
-import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
+import org.apache.spark.sql.columnar.InMemoryRelation
+import org.apache.spark.sql.hive.execution.HiveTableScan
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -258,8 +257,6 @@ private[hive] case class MetastoreRelation
   def hiveQlPartitions = partitions.map { p =>
     new Partition(hiveQlTable, p)
   }
-
-  override def isPartitioned = hiveQlTable.isPartitioned
 
   val tableDesc = new TableDesc(
     Class.forName(hiveQlTable.getSerializationLib).asInstanceOf[Class[Deserializer]],

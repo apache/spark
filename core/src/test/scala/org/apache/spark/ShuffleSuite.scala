@@ -206,6 +206,42 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     // substracted rdd return results as Tuple2
     results(0) should be ((3, 33))
   }
+
+  test("sort with Java non serializable class - Kryo") {
+    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
+    val conf = new SparkConf()
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .setAppName("test")
+      .setMaster("local-cluster[2,1,512]")
+    sc = new SparkContext(conf)
+    val a = sc.parallelize(1 to 10, 2)
+    val b = a.map { x =>
+      (new NonJavaSerializableClass(x), x)
+    }
+    // If the Kryo serializer is not used correctly, the shuffle would fail because the
+    // default Java serializer cannot handle the non serializable class.
+    val c = b.sortByKey().map(x => x._2)
+    assert(c.collect() === Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+  }
+
+  test("sort with Java non serializable class - Java") {
+    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local-cluster[2,1,512]")
+    sc = new SparkContext(conf)
+    val a = sc.parallelize(1 to 10, 2)
+    val b = a.map { x =>
+      (new NonJavaSerializableClass(x), x)
+    }
+    // default Java serializer cannot handle the non serializable class.
+    val thrown = intercept[SparkException] {
+      b.sortByKey().collect()
+    }
+
+    assert(thrown.getClass === classOf[SparkException])
+    assert(thrown.getMessage.contains("NotSerializableException"))
+  }
 }
 
 object ShuffleSuite {
@@ -215,5 +251,9 @@ object ShuffleSuite {
     x + y
   }
 
-  class NonJavaSerializableClass(val value: Int)
+  class NonJavaSerializableClass(val value: Int) extends Comparable[NonJavaSerializableClass] {
+    override def compareTo(o: NonJavaSerializableClass): Int = {
+      value - o.value
+    }
+  }
 }

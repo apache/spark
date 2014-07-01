@@ -257,8 +257,11 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
  * Check https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior for more details
  */
 object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
-  // split the condition expression into 3 parts, 
-  // (canEvaluateInLeftSide, canEvaluateInRightSide, haveToEvaluateWithBothSide) 
+  /**
+   * Splits join condition expressions into three categories based on the attributes required
+   * to evaluate them.
+   * @returns (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
+   */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
     val (leftEvaluateCondition, rest) =
         condition.partition(_.references subsetOf left.outputSet)

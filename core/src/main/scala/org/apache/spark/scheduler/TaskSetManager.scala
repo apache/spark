@@ -166,6 +166,8 @@ private[spark] class TaskSetManager(
 
   override def schedulingMode = SchedulingMode.NONE
 
+  var emittedTaskSizeWarning = false
+
   /**
    * Add a task to all the pending-task lists that it should be on. If readding is set, we are
    * re-adding the task so only include it in each list if it's not already there.
@@ -335,17 +337,19 @@ private[spark] class TaskSetManager(
   /**
    * Dequeue a pending task for a given node and return its index and locality level.
    * Only search for tasks matching the given locality constraint.
+   *
+   * @return An option containing (task index within the task set, locality, is speculative?)
    */
   private def findTask(execId: String, host: String, locality: TaskLocality.Value)
-    : Option[(Int, TaskLocality.Value)] =
+    : Option[(Int, TaskLocality.Value, Boolean)] =
   {
     for (index <- findTaskFromList(execId, getPendingTasksForExecutor(execId))) {
-      return Some((index, TaskLocality.PROCESS_LOCAL))
+      return Some((index, TaskLocality.PROCESS_LOCAL, false))
     }
 
     if (TaskLocality.isAllowed(locality, TaskLocality.NODE_LOCAL)) {
       for (index <- findTaskFromList(execId, getPendingTasksForHost(host))) {
-        return Some((index, TaskLocality.NODE_LOCAL))
+        return Some((index, TaskLocality.NODE_LOCAL, false))
       }
     }
 
@@ -354,23 +358,25 @@ private[spark] class TaskSetManager(
         rack <- sched.getRackForHost(host)
         index <- findTaskFromList(execId, getPendingTasksForRack(rack))
       } {
-        return Some((index, TaskLocality.RACK_LOCAL))
+        return Some((index, TaskLocality.RACK_LOCAL, false))
       }
     }
 
     // Look for no-pref tasks after rack-local tasks since they can run anywhere.
     for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)) {
-      return Some((index, TaskLocality.PROCESS_LOCAL))
+      return Some((index, TaskLocality.PROCESS_LOCAL, false))
     }
 
     if (TaskLocality.isAllowed(locality, TaskLocality.ANY)) {
       for (index <- findTaskFromList(execId, allPendingTasks)) {
-        return Some((index, TaskLocality.ANY))
+        return Some((index, TaskLocality.ANY, false))
       }
     }
 
     // Finally, if all else has failed, find a speculative task
-    findSpeculativeTask(execId, host, locality)
+    findSpeculativeTask(execId, host, locality).map { case (taskIndex, allowedLocality) =>
+      (taskIndex, allowedLocality, true)
+    }
   }
 
   /**
@@ -391,7 +397,7 @@ private[spark] class TaskSetManager(
       }
 
       findTask(execId, host, allowedLocality) match {
-        case Some((index, taskLocality)) => {
+        case Some((index, taskLocality, speculative)) => {
           // Found a task; do some bookkeeping and return a task description
           val task = tasks(index)
           val taskId = sched.newTaskId()
@@ -400,7 +406,9 @@ private[spark] class TaskSetManager(
             taskSet.id, index, taskId, execId, host, taskLocality))
           // Do various bookkeeping
           copiesRunning(index) += 1
-          val info = new TaskInfo(taskId, index, curTime, execId, host, taskLocality)
+          val attemptNum = taskAttempts(index).size
+          val info = new TaskInfo(
+            taskId, index, attemptNum + 1, curTime, execId, host, taskLocality, speculative)
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
           // Update our locality level for delay scheduling
@@ -412,6 +420,13 @@ private[spark] class TaskSetManager(
           // we assume the task can be serialized without exceptions.
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
+          if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
+              !emittedTaskSizeWarning) {
+            emittedTaskSizeWarning = true
+            logWarning(s"Stage ${task.stageId} contains a task of very large size " +
+              s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+              s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+          }
           val timeTaken = clock.getTime() - startTime
           addRunningTask(taskId)
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
@@ -641,7 +656,9 @@ private[spark] class TaskSetManager(
       addPendingTask(index, readding=true)
     }
 
-    // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage
+    // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage.
+    // The reason is the next stage wouldn't be able to fetch the data from this dead executor
+    // so we would need to rerun these tasks on other executors.
     if (tasks(0).isInstanceOf[ShuffleMapTask]) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
@@ -755,4 +772,10 @@ private[spark] class TaskSetManager(
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
   }
+}
+
+private[spark] object TaskSetManager {
+  // The user will be warned if any stages contain a task that has a serialized size greater than
+  // this.
+  val TASK_SIZE_TO_WARN_KB = 100
 }
