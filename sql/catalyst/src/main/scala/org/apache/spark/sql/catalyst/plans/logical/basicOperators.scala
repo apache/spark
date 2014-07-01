@@ -52,6 +52,7 @@ case class Generate(
       .getOrElse(generator.output)
     if (join && outer) {
       output.map {
+        case attr if !attr.resolved => attr
         case attr if !attr.nullable =>
           AttributeReference(
             attr.name, attr.dataType, nullable = true)(attr.exprId, attr.qualifiers)
@@ -95,6 +96,7 @@ case class Join(
   override def output = {
     def nullabilize(output: Seq[Attribute]) = {
       output.map {
+        case attr if !attr.resolved => attr
         case attr if !attr.nullable =>
           AttributeReference(
             attr.name, attr.dataType, nullable = true)(attr.exprId, attr.qualifiers)
