@@ -133,7 +133,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val TRUE = Keyword("TRUE")
   protected val UNION = Keyword("UNION")
   protected val WHERE = Keyword("WHERE")
-  protected val WHERE = Keyword("EXCEPT")
+  protected val EXCEPT = Keyword("EXCEPT")
 
 
   // Use reflection to find the reserved words defined in this class.
