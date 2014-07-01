@@ -20,7 +20,10 @@ package org.apache.spark.mllib.rdd
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
+import org.apache.spark.HashPartitioner
+import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * Machine learning specific RDD functions.
@@ -43,6 +46,65 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
     } else {
       new SlidingRDD[T](self, windowSize)
     }
+  }
+
+  /**
+   * Reduces the elements of this RDD in a tree pattern.
+   * @param depth suggested depth of the tree
+   * @see [[org.apache.spark.rdd.RDD#reduce]]
+   */
+  def treeReduce(f: (T, T) => T, depth: Int): T = {
+    require(depth >= 1, s"Depth must be greater than 1 but got $depth.")
+    val cleanF = self.context.clean(f)
+    val reducePartition: Iterator[T] => Option[T] = iter => {
+      if (iter.hasNext) {
+        Some(iter.reduceLeft(cleanF))
+      } else {
+        None
+      }
+    }
+    val local = self.mapPartitions(it => Iterator(reducePartition(it)))
+    val op: (Option[T], Option[T]) => Option[T] = (c, x) => {
+      if (c.isDefined && x.isDefined) {
+        Some(cleanF(c.get, x.get))
+      } else if (c.isDefined) {
+        c
+      } else if (x.isDefined) {
+        x
+      } else {
+        None
+      }
+    }
+    RDDFunctions.fromRDD(local).treeAggregate(Option.empty[T])(op, op, depth)
+      .getOrElse(throw new UnsupportedOperationException("empty collection"))
+  }
+
+  /**
+   * Aggregates the elements of this RDD in a tree pattern.
+   * @param depth suggested depth of the tree
+   * @see [[org.apache.spark.rdd.RDD#aggregate]]
+   */
+  def treeAggregate[U: ClassTag](zeroValue: U)(
+    seqOp: (U, T) => U,
+    combOp: (U, U) => U,
+    depth: Int): U = {
+    require(depth >= 1, s"Depth must be greater than 1 but got $depth.")
+    if (self.partitions.size == 0) {
+      return Utils.clone(zeroValue, self.context.env.closureSerializer.newInstance())
+    }
+    val cleanSeqOp = self.context.clean(seqOp)
+    val cleanCombOp = self.context.clean(combOp)
+    val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
+    var local = self.mapPartitions(it => Iterator(aggregatePartition(it)))
+    var numPartitions = local.partitions.size
+    val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
+    while (numPartitions > scale + numPartitions / scale) {
+      numPartitions /= scale
+      local = local.mapPartitionsWithIndex { (i, iter) =>
+        iter.map((i % numPartitions, _))
+      }.reduceByKey(new HashPartitioner(numPartitions), cleanCombOp).values
+    }
+    local.reduce(cleanCombOp)
   }
 }
 

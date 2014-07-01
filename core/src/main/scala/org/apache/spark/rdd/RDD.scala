@@ -840,39 +840,6 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * :: DeveloperApi ::
-   * Reduces the elements of this RDD in a tree pattern.
-   * @param depth suggested depth of the tree
-   * @see [[org.apache.spark.rdd.RDD#reduce]]
-   */
-  @DeveloperApi
-  def treeReduce(f: (T, T) => T, depth: Int): T = {
-    require(depth >= 1, s"Depth must be greater than 1 but got $depth.")
-    val cleanF = sc.clean(f)
-    val reducePartition: Iterator[T] => Option[T] = iter => {
-      if (iter.hasNext) {
-        Some(iter.reduceLeft(cleanF))
-      } else {
-        None
-      }
-    }
-    val local = this.mapPartitions(it => Iterator(reducePartition(it)))
-    val op: (Option[T], Option[T]) => Option[T] = (c, x) => {
-      if (c.isDefined && x.isDefined) {
-        Some(cleanF(c.get, x.get))
-      } else if (c.isDefined) {
-        c
-      } else if (x.isDefined) {
-        x
-      } else {
-        None
-      }
-    }
-    local.treeAggregate(Option.empty[T])(op, op, depth)
-      .getOrElse(throw new UnsupportedOperationException("empty collection"))
-  }
-
-  /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
    * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to
    * modify t1 and return it as its result value to avoid object allocation; however, it should not
@@ -905,36 +872,6 @@ abstract class RDD[T: ClassTag](
     val mergeResult = (index: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
     sc.runJob(this, aggregatePartition, mergeResult)
     jobResult
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Aggregates the elements of this RDD in a tree pattern.
-   * @param depth suggested depth of the tree
-   * @see [[org.apache.spark.rdd.RDD#aggregate]]
-   */
-  @DeveloperApi
-  def treeAggregate[U: ClassTag](zeroValue: U)(
-      seqOp: (U, T) => U,
-      combOp: (U, U) => U,
-      depth: Int): U = {
-    require(depth >= 1, s"Depth must be greater than 1 but got $depth.")
-    if (this.partitions.size == 0) {
-      return Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
-    }
-    val cleanSeqOp = sc.clean(seqOp)
-    val cleanCombOp = sc.clean(combOp)
-    val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
-    var local = this.mapPartitions(it => Iterator(aggregatePartition(it)))
-    var numPartitions = local.partitions.size
-    val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
-    while (numPartitions > scale + numPartitions / scale) {
-      numPartitions /= scale
-      local = local.mapPartitionsWithIndex { (i, iter) =>
-        iter.map((i % numPartitions, _))
-      }.reduceByKey(new HashPartitioner(numPartitions), cleanCombOp).values
-    }
-    local.reduce(cleanCombOp)
   }
 
   /**
