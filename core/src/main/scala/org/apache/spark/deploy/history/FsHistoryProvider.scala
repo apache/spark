@@ -76,7 +76,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   private def initialize() {
     // Validate the log directory.
-    val path = new Path(logDir)
+    val path = new Path(Utils.resolveURI(logDir))
     if (!fs.exists(path)) {
       throw new IllegalArgumentException(
         "Logging directory specified does not exist: %s".format(logDir))
@@ -96,14 +96,14 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   override def getAppUI(appId: String): SparkUI = {
     try {
       val appLogDir = fs.getFileStatus(new Path(logDir, appId))
-      loadAppInfo(appLogDir, true)._2
+      val (_, ui) = loadAppInfo(appLogDir, renderUI = true)
+      ui
     } catch {
       case e: FileNotFoundException => null
     }
   }
 
-  override def getConfig(): Map[String, String] =
-    Map(("Event Log Location" -> logDir))
+  override def getConfig(): Map[String, String] = Map("Event Log Location" -> logDir)
 
   /**
    * Builds the application list based on the current contents of the log directory.
@@ -121,7 +121,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       }
 
       val currentApps = Map[String, ApplicationHistoryInfo](
-        appList.map(app => (app.id -> app)):_*)
+        appList.map(app => app.id -> app):_*)
 
       // For any application that either (i) is not listed or (ii) has changed since the last time
       // the listing was created (defined by the log dir's modification time), load the app's info.
@@ -131,7 +131,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         val curr = currentApps.getOrElse(dir.getPath().getName(), null)
         if (curr == null || curr.lastUpdated < getModificationTime(dir)) {
           try {
-            newApps += loadAppInfo(dir, false)._1
+            val (app, _) = loadAppInfo(dir, renderUI = false)
+            newApps += app
           } catch {
             case e: Exception => logError(s"Failed to load app info from directory $dir.")
           }

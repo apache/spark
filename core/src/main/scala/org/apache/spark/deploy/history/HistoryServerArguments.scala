@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.history
 
 import org.apache.spark.SparkConf
-import org.apache.spark.util.Utils
 
 /**
  * Command-line parser for the master.
