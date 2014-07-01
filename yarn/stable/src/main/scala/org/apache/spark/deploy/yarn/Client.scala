@@ -83,7 +83,6 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setApplicationType("SPARK")
     if(!sparkConf.get("spark.maxappattempts", "false").equals("false")) {
       appContext.setMaxAppAttempts(sparkConf.getInt("spark.maxappattempts", -1))
-      logInfo("Got maxattempts. Trying a max of %d times.".format(sparkConf.getInt("spark.maxappattempts", -1)))
     }
 
     // Memory for the ApplicationMaster.
