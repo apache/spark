@@ -81,6 +81,10 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
     appContext.setApplicationType("SPARK")
+    if(!sparkConf.get("spark.maxappattempts", "false").equals("false")) {
+      appContext.setMaxAppAttempts(sparkConf.getInt("spark.maxappattempts", -1))
+      logInfo("Got maxattempts. Trying a max of %d times.".format(sparkConf.getInt("spark.maxappattempts", -1)))
+    }
 
     // Memory for the ApplicationMaster.
     val memoryResource = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
