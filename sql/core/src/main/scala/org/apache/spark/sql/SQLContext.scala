@@ -165,8 +165,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Use string interpolation to perform SQL queries that yield SchemaRDDs. Directly referenced
-   * SchemaRDD's will be automatically registered as a tables. This implicit class extends
-   * StringContext.
+   * SchemaRDD's (or RDDs that can be implicitly converted) will be automatically registered as a
+   * tables. This implicit class extends StringContext.
    *
    * {{{
    *   val sqlContext = new SQLContext(...)
