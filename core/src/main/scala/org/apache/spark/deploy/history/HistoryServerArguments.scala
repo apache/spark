@@ -31,6 +31,7 @@ private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]
     args match {
       case ("--dir" | "-d") :: value :: tail =>
         logDir = value
+        conf.set("spark.history.fs.logDirectory", value)
         parse(tail)
 
       case ("--help" | "-h") :: tail =>
@@ -40,9 +41,6 @@ private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]
 
       case _ =>
         printUsageAndExit(1)
-    }
-    if (logDir != null) {
-      conf.set("spark.history.fs.logDirectory", logDir)
     }
   }
 
