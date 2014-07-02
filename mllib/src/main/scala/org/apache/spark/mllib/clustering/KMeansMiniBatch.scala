@@ -43,14 +43,13 @@ class KMeansMiniBatch private (
     private var batchSize: Int,
     private var runs: Int,
     private var initializationMode: String,
-    private var initializationSteps: Int,
-    private var epsilon: Double) extends Serializable with KMeansCommons with Logging {
-
+    private var initializationSteps: Int) extends Serializable with KMeansCommons with Logging {
+ 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
-   * batchSize: 1000, initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4}.
+   * batchSize: 1000, initializationMode: "k-means||", initializationSteps: 5}.
    */
-  def this() = this(2, 20, 1, 1000, KMeansMiniBatch.K_MEANS_PARALLEL, 5, 1e-4)
+  def this() = this(2, 20, 1, 1000, KMeansMiniBatch.K_MEANS_PARALLEL, 5)
 
   def setBatchSize(batchSize: Int): KMeansMiniBatch = {
     this.batchSize = batchSize
@@ -110,15 +109,6 @@ class KMeansMiniBatch private (
   }
 
   /**
-   * Set the distance threshold within which we've consider centers to have converged.
-   * If all centers move less than this Euclidean distance, we stop iterating one run.
-   */
-  def setEpsilon(epsilon: Double): KMeansMiniBatch = {
-    this.epsilon = epsilon
-    this
-  }
-
-  /**
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
    */
@@ -154,7 +144,9 @@ class KMeansMiniBatch private (
     } else {
       initParallel(data, k, initializationSteps)
     }
-
+    
+    val centerCounts = Array.fill(centers.length){0}
+    
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
       " seconds.")
@@ -165,47 +157,30 @@ class KMeansMiniBatch private (
 
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations) {
-      type WeightedPoint = (BV[Double], Long)
-      def mergeContribs(p1: WeightedPoint, p2: WeightedPoint): WeightedPoint = {
-        (p1._1 += p2._1, p1._2 + p2._2)
-      }
 
-      val costAccums = sc.accumulator(0.0)
+      val sampledPoints = data.sample(false, batchSize)
+      
+      val groupedPoints = sampledPoints.map { p =>
+        val (center, cost) = KMeansMiniBatch.findClosest(centers, p)
 
-      // Find the sum and count of points mapping to each center
-      val totalContribs = data.mapPartitions { points =>
-        val k = centers.length
-        val dims = centers(0).vector.length
-
-        val sums = Array.fill(k)(BDV.zeros[Double](dims).asInstanceOf[BV[Double]])
-        val counts = Array.fill(k)(0L)
-
-        points.foreach { point =>
-          val (bestCenter, cost) = KMeansMiniBatch.findClosest(centers, point)
-          costAccums += cost
-          sums(bestCenter) += point.vector
-          counts(bestCenter) += 1
-        }
-
-        val contribs = for (j <- 0 until k) yield {
-          (j, (sums(j), counts(j)))
-        }
-        contribs.iterator
-      }.reduceByKey(mergeContribs).collectAsMap()
+        (center, p.vector, cost)
+      }.collect()
+      
 
       // Update the cluster centers and costs
-	  var j = 0
-	  while (j < k) {
-	    val (sum, count) = totalContribs(j)
-	    if (count != 0) {
-	      sum /= count.toDouble
-	      val newCenter = new BreezeVectorWithNorm(sum)
-	      centers(j) = newCenter
-	    }
-	    j += 1
+      costs = 0.0
+	  for ((centerIdx, vec, dist) <- groupedPoints) {
+        costs += dist
+        centerCounts(centerIdx) += 1
+	    
+        // take gradient step
+        val learningRate = 1.0 / centerCounts(centerIdx).toDouble
+	    val center = centers(centerIdx).vector
+	    val updatedCenter = center * (1.0 - learningRate) + vec * learningRate
+	   
+	    centers(centerIdx) = new BreezeVectorWithNorm(updatedCenter)
   	  }
         
-      costs = costAccums.value
       iteration += 1
     }
 
