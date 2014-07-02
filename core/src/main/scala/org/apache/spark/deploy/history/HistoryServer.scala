@@ -26,7 +26,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.{WebUI, SparkUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.Utils
 
 /**
  * A web server that renders SparkUIs of completed applications.
