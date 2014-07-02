@@ -50,7 +50,7 @@ class GammaRegressionSuite extends FunSuite with LocalSparkContext {
     testData
   }
 
-  test("Gamma regression") {
+  test("Gamma regression with the SGD optimizer") {
     val nPoints = 100
 
     val testData = generateGammaInput(0.0, 0.9, nPoints, 42)
@@ -59,7 +59,6 @@ class GammaRegressionSuite extends FunSuite with LocalSparkContext {
 
     pr.optimizer.setStepSize(0.05).setNumIterations(400).setMiniBatchFraction(1.0)
     val model = pr.run(testRDD)
-    println(model.weights.size)
 
     val weight1 = model.weights(0)
 
@@ -74,4 +73,28 @@ class GammaRegressionSuite extends FunSuite with LocalSparkContext {
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
+
+  test("Gamma regression with the L-BFGS optimizer") {
+    val nPoints = 100
+
+    val testData = generateGammaInput(0.0, 0.9, nPoints, 42)
+    val testRDD = sc.parallelize(testData, 2).cache()
+    val pr = new GammaRegressionWithLBFGS()
+
+    val model = pr.run(testRDD)
+
+    val weight1 = model.weights(0)
+
+    assert(weight1 >= 0.8 && weight1 <= 1.0, weight1 + " not in [0.8, 1.0]")
+
+    val validationData = generateGammaInput(0.0, 0.9, nPoints, 42)
+    val validationRDD  = sc.parallelize(validationData, 2)
+
+    // Test prediction on RDD.
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+
+    // Test prediction on Array.
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+
 }
