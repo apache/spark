@@ -252,7 +252,7 @@ class ExternalAppendOnlyMap[K, V, C](
       if (it.hasNext) {
         var kc = it.next()
         kcPairs += kc
-        val minHash = if (kc._1 == null) nullHashCode else kc._1.hashCode()
+        val minHash = getKeyHashCode(kc)
         while (it.hasNext && it.head._1.hashCode() == minHash) {
           kc = it.next()
           kcPairs += kc
@@ -294,9 +294,9 @@ class ExternalAppendOnlyMap[K, V, C](
       // Select a key from the StreamBuffer that holds the lowest key hash
       val minBuffer = mergeHeap.dequeue()
       val (minPairs, minHash) = (minBuffer.pairs, minBuffer.minKeyHash)
-      var (minKey, minCombiner) = minPairs.remove(0)
-      val actualMinKeyHash = if (minKey == null) nullHashCode else minKey.hashCode()
-      assert(actualMinKeyHash == minHash)
+      val minPair = minPairs.remove(0)
+      var (minKey, minCombiner) = minPair
+      assert(getKeyHashCode(minPair) == minHash)
 
       // For all other streams that may have this key (i.e. have the same minimum key hash),
       // merge in the corresponding value (if any) from that stream
@@ -335,10 +335,9 @@ class ExternalAppendOnlyMap[K, V, C](
       def isEmpty = pairs.length == 0
 
       // Invalid if there are no more pairs in this stream
-      def minKeyHash = {
+      def minKeyHash: Int = {
         assert(pairs.length > 0)
-        val key = pairs.head._1
-        if (key == null) nullHashCode else key.hashCode()
+        getKeyHashCode(pairs.head)
       }
 
       override def compareTo(other: StreamBuffer): Int = {
@@ -425,11 +424,22 @@ class ExternalAppendOnlyMap[K, V, C](
 }
 
 private[spark] object ExternalAppendOnlyMap {
-  private val nullHashCode: Int = 0
+
+  /**
+   * Return the key hash code of the given (key, combiner) pair.
+   * If the key is null, return a special hash code.
+   */
+  private def getKeyHashCode[K, C](kc: (K, C)): Int = {
+    if (kc._1 == null) 0 else kc._1.hashCode()
+  }
+
+  /**
+   * A comparator for (key, combiner) pairs based on their key hash codes.
+   */
   private class KCComparator[K, C] extends Comparator[(K, C)] {
     def compare(kc1: (K, C), kc2: (K, C)): Int = {
-      val hash1 = if (kc1._1 == null) nullHashCode else kc1._1.hashCode()
-      val hash2 = if (kc2._1 == null) nullHashCode else kc2._1.hashCode()
+      val hash1 = getKeyHashCode(kc1)
+      val hash2 = getKeyHashCode(kc2)
       if (hash1 < hash2) -1 else if (hash1 == hash2) 0 else 1
     }
   }
