@@ -27,7 +27,6 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.ui.{WebUI, SparkUI, UIUtils}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.Utils
 
 /**
  * A web server that renders SparkUIs of completed applications.
