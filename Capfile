@@ -28,6 +28,7 @@ namespace :deploy do
       run "rm -rf #{release_path}/conf && ln -nfs #{shared_conf_path} #{release_path}/conf"
   end
 
-  before 'deploy:restart', 'deploy:symlink_shared', 'deploy:restart_master'
-  after  'deploy:initialize_variables', 'deploy:setup_spark_paths'
+  before 'deploy:restart', 'deploy:restart_master'
+  after 'deploy:updated', 'deploy:symlink_shared'
+  after 'deploy:initialize_variables', 'deploy:setup_spark_paths'
 end
