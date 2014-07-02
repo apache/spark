@@ -266,7 +266,7 @@ object HistoryServer {
 
   def main(argStrings: Array[String]) {
     initSecurity()
-    val args = new HistoryServerArguments(argStrings)
+    new HistoryServerArguments(argStrings)
     val securityManager = new SecurityManager(conf)
     val server = new HistoryServer(args.logDir, securityManager, conf)
     server.bind()
