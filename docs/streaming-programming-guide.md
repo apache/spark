@@ -148,7 +148,7 @@ import org.apache.spark.streaming.*;
 import org.apache.spark.streaming.api.java.*;
 import scala.Tuple2;
 // Create a StreamingContext with a local master
-JavaStreamingContext jssc = new JavaStreamingContext("local", "JavaNetworkWordCount", new Duration(1000))
+JavaStreamingContext jssc = new JavaStreamingContext("local[2]", "JavaNetworkWordCount", new Duration(1000))
 {% endhighlight %}
 
 Using this context, we then create a new DStream
