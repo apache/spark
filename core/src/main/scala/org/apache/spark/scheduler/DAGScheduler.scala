@@ -1312,7 +1312,7 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
       dagScheduler.resubmitFailedStages()
 
     case CheckIfPreStarted(stageId) =>
-      dagScheduler.handleCheckIfPreStarted(stageId)
+      sender ! dagScheduler.handleCheckIfPreStarted(stageId)
   }
 
   override def postStop() {
