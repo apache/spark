@@ -38,8 +38,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
-import org.apache.spark.util.Utils
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.util.{AkkaUtils, Utils}
 import scala.collection.mutable
 
 /**
@@ -1202,7 +1201,7 @@ class DAGScheduler(
   }
 
   // Check if the given stageId is a pre-started stage
-  def isPreStartStage(stageId: Int): Boolean = {
+  private[scheduler] def handleCheckIfPreStarted(stageId: Int): Boolean = {
     if (stageIdToStage.contains(stageId)) {
       val stage = stageIdToStage(stageId)
       for (preStartedStages <- dependantStagePreStarted.values) {
@@ -1212,6 +1211,17 @@ class DAGScheduler(
       }
     }
     false
+  }
+
+  def isPreStartStage(stageId: Int): Boolean = {
+    try {
+      val timeout = AkkaUtils.askTimeout(sc.conf)
+      val future = eventProcessActor.ask(CheckIfPreStarted(stageId))(timeout)
+      Await.result(future, timeout).asInstanceOf[Boolean]
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Time out asking event processor.", e)
+    }
   }
 
   // Mark some stages as failed and resubmit them
@@ -1300,6 +1310,9 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
 
     case ResubmitFailedStages =>
       dagScheduler.resubmitFailedStages()
+
+    case CheckIfPreStarted(stageId) =>
+      dagScheduler.handleCheckIfPreStarted(stageId)
   }
 
   override def postStop() {

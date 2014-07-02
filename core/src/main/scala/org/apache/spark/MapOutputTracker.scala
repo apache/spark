@@ -316,7 +316,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
    * so that statuses are dropped only by explicit de-registering or by TTL-based cleaning (if set).
    * Other than these two scenarios, nothing should be dropped from this HashMap.
    */
-  protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
+  protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]() with
+    mutable.SynchronizedMap[Int, Array[MapStatus]]
   private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]()
 
   // For cleaning up TimeStampedHashMaps

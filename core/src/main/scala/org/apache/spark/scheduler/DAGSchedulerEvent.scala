@@ -76,3 +76,5 @@ private[scheduler]
 case class TaskSetFailed(taskSet: TaskSet, reason: String) extends DAGSchedulerEvent
 
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent
+
+private[scheduler] case class CheckIfPreStarted(stageId: Int) extends DAGSchedulerEvent
