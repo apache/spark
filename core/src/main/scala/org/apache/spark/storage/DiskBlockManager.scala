@@ -26,8 +26,6 @@ import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
 import org.apache.spark.util.Utils
 
-import scala.collection.mutable.ArrayBuffer
-
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
  * locations. By default, one block is mapped to one file with a name given by its BlockId.
@@ -47,7 +45,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
    * having really large inodes at the top level. */
   private val localDirs: Array[File] = createLocalDirs()
   if (localDirs.isEmpty) {
-    logError("Failed to create any local dir")
+    logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
@@ -121,9 +119,8 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
 
   private def createLocalDirs(): Array[File] = {
     logDebug(s"Creating local directories at root dirs '$rootDirs'")
-    val localDirsResult = ArrayBuffer[File]()
     val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
-    rootDirs.split(",").foreach { rootDir =>
+    rootDirs.split(",").flatMap { rootDir =>
       var foundLocalDir = false
       var localDir: File = null
       var localDirId: String = null
@@ -143,13 +140,14 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
         }
       }
       if (!foundLocalDir) {
-        logError(s"Failed $MAX_DIR_CREATION_ATTEMPTS attempts to create local dir in $rootDir")
+        logError(s"Failed $MAX_DIR_CREATION_ATTEMPTS attempts to create local dir in $rootDir." +
+                  " Ignoring this directory.")
+        None
       } else {
         logInfo(s"Created local directory at $localDir")
-        localDirsResult += localDir
+        Some(localDir)
       }
     }
-    localDirsResult.toArray
   }
 
   private def addShutdownHook() {
