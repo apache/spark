@@ -62,7 +62,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
   if (numSlices > length(coll))
     numSlices <- length(coll)
 
-  sliceLen <- length(coll) %/% numSlices
+  sliceLen <- ceiling(length(coll) / numSlices)
   slices <- split(coll, rep(1:(numSlices + 1), each = sliceLen)[1:length(coll)])
 
   # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
