@@ -24,6 +24,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.SQLContext
 
 /**
  * :: DeveloperApi ::
@@ -41,7 +42,7 @@ case class Aggregate(
     partial: Boolean,
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    child: SparkPlan)(@transient sc: SparkContext)
+    child: SparkPlan)(@transient sqlContext: SQLContext)
   extends UnaryNode with NoBind {
 
   override def requiredChildDistribution =
@@ -55,7 +56,7 @@ case class Aggregate(
       }
     }
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   // HACK: Generators don't correctly preserve their output through serializations so we grab
   // out child's output attributes statically here.

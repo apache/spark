@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.types._
  *
  * Limitations:
  *  - Only supports a very limited subset of SQL.
- *  - Keywords must be capital.
  *
  * This is currently included mostly for illustrative purposes.  Users wanting more complete support
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.

@@ -84,5 +84,13 @@
         <artifactId>scalatest-maven-plugin</artifactId>
       </plugin>
     </plugins>
+    <resources>
+      <resource>
+        <directory>../python</directory>
+        <includes>
+          <include>pyspark/mllib/*.py</include>
+        </includes>
+      </resource>
+    </resources>
   </build>
 </project>

@@ -21,6 +21,9 @@
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd $FWDIR
 
+export SPARK_HADOOP_VERSION=2.3.0
+export SPARK_YARN=true
+
 # Remove work directory
 rm -rf ./work
 

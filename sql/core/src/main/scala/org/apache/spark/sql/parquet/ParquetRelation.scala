@@ -44,8 +44,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
  * @param path The path to the Parquet file.
  */
 private[sql] case class ParquetRelation(
-    val path: String,
-    @transient val conf: Option[Configuration] = None) extends LeafNode with MultiInstanceRelation {
+    path: String,
+    @transient conf: Option[Configuration] = None) extends LeafNode with MultiInstanceRelation {
+
   self: Product =>
 
   /** Schema derived from ParquetFile */

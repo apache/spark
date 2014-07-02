@@ -57,21 +57,4 @@ class PlannerSuite extends FunSuite {
     val planned = PartialAggregation(query)
     assert(planned.isEmpty)
   }
-
-  test("equi-join is hash-join") {
-    val x = testData2.as('x)
-    val y = testData2.as('y)
-    val join = x.join(y, Inner, Some("x.a".attr === "y.a".attr)).queryExecution.analyzed
-    val planned = planner.HashJoin(join)
-    assert(planned.size === 1)
-  }
-
-  test("multiple-key equi-join is hash-join") {
-    val x = testData2.as('x)
-    val y = testData2.as('y)
-    val join = x.join(y, Inner,
-      Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)).queryExecution.analyzed
-    val planned = planner.HashJoin(join)
-    assert(planned.size === 1)
-  }
 }

@@ -293,7 +293,9 @@ object SparkBuild extends Build {
         "com.novocode"      % "junit-interface"        % "0.10"   % "test",
         "org.easymock"      % "easymockclassextension" % "3.1"    % "test",
         "org.mockito"       % "mockito-all"            % "1.9.0"  % "test",
-        "junit"             % "junit"                  % "4.10"   % "test"
+        "junit"             % "junit"                  % "4.10"   % "test",
+        // Needed by cglib which is needed by easymock.
+        "asm"               % "asm"                    % "3.3.1"  % "test"
     ),
 
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
@@ -369,7 +371,7 @@ object SparkBuild extends Build {
         "net.java.dev.jets3t"        % "jets3t"           % jets3tVersion excludeAll(excludeCommonsLogging),
         "commons-codec"              % "commons-codec"    % "1.5", // Prevent jets3t from including the older version of commons-codec
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
-        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm),
+        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm, excludeServletApi),
         "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeJBossNetty),
         "com.codahale.metrics"       % "metrics-core"     % codahaleMetricsVersion,
         "com.codahale.metrics"       % "metrics-jvm"      % codahaleMetricsVersion,
@@ -461,7 +463,7 @@ object SparkBuild extends Build {
 
   def toolsSettings = sharedSettings ++ Seq(
     name := "spark-tools",
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v),
     libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
   ) ++ assemblySettings ++ extraAssemblySettings
 
@@ -630,9 +632,9 @@ object SparkBuild extends Build {
     scalaVersion := "2.10.4",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
-    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq", 
+    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
       "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
-      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx", 
+      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
       "spark-core").map(sparkPreviousArtifact(_).get intransitive())
   )
 

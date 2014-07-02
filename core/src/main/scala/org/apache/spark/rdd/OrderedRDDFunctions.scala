@@ -57,7 +57,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    */
   def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.size): RDD[P] = {
     val part = new RangePartitioner(numPartitions, self, ascending)
-    val shuffled = new ShuffledRDD[K, V, P](self, part)
+    val shuffled = new ShuffledRDD[K, V, V, P](self, part).setKeyOrdering(ordering)
     shuffled.mapPartitions(iter => {
       val buf = iter.toArray
       if (ascending) {
