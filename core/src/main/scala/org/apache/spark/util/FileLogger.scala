@@ -51,8 +51,8 @@ private[spark] class FileLogger(
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   }
-
-  private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
+  private val resolvedLogDir = Utils.resolveURI(logDir)
+  private val fileSystem = Utils.getHadoopFileSystem(resolvedLogDir)
   var fileIndex = 0
 
   // Only used if compression is enabled
@@ -82,18 +82,18 @@ private[spark] class FileLogger(
    * Create a logging directory with the given path.
    */
   private def createLogDir() {
-    val path = new Path(logDir)
+    val path = new Path(resolvedLogDir)
     if (fileSystem.exists(path)) {
       if (overwrite) {
-        logWarning("Log directory %s already exists. Overwriting...".format(logDir))
+        logWarning("Log directory %s already exists. Overwriting...".format(resolvedLogDir))
         // Second parameter is whether to delete recursively
         fileSystem.delete(path, true)
       } else {
-        throw new IOException("Log directory %s already exists!".format(logDir))
+        throw new IOException("Log directory %s already exists!".format(resolvedLogDir))
       }
     }
     if (!fileSystem.mkdirs(path)) {
-      throw new IOException("Error in creating log directory: %s".format(logDir))
+      throw new IOException("Error in creating log directory: %s".format(resolvedLogDir))
     }
     if (dirPermissions.isDefined) {
       val fsStatus = fileSystem.getFileStatus(path)
@@ -109,7 +109,7 @@ private[spark] class FileLogger(
    * (dirPermissions) used when class was instantiated.
    */
   private def createWriter(fileName: String, perms: Option[FsPermission] = None): PrintWriter = {
-    val logPath = logDir + "/" + fileName
+    val logPath = resolvedLogDir + "/" + fileName
     val uri = new URI(logPath)
     val path = new Path(logPath)
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
