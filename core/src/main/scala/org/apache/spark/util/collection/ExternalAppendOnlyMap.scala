@@ -252,7 +252,7 @@ class ExternalAppendOnlyMap[K, V, C](
       if (it.hasNext) {
         var kc = it.next()
         kcPairs += kc
-        val minHash = kc._1.hashCode()
+        val minHash = if (kc._1 == null) nullHashCode else kc._1.hashCode()
         while (it.hasNext && it.head._1.hashCode() == minHash) {
           kc = it.next()
           kcPairs += kc
@@ -295,7 +295,8 @@ class ExternalAppendOnlyMap[K, V, C](
       val minBuffer = mergeHeap.dequeue()
       val (minPairs, minHash) = (minBuffer.pairs, minBuffer.minKeyHash)
       var (minKey, minCombiner) = minPairs.remove(0)
-      assert(minKey.hashCode() == minHash)
+      val actualMinKeyHash = if (minKey == null) nullHashCode else minKey.hashCode()
+      assert(actualMinKeyHash == minHash)
 
       // For all other streams that may have this key (i.e. have the same minimum key hash),
       // merge in the corresponding value (if any) from that stream
@@ -327,7 +328,8 @@ class ExternalAppendOnlyMap[K, V, C](
      * StreamBuffers are ordered by the minimum key hash found across all of their own pairs.
      */
     private class StreamBuffer(
-        val iterator: BufferedIterator[(K, C)], val pairs: ArrayBuffer[(K, C)])
+        val iterator: BufferedIterator[(K, C)],
+        val pairs: ArrayBuffer[(K, C)])
       extends Comparable[StreamBuffer] {
 
       def isEmpty = pairs.length == 0
@@ -335,7 +337,8 @@ class ExternalAppendOnlyMap[K, V, C](
       // Invalid if there are no more pairs in this stream
       def minKeyHash = {
         assert(pairs.length > 0)
-        pairs.head._1.hashCode()
+        val key = pairs.head._1
+        if (key == null) nullHashCode else key.hashCode()
       }
 
       override def compareTo(other: StreamBuffer): Int = {
@@ -422,10 +425,11 @@ class ExternalAppendOnlyMap[K, V, C](
 }
 
 private[spark] object ExternalAppendOnlyMap {
+  private val nullHashCode: Int = 0
   private class KCComparator[K, C] extends Comparator[(K, C)] {
     def compare(kc1: (K, C), kc2: (K, C)): Int = {
-      val hash1 = kc1._1.hashCode()
-      val hash2 = kc2._1.hashCode()
+      val hash1 = if (kc1._1 == null) nullHashCode else kc1._1.hashCode()
+      val hash2 = if (kc2._1 == null) nullHashCode else kc2._1.hashCode()
       if (hash1 < hash2) -1 else if (hash1 == hash2) 0 else 1
     }
   }
