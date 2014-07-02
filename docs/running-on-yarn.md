@@ -55,8 +55,11 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
   <td><code>spark.yarn.max.executor.failures</code></td>
-  <td>2*numExecutors</td>
   <td>
+    2*numExecutors or 3, whichever is larger
+  </td>
+  <td>
+    It's the same to `spark.yarn.max.worker.failures`,
     The maximum number of executor failures before failing the application.
   </td>
 </tr>
