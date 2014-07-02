@@ -95,6 +95,12 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   def references = Set.empty
 }
 
+case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  def output = left.output
+
+  def references = Set.empty
+}
+
 case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
