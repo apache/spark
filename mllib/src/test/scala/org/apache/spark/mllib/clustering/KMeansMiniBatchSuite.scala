@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.clustering
 
+import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.LocalSparkContext
@@ -25,41 +27,8 @@ import org.apache.spark.mllib.linalg.Vectors
 class KMeansMiniBatchSuite extends FunSuite with LocalSparkContext {
 
   import KMeans.{RANDOM, K_MEANS_PARALLEL}
-
-  test("single cluster") {
-    val data = sc.parallelize(Array(
-      Vectors.dense(1.0, 2.0, 6.0),
-      Vectors.dense(1.0, 3.0, 0.0),
-      Vectors.dense(1.0, 4.0, 6.0)
-    ))
-
-    val center = Vectors.dense(1.0, 3.0, 4.0)
-
-    // No matter how many runs or iterations we use, we should get one cluster,
-    // centered at the mean of the points
-
-    var model = KMeansMiniBatch.train(data, k=1, maxIterations=1)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=2)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=5)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=5)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=5)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=1, initializationMode=RANDOM)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(
-      data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
-    assert(model.clusterCenters.head === center)
-  }
+  
+  val epsilon = 1e-04
 
   test("single cluster with big dataset") {
     val smallData = Array(
@@ -67,34 +36,20 @@ class KMeansMiniBatchSuite extends FunSuite with LocalSparkContext {
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0)
     )
-    val data = sc.parallelize((1 to 100).flatMap(_ => smallData), 4)
+    val data = sc.parallelize((1 to 10).flatMap(_ => smallData), 4)
+    
+    data.persist()
 
-    // No matter how many runs or iterations we use, we should get one cluster,
-    // centered at the mean of the points
+    // result should converge to given center after a few iterations
+    val center = Vectors.dense(1.0, 3.0, 4.0).toBreeze
 
-    val center = Vectors.dense(1.0, 3.0, 4.0)
+    var model = KMeansMiniBatch.train(data, k=1, batchSize=10, maxIterations=10, runs=1, initializationMode=RANDOM)
+    var error = breezeNorm(model.clusterCenters.head.toBreeze - center, 2.0)
+    assert(error < epsilon)
 
-    var model = KMeansMiniBatch.train(data, k=1, maxIterations=1)
-    assert(model.clusterCenters.size === 1)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=2)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=5)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=5)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=5)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=1, initializationMode=RANDOM)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
-    assert(model.clusterCenters.head === center)
+    model = KMeansMiniBatch.train(data, k=1, batchSize=10, maxIterations=10, runs=1, initializationMode=K_MEANS_PARALLEL)
+    error = breezeNorm(model.clusterCenters.head.toBreeze - center, 2.0)
+    assert(error < epsilon)
   }
 
   test("single cluster with sparse data") {
@@ -113,60 +68,20 @@ class KMeansMiniBatchSuite extends FunSuite with LocalSparkContext {
     }, 4)
 
     data.persist()
+    
+    val center = Vectors.sparse(n, Seq((0, 1.0), (1, 3.0), (2, 4.0))).toBreeze
 
-    // No matter how many runs or iterations we use, we should get one cluster,
-    // centered at the mean of the points
+    var model = KMeansMiniBatch.train(data, k=1, batchSize=10, maxIterations=10, runs=1, initializationMode=RANDOM)
+    var error = breezeNorm(model.clusterCenters.head.toBreeze - center, 2.0)
+    assert(error < epsilon)
 
-    val center = Vectors.sparse(n, Seq((0, 1.0), (1, 3.0), (2, 4.0)))
 
-    var model = KMeansMiniBatch.train(data, k=1, maxIterations=1)
-    assert(model.clusterCenters.head === center)
+    model = KMeansMiniBatch.train(data, k=1, batchSize=10, maxIterations=10, runs=1, initializationMode=K_MEANS_PARALLEL)
+    error = breezeNorm(model.clusterCenters.head.toBreeze - center, 2.0)
+    assert(error < epsilon)
 
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=2)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=5)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=5)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=5)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=1, initializationMode=RANDOM)
-    assert(model.clusterCenters.head === center)
-
-    model = KMeansMiniBatch.train(data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
-    assert(model.clusterCenters.head === center)
 
     data.unpersist()
-  }
-
-  test("k-means|| initialization") {
-    val points = Seq(
-      Vectors.dense(1.0, 2.0, 6.0),
-      Vectors.dense(1.0, 3.0, 0.0),
-      Vectors.dense(1.0, 4.0, 6.0),
-      Vectors.dense(1.0, 0.0, 1.0),
-      Vectors.dense(1.0, 1.0, 1.0)
-    )
-    val rdd = sc.parallelize(points)
-
-    // K-means|| initialization should place all clusters into distinct centers because
-    // it will make at least five passes, and it will give non-zero probability to each
-    // unselected point as long as it hasn't yet selected all of them
-
-    var model = KMeansMiniBatch.train(rdd, k=5, maxIterations=1)
-    assert(Set(model.clusterCenters: _*) === Set(points: _*))
-
-    // Iterations of Lloyd's should not change the answer either
-    model = KMeansMiniBatch.train(rdd, k=5, maxIterations=10)
-    assert(Set(model.clusterCenters: _*) === Set(points: _*))
-
-    // Neither should more runs
-    model = KMeansMiniBatch.train(rdd, k=5, maxIterations=10, runs=5)
-    assert(Set(model.clusterCenters: _*) === Set(points: _*))
   }
 
   test("two clusters") {
@@ -178,11 +93,13 @@ class KMeansMiniBatchSuite extends FunSuite with LocalSparkContext {
       Vectors.dense(9.0, 0.2),
       Vectors.dense(9.2, 0.0)
     )
-    val rdd = sc.parallelize(points, 3)
+    
+    val rdd = sc.parallelize((1 to 10000).flatMap(_ => points), 3)
+    
+    rdd.persist()
 
     for (initMode <- Seq(RANDOM, K_MEANS_PARALLEL)) {
-      // Two iterations are sufficient no matter where the initial centers are.
-      val model = KMeansMiniBatch.train(rdd, k = 2, maxIterations = 2, runs = 1, initMode)
+      val model = KMeansMiniBatch.train(rdd, k = 2, batchSize=10, maxIterations = 10, runs = 1, initMode)
 
       val predicts = model.predict(rdd).collect()
 
