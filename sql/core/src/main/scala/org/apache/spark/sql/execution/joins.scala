@@ -236,6 +236,3 @@ case class BroadcastNestedLoopJoin(
       streamedPlusMatches.flatMap(_._1), sc.makeRDD(rightOuterMatches))
   }
 }
-
-
-
