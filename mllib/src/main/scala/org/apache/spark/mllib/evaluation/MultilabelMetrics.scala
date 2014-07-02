@@ -48,8 +48,7 @@ class MultilabelMetrics(predictionAndLabels:RDD[(Set[Double], Set[Double])]) ext
    * @return Accuracy.
    */
   lazy val accuracy = predictionAndLabels.map{ case(predictions, labels) =>
-    labels.intersect(predictions).size.toDouble / labels.union(predictions).size}.
-    fold(0.0)(_ + _) / numDocs
+    labels.intersect(predictions).size.toDouble / labels.union(predictions).size}.sum / numDocs
 
   /**
    * Returns Hamming-loss
@@ -57,7 +56,7 @@ class MultilabelMetrics(predictionAndLabels:RDD[(Set[Double], Set[Double])]) ext
    */
   lazy val hammingLoss = (predictionAndLabels.map{ case(predictions, labels) =>
     labels.diff(predictions).size + predictions.diff(labels).size}.
-    fold(0)(_ + _)).toDouble / (numDocs * numLabels)
+    sum).toDouble / (numDocs * numLabels)
 
   /**
    * Returns Document-based Precision averaged by the number of documents
@@ -65,23 +64,21 @@ class MultilabelMetrics(predictionAndLabels:RDD[(Set[Double], Set[Double])]) ext
    */
   lazy val macroPrecisionDoc = (predictionAndLabels.map{ case(predictions, labels) =>
     if(predictions.size >0)
-      predictions.intersect(labels).size.toDouble / predictions.size else 0}.fold(0.0)(_ + _)) /
-    numDocs
+      predictions.intersect(labels).size.toDouble / predictions.size else 0}.sum) / numDocs
 
   /**
    * Returns Document-based Recall averaged by the number of documents
    * @return macroRecallDoc.
    */
   lazy val macroRecallDoc = (predictionAndLabels.map{ case(predictions, labels) =>
-    labels.intersect(predictions).size.toDouble / labels.size}.fold(0.0)(_ + _)) / numDocs
+    labels.intersect(predictions).size.toDouble / labels.size}.sum) / numDocs
 
   /**
    * Returns Document-based F1-measure averaged by the number of documents
    * @return macroRecallDoc.
    */
   lazy val macroF1MeasureDoc = (predictionAndLabels.map{ case(predictions, labels) =>
-    2.0 * predictions.intersect(labels).size /
-      (predictions.size + labels.size)}.fold(0.0)(_ + _)) / numDocs
+    2.0 * predictions.intersect(labels).size / (predictions.size + labels.size)}.sum) / numDocs
 
   /**
    * Returns micro-averaged document-based Precision
