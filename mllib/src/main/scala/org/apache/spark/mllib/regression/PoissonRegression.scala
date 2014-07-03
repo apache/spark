@@ -52,7 +52,7 @@ class PoissonRegressionWithLBFGS private (
   extends GeneralizedLinearAlgorithm[PoissonRegressionModel] with Serializable {
   
   private val gradient = new PoissonGradient()
-  private val updater = new SimpleUpdater()
+  private val updater = new SquaredL2Updater()
   
   override val optimizer = new LBFGS(gradient, updater)
     .setNumCorrections(numCorrections)
@@ -191,7 +191,7 @@ class PoissonRegressionWithSGD private (
   extends GeneralizedLinearAlgorithm[PoissonRegressionModel] with Serializable {
 
   private val gradient = new PoissonGradient()
-  private val updater = new SimpleUpdater()
+  private val updater = new SquaredL2Updater()
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)

@@ -53,7 +53,7 @@ class GammaRegressionWithSGD private (
   extends GeneralizedLinearAlgorithm[GammaRegressionModel] with Serializable {
 
   private val gradient = new GammaLogGradient()
-  private val updater = new SimpleUpdater()
+  private val updater = new SquaredL2Updater()
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
@@ -167,7 +167,7 @@ class GammaRegressionWithLBFGS private (
   extends GeneralizedLinearAlgorithm[GammaRegressionModel] with Serializable {
 
   private val gradient = new GammaLogGradient()
-  private val updater = new SimpleUpdater()
+  private val updater = new SquaredL2Updater()
   override val optimizer = new LBFGS(gradient, updater)
     .setNumCorrections(numCorrections)
     .setConvergenceTol(convergenceTol)
