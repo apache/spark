@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.IndexedRDDPartition
 import org.apache.spark.rdd.IndexedRDDPartition.Index
-import org.apache.spark.rdd.IndexedRDDPartitionBase
+import org.apache.spark.rdd.IndexedRDDPartitionLike
 import org.apache.spark.rdd.IndexedRDDPartitionOps
 import org.apache.spark.util.collection.ImmutableBitSet
 import org.apache.spark.util.collection.ImmutableVector
@@ -68,7 +68,7 @@ private[graphx] class ShippableVertexPartition[@specialized(Long, Int, Double) V
     val mask: ImmutableBitSet,
     val routingTable: RoutingTablePartition)
    (implicit val vTag: ClassTag[VD])
-  extends IndexedRDDPartitionBase[VD]
+  extends IndexedRDDPartitionLike[VD]
   with IndexedRDDPartitionOps[VD, ShippableVertexPartition] {
 
   def self: ShippableVertexPartition[VD] = this
