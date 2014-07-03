@@ -151,8 +151,8 @@ private[spark] trait IndexedRDDOps[
     this.mapIndexedRDDPartitions(_.mapValues(f))
 
   /**
-   * Intersects the key sets of `this` and `other` and hides elements with identical values; for
-   * values that are different, keeps the values from `other`.
+   * Intersects `this` and `other` and keeps only elements with differing values. For these
+   * elements, keeps the values from `this`.
    */
   def diff(other: Self[V]): Self[V] =
     this.zipIndexedRDDPartitions(other)(new DiffZipper)
