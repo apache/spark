@@ -136,13 +136,13 @@ object TestParallelANN {
         
     if( graphic ) {
       
-	  outputFrame2D = new OutputFrame2D( "x -> y" )
-	  outputFrame2D.apply
+      outputFrame2D = new OutputFrame2D( "x -> y" )
+      outputFrame2D.apply
 	    
-	  outputFrame3D = new OutputFrame3D( "(x,y) -> z", 1 )
-	  outputFrame3D.apply    
+      outputFrame3D = new OutputFrame3D( "(x,y) -> z", 1 )
+      outputFrame3D.apply    
 	        
-	  outputFrame4D = new OutputFrame3D( "t -> (x,y,z)" )
+      outputFrame4D = new OutputFrame3D( "t -> (x,y,z)" )
       outputFrame4D.apply
       
     }
