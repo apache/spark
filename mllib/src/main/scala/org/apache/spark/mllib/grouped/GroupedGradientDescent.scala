@@ -103,7 +103,9 @@ class GroupedGradientDescent(private var gradient: Gradient, private var updater
    * @return solution vector
    */
   @DeveloperApi
-   override def optimize(data: RDD[(Int, (Double, linalg.Vector))], initialWeights: Map[Int, linalg.Vector]): Map[Int, linalg.Vector] = {
+   override def optimize( data: RDD[(Int, (Double, linalg.Vector))],
+                          initialWeights: Map[Int, linalg.Vector]) :
+  Map[Int, linalg.Vector] = {
       val out = GroupedGradientDescent.runMiniBatchSGD(
         data,
         gradient,
@@ -130,7 +132,9 @@ object GroupedGradientDescent extends Logging {
                        miniBatchFraction: Double,
                        initialWeightsSet: Map[Int,Vector]): Map[Int,(Vector, Array[Double])] = {
 
-    val stochasticLossHistory = data.keys.collect().map( x => (x, new ArrayBuffer[Double](numIterations)) ).toMap
+    val stochasticLossHistory = data.keys.collect().map( x =>
+      (x, new ArrayBuffer[Double](numIterations))
+    ).toMap
 
     val numExamples = data.countByKey()
     val miniBatchSize = numExamples.map( x => (x._1, x._2 * miniBatchFraction) )
@@ -144,7 +148,8 @@ object GroupedGradientDescent extends Logging {
     val dataWithKey = data.map( x => (x._1, (x._1, x._2._1, x._2._2)))
 
     for (i <- 1 to numIterations) {
-      val gradientOut = dataWithKey.sample(false, miniBatchFraction, 42 + i).combineByKey[(BDV[Double], Double)](
+      val gradientOut = dataWithKey.sample(false, miniBatchFraction, 42 + i)
+        .combineByKey[(BDV[Double], Double)](
           createCombiner = (x : (Int, Double, Vector)) => {
             val key = x._1
             val label = x._2
@@ -166,7 +171,9 @@ object GroupedGradientDescent extends Logging {
           }
         )
       val lossSums = gradientOut.map(x => (x._1, x._2._2)).collect.toMap
-      stochasticLossHistory.foreach( x => { x._2.append(lossSums(x._1) / miniBatchSize(x._1) + regVal(x._1)) } )
+      stochasticLossHistory.foreach( x => {
+        x._2.append(lossSums(x._1) / miniBatchSize(x._1) + regVal(x._1))
+      } )
 
       val update = gradientOut.map( x => {
         val a : BDV[Double] = BDV(x._2._1.toArray) / miniBatchSize(x._1)

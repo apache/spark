@@ -58,14 +58,16 @@ abstract class GroupedGeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * RDD of LabeledPoint entries.
    */
   def run(input: RDD[(Int,LabeledPoint)]): Map[Int,M] = {
-    //get the number of features for each group
+    // get the number of features for each group
     val groupNumFeatures = input.combineByKey[Int](
       (x : LabeledPoint) => x.features.size,
       (x : Int,y :LabeledPoint) => x,
       (x : Int,y : Int) => x
     ).collect.toMap
 
-    val group_initialWeights = input.keys.collect.map( x => (x,Vectors.dense(new Array[Double](groupNumFeatures(x)))) ).toMap
+    val group_initialWeights = input.keys.collect.map( x =>
+      (x,Vectors.dense(new Array[Double](groupNumFeatures(x))))
+    ).toMap
 
     run(input, group_initialWeights)
   }
@@ -87,15 +89,19 @@ abstract class GroupedGeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   def run(input: RDD[(Int,LabeledPoint)], initialWeights: Map[Int,Vector]): Map[Int,M] = {
 
     // Check the data properties before running the optimizer
-    //if (validateData && !validators.forall(func => func(input))) {
-    //  throw new SparkException("Input validation failed.")
-    //}
+    if (validateData && !validators.forall(func => func(input.map(_._2)))) {
+      throw new SparkException("Input validation failed.")
+    }
 
     // Prepend an extra variable consisting of all 1.0's for the intercept.
     val data = if (addIntercept) {
-      input.map(labeledPoint => (labeledPoint._1, (labeledPoint._2.label, prependOne(labeledPoint._2.features))))
+      input.map(labeledPoint =>
+        (labeledPoint._1, (labeledPoint._2.label, prependOne(labeledPoint._2.features)))
+      )
     } else {
-      input.map(labeledPoint => (labeledPoint._1, (labeledPoint._2.label, labeledPoint._2.features)))
+      input.map(labeledPoint =>
+        (labeledPoint._1, (labeledPoint._2.label, labeledPoint._2.features))
+      )
     }
 
     val initialWeightsWithIntercept = if (addIntercept) {

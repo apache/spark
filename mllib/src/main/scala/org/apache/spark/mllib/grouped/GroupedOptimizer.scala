@@ -28,6 +28,8 @@ trait GroupedOptimizer extends Serializable {
     /**
      * Solve the provided convex optimization problem.
      */
-    def optimize(data: RDD[(Int, (Double, Vector))], initialWeights: Map[Int,Vector]): Map[Int,Vector]
+    def optimize(data: RDD[(Int, (Double, Vector))],
+                 initialWeights: Map[Int,Vector])
+    : Map[Int,Vector]
 
 }
