@@ -30,57 +30,57 @@ object TestParallelANN {
   
   def generateInput2D( f: Double => Double, xmin: Double, xmax: Double, noPoints: Int ): Array[(Vector,Vector)] = {
     
-	var out = new Array[(Vector,Vector)](noPoints)
+    var out = new Array[(Vector,Vector)](noPoints)
 	
-	for( i <- 0 to noPoints-1 ) {
-	  val x = xmin+rand.nextDouble()*(xmax-xmin)
-	  val y = f(x)	    
-	  out(i) = ( Vectors.dense( x ), Vectors.dense( y ) )	    
-	}	
+    for( i <- 0 to noPoints-1 ) {
+      val x = xmin+rand.nextDouble()*(xmax-xmin)
+      val y = f(x)	    
+      out(i) = ( Vectors.dense( x ), Vectors.dense( y ) )	    
+    }	
 	  
-	return out
+    return out
   
   }
 
   
   def generateInput3D( f: (Double,Double) => Double, xmin: Double, xmax: Double, ymin: Double, ymax: Double, noPoints: Int ): Array[(Vector,Vector)] = {
 	
-	var out = new Array[(Vector,Vector)](noPoints)
+    var out = new Array[(Vector,Vector)](noPoints)
 	
-	for( i <- 0 to noPoints-1 ) {
-	  val x = xmin+rand.nextDouble()*(xmax-xmin)
-	  val y = ymin+rand.nextDouble()*(ymax-ymin)
-	  val z = f( x, y )
-	  var arr = new Array[Double](2)
-	  arr(0) = x
-	  arr(1) = y
-	  out(i) = ( Vectors.dense( arr ), Vectors.dense( z ) )
-	} 
+    for( i <- 0 to noPoints-1 ) {
+      val x = xmin+rand.nextDouble()*(xmax-xmin)
+      val y = ymin+rand.nextDouble()*(ymax-ymin)
+      val z = f( x, y )
+      var arr = new Array[Double](2)
+      arr(0) = x
+      arr(1) = y
+      out(i) = ( Vectors.dense( arr ), Vectors.dense( z ) )
+    } 
 	  
-	out
+    out
   
   }  
 
   def generateInput4D( f: Double => (Double,Double,Double), tmin: Double, tmax: Double, noPoints: Int ): Array[(Vector,Vector)] = {
 	
-	var out = new Array[(Vector,Vector)](noPoints)
+    var out = new Array[(Vector,Vector)](noPoints)
 	
-	for( i <- 0 to noPoints-1 ) {
+    for( i <- 0 to noPoints-1 ) {
 	  
-	  val t: Double = tmin+rand.nextDouble()*(tmax-tmin)
+      val t: Double = tmin+rand.nextDouble()*(tmax-tmin)
 	  
-	  var arr = new Array[Double](3)
+      var arr = new Array[Double](3)
 	  
-	  var F = f(t)
+      var F = f(t)
 	  
-	  arr(0) = F._1
-	  arr(1) = F._2
-	  arr(2) = F._3
+      arr(0) = F._1
+      arr(1) = F._2
+      arr(2) = F._3
 	  
-	  out(i) = ( Vectors.dense( t ), Vectors.dense( arr ) )
-	} 
+      out(i) = ( Vectors.dense( t ), Vectors.dense( arr ) )
+    } 
 	  
-	out
+    out
   
   }
   
@@ -186,65 +186,65 @@ object TestParallelANN {
     for( i <- 0 to noIt-1 ) {
       
       val predictedAndTarget2D = validationRDD2D.map( T => ( T._1, T._2, model2D.predictV( T._1 ) ) )
-	  val predictedAndTarget3D = validationRDD3D.map( T => ( T._1, T._2, model3D.predictV( T._1 ) ) )	  
-	  val predictedAndTarget4D = validationRDD4D.map( T => ( T._1, T._2, model4D.predictV( T._1 ) ) )
+      val predictedAndTarget3D = validationRDD3D.map( T => ( T._1, T._2, model3D.predictV( T._1 ) ) )	  
+      val predictedAndTarget4D = validationRDD4D.map( T => ( T._1, T._2, model4D.predictV( T._1 ) ) )
 	  	  
-	  var err2D = predictedAndTarget2D.map( T => 
-	    (T._3.toArray(0) - T._2.toArray(0))*(T._3.toArray(0) - T._2.toArray(0)) 
-	  ).reduce( (u,v) => u+v )
+      var err2D = predictedAndTarget2D.map( T => 
+        (T._3.toArray(0) - T._2.toArray(0))*(T._3.toArray(0) - T._2.toArray(0)) 
+      ).reduce( (u,v) => u+v )
 	  
-	  var err3D = predictedAndTarget3D.map( T => 
-	    (T._3.toArray(0) - T._2.toArray(0))*(T._3.toArray(0) - T._2.toArray(0)) 
-	  ).reduce( (u,v) => u+v )
+      var err3D = predictedAndTarget3D.map( T => 
+        (T._3.toArray(0) - T._2.toArray(0))*(T._3.toArray(0) - T._2.toArray(0)) 
+      ).reduce( (u,v) => u+v )
 
-	  var err4D = predictedAndTarget4D.map( T => {
+      var err4D = predictedAndTarget4D.map( T => {
 	    
-	    val v1 = T._2.toArray
-	    val v2 = T._3.toArray
+        val v1 = T._2.toArray
+        val v2 = T._3.toArray
 	      
-	    (v1(0) - v2(0))*(v1(0) - v2(0))+
-	    (v1(1) - v2(1))*(v1(1) - v2(1))+
-	    (v1(2) - v2(2))*(v1(2) - v2(2))
+        (v1(0) - v2(0))*(v1(0) - v2(0))+
+        (v1(1) - v2(1))*(v1(1) - v2(1))+
+        (v1(2) - v2(2))*(v1(2) - v2(2))
 	    
-	  } ).reduce( (u,v) => u+v )
+      } ).reduce( (u,v) => u+v )
 	        
 	  
-	  if( graphic ) {
+      if( graphic ) {
 
     	val predicted2D = predictedAndTarget2D.map(
-	      T => concat( T._1, T._3 ) 
-	    )
+          T => concat( T._1, T._3 ) 
+        )
 	    
-	    val predicted3D = predictedAndTarget3D.map(
-	      T => concat( T._1, T._3 )
-	    )	  
+        val predicted3D = predictedAndTarget3D.map(
+          T => concat( T._1, T._3 )
+        )	  
 	    
-	    val predicted4D = predictedAndTarget4D.map(
-	      T => T._3 
-	    )
+        val predicted4D = predictedAndTarget4D.map(
+          T => T._3 
+        )
   
      	curAngle = curAngle + math.Pi/4
-	    if( curAngle>=2*math.Pi ) {
-	      curAngle = curAngle-2*math.Pi	    
-	    }
+        if( curAngle>=2*math.Pi ) {
+          curAngle = curAngle-2*math.Pi	    
+        }
 
-	    outputFrame3D.setAngle( curAngle )
-  	    outputFrame4D.setAngle( curAngle )
+        outputFrame3D.setAngle( curAngle )
+        outputFrame4D.setAngle( curAngle )
 
-	    outputFrame2D.setApproxPoints( predicted2D )
-	    outputFrame3D.setApproxPoints( predicted3D )
-  	    outputFrame4D.setApproxPoints( predicted4D )
+        outputFrame2D.setApproxPoints( predicted2D )
+        outputFrame3D.setApproxPoints( predicted3D )
+        outputFrame4D.setApproxPoints( predicted4D )
   	    
-	  }
+      }
 	    	  
-	  println( "Error 2D/3D/4D: "+(err2D, err3D, err4D) )
-	  errHist(i) = ( i, err2D, err3D, err4D )
+      println( "Error 2D/3D/4D: "+(err2D, err3D, err4D) )
+      errHist(i) = ( i, err2D, err3D, err4D )
 	    
-	  if( i<noIt-1 ) {
-	    model2D = parallelANN2D.train( testRDD2D, model2D )
-	    model3D = parallelANN3D.train( testRDD3D, model3D )	    
-	    model4D = parallelANN4D.train( testRDD4D, model4D )
-	  }
+      if( i<noIt-1 ) {
+        model2D = parallelANN2D.train( testRDD2D, model2D )
+        model3D = parallelANN3D.train( testRDD3D, model3D )	    
+        model4D = parallelANN4D.train( testRDD4D, model4D )
+      }
 
     }
 
