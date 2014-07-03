@@ -203,6 +203,8 @@ def get_spark_shark_version(opts):
 
 # Attempt to resolve an appropriate AMI given the architecture and
 # region of the request.
+# Information regarding Amazon Linux AMI instance type was update on 2014-6-20:
+# http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
 def get_spark_ami(opts):
     instance_types = {
         "m1.small":    "pvm",
@@ -218,10 +220,12 @@ def get_spark_ami(opts):
         "cc1.4xlarge": "hvm",
         "cc2.8xlarge": "hvm",
         "cg1.4xlarge": "hvm",
-        "hs1.8xlarge": "hvm",
-        "hi1.4xlarge": "hvm",
-        "m3.xlarge":   "hvm",
-        "m3.2xlarge":  "hvm",
+        "hs1.8xlarge": "pvm",
+        "hi1.4xlarge": "pvm",
+        "m3.medium":   "pvm",
+        "m3.large":    "pvm",
+        "m3.xlarge":   "pvm",
+        "m3.2xlarge":  "pvm",
         "cr1.8xlarge": "hvm",
         "i2.xlarge":   "hvm",
         "i2.2xlarge":  "hvm",
@@ -526,7 +530,8 @@ def wait_for_cluster(conn, wait_secs, master_nodes, slave_nodes):
 
 # Get number of local disks available for a given EC2 instance type.
 def get_num_disks(instance_type):
-    # From http://docs.amazonwebservices.com/AWSEC2/latest/UserGuide/index.html?InstanceStorage.html
+    # From http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
+    # Updated 2014-6-20
     disks_by_instance = {
         "m1.small":    1,
         "m1.medium":   1,
@@ -544,8 +549,10 @@ def get_num_disks(instance_type):
         "hs1.8xlarge": 24,
         "cr1.8xlarge": 2,
         "hi1.4xlarge": 2,
-        "m3.xlarge":   0,
-        "m3.2xlarge":  0,
+        "m3.medium":   1,
+        "m3.large":    1,
+        "m3.xlarge":   2,
+        "m3.2xlarge":  2,
         "i2.xlarge":   1,
         "i2.2xlarge":  2,
         "i2.4xlarge":  4,
@@ -559,7 +566,9 @@ def get_num_disks(instance_type):
         "r3.xlarge":   1,
         "r3.2xlarge":  1,
         "r3.4xlarge":  1,
-        "r3.8xlarge":  2
+        "r3.8xlarge":  2,
+        "g2.2xlarge":  1,
+        "t1.micro":    0
     }
     if instance_type in disks_by_instance:
         return disks_by_instance[instance_type]
@@ -770,12 +779,16 @@ def real_main():
         setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
     elif action == "destroy":
-        response = raw_input("Are you sure you want to destroy the cluster " +
-                             cluster_name + "?\nALL DATA ON ALL NODES WILL BE LOST!!\n" +
-                             "Destroy cluster " + cluster_name + " (y/N): ")
+        print "Are you sure you want to destroy the cluster %s?" % cluster_name
+        print "The following instances will be terminated:"
+        (master_nodes, slave_nodes) = get_existing_cluster(
+            conn, opts, cluster_name, die_on_error=False)
+        for inst in master_nodes + slave_nodes:
+            print "> %s" % inst.public_dns_name
+
+        msg = "ALL DATA ON ALL NODES WILL BE LOST!!\nDestroy cluster %s (y/N): " % cluster_name
+        response = raw_input(msg)
         if response == "y":
-            (master_nodes, slave_nodes) = get_existing_cluster(
-                conn, opts, cluster_name, die_on_error=False)
             print "Terminating master..."
             for inst in master_nodes:
                 inst.terminate()

@@ -18,13 +18,16 @@
 package org.apache.spark.util
 
 import java.io._
+import java.nio.charset.Charset
 
 import scala.collection.mutable.HashSet
 import scala.reflect._
 
-import org.apache.commons.io.{FileUtils, IOUtils}
-import org.apache.spark.{Logging, SparkConf}
 import org.scalatest.{BeforeAndAfter, FunSuite}
+
+import com.google.common.io.Files
+
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.logging.{RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy, FileAppender}
 
 class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
@@ -41,11 +44,11 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
 
   test("basic file appender") {
     val testString = (1 to 1000).mkString(", ")
-    val inputStream = IOUtils.toInputStream(testString)
+    val inputStream = new ByteArrayInputStream(testString.getBytes(Charset.forName("UTF-8")))
     val appender = new FileAppender(inputStream, testFile)
     inputStream.close()
     appender.awaitTermination()
-    assert(FileUtils.readFileToString(testFile) === testString)
+    assert(Files.toString(testFile, Charset.forName("UTF-8")) === testString)
   }
 
   test("rolling file appender - time-based rolling") {
@@ -93,7 +96,7 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
     val allGeneratedFiles = new HashSet[String]()
     val items = (1 to 10).map { _.toString * 10000 }
     for (i <- 0 until items.size) {
-      testOutputStream.write(items(i).getBytes("UTF8"))
+      testOutputStream.write(items(i).getBytes(Charset.forName("UTF-8")))
       testOutputStream.flush()
       allGeneratedFiles ++= RollingFileAppender.getSortedRolledOverFiles(
         testFile.getParentFile.toString, testFile.getName).map(_.toString)
@@ -197,7 +200,7 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
     // send data to appender through the input stream, and wait for the data to be written
     val expectedText = textToAppend.mkString("")
     for (i <- 0 until textToAppend.size) {
-      outputStream.write(textToAppend(i).getBytes("UTF8"))
+      outputStream.write(textToAppend(i).getBytes(Charset.forName("UTF-8")))
       outputStream.flush()
       Thread.sleep(sleepTimeBetweenTexts)
     }
@@ -212,7 +215,7 @@ class FileAppenderSuite extends FunSuite with BeforeAndAfter with Logging {
     logInfo("Filtered files: \n" + generatedFiles.mkString("\n"))
     assert(generatedFiles.size > 1)
     val allText = generatedFiles.map { file =>
-      FileUtils.readFileToString(file)
+      Files.toString(file, Charset.forName("UTF-8"))
     }.mkString("")
     assert(allText === expectedText)
     generatedFiles
