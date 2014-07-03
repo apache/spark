@@ -255,10 +255,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   // Compute the completeness of map statuses for a shuffle
   def completenessForShuffle(shuffleId: Int): Int = {
-    if (mapStatuses.get(shuffleId).isDefined) {
-      return mapStatuses.get(shuffleId).get.count(_ != null)
-    }
-    0
+    mapStatuses.getOrElse(shuffleId, new Array[MapStatus](0)).count(_ != null)
   }
 
   // A proxy to update partial map statuses periodically
@@ -270,14 +267,20 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         }
       }
       logInfo("Updater started for shuffleId "+shuffleId+". ---lirui")
+      val minInterval = 1000
+      val maxInterval = 3000
+      var sleepInterval = minInterval
       while (partialForShuffle.contains(shuffleId)) {
-        Thread.sleep(1000)
+        Thread.sleep(sleepInterval)
         if (clearOutdatedMapStatuses(shuffleId)) {
           getMapStatusesForShuffle(shuffleId, -1)
           partialEpoch.synchronized {
             partialEpoch.put(shuffleId, partialEpoch.getOrElse(shuffleId, 0) + 1)
             partialEpoch.notifyAll()
           }
+          sleepInterval = math.max(minInterval, sleepInterval - 500)
+        } else {
+          sleepInterval = math.min(maxInterval, sleepInterval + 200)
         }
       }
       logInfo("Map status for shuffleId "+shuffleId+" is now complete. Updater terminated. ---lirui")
