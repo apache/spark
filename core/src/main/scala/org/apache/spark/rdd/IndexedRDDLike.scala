@@ -24,7 +24,6 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
 
 import IndexedRDD.Id
-import IndexedRDDFunctions.rdd2IndexedRDDFunctions
 
 /**
  * Contains members that are shared among all variants of IndexedRDD (e.g., IndexedRDD,

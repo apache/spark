@@ -26,7 +26,6 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
 
 import IndexedRDD.Id
-import IndexedRDDFunctions._
 
 /**
  * Contains functions whose implementations are shared among all variants of IndexedRDD (e.g.,
@@ -134,7 +133,7 @@ private[spark] trait IndexedRDDOps[
   /** Applies a function to corresponding partitions of `this` and `other`. */
   protected def zipPartitionsWithOther[V2: ClassTag, V3: ClassTag](other: RDD[(Id, V2)])
       (f: OtherZipPartitionsFunction[V2, V3]): Self[V3] = {
-    val partitioned = other.partitionWithSerializer(self.partitioner.get)
+    val partitioned = IndexedRDD.partitionWithSerializer(other, self.partitioner.get)
     val newPartitionsRDD = self.partitionsRDD.zipPartitions(partitioned, true)(f)
     withPartitionsRDD(newPartitionsRDD)
   }
@@ -324,33 +323,5 @@ private[spark] trait IndexedRDDOps[
       val thisPart = thisIter.next()
       Iterator(thisPart.aggregateUsingIndex(otherIter, reduceFunc))
     }
-  }
-}
-
-private[spark]
-class IndexedRDDFunctions[V: ClassTag](self: RDD[(Id, V)]) {
-  def partitionWithSerializer(partitioner: Partitioner): RDD[(Id, V)] = {
-    val rdd =
-      if (self.partitioner == partitioner) self
-      else new ShuffledRDD[Id, V, (Id, V)](self, partitioner)
-
-    // Set a custom serializer if the data is of primitive type.
-    // if (classTag[V] == ClassTag.Int) {
-    //   rdd.setSerializer(new IdIntPairSerializer)
-    // } else if (classTag[V] == ClassTag.Long) {
-    //   rdd.setSerializer(new IdLongPairSerializer)
-    // } else if (classTag[V] == ClassTag.Double) {
-    //   rdd.setSerializer(new IdDoublePairSerializer)
-    // }
-    rdd
-  }
-}
-
-private[spark]
-object IndexedRDDFunctions {
-  import scala.language.implicitConversions
-
-  implicit def rdd2IndexedRDDFunctions[V: ClassTag](rdd: RDD[(Id, V)]): IndexedRDDFunctions[V] = {
-    new IndexedRDDFunctions(rdd)
   }
 }
