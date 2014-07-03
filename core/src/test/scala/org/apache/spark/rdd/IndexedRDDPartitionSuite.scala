@@ -55,15 +55,15 @@ class IndexedRDDPartitionSuite extends FunSuite {
     assert(vp.delete(Array(3L)).iterator.toSet === Set(0L -> 0, 1L -> 1, 2L -> 2))
   }
 
-  test("map") {
-    val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1))).map { (vid, attr) => 2 }
+  test("mapValues") {
+    val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1))).mapValues { (vid, attr) => 2 }
     assert(vp(0) === 2)
   }
 
   test("diff") {
     val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1), (2L, 1)))
     val vp2 = vp.filter { (vid, attr) => vid <= 1 }
-    val vp3a = vp.map { (vid, attr) => 2 }
+    val vp3a = vp.mapValues { (vid, attr) => 2 }
     val vp3b = IndexedRDDPartition(vp3a.iterator)
     // diff with same index
     val diff1 = vp3a.diff(vp2)
@@ -81,7 +81,7 @@ class IndexedRDDPartitionSuite extends FunSuite {
 
   test("leftJoin") {
     val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1), (2L, 1)))
-    val vp2a = vp.filter { (vid, attr) => vid <= 1 }.map { (vid, attr) => 2 }
+    val vp2a = vp.filter { (vid, attr) => vid <= 1 }.mapValues { (vid, attr) => 2 }
     val vp2b = IndexedRDDPartition(vp2a.iterator)
     // leftJoin with same index
     val join1 = vp.leftJoin(vp2a) { (vid, a, bOpt) => bOpt.getOrElse(a) }
@@ -96,7 +96,7 @@ class IndexedRDDPartitionSuite extends FunSuite {
 
   test("join") {
     val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1), (2L, 1)))
-    val vp2a = vp.filter { (vid, attr) => vid <= 1 }.map { (vid, attr) => 2 }
+    val vp2a = vp.filter { (vid, attr) => vid <= 1 }.mapValues { (vid, attr) => 2 }
     val vp2b = IndexedRDDPartition(vp2a.iterator)
     // join with same index
     val join1 = vp.join(vp2a) { (vid, a, b) => b }
@@ -111,7 +111,7 @@ class IndexedRDDPartitionSuite extends FunSuite {
 
   test("innerJoin") {
     val vp = IndexedRDDPartition(Iterator((0L, 1), (1L, 1), (2L, 1)))
-    val vp2a = vp.filter { (vid, attr) => vid <= 1 }.map { (vid, attr) => 2 }
+    val vp2a = vp.filter { (vid, attr) => vid <= 1 }.mapValues { (vid, attr) => 2 }
     val vp2b = IndexedRDDPartition(vp2a.iterator)
     // innerJoin with same index
     val join1 = vp.innerJoin(vp2a) { (vid, a, b) => b }

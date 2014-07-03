@@ -32,21 +32,33 @@ import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 import IndexedRDD.Id
 import IndexedRDDPartition.Index
 
+/**
+ * Contains functions whose implementations are shared among all variants of IndexedRDDPartition
+ * (e.g., IndexedRDDPartition, ShippableVertexPartition). Unlike `IndexedRDDPartitionLike`,
+ * `IndexedRDDPartitionOps` takes a `Self` type parameter, which allows transformation methods on
+ * any variant of IndexedRDDPartition to yield a result of the same type.
+ *
+ * @tparam V the type of the values stored in the IndexedRDDPartition
+ * @tparam Self the type of the implementing container, which must be a variant of
+ * IndexedRDDPartition
+ */
 private[spark] trait IndexedRDDPartitionOps[
     @specialized(Long, Int, Double) V,
     Self[X] <: IndexedRDDPartitionLike[X] with IndexedRDDPartitionOps[X, Self]]
   extends Logging {
 
-  def self: Self[V]
-
+  /** A generator for ClassTags of the value type V. */
   implicit def vTag: ClassTag[V]
+
+  /** Accessor for the IndexedRDDPartition variant that is mixing in this trait. */
+  def self: Self[V]
 
   def withIndex(index: Index): Self[V]
   def withValues[V2: ClassTag](values: ImmutableVector[V2]): Self[V2]
   def withMask(mask: ImmutableBitSet): Self[V]
 
   /**
-   * Gets the values corresponding to keys ks.
+   * Gets the values corresponding to the specified keys, if any.
    */
   def multiget(ks: Array[Id]): LongMap[V] = {
     var result = LongMap.empty[V]
@@ -62,7 +74,8 @@ private[spark] trait IndexedRDDPartitionOps[
   }
 
   /**
-   * Updates keys ks to have values vs, running `merge` on old and new values if necessary.
+   * Updates the keys in `kvs` to their corresponding values, running `merge` on old and new values
+   * if necessary. Returns a new IndexedRDDPartition that reflects the modification.
    */
   def multiput(kvs: Seq[(Id, V)], merge: (Id, V, V) => V): Self[V] = {
     if (kvs.forall(kv => self.isDefined(kv._1))) {
@@ -109,6 +122,7 @@ private[spark] trait IndexedRDDPartitionOps[
     }
   }
 
+  /** Deletes the specified keys. Returns a new IndexedRDDPartition that reflects the deletions. */
   def delete(ks: Array[Id]): Self[V] = {
     var newMask = self.mask
     for (k <- ks) {
@@ -120,8 +134,8 @@ private[spark] trait IndexedRDDPartitionOps[
     this.withMask(newMask)
   }
 
-  def map[V2: ClassTag](f: (Id, V) => V2): Self[V2] = {
-    // Construct a view of the map transformation
+  /** Maps each value, supplying the corresponding key and preserving the index. */
+  def mapValues[V2: ClassTag](f: (Id, V) => V2): Self[V2] = {
     val newValues = new Array[V2](self.capacity)
     self.mask.iterator.foreach { i =>
       newValues(i) = f(self.index.getValue(i), self.values(i))
@@ -130,18 +144,12 @@ private[spark] trait IndexedRDDPartitionOps[
   }
 
   /**
-   * Restrict the vertex set to the set of vertices satisfying the given predicate.
-   *
-   * @param pred the user defined predicate
-   *
-   * @note The vertex set preserves the original index structure which means that the returned
-   *       RDD can be easily joined with the original vertex-set. Furthermore, the filter only
-   *       modifies the bitmap index and so no new values are allocated.
+   * Restricts the entries to those satisfying the given predicate. This operation preserves the
+   * index for efficient joins with the original IndexedRDDPartition and is implemented using soft
+   * deletions.
    */
   def filter(pred: (Id, V) => Boolean): Self[V] = {
-    // Allocate the array to store the results into
     val newMask = new BitSet(self.capacity)
-    // Iterate over the active bits in the old mask and evaluate the predicate
     self.mask.iterator.foreach { i =>
       if (pred(self.index.getValue(i), self.values(i))) {
         newMask.set(i)
@@ -151,8 +159,8 @@ private[spark] trait IndexedRDDPartitionOps[
   }
 
   /**
-   * Intersects `this` and `other` and keeps only vertices with differing values. For differing
-   * vertices, keeps the values from `this`.
+   * Intersects the key sets of `this` and `other` and hides elements with identical values; for
+   * values that are different, keeps the values from `other`.
    */
   def diff(other: Self[V]): Self[V] = {
     if (self.index != other.index) {
@@ -189,44 +197,11 @@ private[spark] trait IndexedRDDPartitionOps[
     }
   }
 
-  /** Left outer join another IndexedRDDPartition. */
-  def leftJoin[V2: ClassTag, V3: ClassTag]
-      (other: Self[V2])
-      (f: (Id, V, Option[V2]) => V3): Self[V3] = {
-    if (self.index != other.index) {
-      logWarning("Joining two IndexedRDDPartitions with different indexes is slow.")
-      val newValues = new Array[V3](self.capacity)
-
-      self.mask.iterator.foreach { i =>
-        val vid = self.index.getValue(i)
-        val otherI =
-          if (other.index.getValue(i) == vid) {
-            if (other.mask.get(i)) i else -1
-          } else {
-            if (other.isDefined(vid)) other.index.getPos(vid) else -1
-          }
-        val otherV = if (otherI != -1) Some(other.values(otherI)) else None
-        newValues(i) = f(vid, self.values(i), otherV)
-      }
-      this.withValues(ImmutableVector.fromArray(newValues))
-    } else {
-      val newValues = new Array[V3](self.capacity)
-
-      self.mask.iterator.foreach { i =>
-        val otherV: Option[V2] = if (other.mask.get(i)) Some(other.values(i)) else None
-        newValues(i) = f(self.index.getValue(i), self.values(i), otherV)
-      }
-      this.withValues(ImmutableVector.fromArray(newValues))
-    }
-  }
-
-  /** Left outer join another iterator of messages. */
-  def leftJoin[V2: ClassTag, V3: ClassTag]
-      (other: Iterator[(Id, V2)])
-      (f: (Id, V, Option[V2]) => V3): Self[V3] = {
-    leftJoin(createUsingIndex(other))(f)
-  }
-
+  /**
+   * Left outer joins `this` with `other`, running `f` on the values of corresponding keys. Because
+   * values in `this` with no corresponding entries in `other` are preserved, `f` cannot change the
+   * value type.
+   */
   def join[U: ClassTag]
       (other: Self[U])
       (f: (Id, V, U) => V): Self[V] = {
@@ -258,7 +233,11 @@ private[spark] trait IndexedRDDPartitionOps[
     }
   }
 
-  /** Join another iterator of messages. */
+  /**
+   * Left outer joins `this` with the iterator `other`, running `f` on the values of corresponding
+   * keys. Because values in `this` with no corresponding entries in `other` are preserved, `f`
+   * cannot change the value type.
+   */
   def join[U: ClassTag]
       (other: Iterator[(Id, U)])
       (f: (Id, V, U) => V): Self[V] = {
@@ -272,7 +251,45 @@ private[spark] trait IndexedRDDPartitionOps[
     this.withValues(newValues)
   }
 
-  /** Inner join another IndexedRDDPartition. */
+  /** Left outer joins `this` with `other`, running `f` on all values of `this`. */
+  def leftJoin[V2: ClassTag, V3: ClassTag]
+      (other: Self[V2])
+      (f: (Id, V, Option[V2]) => V3): Self[V3] = {
+    if (self.index != other.index) {
+      logWarning("Joining two IndexedRDDPartitions with different indexes is slow.")
+      val newValues = new Array[V3](self.capacity)
+
+      self.mask.iterator.foreach { i =>
+        val vid = self.index.getValue(i)
+        val otherI =
+          if (other.index.getValue(i) == vid) {
+            if (other.mask.get(i)) i else -1
+          } else {
+            if (other.isDefined(vid)) other.index.getPos(vid) else -1
+          }
+        val otherV = if (otherI != -1) Some(other.values(otherI)) else None
+        newValues(i) = f(vid, self.values(i), otherV)
+      }
+      this.withValues(ImmutableVector.fromArray(newValues))
+    } else {
+      val newValues = new Array[V3](self.capacity)
+
+      self.mask.iterator.foreach { i =>
+        val otherV: Option[V2] = if (other.mask.get(i)) Some(other.values(i)) else None
+        newValues(i) = f(self.index.getValue(i), self.values(i), otherV)
+      }
+      this.withValues(ImmutableVector.fromArray(newValues))
+    }
+  }
+
+  /** Left outer joins `this` with the iterator `other`, running `f` on all values of `this`. */
+  def leftJoin[V2: ClassTag, V3: ClassTag]
+      (other: Iterator[(Id, V2)])
+      (f: (Id, V, Option[V2]) => V3): Self[V3] = {
+    leftJoin(createUsingIndex(other))(f)
+  }
+
+  /** Inner joins `this` with `other`, running `f` on the values of corresponding keys. */
   def innerJoin[U: ClassTag, V2: ClassTag]
       (other: Self[U])
       (f: (Id, V, U) => V2): Self[V2] = {
@@ -306,7 +323,8 @@ private[spark] trait IndexedRDDPartitionOps[
   }
 
   /**
-   * Inner join an iterator of messages.
+   * Inner joins `this` with the iterator `other`, running `f` on the values of corresponding
+   * keys.
    */
   def innerJoin[U: ClassTag, V2: ClassTag]
       (iter: Iterator[Product2[Id, U]])
@@ -315,7 +333,25 @@ private[spark] trait IndexedRDDPartitionOps[
   }
 
   /**
-   * Similar effect as aggregateUsingIndex((a, b) => b)
+   * Inner joins `this` with `iter`, taking values from `iter` and hiding other values using the
+   * bitmask.
+   */
+  def innerJoinKeepLeft(iter: Iterator[Product2[Id, V]]): Self[V] = {
+    val newMask = new BitSet(self.capacity)
+    var newValues = self.values
+    iter.foreach { pair =>
+      val pos = self.index.getPos(pair._1)
+      if (pos >= 0) {
+        newMask.set(pos)
+        newValues = newValues.updated(pos, pair._2)
+      }
+    }
+    this.withValues(newValues).withMask(newMask.toImmutableBitSet)
+  }
+
+  /**
+   * Creates a new IndexedRDDPartition with values from `iter` that shares an index with `this`,
+   * merging duplicate keys in `messages` arbitrarily.
    */
   def createUsingIndex[V2: ClassTag](iter: Iterator[Product2[Id, V2]])
     : Self[V2] = {
@@ -332,22 +368,9 @@ private[spark] trait IndexedRDDPartitionOps[
   }
 
   /**
-   * Similar to innerJoin, but vertices from the left side that don't appear in iter will remain in
-   * the partition, hidden by the bitmask.
+   * Creates a new IndexedRDDPartition with values from `iter` that shares an index with
+   * `this`.
    */
-  def innerJoinKeepLeft(iter: Iterator[Product2[Id, V]]): Self[V] = {
-    val newMask = new BitSet(self.capacity)
-    var newValues = self.values
-    iter.foreach { pair =>
-      val pos = self.index.getPos(pair._1)
-      if (pos >= 0) {
-        newMask.set(pos)
-        newValues = newValues.updated(pos, pair._2)
-      }
-    }
-    this.withValues(newValues).withMask(newMask.toImmutableBitSet)
-  }
-
   def aggregateUsingIndex[V2: ClassTag](
       iter: Iterator[Product2[Id, V2]],
       reduceFunc: (V2, V2) => V2): Self[V2] = {
@@ -370,7 +393,8 @@ private[spark] trait IndexedRDDPartitionOps[
   }
 
   /**
-   * Construct a new IndexedRDDPartition whose index contains only the vertices in the mask.
+   * Rebuilds the indexes of this IndexedRDDPartition, removing deleted entries. The resulting
+   * IndexedRDDPartition will not support efficient joins with the original one.
    */
   def reindex(): Self[V] = {
     val hashMap = new PrimitiveKeyOpenHashMap[Id, V]

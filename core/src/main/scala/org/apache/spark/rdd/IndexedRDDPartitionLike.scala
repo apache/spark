@@ -31,7 +31,9 @@ import IndexedRDDPartition.Index
  *
  * @tparam V the type of the values stored in the IndexedRDDPartition
  */
-private[spark] trait IndexedRDDPartitionLike[@specialized(Long, Int, Double) V] {
+private[spark] trait IndexedRDDPartitionLike[@specialized(Long, Int, Double) V]
+  extends Serializable {
+
   def index: Index
   def values: ImmutableVector[V]
   def mask: ImmutableBitSet

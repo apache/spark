@@ -31,7 +31,6 @@ class ImmutableVectorSuite extends FunSuite {
       offset <- Array(-1, 0, 1)
     } yield (1 << shift) + offset
     for (size <- sizes) {
-      println(size)
       val v = ImmutableVector.fromArray((0 until size).toArray)
       assert(v.size === size)
       for (i <- 0 until size) {
@@ -46,7 +45,6 @@ class ImmutableVectorSuite extends FunSuite {
       offset <- Array(-1, 0, 1)
     } yield (1 << shift) + offset
     for (size <- sizes) {
-      println(size)
       val v = ImmutableVector.fromArray((0 until size).toArray)
       val iter = v.iterator
       var i = 0
@@ -64,7 +62,6 @@ class ImmutableVectorSuite extends FunSuite {
       offset <- Array(-1, 0, 1)
     } yield (1 << shift) + offset
     for (size <- sizes) {
-      println(size)
       var v = ImmutableVector.fromArray((0 until size).toArray)
       for (i <- 0 until size) {
         v = v.updated(i, 0)

@@ -54,12 +54,6 @@ private[spark] trait IndexedRDDOps[
 
   def withPartitionsRDD[V2: ClassTag](partitionsRDD: RDD[P[V2]]): Self[V2]
 
-  /**
-   * Rebuilds the indexes of this IndexedRDD, removing deleted entries. The resulting IndexedRDD
-   * will not support efficient joins with the original one.
-   */
-  def reindex(): Self[V] = withPartitionsRDD(self.partitionsRDD.map(_.reindex()))
-
   /** Gets the value corresponding to the specified key, if any. */
   def get(k: Id): Option[V] = multiget(Array(k)).get(k)
 
@@ -148,32 +142,17 @@ private[spark] trait IndexedRDDOps[
   override def filter(pred: Tuple2[Id, V] => Boolean): Self[V] =
     this.mapIndexedRDDPartitions(_.filter(Function.untupled(pred)))
 
-  /**
-   * Maps each value, preserving the index.
-   *
-   * @tparam V2 the new value type
-   * @param f the function applied to each value
-   * @return a new IndexedRDD with values obtained by applying `f` to each of the entries in the
-   * original IndexedRDD
-   */
+  /** Maps each value, preserving the index. */
   def mapValues[V2: ClassTag](f: V => V2): Self[V2] =
-    this.mapIndexedRDDPartitions(_.map((vid, attr) => f(attr)))
+    this.mapIndexedRDDPartitions(_.mapValues((vid, attr) => f(attr)))
 
-  /**
-   * Maps each value, additionally supplying the vertex ID.
-   *
-   * @tparam V2 the type returned by the map function
-   *
-   * @param f the function applied to each ID-value pair in the RDD
-   * @return a new IndexedRDD with values obtained by applying `f` to each of the entries in the
-   * original IndexedRDD.  The resulting IndexedRDD retains the same index.
-   */
+  /** Maps each value, supplying the corresponding key and preserving the index. */
   def mapValues[V2: ClassTag](f: (Id, V) => V2): Self[V2] =
-    this.mapIndexedRDDPartitions(_.map(f))
+    this.mapIndexedRDDPartitions(_.mapValues(f))
 
   /**
-   * Intersects the key sets of `this` and `other` and hides elements with identical values in the
-   * two RDDs; for values that are different, keeps the values from `other`.
+   * Intersects the key sets of `this` and `other` and hides elements with identical values; for
+   * values that are different, keeps the values from `other`.
    */
   def diff(other: Self[V]): Self[V] =
     this.zipIndexedRDDPartitions(other)(new DiffZipper)
@@ -223,6 +202,12 @@ private[spark] trait IndexedRDDOps[
       messages: RDD[(Id, V2)], reduceFunc: (V2, V2) => V2): Self[V2] = {
     this.zipPartitionsWithOther(messages)(new AggregateUsingIndexZipper(reduceFunc))
   }
+
+  /**
+   * Rebuilds the indexes of this IndexedRDD, removing deleted entries. The resulting IndexedRDD
+   * will not support efficient joins with the original one.
+   */
+  def reindex(): Self[V] = withPartitionsRDD(self.partitionsRDD.map(_.reindex()))
 
   // The following functions could have been anonymous, but we name them to work around a Scala
   // compiler bug related to specialization.

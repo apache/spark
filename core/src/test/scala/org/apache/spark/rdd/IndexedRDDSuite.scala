@@ -86,9 +86,9 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     val ps = pairs(sc, n).cache()
     val flipEvens = ps.mapValues(x => if (x % 2 == 0) -x else x).cache()
     // diff should keep only the changed pairs
-    assert(flipEvens.diff(ps).map(_._2).collect().toSet === (2 to n by 2).map(-_).toSet)
+    assert(flipEvens.diff(ps).map(_._2).collect().toList.sorted === (2 to n by 2).map(-_).toList.sorted)
     // diff should keep the vertex values from `this`
-    assert(ps.diff(flipEvens).map(_._2).collect().toSet === (2 to n by 2).toSet)
+    assert(ps.diff(flipEvens).map(_._2).collect().toList.sorted === (2 to n by 2).toList.sorted)
   }
 
   test("leftJoin") {
