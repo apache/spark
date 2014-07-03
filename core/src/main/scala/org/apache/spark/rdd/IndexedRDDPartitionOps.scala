@@ -187,10 +187,10 @@ private[spark] trait IndexedRDDPartitionOps[
       }
       this.withMask(newMask.toImmutableBitSet)
     } else {
-      val newMask = self.mask & other.mask
+      var newMask = self.mask & other.mask
       newMask.iterator.foreach { i =>
         if (self.values(i) == other.values(i)) {
-          newMask.unset(i)
+          newMask = newMask.unset(i)
         }
       }
       this.withMask(newMask)
