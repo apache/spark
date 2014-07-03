@@ -35,7 +35,8 @@ object BuildCommons {
       "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
   val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, sparkGangliaLgpl) =
-    Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl").map(ProjectRef(buildLocation, _))
+    Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl")
+      .map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(assembly, examples, tools) = Seq("assembly", "examples", "tools")
     .map(ProjectRef(buildLocation, _))
@@ -50,15 +51,35 @@ object SparkBuild extends PomBuild {
 
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
+  // Provides compatibility for older versions of the Spark build
   def backwardCompatibility = {
     import scala.collection.mutable
+    var isAlphaYarn = false
     var profiles: mutable.Seq[String] = mutable.Seq.empty
-    if (Properties.envOrNone("SPARK_YARN").isDefined) profiles ++= Seq("yarn")
-    if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) profiles ++= Seq("spark-ganglia-lgpl")
-    if (Properties.envOrNone("SPARK_HIVE").isDefined) profiles ++= Seq("hive")
+    if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
+      println("NOTE: SPARK_GANGLIA_LGPL is deprecated, Use the -Pganglia-lgpl flag.")
+      profiles ++= Seq("spark-ganglia-lgpl")
+    }
+    if (Properties.envOrNone("SPARK_HIVE").isDefined) {
+      println("NOTE: SPARK_HIVE is deprecated, Use the -Phive flag.")
+      profiles ++= Seq("hive")
+    }
     Properties.envOrNone("SPARK_HADOOP_VERSION") match {
-      case Some(v) => System.setProperty("hadoop.version", v)
+      case Some(v) =>
+        if (v.matches("0.23.*")) isAlphaYarn = true
+        println("NOTE: SPARK_HADOOP_VERSION is deprecated, please use -Dhadoop.version=" + v)
+        System.setProperty("hadoop.version", v)
       case None =>
+    }
+    if (Properties.envOrNone("SPARK_YARN").isDefined) {
+      if(isAlphaYarn) {
+        println("NOTE: SPARK_YARN is deprecated, Use the -Pyarn-alpha flag.")
+        profiles ++= Seq("yarn-alpha")
+      }
+      else {
+        println("NOTE: SPARK_YARN is deprecated, Use the -Pyarn flag.")
+        profiles ++= Seq("yarn")
+      }
     }
     profiles
   }
@@ -66,7 +87,11 @@ object SparkBuild extends PomBuild {
   override val profiles = Properties.envOrNone("MAVEN_PROFILES") match {
     case None => backwardCompatibility
     // Rationale: If -P option exists no need to support backwardCompatibility.
-    case Some(v) => v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
+    case Some(v) =>
+      if (backwardCompatibility.nonEmpty)
+        println("Note: We ignore environment variables, when use of profile is detected in " +
+          "conjunction with environment variable.")
+      v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
   }
 
   override val userPropertiesMap = System.getProperties.toMap
@@ -106,17 +131,17 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  allProjects ++ optionallyEnabledProjects ++ assemblyProjects foreach enable(sharedSettings)
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects).foreach(enable(sharedSettings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
-  allProjects ++ optionallyEnabledProjects foreach enable(TestSettings.settings)
+  (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  /* Enable Mima for all projects except spark, sql, hive, catalyst  and repl */
-  allProjects.filterNot(y => Seq(spark, sql, hive, catalyst, repl).exists(x => x == y)).
+  /* Enable Mima for all projects except spark, hive, catalyst  and repl */
+  allProjects.filterNot(y => Seq(spark, hive, catalyst, repl).exists(x => x == y)).
     foreach (x => enable(MimaBuild.mimaSettings(sparkHome, x))(x))
 
   /* Enable Assembly for all assembly projects */
-  assemblyProjects foreach enable(Assembly.settings)
+  assemblyProjects.foreach(enable(Assembly.settings))
 
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
@@ -171,7 +196,7 @@ object Assembly {
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
     jarName in assembly <<= (version, moduleName) map { (v, mName) => mName + "-"+v + "-hadoop" +
-      Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar" }, // TODO: add proper default hadoop version.
+      Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar" },
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
@@ -246,8 +271,10 @@ object TestSettings {
     javaOptions in Test += "-Dspark.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
-    javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark").map { case (k,v) => s"-D$k=$v" }.toSeq,
-    javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g".split(" ").toSeq,
+    javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
+      .map { case (k,v) => s"-D$k=$v" }.toSeq,
+    javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
+      .split(" ").toSeq,
     javaOptions += "-Xmx3g",
 
     // Show full stack trace and duration in test cases.
