@@ -27,65 +27,12 @@ import org.apache.spark.storage.StorageLevel
 import IndexedRDD.Id
 import IndexedRDDFunctions.rdd2IndexedRDDFunctions
 
-private[spark] trait IndexedRDDLike[
-    @specialized(Long, Int, Double) V,
-    P[X] <: IndexedRDDPartitionBase[X] with IndexedRDDPartitionOps[X, P]]
-  extends RDD[(Id, V)] {
-
-  def partitionsRDD: RDD[P[V]]
-  implicit def pTag[V2]: ClassTag[P[V2]]
-
-  require(partitionsRDD.partitioner.isDefined)
-
-  override val partitioner = partitionsRDD.partitioner
-
-  override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
-
-  override protected def getPreferredLocations(s: Partition): Seq[String] =
-    partitionsRDD.preferredLocations(s)
-
-  override def persist(newLevel: StorageLevel): this.type = {
-    partitionsRDD.persist(newLevel)
-    this
-  }
-
-  override def unpersist(blocking: Boolean = true): this.type = {
-    partitionsRDD.unpersist(blocking)
-    this
-  }
-
-  /** The number of entries in the RDD. */
-  override def count(): Long = {
-    partitionsRDD.map(_.size).reduce(_ + _)
-  }
-
-  /**
-   * Provides the `RDD[(Id, V)]` equivalent output.
-   */
-  override def compute(part: Partition, context: TaskContext): Iterator[(Id, V)] = {
-    firstParent[P[V]].iterator(part, context).next.iterator
-  }
-}
-
 /**
- * Extends RDD[(Id, V)] to provide a key-value store by enforcing key uniqueness and pre-indexing
- * the entries for efficient joins. Two IndexedRDDs with the same index can be joined
+ * :: AlphaComponent ::
+ * An RDD of key-value `(Id, V)` pairs that enforces key uniqueness and pre-indexes the entries for
+ * efficient joins and point lookups/updates. Two IndexedRDDs with the same index can be joined
  * efficiently. All operations except [[reindex]] preserve the index. To construct an `IndexedRDD`,
  * use the [[org.apache.spark.rdd.IndexedRDD$ IndexedRDD object]].
- *
- * @example Construct a `IndexedRDD` from a plain RDD:
- * {{{
- * // Construct an initial dataset
- * val someData: RDD[(Id, SomeType)] = loadData(someFile)
- * val vset = IndexedRDD(someData)
- * // If there were redundant values in someData we would use a reduceFunc
- * val vset2 = IndexedRDD(someData, reduceFunc)
- * // Finally we can use the IndexedRDD to index another dataset
- * val otherData: RDD[(Id, OtherType)] = loadData(otherFile)
- * val vset3 = vset2.innerJoin(otherData) { (vid, a, b) => b }
- * // Now we can construct very fast joins between the two sets
- * val vset4: IndexedRDD[(SomeType, OtherType)] = vset.leftJoin(vset3)
- * }}}
  *
  * @tparam V the value associated with each entry in the set.
  */
@@ -111,16 +58,23 @@ class IndexedRDD[@specialized(Long, Int, Double) V: ClassTag]
  * The IndexedRDD singleton is used to construct IndexedRDDs.
  */
 object IndexedRDD {
+  /** The key type of IndexedRDDs. */
   type Id = Long
 
+  /**
+   * Constructs an IndexedRDD from an RDD of pairs, partitioning keys using a hash partitioner,
+   * preserving the number of partitions of `elems`, and merging duplicate keys arbitrarily.
+   */
   def apply[V: ClassTag](elems: RDD[(Id, V)]): IndexedRDD[V] = {
     IndexedRDD(elems, elems.partitioner.getOrElse(new HashPartitioner(elems.partitions.size)))
   }
 
+  /** Constructs an IndexedRDD from an RDD of pairs, merging duplicate keys arbitrarily. */
   def apply[V: ClassTag](elems: RDD[(Id, V)], partitioner: Partitioner): IndexedRDD[V] = {
     IndexedRDD(elems, partitioner, (a, b) => b)
   }
 
+  /** Constructs an IndexedRDD from an RDD of pairs. */
   def apply[V: ClassTag](
       elems: RDD[(Id, V)], partitioner: Partitioner, mergeValues: (V, V) => V): IndexedRDD[V] = {
     val partitioned: RDD[(Id, V)] = elems.partitionWithSerializer(partitioner)
