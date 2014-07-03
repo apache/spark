@@ -27,9 +27,9 @@ if [ -n "$1" ]; then
   EXAMPLE_CLASS="$1"
   shift
 else
-  echo "Usage: ./bin/run-example <example-class> [example-args]"
-  echo "  - set MASTER=XX to use a specific master"
-  echo "  - can use abbreviated example class name (e.g. SparkPi, mllib.LinearRegression)"
+  echo "Usage: ./bin/run-example <example-class> [example-args]" 1>&2
+  echo "  - set MASTER=XX to use a specific master" 1>&2
+  echo "  - can use abbreviated example class name (e.g. SparkPi, mllib.LinearRegression)" 1>&2
   exit 1
 fi
 
@@ -40,8 +40,8 @@ elif [ -e "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.ja
 fi
 
 if [[ -z $SPARK_EXAMPLES_JAR ]]; then
-  echo "Failed to find Spark examples assembly in $FWDIR/lib or $FWDIR/examples/target" >&2
-  echo "You need to build Spark before running this program" >&2
+  echo "Failed to find Spark examples assembly in $FWDIR/lib or $FWDIR/examples/target" 1>&2
+  echo "You need to build Spark before running this program" 1>&2
   exit 1
 fi
 
