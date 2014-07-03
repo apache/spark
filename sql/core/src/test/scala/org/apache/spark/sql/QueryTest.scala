@@ -35,7 +35,7 @@ class QueryTest extends PlanTest {
       case singleItem => Seq(Seq(singleItem))
     }
 
-    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s}.nonEmpty
+    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
     def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
     val sparkAnswer = try rdd.collect().toSeq catch {
       case e: Exception =>
@@ -48,7 +48,7 @@ class QueryTest extends PlanTest {
           """.stripMargin)
     }
 
-    if(prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
+    if (prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
       fail(s"""
         |Results do not match for query:
         |${rdd.logicalPlan}

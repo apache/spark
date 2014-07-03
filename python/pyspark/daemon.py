@@ -103,6 +103,7 @@ def worker(listen_sock):
             if os.fork() == 0:
                 # Leave the worker pool
                 signal.signal(SIGHUP, SIG_DFL)
+                signal.signal(SIGCHLD, SIG_DFL)
                 listen_sock.close()
                 # Read the socket using fdopen instead of socket.makefile() because the latter
                 # seems to be very slow; note that we need to dup() the file descriptor because
