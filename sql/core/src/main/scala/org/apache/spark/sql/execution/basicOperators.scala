@@ -208,7 +208,8 @@ case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
 
 /**
  * :: DeveloperApi ::
- * Returns a table with the elements from left that are not in right using the b * uilt-in spark subtract function.
+ * Returns a table with the elements from left that are not in right using
+ * the built-in spark subtract function.
  */
 @DeveloperApi
 case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
