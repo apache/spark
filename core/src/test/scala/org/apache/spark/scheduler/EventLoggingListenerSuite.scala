@@ -117,6 +117,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
       // Log file name, Spark version, Compression codec, in progress
       ("app1-1234-1.0.inprogress", "1.0", None, true),
       ("app2-1234-0.9.1", "0.9.1", None, false),
+      ("app-with-dashes-in-name-1234-1.0.1.inprogress", "1.0.1", None, true),
       ("app3-1234-0.9-org.apache.spark.io.LZFCompressionCodec", "0.9",
         Some(classOf[LZFCompressionCodec]), false),
       ("app-123456-1234-0.8-org.apache.spark.io.SnappyCompressionCodec.inprogress", "0.8",
@@ -254,20 +255,21 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
 
     // Ensure all asserts have actually been triggered
     eventExistenceListener.assertAllCallbacksInvoked()
-  }
 
-  /**
-   * Assert that all of the specified events are logged by the given EventLoggingListener.
-   *
-   * This is done while the application is still running, so the log file contains the
-   * IN_PROGRESS suffix.
-   */
-  private def assertEventsExist(eventLogger: EventLoggingListener, events: Seq[String]) {
-    val eventLoggingInfo = EventLoggingListener.parseLoggingInfo(
-      new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS))
-    assert(eventLoggingInfo != null)
+    // Make sure expected events exist in the log file.
+    val eventLoggingInfo = EventLoggingListener.parseLoggingInfo(new Path(eventLogger.logPath))
     val lines = readFileLines(eventLoggingInfo.path, eventLoggingInfo.compressionCodec)
-    val eventSet = mutable.Set(events: _*)
+    val eventSet = mutable.Set(
+      Utils.getFormattedClassName(SparkListenerApplicationStart),
+      Utils.getFormattedClassName(SparkListenerBlockManagerAdded),
+      Utils.getFormattedClassName(SparkListenerEnvironmentUpdate),
+      Utils.getFormattedClassName(SparkListenerJobStart),
+      Utils.getFormattedClassName(SparkListenerJobEnd),
+      Utils.getFormattedClassName(SparkListenerStageSubmitted),
+      Utils.getFormattedClassName(SparkListenerStageCompleted),
+      Utils.getFormattedClassName(SparkListenerTaskStart),
+      Utils.getFormattedClassName(SparkListenerTaskEnd),
+      Utils.getFormattedClassName(SparkListenerApplicationEnd))
     lines.foreach { line =>
       eventSet.foreach { event =>
         if (line.contains(event)) {
@@ -307,30 +309,14 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     var appEnded = false
 
     override def onJobStart(jobStart: SparkListenerJobStart) {
-      assertEventsExist(eventLogger, Seq[String](
-        Utils.getFormattedClassName(SparkListenerApplicationStart),
-        Utils.getFormattedClassName(SparkListenerBlockManagerAdded),
-        Utils.getFormattedClassName(SparkListenerEnvironmentUpdate)
-      ))
       jobStarted = true
     }
 
     override def onJobEnd(jobEnd: SparkListenerJobEnd) {
-      assertEventsExist(eventLogger, Seq[String](
-        Utils.getFormattedClassName(SparkListenerJobStart),
-        Utils.getFormattedClassName(SparkListenerJobEnd),
-        Utils.getFormattedClassName(SparkListenerStageSubmitted),
-        Utils.getFormattedClassName(SparkListenerStageCompleted),
-        Utils.getFormattedClassName(SparkListenerTaskStart),
-        Utils.getFormattedClassName(SparkListenerTaskEnd)
-      ))
       jobEnded = true
     }
 
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
-      assertEventsExist(eventLogger, Seq[String](
-        Utils.getFormattedClassName(SparkListenerApplicationEnd)
-      ))
       appEnded = true
     }
 

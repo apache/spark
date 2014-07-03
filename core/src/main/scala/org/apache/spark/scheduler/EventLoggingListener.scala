@@ -222,7 +222,7 @@ private[spark] object EventLoggingListener extends Logging {
       EventLoggingInfo(log, version, codec, inprogress == null)
     } catch {
       case e: Exception =>
-        logError("Exception in parsing logging info from file %s".format(log), e)
+        logWarning("Exception in parsing logging info from file %s".format(log), e)
         null
     }
   }
