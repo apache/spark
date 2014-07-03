@@ -17,15 +17,43 @@
 
 package org.apache.spark.util.random
 
+import scala.collection.{Map, mutable}
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.{mutable, Map}
+import scala.reflect.ClassTag
+
 import org.apache.commons.math3.random.RandomDataGenerator
-import org.apache.spark.{Logging, TaskContext}
-import org.apache.spark.util.random.{PoissonBounds => PB}
-import scala.Some
+import org.apache.spark.{Logging, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
+import org.apache.spark.util.random.{PoissonBounds => PB}
 
 private[spark] object StratifiedSampler extends Logging {
+
+  /**
+   * A version of {@link #aggregate()} that passes the TaskContext to the function that does
+   * aggregation for each partition. This function avoids creating an extra depth in the RDD
+   * lineage, as opposed to using mapPartitionsWithId, which results in slightly improved run time.
+   */
+  def aggregateWithContext[U: ClassTag, T: ClassTag](zeroValue: U)
+      (rdd: RDD[T],
+       seqOp: ((TaskContext, U), T) => U,
+       combOp: (U, U) => U): U = {
+    val sc: SparkContext = rdd.sparkContext
+    // Clone the zero value since we will also be serializing it as part of tasks
+    var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
+    // pad seqOp and combOp with taskContext to conform to aggregate's signature in TraversableOnce
+    val paddedSeqOp = (arg1: (TaskContext, U), item: T) => (arg1._1, seqOp(arg1, item))
+    val paddedcombOp = (arg1: (TaskContext, U), arg2: (TaskContext, U)) =>
+      (arg1._1, combOp(arg1._2, arg1._2))
+    val cleanSeqOp = sc.clean(paddedSeqOp)
+    val cleanCombOp = sc.clean(paddedcombOp)
+    val aggregatePartition = (tc: TaskContext, it: Iterator[T]) =>
+      (it.aggregate(tc, zeroValue)(cleanSeqOp, cleanCombOp))._2
+    val mergeResult = (index: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
+    sc.runJob(rdd, aggregatePartition, mergeResult)
+    jobResult
+  }
+
   /**
    * Returns the function used by aggregate to collect sampling statistics for each partition.
    */
@@ -153,7 +181,7 @@ private[spark] object StratifiedSampler extends Logging {
       val seqOp = StratifiedSampler.getSeqOp[K,V](false, fractionByKey, None)
       val combOp = StratifiedSampler.getCombOp[K]()
       val zeroU = new Result[K](Map[K, Stratum](), seed = seed)
-      val finalResult = rdd.aggregateWithContext(zeroU)(seqOp, combOp).resultMap
+      val finalResult = aggregateWithContext(zeroU)(rdd, seqOp, combOp).resultMap
       samplingRateByKey = StratifiedSampler.computeThresholdByKey(finalResult, fractionByKey)
     }
     (idx: Int, iter: Iterator[(K, V)]) => {
@@ -183,7 +211,7 @@ private[spark] object StratifiedSampler extends Logging {
       val seqOp = StratifiedSampler.getSeqOp[K,V](true, fractionByKey, counts)
       val combOp = StratifiedSampler.getCombOp[K]()
       val zeroU = new Result[K](Map[K, Stratum](), seed = seed)
-      val finalResult = rdd.aggregateWithContext(zeroU)(seqOp, combOp).resultMap
+      val finalResult = aggregateWithContext(zeroU)(rdd, seqOp, combOp).resultMap
       val thresholdByKey = StratifiedSampler.computeThresholdByKey(finalResult, fractionByKey)
       (idx: Int, iter: Iterator[(K, V)]) => {
         val random = new RandomDataGenerator()

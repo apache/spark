@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList}
+import java.util.{Comparator, List => JList, Map => JMap}
 import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConversions._
@@ -128,6 +128,38 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.sample(withReplacement, fraction, seed))
+
+  /**
+   * Return a subset of this RDD sampled by key (via stratified sampling).
+   */
+  def sampleByKey(withReplacement: Boolean,
+      fractions: JMap[K, Double],
+      exact: Boolean,
+      seed: Long): JavaPairRDD[K, V] =
+    new JavaPairRDD[K, V](rdd.sampleByKey(withReplacement, fractions, exact, seed))
+
+
+  /**
+   * Return a subset of this RDD sampled by key (via stratified sampling).
+   */
+  def sampleByKey(withReplacement: Boolean,
+      fractions: JMap[K, Double],
+      exact: Boolean): JavaPairRDD[K, V] =
+    sampleByKey(withReplacement, fractions, exact, Utils.random.nextLong)
+
+  /**
+   * Return a subset of this RDD sampled by key (via stratified sampling).
+   */
+  def sampleByKey(withReplacement: Boolean,
+      fractions: JMap[K, Double],
+      seed: Long): JavaPairRDD[K, V] =
+    sampleByKey(withReplacement, fractions, true, seed)
+
+  /**
+   * Return a subset of this RDD sampled by key (via stratified sampling).
+   */
+  def sampleByKey(withReplacement: Boolean, fractions: JMap[K, Double]): JavaPairRDD[K, V] =
+    sampleByKey(withReplacement, fractions, true, Utils.random.nextLong)
 
   /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple

@@ -19,12 +19,10 @@ package org.apache.spark.rdd
 
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.{HashMap => JHashMap}
+import java.util.{Date, HashMap => JHashMap}
 
+import scala.collection.{Map, mutable}
 import scala.collection.JavaConversions._
-import scala.collection.Map
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
@@ -34,16 +32,14 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job => NewAPIHadoopJob,
+import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat,
 RecordWriter => NewRecordWriter, SparkHadoopMapReduceUtil}
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 
 import org.apache.spark._
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.SparkHadoopWriter
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
@@ -216,24 +212,26 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * need two additional passes.
    *
    * @param withReplacement whether to sample with or without replacement
-   * @param fractionByKey function mapping key to sampling rate
+   * @param fractions map of specific keys to sampling rates
    * @param seed seed for the random number generator
    * @param exact whether sample size needs to be exactly math.ceil(fraction * size) per stratum
    * @return RDD containing the sampled subset
    */
   def sampleByKey(withReplacement: Boolean,
-      fractionByKey: Map[K, Double],
-      seed: Long = Utils.random.nextLong,
-      exact: Boolean = true): RDD[(K, V)]= {
-    require(fractionByKey.forall({case(k, v) => v >= 0.0}), "Invalid sampling rates.")
+      fractions: Map[K, Double],
+      exact: Boolean = true,
+      seed: Long = Utils.random.nextLong): RDD[(K, V)]= {
+
+    require(fractions.forall({case(k, v) => v >= 0.0}), "Invalid sampling rates.")
+
     if (withReplacement) {
       val counts = if (exact) Some(this.countByKey()) else None
       val samplingFunc =
-        StratifiedSampler.getPoissonSamplingFunction(self, fractionByKey, exact, counts, seed)
+        StratifiedSampler.getPoissonSamplingFunction(self, fractions, exact, counts, seed)
       self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
     } else {
       val samplingFunc =
-        StratifiedSampler.getBernoulliSamplingFunction(self, fractionByKey, exact, seed)
+        StratifiedSampler.getBernoulliSamplingFunction(self, fractions, exact, seed)
       self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
     }
   }
