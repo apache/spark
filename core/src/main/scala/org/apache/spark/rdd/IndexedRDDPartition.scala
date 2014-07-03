@@ -28,62 +28,15 @@ import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 import IndexedRDD.Id
 import IndexedRDDPartition.Index
 
-private[spark] object IndexedRDDPartition {
-  type Index = ImmutableLongOpenHashSet
-
-  // Same as apply(iter, (a, b) => b)
-  def apply[V: ClassTag](iter: Iterator[(Id, V)]): IndexedRDDPartition[V] = {
-    val map = new PrimitiveKeyOpenHashMap[Id, V]
-    iter.foreach { pair =>
-      map(pair._1) = pair._2
-    }
-    new IndexedRDDPartition(
-      ImmutableLongOpenHashSet.fromLongOpenHashSet(map.keySet),
-      ImmutableVector.fromArray(map._values),
-      map.keySet.getBitSet.toImmutableBitSet)
-  }
-
-  def apply[V: ClassTag](iter: Iterator[(Id, V)], mergeFunc: (V, V) => V)
-    : IndexedRDDPartition[V] = {
-    val map = new PrimitiveKeyOpenHashMap[Id, V]
-    iter.foreach { pair =>
-      map.setMerge(pair._1, pair._2, mergeFunc)
-    }
-    new IndexedRDDPartition(
-      ImmutableLongOpenHashSet.fromLongOpenHashSet(map.keySet),
-      ImmutableVector.fromArray(map._values),
-      map.keySet.getBitSet.toImmutableBitSet)
-  }
-}
-
-private[spark] trait IndexedRDDPartitionLike[@specialized(Long, Int, Double) V] {
-  def index: Index
-  def values: ImmutableVector[V]
-  def mask: ImmutableBitSet
-
-  val capacity: Int = index.capacity
-
-  def size: Int = mask.cardinality()
-
-  /** Return the value for the given key. */
-  def apply(k: Id): V = values(index.getPos(k))
-
-  // /** Return the value for the given key, or None if it is not defined. */
-  // def get(k: Id): Option[V] = {
-  //   val pos = index.getPos(k)
-  //   if (pos != -1 && mask.get(pos)) Some(values(pos))
-  //   else None
-  // }
-
-  def isDefined(k: Id): Boolean = {
-    val pos = index.getPos(k)
-    pos >= 0 && mask.get(pos)
-  }
-
-  def iterator: Iterator[(Id, V)] =
-    mask.iterator.map(ind => (index.getValue(ind), values(ind)))
-}
-
+/**
+ * An immutable map of key-value `(Id, V)` pairs that enforces key uniqueness and pre-indexes the
+ * entries for efficient joins and point lookups/updates. Two IndexedRDDPartitions with the same
+ * index can be joined efficiently. All operations except [[reindex]] preserve the index. To
+ * construct an `IndexedRDDPartition`, use the [[org.apache.spark.rdd.IndexedRDDPartition$
+ * IndexedRDDPartition object]].
+ *
+ * @tparam V the value associated with each entry in the set.
+ */
 private[spark] class IndexedRDDPartition[@specialized(Long, Int, Double) V](
     val index: Index,
     val values: ImmutableVector[V],
@@ -104,5 +57,37 @@ private[spark] class IndexedRDDPartition[@specialized(Long, Int, Double) V](
 
   def withMask(mask: ImmutableBitSet): IndexedRDDPartition[V] = {
     new IndexedRDDPartition(index, values, mask)
+  }
+}
+
+private[spark] object IndexedRDDPartition {
+  type Index = ImmutableLongOpenHashSet
+
+  /**
+   * Constructs an IndexedRDDPartition from an iterator of pairs, merging duplicate keys
+   * arbitrarily.
+   */
+  def apply[V: ClassTag](iter: Iterator[(Id, V)]): IndexedRDDPartition[V] = {
+    val map = new PrimitiveKeyOpenHashMap[Id, V]
+    iter.foreach { pair =>
+      map(pair._1) = pair._2
+    }
+    new IndexedRDDPartition(
+      ImmutableLongOpenHashSet.fromLongOpenHashSet(map.keySet),
+      ImmutableVector.fromArray(map._values),
+      map.keySet.getBitSet.toImmutableBitSet)
+  }
+
+  /** Constructs an IndexedRDDPartition from an iterator of pairs. */
+  def apply[V: ClassTag](iter: Iterator[(Id, V)], mergeFunc: (V, V) => V)
+    : IndexedRDDPartition[V] = {
+    val map = new PrimitiveKeyOpenHashMap[Id, V]
+    iter.foreach { pair =>
+      map.setMerge(pair._1, pair._2, mergeFunc)
+    }
+    new IndexedRDDPartition(
+      ImmutableLongOpenHashSet.fromLongOpenHashSet(map.keySet),
+      ImmutableVector.fromArray(map._values),
+      map.keySet.getBitSet.toImmutableBitSet)
   }
 }

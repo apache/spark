@@ -45,17 +45,14 @@ class IndexedRDD[@specialized(Long, Int, Double) V: ClassTag]
 
   def pTag[V2]: ClassTag[IndexedRDDPartition[V2]] = classTag[IndexedRDDPartition[V2]]
 
+  def self: IndexedRDD[V] = this
+
   def withPartitionsRDD[V2: ClassTag](
       partitionsRDD: RDD[IndexedRDDPartition[V2]]): IndexedRDD[V2] = {
     new IndexedRDD(partitionsRDD)
   }
-
-  def self: IndexedRDD[V] = this
 }
 
-/**
- * The IndexedRDD singleton is used to construct IndexedRDDs.
- */
 object IndexedRDD {
   /** The key type of IndexedRDDs. */
   type Id = Long
