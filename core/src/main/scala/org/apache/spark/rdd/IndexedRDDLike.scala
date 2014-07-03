@@ -34,7 +34,7 @@ import IndexedRDD.Id
  */
 private[spark] trait IndexedRDDLike[
     @specialized(Long, Int, Double) V,
-    P[X] <: IndexedRDDPartitionBase[X] with IndexedRDDPartitionOps[X, P]]
+    P[X] <: IndexedRDDPartitionLike[X] with IndexedRDDPartitionOps[X, P]]
   extends RDD[(Id, V)] {
 
   /** The underlying representation of the IndexedRDD as an RDD of partitions. */

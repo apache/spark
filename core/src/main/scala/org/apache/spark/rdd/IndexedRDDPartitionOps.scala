@@ -34,7 +34,7 @@ import IndexedRDDPartition.Index
 
 private[spark] trait IndexedRDDPartitionOps[
     @specialized(Long, Int, Double) V,
-    Self[X] <: IndexedRDDPartitionBase[X] with IndexedRDDPartitionOps[X, Self]]
+    Self[X] <: IndexedRDDPartitionLike[X] with IndexedRDDPartitionOps[X, Self]]
   extends Logging {
 
   def self: Self[V]

@@ -56,7 +56,7 @@ private[spark] object IndexedRDDPartition {
   }
 }
 
-private[spark] trait IndexedRDDPartitionBase[@specialized(Long, Int, Double) V] {
+private[spark] trait IndexedRDDPartitionLike[@specialized(Long, Int, Double) V] {
   def index: Index
   def values: ImmutableVector[V]
   def mask: ImmutableBitSet
@@ -89,7 +89,7 @@ private[spark] class IndexedRDDPartition[@specialized(Long, Int, Double) V](
     val values: ImmutableVector[V],
     val mask: ImmutableBitSet)
    (implicit val vTag: ClassTag[V])
-  extends IndexedRDDPartitionBase[V]
+  extends IndexedRDDPartitionLike[V]
   with IndexedRDDPartitionOps[V, IndexedRDDPartition] {
 
   def self: IndexedRDDPartition[V] = this

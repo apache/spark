@@ -39,7 +39,7 @@ import IndexedRDD.Id
  */
 private[spark] trait IndexedRDDOps[
     @specialized(Long, Int, Double) V,
-    P[X] <: IndexedRDDPartitionBase[X] with IndexedRDDPartitionOps[X, P],
+    P[X] <: IndexedRDDPartitionLike[X] with IndexedRDDPartitionOps[X, P],
     Self[X] <: IndexedRDDLike[X, P] with IndexedRDDOps[X, P, Self]]
   extends RDD[(Id, V)] {
 
