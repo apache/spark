@@ -31,7 +31,7 @@ import IndexedRDDFunctions._
 trait IndexedRDDOps[
     @specialized(Long, Int, Double) V,
     P[X] <: IndexedRDDPartitionBase[X] with IndexedRDDPartitionOps[X, P],
-    Self[X] <: IndexedRDDBase[X, P] with IndexedRDDOps[X, P, Self]]
+    Self[X] <: IndexedRDDLike[X, P] with IndexedRDDOps[X, P, Self]]
   extends RDD[(Id, V)] {
 
   implicit def vTag: ClassTag[V]

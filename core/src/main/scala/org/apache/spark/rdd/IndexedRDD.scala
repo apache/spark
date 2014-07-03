@@ -27,7 +27,7 @@ import org.apache.spark.storage.StorageLevel
 import IndexedRDD.Id
 import IndexedRDDFunctions.rdd2IndexedRDDFunctions
 
-private[spark] trait IndexedRDDBase[
+private[spark] trait IndexedRDDLike[
     @specialized(Long, Int, Double) V,
     P[X] <: IndexedRDDPartitionBase[X] with IndexedRDDPartitionOps[X, P]]
   extends RDD[(Id, V)] {
@@ -92,7 +92,7 @@ private[spark] trait IndexedRDDBase[
 class IndexedRDD[@specialized(Long, Int, Double) V: ClassTag]
     (val partitionsRDD: RDD[IndexedRDDPartition[V]])
   extends RDD[(Id, V)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD)))
-  with IndexedRDDBase[V, IndexedRDDPartition]
+  with IndexedRDDLike[V, IndexedRDDPartition]
   with IndexedRDDOps[V, IndexedRDDPartition, IndexedRDD] {
 
   def vTag: ClassTag[V] = classTag[V]
