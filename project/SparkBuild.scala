@@ -38,8 +38,10 @@ object BuildCommons {
     Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl")
       .map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, tools) = Seq("assembly", "examples", "tools")
+  val assemblyProjects@Seq(assembly, examples) = Seq("assembly", "examples")
     .map(ProjectRef(buildLocation, _))
+
+  val tools = "tools"
 
   val sparkHome = buildLocation
 }
