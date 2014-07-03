@@ -194,11 +194,16 @@ private[spark] object JettyUtils extends Logging {
         case s: Success[_] =>
           (server, server.getConnectors.head.getLocalPort)
         case f: Failure[_] =>
+          val nextPort = (currentPort + 1) % 65536
           server.stop()
           pool.stop()
-          logInfo("Failed to create UI at port, %s. Trying again.".format(currentPort))
-          logInfo("Error was: " + f.toString)
-          connect((currentPort + 1) % 65536)
+          val msg = s"Failed to create UI on port $currentPort. Trying again on port $nextPort."
+          if (f.toString.contains("Address already in use")) {
+            logWarning(s"$msg - $f")
+          } else {
+            logError(msg, f.exception)
+          }
+          connect(nextPort)
       }
     }
 

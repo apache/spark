@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Dependency, Partition, Partitioner, ShuffleDependency, SparkEnv, TaskContext}
+import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
 
@@ -35,23 +35,48 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
  * @param part the partitioner used to partition the RDD
  * @tparam K the key class.
  * @tparam V the value class.
+ * @tparam C the combiner class.
  */
 @DeveloperApi
-class ShuffledRDD[K, V, P <: Product2[K, V] : ClassTag](
-    @transient var prev: RDD[P],
+class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
+    @transient var prev: RDD[_ <: Product2[K, V]],
     part: Partitioner)
   extends RDD[P](prev.context, Nil) {
 
   private var serializer: Option[Serializer] = None
 
+  private var keyOrdering: Option[Ordering[K]] = None
+
+  private var aggregator: Option[Aggregator[K, V, C]] = None
+
+  private var mapSideCombine: Boolean = false
+
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
-  def setSerializer(serializer: Serializer): ShuffledRDD[K, V, P] = {
+  def setSerializer(serializer: Serializer): ShuffledRDD[K, V, C, P] = {
     this.serializer = Option(serializer)
     this
   }
 
+  /** Set key ordering for RDD's shuffle. */
+  def setKeyOrdering(keyOrdering: Ordering[K]): ShuffledRDD[K, V, C, P] = {
+    this.keyOrdering = Option(keyOrdering)
+    this
+  }
+
+  /** Set aggregator for RDD's shuffle. */
+  def setAggregator(aggregator: Aggregator[K, V, C]): ShuffledRDD[K, V, C, P] = {
+    this.aggregator = Option(aggregator)
+    this
+  }
+
+  /** Set mapSideCombine flag for RDD's shuffle. */
+  def setMapSideCombine(mapSideCombine: Boolean): ShuffledRDD[K, V, C, P] = {
+    this.mapSideCombine = mapSideCombine
+    this
+  }
+
   override def getDependencies: Seq[Dependency[_]] = {
-    List(new ShuffleDependency(prev, part, serializer))
+    List(new ShuffleDependency(prev, part, serializer, keyOrdering, aggregator, mapSideCombine))
   }
 
   override val partitioner = Some(part)
@@ -61,7 +86,7 @@ class ShuffledRDD[K, V, P <: Product2[K, V] : ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[P] = {
-    val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, V]]
+    val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
     SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context)
       .read()
       .asInstanceOf[Iterator[P]]

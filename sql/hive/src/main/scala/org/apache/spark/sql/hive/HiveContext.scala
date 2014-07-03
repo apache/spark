@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.{Command => PhysicalCommand}
+import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 
 /**
  * Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
@@ -258,7 +259,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         struct.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ))=>
+      case (seq: Seq[_], ArrayType(typ)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
       case (map: Map[_,_], MapType(kType, vType)) =>
         map.map {
@@ -292,6 +293,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
      * execution is simply passed back to Hive.
      */
     def stringResult(): Seq[String] = executedPlan match {
+      case describeHiveTableCommand: DescribeHiveTableCommand =>
+        // If it is a describe command for a Hive table, we want to have the output format
+        // be similar with Hive.
+        describeHiveTableCommand.hiveString
       case command: PhysicalCommand =>
         command.sideEffectResult.map(_.toString)
 

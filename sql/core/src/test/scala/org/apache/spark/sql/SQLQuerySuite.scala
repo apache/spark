@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -404,7 +406,7 @@ class SQLQuerySuite extends QueryTest {
     )
     clear()
   }
-  
+
    test("Skew join") {
     checkAnswer(
       sql("SELECT * FROM upperCaseData SKEW JOIN lowerCaseData "),
@@ -413,5 +415,4 @@ class SQLQuerySuite extends QueryTest {
       (3, "C", 3, "c") ::
       (4, "D", 4, "d") ::Nil)
   }
-
 }
