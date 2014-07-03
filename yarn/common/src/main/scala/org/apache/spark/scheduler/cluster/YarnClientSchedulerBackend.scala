@@ -73,10 +73,17 @@ private[spark] class YarnClientSchedulerBackend(
     .foreach { case (optName, optParam) => addArg(optName, optParam, argsArrayBuf) }
       
     logDebug("ClientArguments called with: " + argsArrayBuf)
-    val args = new ClientArguments(argsArrayBuf.toArray, conf)
-    client = new Client(args, conf)
-    appId = client.runApp()
-    waitForApp()
+    try {
+      val args = new ClientArguments(argsArrayBuf.toArray, conf)
+      client = new Client(args, conf)
+      appId = client.runApp()
+      waitForApp()
+    } catch {
+      case e: IllegalArgumentException => {
+        e.printStackTrace()
+        System.exit(1)
+      }
+    }
   }
 
   def waitForApp() {

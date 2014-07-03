@@ -93,7 +93,6 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
   def run() {
     val appId = runApp()
     monitorApplication(appId)
-    System.exit(0)
   }
 
   def validateArgs() = {
@@ -109,7 +108,7 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     ).foreach { case(cond, errStr) =>
       if (cond) {
         logError(errStr)
-        args.printUsageAndExit(1)
+        throw new IllegalArgumentException(args.getUsageMessage())
       }
     }
   }
@@ -135,17 +134,19 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
 
   def verifyClusterResources(app: GetNewApplicationResponse) = {
     val maxMem = app.getMaximumResourceCapability().getMemory()
-    logInfo("Max mem capabililty of a single resource in this cluster " + maxMem)
+    logInfo("Max mem capability of a single resource in this cluster " + maxMem)
 
     // If we have requested more then the clusters max for a single resource then exit.
     if (args.workerMemory > maxMem) {
-      logError("the worker size is to large to run on this cluster " + args.workerMemory)
-      System.exit(1)
+      val errorMessage = s"the worker size is too large to run on this cluster ${args.workerMemory}"
+      logError(errorMessage)
+      throw new IllegalArgumentException(errorMessage)
     }
     val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
     if (amMem > maxMem) {
-      logError("AM size is to large to run on this cluster " + amMem)
-      System.exit(1)
+      val errorMessage = s"AM size is too large to run on this cluster $amMem"
+      logError(errorMessage)
+      throw new IllegalArgumentException(errorMessage)
     }
 
     // We could add checks to make sure the entire cluster has enough resources but that involves
@@ -229,8 +230,9 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     val delegTokenRenewer = Master.getMasterPrincipal(conf)
     if (UserGroupInformation.isSecurityEnabled()) {
       if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
-        logError("Can't get Master Kerberos principal for use as renewer")
-        System.exit(1)
+        val errorMessage = "Can't get Master Kerberos principal for use as renewer"
+        logError(errorMessage)
+        throw new IllegalArgumentException(errorMessage)
       }
     }
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
@@ -475,9 +477,18 @@ object Client {
     System.setProperty("SPARK_YARN_MODE", "true")
 
     val sparkConf = new SparkConf
-    val args = new ClientArguments(argStrings, sparkConf)
 
-    new Client(args, sparkConf).run
+    try {
+      val args = new ClientArguments(argStrings, sparkConf)
+      new Client(args, sparkConf).run()
+    } catch {
+      case e: Exception => {
+        e.printStackTrace()
+        System.exit(1)
+      }
+    }
+
+    System.exit(0)
   }
 
   // Based on code from org.apache.hadoop.mapreduce.v2.util.MRApps
