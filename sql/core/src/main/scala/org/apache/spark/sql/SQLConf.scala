@@ -64,7 +64,7 @@ trait SQLConf {
   }
 
   def get(key: String): String = {
-    settings.get(key)
+    Option(settings.get(key)).orElse(throw new NoSuchElementException(key))
   }
 
   def get(key: String, defaultValue: String): String = {
