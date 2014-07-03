@@ -39,8 +39,10 @@ class ShuffledDStream[K: ClassTag, V: ClassTag, C: ClassTag](
 
   override def compute(validTime: Time): Option[RDD[(K,C)]] = {
     parent.getOrCompute(validTime) match {
-      case Some(rdd) => Some(rdd.combineByKey[C](
-          createCombiner, mergeValue, mergeCombiner, partitioner, mapSideCombine))
+      case Some(rdd) => {
+        Some(if (rdd.partitions.length==0) rdd.combineByKey(createCombiner, mergeValue, mergeCombiner,0)
+          else rdd.combineByKey[C]( createCombiner, mergeValue, mergeCombiner, partitioner, mapSideCombine))
+      }
       case None => None
     }
   }
