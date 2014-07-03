@@ -100,14 +100,28 @@ class EstimatesSuite extends QueryTest {
       val testRDD = parquetFile(ParquetTestData.testDir.toString)
       testRDD.registerAsTable("psrc")
     }
+    def parquetAfter() = {
+      Utils.deleteRecursively(ParquetTestData.testDir)
+      reset()
+    }
     mkTest(
-     parquetBefore, reset, parquetQuery, parquetAnswer, implicitly[ClassTag[ParquetRelation]])
+      parquetBefore,
+      parquetAfter,
+      parquetQuery,
+      parquetAnswer,
+      implicitly[ClassTag[ParquetRelation]]
+    )
 
     /** Tests for MetastoreRelation */
     val metastoreQuery = """SELECT * FROM src a JOIN src b ON a.key = 238 AND a.key = b.key"""
     val metastoreAnswer = Seq.fill(4)((238, "val_238", 238, "val_238"))
     mkTest(
-      () => (), () => (), metastoreQuery, metastoreAnswer, implicitly[ClassTag[MetastoreRelation]])
+      () => (),
+      () => (),
+      metastoreQuery,
+      metastoreAnswer,
+      implicitly[ClassTag[MetastoreRelation]]
+    )
   }
 
 }
