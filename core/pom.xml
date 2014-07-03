@@ -34,6 +34,12 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>javax.servlet</groupId>
+          <artifactId>servlet-api</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>net.java.dev.jets3t</groupId>
@@ -240,6 +246,11 @@
     <dependency>
       <groupId>org.easymock</groupId>
       <artifactId>easymockclassextension</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>asm</groupId>
+      <artifactId>asm</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

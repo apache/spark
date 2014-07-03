@@ -22,24 +22,22 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
-
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-
 import org.apache.spark.sql.columnar.InMemoryRelation
-
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
-
+import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.SparkContext
 
 /**
  * :: AlphaComponent ::
@@ -53,7 +51,7 @@ import org.apache.spark.sql.parquet.ParquetRelation
 class SQLContext(@transient val sparkContext: SparkContext)
   extends Logging
   with SQLConf
-  with dsl.ExpressionConversions
+  with ExpressionConversions
   with Serializable {
 
   self =>
@@ -96,7 +94,40 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation(path))
+    new SchemaRDD(this, parquet.ParquetRelation(path, Some(sparkContext.hadoopConfiguration)))
+
+  /**
+   * Loads a JSON file (one object per line), returning the result as a [[SchemaRDD]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group userf
+   */
+  def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0)
+
+  /**
+   * :: Experimental ::
+   */
+  @Experimental
+  def jsonFile(path: String, samplingRatio: Double): SchemaRDD = {
+    val json = sparkContext.textFile(path)
+    jsonRDD(json, samplingRatio)
+  }
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[SchemaRDD]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group userf
+   */
+  def jsonRDD(json: RDD[String]): SchemaRDD = jsonRDD(json, 1.0)
+
+  /**
+   * :: Experimental ::
+   */
+  @Experimental
+  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
+    new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
 
   /**
    * :: Experimental ::
@@ -139,7 +170,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(None, tableName, rdd.logicalPlan)
+    val name = tableName
+    val newPlan = rdd.logicalPlan transform {
+      case s @ SparkLogicalPlan(ExistingRdd(_, _), _) => s.copy(tableName = name)
+    }
+    catalog.registerTable(None, tableName, newPlan)
   }
 
   /**
@@ -155,18 +190,23 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Caches the specified table in-memory. */
   def cacheTable(tableName: String): Unit = {
-    val currentTable = catalog.lookupRelation(None, tableName)
-    val useCompression =
-      sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
-    val asInMemoryRelation =
-      InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
+    val currentTable = table(tableName).queryExecution.analyzed
+    val asInMemoryRelation = currentTable match {
+      case _: InMemoryRelation =>
+        currentTable.logicalPlan
+
+      case _ =>
+        val useCompression =
+          sparkContext.conf.getBoolean("spark.sql.inMemoryColumnarStorage.compressed", false)
+        InMemoryRelation(useCompression, executePlan(currentTable).executedPlan)
+    }
 
     catalog.registerTable(None, tableName, asInMemoryRelation)
   }
 
   /** Removes the specified table from the in-memory cache. */
   def uncacheTable(tableName: String): Unit = {
-    EliminateAnalysisOperators(catalog.lookupRelation(None, tableName)) match {
+    table(tableName).queryExecution.analyzed match {
       // This is kind of a hack to make sure that if this was just an RDD registered as a table,
       // we reregister the RDD as a table.
       case inMem @ InMemoryRelation(_, _, e: ExistingRdd) =>
@@ -182,15 +222,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Returns true if the table is currently cached in-memory. */
   def isCached(tableName: String): Boolean = {
-    val relation = catalog.lookupRelation(None, tableName)
-    EliminateAnalysisOperators(relation) match {
+    val relation = table(tableName).queryExecution.analyzed
+    relation match {
       case _: InMemoryRelation => true
       case _ => false
     }
   }
 
   protected[sql] class SparkPlanner extends SparkStrategies {
-    val sparkContext = self.sparkContext
+    val sparkContext: SparkContext = self.sparkContext
+
+    val sqlContext: SQLContext = self
 
     def numPartitions = self.numShufflePartitions
 
@@ -276,6 +318,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
     lazy val sparkPlan = planner(optimizedPlan).next()
+    // executedPlan should not be used to initialize any SparkPlan. It should be
+    // only used for execution.
     lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */

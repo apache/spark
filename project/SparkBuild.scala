@@ -76,7 +76,7 @@ object SparkBuild extends Build {
 
   lazy val catalyst = Project("catalyst", file("sql/catalyst"), settings = catalystSettings) dependsOn(core)
 
-  lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core, catalyst)
+  lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core) dependsOn(catalyst % "compile->compile;test->test")
 
   lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql)
 
@@ -293,7 +293,9 @@ object SparkBuild extends Build {
         "com.novocode"      % "junit-interface"        % "0.10"   % "test",
         "org.easymock"      % "easymockclassextension" % "3.1"    % "test",
         "org.mockito"       % "mockito-all"            % "1.9.0"  % "test",
-        "junit"             % "junit"                  % "4.10"   % "test"
+        "junit"             % "junit"                  % "4.10"   % "test",
+        // Needed by cglib which is needed by easymock.
+        "asm"               % "asm"                    % "3.3.1"  % "test"
     ),
 
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
@@ -369,7 +371,7 @@ object SparkBuild extends Build {
         "net.java.dev.jets3t"        % "jets3t"           % jets3tVersion excludeAll(excludeCommonsLogging),
         "commons-codec"              % "commons-codec"    % "1.5", // Prevent jets3t from including the older version of commons-codec
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
-        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm),
+        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm, excludeServletApi),
         "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeJBossNetty),
         "com.codahale.metrics"       % "metrics-core"     % codahaleMetricsVersion,
         "com.codahale.metrics"       % "metrics-jvm"      % codahaleMetricsVersion,
@@ -461,7 +463,7 @@ object SparkBuild extends Build {
 
   def toolsSettings = sharedSettings ++ Seq(
     name := "spark-tools",
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v),
     libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
   ) ++ assemblySettings ++ extraAssemblySettings
 
@@ -501,9 +503,23 @@ object SparkBuild extends Build {
   def sqlCoreSettings = sharedSettings ++ Seq(
     name := "spark-sql",
     libraryDependencies ++= Seq(
-      "com.twitter" % "parquet-column" % parquetVersion,
-      "com.twitter" % "parquet-hadoop" % parquetVersion
-    )
+      "com.twitter"                  % "parquet-column"             % parquetVersion,
+      "com.twitter"                  % "parquet-hadoop"             % parquetVersion,
+      "com.fasterxml.jackson.core"   % "jackson-databind"           % "2.3.0" // json4s-jackson 3.2.6 requires jackson-databind 2.3.0.
+    ),
+    initialCommands in console :=
+      """
+        |import org.apache.spark.sql.catalyst.analysis._
+        |import org.apache.spark.sql.catalyst.dsl._
+        |import org.apache.spark.sql.catalyst.errors._
+        |import org.apache.spark.sql.catalyst.expressions._
+        |import org.apache.spark.sql.catalyst.plans.logical._
+        |import org.apache.spark.sql.catalyst.rules._
+        |import org.apache.spark.sql.catalyst.types._
+        |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.execution
+        |import org.apache.spark.sql.test.TestSQLContext._
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
   )
 
   // Since we don't include hive in the main assembly this project also acts as an alternative
@@ -616,9 +632,9 @@ object SparkBuild extends Build {
     scalaVersion := "2.10.4",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
-    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq", 
+    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
       "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
-      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx", 
+      "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
       "spark-core").map(sparkPreviousArtifact(_).get intransitive())
   )
 

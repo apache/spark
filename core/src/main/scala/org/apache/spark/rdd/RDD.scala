@@ -340,7 +340,7 @@ abstract class RDD[T: ClassTag](
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
+        new ShuffledRDD[Int, T, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
         numPartitions).values
     } else {
@@ -447,7 +447,7 @@ abstract class RDD[T: ClassTag](
    * Return this RDD sorted by the given key function.
    */
   def sortBy[K](
-      f: (T) ⇒ K,
+      f: (T) => K,
       ascending: Boolean = true,
       numPartitions: Int = this.partitions.size)
       (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] =

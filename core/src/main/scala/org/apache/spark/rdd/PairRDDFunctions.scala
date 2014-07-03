@@ -88,21 +88,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       self.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
-    } else if (mapSideCombine) {
-      val combined = self.mapPartitionsWithContext((context, iter) => {
-        aggregator.combineValuesByKey(iter, context)
-      }, preservesPartitioning = true)
-      val partitioned = new ShuffledRDD[K, C, (K, C)](combined, partitioner)
-        .setSerializer(serializer)
-      partitioned.mapPartitionsWithContext((context, iter) => {
-        new InterruptibleIterator(context, aggregator.combineCombinersByKey(iter, context))
-      }, preservesPartitioning = true)
     } else {
-      // Don't apply map-side combiner.
-      val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializer)
-      values.mapPartitionsWithContext((context, iter) => {
-        new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
-      }, preservesPartitioning = true)
+      new ShuffledRDD[K, V, C, (K, C)](self, partitioner)
+        .setSerializer(serializer)
+        .setAggregator(aggregator)
+        .setMapSideCombine(mapSideCombine)
     }
   }
 
@@ -433,7 +423,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     if (self.partitioner == Some(partitioner)) {
       self
     } else {
-      new ShuffledRDD[K, V, (K, V)](self, partitioner)
+      new ShuffledRDD[K, V, V, (K, V)](self, partitioner)
     }
   }
 
@@ -603,6 +593,28 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
+   */
+  def cogroup[W1, W2, W3](other1: RDD[(K, W1)],
+      other2: RDD[(K, W2)],
+      other3: RDD[(K, W3)],
+      partitioner: Partitioner)
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+    if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
+      throw new SparkException("Default partitioner cannot partition array keys.")
+    }
+    val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
+    cg.mapValues { case Seq(vs, w1s, w2s, w3s) =>
+      (vs.asInstanceOf[Seq[V]],
+        w1s.asInstanceOf[Seq[W1]],
+        w2s.asInstanceOf[Seq[W2]],
+        w3s.asInstanceOf[Seq[W3]])
+    }
+  }
+
+  /**
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
@@ -632,6 +644,16 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
        w1s.asInstanceOf[Seq[W1]],
        w2s.asInstanceOf[Seq[W2]])
     }
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
+   */
+  def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)])
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+    cogroup(other1, other2, other3, defaultPartitioner(self, other1, other2, other3))
   }
 
   /**
@@ -668,6 +690,19 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     cogroup(other1, other2, new HashPartitioner(numPartitions))
   }
 
+  /**
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
+   */
+  def cogroup[W1, W2, W3](other1: RDD[(K, W1)],
+      other2: RDD[(K, W2)],
+      other3: RDD[(K, W3)],
+      numPartitions: Int)
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+    cogroup(other1, other2, other3, new HashPartitioner(numPartitions))
+  }
+
   /** Alias for cogroup. */
   def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, defaultPartitioner(self, other))
@@ -677,6 +712,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
     cogroup(other1, other2, defaultPartitioner(self, other1, other2))
+  }
+
+  /** Alias for cogroup. */
+  def groupWith[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)])
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+    cogroup(other1, other2, other3, defaultPartitioner(self, other1, other2, other3))
   }
 
   /**
@@ -754,8 +795,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
-      hadoopConf: Configuration = self.context.hadoopConfiguration)
+      conf: Configuration = self.context.hadoopConfiguration)
   {
+    // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
+    val hadoopConf = conf
     val job = new NewAPIHadoopJob(hadoopConf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
@@ -787,8 +830,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      hadoopConf: JobConf = new JobConf(self.context.hadoopConfiguration),
+      conf: JobConf = new JobConf(self.context.hadoopConfiguration),
       codec: Option[Class[_ <: CompressionCodec]] = None) {
+    // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
+    val hadoopConf = conf
     hadoopConf.setOutputKeyClass(keyClass)
     hadoopConf.setOutputValueClass(valueClass)
     // Doesn't work in Scala 2.9 due to what may be a generics bug
@@ -814,7 +859,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * output paths required (e.g. a table name to write to) in the same way as it would be
    * configured for a Hadoop MapReduce job.
    */
-  def saveAsNewAPIHadoopDataset(hadoopConf: Configuration) {
+  def saveAsNewAPIHadoopDataset(conf: Configuration) {
+    // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
+    val hadoopConf = conf
     val job = new NewAPIHadoopJob(hadoopConf)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
@@ -871,7 +918,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
    * MapReduce job.
    */
-  def saveAsHadoopDataset(hadoopConf: JobConf) {
+  def saveAsHadoopDataset(conf: JobConf) {
+    // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
+    val hadoopConf = conf
     val outputFormatInstance = hadoopConf.getOutputFormat
     val keyClass = hadoopConf.getOutputKeyClass
     val valueClass = hadoopConf.getOutputValueClass

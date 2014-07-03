@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -404,5 +406,4 @@ class SQLQuerySuite extends QueryTest {
     )
     clear()
   }
-
 }

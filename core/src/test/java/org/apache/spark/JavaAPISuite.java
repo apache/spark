@@ -18,9 +18,13 @@
 package org.apache.spark;
 
 import java.io.*;
+import java.net.URI;
 import java.util.*;
 
 import scala.Tuple2;
+import scala.Tuple3;
+import scala.Tuple4;
+
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
@@ -300,6 +304,66 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals("[Fruit, Citrus]",
                         Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
     Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
+
+    cogrouped.collect();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void cogroup3() {
+    JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, String>("Apples", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Citrus")
+      ));
+    JavaPairRDD<String, Integer> prices = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 2),
+      new Tuple2<String, Integer>("Apples", 3)
+    ));
+    JavaPairRDD<String, Integer> quantities = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 21),
+      new Tuple2<String, Integer>("Apples", 42)
+    ));
+
+    JavaPairRDD<String, Tuple3<Iterable<String>, Iterable<Integer>, Iterable<Integer>>> cogrouped =
+        categories.cogroup(prices, quantities);
+    Assert.assertEquals("[Fruit, Citrus]",
+                        Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
+    Assert.assertEquals("[42]", Iterables.toString(cogrouped.lookup("Apples").get(0)._3()));
+
+
+    cogrouped.collect();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void cogroup4() {
+    JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, String>("Apples", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Citrus")
+      ));
+    JavaPairRDD<String, Integer> prices = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 2),
+      new Tuple2<String, Integer>("Apples", 3)
+    ));
+    JavaPairRDD<String, Integer> quantities = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, Integer>("Oranges", 21),
+      new Tuple2<String, Integer>("Apples", 42)
+    ));
+    JavaPairRDD<String, String> countries = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, String>("Oranges", "BR"),
+      new Tuple2<String, String>("Apples", "US")
+    ));
+
+    JavaPairRDD<String, Tuple4<Iterable<String>, Iterable<Integer>, Iterable<Integer>, Iterable<String>>> cogrouped =
+        categories.cogroup(prices, quantities, countries);
+    Assert.assertEquals("[Fruit, Citrus]",
+                        Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
+    Assert.assertEquals("[42]", Iterables.toString(cogrouped.lookup("Apples").get(0)._3()));
+    Assert.assertEquals("[BR]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._4()));
 
     cogrouped.collect();
   }
@@ -678,7 +742,7 @@ public class JavaAPISuite implements Serializable {
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
     TaskContext context = new TaskContext(0, 0, 0, false, new TaskMetrics());
-    Assert.assertEquals(1, rdd.iterator(rdd.splits().get(0), context).next().intValue());
+    Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 
   @Test
@@ -705,7 +769,7 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void wholeTextFiles() throws IOException {
+  public void wholeTextFiles() throws Exception {
     byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
     byte[] content2 = "spark is also easy to use.\n".getBytes("utf-8");
 
@@ -721,7 +785,7 @@ public class JavaAPISuite implements Serializable {
     List<Tuple2<String, String>> result = readRDD.collect();
 
     for (Tuple2<String, String> res : result) {
-      Assert.assertEquals(res._2(), container.get(res._1()));
+      Assert.assertEquals(res._2(), container.get(new URI(res._1()).getPath()));
     }
   }
 

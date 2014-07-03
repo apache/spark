@@ -106,6 +106,8 @@ private[spark] class Stage(
     id
   }
 
+  def attemptId: Int = nextAttemptId
+
   val name = callSite.short
   val details = callSite.long
 

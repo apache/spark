@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
@@ -71,6 +72,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     "Complete Tasks",
     "Total Tasks",
     "Task Time",
+    "Input Bytes",
     "Shuffle Read",
     "Shuffle Write")
 
@@ -79,6 +81,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val maximumMemory = values("Maximum Memory")
     val memoryUsed = values("Memory Used")
     val diskUsed = values("Disk Used")
+    // scalastyle:off
     <tr>
       <td>{values("Executor ID")}</td>
       <td>{values("Address")}</td>
@@ -94,10 +97,12 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       <td>{values("Failed Tasks")}</td>
       <td>{values("Complete Tasks")}</td>
       <td>{values("Total Tasks")}</td>
-      <td>{Utils.msDurationToString(values("Task Time").toLong)}</td>
-      <td>{Utils.bytesToString(values("Shuffle Read").toLong)}</td>
-      <td>{Utils.bytesToString(values("Shuffle Write").toLong)}</td>
+      <td sorttable_customkey={values("Task Time")}>{Utils.msDurationToString(values("Task Time").toLong)}</td>
+      <td sorttable_customkey={values("Input Bytes")}>{Utils.bytesToString(values("Input Bytes").toLong)}</td>
+      <td sorttable_customkey={values("Shuffle Read")}>{Utils.bytesToString(values("Shuffle Read").toLong)}</td>
+      <td sorttable_customkey={values("Shuffle Write")} >{Utils.bytesToString(values("Shuffle Write").toLong)}</td>
     </tr>
+    // scalastyle:on
   }
 
   /** Represent an executor's info as a map given a storage status index */
@@ -105,7 +110,9 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val status = listener.storageStatusList(statusId)
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
-    val rddBlocks = status.blocks.size
+    val rddBlocks = status.blocks.count { case (_, blockStatus) =>
+      blockStatus.storageLevel != StorageLevel.NONE
+    }
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
@@ -114,6 +121,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
     val totalTasks = activeTasks + failedTasks + completedTasks
     val totalDuration = listener.executorToDuration.getOrElse(execId, 0)
+    val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0)
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0)
 
@@ -131,6 +139,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       completedTasks,
       totalTasks,
       totalDuration,
+      totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
       maxMem
