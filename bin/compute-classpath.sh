@@ -65,10 +65,10 @@ fi
 # Verify that versions of java used to build the jars and run Spark are compatible
 jar_error_check=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" nonexistent/class/path 2>&1)
 if [[ "$jar_error_check" =~ "invalid CEN header" ]]; then
-  echo "Loading Spark jar with '$JAR_CMD' failed. "
-  echo "This is likely because Spark was compiled with Java 7 and run "
-  echo "with Java 6. (see SPARK-1703). Please use Java 7 to run Spark "
-  echo "or build Spark with Java 6."
+  echo "Loading Spark jar with '$JAR_CMD' failed. " 1>&2
+  echo "This is likely because Spark was compiled with Java 7 and run " 1>&2
+  echo "with Java 6. (see SPARK-1703). Please use Java 7 to run Spark " 1>&2
+  echo "or build Spark with Java 6." 1>&2
   exit 1
 fi
 
