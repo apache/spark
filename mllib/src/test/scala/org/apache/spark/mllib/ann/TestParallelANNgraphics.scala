@@ -63,45 +63,45 @@ class OutputCanvas2D( wd: Int, ht: Int ) extends Canvas {
   
   override def paint( g: Graphics) = {
 	  
-	  var xmax: Double = 0.0
-	  var xmin: Double = 0.0
-	  var ymax: Double = 0.0
-	  var ymin: Double = 0.0
+    var xmax: Double = 0.0
+    var xmin: Double = 0.0
+    var ymax: Double = 0.0
+    var ymin: Double = 0.0
 	  
-	  if( points!=null ) {
+    if( points!=null ) {
 	  
-	    g.setColor( Color.black )
-	    val x = points.map( T => (T.toArray)(0) )
-	    val y = points.map( T => (T.toArray)(1) )
+      g.setColor( Color.black )
+      val x = points.map( T => (T.toArray)(0) )
+      val y = points.map( T => (T.toArray)(1) )
 		  
-	    xmax = x.max
-	    xmin = x.min
-	    ymax = y.max
-	    ymin = y.min
+      xmax = x.max
+      xmin = x.min
+      ymax = y.max
+      ymin = y.min
 		  
-	    for( i <- 0 to x.size-1 ) {
+      for( i <- 0 to x.size-1 ) {
 	    
-	      val xr = (((x(i).toDouble-xmin)/(xmax-xmin))*wd+.5).toInt
-	      val yr = (((y(i).toDouble-ymin)/(ymax-ymin))*ht+.5).toInt	    
-	      plotDot( g, xr, yr )
+        val xr = (((x(i).toDouble-xmin)/(xmax-xmin))*wd+.5).toInt
+        val yr = (((y(i).toDouble-ymin)/(ymax-ymin))*ht+.5).toInt	    
+        plotDot( g, xr, yr )
 	    
-	    }
+      }
 	  
       if( approxPoints != null ) {
         
-	      g.setColor( Color.red )
-		    val x = approxPoints.map( T => (T.toArray)(0) )
-		    val y = approxPoints.map( T => (T.toArray)(1) )
+        g.setColor( Color.red )
+        val x = approxPoints.map( T => (T.toArray)(0) )
+        val y = approxPoints.map( T => (T.toArray)(1) )
 		
-		    for( i <- 0 to x.size-1 ) {
-		      val xr = (((x(i).toDouble-xmin)/(xmax-xmin))*wd+.5).toInt
-		      val yr = (((y(i).toDouble-ymin)/(ymax-ymin))*ht+.5).toInt
-		      plotDot( g, xr, yr )
-		    }
+        for( i <- 0 to x.size-1 ) {
+          val xr = (((x(i).toDouble-xmin)/(xmax-xmin))*wd+.5).toInt
+          val yr = (((y(i).toDouble-ymin)/(ymax-ymin))*ht+.5).toInt
+          plotDot( g, xr, yr )
+        }
 		    
-	    }
+      }
 
-	  }
+    }
 	  
   }
 }
@@ -205,77 +205,77 @@ class OutputCanvas3D( wd: Int, ht: Int, shadowFrac: Double ) extends Canvas {
   
   override def paint( g: Graphics) = {	
 	  
-	if( points!=null ) {
+    if( points!=null ) {
 		  
-	  var p = points.map( T => calcCord( T.toArray, angle ) ).toArray
+      var p = points.map( T => calcCord( T.toArray, angle ) ).toArray
 		  
-	  var xmax = p(0)._1
-	  var xmin = p(0)._1
-	  var ymax = p(0)._2
-	  var ymin = p(0)._2
+      var xmax = p(0)._1
+      var xmin = p(0)._1
+      var ymax = p(0)._2
+      var ymin = p(0)._2
 		  
-	  for( i <-0 to p.size-1 ) {
+      for( i <-0 to p.size-1 ) {
 
-		  if( xmax<p(i)._1 ) xmax = p(i)._1
-	  	if( xmax<p(i)._3 ) xmax = p(i)._3
-		  if( xmax<p(i)._5 ) xmax = p(i)._5		    
+        if( xmax<p(i)._1 ) xmax = p(i)._1
+  	if( xmax<p(i)._3 ) xmax = p(i)._3
+        if( xmax<p(i)._5 ) xmax = p(i)._5		    
 
-		  if( xmin>p(i)._1 ) xmin = p(i)._1
-		  if( xmin>p(i)._3 ) xmin = p(i)._3
-		  if( xmin>p(i)._5 ) xmin = p(i)._5		    
+        if( xmin>p(i)._1 ) xmin = p(i)._1
+        if( xmin>p(i)._3 ) xmin = p(i)._3
+        if( xmin>p(i)._5 ) xmin = p(i)._5		    
 
-		  if( ymax<p(i)._2 ) ymax = p(i)._2
-		  if( ymax<p(i)._4 ) ymax = p(i)._4
-		  if( ymax<p(i)._6 ) ymax = p(i)._6		    
+        if( ymax<p(i)._2 ) ymax = p(i)._2
+        if( ymax<p(i)._4 ) ymax = p(i)._4
+        if( ymax<p(i)._6 ) ymax = p(i)._6		    
 
-		  if( ymin>p(i)._2 ) ymin = p(i)._2
-		  if( ymin>p(i)._4 ) ymin = p(i)._4
-		  if( ymin>p(i)._6 ) ymin = p(i)._6		    
+        if( ymin>p(i)._2 ) ymin = p(i)._2
+        if( ymin>p(i)._4 ) ymin = p(i)._4
+        if( ymin>p(i)._6 ) ymin = p(i)._6		    
 		      
-	  }
+      }
 		  
-	  for( i <- 0 to p.size-1 ) {
+      for( i <- 0 to p.size-1 ) {
 
-		  var x_ = (((p(i)._1-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
-	    var y_ = (((p(i)._2-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt
-	    var x0 = (((p(i)._3-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
-  	  var y0 = (((p(i)._4-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt  	        
-  	  var xs = (((p(i)._5-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
-  	  var ys = (((p(i)._6-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt
+        var x_ = (((p(i)._1-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
+        var y_ = (((p(i)._2-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt
+        var x0 = (((p(i)._3-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
+        var y0 = (((p(i)._4-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt  	        
+        var xs = (((p(i)._5-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
+        var ys = (((p(i)._6-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt
   	        
-		  g.setColor( Color.black )
+        g.setColor( Color.black )
 		  
-		  plotDot( g, x_, y_ )
-	    plotLine( g, x_, y_, x0, y0 )
-	    g.setColor( Color.gray )
-	    plotLine( g, x0, y0, xs, ys )
-		    
-	  }	  
+        plotDot( g, x_, y_ )
+        plotLine( g, x_, y_, x0, y0 )
+        g.setColor( Color.gray )
+        plotLine( g, x0, y0, xs, ys )
+	    
+      }	  
 		  		  
-	  if( approxPoints != null ) {
+      if( approxPoints != null ) {
 		    
-  		var p = approxPoints.map( T => calcCord( T.toArray, angle ) )
+        var p = approxPoints.map( T => calcCord( T.toArray, angle ) )
 			  			    
-		for( i <- 0 to p.size-1 ) {
+        for( i <- 0 to p.size-1 ) {
 	
-		  var x_ = (((p(i)._1-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
-		  var y_ = (((p(i)._2-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt
-		  var x0 = (((p(i)._3-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
-	  	  var y0 = (((p(i)._4-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt  	        
-	  	  var xs = (((p(i)._5-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
-	  	  var ys = (((p(i)._6-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt
+          var x_ = (((p(i)._1-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
+          var y_ = (((p(i)._2-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt
+          var x0 = (((p(i)._3-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
+          var y0 = (((p(i)._4-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt  	        
+          var xs = (((p(i)._5-xmin)/(xmax-xmin))*(wd-40)+20.5).toInt
+          var ys = (((p(i)._6-ymin)/(ymax-ymin))*(ht-40)+20.5).toInt
 	  	        
-		  g.setColor( Color.red )
-		  plotDot( g, x_, y_ )
-		  plotLine( g, x_, y_, x0, y0 )
-		  g.setColor( Color.magenta )
-		  plotLine( g, x0, y0, xs, ys )
+          g.setColor( Color.red )
+          plotDot( g, x_, y_ )
+          plotLine( g, x_, y_, x0, y0 )
+          g.setColor( Color.magenta )
+          plotLine( g, x0, y0, xs, ys )
 			    
-	    }	  
+        }	  
 		    
-	  }		  		  
+      }		  		  
 
-	}
+    }
   }
 }
 
