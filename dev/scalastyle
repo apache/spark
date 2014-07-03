@@ -19,7 +19,7 @@
 
 echo -e "q\n" | SPARK_HIVE=true sbt/sbt scalastyle > scalastyle.txt
 # Check style with YARN alpha built too
-echo -e "q\n" | sbt/sbt -Dhadoop.version=0.23.9 -Pyarn-alpha  yarn-alpha/scalastyle \
+echo -e "q\n" | SPARK_HADOOP_VERSION=0.23.9 SPARK_YARN=true sbt/sbt yarn-alpha/scalastyle \
   >> scalastyle.txt
 # Check style with YARN built too
 echo -e "q\n" | SPARK_HADOOP_VERSION=2.2.0 SPARK_YARN=true sbt/sbt yarn/scalastyle \
