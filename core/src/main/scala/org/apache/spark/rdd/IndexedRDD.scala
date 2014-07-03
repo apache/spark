@@ -76,28 +76,10 @@ object IndexedRDD {
   /** Constructs an IndexedRDD from an RDD of pairs. */
   def apply[V: ClassTag](
       elems: RDD[(Id, V)], partitioner: Partitioner, mergeValues: (V, V) => V): IndexedRDD[V] = {
-    val partitioned: RDD[(Id, V)] = IndexedRDD.partitionWithSerializer(elems, partitioner)
+    val partitioned: RDD[(Id, V)] = elems.partitionBy(partitioner)
     val partitions = partitioned.mapPartitions(
       iter => Iterator(IndexedRDDPartition(iter, mergeValues)),
       preservesPartitioning = true)
     new IndexedRDD(partitions)
-  }
-
-  /** Partitions `rdd` according to `partitioner` using a custom serializer for primitive values. */
-  private[spark] def partitionWithSerializer(
-      rdd: RDD[(Id, V)], partitioner: Partitioner): RDD[(Id, V)] = {
-    val rdd =
-      if (self.partitioner == partitioner) self
-      else new ShuffledRDD[Id, V, (Id, V)](self, partitioner)
-
-    // Set a custom serializer if the data is of primitive type.
-    // if (classTag[V] == ClassTag.Int) {
-    //   rdd.setSerializer(new IdIntPairSerializer)
-    // } else if (classTag[V] == ClassTag.Long) {
-    //   rdd.setSerializer(new IdLongPairSerializer)
-    // } else if (classTag[V] == ClassTag.Double) {
-    //   rdd.setSerializer(new IdDoublePairSerializer)
-    // }
-    rdd
   }
 }

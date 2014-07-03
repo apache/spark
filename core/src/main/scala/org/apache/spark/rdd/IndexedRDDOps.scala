@@ -133,7 +133,7 @@ private[spark] trait IndexedRDDOps[
   /** Applies a function to corresponding partitions of `this` and `other`. */
   protected def zipPartitionsWithOther[V2: ClassTag, V3: ClassTag](other: RDD[(Id, V2)])
       (f: OtherZipPartitionsFunction[V2, V3]): Self[V3] = {
-    val partitioned = IndexedRDD.partitionWithSerializer(other, self.partitioner.get)
+    val partitioned = other.partitionBy(self.partitioner.get)
     val newPartitionsRDD = self.partitionsRDD.zipPartitions(partitioned, true)(f)
     withPartitionsRDD(newPartitionsRDD)
   }
