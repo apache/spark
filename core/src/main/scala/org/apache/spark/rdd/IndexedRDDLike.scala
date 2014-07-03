@@ -27,7 +27,7 @@ import IndexedRDD.Id
 import IndexedRDDFunctions.rdd2IndexedRDDFunctions
 
 /**
- * Contains members that are shared between all variants of IndexedRDD (e.g., IndexedRDD,
+ * Contains members that are shared among all variants of IndexedRDD (e.g., IndexedRDD,
  * VertexRDD).
  *
  * @tparam V the type of the values stored in the IndexedRDD
