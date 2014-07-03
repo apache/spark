@@ -103,7 +103,7 @@ case class Alias(child: Expression, name: String)
  * A reference to an attribute produced by another operator in the tree.
  *
  * @param name The name of this attribute, should only be used during analysis or for debugging.
- * @param dataType The [[types.DataType DataType]] of this attribute.
+ * @param dataType The [[DataType]] of this attribute.
  * @param nullable True if null is a valid value for this attribute.
  * @param exprId A globally unique id used to check if different AttributeReferences refer to the
  *               same attribute.

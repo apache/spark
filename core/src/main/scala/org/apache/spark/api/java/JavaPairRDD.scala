@@ -544,6 +544,18 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2, partitioner)))
 
   /**
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
+   */
+  def cogroup[W1, W2, W3](other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      other3: JavaPairRDD[K, W3],
+      partitioner: Partitioner)
+  : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3])] =
+    fromRDD(cogroupResult3ToJava(rdd.cogroup(other1, other2, other3, partitioner)))
+
+  /**
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
@@ -557,6 +569,17 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def cogroup[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2])
   : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2)))
+
+  /**
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
+   */
+  def cogroup[W1, W2, W3](other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      other3: JavaPairRDD[K, W3])
+  : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3])] =
+    fromRDD(cogroupResult3ToJava(rdd.cogroup(other1, other2, other3)))
 
   /**
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
@@ -574,6 +597,18 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2, numPartitions)))
 
+  /**
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
+   */
+  def cogroup[W1, W2, W3](other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      other3: JavaPairRDD[K, W3],
+      numPartitions: Int)
+  : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3])] =
+    fromRDD(cogroupResult3ToJava(rdd.cogroup(other1, other2, other3, numPartitions)))
+
   /** Alias for cogroup. */
   def groupWith[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JIterable[V], JIterable[W])] =
     fromRDD(cogroupResultToJava(rdd.groupWith(other)))
@@ -582,6 +617,13 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def groupWith[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2])
   : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.groupWith(other1, other2)))
+
+  /** Alias for cogroup. */
+  def groupWith[W1, W2, W3](other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      other3: JavaPairRDD[K, W3])
+  : JavaPairRDD[K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3])] =
+    fromRDD(cogroupResult3ToJava(rdd.groupWith(other1, other2, other3)))
 
   /**
    * Return the list of values in the RDD for key `key`. This operation is done efficiently if the
@@ -784,6 +826,15 @@ object JavaPairRDD {
       : RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2]))] = {
     rddToPairRDDFunctions(rdd)
       .mapValues(x => (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3)))
+  }
+
+  private[spark]
+  def cogroupResult3ToJava[K: ClassTag, V, W1, W2, W3](
+      rdd: RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))])
+  : RDD[(K, (JIterable[V], JIterable[W1], JIterable[W2], JIterable[W3]))] = {
+    rddToPairRDDFunctions(rdd)
+      .mapValues(x =>
+        (asJavaIterable(x._1), asJavaIterable(x._2), asJavaIterable(x._3), asJavaIterable(x._4)))
   }
 
   def fromRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): JavaPairRDD[K, V] = {

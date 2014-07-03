@@ -133,8 +133,13 @@ class SchemaRDD(
    *
    * @group Query
    */
-  def select(exprs: NamedExpression*): SchemaRDD =
-    new SchemaRDD(sqlContext, Project(exprs, logicalPlan))
+  def select(exprs: Expression*): SchemaRDD = {
+    val aliases = exprs.zipWithIndex.map {
+      case (ne: NamedExpression, _) => ne
+      case (e, i) => Alias(e, s"c$i")()
+    }
+    new SchemaRDD(sqlContext, Project(aliases, logicalPlan))
+  }
 
   /**
    * Filters the output, only returning those rows where `condition` evaluates to true.
