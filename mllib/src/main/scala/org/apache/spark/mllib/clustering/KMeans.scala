@@ -117,6 +117,11 @@ class KMeans private (
    * performance, because this is an iterative algorithm.
    */
   def run(data: RDD[Vector]): KMeansModel = {
+
+    if (data.count() < k) {
+      throw new IllegalArgumentException("Number of clusters must not be greater than data number")
+    }
+
     // Compute squared norms and cache them.
     val norms = data.map(v => breezeNorm(v.toBreeze, 2.0))
     norms.persist()
