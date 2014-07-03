@@ -208,11 +208,10 @@ case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
 
 /**
  * :: DeveloperApi ::
- * This operator support the substract function .
- * Return an table with the elements from `left` that are not in `right`.
+ * Returns a table with the elements from left that are not in right using the b * uilt-in spark subtract function.
  */
 @DeveloperApi
-case class Subtract(left: SparkPlan, right: SparkPlan) extends BinaryNode {
+case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   override def output = left.output
 
   override def execute() = {
