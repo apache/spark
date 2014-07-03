@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.execution.{BuildRight, BroadcastHashJoin}
-
 import scala.util.Try
 
-import org.apache.spark.sql.{SchemaRDD, Row}
-import org.apache.spark.sql.hive.MetastoreRelation
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.{Row, SchemaRDD}
 
 case class TestData(a: Int, b: String)
 

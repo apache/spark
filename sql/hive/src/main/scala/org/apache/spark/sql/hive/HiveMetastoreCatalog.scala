@@ -271,6 +271,7 @@ private[hive] case class MetastoreRelation
 
   // TODO: are there any stats in hiveQlTable.getSkewedInfo that we can use?
   @transient override lazy val estimates = new Estimates {
+    // TODO: check if this estimate is valid for tables after partition pruning.
     // Size getters adapted from SizeBasedBigTableSelectorForAutoSMJ.java in Hive (version 0.13).
     override lazy val sizeInBytes: Long =
       maybeGetSize(hiveConf, hiveQlTable.getProperty("totalSize"), path)
