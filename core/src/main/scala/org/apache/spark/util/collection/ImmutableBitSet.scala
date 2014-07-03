@@ -56,7 +56,7 @@ class ImmutableBitSet(val numBits: Int, val words: ImmutableVector[Long]) extend
     val otherWordsIter = other.words.iterator
     var i = 0
     while (thisWordsIter.hasNext && otherWordsIter.hasNext) {
-      newWords(i) = thisWordsIter.next() & otherWordsIter.next()
+      newWords(i) = thisWordsIter.next() | otherWordsIter.next()
       i += 1
     }
     while (thisWordsIter.hasNext) {

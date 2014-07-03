@@ -32,11 +32,7 @@ class ImmutableBitSetSuite extends FunSuite {
     setBits.foreach(i => bitset = bitset.set(i))
 
     for (i <- 0 until 100) {
-      if (setBits.contains(i)) {
-        assert(bitset.get(i))
-      } else {
-        assert(!bitset.get(i))
-      }
+      assert(bitset.get(i) === setBits.contains(i))
     }
     assert(bitset.cardinality() === setBits.size)
     assert(bitset.iterator.toSet === setBits.toSet)
@@ -52,5 +48,27 @@ class ImmutableBitSetSuite extends FunSuite {
       assert(bitset.get(i))
     }
     assert(bitset.cardinality() === 10000)
+  }
+
+  test("&, |") {
+    val aList = List(0, 9, 10, 90, 96)
+    val bList = List(0, 1, 10)
+    val andSet = Set(0, 10)
+    val orSet = Set(0, 1, 9, 10, 90, 96)
+    var a = new ImmutableBitSet(100)
+    var b = new ImmutableBitSet(100)
+
+    aList.foreach(i => a = a.set(i))
+    bList.foreach(i => b = b.set(i))
+
+    val and = a & b
+    for (i <- 0 until 100) {
+      assert(and.get(i) === andSet.contains(i))
+    }
+
+    val or = a | b
+    for (i <- 0 until 100) {
+      assert(or.get(i) === orSet.contains(i))
+    }
   }
 }
