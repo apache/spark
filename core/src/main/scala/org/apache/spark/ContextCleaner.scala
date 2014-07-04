@@ -63,6 +63,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     with SynchronizedBuffer[CleanerListener]
 
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
+  
+  private var broadcastRefCounts = Map(0L -> 0L)
 
   /**
    * Whether the cleaning thread will block on cleanup tasks.
@@ -102,9 +104,25 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Register a Broadcast for cleanup when it is garbage collected. */
   def registerBroadcastForCleanup[T](broadcast: Broadcast[T]) {
+    incBroadcastRefCount(broadcast.id)
     registerForCleanup(broadcast, CleanBroadcast(broadcast.id))
   }
 
+  private def incBroadcastRefCount[T](bid: Long) {
+    val newRefCount: Long = this.broadcastRefCounts.getOrElse(bid, 0L) + 1
+    this.broadcastRefCounts = this.broadcastRefCounts + Pair(bid, newRefCount)
+  }
+  
+  private def decBroadcastRefCount[T](bid: Long) = {
+    this.broadcastRefCounts.get(bid) match {
+      case Some(rc:Long) if rc > 0 => {
+        this.broadcastRefCounts = this.broadcastRefCounts + Pair(bid, rc - 1)
+        rc - 1
+      }
+      case _ => 0
+    }
+  }
+  
   /** Register an object for cleanup. */
   private def registerForCleanup(objectForCleanup: AnyRef, task: CleanupTask) {
     referenceBuffer += new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue)
@@ -161,14 +179,18 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Perform broadcast cleanup. */
   def doCleanupBroadcast(broadcastId: Long, blocking: Boolean) {
-    try {
-      logDebug("Cleaning broadcast " + broadcastId)
-      broadcastManager.unbroadcast(broadcastId, true, blocking)
-      listeners.foreach(_.broadcastCleaned(broadcastId))
-      logInfo("Cleaned broadcast " + broadcastId)
-    } catch {
-      case e: Exception => logError("Error cleaning broadcast " + broadcastId, e)
+    decBroadcastRefCount(broadcastId) match {
+      case x if x > 0 => {} 
+      case _ => try {
+        logDebug("Cleaning broadcast " + broadcastId)
+        broadcastManager.unbroadcast(broadcastId, true, blocking)
+        listeners.foreach(_.broadcastCleaned(broadcastId))
+        logInfo("Cleaned broadcast " + broadcastId)
+      } catch {
+        case e: Exception => logError("Error cleaning broadcast " + broadcastId, e)
+      }
     }
+    
   }
 
   private def blockManagerMaster = sc.env.blockManager.master
