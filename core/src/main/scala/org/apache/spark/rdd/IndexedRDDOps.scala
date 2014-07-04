@@ -107,16 +107,13 @@ private[spark] trait IndexedRDDOps[
     zipPartitionsWithOther(deletions)(new DeleteZipper)
   }
 
-  /**
-   * Applies a function to each partition of this IndexedRDD.
-   */
-  protected def mapIndexedRDDPartitions[V2: ClassTag](
-      f: P[V] => P[V2]): Self[V2] = {
+  /** Applies a function to each partition of this IndexedRDD. */
+  protected def mapIndexedRDDPartitions[V2: ClassTag](f: P[V] => P[V2]): Self[V2] = {
     val newPartitionsRDD = self.partitionsRDD.mapPartitions(_.map(f), preservesPartitioning = true)
     withPartitionsRDD(newPartitionsRDD)
   }
 
-  /** Applies a function to corresponding partitions of `this` and `other`. */
+  /** Applies a function to corresponding partitions of `this` and another IndexedRDD. */
   protected def zipIndexedRDDPartitions[V2: ClassTag, V3: ClassTag](other: Self[V2])
       (f: ZipPartitionsFunction[V2, V3]): Self[V3] = {
     assert(self.partitioner == other.partitioner)
@@ -124,7 +121,7 @@ private[spark] trait IndexedRDDOps[
     withPartitionsRDD(newPartitionsRDD)
   }
 
-  /** Applies a function to corresponding partitions of `this` and `other`. */
+  /** Applies a function to corresponding partitions of `this` and a pair RDD. */
   protected def zipPartitionsWithOther[V2: ClassTag, V3: ClassTag](other: RDD[(Id, V2)])
       (f: OtherZipPartitionsFunction[V2, V3]): Self[V3] = {
     val partitioned = other.partitionBy(self.partitioner.get)
@@ -212,10 +209,10 @@ private[spark] trait IndexedRDDOps[
   // The following functions could have been anonymous, but we name them to work around a Scala
   // compiler bug related to specialization.
 
-  private type ZipPartitionsFunction[V2, V3] =
+  protected type ZipPartitionsFunction[V2, V3] =
     Function2[Iterator[P[V]], Iterator[P[V2]], Iterator[P[V3]]]
 
-  private type OtherZipPartitionsFunction[V2, V3] =
+  protected type OtherZipPartitionsFunction[V2, V3] =
     Function2[Iterator[P[V]], Iterator[(Id, V2)], Iterator[P[V3]]]
 
   private class MultiputZipper(merge: (Id, V, V) => V)

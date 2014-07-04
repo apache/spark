@@ -67,16 +67,20 @@ private[spark] class ImmutableBitSet(val numBits: Int, val words: ImmutableVecto
 
   /** Returns a new ImmutableBitSet where the bit at the specified index is set to true. */
   def set(index: Int): ImmutableBitSet = {
-    val wordIndex = index >> 6         // div by 64
+    val wordIdx = index >> 6         // div by 64
     val bitmask = 1L << (index & 0x3f) // mod 64 and shift
-    new ImmutableBitSet(numBits, words.updated(wordIndex, words(wordIndex) | bitmask))
+    val oldWord = words(wordIdx)
+    val newWord = oldWord | bitmask
+    if (newWord == oldWord) this else new ImmutableBitSet(numBits, words.updated(wordIdx, newWord))
   }
 
   /** Returns a new ImmutableBitSet where the bit at the specified index is set to false. */
   def unset(index: Int): ImmutableBitSet = {
-    val wordIndex = index >> 6         // div by 64
+    val wordIdx = index >> 6         // div by 64
     val bitmask = 1L << (index & 0x3f) // mod 64 and shift
-    new ImmutableBitSet(numBits, words.updated(wordIndex, words(wordIndex) & ~bitmask))
+    val oldWord = words(wordIdx)
+    val newWord = oldWord & ~bitmask
+    if (newWord == oldWord) this else new ImmutableBitSet(numBits, words.updated(wordIdx, newWord))
   }
 
   /**
