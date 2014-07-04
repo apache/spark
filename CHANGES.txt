@@ -3,10 +3,135 @@ Spark Change Log
 
 Release 1.0.1
 
+  [SPARK-2059][SQL] Add analysis checks
+  Reynold Xin <rxin@apache.org>, Michael Armbrust <michael@databricks.com>
+  2014-07-04 00:53:41 -0700
+  Commit: 354a627, github.com/apache/spark/pull/1265
+
+  Update SQLConf.scala
+  baishuo(白硕) <vc_java@hotmail.com>
+  2014-07-04 00:25:31 -0700
+  Commit: dc73ee1, github.com/apache/spark/pull/1272
+
+  [SPARK-1199][REPL] Remove VALId and use the original import style for defined classes.
+  Prashant Sharma <prashant.s@imaginea.com>
+  2014-07-04 00:05:27 -0700
+  Commit: 6e0b7e5, github.com/apache/spark/pull/1179
+
+  [SPARK-2059][SQL] Don't throw TreeNodeException in `execution.ExplainCommand`
+  Cheng Lian <lian.cs.zju@gmail.com>
+  2014-07-03 23:41:54 -0700
+  Commit: 5c43758, github.com/apache/spark/pull/1294
+
+  SPARK-2282: Reuse PySpark Accumulator sockets to avoid crashing Spark
+  Aaron Davidson <aaron@databricks.com>
+  2014-07-03 23:02:36 -0700
+  Commit: 313f202, github.com/apache/spark/pull/1220
+
+  [SPARK-2307][Reprise] Correctly report RDD blocks on SparkUI
+  Andrew Or <andrewor14@gmail.com>
+  2014-07-03 22:48:23 -0700
+  Commit: cf1d46e, github.com/apache/spark/pull/1255
+
+  [SPARK-2350] Don't NPE while launching drivers
+  Aaron Davidson <aaron@databricks.com>
+  2014-07-03 22:31:41 -0700
+  Commit: 27a2afe, github.com/apache/spark/pull/1289
+
+  [SPARK-1097] Workaround Hadoop conf ConcurrentModification issue
+  Raymond Liu <raymond.liu@intel.com>
+  2014-07-03 19:24:22 -0700
+  Commit: d2f2534, github.com/apache/spark/pull/1273
+
+  Streaming programming guide typos
+  Clément MATHIEU <clement@unportant.info>
+  2014-07-03 18:31:18 -0700
+  Commit: ff6ec25, github.com/apache/spark/pull/1286
+
+  [SPARK-2109] Setting SPARK_MEM for bin/pyspark does not work.
+  Prashant Sharma <prashant.s@imaginea.com>
+  2014-07-03 15:06:58 -0700
+  Commit: 1d36165, github.com/apache/spark/pull/1050
+
+  [SPARK-2342] Evaluation helper's output type doesn't conform to input ty...
+  Yijie Shen <henry.yijieshen@gmail.com>
+  2014-07-03 13:22:13 -0700
+  Commit: 7766c9d, github.com/apache/spark/pull/1283
+
+  [SPARK] Fix NPE for ExternalAppendOnlyMap
+  Andrew Or <andrewor14@gmail.com>
+  2014-07-03 10:26:50 -0700
+  Commit: fdee6ee, github.com/apache/spark/pull/1288
+
+  [SPARK-2287] [SQL] Make ScalaReflection be able to handle Generic case classes.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-07-02 10:10:36 -0700
+  Commit: 87b74a9, github.com/apache/spark/pull/1226
+
+  [SPARK-2328] [SQL] Add execution of `SHOW TABLES` before `TestHive.reset()`.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-07-02 10:07:01 -0700
+  Commit: 552e28b, github.com/apache/spark/pull/1268
+
+  SPARK-2186: Spark SQL DSL support for simple aggregations such as SUM and AVG
+  Ximo Guanter Gonzalbez <ximo@tid.es>
+  2014-07-02 10:03:44 -0700
+  Commit: 69112b0, github.com/apache/spark/pull/1211
+
+  update the comments in SqlParser
+  CodingCat <zhunansjtu@gmail.com>
+  2014-07-01 20:37:10 -0700
+  Commit: a4c7541, github.com/apache/spark/pull/1275
+
+  [SPARK-2322] Exception in resultHandler should NOT crash DAGScheduler and shutdown SparkContext.
+  Reynold Xin <rxin@apache.org>
+  2014-06-30 11:50:22 -0700
+  Commit: d468b3d, github.com/apache/spark/pull/1264
+
+  [SPARK-1394] Remove SIGCHLD handler in worker subprocess
+  Matthew Farrellee <matt@redhat.com>
+  2014-06-28 18:39:27 -0700
+  Commit: febec74, github.com/apache/spark/pull/1247
+
+  [SPARK-2003] Fix python SparkContext example
+  Matthew Farrellee <matt@redhat.com>
+  2014-06-27 18:20:33 -0700
+  Commit: 44d70de, github.com/apache/spark/pull/1246
+
+  [SPARK-2259] Fix highly misleading docs on cluster / client deploy modes
+  Andrew Or <andrewor14@gmail.com>
+  2014-06-27 16:11:31 -0700
+  Commit: 9013197, github.com/apache/spark/pull/1200
+
+  [SPARK-2307] SparkUI - storage tab displays incorrect RDDs
+  Andrew Or <andrewor14@gmail.com>
+  2014-06-27 15:23:25 -0700
+  Commit: 2a49a8d, github.com/apache/spark/pull/1249
+
+  SPARK-2181:The keys for sorting the columns of Executor page in SparkUI are incorrect
+  witgo <witgo@qq.com>
+  2014-06-26 21:59:21 -0700
+  Commit: fb61928, github.com/apache/spark/pull/1135
+
+  CHANGES.txt for release 1.0.1
+  Patrick Wendell <pwendell@gmail.com>
+  2014-06-26 15:55:42 -0700
+  Commit: 341e5c6
+
   Fixing AWS instance type information based upon current EC2 data
   Zichuan Ye <jerry@tangentds.com>
   2014-06-26 15:21:29 -0700
   Commit: 0bc8321, github.com/apache/spark/pull/1156
+
+  Small error in previous commit
+  Patrick Wendell <pwendell@gmail.com>
+  2014-06-26 14:59:18 -0700
+  Commit: c23bfd7
+
+  Updating versions for 1.0.1 release
+  Patrick Wendell <pwendell@gmail.com>
+  2014-06-26 14:56:59 -0700
+  Commit: 43ba1ab
 
   [SPARK-2286][UI] Report exception/errors for failed tasks that are not ExceptionFailure
   Reynold Xin <rxin@apache.org>
