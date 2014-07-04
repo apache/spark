@@ -81,8 +81,11 @@ class FileServerHandler extends SimpleChannelInboundHandler<String> {
 
   // We want to send right away without over  loading the channel so the busy wait is needed.
   private void writeIfPossible(Channel channel, Object object) {
-    while (!channel.isWritable()) {
-      channel.writeAndFlush(object);
+    while (true) {
+      if (channel.isWritable()) {
+        channel.writeAndFlush(object);
+        return;
+      }
     }
   }
 }
