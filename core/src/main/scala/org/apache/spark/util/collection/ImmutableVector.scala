@@ -54,17 +54,14 @@ private[spark] object ImmutableVector {
   private def nodeFromArray[A: ClassTag](array: Array[A], start: Int, end: Int): VectorNode[A] = {
     val length = end - start
     if (length == 0) {
-      // println("fromArray(%d, %d) => empty".format(start, end))
       emptyNode
     } else {
       val depth = depthOf(length)
       if (depth == 0) {
-        // println("fromArray(%d, %d) => LeafNode".format(start, end))
         new LeafNode(array.slice(start, end))
       } else {
         val shift = 5 * depth
         val numChildren = ((length - 1) >> shift) + 1
-        // println("fromArray(%d, %d) => InternalNode(depth=%d, numChildren=%d)".format(start, end, depth, numChildren))
         val children = new Array[VectorNode[A]](numChildren)
         var i = 0
         while (i < numChildren) {

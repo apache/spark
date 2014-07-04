@@ -88,7 +88,8 @@ private[spark] class ImmutableLongOpenHashSet(
     while (result == null) {
       if (!bitset.get(pos)) {
         // This is a new key.
-        result = new ImmutableLongOpenHashSet(data.updated(pos, k), bitset.set(pos), pos | NONEXISTENCE_MASK, loadFactor)
+        result = new ImmutableLongOpenHashSet(
+          data.updated(pos, k), bitset.set(pos), pos | NONEXISTENCE_MASK, loadFactor)
       } else if (data(pos) == k) {
         // Found an existing key.
         result = this.withFocus(pos)
@@ -190,7 +191,8 @@ private[spark] class ImmutableLongOpenHashSet(
       oldPos += 1
     }
 
-    new ImmutableLongOpenHashSet(ImmutableVector.fromArray(newData), newBitset.toImmutableBitSet, -1, loadFactor)
+    new ImmutableLongOpenHashSet(
+      ImmutableVector.fromArray(newData), newBitset.toImmutableBitSet, -1, loadFactor)
   }
 
   /**
