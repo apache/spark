@@ -43,6 +43,7 @@ private[ui] class StageTableBase(
     <th>Submitted</th>
     <th>Duration</th>
     <th>Tasks: Succeeded/Total</th>
+    <th>Input</th>
     <th>Shuffle Read</th>
     <th>Shuffle Write</th>
   }
@@ -123,6 +124,11 @@ private[ui] class StageTableBase(
       case _ => ""
     }
     val totalTasks = s.numTasks
+    val inputSortable = listener.stageIdToInputBytes.getOrElse(s.stageId, 0L)
+    val inputRead = inputSortable match {
+      case 0 => ""
+      case b => Utils.bytesToString(b)
+    }
     val shuffleReadSortable = listener.stageIdToShuffleRead.getOrElse(s.stageId, 0L)
     val shuffleRead = shuffleReadSortable match {
       case 0 => ""
@@ -150,6 +156,7 @@ private[ui] class StageTableBase(
     <td class="progress-cell">
       {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
     </td>
+    <td sorttable_customekey={inputSortable.toString}>{inputRead}</td>
     <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
     <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
   }
@@ -168,7 +175,7 @@ private[ui] class FailedStageTable(
 
   override protected def stageRow(s: StageInfo): Seq[Node] = {
     val basicColumns = super.stageRow(s)
-    val failureReason = <td valign="middle">{s.failureReason.getOrElse("")}</td>
+    val failureReason = <td valign="middle"><pre>{s.failureReason.getOrElse("")}</pre></td>
     basicColumns ++ failureReason
   }
 }

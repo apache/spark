@@ -26,10 +26,10 @@ import scala.concurrent.Await
 import akka.actor._
 import akka.pattern.ask
 
-import org.apache.spark.util._
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util._
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
@@ -107,14 +107,17 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       Await.result(future, timeout)
     } catch {
       case e: Exception =>
+        logError("Error communicating with MapOutputTracker", e)
         throw new SparkException("Error communicating with MapOutputTracker", e)
     }
   }
 
   /** Send a one-way message to the trackerActor, to which we expect it to reply with true. */
   protected def sendTracker(message: Any) {
-    if (askTracker(message) != true) {
-      throw new SparkException("Error reply received from MapOutputTracker")
+    val response = askTracker(message)
+    if (response != true) {
+      throw new SparkException(
+        "Error reply received from MapOutputTracker. Expecting true, got " + response.toString)
     }
   }
 
@@ -366,9 +369,9 @@ private[spark] object MapOutputTracker {
   // any of the statuses is null (indicating a missing location due to a failed mapper),
   // throw a FetchFailedException.
   private def convertMapStatuses(
-        shuffleId: Int,
-        reduceId: Int,
-        statuses: Array[MapStatus]): Array[(BlockManagerId, Long)] = {
+      shuffleId: Int,
+      reduceId: Int,
+      statuses: Array[MapStatus]): Array[(BlockManagerId, Long)] = {
     assert (statuses != null)
     statuses.map {
       status =>
@@ -403,7 +406,7 @@ private[spark] object MapOutputTracker {
     if (compressedSize == 0) {
       0
     } else {
-      math.pow(LOG_BASE, (compressedSize & 0xFF)).toLong
+      math.pow(LOG_BASE, compressedSize & 0xFF).toLong
     }
   }
 }

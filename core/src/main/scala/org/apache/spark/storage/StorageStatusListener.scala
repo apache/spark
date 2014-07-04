@@ -37,11 +37,7 @@ class StorageStatusListener extends SparkListener {
     val filteredStatus = storageStatusList.find(_.blockManagerId.executorId == execId)
     filteredStatus.foreach { storageStatus =>
       updatedBlocks.foreach { case (blockId, updatedStatus) =>
-        if (updatedStatus.storageLevel == StorageLevel.NONE) {
-          storageStatus.blocks.remove(blockId)
-        } else {
-          storageStatus.blocks(blockId) = updatedStatus
-        }
+        storageStatus.blocks(blockId) = updatedStatus
       }
     }
   }
