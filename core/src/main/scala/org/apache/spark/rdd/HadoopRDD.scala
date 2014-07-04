@@ -140,8 +140,8 @@ class HadoopRDD[K, V](
       // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
       // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary objects.
       // synchronize to prevent ConcurrentModificationException (Spark-1097, Hadoop-10456)
-      broadcastedConf.synchronized {
-        val newJobConf = new JobConf(broadcastedConf.value.value)
+      conf.synchronized {
+        val newJobConf = new JobConf(conf)
         initLocalJobConfFuncOpt.map(f => f(newJobConf))
         HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
         newJobConf
