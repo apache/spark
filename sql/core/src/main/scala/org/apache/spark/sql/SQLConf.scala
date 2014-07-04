@@ -33,7 +33,22 @@ trait SQLConf {
   // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
 
   /** Number of partitions to use for shuffle operators. */
-  private[spark] def numShufflePartitions: Int = get("spark.sql.shuffle.partitions", "200").toInt
+  private[sql] def numShufflePartitions: Int = get("spark.sql.shuffle.partitions", "200").toInt
+
+  /**
+   * Hash aggregation will be turned off if the ratio between hash table size and input rows
+   * is bigger than this number. Set to 1 to make sure hash aggregation is never turned off.
+   * Hive setting: hive.map.aggr.hash.min.reduction
+   */
+  private[sql] def partialAggMinReduction: Double =
+    get("spark.sql.partialAgg.min.reduction", "0.5").toDouble
+
+  /**
+   * Number of rows to process before checking for [[partialAggMinReduction]].
+   * Hive setting: hive.groupby.mapaggr.checkinterval
+   */
+  private[sql] def partialAggCheckInterval: Int =
+    get("spark.sql.partialAgg.check.interval", "10000").toInt
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to

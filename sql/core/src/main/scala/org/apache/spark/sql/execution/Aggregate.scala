@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.HashMap
+import java.util.{HashMap => JHashMap}
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -78,18 +78,20 @@ case class Aggregate(
       resultAttribute: AttributeReference)
 
   /** A list of aggregates that need to be computed for each group. */
-  private[this] val computedAggregates = aggregateExpressions.flatMap { agg =>
-    agg.collect {
-      case a: AggregateExpression =>
-        ComputedAggregate(
-          a,
-          BindReferences.bindReference(a, childOutput).asInstanceOf[AggregateExpression],
-          AttributeReference(s"aggResult:$a", a.dataType, nullable = true)())
-    }
-  }.toArray
+  private[this] val computedAggregates: Array[ComputedAggregate] =
+    aggregateExpressions.flatMap { agg =>
+      agg.collect {
+        case a: AggregateExpression =>
+          ComputedAggregate(
+            a,
+            BindReferences.bindReference(a, childOutput),
+            AttributeReference(s"aggResult:$a", a.dataType, nullable = true)())
+      }
+    }.toArray
 
   /** The schema of the result of all aggregate evaluations */
-  private[this] val computedSchema = computedAggregates.map(_.resultAttribute)
+  private[this] val computedSchema: Array[AttributeReference] =
+    computedAggregates.map(_.resultAttribute)
 
   /** Creates a new aggregate buffer for a group. */
   private[this] def newAggregateBuffer(): Array[AggregateFunction] = {
@@ -103,7 +105,7 @@ case class Aggregate(
   }
 
   /** Named attributes used to substitute grouping attributes into the final result. */
-  private[this] val namedGroups = groupingExpressions.map {
+  private[this] val namedGroups: Seq[(Expression, Attribute)] = groupingExpressions.map {
     case ne: NamedExpression => ne -> ne.toAttribute
     case e => e -> Alias(e, s"groupingExpr:$e")().toAttribute
   }
@@ -112,14 +114,14 @@ case class Aggregate(
    * A map of substitutions that are used to insert the aggregate expressions and grouping
    * expression into the final result expression.
    */
-  private[this] val resultMap =
+  private[this] val resultMap: Map[Expression, Attribute] =
     (computedAggregates.map { agg => agg.unbound -> agg.resultAttribute } ++ namedGroups).toMap
 
   /**
    * Substituted version of aggregateExpressions expressions which are used to compute final
    * output rows given a group and the result of all aggregate computations.
    */
-  private[this] val resultExpressions = aggregateExpressions.map { agg =>
+  private[this] val resultExpressions: Seq[Expression] = aggregateExpressions.map { agg =>
     agg.transform {
       case e: Expression if resultMap.contains(e) => resultMap(e)
     }
@@ -127,6 +129,7 @@ case class Aggregate(
 
   override def execute() = attachTree(this, "execute") {
     if (groupingExpressions.isEmpty) {
+      // No grouping key, i.e. the output will contain only one row.
       child.execute().mapPartitions { iter =>
         val buffer = newAggregateBuffer()
         var currentRow: Row = null
@@ -150,12 +153,15 @@ case class Aggregate(
         Iterator(resultProjection(aggregateResults))
       }
     } else {
+      // With grouping key.
       child.execute().mapPartitions { iter =>
-        val hashTable = new HashMap[Row, Array[AggregateFunction]]
+        val hashTable = new JHashMap[Row, Array[AggregateFunction]]
         val groupingProjection = new MutableProjection(groupingExpressions, childOutput)
 
+        var partialAggEnabled = true
+        var rowCount: Int = 0
         var currentRow: Row = null
-        while (iter.hasNext) {
+        while (iter.hasNext && partialAggEnabled) {
           currentRow = iter.next()
           val currentGroup = groupingProjection(currentRow)
           var currentBuffer = hashTable.get(currentGroup)
@@ -169,9 +175,22 @@ case class Aggregate(
             currentBuffer(i).update(currentRow)
             i += 1
           }
+
+          // Disable partial hash-based aggregation if desired minimum reduction is
+          // not observed after initial interval.
+          rowCount += 1
+          if (rowCount == 100 & partial) {
+            val hashTableSize = hashTable.size
+            logger.info(s"#hash table=$hashTableSize #rows=$rowCount " +
+              s"reduction=${hashTableSize.toFloat/rowCount} minReduction=0.5")
+            if (hashTableSize > rowCount * 0) {
+              logger.info("Partial aggregation disabled")
+              partialAggEnabled = false
+            }
+          }
         }
 
-        new Iterator[Row] {
+        val hashTableIter = new Iterator[Row] {
           private[this] val hashTableIter = hashTable.entrySet().iterator()
           private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
           private[this] val resultProjection =
@@ -194,6 +213,27 @@ case class Aggregate(
             }
             resultProjection(joinedRow(aggregateResults, currentGroup))
           }
+        }  // end of hashTableIter
+
+        if (!partialAggEnabled && iter.hasNext) {
+          // Partial aggregation disabled and not all entries have been consumed by the hash table.
+          val aggregateResults = new GenericMutableRow(computedAggregates.length)
+          val resultProjection =
+            new MutableProjection(resultExpressions, computedSchema ++ namedGroups.map(_._2))
+          val joinedRow = new JoinedRow
+          hashTableIter ++ iter.map { currentRow =>
+            val currentGroup = groupingProjection(currentRow)
+            val currentBuffer = newAggregateBuffer()
+            var i = 0
+            while (i < currentBuffer.length) {
+              currentBuffer(i).update(currentRow)
+              aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
+              i += 1
+            }
+            resultProjection(joinedRow(aggregateResults, currentGroup))
+          }
+        } else {
+          hashTableIter
         }
       }
     }
