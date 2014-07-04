@@ -51,13 +51,7 @@ case class Generate(
       .map(a => generator.output.map(_.withQualifiers(a :: Nil)))
       .getOrElse(generator.output)
     if (join && outer) {
-      output.map {
-        case attr if !attr.resolved => attr
-        case attr if !attr.nullable =>
-          AttributeReference(
-            attr.name, attr.dataType, nullable = true)(attr.exprId, attr.qualifiers)
-        case attr => attr
-      }
+      output.map(_.withNullability(true))
     } else {
       output
     }
@@ -93,26 +87,17 @@ case class Join(
   condition: Option[Expression]) extends BinaryNode {
 
   override def references = condition.map(_.references).getOrElse(Set.empty)
-  override def output = {
-    def nullabilize(output: Seq[Attribute]) = {
-      output.map {
-        case attr if !attr.resolved => attr
-        case attr if !attr.nullable =>
-          AttributeReference(
-            attr.name, attr.dataType, nullable = true)(attr.exprId, attr.qualifiers)
-        case attr => attr
-      }
-    }
 
+  override def output = {
     joinType match {
       case LeftSemi =>
         left.output
       case LeftOuter =>
-        left.output ++ nullabilize(right.output)
+        left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
-        nullabilize(left.output) ++ right.output
+        left.output.map(_.withNullability(true)) ++ right.output
       case FullOuter =>
-        nullabilize(left.output) ++ nullabilize(right.output)
+        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case _ =>
         left.output ++ right.output
     }

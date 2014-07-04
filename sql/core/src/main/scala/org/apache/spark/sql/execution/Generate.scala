@@ -41,12 +41,7 @@ case class Generate(
 
   protected def generatorOutput: Seq[Attribute] = {
     if (join && outer) {
-      generator.output.map {
-        case attr if !attr.nullable =>
-          AttributeReference(
-            attr.name, attr.dataType, nullable = true)(attr.exprId, attr.qualifiers)
-        case attr => attr
-      }
+      generator.output.map(_.withNullability(true))
     } else {
       generator.output
     }
