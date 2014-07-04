@@ -26,9 +26,8 @@ import com.google.common.hash.Hashing
  * building block for higher level data structures such as a hash map (for example,
  * IndexedRDDPartition).
  *
- * It uses ImmutableVector as its backing store, and it uses quadratic probing with a power-of-2
- * hash table size, which is guaranteed to explore all spaces for each key (see
- * http://en.wikipedia.org/wiki/Quadratic_probing).
+ * It uses quadratic probing with a power-of-2 hash table size, which is guaranteed to explore all
+ * spaces for each key (see http://en.wikipedia.org/wiki/Quadratic_probing).
  */
 private[spark]
 class ImmutableLongOpenHashSet(
@@ -151,14 +150,6 @@ class ImmutableLongOpenHashSet(
     data(pos)
   }
 
-  // /**
-  //  * Return the next position with an element stored, starting from the given position inclusively.
-  //  */
-  // def nextPos(fromPos: Int): Int = {
-  //   val iter = bitset.keysIteratorFrom(fromPos)
-  //   if (iter.hasNext) iter.next() else INVALID_POS
-  // }
-
   /**
    * Double the table's size and re-hash everything.
    *
@@ -214,7 +205,7 @@ class ImmutableLongOpenHashSet(
   }
 }
 
-object ImmutableLongOpenHashSet {
+private[spark] object ImmutableLongOpenHashSet {
   def empty(initialCapacity: Int, loadFactor: Double): ImmutableLongOpenHashSet =
     new ImmutableLongOpenHashSet(
       ImmutableVector.fromArray(new Array[Long](initialCapacity)),

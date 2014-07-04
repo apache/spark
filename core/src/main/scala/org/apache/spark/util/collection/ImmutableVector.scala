@@ -19,7 +19,22 @@ package org.apache.spark.util.collection
 
 import scala.reflect.ClassTag
 
-object ImmutableVector {
+/**
+ * An immutable vector that supports efficient point updates. Similarly to
+ * scala.collection.immutable.Vector, it is implemented using a 32-ary tree with 32-element arrays
+ * at the leaves. Unlike Scala's Vector, it is specialized on the value type, making it much more
+ * memory-efficient for primitive values.
+ */
+private[spark] class ImmutableVector[@specialized(Long, Int) A](val size: Int, root: VectorNode[A])
+  extends Serializable {
+
+  def iterator: Iterator[A] = new VectorIterator[A](root)
+  def apply(index: Int): A = root(index)
+  def updated(index: Int, elem: A): ImmutableVector[A] =
+    new ImmutableVector(size, root.updated(index, elem))
+}
+
+private[spark] object ImmutableVector {
   def empty[A: ClassTag]: ImmutableVector[A] = new ImmutableVector(0, emptyNode)
 
   def fromArray[A: ClassTag](array: Array[A]): ImmutableVector[A] = {
@@ -35,6 +50,7 @@ object ImmutableVector {
     fromArray(Array.fill(n)(a), 0, n)
   }
 
+  /** Returns the root of a 32-ary tree representing the specified interval into the array. */
   private def nodeFromArray[A: ClassTag](array: Array[A], start: Int, end: Int): VectorNode[A] = {
     val length = end - start
     if (length == 0) {
@@ -67,6 +83,7 @@ object ImmutableVector {
 
   private def emptyNode[A: ClassTag] = new LeafNode(Array.empty)
 
+  /** Returns the required tree depth for an ImmutableVector of the given size. */
   private def depthOf(size: Int): Int = {
     var depth = 0
     var sizeLeft = (size - 1) >> 5
@@ -78,6 +95,77 @@ object ImmutableVector {
   }
 }
 
+/** Trait representing nodes in the vector tree. */
+private sealed trait VectorNode[@specialized(Long, Int) A] extends Serializable {
+  def apply(index: Int): A
+  def updated(index: Int, elem: A): VectorNode[A]
+  def numChildren: Int
+}
+
+/** An internal node in the vector tree (one containing other nodes rather than vector elements). */
+private class InternalNode[@specialized(Long, Int) A: ClassTag](
+    children: Array[VectorNode[A]],
+    val depth: Int)
+  extends VectorNode[A] {
+
+  require(children.length > 0, "InternalNode must have children")
+  require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
+  require(depth >= 1, "InternalNode must have depth >= 1 (got $depth)")
+
+  def childAt(index: Int): VectorNode[A] = children(index)
+
+  override def apply(index: Int): A = {
+    var cur: VectorNode[A] = this
+    var continue: Boolean = true
+    var result: A = null.asInstanceOf[A]
+    while (continue) {
+      cur match {
+        case internal: InternalNode[A] =>
+          val shift = 5 * internal.depth
+          val localIndex = (index >> shift) & 31
+          cur = internal.childAt(localIndex)
+        case leaf: LeafNode[A] =>
+          continue = false
+          result = leaf(index & 31)
+      }
+    }
+    result
+  }
+
+  override def updated(index: Int, elem: A) = {
+    val shift = 5 * depth
+    val localIndex = (index >> shift) & 31
+    val childIndex = index & ~(31 << shift)
+
+    val newChildren = new Array[VectorNode[A]](children.length)
+    System.arraycopy(children, 0, newChildren, 0, children.length)
+    newChildren(localIndex) = children(localIndex).updated(childIndex, elem)
+    new InternalNode(newChildren, depth)
+  }
+
+  override def numChildren = children.length
+}
+
+/** A leaf node in the vector tree containing up to 32 vector elements. */
+private class LeafNode[@specialized(Long, Int) A: ClassTag](
+    children: Array[A])
+  extends VectorNode[A] {
+
+  require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
+
+  override def apply(index: Int): A = children(index)
+
+  override def updated(index: Int, elem: A) = {
+    val newChildren = new Array[A](children.length)
+    System.arraycopy(children, 0, newChildren, 0, children.length)
+    newChildren(index) = elem
+    new LeafNode(newChildren)
+  }
+
+  override def numChildren = children.length
+}
+
+/** An iterator that walks through the vector tree. */
 private class VectorIterator[@specialized(Long, Int) A](v: VectorNode[A]) extends Iterator[A] {
   private[this] val elemStack: Array[VectorNode[A]] = Array.fill(8)(null)
   private[this] val idxStack: Array[Int] = Array.fill(8)(-1)
@@ -131,80 +219,4 @@ private class VectorIterator[@specialized(Long, Int) A](v: VectorNode[A]) extend
       }
     }
   }
-}
-
-class ImmutableVector[@specialized(Long, Int) A](val size: Int, root: VectorNode[A])
-  extends Serializable {
-
-  def iterator: Iterator[A] = new VectorIterator[A](root)
-  def apply(index: Int): A = root(index)
-  def updated(index: Int, elem: A): ImmutableVector[A] =
-    new ImmutableVector(size, root.updated(index, elem))
-}
-
-private sealed trait VectorNode[@specialized(Long, Int) A] extends Serializable {
-  def apply(index: Int): A
-  def updated(index: Int, elem: A): VectorNode[A]
-  def numChildren: Int
-}
-
-private class InternalNode[@specialized(Long, Int) A: ClassTag](
-    children: Array[VectorNode[A]],
-    val depth: Int)
-  extends VectorNode[A] {
-
-  require(children.length > 0, "InternalNode must have children")
-  require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
-  require(depth >= 1, "InternalNode must have depth >= 1 (got $depth)")
-
-  override def apply(index: Int): A = {
-    var cur: VectorNode[A] = this
-    var continue: Boolean = true
-    var result: A = null.asInstanceOf[A]
-    while (continue) {
-      cur match {
-        case internal: InternalNode[A] =>
-          val shift = 5 * internal.depth
-          val localIndex = (index >> shift) & 31
-          cur = internal.childAt(localIndex)
-        case leaf: LeafNode[A] =>
-          continue = false
-          result = leaf(index & 31)
-      }
-    }
-    result
-  }
-
-  override def updated(index: Int, elem: A) = {
-    val shift = 5 * depth
-    val localIndex = (index >> shift) & 31
-    val childIndex = index & ~(31 << shift)
-
-    val newChildren = new Array[VectorNode[A]](children.length)
-    System.arraycopy(children, 0, newChildren, 0, children.length)
-    newChildren(localIndex) = children(localIndex).updated(childIndex, elem)
-    new InternalNode(newChildren, depth)
-  }
-
-  override def numChildren = children.length
-
-  def childAt(index: Int): VectorNode[A] = children(index)
-}
-
-private class LeafNode[@specialized(Long, Int) A: ClassTag](
-    children: Array[A])
-  extends VectorNode[A] {
-
-  require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
-
-  override def apply(index: Int): A = children(index)
-
-  override def updated(index: Int, elem: A) = {
-    val newChildren = new Array[A](children.length)
-    System.arraycopy(children, 0, newChildren, 0, children.length)
-    newChildren(index) = elem
-    new LeafNode(newChildren)
-  }
-
-  override def numChildren = children.length
 }

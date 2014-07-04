@@ -17,23 +17,21 @@
 
 package org.apache.spark.util.collection
 
-class ImmutableBitSet(val numBits: Int, val words: ImmutableVector[Long]) extends Serializable {
+/**
+ * An immutable fixed-size bitset backed by `ImmutableVector[Long]`.
+ */
+private[spark] class ImmutableBitSet(val numBits: Int, val words: ImmutableVector[Long])
+  extends Serializable {
 
   def this(numBits: Int) =
     this(numBits, ImmutableVector.fromArray(new Array(ImmutableBitSet.bit2words(numBits))))
 
-  def numWords: Int = ImmutableBitSet.bit2words(numBits)
+  private def numWords: Int = ImmutableBitSet.bit2words(numBits)
 
-  /**
-   * Compute the capacity (number of bits) that can be represented
-   * by this bitset.
-   */
+  /** The capacity (number of bits) that can be represented by this bitset. */
   def capacity: Int = numWords * 64
 
-  /**
-   * Compute the bit-wise AND of the two sets returning the
-   * result.
-   */
+  /** Returns the bit-wise AND of the two sets. */
   def &(other: ImmutableBitSet): ImmutableBitSet = {
     val newWords = new Array[Long](math.max(numWords, other.numWords))
     val thisWordsIter = words.iterator
@@ -46,10 +44,7 @@ class ImmutableBitSet(val numBits: Int, val words: ImmutableVector[Long]) extend
     new ImmutableBitSet(math.max(numBits, other.numBits), ImmutableVector.fromArray(newWords))
   }
 
-  /**
-   * Compute the bit-wise OR of the two sets returning the
-   * result.
-   */
+  /** Returns the bit-wise OR of the two sets. */
   def |(other: ImmutableBitSet): ImmutableBitSet = {
     val newWords = new Array[Long](math.max(numWords, other.numWords))
     val thisWordsIter = words.iterator
@@ -70,16 +65,14 @@ class ImmutableBitSet(val numBits: Int, val words: ImmutableVector[Long]) extend
     new ImmutableBitSet(math.max(numBits, other.numBits), ImmutableVector.fromArray(newWords))
   }
 
-  /**
-   * Sets the bit at the specified index to true.
-   * @param index the bit index
-   */
+  /** Returns a new ImmutableBitSet where the bit at the specified index is set to true. */
   def set(index: Int): ImmutableBitSet = {
     val wordIndex = index >> 6         // div by 64
     val bitmask = 1L << (index & 0x3f) // mod 64 and shift
     new ImmutableBitSet(numBits, words.updated(wordIndex, words(wordIndex) | bitmask))
   }
 
+  /** Returns a new ImmutableBitSet where the bit at the specified index is set to false. */
   def unset(index: Int): ImmutableBitSet = {
     val wordIndex = index >> 6         // div by 64
     val bitmask = 1L << (index & 0x3f) // mod 64 and shift
@@ -103,7 +96,8 @@ class ImmutableBitSet(val numBits: Int, val words: ImmutableVector[Long]) extend
    */
   def iterator = words.iterator.zipWithIndex.flatMap(pair => wordIterator(pair._1, pair._2 * 64))
 
-  def wordIterator(word: Long, globalOffset: Int): Iterator[Int] = new Iterator[Int] {
+  /** Get an iterator over the bits in the specified word. */
+  private def wordIterator(word: Long, globalOffset: Int): Iterator[Int] = new Iterator[Int] {
     private[this] var w = word
     private[this] var o = 0
     override def hasNext: Boolean = w != 0 && o < 64
@@ -129,7 +123,7 @@ class ImmutableBitSet(val numBits: Int, val words: ImmutableVector[Long]) extend
   }
 }
 
-object ImmutableBitSet {
+private[spark] object ImmutableBitSet {
   /** Return the number of longs it would take to hold numBits. */
   private def bit2words(numBits: Int) = ((numBits - 1) >> 6) + 1
 }

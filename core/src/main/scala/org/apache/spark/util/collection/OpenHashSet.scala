@@ -40,7 +40,7 @@ import com.google.common.hash.Hashing
 private[spark]
 class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     initialCapacity: Int,
-    val loadFactor: Double)
+    private[collection] val loadFactor: Double)
   extends Serializable {
 
   require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
@@ -92,7 +92,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   protected var _data: Array[T] = _
   _data = new Array[T](_capacity)
 
-  def data: Array[T] = _data
+  private[collection] def data: Array[T] = _data
 
   /** Number of elements in the set. */
   def size: Int = _size

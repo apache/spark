@@ -217,7 +217,7 @@ class BitSet(numBits: Int) extends Serializable {
     -1
   }
 
-  def toImmutableBitSet: ImmutableBitSet = {
+  private[spark] def toImmutableBitSet: ImmutableBitSet = {
     new ImmutableBitSet(numBits, ImmutableVector.fromArray(words))
   }
 
