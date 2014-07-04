@@ -135,11 +135,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * a given shuffle.
    */
   def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
-    val mapStatuses = getMapStatusesForShuffle(shuffleId, reduceId)
-    val statuses = mapStatuses._1
-    val partial = mapStatuses._2
+    val statuses = getMapStatusesForShuffle(shuffleId, reduceId)
     statuses.synchronized {
-      MapOutputTracker.convertMapStatuses(shuffleId, reduceId, statuses, isPartial = partial)
+      MapOutputTracker.convertMapStatuses(shuffleId, reduceId, statuses, isPartial = partialForShuffle.contains(shuffleId))
     }
   }
 
@@ -174,12 +172,11 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def stop() { }
 
   // Get map statuses for a shuffle
-  private def getMapStatusesForShuffle(shuffleId: Int, reduceId: Int): (Array[MapStatus], Boolean) ={
+  private def getMapStatusesForShuffle(shuffleId: Int, reduceId: Int): Array[MapStatus]={
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
       var fetchedStatuses: Array[MapStatus] = null
-      var fetchedPartial = partialForShuffle.contains(shuffleId)
       fetching.synchronized {
         if (fetching.contains(shuffleId)) {
           // Someone else is fetching it; wait for them to be done
@@ -210,11 +207,11 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
             askTracker(GetMapOutputStatuses(shuffleId)).asInstanceOf[Array[Byte]]
           val fetchedResults = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
           fetchedStatuses = fetchedResults._1
-          fetchedPartial = fetchedResults._2
           if (fetchedResults._2) {
             logInfo("Got partial map outputs from master for shuffleId " + shuffleId + ". ---lirui")
-            if (partialForShuffle.add(shuffleId)) {
-              new Thread(new MapStatusUpdater(shuffleId), "MapStatusUpdater-for-shuffle" + shuffleId).start()
+            if(!partialForShuffle.contains(shuffleId)){
+              partialForShuffle += shuffleId
+              new Thread(new MapStatusUpdater(shuffleId)).start()
             }
           } else {
             logInfo("Got complete map outputs from master for shuffleId " + shuffleId + ". ---lirui")
@@ -230,13 +227,13 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         }
       }
       if (fetchedStatuses != null) {
-        (fetchedStatuses, fetchedPartial)
+        fetchedStatuses
       } else {
         throw new FetchFailedException(null, shuffleId, -1, reduceId,
           new Exception("Missing all output locations for shuffle " + shuffleId))
       }
     } else {
-      (statuses, partialForShuffle.contains(shuffleId))
+      statuses
     }
   }
 
