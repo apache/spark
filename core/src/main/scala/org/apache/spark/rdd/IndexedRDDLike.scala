@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import scala.language.higherKinds
 import scala.reflect.ClassTag
 
 import org.apache.spark._

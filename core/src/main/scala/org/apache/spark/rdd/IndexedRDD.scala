@@ -27,7 +27,7 @@ import org.apache.spark.storage.StorageLevel
 import IndexedRDD.Id
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * An RDD of key-value `(Id, V)` pairs that enforces key uniqueness and pre-indexes the entries for
  * efficient joins and point lookups/updates. Two IndexedRDDs with the same index can be joined
  * efficiently. All operations except [[reindex]] preserve the index. To construct an `IndexedRDD`,

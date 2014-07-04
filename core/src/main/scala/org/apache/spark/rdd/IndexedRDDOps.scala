@@ -164,8 +164,8 @@ private[spark] trait IndexedRDDOps[
    */
   def join[U: ClassTag]
       (other: RDD[(Id, U)])(f: (Id, V, U) => V): Self[V] = other match {
-    case other: Self[U] if self.partitioner == other.partitioner =>
-      this.zipIndexedRDDPartitions(other)(new JoinZipper(f))
+    case other: IndexedRDDLike[_, _] if self.partitioner == other.partitioner =>
+      this.zipIndexedRDDPartitions(other.asInstanceOf[Self[U]])(new JoinZipper(f))
     case _ =>
       this.zipPartitionsWithOther(other)(new OtherJoinZipper(f))
   }
@@ -173,8 +173,8 @@ private[spark] trait IndexedRDDOps[
   /** Left outer joins `this` with `other`, running `f` on all values of `this`. */
   def leftJoin[V2: ClassTag, V3: ClassTag]
       (other: RDD[(Id, V2)])(f: (Id, V, Option[V2]) => V3): Self[V3] = other match {
-    case other: Self[V2] if self.partitioner == other.partitioner =>
-      this.zipIndexedRDDPartitions(other)(new LeftJoinZipper(f))
+    case other: IndexedRDDLike[_, _] if self.partitioner == other.partitioner =>
+      this.zipIndexedRDDPartitions(other.asInstanceOf[Self[V2]])(new LeftJoinZipper(f))
     case _ =>
       this.zipPartitionsWithOther(other)(new OtherLeftJoinZipper(f))
   }
@@ -182,8 +182,8 @@ private[spark] trait IndexedRDDOps[
   /** Inner joins `this` with `other`, running `f` on the values of corresponding keys. */
   def innerJoin[V2: ClassTag, V3: ClassTag](other: RDD[(Id, V2)])
       (f: (Id, V, V2) => V3): Self[V3] = other match {
-    case other: Self[V2] if self.partitioner == other.partitioner =>
-      this.zipIndexedRDDPartitions(other)(new InnerJoinZipper(f))
+    case other: IndexedRDDLike[_, _] if self.partitioner == other.partitioner =>
+      this.zipIndexedRDDPartitions(other.asInstanceOf[Self[V2]])(new InnerJoinZipper(f))
     case _ =>
       this.zipPartitionsWithOther(other)(new OtherInnerJoinZipper(f))
   }
