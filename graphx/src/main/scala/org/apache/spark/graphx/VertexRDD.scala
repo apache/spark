@@ -58,13 +58,15 @@ import org.apache.spark.graphx.impl.VertexRDDFunctions._
 class VertexRDD[@specialized(Long, Int, Double) VD](
     val partitionsRDD: RDD[ShippableVertexPartition[VD]],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
-   (implicit val vTag: ClassTag[VD])
+   (override implicit protected val vTag: ClassTag[VD])
   extends RDD[(VertexId, VD)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD)))
   with IndexedRDDLike[VD, ShippableVertexPartition]
   with IndexedRDDOps[VD, ShippableVertexPartition, VertexRDD] {
 
-  def pTag[VD2]: ClassTag[ShippableVertexPartition[VD2]] =
+  override protected def pTag[VD2]: ClassTag[ShippableVertexPartition[VD2]] =
     classTag[ShippableVertexPartition[VD2]]
+
+  override protected def self: VertexRDD[VD] = this
 
   override def setName(_name: String): this.type = {
     if (partitionsRDD.name != null) {
@@ -98,8 +100,6 @@ class VertexRDD[@specialized(Long, Int, Double) VD](
       targetStorageLevel: StorageLevel): VertexRDD[VD] = {
     new VertexRDD(this.partitionsRDD, targetStorageLevel)
   }
-
-  def self: VertexRDD[VD] = this
 
   /**
    * Returns a new `VertexRDD` reflecting a reversal of all edge directions in the corresponding

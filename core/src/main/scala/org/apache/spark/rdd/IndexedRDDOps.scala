@@ -44,13 +44,13 @@ private[spark] trait IndexedRDDOps[
   extends RDD[(Id, V)] {
 
   /** A generator for ClassTags of the value type V. */
-  implicit def vTag: ClassTag[V]
+  protected implicit def vTag: ClassTag[V]
 
   /** A generator for ClassTags of the partition type P. */
-  implicit def pTag[V2]: ClassTag[P[V2]]
+  protected implicit def pTag[V2]: ClassTag[P[V2]]
 
   /** Accessor for the IndexedRDD variant that is mixing in this trait. */
-  def self: Self[V]
+  protected def self: Self[V]
 
   def withPartitionsRDD[V2: ClassTag](partitionsRDD: RDD[P[V2]]): Self[V2]
 

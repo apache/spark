@@ -42,7 +42,7 @@ private[spark] trait IndexedRDDLike[
   require(partitionsRDD.partitioner.isDefined)
 
   /** A generator for ClassTags of the partition type P. */
-  implicit def pTag[V2]: ClassTag[P[V2]]
+  protected implicit def pTag[V2]: ClassTag[P[V2]]
 
   override val partitioner = partitionsRDD.partitioner
 

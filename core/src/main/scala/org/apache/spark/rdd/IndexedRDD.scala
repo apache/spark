@@ -41,11 +41,12 @@ class IndexedRDD[@specialized(Long, Int, Double) V: ClassTag]
   with IndexedRDDLike[V, IndexedRDDPartition]
   with IndexedRDDOps[V, IndexedRDDPartition, IndexedRDD] {
 
-  def vTag: ClassTag[V] = classTag[V]
+  override protected def vTag: ClassTag[V] = classTag[V]
 
-  def pTag[V2]: ClassTag[IndexedRDDPartition[V2]] = classTag[IndexedRDDPartition[V2]]
+  override protected def pTag[V2]: ClassTag[IndexedRDDPartition[V2]] =
+    classTag[IndexedRDDPartition[V2]]
 
-  def self: IndexedRDD[V] = this
+  override protected def self: IndexedRDD[V] = this
 
   def withPartitionsRDD[V2: ClassTag](
       partitionsRDD: RDD[IndexedRDDPartition[V2]]): IndexedRDD[V2] = {
