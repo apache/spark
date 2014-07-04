@@ -1,4 +1,4 @@
-/*
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -121,6 +121,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val INTERSECT = Keyword("INTERSECT")
   protected val EXCEPT = Keyword("EXCEPT")
 
+
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
     this.getClass
@@ -140,11 +141,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected lazy val query: Parser[LogicalPlan] = (
     select * (
         UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
-<<<<<<< HEAD
         INTERSECT ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Intersect(q1, q2)} |
-=======
         EXCEPT ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)} |
->>>>>>> upstream/master
         UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
     | insert | cache
