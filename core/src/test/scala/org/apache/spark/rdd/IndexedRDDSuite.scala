@@ -23,11 +23,6 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 
-// Declared outside of test suite to avoid closure capture
-object SumFunction extends Function3[IndexedRDD.Id, Int, Int, Int] with Serializable {
-  def apply(id: Long, a: Int, b: Int) = a + b
-}
-
 class IndexedRDDSuite extends FunSuite with SharedSparkContext {
 
   def pairs(sc: SparkContext, n: Int) = {
@@ -138,5 +133,9 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     assert(ps.aggregateUsingIndex[Int](messages, _ + _).collect.toSet ===
       (0 to n).map(x => (x.toLong, if (x % 2 == 0) 2 else 1)).toSet)
   }
+}
 
+// Declared outside of test suite to avoid closure capture
+private object SumFunction extends Function3[IndexedRDD.Id, Int, Int, Int] with Serializable {
+  def apply(id: Long, a: Int, b: Int) = a + b
 }
