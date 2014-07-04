@@ -20,6 +20,7 @@ package org.apache.spark.network.netty;
 import java.net.InetSocketAddress;
 
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -52,7 +53,10 @@ class FileServer {
         .channel(OioServerSocketChannel.class)
         .option(ChannelOption.SO_BACKLOG, 100)
         .option(ChannelOption.SO_RCVBUF, 1500)
-        .childHandler(new FileServerChannelInitializer(pResolver));
+        .childHandler(new FileServerChannelInitializer(pResolver))
+        .childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, 32 * 1024)
+        .childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, 8 * 1024)
+        .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
     // Start the server.
     channelFuture = bootstrap.bind(addr);
     try {

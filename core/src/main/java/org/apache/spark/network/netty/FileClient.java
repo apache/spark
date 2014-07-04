@@ -20,6 +20,7 @@ package org.apache.spark.network.netty;
 import java.util.concurrent.TimeUnit;
 
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -53,6 +54,9 @@ class FileClient {
       .option(ChannelOption.SO_KEEPALIVE, true)
       .option(ChannelOption.TCP_NODELAY, true)
       .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout)
+      .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, 32 * 1024)
+      .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, 8 * 1024)
+      .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
       .handler(new FileClientChannelInitializer(handler));
   }
 

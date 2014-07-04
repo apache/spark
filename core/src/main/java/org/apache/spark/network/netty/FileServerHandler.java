@@ -20,6 +20,7 @@ package org.apache.spark.network.netty;
 import java.io.File;
 import java.io.FileInputStream;
 
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.DefaultFileRegion;
@@ -51,33 +52,37 @@ class FileServerHandler extends SimpleChannelInboundHandler<String> {
     File file = fileSegment.file();
     if (file.exists()) {
       if (!file.isFile()) {
-        ctx.write(new FileHeader(0, blockId).buffer());
-        ctx.flush();
+        writeIfPossible(ctx.channel(), new FileHeader(0, blockId).buffer());
         return;
       }
       long length = fileSegment.length();
       if (length > Integer.MAX_VALUE || length <= 0) {
-        ctx.write(new FileHeader(0, blockId).buffer());
-        ctx.flush();
+        writeIfPossible(ctx.channel(), new FileHeader(0, blockId).buffer());
         return;
       }
       int len = (int) length;
-      ctx.write((new FileHeader(len, blockId)).buffer());
+      writeIfPossible(ctx.channel(), new FileHeader(len, blockId).buffer());
       try {
-        ctx.write(new DefaultFileRegion(new FileInputStream(file)
-          .getChannel(), fileSegment.offset(), fileSegment.length()));
+        writeIfPossible(ctx.channel(), new DefaultFileRegion(new FileInputStream(file)
+                .getChannel(), fileSegment.offset(), fileSegment.length()));
       } catch (Exception e) {
           LOG.error("Exception: ", e);
       }
     } else {
-      ctx.write(new FileHeader(0, blockId).buffer());
+      writeIfPossible(ctx.channel(), new FileHeader(0, blockId).buffer());
     }
-    ctx.flush();
   }
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
     LOG.error("Exception: ", cause);
     ctx.close();
+  }
+
+  // We want to send right away without over  loading the channel so the busy wait is needed.
+  private void writeIfPossible(Channel channel, Object object) {
+    while (!channel.isWritable()) {
+      channel.writeAndFlush(object);
+    }
   }
 }
