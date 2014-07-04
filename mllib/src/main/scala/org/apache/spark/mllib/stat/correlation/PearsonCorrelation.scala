@@ -17,17 +17,31 @@
 
 package org.apache.spark.mllib.stat.correlation
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import breeze.linalg.{DenseMatrix => BDM}
-import breeze.numerics.{sqrt => brzSqrt}
 
 class PearsonCorrelation extends Correlation {
 
   def computeCorrelationMatrix(x: RDD[Double], y: RDD[Double]): Double = {
 
-    return 0.0
+    var paired: Option[RDD[(Double, Double)]] = None
+
+    try {
+      paired = Some(x.zip(y))
+    } catch {
+      case se: SparkException => throw new IllegalArgumentException("Cannot compute correlation"
+        + "for RDDs of different sizes.")
+    }
+
+    val stats = paired.get.aggregate(new Stats)((m: Stats, i: (Double, Double)) => m.seqOp(i),
+      (m1: Stats, m2: Stats) => m1.combOp(m2))
+
+    val cov = stats.xyMean - stats.xMean * stats.yMean
+
+    return cov / (stats.xStdev * stats.yStdev)
   }
 
   def computeCorrelationMatrix(X: RDD[Vector]): Matrix = {
@@ -38,22 +52,26 @@ class PearsonCorrelation extends Correlation {
     // Compute the standard deviation on the diagonals first
     var i = 0
     while (i < n) {
-      cov(i, i) = brzSqrt(cov(i, i))
+      cov(i, i) = math.sqrt(cov(i, i))
       i +=1
     }
+    // or we could put the stddev in its own array
 
     // we could use blas.dspr instead to compute the correlation matrix if the covariance matrix
     // is upper triangular.
+    // Loop through columns since cov is column major
     i = 0
     var j = 0
     var sigma = 0.0
-    while (i < n) {
-      sigma = cov(i, i)
-      while (j < n) {
+    while (j < n) {
+      sigma = cov(j, j)
+      while (i < n) {
         if (i != j) { // we need to keep the stddev values on the diagonals throughout the update
-          cov(i, j) = cov(i, j) / (sigma * cov(j, j))
+          cov(i, j) = cov(i, j) / (sigma * cov(i, i))
         }
+        i += 1
       }
+      j += 1
     }
 
     // put 1.0 on the diagonals
@@ -64,5 +82,69 @@ class PearsonCorrelation extends Correlation {
     }
 
     Matrices.fromBreeze(cov)
+  }
+}
+
+/**
+ * Custom version of StatCounter to allow for computation of all necessary statistics in one pass
+ * over both input RDDs since passes over large RDDs are expensive
+ */
+private class Stats() extends Serializable {
+  private var n: Long = 0L
+  private var Exy: Double = 0.0
+  private var Ex: Double = 0.0
+  private var Sx: Double = 0.0
+  private var Ey: Double = 0.0
+  private var Sy: Double = 0.0
+
+  def count: Long = n
+
+  def xyMean: Double = Exy
+
+  def xMean: Double = Ex
+
+  def xStdev: Double = if (n == 0) Double.NaN else math.sqrt(Sx / n)
+
+  def yMean: Double = Ey
+
+  def yStdev: Double = if (n == 0) Double.NaN else math.sqrt(Sy / n)
+
+  def seqOp(xy:(Double, Double)): Stats = {
+    val dX = xy._1 - Ex
+    val dY = xy._2 - Ey
+    n += 1
+    Ex += dX / n
+    Sx += dX * (xy._1 - Ex)
+    Ey += dY / n
+    Sy += dY * (xy._2 - Ey)
+    Exy += (xy._1 * xy._2 - Exy) / n
+    this
+  }
+
+  def combOp(other: Stats): Stats = {
+    if (n == 0) {
+      return other
+    } else if (other.n > 0) {
+      val dX = other.Ex - Ex
+      val dY = other.Ey - Ey
+      val sum = n + other.n
+      if (other.n * 10 < n) {
+        Ex += dX * other.n / sum
+        Ey += dY * other.n / sum
+        Exy += (other.Exy - Exy) * other.n / sum
+      } else if (n * 10 < other.n) {
+        Ex = other.Ex - dX * n / sum
+        Ey = other.Ey - dY * n / sum
+        Exy += other.Exy - (other.Exy - Exy) * n / sum
+      } else {
+        Ex = (Ex * n + other.Ex * other.n) / sum
+        Ey = (Ey * n + other.Ey * other.n) / sum
+        Exy = (Exy * n + other.Exy * other.n) / sum
+      }
+      Sx += other.Sx + (dX * dX * n * other.n) / sum
+      Sy += other.Sy + (dY * dY * n * other.n) / sum
+      n += other.n
+    }
+    this
   }
 }
