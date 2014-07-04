@@ -29,8 +29,7 @@ import com.google.common.hash.Hashing
  * It uses quadratic probing with a power-of-2 hash table size, which is guaranteed to explore all
  * spaces for each key (see http://en.wikipedia.org/wiki/Quadratic_probing).
  */
-private[spark]
-class ImmutableLongOpenHashSet(
+private[spark] class ImmutableLongOpenHashSet(
     /** Underlying array of elements used as a hash table. */
     val data: ImmutableVector[Long],
     /** Whether or not there is an element at the corresponding position in `data`. */

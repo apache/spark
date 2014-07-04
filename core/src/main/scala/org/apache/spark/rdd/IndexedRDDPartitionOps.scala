@@ -403,7 +403,7 @@ private[spark] trait IndexedRDDPartitionOps[
       hashMap.setMerge(k, v, arbitraryMerge)
     }
     this.withIndex(ImmutableLongOpenHashSet.fromLongOpenHashSet(hashMap.keySet))
-      .withValues(ImmutableVector.fromArray(hashMap._values))
+      .withValues(ImmutableVector.fromArray(hashMap.values))
       .withMask(hashMap.keySet.getBitSet.toImmutableBitSet)
   }
 }

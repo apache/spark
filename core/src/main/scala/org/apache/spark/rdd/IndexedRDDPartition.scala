@@ -74,7 +74,7 @@ private[spark] object IndexedRDDPartition {
     }
     new IndexedRDDPartition(
       ImmutableLongOpenHashSet.fromLongOpenHashSet(map.keySet),
-      ImmutableVector.fromArray(map._values),
+      ImmutableVector.fromArray(map.values),
       map.keySet.getBitSet.toImmutableBitSet)
   }
 
@@ -87,7 +87,7 @@ private[spark] object IndexedRDDPartition {
     }
     new IndexedRDDPartition(
       ImmutableLongOpenHashSet.fromLongOpenHashSet(map.keySet),
-      ImmutableVector.fromArray(map._values),
+      ImmutableVector.fromArray(map.values),
       map.keySet.getBitSet.toImmutableBitSet)
   }
 }
