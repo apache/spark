@@ -639,6 +639,7 @@ class DAGScheduler(
             DAGScheduler.TASK_SIZE_TO_WARN))
       }
       waitingTaskNum.put(stage, waitingTaskNum.getOrElse(stage, 1) - 1)
+      logInfo(""+waitingTaskNum(stage)+" tasks waiting to be launched. ---lirui")
     }
     listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
     submitWaitingStages()
