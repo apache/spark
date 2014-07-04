@@ -191,7 +191,6 @@ case object NoRelation extends LeafNode {
 }
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  def output = left.output
-
-  def references = Set.empty
+  override def output = left.output
+  override def references = Set.empty
 }
