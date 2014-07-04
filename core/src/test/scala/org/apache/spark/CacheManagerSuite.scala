@@ -59,12 +59,12 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     val getValue = blockManager.get(RDDBlockId(rdd.id, split.index))
     assert(computeValue.toList === List(1, 2, 3, 4))
     assert(getValue.isDefined, "Block cached from getOrCompute is not found!")
-    assert(getValue.get.toArray === List(1, 2, 3, 4))
+    assert(getValue.get.data.toArray === List(1, 2, 3, 4))
   }
 
   test("get cached rdd") {
     expecting {
-      val result = new BlockResult(ArrayBuffer(5, 6, 7).iterator, DataReadMethod.Memory, 12)
+      val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
       blockManager.get(RDDBlockId(0, 0)).andReturn(Some(result))
     }
 
