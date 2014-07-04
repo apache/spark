@@ -347,6 +347,8 @@ class RowMatrix(
    * The principal components are stored a local matrix of size n-by-k.
    * Each column corresponds for one principal component,
    * and the columns are in descending order of component variance.
+   * The row data do not need to be "centered" first; it is not necessary for
+   * the mean of each column to be 0.
    *
    * @param k number of top principal components.
    * @return a matrix of size n-by-k, whose columns are principal components

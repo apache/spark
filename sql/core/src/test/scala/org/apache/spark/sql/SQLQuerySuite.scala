@@ -372,38 +372,40 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("SET commands semantics using sql()") {
-    clear()
-    val testKey = "test.key.0"
-    val testVal = "test.val.0"
-    val nonexistentKey = "nonexistent"
+    TestSQLContext.settings.synchronized {
+      clear()
+      val testKey = "test.key.0"
+      val testVal = "test.val.0"
+      val nonexistentKey = "nonexistent"
 
-    // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size == 0)
+      // "set" itself returns all config variables currently specified in SQLConf.
+      assert(sql("SET").collect().size == 0)
 
-    // "set key=val"
-    sql(s"SET $testKey=$testVal")
-    checkAnswer(
-      sql("SET"),
-      Seq(Seq(testKey, testVal))
-    )
+      // "set key=val"
+      sql(s"SET $testKey=$testVal")
+      checkAnswer(
+        sql("SET"),
+        Seq(Seq(testKey, testVal))
+      )
 
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    checkAnswer(
-      sql("set"),
-      Seq(
-        Seq(testKey, testVal),
-        Seq(testKey + testKey, testVal + testVal))
-    )
+      sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+      checkAnswer(
+        sql("set"),
+        Seq(
+          Seq(testKey, testVal),
+          Seq(testKey + testKey, testVal + testVal))
+      )
 
-    // "set key"
-    checkAnswer(
-      sql(s"SET $testKey"),
-      Seq(Seq(testKey, testVal))
-    )
-    checkAnswer(
-      sql(s"SET $nonexistentKey"),
-      Seq(Seq(nonexistentKey, "<undefined>"))
-    )
-    clear()
+      // "set key"
+      checkAnswer(
+        sql(s"SET $testKey"),
+        Seq(Seq(testKey, testVal))
+      )
+      checkAnswer(
+        sql(s"SET $nonexistentKey"),
+        Seq(Seq(nonexistentKey, "<undefined>"))
+      )
+      clear()
+    }
   }
 }

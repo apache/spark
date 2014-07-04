@@ -60,6 +60,26 @@ class DslQuerySuite extends QueryTest {
       Seq(Seq("1")))
   }
 
+  test("select with functions") {
+    checkAnswer(
+      testData.select(sum('value), avg('value), count(1)),
+      Seq(Seq(5050.0, 50.5, 100)))
+
+    checkAnswer(
+      testData2.select('a + 'b, 'a < 'b),
+      Seq(
+        Seq(2, false),
+        Seq(3, true),
+        Seq(3, false),
+        Seq(4, false),
+        Seq(4, false),
+        Seq(5, false)))
+
+    checkAnswer(
+      testData2.select(sumDistinct('a)),
+      Seq(Seq(6)))
+  }
+
   test("sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
@@ -110,17 +130,17 @@ class DslQuerySuite extends QueryTest {
 
   test("average") {
     checkAnswer(
-      testData2.groupBy()(Average('a)),
+      testData2.groupBy()(avg('a)),
       2.0)
   }
 
   test("null average") {
     checkAnswer(
-      testData3.groupBy()(Average('b)),
+      testData3.groupBy()(avg('b)),
       2.0)
 
     checkAnswer(
-      testData3.groupBy()(Average('b), CountDistinct('b :: Nil)),
+      testData3.groupBy()(avg('b), countDistinct('b)),
       (2.0, 1) :: Nil)
   }
 
@@ -130,17 +150,17 @@ class DslQuerySuite extends QueryTest {
 
   test("null count") {
     checkAnswer(
-      testData3.groupBy('a)('a, Count('b)),
+      testData3.groupBy('a)('a, count('b)),
       Seq((1,0), (2, 1))
     )
 
     checkAnswer(
-      testData3.groupBy('a)('a, Count('a + 'b)),
+      testData3.groupBy('a)('a, count('a + 'b)),
       Seq((1,0), (2, 1))
     )
 
     checkAnswer(
-      testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
+      testData3.groupBy()(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
       (2, 1, 2, 2, 1) :: Nil
     )
   }
