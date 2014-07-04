@@ -106,10 +106,12 @@ class ImmutableBitSet(val numBits: Int, val words: ImmutableVector[Long]) extend
   def wordIterator(word: Long, globalOffset: Int): Iterator[Int] = new Iterator[Int] {
     private[this] var w = word
     private[this] var o = 0
-    override def hasNext: Boolean = w != 0
+    override def hasNext: Boolean = w != 0 && o < 64
     override def next() = {
       val step = java.lang.Long.numberOfTrailingZeros(w)
       val result = o + step + globalOffset
+      // If step == 63, the shift will have no effect, but o will become >= 64 on the next line,
+      // halting iteration.
       w = w >>> step + 1
       o += step + 1
       result
