@@ -384,6 +384,7 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData "), Nil)
   }
+
   test("SET commands semantics using sql()") {
     TestSQLContext.settings.synchronized {
       clear()
