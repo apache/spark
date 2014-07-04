@@ -371,6 +371,20 @@ class SQLQuerySuite extends QueryTest {
         (3, null)))
   }
 
+  test("EXCEPT") {
+
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM upperCaseData "),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM lowerCaseData "), Nil)
+    checkAnswer(
+      sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData "), Nil)
+  }
+
   test("SET commands semantics using sql()") {
     TestSQLContext.settings.synchronized {
       clear()
