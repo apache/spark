@@ -926,31 +926,7 @@ class DAGScheduler(
               }
               dependantStagePreStarted -= stage
             } else {
-              // ShuffleMap stage not finished yet. Maybe we can remove the stage barrier here.
-              if(removeStageBarrier && taskScheduler.isInstanceOf[TaskSchedulerImpl]){
-                // TODO: need a better way to check if there's free slots
-                val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend
-                val numPendingTask = pendingTasks.values.map(_.size).sum
-                val numWaitingStage = waitingStages.size
-                if (backend.freeSlotAvail(numPendingTask) && numWaitingStage > 0 && stage.shuffleDep.isDefined) {
-                  val preStartableStage = getPreStartableStage(stage)
-                  if (preStartableStage.isDefined) {
-                    val preStartedStage = preStartableStage.get
-                    logInfo("Pre-start stage " + preStartedStage.id + " ---lirui")
-                    // Register map output finished so far
-                    mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
-                      stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-                      changeEpoch = false, isPartial = true)
-                    waitingStages -= preStartedStage
-                    runningStages += preStartedStage
-                    // Inform parent stages that the dependant stage has been pre-started
-                    for (parentStage <- getMissingParentStages(preStartedStage)) {
-                      dependantStagePreStarted.getOrElseUpdate(parentStage, new ArrayBuffer[Stage]()) += preStartedStage
-                    }
-                    submitMissingTasks(preStartedStage, activeJobForStage(preStartedStage).get)
-                  }
-                }
-              }
+              maybePreStartWaitingStage(stage)
             }
           }
 
@@ -1250,6 +1226,31 @@ class DAGScheduler(
         RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
     }
     failedStages ++= stages
+  }
+
+  private def maybePreStartWaitingStage(stage: Stage) {
+    if (removeStageBarrier && taskScheduler.isInstanceOf[TaskSchedulerImpl]) {
+      // TODO: need a better way to check if there's free slots
+      val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend
+      val numPendingTask = pendingTasks.values.map(_.size).sum
+      val numWaitingStage = waitingStages.size
+      if (backend.freeSlotAvail(numPendingTask) && numWaitingStage > 0 && stage.shuffleDep.isDefined) {
+        for (preStartStage <- getPreStartableStage(stage)) {
+          logInfo("Pre-start stage " + preStartStage.id + " ---lirui")
+          // Register map output finished so far
+          mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
+            stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+            changeEpoch = false, isPartial = true)
+          waitingStages -= preStartStage
+          runningStages += preStartStage
+          // Inform parent stages that the dependant stage has been pre-started
+          for (parentStage <- getMissingParentStages(preStartStage) if runningStages.contains(parentStage)) {
+            dependantStagePreStarted.getOrElseUpdate(parentStage, new ArrayBuffer[Stage]()) += preStartStage
+          }
+          submitMissingTasks(preStartStage, activeJobForStage(preStartStage).get)
+        }
+      }
+    }
   }
 }
 
