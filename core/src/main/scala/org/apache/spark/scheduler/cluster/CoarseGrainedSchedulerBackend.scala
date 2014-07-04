@@ -90,6 +90,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         if (TaskState.isFinished(state)) {
           if (executorActor.contains(executorId)) {
             freeCores(executorId) += scheduler.CPUS_PER_TASK
+            // Make offer right away if the task succeeds, otherwise wait for the scheduler to
+            // revive offer
+            // TODO: there may still be deadlock if a task reports success
+            // but we failed retrieving its result
             if (state == TaskState.FINISHED) {
               makeOffers(executorId)
             }
