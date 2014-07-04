@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -54,9 +55,24 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       ResolveFunctions ::
       GlobalAggregates ::
       typeCoercionRules :_*),
+    Batch("Check Analysis", Once,
+      CheckResolution),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
+
+  /**
+   * Makes sure all attributes have been resolved.
+   */
+  object CheckResolution extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      plan.transform {
+        case p if p.expressions.exists(!_.resolved) =>
+          throw new TreeNodeException(p,
+            s"Unresolved attributes: ${p.expressions.filterNot(_.resolved).mkString(",")}")
+      }
+    }
+  }
 
   /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.

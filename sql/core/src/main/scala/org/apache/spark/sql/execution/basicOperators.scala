@@ -208,6 +208,8 @@ case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
 
 /**
  * :: DeveloperApi ::
+ *Returns the rows in left that also appear in right using the built in spark 
+ *intersection function.
  */
 @DeveloperApi
 case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
@@ -215,5 +217,19 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
 
   override def execute() = {
     left.execute().map(_.copy()).intersection(right.execute().map(_.copy()))
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Returns a table with the elements from left that are not in right using
+ * the built-in spark subtract function.
+ */
+@DeveloperApi
+case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
+  override def output = left.output
+
+  override def execute() = {
+    left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
   }
 }
