@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming_2.10</artifactId>
+  <artifactId>spark-streaming_${scala.binary.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Streaming</name>
   <url>http://spark.apache.org/</url>

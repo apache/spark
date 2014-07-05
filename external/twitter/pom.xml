@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-twitter_2.10</artifactId>
+  <artifactId>spark-streaming-twitter_${scala.binary.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project External Twitter</name>
   <url>http://spark.apache.org/</url>
