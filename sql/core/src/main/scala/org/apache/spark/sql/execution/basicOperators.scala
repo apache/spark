@@ -219,17 +219,3 @@ case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
     left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
   }
 }
-
-/**
- * :: DeveloperApi ::
- *Returns the rows in left that also appear in right using the built in spark
- *intersection function.
- */
-@DeveloperApi
-case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
-  override def output = children.head.output
-
-  override def execute() = {
-    left.execute().map(_.copy()).intersection(right.execute().map(_.copy()))
-  }
-}
