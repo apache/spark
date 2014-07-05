@@ -448,9 +448,9 @@ class JsonSuite extends QueryTest {
   }
 
   test("Type conflict in array elements") {
-    val jsonSchemaRDD = jsonRDD(arrayElementTypeConflict)
+    var jsonSchemaRDD = jsonRDD(arrayElementTypeConflict1)
 
-    val expectedSchema =
+    var expectedSchema =
       AttributeReference("array", ArrayType(StringType), true)() :: Nil
 
     comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
@@ -468,6 +468,14 @@ class JsonSuite extends QueryTest {
       sql("select array[0] + 1 from jsonTable"),
       2
     )
+
+    jsonSchemaRDD = jsonRDD(arrayElementTypeConflict2)
+
+    expectedSchema =
+      AttributeReference("array",
+        ArrayType(StructType(StructField("field", LongType, true) :: Nil)), true)() :: Nil
+
+    comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
   }
 
   test("Handling missing fields") {
