@@ -219,3 +219,4 @@ case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
     left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
   }
 }
+
