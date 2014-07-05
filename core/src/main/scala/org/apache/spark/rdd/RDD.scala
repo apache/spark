@@ -1270,4 +1270,10 @@ abstract class RDD[T: ClassTag](
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
   }
+
+   def span(p: T => Boolean) : (RDD[T], RDD[T]) = {
+    val left=this.filter(p)
+    val right=this.filter(!p(_))
+    (left, right)
+    }
 }
