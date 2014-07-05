@@ -54,7 +54,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val table = client.getTable(databaseName, tableName)
     val partitions: Seq[Partition] =
       if (table.isPartitioned) {
-        client.getPartitions(table)
+        client.getAllPartitionsForPruner(table).toSeq
       } else {
         Nil
       }
