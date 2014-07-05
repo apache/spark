@@ -43,15 +43,14 @@ class PatternMatchingSuite extends FunSuite with LocalSparkContext {
         Match(List(
           EdgeMatch(0L, 1L, "works_at"), // Alice works at Acme.
           EdgeMatch(2L, 1L, "works_at"), // Bob also works at Acme.
-          EdgeMatch(2L, 3L, "worked_at"), // Bob formerly worked at CompanyX...
+          EdgeMatch(2L, 3L, "worked_at"), // Bob formerly worked at CompanyX,
           EdgeMatch(4L, 3L, "works_at"))), // where Cindy currently works.
         Match(List(
-          EdgeMatch(2L, 1L, "works_at"), // Alice works at Acme.
-          EdgeMatch(2L, 1L, "works_at"), // Alice also works at Acme. Who would have guessed? (The
-                                         // duplicate edge is an artifact of the PatternMatching
-                                         // semantics.)
-          EdgeMatch(2L, 3L, "worked_at"), // -- as before --
-          EdgeMatch(4L, 3L, "works_at"))))))) // -- as before --
+          EdgeMatch(2L, 1L, "works_at"), // Bob works at Acme.
+          EdgeMatch(2L, 1L, "works_at"), // Bob works at Acme. (The duplicate edge is an artifact of
+                                         // the PatternMatching semantics.)
+          EdgeMatch(2L, 3L, "worked_at"), // Bob formerly worked at CompanyX,
+          EdgeMatch(4L, 3L, "works_at"))))))) // where Cindy currently works.
 
     }
   }
