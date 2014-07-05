@@ -70,13 +70,10 @@ object TestJsonData {
       """{"num_struct":{}, "str_array":["str1", "str2", 33],
           "array":[7], "struct_array":{"field": true}, "struct": {"field": "str"}}""" :: Nil)
 
-  val arrayElementTypeConflict1 =
+  val arrayElementTypeConflict =
     TestSQLContext.sparkContext.parallelize(
-      """{"array": [1, 1.1, true, null, [], {}, [2,3,4], {"field":"str"}]}""" :: Nil)
-
-  val arrayElementTypeConflict2 =
-    TestSQLContext.sparkContext.parallelize(
-      """{"array": [{"field":214748364700}, {"field":1}]}""" :: Nil)
+      """{"array1": [1, 1.1, true, null, [], {}, [2,3,4], {"field":"str"}],
+          "array2": [{"field":214748364700}, {"field":1}]}""" :: Nil)
 
   val missingFields =
     TestSQLContext.sparkContext.parallelize(
