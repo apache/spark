@@ -63,7 +63,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Eliminate unneeded attributes from either side of a Join.
     case Project(projectList, Join(left, right, joinType, condition)) =>
-      // Collect the list of off references required either above or to evaluate the condition.
+      // Collect the list of all references required either above or to evaluate the condition.
       val allReferences: Set[Attribute] =
         projectList.flatMap(_.references).toSet ++ condition.map(_.references).getOrElse(Set.empty)
 
@@ -74,7 +74,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Eliminate unneeded attributes from right side of a LeftSemiJoin.
     case Join(left, right, LeftSemi, condition) =>
-      // Collect the list of off references required either above or to evaluate the condition.
+      // Collect the list of all references required to evaluate the condition.
       val allReferences: Set[Attribute] =
         condition.map(_.references).getOrElse(Set.empty)
 
