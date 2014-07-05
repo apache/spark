@@ -23,7 +23,8 @@ import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.util.Utils
 import org.apache.spark.storage.{BlockId, FileSegment}
 
-private[spark] class ShuffleSender(portIn: Int, val pResolver: PathResolver, val conf: SparkConf) extends Logging {
+private[spark] class ShuffleSender(portIn: Int, val pResolver: PathResolver,
+                                   val conf: SparkConf) extends Logging {
 
   val server = new FileServer(pResolver, portIn, conf)
   server.start()
