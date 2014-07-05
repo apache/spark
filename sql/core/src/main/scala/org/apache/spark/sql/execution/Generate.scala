@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{Generator, JoinedRow, Literal, Projection}
+import org.apache.spark.sql.catalyst.expressions._
 
 /**
  * :: DeveloperApi ::
@@ -39,8 +39,16 @@ case class Generate(
     child: SparkPlan)
   extends UnaryNode {
 
+  protected def generatorOutput: Seq[Attribute] = {
+    if (join && outer) {
+      generator.output.map(_.withNullability(true))
+    } else {
+      generator.output
+    }
+  }
+
   override def output =
-    if (join) child.output ++ generator.output else generator.output
+    if (join) child.output ++ generatorOutput else generatorOutput
 
   override def execute() = {
     if (join) {
