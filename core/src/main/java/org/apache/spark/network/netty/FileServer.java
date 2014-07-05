@@ -26,6 +26,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
+import org.apache.spark.SparkConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +42,7 @@ class FileServer {
   private ChannelFuture channelFuture = null;
   private int port = 0;
 
-  FileServer(PathResolver pResolver, int port) {
+  FileServer(PathResolver pResolver, int port, SparkConf conf) {
     InetSocketAddress addr = new InetSocketAddress(port);
 
     // Configure the server.
@@ -49,13 +50,14 @@ class FileServer {
     workerGroup = new OioEventLoopGroup();
 
     ServerBootstrap bootstrap = new ServerBootstrap();
+
     bootstrap.group(bossGroup, workerGroup)
         .channel(OioServerSocketChannel.class)
-        .option(ChannelOption.SO_BACKLOG, 100)
-        .option(ChannelOption.SO_RCVBUF, 1500)
+        .option(ChannelOption.SO_BACKLOG, conf.getInt("spark.shuffle.fileserver.backlog", 100))
+        .option(ChannelOption.SO_RCVBUF, conf.getInt("spark.shuffle.fileserver.receivebuf", 1536))
         .childHandler(new FileServerChannelInitializer(pResolver))
-        .childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, 32 * 1024)
-        .childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, 8 * 1024)
+        .childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, conf.getInt("spark.shuffle.fileserver.watermark.high", 1024) * 1024)
+        .childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, conf.getInt("spark.shuffle.fileserver.watermark.low", 256) * 1024)
         .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
     // Start the server.
     channelFuture = bootstrap.bind(addr);

@@ -179,7 +179,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   }
 
   private[storage] def startShuffleBlockSender(port: Int): Int = {
-    shuffleSender = new ShuffleSender(port, this)
+    shuffleSender = new ShuffleSender(port, this, shuffleManager.conf)
     logInfo(s"Created ShuffleSender binding to port: ${shuffleSender.port}")
     shuffleSender.port
   }

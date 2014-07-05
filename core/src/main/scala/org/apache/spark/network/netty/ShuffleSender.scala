@@ -19,13 +19,13 @@ package org.apache.spark.network.netty
 
 import java.io.File
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.util.Utils
 import org.apache.spark.storage.{BlockId, FileSegment}
 
-private[spark] class ShuffleSender(portIn: Int, val pResolver: PathResolver) extends Logging {
+private[spark] class ShuffleSender(portIn: Int, val pResolver: PathResolver, val conf: SparkConf) extends Logging {
 
-  val server = new FileServer(pResolver, portIn)
+  val server = new FileServer(pResolver, portIn, conf)
   server.start()
 
   def stop() {
@@ -66,6 +66,6 @@ private[spark] object ShuffleSender {
         new FileSegment(file, 0, file.length())
       }
     }
-    val sender = new ShuffleSender(port, pResovler)
+    val sender = new ShuffleSender(port, pResovler, new SparkConf)
   }
 }
