@@ -68,9 +68,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
         projectList.flatMap(_.references).toSet ++ condition.map(_.references).getOrElse(Set.empty)
 
       /** Applies a projection only when the child is producing unnecessary attributes */
-      def prunedChild(c: LogicalPlan) = ColumnPruning.prunedChild(c, allReferences)
+      def pruneJoinChild(c: LogicalPlan) = prunedChild(c, allReferences)
 
-      Project(projectList, Join(prunedChild(left), prunedChild(right), joinType, condition))
+      Project(projectList, Join(pruneJoinChild(left), pruneJoinChild(right), joinType, condition))
 
     // Eliminate unneeded attributes from right side of a LeftSemiJoin.
     case Join(left, right, LeftSemi, condition) =>
