@@ -386,13 +386,13 @@ class SQLQuerySuite extends QueryTest {
 
  test("INTERSECT") {
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData "),
+      sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
       (1, "a") ::
       (2, "b") ::
       (3, "c") ::
       (4, "d") :: Nil)
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM upperCaseData "), Nil)
+      sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM upperCaseData"), Nil)
   }
 
   test("SET commands semantics using sql()") {

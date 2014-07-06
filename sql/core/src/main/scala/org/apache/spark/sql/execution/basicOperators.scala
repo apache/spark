@@ -222,8 +222,8 @@ case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
 
 /**
  * :: DeveloperApi ::
- *Returns the rows in left that also appear in right using the built in spark
- *intersection function.
+ * Returns the rows in left that also appear in right using the built in spark
+ * intersection function.
  */
 @DeveloperApi
 case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
