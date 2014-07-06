@@ -45,6 +45,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       case Some(blockResult) =>
         // Partition is already materialized, so just return its values
         context.taskMetrics.inputMetrics = Some(blockResult.inputMetrics)
+        if (blockResult.inputMetrics.bytesRead > 0) {
+          rdd.inputBytes += blockResult.inputMetrics.bytesRead
+        }
         new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
 
       case None =>
