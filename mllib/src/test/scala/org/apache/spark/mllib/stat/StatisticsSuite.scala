@@ -1,6 +1,11 @@
 package org.apache.spark.mllib.stat
 
-class StatisticsSuite {
+import org.apache.spark.SharedSparkContext
+import org.scalatest.FunSuite
+
+class StatisticsSuite extends FunSuite with SharedSparkContext {
+
+  //test pearson
 
 
 }
