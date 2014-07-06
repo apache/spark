@@ -1272,8 +1272,18 @@ abstract class RDD[T: ClassTag](
   }
 
   def span(p: T => Boolean) : (RDD[T], RDD[T]) = {
-    val left=this.filter(p)
-    val right=this.filter(!p(_))
+    val spaned = this.mapPartitions { iter =>
+      val (left, right) = iter.span(p)
+      val iterSeq = Seq(left, right)
+      iterSeq.iterator
+    }
+    val left = spaned.mapPartitions { iter =>
+      iter.next().toIterator
+    }
+    val right = spaned.mapPartitions { iter =>
+      iter.next()
+      iter.next().toIterator
+    }
     (left, right)
   }
 }
