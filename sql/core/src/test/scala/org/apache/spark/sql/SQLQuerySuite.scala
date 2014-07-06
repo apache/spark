@@ -372,6 +372,7 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("EXCEPT") {
+
     checkAnswer(
       sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM upperCaseData "),
       (1, "a") ::

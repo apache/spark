@@ -272,9 +272,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child))(sqlContext) :: Nil
       case Unions(unionChildren) =>
-        execution.Union(unionChildren.map(planLater))(sqlContext) :: Nil   
+        execution.Union(unionChildren.map(planLater))(sqlContext) :: Nil
       case logical.Except(left,right) =>                                        
-        execution.Except(planLater(left),planLater(right)) :: Nil  
+        execution.Except(planLater(left),planLater(right)) :: Nil   
       case logical.Intersect(left, right) =>
         execution.Intersect(planLater(left), planLater(right)) :: Nil
       case logical.Generate(generator, join, outer, _, child) =>

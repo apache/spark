@@ -622,7 +622,7 @@ private[hive] object HiveQl {
       // If there are multiple INSERTS just UNION them together into on query.
       queries.reduceLeft(Union)
 
-    case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))  
+    case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
