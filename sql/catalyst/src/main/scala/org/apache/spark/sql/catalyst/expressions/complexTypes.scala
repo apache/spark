@@ -50,6 +50,8 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
         null
       } else {
         if (child.dataType.isInstanceOf[ArrayType]) {
+          // TODO: consider using Array[_] for ArrayType child to avoid
+          // boxing of primitives
           val baseValue = value.asInstanceOf[Seq[_]]
           val o = key.asInstanceOf[Int]
           if (o >= baseValue.size || o < 0) {

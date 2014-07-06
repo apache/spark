@@ -17,16 +17,30 @@
 
 package org.apache.spark.sql.hive.execution
 
+import scala.util.Try
+
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.{SchemaRDD, Row}
+
+case class TestData(a: Int, b: String)
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  test("CREATE TABLE AS runs once") {
+    hql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
+    assert(hql("SELECT COUNT(*) FROM foo").collect().head.getLong(0) === 1,
+      "Incorrect number of rows in created table")
+  }
+
   createQueryTest("between",
-    "SELECT * FROM src WHERE key between 1 and 2"
-  )
+    "SELECT * FROM src WHERE key Between 1 and 2")
+
+  createQueryTest("div",
+    "SELECT 1 DIV 2, 1 div 2, 1 dIv 2 FROM src LIMIT 1")
 
   test("Query expressed in SQL") {
     assert(sql("SELECT 1").collect() === Array(Seq(1)))
@@ -157,4 +171,306 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SHOW TABLES").toString
     hql("SELECT * FROM src").toString
   }
+
+  createQueryTest("case statements with key #1",
+    "SELECT (CASE 1 WHEN 2 THEN 3 END) FROM src where key < 15")
+
+  createQueryTest("case statements with key #2",
+    "SELECT (CASE key WHEN 2 THEN 3 ELSE 0 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements with key #3",
+    "SELECT (CASE key WHEN 2 THEN 3 WHEN NULL THEN 4 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements with key #4",
+    "SELECT (CASE key WHEN 2 THEN 3 WHEN NULL THEN 4 ELSE 0 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #1",
+    "SELECT (CASE WHEN key > 2 THEN 3 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #2",
+    "SELECT (CASE WHEN key > 2 THEN 3 ELSE 4 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #3",
+    "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 END) FROM src WHERE key < 15")
+
+  createQueryTest("case statements WITHOUT key #4",
+    "SELECT (CASE WHEN key > 2 THEN 3 WHEN 2 > key THEN 2 ELSE 0 END) FROM src WHERE key < 15")
+
+  test("implement identity function using case statement") {
+    val actual = hql("SELECT (CASE key WHEN key THEN key END) FROM src").collect().toSet
+    val expected = hql("SELECT key FROM src").collect().toSet
+    assert(actual === expected)
+  }
+
+  // TODO: adopt this test when Spark SQL has the functionality / framework to report errors.
+  // See https://github.com/apache/spark/pull/1055#issuecomment-45820167 for a discussion.
+  ignore("non-boolean conditions in a CaseWhen are illegal") {
+    intercept[Exception] {
+      hql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
+    }
+  }
+
+  def isExplanation(result: SchemaRDD) = {
+    val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
+    explanation.size > 1 && explanation.head.startsWith("Physical execution plan")
+  }
+
+  test("SPARK-1704: Explain commands as a SchemaRDD") {
+    hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+
+    val rdd = hql("explain select key, count(value) from src group by key")
+    assert(isExplanation(rdd))
+
+    TestHive.reset()
+  }
+
+  test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
+    val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
+      .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
+    TestHive.sparkContext.parallelize(fixture).registerAsTable("having_test")
+    val results =
+      hql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
+      .collect()
+      .map(x => Pair(x.getString(0), x.getInt(1)))
+
+    assert(results === Array(Pair("foo", 4)))
+    TestHive.reset()
+  }
+
+  test("SPARK-2180: HAVING with non-boolean clause raises no exceptions") {
+    hql("select key, count(*) c from src group by key having c").collect()
+  }
+
+  test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
+    assert(hql("select key from src having key > 490").collect().size < 100)
+  }
+
+  test("Query Hive native command execution result") {
+    val tableName = "test_native_commands"
+
+    assertResult(0) {
+      hql(s"DROP TABLE IF EXISTS $tableName").count()
+    }
+
+    assertResult(0) {
+      hql(s"CREATE TABLE $tableName(key INT, value STRING)").count()
+    }
+
+    assert(
+      hql("SHOW TABLES")
+        .select('result)
+        .collect()
+        .map(_.getString(0))
+        .contains(tableName))
+
+    assert(isExplanation(hql(s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
+
+    TestHive.reset()
+  }
+
+  test("Exactly once semantics for DDL and command statements") {
+    val tableName = "test_exactly_once"
+    val q0 = hql(s"CREATE TABLE $tableName(key INT, value STRING)")
+
+    // If the table was not created, the following assertion would fail
+    assert(Try(table(tableName)).isSuccess)
+
+    // If the CREATE TABLE command got executed again, the following assertion would fail
+    assert(Try(q0.count()).isSuccess)
+  }
+
+  test("DESCRIBE commands") {
+    hql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
+
+    hql(
+      """FROM src INSERT OVERWRITE TABLE test_describe_commands1 PARTITION (dt='2008-06-08')
+        |SELECT key, value
+      """.stripMargin)
+
+    // Describe a table
+    assertResult(
+      Array(
+        Array("key", "int", null),
+        Array("value", "string", null),
+        Array("dt", "string", null),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
+        Array("dt", "string", null))
+    ) {
+      hql("DESCRIBE test_describe_commands1")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
+
+    // Describe a table with a fully qualified table name
+    assertResult(
+      Array(
+        Array("key", "int", null),
+        Array("value", "string", null),
+        Array("dt", "string", null),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
+        Array("dt", "string", null))
+    ) {
+      hql("DESCRIBE default.test_describe_commands1")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
+
+    // Describe a column is a native command
+    assertResult(Array(Array("value", "string", "from deserializer"))) {
+      hql("DESCRIBE test_describe_commands1 value")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a column is a native command
+    assertResult(Array(Array("value", "string", "from deserializer"))) {
+      hql("DESCRIBE default.test_describe_commands1 value")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a partition is a native command
+    assertResult(
+      Array(
+        Array("key", "int", "None"),
+        Array("value", "string", "None"),
+        Array("dt", "string", "None"),
+        Array("", "", ""),
+        Array("# Partition Information", "", ""),
+        Array("# col_name", "data_type", "comment"),
+        Array("", "", ""),
+        Array("dt", "string", "None"))
+    ) {
+      hql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
+        .select('result)
+        .collect()
+        .map(_.getString(0).split("\t").map(_.trim))
+    }
+
+    // Describe a registered temporary table.
+    val testData: SchemaRDD =
+      TestHive.sparkContext.parallelize(
+        TestData(1, "str1") ::
+        TestData(1, "str2") :: Nil)
+    testData.registerAsTable("test_describe_commands2")
+
+    assertResult(
+      Array(
+        Array("# Registered as a temporary table", null, null),
+        Array("a", "IntegerType", null),
+        Array("b", "StringType", null))
+    ) {
+      hql("DESCRIBE test_describe_commands2")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
+  }
+
+  test("SPARK-2263: Insert Map<K, V> values") {
+    hql("CREATE TABLE m(value MAP<INT, STRING>)")
+    hql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
+    hql("SELECT * FROM m").collect().zip(hql("SELECT * FROM src LIMIT 10").collect()).map {
+      case (Row(map: Map[Int, String]), Row(key: Int, value: String)) =>
+        assert(map.size === 1)
+        assert(map.head === (key, value))
+    }
+  }
+
+  test("parse HQL set commands") {
+    // Adapted from its SQL counterpart.
+    val testKey = "spark.sql.key.usedfortestonly"
+    val testVal = "val0,val_1,val2.3,my_table"
+
+    hql(s"set $testKey=$testVal")
+    assert(get(testKey, testVal + "_") == testVal)
+
+    hql("set mapred.reduce.tasks=20")
+    assert(get("mapred.reduce.tasks", "0") == "20")
+    hql("set mapred.reduce.tasks = 40")
+    assert(get("mapred.reduce.tasks", "0") == "40")
+
+    hql(s"set $testKey=$testVal")
+    assert(get(testKey, "0") == testVal)
+
+    hql(s"set $testKey=")
+    assert(get(testKey, "0") == "")
+  }
+
+  test("SET commands semantics for a HiveContext") {
+    // Adapted from its SQL counterpart.
+    val testKey = "spark.sql.key.usedfortestonly"
+    val testVal = "test.val.0"
+    val nonexistentKey = "nonexistent"
+    def rowsToPairs(rows: Array[Row]) = rows.map { case Row(key: String, value: String) =>
+      key -> value
+    }
+
+    clear()
+
+    // "set" itself returns all config variables currently specified in SQLConf.
+    assert(hql("SET").collect().size == 0)
+
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql(s"SET $testKey=$testVal").collect())
+    }
+
+    assert(hiveconf.get(testKey, "") == testVal)
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql("SET").collect())
+    }
+
+    hql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      rowsToPairs(hql("SET").collect())
+    }
+
+    // "set key"
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql(s"SET $testKey").collect())
+    }
+
+    assertResult(Array(nonexistentKey -> "<undefined>")) {
+      rowsToPairs(hql(s"SET $nonexistentKey").collect())
+    }
+
+    // Assert that sql() should have the same effects as hql() by repeating the above using sql().
+    clear()
+    assert(sql("SET").collect().size == 0)
+
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql(s"SET $testKey=$testVal").collect())
+    }
+
+    assert(hiveconf.get(testKey, "") == testVal)
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql("SET").collect())
+    }
+
+    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      rowsToPairs(sql("SET").collect())
+    }
+
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql(s"SET $testKey").collect())
+    }
+
+    assertResult(Array(nonexistentKey -> "<undefined>")) {
+      rowsToPairs(sql(s"SET $nonexistentKey").collect())
+    }
+
+    clear()
+  }
+
+  // Put tests that depend on specific Hive settings before these last two test,
+  // since they modify /clear stuff.
 }
+
+// for SPARK-2180 test
+case class HavingRow(key: Int, value: String, attr: Int)

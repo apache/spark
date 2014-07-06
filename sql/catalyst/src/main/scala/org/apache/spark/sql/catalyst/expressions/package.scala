@@ -24,7 +24,7 @@ package org.apache.spark.sql.catalyst
  * expression, a [[NamedExpression]] in addition to the standard collection of expressions.
  *
  * ==Standard Expressions==
- * A library of standard expressions (e.g., [[Add]], [[Equals]]), aggregates (e.g., SUM, COUNT),
+ * A library of standard expressions (e.g., [[Add]], [[EqualTo]]), aggregates (e.g., SUM, COUNT),
  * and other computations (e.g. UDFs). Each expression type is capable of determining its output
  * schema as a function of its children's output schema.
  *

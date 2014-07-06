@@ -34,9 +34,8 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.hive.execution.{HiveTableScan, InsertIntoHiveTable}
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.columnar.InMemoryRelation
+import org.apache.spark.sql.hive.execution.HiveTableScan
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -54,7 +53,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val table = client.getTable(databaseName, tableName)
     val partitions: Seq[Partition] =
       if (table.isPartitioned) {
-        client.getPartitions(table)
+        client.getAllPartitionsForPruner(table).toSeq
       } else {
         Nil
       }
@@ -105,7 +104,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case InsertIntoCreatedTable(db, tableName, child) =>
-        val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase)
+        val databaseName = db.getOrElse(hive.sessionState.getCurrentDatabase)
 
         createTable(databaseName, tableName, child.output)
 
@@ -130,8 +129,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
         castChildOutput(p, table, child)
 
-      case p @ logical.InsertIntoTable(SparkLogicalPlan(InMemoryColumnarTableScan(
-        _, HiveTableScan(_, table, _), _)), _, child, _) =>
+      case p @ logical.InsertIntoTable(
+                 InMemoryRelation(_, _,
+                   HiveTableScan(_, table, _)), _, child, _) =>
         castChildOutput(p, table, child)
     }
 
@@ -207,7 +207,9 @@ object HiveMetastoreTypes extends RegexParsers {
     }
 
   protected lazy val structType: Parser[DataType] =
-    "struct" ~> "<" ~> repsep(structField,",") <~ ">" ^^ StructType
+    "struct" ~> "<" ~> repsep(structField,",") <~ ">"  ^^ {
+      case fields => new StructType(fields)
+    }
 
   protected lazy val dataType: Parser[DataType] =
     arrayType |
@@ -236,6 +238,7 @@ object HiveMetastoreTypes extends RegexParsers {
     case BinaryType => "binary"
     case BooleanType => "boolean"
     case DecimalType => "decimal"
+    case TimestampType => "timestamp"
   }
 }
 
@@ -254,8 +257,6 @@ private[hive] case class MetastoreRelation
   def hiveQlPartitions = partitions.map { p =>
     new Partition(hiveQlTable, p)
   }
-
-  override def isPartitioned = hiveQlTable.isPartitioned
 
   val tableDesc = new TableDesc(
     Class.forName(hiveQlTable.getSerializationLib).asInstanceOf[Class[Deserializer]],

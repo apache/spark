@@ -22,7 +22,7 @@ import org.apache.hadoop.hbase.{HBaseConfiguration, HTableDescriptor}
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 
 import org.apache.spark._
-import org.apache.spark.rdd.NewHadoopRDD
+
 
 object HBaseTest {
   def main(args: Array[String]) {

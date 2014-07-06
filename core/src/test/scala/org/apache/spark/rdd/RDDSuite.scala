@@ -24,7 +24,9 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd._
+import org.apache.spark.util.Utils
+
+import org.apache.spark.rdd.RDDSuiteUtils._
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
@@ -66,6 +68,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("serialization") {
+    val empty = new EmptyRDD[Int](sc)
+    val serial = Utils.serialize(empty)
+    val deserial: EmptyRDD[Int] = Utils.deserialize(serial)
+    assert(!deserial.toString().isEmpty())
+  }
+
   test("countApproxDistinct") {
 
     def error(est: Long, size: Long) = math.abs(est - size) / size.toDouble
@@ -73,10 +82,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val size = 100
     val uniformDistro = for (i <- 1 to 100000) yield i % size
     val simpleRdd = sc.makeRDD(uniformDistro)
-    assert(error(simpleRdd.countApproxDistinct(0.2), size) < 0.2)
-    assert(error(simpleRdd.countApproxDistinct(0.05), size) < 0.05)
-    assert(error(simpleRdd.countApproxDistinct(0.01), size) < 0.01)
-    assert(error(simpleRdd.countApproxDistinct(0.001), size) < 0.001)
+    assert(error(simpleRdd.countApproxDistinct(4, 0), size) < 0.4)
+    assert(error(simpleRdd.countApproxDistinct(8, 0), size) < 0.1)
   }
 
   test("SparkContext.union") {
@@ -268,8 +275,9 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     // we can optionally shuffle to keep the upstream parallel
     val coalesced5 = data.coalesce(1, shuffle = true)
-    assert(coalesced5.dependencies.head.rdd.dependencies.head.rdd.asInstanceOf[ShuffledRDD[_, _, _]] !=
-      null)
+    val isEquals = coalesced5.dependencies.head.rdd.dependencies.head.rdd.
+      asInstanceOf[ShuffledRDD[_, _, _, _]] != null
+    assert(isEquals)
 
     // when shuffling, we can increase the number of partitions
     val coalesced6 = data.coalesce(20, shuffle = true)
@@ -351,6 +359,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     intercept[IllegalArgumentException] {
       nums.zip(sc.parallelize(1 to 4, 1)).collect()
+    }
+
+    intercept[SparkException] {
+      nums.zip(sc.parallelize(1 to 5, 2)).collect()
     }
   }
 
@@ -495,55 +507,56 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("takeSample") {
-    val data = sc.parallelize(1 to 100, 2)
-    
+    val n = 1000000
+    val data = sc.parallelize(1 to n, 2)
+
     for (num <- List(5, 20, 100)) {
       val sample = data.takeSample(withReplacement=false, num=num)
       assert(sample.size === num)        // Got exactly num elements
       assert(sample.toSet.size === num)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
       assert(sample.toSet.size === 20)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=false, 200, seed)
+      val sample = data.takeSample(withReplacement=false, 100, seed)
       assert(sample.size === 100)        // Got only 100 elements
       assert(sample.toSet.size === 100)  // Elements are distinct
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=true, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
       val sample = data.takeSample(withReplacement=true, num=20)
       assert(sample.size === 20)        // Got exactly 100 elements
       assert(sample.toSet.size <= 20, "sampling with replacement returned all distinct elements")
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
-      val sample = data.takeSample(withReplacement=true, num=100)
-      assert(sample.size === 100)        // Got exactly 100 elements
+      val sample = data.takeSample(withReplacement=true, num=n)
+      assert(sample.size === n)        // Got exactly 100 elements
       // Chance of getting all distinct elements is astronomically low, so test we got < 100
-      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
-      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+      assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
+      assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, 100, seed)
-      assert(sample.size === 100)        // Got exactly 100 elements
+      val sample = data.takeSample(withReplacement=true, n, seed)
+      assert(sample.size === n)        // Got exactly 100 elements
       // Chance of getting all distinct elements is astronomically low, so test we got < 100
-      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
+      assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
     for (seed <- 1 to 5) {
-      val sample = data.takeSample(withReplacement=true, 200, seed)
-      assert(sample.size === 200)        // Got exactly 200 elements
+      val sample = data.takeSample(withReplacement=true, 2 * n, seed)
+      assert(sample.size === 2 * n)        // Got exactly 200 elements
       // Chance of getting all distinct elements is still quite low, so test we got < 100
-      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
+      assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
   }
 
@@ -574,14 +587,63 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("sortByKey") {
+    val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
+
+    val col1 = Array("4|60|C", "5|50|A", "6|40|B")
+    val col2 = Array("6|40|B", "5|50|A", "4|60|C")
+    val col3 = Array("5|50|A", "6|40|B", "4|60|C")
+
+    assert(data.sortBy(_.split("\\|")(0)).collect() === col1)
+    assert(data.sortBy(_.split("\\|")(1)).collect() === col2)
+    assert(data.sortBy(_.split("\\|")(2)).collect() === col3)
+  }
+
+  test("sortByKey ascending parameter") {
+    val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
+
+    val asc = Array("4|60|C", "5|50|A", "6|40|B")
+    val desc = Array("6|40|B", "5|50|A", "4|60|C")
+
+    assert(data.sortBy(_.split("\\|")(0), true).collect() === asc)
+    assert(data.sortBy(_.split("\\|")(0), false).collect() === desc)
+  }
+
+  test("sortByKey with explicit ordering") {
+    val data = sc.parallelize(Seq("Bob|Smith|50",
+                                  "Jane|Smith|40",
+                                  "Thomas|Williams|30",
+                                  "Karen|Williams|60"))
+
+    val ageOrdered = Array("Thomas|Williams|30",
+                           "Jane|Smith|40",
+                           "Bob|Smith|50",
+                           "Karen|Williams|60")
+
+    // last name, then first name
+    val nameOrdered = Array("Bob|Smith|50",
+                            "Jane|Smith|40",
+                            "Karen|Williams|60",
+                            "Thomas|Williams|30")
+
+    val parse = (s: String) => {
+      val split = s.split("\\|")
+      Person(split(0), split(1), split(2).toInt)
+    }
+
+    import scala.reflect.classTag
+    assert(data.sortBy(parse, true, 2)(AgeOrdering, classTag[Person]).collect() === ageOrdered)
+    assert(data.sortBy(parse, true, 2)(NameOrdering, classTag[Person]).collect() === nameOrdered)
+  }
+
   test("intersection") {
     val all = sc.parallelize(1 to 10)
     val evens = sc.parallelize(2 to 10 by 2)
     val intersection = Array(2, 4, 6, 8, 10)
 
     // intersection is commutative
-    assert(all.intersection(evens).collect.sorted === intersection)
-    assert(evens.intersection(all).collect.sorted === intersection)
+    assert(all.intersection(evens).collect().sorted === intersection)
+    assert(evens.intersection(all).collect().sorted === intersection)
   }
 
   test("intersection strips duplicates in an input") {
@@ -589,8 +651,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val b = sc.parallelize(Seq(1,1,2,3))
     val intersection = Array(1,2,3)
 
-    assert(a.intersection(b).collect.sorted === intersection)
-    assert(b.intersection(a).collect.sorted === intersection)
+    assert(a.intersection(b).collect().sorted === intersection)
+    assert(b.intersection(a).collect().sorted === intersection)
   }
 
   test("zipWithIndex") {
@@ -642,11 +704,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(ancestors3.count(_.isInstanceOf[MappedRDD[_, _]]) === 2)
 
     // Any ancestors before the shuffle are not considered
-    assert(ancestors4.size === 1)
-    assert(ancestors4.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 1)
-    assert(ancestors5.size === 4)
-    assert(ancestors5.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 1)
-    assert(ancestors5.count(_.isInstanceOf[MapPartitionsRDD[_, _]]) === 1)
+    assert(ancestors4.size === 0)
+    assert(ancestors4.count(_.isInstanceOf[ShuffledRDD[_, _, _, _]]) === 0)
+    assert(ancestors5.size === 3)
+    assert(ancestors5.count(_.isInstanceOf[ShuffledRDD[_, _, _, _]]) === 1)
+    assert(ancestors5.count(_.isInstanceOf[MapPartitionsRDD[_, _]]) === 0)
     assert(ancestors5.count(_.isInstanceOf[MappedValuesRDD[_, _, _]]) === 2)
   }
 

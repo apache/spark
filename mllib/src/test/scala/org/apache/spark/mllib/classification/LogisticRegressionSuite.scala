@@ -21,7 +21,7 @@ import scala.util.Random
 import scala.collection.JavaConversions._
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
@@ -56,7 +56,7 @@ object LogisticRegressionSuite {
   }
 }
 
-class LogisticRegressionSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Matchers {
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label

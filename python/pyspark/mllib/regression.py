@@ -23,7 +23,7 @@ from pyspark.mllib._common import \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
     _linear_predictor_typecheck, _have_scipy, _scipy_issparse
-from pyspark.mllib.linalg import SparseVector
+from pyspark.mllib.linalg import SparseVector, Vectors
 
 
 class LabeledPoint(object):
@@ -43,6 +43,9 @@ class LabeledPoint(object):
             self.features = array(features)
         else:
             raise TypeError("Expected NumPy array, list, SparseVector, or scipy.sparse matrix")
+
+    def __str__(self):
+        return "(" + ",".join((str(self.label), Vectors.stringify(self.features))) + ")"
 
 
 class LinearModel(object):
