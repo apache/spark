@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -40,6 +42,11 @@ class TaskInfo(
    * IndirectTaskResult and later fetching the result from the block manager).
    */
   var gettingResultTime: Long = 0
+
+  /**
+   * Terminal values of accumulables updated during this task.
+   */
+  val accumValues = ListBuffer[(String, String)]()
 
   /**
    * The time when the task has completed successfully (including the time to remotely fetch

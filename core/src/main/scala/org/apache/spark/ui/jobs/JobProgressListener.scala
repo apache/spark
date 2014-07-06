@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.collection.mutable.{HashMap, ListBuffer, Map}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -48,6 +48,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
 
   // TODO: Should probably consolidate all following into a single hash map.
   val stageIdToTime = HashMap[Int, Long]()
+  val stageIdToAccumulables = HashMap[Int, Map[String, String]]()
   val stageIdToInputBytes = HashMap[Int, Long]()
   val stageIdToShuffleRead = HashMap[Int, Long]()
   val stageIdToShuffleWrite = HashMap[Int, Long]()
@@ -73,6 +74,12 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
     val stageId = stage.stageId
     // Remove by stageId, rather than by StageInfo, in case the StageInfo is from storage
     poolToActiveStages(stageIdToPool(stageId)).remove(stageId)
+
+    val accumulables = stageIdToAccumulables.getOrElseUpdate(stageId, HashMap[String, String]())
+    stageCompleted.stageInfo.accumulatorValues.foreach { case (name, value) =>
+      accumulables(name) = value
+    }
+
     activeStages.remove(stageId)
     if (stage.failureReason.isEmpty) {
       completedStages += stage
@@ -89,6 +96,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
       val toRemove = math.max(retainedStages / 10, 1)
       stages.take(toRemove).foreach { s =>
         stageIdToTime.remove(s.stageId)
+        stageIdToAccumulables.remove(s.stageId)
         stageIdToInputBytes.remove(s.stageId)
         stageIdToShuffleRead.remove(s.stageId)
         stageIdToShuffleWrite.remove(s.stageId)
@@ -147,6 +155,11 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
     val info = taskEnd.taskInfo
 
     if (info != null) {
+      val accumulables = stageIdToAccumulables.getOrElseUpdate(sid, HashMap[String, String]())
+      info.accumValues.map { case (name, value) =>
+        accumulables(name) = value
+      }
+
       // create executor summary map if necessary
       val executorSummaryMap = stageIdToExecutorSummaries.getOrElseUpdate(key = sid,
         op = new HashMap[String, ExecutorSummary]())

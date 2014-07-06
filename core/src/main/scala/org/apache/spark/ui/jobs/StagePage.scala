@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.Node
+import scala.xml.{Unparsed, Node}
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.{Utils, Distribution}
@@ -57,6 +57,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val memoryBytesSpilled = listener.stageIdToMemoryBytesSpilled.getOrElse(stageId, 0L)
       val diskBytesSpilled = listener.stageIdToDiskBytesSpilled.getOrElse(stageId, 0L)
       val hasBytesSpilled = memoryBytesSpilled > 0 && diskBytesSpilled > 0
+      val accumulables = listener.stageIdToAccumulables(stageId)
 
       var activeTime = 0L
       val now = System.currentTimeMillis
@@ -102,10 +103,14 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           </ul>
         </div>
         // scalastyle:on
+      val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
+      def accumulableRow(acc: (String, String)) = <tr><td>{acc._1}</td><td>{acc._2}</td></tr>
+      val accumulableTable = UIUtils.listingTable(accumulableHeaders, accumulableRow, accumulables.toSeq)
+
       val taskHeaders: Seq[String] =
         Seq(
           "Index", "ID", "Attempt", "Status", "Locality Level", "Executor",
-          "Launch Time", "Duration", "GC Time") ++
+          "Launch Time", "Duration", "GC Time", "Accumulators") ++
         {if (hasInput) Seq("Input") else Nil} ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
@@ -217,6 +222,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
+        <h4>Accumulators</h4> ++ accumulableTable ++
         <h4>Tasks</h4> ++ taskTable
 
       UIUtils.headerSparkPage(content, basePath, appName, "Details for Stage %d".format(stageId),
@@ -283,6 +289,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         <td sorttable_customkey={gcTime.toString}>
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
         </td>
+        <td>{Unparsed(info.accumValues.map{ case (k, v) => s"$k += $v" }.mkString("<br/>"))}</td>
         <!--
         TODO: Add this back after we add support to hide certain columns.
         <td sorttable_customkey={serializationTime.toString}>

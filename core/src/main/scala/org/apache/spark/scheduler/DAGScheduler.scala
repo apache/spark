@@ -791,9 +791,10 @@ class DAGScheduler(
     val task = event.task
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
-    listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
-      event.taskMetrics))
+
     if (!stageIdToStage.contains(task.stageId)) {
+      listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
+        event.taskMetrics))
       // Skip all the actions if the stage has been cancelled.
       return
     }
@@ -809,12 +810,24 @@ class DAGScheduler(
       listenerBus.post(SparkListenerStageCompleted(stageToInfos(stage)))
       runningStages -= stage
     }
+
     event.reason match {
       case Success =>
         logInfo("Completed " + task)
         if (event.accumUpdates != null) {
           // TODO: fail the stage if the accumulator update fails...
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
+          event.accumUpdates.foreach { case (id, partialValue) =>
+            val acc = Accumulators.originals(id)
+            val name = acc.name
+            // To avoid UI cruft, ignore cases where value wasn't updated
+            if (partialValue != acc.zero) {
+              val stringPartialValue = s"${partialValue}"
+              val stringValue = s"${acc.value}"
+              stageToInfos(stage).accumulatorValues(name) = stringValue
+              event.taskInfo.accumValues += ((name, stringPartialValue))
+            }
+          }
         }
         pendingTasks(stage) -= task
         task match {
@@ -945,6 +958,8 @@ class DAGScheduler(
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
     }
+    listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
+      event.taskMetrics))
     submitWaitingStages()
   }
 
