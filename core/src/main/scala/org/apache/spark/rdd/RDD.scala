@@ -350,7 +350,6 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a sampled subset of this RDD.
-   *
    */
   def sample(withReplacement: Boolean, 
       fraction: Double, 

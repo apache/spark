@@ -72,6 +72,7 @@ private[spark] object SamplingUtils {
 private[spark] object PoissonBounds {
 
   val delta = 1e-4 / 3.0
+  val epsilon = 1e-15
 
   /**
    * Compute the threshold for accepting items on the fly. The threshold value is a fairly small
@@ -87,7 +88,7 @@ private[spark] object PoissonBounds {
     var ub = s
     while (lb < ub - 1.0) {
       val m = (lb + ub) / 2.0
-      val poisson = new PoissonDistribution(m, 1e-15)
+      val poisson = new PoissonDistribution(m, epsilon)
       val y = poisson.inverseCumulativeProbability(1 - delta)
       if (y > s) ub = m else lb = m
     }
@@ -96,7 +97,7 @@ private[spark] object PoissonBounds {
 
   def getMinCount(lmbd: Double): Double = {
     if (lmbd == 0) return 0
-    val poisson = new PoissonDistribution(lmbd, 1e-15)
+    val poisson = new PoissonDistribution(lmbd, epsilon)
     poisson.inverseCumulativeProbability(delta)
   }
 
@@ -114,7 +115,7 @@ private[spark] object PoissonBounds {
     var ub = s + math.sqrt(s / delta) // Chebyshev's inequality
     while (lb < ub - 1.0) {
       val m = (lb + ub) / 2.0
-      val poisson = new PoissonDistribution(m, 1e-15)
+      val poisson = new PoissonDistribution(m, epsilon)
       val y = poisson.inverseCumulativeProbability(delta)
       if (y >= s) ub = m else lb = m
     }

@@ -212,18 +212,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       exact: Boolean = true,
       seed: Long = Utils.random.nextLong): RDD[(K, V)]= {
 
-    require(fractions.forall({case(k, v) => v >= 0.0}), "Invalid sampling rates.")
+    require(fractions.forall {case(k, v) => v >= 0.0}, "Invalid sampling rates.")
 
-    if (withReplacement) {
+    val samplingFunc = if (withReplacement) {
       val counts = if (exact) Some(this.countByKey()) else None
-      val samplingFunc =
         StratifiedSampler.getPoissonSamplingFunction(self, fractions, exact, counts, seed)
-      self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
     } else {
-      val samplingFunc =
         StratifiedSampler.getBernoulliSamplingFunction(self, fractions, exact, seed)
-      self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
     }
+    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning=true)
   }
 
   /**
