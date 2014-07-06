@@ -401,7 +401,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     } else {
       val attributes = convertToAttributes(
         readMetaData(origPath, conf).getFileMetaData.getSchema)
-      log.warn(s"Falling back to schema conversion from Parquet types; result: $attributes")
+      log.info(s"Falling back to schema conversion from Parquet types; result: $attributes")
       attributes
     }
   }
