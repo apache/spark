@@ -23,18 +23,19 @@ import org.apache.spark.mllib.optimization.{GradientDescent, SquaredL2Updater, H
 import org.apache.spark.mllib.util.DataValidators
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
+import scala.reflect.ClassTag
 
 
-class GroupedSVMWithSGD private (
+class GroupedSVMWithSGD[K] private (
                            private var stepSize: Double,
                            private var numIterations: Int,
                            private var regParam: Double,
-                           private var miniBatchFraction: Double)
-  extends GroupedGeneralizedLinearAlgorithm[SVMModel] with Serializable {
+                           private var miniBatchFraction: Double) (implicit tag:ClassTag[K])
+  extends GroupedGeneralizedLinearAlgorithm[K,SVMModel] with Serializable {
 
   private val gradient = new HingeGradient()
   private val updater = new SquaredL2Updater()
-  override val optimizer = new GroupedGradientDescent(gradient, updater)
+  override val optimizer = new GroupedGradientDescent[K](gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
@@ -44,7 +45,7 @@ class GroupedSVMWithSGD private (
   /**
    * Construct a SVM object with default parameters
    */
-  def this() = this(1.0, 100, 1.0, 1.0)
+  def this()(implicit tag:ClassTag[K]) = this(1.0, 100, 1.0, 1.0)
 
   /**
    * Create a model given the weights and intercept
@@ -73,14 +74,14 @@ object GroupedSVMWithSGD {
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
    */
-  def train(
-             input: RDD[(Int,LabeledPoint)],
+  def train[K](
+             input: RDD[(K,LabeledPoint)],
              numIterations: Int,
              stepSize: Double,
              regParam: Double,
              miniBatchFraction: Double,
-             initialWeights: Map[Int,Vector]): Map[Int,SVMModel] = {
-    new GroupedSVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction)
+             initialWeights: Map[K,Vector]) (implicit tag:ClassTag[K]) : Map[K,SVMModel] = {
+    new GroupedSVMWithSGD[K](stepSize, numIterations, regParam, miniBatchFraction)
       .run(input, initialWeights)
   }
 
@@ -96,12 +97,12 @@ object GroupedSVMWithSGD {
    * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
-  def train(
-             input: RDD[(Int,LabeledPoint)],
+  def train[K](
+             input: RDD[(K,LabeledPoint)],
              numIterations: Int,
              stepSize: Double,
              regParam: Double,
-             miniBatchFraction: Double): Map[Int,SVMModel] = {
+             miniBatchFraction: Double) (implicit tag : ClassTag[K]) : Map[K,SVMModel] = {
     new GroupedSVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input)
   }
 
@@ -117,11 +118,11 @@ object GroupedSVMWithSGD {
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a SVMModel which has the weights and offset from training.
    */
-  def train(
-             input: RDD[(Int,LabeledPoint)],
+  def train[K <: Serializable](
+             input: RDD[(K,LabeledPoint)],
              numIterations: Int,
              stepSize: Double,
-             regParam: Double): Map[Int,SVMModel] = {
+             regParam: Double) (implicit tag : ClassTag[K]) : Map[K,SVMModel] = {
     train(input, numIterations, stepSize, regParam, 1.0)
   }
 
@@ -135,7 +136,7 @@ object GroupedSVMWithSGD {
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a SVMModel which has the weights and offset from training.
    */
-  def train(input: RDD[(Int,LabeledPoint)], numIterations: Int): Map[Int,SVMModel] = {
+  def train[K](input: RDD[(K,LabeledPoint)], numIterations: Int) (implicit tag : ClassTag[K]) : Map[K,SVMModel] = {
     train(input, numIterations, 1.0, 1.0, 1.0)
   }
 }

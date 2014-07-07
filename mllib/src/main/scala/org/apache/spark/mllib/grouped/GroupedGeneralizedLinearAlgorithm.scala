@@ -26,6 +26,7 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.regression.{GeneralizedLinearAlgorithm, GeneralizedLinearModel, LabeledPoint}
 import org.apache.spark.SparkContext._
+import scala.reflect.ClassTag
 
 
 /**
@@ -34,13 +35,13 @@ import org.apache.spark.SparkContext._
  * This class should be extended with an Optimizer to create a new GLM.
  */
 @DeveloperApi
-abstract class GroupedGeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
+abstract class GroupedGeneralizedLinearAlgorithm[K, M <: GeneralizedLinearModel]
   extends Logging with Serializable {
 
   protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
   /** The optimizer to solve the problem. */
-  def optimizer: GroupedOptimizer
+  def optimizer: GroupedOptimizer[K]
 
   /**
    * Create a model given the weights and intercept
@@ -57,7 +58,7 @@ abstract class GroupedGeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * Run the algorithm with the configured parameters on an input
    * RDD of LabeledPoint entries.
    */
-  def run(input: RDD[(Int,LabeledPoint)]): Map[Int,M] = {
+  def run(input: RDD[(K,LabeledPoint)]) (implicit tag:ClassTag[K]): Map[K,M] = {
     // get the number of features for each group
     val groupNumFeatures = input.combineByKey[Int](
       (x : LabeledPoint) => x.features.size,
@@ -65,7 +66,7 @@ abstract class GroupedGeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       (x : Int,y : Int) => x
     ).collect.toMap
 
-    val group_initialWeights = input.keys.collect.map( x =>
+    val group_initialWeights = input.keys.distinct.collect.map( x =>
       (x,Vectors.dense(new Array[Double](groupNumFeatures(x))))
     ).toMap
 
@@ -86,7 +87,7 @@ abstract class GroupedGeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * Run the algorithm with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
    */
-  def run(input: RDD[(Int,LabeledPoint)], initialWeights: Map[Int,Vector]): Map[Int,M] = {
+  def run(input: RDD[(K,LabeledPoint)], initialWeights: Map[K,Vector]): Map[K,M] = {
 
     // Check the data properties before running the optimizer
     if (validateData && !validators.forall(func => func(input.map(_._2)))) {

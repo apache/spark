@@ -23,13 +23,13 @@ import org.apache.spark.mllib.linalg.Vector
 /**
  * Created by kellrott on 6/29/14.
  */
-trait GroupedOptimizer extends Serializable {
+trait GroupedOptimizer[K] extends Serializable {
 
     /**
      * Solve the provided convex optimization problem.
      */
-    def optimize(data: RDD[(Int, (Double, Vector))],
-                 initialWeights: Map[Int,Vector])
-    : Map[Int,Vector]
+    def optimize(data: RDD[(K, (Double, Vector))],
+                 initialWeights: Map[K,Vector])
+    : Map[K,Vector]
 
 }

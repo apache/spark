@@ -26,9 +26,10 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import scala.collection.mutable.ArrayBuffer
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.SparkContext._
+import scala.reflect.ClassTag
 
-class GroupedGradientDescent(private var gradient: Gradient, private var updater: Updater)
-  extends GroupedOptimizer with Logging {
+class GroupedGradientDescent[K](private var gradient: Gradient, private var updater: Updater)(implicit tag:ClassTag[K])
+  extends GroupedOptimizer[K] with Logging {
   /**
    * Solve the provided convex optimization problem.
    */
@@ -103,9 +104,9 @@ class GroupedGradientDescent(private var gradient: Gradient, private var updater
    * @return solution vector
    */
   @DeveloperApi
-   override def optimize( data: RDD[(Int, (Double, linalg.Vector))],
-                          initialWeights: Map[Int, linalg.Vector]) :
-  Map[Int, linalg.Vector] = {
+   override def optimize( data: RDD[(K, (Double, linalg.Vector))],
+                          initialWeights: Map[K, linalg.Vector]) :
+  Map[K, linalg.Vector] = {
       val out = GroupedGradientDescent.runMiniBatchSGD(
         data,
         gradient,
@@ -122,15 +123,15 @@ class GroupedGradientDescent(private var gradient: Gradient, private var updater
 
 object GroupedGradientDescent extends Logging {
 
-  def runMiniBatchSGD(
-                       data: RDD[(Int, (Double, Vector))],
+  def runMiniBatchSGD[K](
+                       data: RDD[(K, (Double, Vector))],
                        gradient: Gradient,
                        updater: Updater,
                        stepSize: Double,
                        numIterations: Int,
                        regParam: Double,
                        miniBatchFraction: Double,
-                       initialWeightsSet: Map[Int,Vector]): Map[Int,(Vector, Array[Double])] = {
+                       initialWeightsSet: Map[K,Vector]) (implicit tag:ClassTag[K]) : Map[K,(Vector, Array[Double])] = {
 
     val stochasticLossHistory = data.keys.collect().map( x =>
       (x, new ArrayBuffer[Double](numIterations))
@@ -150,14 +151,14 @@ object GroupedGradientDescent extends Logging {
     for (i <- 1 to numIterations) {
       val gradientOut = dataWithKey.sample(false, miniBatchFraction, 42 + i)
         .combineByKey[(BDV[Double], Double)](
-          createCombiner = (x : (Int, Double, Vector)) => {
+          createCombiner = (x : (K, Double, Vector)) => {
             val key = x._1
             val label = x._2
             val features = x._3
             val (new_gradient, new_loss) = gradient.compute(features, label, weightSet(key))
             (BDV(new_gradient.toArray), new_loss)
           },
-          mergeValue = (x : (BDV[Double],Double), y : (Int,Double,Vector)) => {
+          mergeValue = (x : (BDV[Double],Double), y : (K,Double,Vector)) => {
             var in_gradient = x._1
             val loss = x._2
             val key = y._1
