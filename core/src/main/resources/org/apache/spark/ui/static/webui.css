@@ -112,3 +112,8 @@ pre {
   padding-bottom: 0;
   border: none;
 }
+
+.tooltip {
+ font-weight: normal;
+}
+

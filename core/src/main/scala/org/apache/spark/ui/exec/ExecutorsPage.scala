@@ -22,8 +22,24 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
+
+private case class ExecutorInfo(
+    id: String,
+    hostPort: String,
+    rddBlocks: Int,
+    memoryUsed: Long,
+    diskUsed: Long,
+    activeTasks: Int,
+    failedTasks: Int,
+    completedTasks: Int,
+    totalTasks: Int,
+    totalDuration: Long,
+    totalInputBytes: Long,
+    totalShuffleRead: Long,
+    totalShuffleWrite: Long,
+    maxMemory: Long)
 
 private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
   private val appName = parent.appName
@@ -36,8 +52,41 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val memUsed = storageStatusList.map(_.memUsed).fold(0L)(_ + _)
     val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize)).fold(0L)(_ + _)
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield getExecInfo(statusId)
-    val execInfoSorted = execInfo.sortBy(_.getOrElse("Executor ID", ""))
-    val execTable = UIUtils.listingTable(execHeader, execRow, execInfoSorted)
+    val execInfoSorted = execInfo.sortBy(_.id)
+
+    val execTable =
+      <table class={UIUtils.TABLE_CLASS}>
+        <thead>
+          <th>Executor ID</th>
+          <th>Address</th>
+          <th>RDD Blocks</th>
+          <th>Memory Used</th>
+          <th>Disk Used</th>
+          <th>Active Tasks</th>
+          <th>Failed Tasks</th>
+          <th>Complete Tasks</th>
+          <th>Total Tasks</th>
+          <th>Task Time</th>
+          <th>
+            <span data-toggle="tooltip" title={ToolTips.INPUT}>
+              Input
+            </span>
+          </th>
+          <th>
+            <span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>
+              Shuffle Read
+            </span>
+          </th>
+          <th>
+            <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
+              Shuffle Write
+            </span>
+          </th>
+        </thead>
+        <tbody>
+          {execInfoSorted.map(execRow(_))}
+        </tbody>
+      </table>
 
     val content =
       <div class="row-fluid">
@@ -60,53 +109,43 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       parent.headerTabs, parent)
   }
 
-  /** Header fields for the executors table */
-  private def execHeader = Seq(
-    "Executor ID",
-    "Address",
-    "RDD Blocks",
-    "Memory Used",
-    "Disk Used",
-    "Active Tasks",
-    "Failed Tasks",
-    "Complete Tasks",
-    "Total Tasks",
-    "Task Time",
-    "Input Bytes",
-    "Shuffle Read",
-    "Shuffle Write")
-
   /** Render an HTML row representing an executor */
-  private def execRow(values: Map[String, String]): Seq[Node] = {
-    val maximumMemory = values("Maximum Memory")
-    val memoryUsed = values("Memory Used")
-    val diskUsed = values("Disk Used")
-    // scalastyle:off
+  private def execRow(info: ExecutorInfo): Seq[Node] = {
+    val maximumMemory = info.maxMemory
+    val memoryUsed = info.memoryUsed
+    val diskUsed = info.diskUsed
     <tr>
-      <td>{values("Executor ID")}</td>
-      <td>{values("Address")}</td>
-      <td>{values("RDD Blocks")}</td>
-      <td sorttable_customkey={memoryUsed}>
-        {Utils.bytesToString(memoryUsed.toLong)} /
-        {Utils.bytesToString(maximumMemory.toLong)}
+      <td>{info.id}</td>
+      <td>{info.hostPort}</td>
+      <td>{info.rddBlocks}</td>
+      <td sorttable_customkey={memoryUsed.toString}>
+        {Utils.bytesToString(memoryUsed)} /
+        {Utils.bytesToString(maximumMemory)}
       </td>
-      <td sorttable_customkey={diskUsed}>
-        {Utils.bytesToString(diskUsed.toLong)}
+      <td sorttable_customkey={diskUsed.toString}>
+        {Utils.bytesToString(diskUsed)}
       </td>
-      <td>{values("Active Tasks")}</td>
-      <td>{values("Failed Tasks")}</td>
-      <td>{values("Complete Tasks")}</td>
-      <td>{values("Total Tasks")}</td>
-      <td sorttable_customkey={values("Task Time")}>{Utils.msDurationToString(values("Task Time").toLong)}</td>
-      <td sorttable_customkey={values("Input Bytes")}>{Utils.bytesToString(values("Input Bytes").toLong)}</td>
-      <td sorttable_customkey={values("Shuffle Read")}>{Utils.bytesToString(values("Shuffle Read").toLong)}</td>
-      <td sorttable_customkey={values("Shuffle Write")} >{Utils.bytesToString(values("Shuffle Write").toLong)}</td>
+      <td>{info.activeTasks}</td>
+      <td>{info.failedTasks}</td>
+      <td>{info.completedTasks}</td>
+      <td>{info.totalTasks}</td>
+      <td sorttable_customkey={info.totalDuration.toString}>
+        {Utils.msDurationToString(info.totalDuration)}
+      </td>
+      <td sorttable_customkey={info.totalInputBytes.toString}>
+        {Utils.bytesToString(info.totalInputBytes)}
+      </td>
+      <td sorttable_customkey={info.totalShuffleRead.toString}>
+        {Utils.bytesToString(info.totalShuffleRead)}
+      </td>
+      <td sorttable_customkey={info.totalShuffleWrite.toString}>
+        {Utils.bytesToString(info.totalShuffleWrite)}
+      </td>
     </tr>
-    // scalastyle:on
   }
 
   /** Represent an executor's info as a map given a storage status index */
-  private def getExecInfo(statusId: Int): Map[String, String] = {
+  private def getExecInfo(statusId: Int): ExecutorInfo = {
     val status = listener.storageStatusList(statusId)
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
@@ -120,15 +159,12 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
     val totalTasks = activeTasks + failedTasks + completedTasks
-    val totalDuration = listener.executorToDuration.getOrElse(execId, 0)
-    val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0)
-    val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0)
-    val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0)
+    val totalDuration = listener.executorToDuration.getOrElse(execId, 0L)
+    val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0L)
+    val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
+    val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
 
-    // Also include fields not in the header
-    val execFields = execHeader ++ Seq("Maximum Memory")
-
-    val execValues = Seq(
+    new ExecutorInfo(
       execId,
       hostPort,
       rddBlocks,
@@ -143,8 +179,6 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       totalShuffleRead,
       totalShuffleWrite,
       maxMem
-    ).map(_.toString)
-
-    execFields.zip(execValues).toMap
+    )
   }
 }

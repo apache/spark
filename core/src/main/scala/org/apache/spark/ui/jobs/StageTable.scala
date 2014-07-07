@@ -23,7 +23,7 @@ import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.apache.spark.scheduler.{StageInfo, TaskInfo}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
@@ -43,9 +43,13 @@ private[ui] class StageTableBase(
     <th>Submitted</th>
     <th>Duration</th>
     <th>Tasks: Succeeded/Total</th>
-    <th>Input</th>
-    <th>Shuffle Read</th>
-    <th>Shuffle Write</th>
+    <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+    <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
+    <th>
+      <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
+        Shuffle Write
+      </span>
+    </th>
   }
 
   def toNodeSeq: Seq[Node] = {
