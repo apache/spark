@@ -496,8 +496,10 @@ object SparkBuild extends Build {
     // this non-deterministically.  TODO: FIX THIS.
     parallelExecution in Test := false,
     libraryDependencies ++= Seq(
-      "com.typesafe" %% "scalalogging-slf4j" % "1.0.1"
-    )
+      "com.typesafe" %% "scalalogging-slf4j" % "1.0.1",
+      "com.github.axel22" %% "scalameter" % "0.5-M2"
+
+  )
   )
 
   def sqlCoreSettings = sharedSettings ++ Seq(
