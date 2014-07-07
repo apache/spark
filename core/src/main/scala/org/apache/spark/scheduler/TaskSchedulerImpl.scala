@@ -442,7 +442,7 @@ private[spark] class TaskSchedulerImpl(
     executorsByHost.contains(host)
   }
 
-  def hasHostOnRack(rack: String): Boolean = synchronized {
+  def hasHostAliveOnRack(rack: String): Boolean = synchronized {
     hostsByRack.contains(rack)
   }
 
