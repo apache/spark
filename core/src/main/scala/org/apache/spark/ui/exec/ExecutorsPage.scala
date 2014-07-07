@@ -25,7 +25,8 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
-private case class ExecutorInfo(
+/** Summary information about an executor to display in the UI. */
+private case class ExecutorSummaryInfo(
     id: String,
     hostPort: String,
     rddBlocks: Int,
@@ -67,17 +68,12 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
           <th>Complete Tasks</th>
           <th>Total Tasks</th>
           <th>Task Time</th>
+          <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+          <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
           <th>
-            <span data-toggle="tooltip" title={ToolTips.INPUT}>
-              Input
-            </span>
-          </th>
-          <th>
-            <span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>
-              Shuffle Read
-            </span>
-          </th>
-          <th>
+            <!-- Place the shuffle write tooltip on the left (rather than the default position
+              of on top) because the shuffle write column is the last column on the right side and
+              the tooltip is wider than the column, so it doesn't fit on top. -->
             <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
               Shuffle Write
             </span>
@@ -110,7 +106,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorInfo): Seq[Node] = {
+  private def execRow(info: ExecutorSummaryInfo): Seq[Node] = {
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
@@ -145,7 +141,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
   }
 
   /** Represent an executor's info as a map given a storage status index */
-  private def getExecInfo(statusId: Int): ExecutorInfo = {
+  private def getExecInfo(statusId: Int): ExecutorSummaryInfo = {
     val status = listener.storageStatusList(statusId)
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
@@ -164,7 +160,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
 
-    new ExecutorInfo(
+    new ExecutorSummaryInfo(
       execId,
       hostPort,
       rddBlocks,

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-object ToolTips {
+private[spark] object ToolTips {
   val SCHEDULER_DELAY =
     """Scheduler delay includes time to ship the task from the scheduler to
        the executor, and time the time to send a message from the executor to the scheduler stating

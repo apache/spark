@@ -140,16 +140,17 @@ private[spark] object UIUtils extends Logging {
 
   def prependBaseUri(basePath: String = "", resource: String = "") = uiRoot + basePath + resource
 
-  val commonHeaderNodes =
-      <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-      <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
-            type="text/css" />
-      <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
-            type="text/css" />
-      <script src={prependBaseUri("/static/sorttable.js")} ></script>
-      <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
-      <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
-      <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
+  val commonHeaderNodes = {
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
+          type="text/css" />
+    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
+          type="text/css" />
+    <script src={prependBaseUri("/static/sorttable.js")} ></script>
+    <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
+    <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
+    <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
+  }
 
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(

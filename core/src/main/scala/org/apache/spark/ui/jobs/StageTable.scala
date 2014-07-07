@@ -46,6 +46,9 @@ private[ui] class StageTableBase(
     <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
     <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
     <th>
+      <!-- Place the shuffle write tooltip on the left (rather than the default position
+        of on top) because the shuffle write column is the last column on the right side and
+        the tooltip is wider than the column, so it doesn't fit on top. -->
       <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
         Shuffle Write
       </span>
