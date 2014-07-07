@@ -22,7 +22,9 @@ import java.util.LinkedHashMap
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.util.{SizeEstimator, Utils}
+import org.apache.spark.util.collection.SizeTrackingAppendOnlyBuffer
 
 private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
 
@@ -34,10 +36,19 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   extends BlockStore(blockManager) {
 
   private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
+
   @volatile private var currentMemory = 0L
-  // Object used to ensure that only one thread is putting blocks and if necessary, dropping
-  // blocks from the memory store.
+
+  // Object used to ensure that only one thread is putting blocks and if necessary,
+  // dropping blocks from the memory store.
   private val putLock = new Object()
+
+  /**
+   * The amount of space ensured for unfolding values in memory, shared across all cores.
+   * This space is not reserved in advance, but allocated dynamically by dropping existing blocks.
+   * It must be a lazy val in order to access a mocked BlockManager's conf in tests properly.
+   */
+  private lazy val globalBufferMemory = BlockManager.getBufferMemory(blockManager.conf)
 
   logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
 
@@ -135,6 +146,87 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       currentMemory = 0
     }
     logInfo("MemoryStore cleared")
+  }
+
+  /**
+   * Unfold the given block in memory safely.
+   *
+   * The safety of this operation refers to avoiding potential OOM exceptions caused by
+   * unfolding the entirety of the block in memory at once. This is achieved by periodically
+   * checking whether the memory restrictions for unfolding blocks are still satisfied,
+   * stopping immediately if not. This check is a safeguard against the scenario in which
+   * there is not enough free memory to accommodate the entirety of a single block.
+   *
+   * This method returns either a fully unfolded array or a partially unfolded iterator.
+   */
+  def unfoldSafely(
+      blockId: BlockId,
+      values: Iterator[Any],
+      storageLevel: StorageLevel,
+      droppedBlocks: ArrayBuffer[(BlockId, BlockStatus)])
+    : Either[Array[Any], Iterator[Any]] = {
+
+    var count = 0                   // The number of elements unfolded so far
+    var enoughMemory = true         // Whether there is enough memory to unfold this block
+    var previousSize = 0L           // Previous estimate of the size of our buffer
+    val memoryRequestPeriod = 1000  // How frequently we request for more memory for our buffer
+
+    val threadId = Thread.currentThread().getId
+    val cacheMemoryMap = SparkEnv.get.cacheMemoryMap
+    var buffer = new SizeTrackingAppendOnlyBuffer[Any]
+
+    try {
+      while (values.hasNext && enoughMemory) {
+        buffer += values.next()
+        count += 1
+        if (count % memoryRequestPeriod == 1) {
+          // Calculate the amount of memory to request from the global memory pool
+          val currentSize = buffer.estimateSize()
+          val delta = math.max(currentSize - previousSize, 0)
+          val memoryToRequest = currentSize + delta
+          previousSize = currentSize
+
+          // Atomically check whether there is sufficient memory in the global pool to continue
+          cacheMemoryMap.synchronized {
+            val previouslyOccupiedMemory = cacheMemoryMap.get(threadId).getOrElse(0L)
+            val otherThreadsMemory = cacheMemoryMap.values.sum - previouslyOccupiedMemory
+
+            // Request for memory for the local buffer, and return whether request is granted
+            def requestForMemory(): Boolean = {
+              val availableMemory = freeMemory - otherThreadsMemory
+              val granted = availableMemory > memoryToRequest
+              if (granted) { cacheMemoryMap(threadId) = memoryToRequest }
+              granted
+            }
+
+            // If the first request is not granted, try again after ensuring free space
+            // If there is still not enough space, give up and drop the partition
+            if (!requestForMemory()) {
+              val result = ensureFreeSpace(blockId, globalBufferMemory)
+              droppedBlocks ++= result.droppedBlocks
+              enoughMemory = requestForMemory()
+            }
+          }
+        }
+      }
+
+      if (enoughMemory) {
+        // We successfully unfolded the entirety of this block
+        Left(buffer.array)
+      } else {
+        // We ran out of space while unfolding the values for this block
+        Right(buffer.iterator ++ values)
+      }
+
+    } finally {
+      // Unless we return an iterator that depends on the buffer, free up space for other threads
+      if (enoughMemory) {
+        buffer = null
+        cacheMemoryMap.synchronized {
+          cacheMemoryMap(threadId) = 0
+        }
+      }
+    }
   }
 
   /**
