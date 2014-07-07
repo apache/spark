@@ -87,7 +87,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         }
 
       case StatusUpdate(executorId, taskId, state, data) =>
-        scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           if (executorActor.contains(executorId)) {
             freeCores(executorId) += scheduler.CPUS_PER_TASK
@@ -103,6 +102,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
             val msg = "Ignored task status update (%d state %s) from unknown executor %s with ID %s"
             logWarning(msg.format(taskId, state, sender, executorId))
           }
+          scheduler.statusUpdate(taskId, state, data.value)
         }
 
       case ReviveOffers =>

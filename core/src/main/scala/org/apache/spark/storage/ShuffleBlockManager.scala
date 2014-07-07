@@ -257,7 +257,8 @@ object ShuffleBlockManager {
       val blockOffsets = blockOffsetsByReducer(reducerId)
       val index = mapIdToIndex.getOrElse(mapId, -1)
       if (index >= 0) {
-        assert(index + 1 < blockOffsets.size, "Index is " + index + ", total size is " + blockOffsets.size)
+        assert(index + 1 < blockOffsets.size,
+            "Index is " + index + ", total size is " + blockOffsets.size)
         val offset = blockOffsets(index)
         val length = blockOffsets(index + 1) - offset
 //        val length =

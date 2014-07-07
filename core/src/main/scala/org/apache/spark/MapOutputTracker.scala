@@ -142,7 +142,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
     val statuses = getMapStatusesForShuffle(shuffleId, reduceId)
     statuses.synchronized {
-      MapOutputTracker.convertMapStatuses(shuffleId, reduceId, statuses, isPartial = partialForShuffle.contains(shuffleId))
+      MapOutputTracker.convertMapStatuses(
+          shuffleId, reduceId, statuses, isPartial = partialForShuffle.contains(shuffleId))
     }
   }
 
@@ -295,7 +296,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  def getUpdatedStatus(shuffleId: Int, reduceId: Int, localEpoch: Int): (Array[(BlockManagerId, Long)], Int) = {
+  def getUpdatedStatus(
+      shuffleId: Int, reduceId: Int, localEpoch: Int): (Array[(BlockManagerId, Long)], Int) = {
     partialEpoch.synchronized {
       if (!partialEpoch.contains(shuffleId)) {
         return (getServerStatuses(shuffleId, reduceId), 0)
@@ -347,7 +349,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   }
 
   /** Register multiple map output information for the given shuffle */
-  def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false, isPartial: Boolean = false) {
+  def registerMapOutputs(
+      shuffleId: Int, statuses: Array[MapStatus],
+      changeEpoch: Boolean = false, isPartial: Boolean = false) {
     mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
     if (changeEpoch) {
       incrementEpoch()

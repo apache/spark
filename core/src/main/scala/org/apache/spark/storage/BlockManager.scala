@@ -567,7 +567,8 @@ private[spark] class BlockManager(
       serializer: Serializer,
       shuffleId: Int,
       reduceId: Int) = {
-    val iter = new BlockFetcherIterator.PartialBlockFetcherIterator(this, statuses, mapOutputTracker, serializer, shuffleId, reduceId)
+    val iter = new BlockFetcherIterator.PartialBlockFetcherIterator(
+        this, statuses, mapOutputTracker, serializer, shuffleId, reduceId)
     iter.initialize()
     iter
   }
