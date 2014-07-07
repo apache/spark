@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
-import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.{Logging, SparkEnv, SparkException, SparkContext, ContextCleaner}
 
 private[spark] object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it
@@ -103,7 +103,7 @@ private[spark] object ClosureCleaner extends Logging {
     }
   }
   
-  def clean[F <: AnyRef : ClassTag](func: F, captureNow: Boolean = true): F = {
+  def clean[F <: AnyRef : ClassTag](func: F, captureNow: Boolean = true, sc: SparkContext): F = {
     // TODO: cache outerClasses / innerClasses / accessedFields
     val outerClasses = getOuterClasses(func)
     val innerClasses = getInnerClasses(func)
@@ -157,7 +157,9 @@ private[spark] object ClosureCleaner extends Logging {
     }
     
     if (captureNow) {
-      cloneViaSerializing(func)
+      ContextCleaner.withCurrentCleaner(sc.cleaner){
+        cloneViaSerializing(func)
+      }
     } else {
       func
     }

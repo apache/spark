@@ -51,11 +51,11 @@ class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContex
   // transformation on a given RDD, creating one test case for each
   
   for (transformation <- 
-      Map("map" -> xmap _, "flatMap" -> xflatMap _, "filter" -> xfilter _, 
-          "mapWith" -> xmapWith _, "mapPartitions" -> xmapPartitions _, 
-          "mapPartitionsWithIndex" -> xmapPartitionsWithIndex _,
-          "mapPartitionsWithContext" -> xmapPartitionsWithContext _, 
-          "filterWith" -> xfilterWith _)) {
+      Map("map" -> map _, "flatMap" -> flatMap _, "filter" -> filter _, 
+          "mapWith" -> mapWith _, "mapPartitions" -> mapPartitions _, 
+          "mapPartitionsWithIndex" -> mapPartitionsWithIndex _,
+          "mapPartitionsWithContext" -> mapPartitionsWithContext _, 
+          "filterWith" -> filterWith _)) {
     val (name, xf) = transformation
     
     test(s"$name transformations throw proactive serialization exceptions") {

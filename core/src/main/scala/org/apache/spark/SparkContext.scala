@@ -1214,8 +1214,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * @throws <tt>SparkException<tt> if <tt>checkSerializable</tt> is set but <tt>f</tt> is not
    *   serializable
    */
-  private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
-    ClosureCleaner.clean(f, checkSerializable)
+  private[spark] def clean[F <: AnyRef : ClassTag](f: F, checkSerializable: Boolean = true): F = {
+    ClosureCleaner.clean(f, checkSerializable, this)
   }
 
   /**
