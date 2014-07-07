@@ -217,7 +217,6 @@ class ExternalAppendOnlyMap[K, V, C](
    */
   override def iterator: Iterator[(K, C)] = {
     if (spilledMaps.isEmpty) {
-      println("empty")
       currentMap.iterator
     } else {
       new ExternalIterator()
@@ -273,9 +272,9 @@ class ExternalAppendOnlyMap[K, V, C](
         while (it.hasNext) {
           var kc1 = it.next()
           kcPairs += kc1
-          if (comparator.compare(kc, kc1) != 0)
+          if (comparator.compare(kc, kc1) != 0) {
             return kcPairs
-//>>>>>>> Fix JIRA-983 and support exteranl sort for sortByKey
+          }
         }
       }
       kcPairs
@@ -359,15 +358,6 @@ class ExternalAppendOnlyMap[K, V, C](
 
       def isEmpty = pairs.length == 0
 
-<<<<<<< HEAD
-      // Invalid if there are no more pairs in this stream
-      def minKeyHash: Int = {
-        assert(pairs.length > 0)
-        getKeyHashCode(pairs.head)
-      }
-
-=======
->>>>>>> fix unit test failure
       override def compareTo(other: StreamBuffer): Int = {
         // descending order because mutable.PriorityQueue dequeues the max, not the min
         comparator.compare(other.pairs.head, pairs.head)
