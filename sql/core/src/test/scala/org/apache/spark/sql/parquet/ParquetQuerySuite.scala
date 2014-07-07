@@ -336,7 +336,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("save and load case class RDD with Nones as parquet") {
-    val data = OptionalReflectData(null, null, null, null, null)
+    val data = OptionalReflectData(None, None, None, None, None)
     val rdd = sparkContext.parallelize(data :: Nil)
 
     val file = getTempFilePath("parquet")
