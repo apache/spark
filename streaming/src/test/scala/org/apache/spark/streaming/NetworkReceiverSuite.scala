@@ -20,7 +20,6 @@ package org.apache.spark.streaming
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.postfixOps
 
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -32,6 +31,7 @@ import org.scalatest.time.SpanSugar._
 
 /** Testsuite for testing the network receiver behavior */
 class NetworkReceiverSuite extends FunSuite with Timeouts {
+  import scala.language.postfixOps
 
   test("network receiver life cycle") {
 

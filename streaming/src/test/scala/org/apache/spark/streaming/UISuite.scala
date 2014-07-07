@@ -18,13 +18,13 @@
 package org.apache.spark.streaming
 
 import scala.io.Source
-import scala.language.postfixOps
 
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 class UISuite extends FunSuite {
+  import scala.language.postfixOps
 
   // Ignored: See SPARK-1530
   ignore("streaming tab in spark UI") {

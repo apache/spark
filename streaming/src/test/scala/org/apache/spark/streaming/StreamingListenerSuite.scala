@@ -20,7 +20,6 @@ package org.apache.spark.streaming
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.language.postfixOps
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
@@ -33,6 +32,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.Logging
 
 class StreamingListenerSuite extends TestSuiteBase with Matchers {
+  import scala.language.postfixOps
 
   val input = (1 to 4).map(Seq(_)).toSeq
   val operation = (d: DStream[Int]) => d.map(x => x)

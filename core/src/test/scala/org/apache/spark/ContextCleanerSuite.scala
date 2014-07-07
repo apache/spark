@@ -21,7 +21,6 @@ import java.lang.ref.WeakReference
 
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -47,6 +46,8 @@ import org.apache.spark.storage.ShuffleIndexBlockId
 abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[HashShuffleManager])
   extends FunSuite with BeforeAndAfter with LocalSparkContext
 {
+  import scala.language.postfixOps
+
   implicit val defaultTimeout = timeout(10000 millis)
   val conf = new SparkConf()
     .setMaster("local[2]")
