@@ -118,6 +118,8 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val UNCACHE = Keyword("UNCACHE")
   protected val UNION = Keyword("UNION")
   protected val WHERE = Keyword("WHERE")
+  protected val EXCEPT = Keyword("EXCEPT")
+
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -138,6 +140,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected lazy val query: Parser[LogicalPlan] = (
     select * (
         UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
+        EXCEPT ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)} |
         UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
       )
     | insert | cache

@@ -75,17 +75,26 @@ private[spark] object StorageUtils {
   /** Returns storage information of all RDDs in the given list. */
   def rddInfoFromStorageStatus(
       storageStatuses: Seq[StorageStatus],
-      rddInfos: Seq[RDDInfo]): Array[RDDInfo] = {
+      rddInfos: Seq[RDDInfo],
+      updatedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty): Array[RDDInfo] = {
+
+    // Mapping from a block ID -> its status
+    val blockMap = mutable.Map(storageStatuses.flatMap(_.rddBlocks): _*)
+
+    // Record updated blocks, if any
+    updatedBlocks
+      .collect { case (id: RDDBlockId, status) => (id, status) }
+      .foreach { case (id, status) => blockMap(id) = status }
 
     // Mapping from RDD ID -> an array of associated BlockStatuses
-    val blockStatusMap = storageStatuses.flatMap(_.rddBlocks).toMap
+    val rddBlockMap = blockMap
       .groupBy { case (k, _) => k.rddId }
       .mapValues(_.values.toArray)
 
     // Mapping from RDD ID -> the associated RDDInfo (with potentially outdated storage information)
     val rddInfoMap = rddInfos.map { info => (info.id, info) }.toMap
 
-    val rddStorageInfos = blockStatusMap.flatMap { case (rddId, blocks) =>
+    val rddStorageInfos = rddBlockMap.flatMap { case (rddId, blocks) =>
       // Add up memory, disk and Tachyon sizes
       val persistedBlocks =
         blocks.filter { status => status.memSize + status.diskSize + status.tachyonSize > 0 }

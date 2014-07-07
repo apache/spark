@@ -744,7 +744,7 @@ import org.apache.spark.util.Utils
    *
    *  Read! Eval! Print! Some of that not yet centralized here.
    */
-  class ReadEvalPrint(lineId: Int) {
+  class ReadEvalPrint(val lineId: Int) {
     def this() = this(freshLineId())
 
     private var lastRun: Run = _
@@ -1241,7 +1241,10 @@ import org.apache.spark.util.Utils
     // old style
     beSilentDuring(parse(code)) foreach { ts =>
       ts foreach { t =>
-        withoutUnwrapping(logDebug(asCompactString(t)))
+        if (isShow || isShowRaw)
+          withoutUnwrapping(echo(asCompactString(t)))
+        else
+          withoutUnwrapping(logDebug(asCompactString(t)))
       }
     }
   }

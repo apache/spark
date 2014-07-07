@@ -50,7 +50,7 @@ trait SQLConf {
   /** ********************** SQLConf functionality methods ************ */
 
   @transient
-  private val settings = java.util.Collections.synchronizedMap(
+  protected[sql] val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
 
   def set(props: Properties): Unit = {
@@ -64,20 +64,17 @@ trait SQLConf {
   }
 
   def get(key: String): String = {
-    if (!settings.containsKey(key)) {
-      throw new NoSuchElementException(key)
-    }
-    settings.get(key)
+    Option(settings.get(key)).getOrElse(throw new NoSuchElementException(key))
   }
 
   def get(key: String, defaultValue: String): String = {
-    if (!settings.containsKey(key)) defaultValue else settings.get(key)
+    Option(settings.get(key)).getOrElse(defaultValue)
   }
 
   def getAll: Array[(String, String)] = settings.asScala.toArray
 
   def getOption(key: String): Option[String] = {
-    if (!settings.containsKey(key)) None else Some(settings.get(key))
+    Option(settings.get(key))
   }
 
   def contains(key: String): Boolean = settings.containsKey(key)
