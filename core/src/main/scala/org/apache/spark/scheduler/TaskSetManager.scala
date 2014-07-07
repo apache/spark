@@ -148,10 +148,8 @@ private[spark] class TaskSetManager(
 
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
-  val delaySchedule = conf.getBoolean("spark.schedule.delaySchedule", true)
   for (i <- (0 until numTasks).reverse) {
-    //if delay schedule is set, we shouldn't enforce check since executors may haven't registered yet
-    addPendingTask(i, enforceCheck = !delaySchedule)
+    addPendingTask(i)
   }
 
   // Figure out which locality levels we have in our TaskSet, so we can do delay scheduling
@@ -171,10 +169,8 @@ private[spark] class TaskSetManager(
   /**
    * Add a task to all the pending-task lists that it should be on. If readding is set, we are
    * re-adding the task so only include it in each list if it's not already there.
-   * If enforceCheck is set, we'll check the availability of executors/hosts before adding a task
-   * to the pending list, otherwise, we simply add the task according to its preference.
    */
-  private def addPendingTask(index: Int, readding: Boolean = false, enforceCheck: Boolean = true) {
+  private def addPendingTask(index: Int, readding: Boolean = false) {
     // Utility method that adds `index` to a list only if readding=false or it's not already there
     def addTo(list: ArrayBuffer[Int]) {
       if (!readding || !list.contains(index)) {
@@ -185,12 +181,12 @@ private[spark] class TaskSetManager(
     var hadAliveLocations = false
     for (loc <- tasks(index).preferredLocations) {
       for (execId <- loc.executorId) {
-        if (!enforceCheck || sched.isExecutorAlive(execId)) {
+        if (sched.isExecutorAlive(execId)) {
           addTo(pendingTasksForExecutor.getOrElseUpdate(execId, new ArrayBuffer))
           hadAliveLocations = true
         }
       }
-      if (!enforceCheck || sched.hasExecutorsAliveOnHost(loc.host)) {
+      if (sched.hasExecutorsAliveOnHost(loc.host)) {
         addTo(pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer))
         for (rack <- sched.getRackForHost(loc.host)) {
           addTo(pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer))
@@ -376,11 +372,7 @@ private[spark] class TaskSetManager(
     }
 
     // Finally, if all else has failed, find a speculative task
-    val speculativeTask = findSpeculativeTask(execId, host, locality)
-    if (speculativeTask.isDefined) {
-      logInfo("Pick a speculative task to run: " + speculativeTask.get._1 + " ---lirui")
-    }
-    speculativeTask
+    findSpeculativeTask(execId, host, locality)
   }
 
   /**

@@ -208,13 +208,11 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           val fetchedResults = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
           fetchedStatuses = fetchedResults._1
           if (fetchedResults._2) {
-            logInfo("Got partial map outputs from master for shuffleId " + shuffleId + ". ---lirui")
             if(!partialForShuffle.contains(shuffleId)){
               partialForShuffle += shuffleId
               new Thread(new MapStatusUpdater(shuffleId)).start()
             }
           } else {
-            logInfo("Got complete map outputs from master for shuffleId " + shuffleId + ". ---lirui")
             partialForShuffle -= shuffleId
           }
           logInfo("Got the output locations")
@@ -243,7 +241,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       val masterCompleteness = askTracker(GetShuffleStatus(shuffleId)).asInstanceOf[Int]
       val diff = masterCompleteness - completenessForShuffle(shuffleId)
       if (diff > 0) {
-        logInfo("Master is " + diff + " map statuses ahead of us for shuffleId " + shuffleId + ". Clear local cache. ---lirui")
+        logInfo("Master is " + diff + " map statuses ahead of us for shuffle " +
+          shuffleId + ". Clear local cache.")
         mapStatuses -= shuffleId
         return true
       } else {
@@ -266,9 +265,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           partialEpoch.put(shuffleId, 0)
         }
       }
-      logInfo("Updater started for shuffleId "+shuffleId+". ---lirui")
+      logInfo("Updater started for shuffle "+shuffleId+".")
       val minInterval = 1000
-      val maxInterval = 2000
+      val maxInterval = 3000
       var sleepInterval = minInterval
       while (partialForShuffle.contains(shuffleId)) {
         Thread.sleep(sleepInterval)
@@ -283,7 +282,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           sleepInterval = math.min(maxInterval, sleepInterval + 200)
         }
       }
-      logInfo("Map status for shuffleId "+shuffleId+" is now complete. Updater terminated. ---lirui")
+      logInfo("Map status for shuffle "+shuffleId+" is now complete. Updater terminated.")
       partialEpoch.synchronized {
         partialEpoch.remove(shuffleId)
         partialEpoch.notifyAll()

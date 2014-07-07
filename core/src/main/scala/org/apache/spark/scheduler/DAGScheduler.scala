@@ -124,7 +124,7 @@ class DAGScheduler(
   // Whether to enable remove stage barrier
   private var removeStageBarrier = env.conf.getBoolean("spark.scheduler.removeStageBarrier", false)
   // Track the pre-started stages depending on a stage (the key)
-  private val dependantStagePreStarted = new mutable.HashMap[Stage, ArrayBuffer[Stage]]()
+  private val dependantStagePreStarted = new HashMap[Stage, ArrayBuffer[Stage]]()
 
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
@@ -1225,7 +1225,7 @@ class DAGScheduler(
       val numWaitingStage = waitingStages.size
       if (backend.freeSlotAvail(numPendingTask) && numWaitingStage > 0 && stage.shuffleDep.isDefined) {
         for (preStartStage <- getPreStartableStage(stage)) {
-          logInfo("Pre-start stage " + preStartStage.id + " ---lirui")
+          logInfo("Pre-start stage " + preStartStage.id)
           // Register map output finished so far
           mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
             stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
