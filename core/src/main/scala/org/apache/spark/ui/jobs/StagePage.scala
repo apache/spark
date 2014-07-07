@@ -290,7 +290,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         <td sorttable_customkey={gcTime.toString}>
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
         </td>
-        <td>{Unparsed(info.accumulableValues.map{ case (k, v) => s"$k: $v" }.mkString("<br/>"))}</td>
+        <td>
+          {Unparsed(info.accumulableValues.map{ case (k, v) => s"$k: $v" }.mkString("<br/>"))}
+        </td>
         <!--
         TODO: Add this back after we add support to hide certain columns.
         <td sorttable_customkey={serializationTime.toString}>

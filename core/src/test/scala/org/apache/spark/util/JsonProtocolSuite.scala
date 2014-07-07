@@ -123,15 +123,22 @@ class JsonProtocolSuite extends FunSuite {
     testBlockId(StreamBlockId(1, 2L))
   }
 
-  test("StageInfo.details backward compatibility") {
-    // StageInfo.details was added after 1.0.0.
+  test("StageInfo backward compatibility") {
     val info = makeStageInfo(1, 2, 3, 4L, 5L)
-    assert(info.details.nonEmpty)
     val newJson = JsonProtocol.stageInfoToJson(info)
-    val oldJson = newJson.removeField { case (field, _) => field == "Details" }
+
+    // Fields added after 1.0.0.
+    assert(info.details.nonEmpty)
+    assert(info.accumulatedValues.nonEmpty)
+    val oldJson = newJson
+      .removeField { case (field, _) => field == "Details" }
+      .removeField { case (field, _) => field == "Accumulated Values" }
+
     val newInfo = JsonProtocol.stageInfoFromJson(oldJson)
+
     assert(info.name === newInfo.name)
     assert("" === newInfo.details)
+    assert(0 === newInfo.accumulatedValues.size)
   }
 
   test("InputMetrics backward compatibility") {
