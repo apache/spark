@@ -295,16 +295,4 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
   }
-object SkewJoin extends Strategy with PredicateHelper {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case SkewFilteredJoin(Skew, leftKeys, rightKeys, condition, left, right) =>
-        val skewJoin =
-        execution.SkewJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right),sparkContext)
-        condition.map(Filter(_, skewJoin)).getOrElse(skewJoin) :: Nil
-      case _ => Nil
-      case logical.Join(left, right, joinType, condition) =>
-          execution.BroadcastNestedLoopJoin(
-              planLater(left), planLater(right), joinType, condition)(sparkContext) :: Nil
-      case _ => Nil
-    }
-  }
+}

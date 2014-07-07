@@ -154,20 +154,4 @@ object Unions {
     case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
     case other => other :: Nil
   }
-}
-
-object SkewFilteredJoin extends Logging with PredicateHelper {
-    /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
-    type ReturnType =
-    (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
-
-    def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-        case FilteredOperation(predicates, join @ Join(left, right, Skew, condition)) =>
-            logger.debug(s"Considering hash inner join on: ${predicates ++ condition}")
-            splitPredicates(predicates ++ condition, join)
-        case join @ Join(left, right,joinType, condition) =>
-            logger.debug(s"Considering hash join on: $condition")
-            splitPredicates(condition.toSeq, join)
-        case _ => None
-    }
-
+} 
