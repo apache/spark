@@ -157,7 +157,7 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
   override def toString() = s"Lower($child)"
 }
 
-/** An base class for functions that compares two strings, returning a boolean */
+/** A base class for functions that compares two strings, returning a boolean */
 abstract class StringComparison extends Expression {
   self: Product =>
 
