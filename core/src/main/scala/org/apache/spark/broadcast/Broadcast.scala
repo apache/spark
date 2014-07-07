@@ -17,9 +17,9 @@
 
 package org.apache.spark.broadcast
 
-import java.io.Serializable
+import java.io.{ObjectInputStream, Serializable}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{ContextCleaner, SparkException}
 
 import scala.reflect.ClassTag
 
@@ -129,4 +129,12 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable {
   }
 
   override def toString = "Broadcast(" + id + ")"
+  
+  private def readObject(in: ObjectInputStream) {
+    in.defaultReadObject()
+    ContextCleaner.currentCleaner.value match {
+      case None => {}
+      case Some(cc: ContextCleaner) => cc.registerBroadcastForCleanup(this)
+    }
+  }
 }
