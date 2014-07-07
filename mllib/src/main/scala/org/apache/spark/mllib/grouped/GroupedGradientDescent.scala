@@ -28,7 +28,8 @@ import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.SparkContext._
 import scala.reflect.ClassTag
 
-class GroupedGradientDescent[K](private var gradient: Gradient, private var updater: Updater)(implicit tag:ClassTag[K])
+class GroupedGradientDescent[K](private var gradient: Gradient, private var updater: Updater)
+                               (implicit tag:ClassTag[K])
   extends GroupedOptimizer[K] with Logging {
   /**
    * Solve the provided convex optimization problem.
@@ -131,7 +132,9 @@ object GroupedGradientDescent extends Logging {
                        numIterations: Int,
                        regParam: Double,
                        miniBatchFraction: Double,
-                       initialWeightsSet: Map[K,Vector]) (implicit tag:ClassTag[K]) : Map[K,(Vector, Array[Double])] = {
+                       initialWeightsSet: Map[K,Vector])
+                        (implicit tag:ClassTag[K]) :
+  Map[K,(Vector, Array[Double])] = {
 
     val stochasticLossHistory = data.keys.collect().map( x =>
       (x, new ArrayBuffer[Double](numIterations))

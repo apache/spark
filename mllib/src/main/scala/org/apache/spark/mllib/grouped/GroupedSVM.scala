@@ -136,7 +136,9 @@ object GroupedSVMWithSGD {
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a SVMModel which has the weights and offset from training.
    */
-  def train[K](input: RDD[(K,LabeledPoint)], numIterations: Int) (implicit tag : ClassTag[K]) : Map[K,SVMModel] = {
+  def train[K](input: RDD[(K,LabeledPoint)], numIterations: Int)
+              (implicit tag : ClassTag[K]) :
+  Map[K,SVMModel] = {
     train(input, numIterations, 1.0, 1.0, 1.0)
   }
 }

@@ -47,7 +47,7 @@ class GroupedTestSuite extends FunSuite with LocalSparkContext {
 
     val array_out = folds.zipWithIndex.map( f => (f._2, optimizer.optimize( f._1._1.map( x => (x.label, x.features) ), initialWeights ) ) )
 
-    val group_optimizer = new GroupedGradientDescent(gradient, updater)
+    val group_optimizer = new GroupedGradientDescent[Int](gradient, updater)
     group_optimizer.setNumIterations(10)
     val group_train = sc.union(folds.zipWithIndex.map( x => x._1._1.map( y => (x._2, (y.label, y.features)) ) ))
     val group_initialWeights = group_train.keys.collect.map( x => (x,Vectors.dense(new Array[Double](numFeatures))) ).toMap
