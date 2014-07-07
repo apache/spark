@@ -157,7 +157,7 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
   override def toString() = s"Lower($child)"
 }
 
-/** A base class for functions that compare two strings, returning a boolean */
+/** A base class for functions that compare two strings, returning a boolean. */
 abstract class StringComparison extends Expression {
   self: Product =>
 
@@ -188,21 +188,21 @@ abstract class StringComparison extends Expression {
 }
 
 /**
- * A function that returns true if the string `left` contains the string `right`
+ * A function that returns true if the string `left` contains the string `right`.
  */
 case class Contains(left: Expression, right: Expression) extends StringComparison {
   override def compare(l: String, r: String) = l.contains(r)
 }
 
 /**
- * A function that returns true if the string `left` starts with the string `right`
+ * A function that returns true if the string `left` starts with the string `right`.
  */
 case class StartsWith(left: Expression, right: Expression) extends StringComparison {
   def compare(l: String, r: String) = l.startsWith(r)
 }
 
 /**
- * A function that returns true if the string `left` ends with the string `right`
+ * A function that returns true if the string `left` ends with the string `right`.
  */
 case class EndsWith(left: Expression, right: Expression) extends StringComparison {
   def compare(l: String, r: String) = l.endsWith(r)
