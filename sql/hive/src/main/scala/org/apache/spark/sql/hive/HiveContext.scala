@@ -232,6 +232,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       PartialAggregation,
       LeftSemiJoin,
       HashJoin,
+      SkewJoin,
       BasicOperators,
       CartesianProduct,
       BroadcastNestedLoopJoin

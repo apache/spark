@@ -385,6 +385,16 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData "), Nil)
   }
 
+test(" Skew Join") {
+  checkAnswer(
+    sql("SELECT * FROM upperCaseData x SKEW JOIN lowerCaseData y ON s.N=y.n"),
+      (1, A, 1, a) ::
+      (2, B, 2, b) ::
+      (3, C, 3, c) ::
+      (4, D, 4, d) :: Nil
+    )
+  }
+
   test("SET commands semantics using sql()") {
     TestSQLContext.settings.synchronized {
       clear()

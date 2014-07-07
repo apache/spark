@@ -119,7 +119,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val UNION = Keyword("UNION")
   protected val WHERE = Keyword("WHERE")
   protected val EXCEPT = Keyword("EXCEPT")
-
+  protected val SKEW = Keyword("SKEW")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -221,8 +221,9 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
      LEFT ~ SEMI ^^^ LeftSemi |
      LEFT ~ opt(OUTER) ^^^ LeftOuter |
      RIGHT ~ opt(OUTER) ^^^ RightOuter |
-     FULL ~ opt(OUTER) ^^^ FullOuter
-
+     FULL ~ opt(OUTER) ^^^ FullOuter |
+     SKEW ^^^ Skew
+    
   protected lazy val filter: Parser[Expression] = WHERE ~ expression ^^ { case _ ~ e => e }
 
   protected lazy val orderBy: Parser[Seq[SortOrder]] =

@@ -22,4 +22,5 @@ case object Inner extends JoinType
 case object LeftOuter extends JoinType
 case object RightOuter extends JoinType
 case object FullOuter extends JoinType
-case object LeftSemi extends JoinType 
+case object LeftSemi extends JoinType
+case object Skew extends JoinType 
