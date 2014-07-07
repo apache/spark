@@ -421,13 +421,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf, securityMgr,
       mapOutputTracker)
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
-    val list1ForSizeEstimate = new ArrayBuffer[Any]
-    list1ForSizeEstimate ++= list1.iterator
-    val list1SizeEstimate = SizeEstimator.estimate(list1ForSizeEstimate)
     val list2 = List(new Array[Byte](50), new Array[Byte](100), new Array[Byte](150))
-    val list2ForSizeEstimate = new ArrayBuffer[Any]
-    list2ForSizeEstimate ++= list2.iterator
-    val list2SizeEstimate = SizeEstimator.estimate(list2ForSizeEstimate)
+    val list1SizeEstimate = SizeEstimator.estimate(list1.iterator.toArray)
+    val list2SizeEstimate = SizeEstimator.estimate(list2.iterator.toArray)
     store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.put("list2memory", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.put("list2disk", list2.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
