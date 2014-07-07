@@ -103,9 +103,6 @@ class DAGScheduler(
   // Missing tasks from each stage
   private[scheduler] val pendingTasks = new HashMap[Stage, HashSet[Task[_]]]
 
-  // Track the number of tasks not launched yet of a stage
-  private val waitingTaskNum = new HashMap[Stage, Int]()
-
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
   // Contains the locations that each RDD's partitions are cached on
@@ -368,7 +365,6 @@ class DAGScheduler(
                   logDebug("Removing pending status for stage %d".format(stageId))
                 }
                 pendingTasks -= stage
-                waitingTaskNum -= stage
                 if (waitingStages.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))
                   waitingStages -= stage
@@ -638,8 +634,6 @@ class DAGScheduler(
             task.stageId, stageInfo.name, taskInfo.serializedSize / 1024,
             DAGScheduler.TASK_SIZE_TO_WARN))
       }
-      waitingTaskNum.put(stage, waitingTaskNum.getOrElse(stage, 1) - 1)
-      logInfo(""+waitingTaskNum(stage)+" tasks waiting to be launched. ---lirui")
     }
     listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
     submitWaitingStages()
@@ -791,8 +785,6 @@ class DAGScheduler(
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       myPending ++= tasks
       logDebug("New pending tasks: " + myPending)
-      // Initially, all tasks are waiting
-      waitingTaskNum.put(stage, myPending.size)
       taskScheduler.submitTasks(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
       stageToInfos(stage).submissionTime = Some(System.currentTimeMillis())
@@ -934,7 +926,6 @@ class DAGScheduler(
       case Resubmitted =>
         logInfo("Resubmitted " + task + ", so marking it as still running")
         pendingTasks(stage) += task
-        waitingTaskNum.put(stage, waitingTaskNum.getOrElse(stage, 0) + 1)
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
         // Mark the stage that the reducer was in as unrunnable
@@ -962,11 +953,9 @@ class DAGScheduler(
         }
 
       case ExceptionFailure(className, description, stackTrace, metrics) =>
-        waitingTaskNum.put(stage, waitingTaskNum.getOrElse(stage, 0) + 1)
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
       case TaskResultLost =>
-        waitingTaskNum.put(stage, waitingTaskNum.getOrElse(stage, 0) + 1)
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
       case other =>
@@ -1180,8 +1169,7 @@ class DAGScheduler(
     for (waitingStage <- waitingStages) {
       val missingParents = getMissingParentStages(waitingStage)
       if (missingParents.contains(stage) &&
-        missingParents.forall(parent => !(waitingStages.contains(parent) || failedStages.contains(parent)) &&
-          waitingTaskNum.getOrElse(parent, 0) <= 0)) {
+        missingParents.forall(parent => !(waitingStages.contains(parent) || failedStages.contains(parent)))) {
         return Some(waitingStage)
       }
     }

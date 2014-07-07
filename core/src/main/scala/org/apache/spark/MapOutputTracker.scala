@@ -268,7 +268,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       }
       logInfo("Updater started for shuffleId "+shuffleId+". ---lirui")
       val minInterval = 1000
-      val maxInterval = 3000
+      val maxInterval = 2000
       var sleepInterval = minInterval
       while (partialForShuffle.contains(shuffleId)) {
         Thread.sleep(sleepInterval)
