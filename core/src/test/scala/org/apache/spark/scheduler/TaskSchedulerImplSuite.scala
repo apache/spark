@@ -80,7 +80,7 @@ class FakeTaskSetManager(
   override def resourceOffer(
       execId: String,
       host: String,
-      maxLocality: TaskLocality.TaskLocality)
+      preferredLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
     if (tasksSuccessful + numRunningTasks < numTasks) {

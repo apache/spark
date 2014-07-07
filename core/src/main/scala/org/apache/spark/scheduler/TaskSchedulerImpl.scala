@@ -250,14 +250,14 @@ private[spark] class TaskSchedulerImpl(
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     var launchedTask = false
-    for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
+    for (taskSet <- sortedTaskSets; preferredLocality <- taskSet.myLocalityLevels) {
       do {
         launchedTask = false
         for (i <- 0 until shuffledOffers.size) {
           val execId = shuffledOffers(i).executorId
           val host = shuffledOffers(i).host
           if (availableCpus(i) >= CPUS_PER_TASK) {
-            for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
+            for (task <- taskSet.resourceOffer(execId, host, preferredLocality)) {
               tasks(i) += task
               val tid = task.taskId
               taskIdToTaskSetId(tid) = taskSet.taskSet.id

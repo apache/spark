@@ -196,9 +196,7 @@ private[spark] class TaskSetManager(
       }
     }
 
-    if (!hadAliveLocations) {
-      // Even though the task might've had preferred locations, all of those hosts or executors
-      // are dead; put it in the no-prefs list so we can schedule it elsewhere right away.
+    if (tasks(index).preferredLocations == Nil) {
       addTo(pendingTasksWithNoPrefs)
     }
 
@@ -239,7 +237,6 @@ private[spark] class TaskSetManager(
    */
   private def findTaskFromList(execId: String, list: ArrayBuffer[Int]): Option[Int] = {
     var indexOffset = list.size
-
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
@@ -352,6 +349,14 @@ private[spark] class TaskSetManager(
       for (index <- findTaskFromList(execId, getPendingTasksForHost(host))) {
         return Some((index, TaskLocality.NODE_LOCAL, false))
       }
+      // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
+      for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)) {
+        return Some((index, TaskLocality.PROCESS_LOCAL, false))
+      }
+      // find a speculative task if all noPref tasks have been scheduled
+      val specTask = findSpeculativeTask(execId, host, locality).map {
+        case (taskIndex, allowedLocality) => (taskIndex, allowedLocality, true)}
+      if (specTask != None) return specTask
     }
 
     if (TaskLocality.isAllowed(locality, TaskLocality.RACK_LOCAL)) {
@@ -363,21 +368,12 @@ private[spark] class TaskSetManager(
       }
     }
 
-    // Look for no-pref tasks after rack-local tasks since they can run anywhere.
-    for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)) {
-      return Some((index, TaskLocality.PROCESS_LOCAL, false))
-    }
-
     if (TaskLocality.isAllowed(locality, TaskLocality.ANY)) {
       for (index <- findTaskFromList(execId, allPendingTasks)) {
         return Some((index, TaskLocality.ANY, false))
       }
     }
-
-    // Finally, if all else has failed, find a speculative task
-    findSpeculativeTask(execId, host, locality).map { case (taskIndex, allowedLocality) =>
-      (taskIndex, allowedLocality, true)
-    }
+    None
   }
 
   /**
@@ -386,17 +382,16 @@ private[spark] class TaskSetManager(
   def resourceOffer(
       execId: String,
       host: String,
-      maxLocality: TaskLocality.TaskLocality)
+      preferredLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
     if (!isZombie) {
       val curTime = clock.getTime()
 
       var allowedLocality = getAllowedLocalityLevel(curTime)
-      if (allowedLocality > maxLocality) {
-        allowedLocality = maxLocality   // We're not allowed to search for farther-away tasks
+      if (allowedLocality > preferredLocality) {
+        allowedLocality = preferredLocality   // We're not allowed to search for farther-away tasks
       }
-
       findTask(execId, host, allowedLocality) match {
         case Some((index, taskLocality, speculative)) => {
           // Found a task; do some bookkeeping and return a task description
@@ -751,7 +746,6 @@ private[spark] class TaskSetManager(
     levels.toArray
   }
 
-  // Re-compute pendingTasksWithNoPrefs since new preferred locations may become available
   def executorAdded() {
     def newLocAvail(index: Int): Boolean = {
       for (loc <- tasks(index).preferredLocations) {
@@ -763,8 +757,6 @@ private[spark] class TaskSetManager(
       }
       false
     }
-    logInfo("Re-computing pending task lists.")
-    pendingTasksWithNoPrefs = pendingTasksWithNoPrefs.filter(!newLocAvail(_))
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
   }
