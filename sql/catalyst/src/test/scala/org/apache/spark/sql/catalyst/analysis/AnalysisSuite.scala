@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /* Implicit conversions */
@@ -33,5 +34,12 @@ class AnalysisSuite extends FunSuite {
     assert(
       analyze(Project(Seq(UnresolvedAttribute("a")), testRelation)) ===
         Project(testRelation.output, testRelation))
+  }
+
+  test("throw errors for unresolved attributes during analysis") {
+    val e = intercept[TreeNodeException[_]] {
+      analyze(Project(Seq(UnresolvedAttribute("abcd")), testRelation))
+    }
+    assert(e.getMessage().toLowerCase.contains("unresolved"))
   }
 }
