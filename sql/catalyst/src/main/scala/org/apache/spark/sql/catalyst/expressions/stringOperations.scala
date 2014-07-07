@@ -76,13 +76,18 @@ trait CaseConversionExpression {
   type EvaluatedType = Any
 
   def convert(v: String): String
-  
+
+  override def foldable: Boolean = child.foldable
   def nullable: Boolean = child.nullable
   def dataType: DataType = StringType
 
   override def eval(input: Row): Any = {
-    val converted = child.eval(input)
-    convert(converted.toString)
+    val evaluated = child.eval(input)
+    if (evaluated == null) {
+      null
+    } else {
+      convert(evaluated.toString)
+    }
   }
 }
 
@@ -138,6 +143,8 @@ case class RLike(left: Expression, right: Expression)
 case class Upper(child: Expression) extends UnaryExpression with CaseConversionExpression {
   
   override def convert(v: String): String = v.toUpperCase()
+
+  override def toString() = s"Upper($child)"
 }
 
 /**
@@ -146,4 +153,6 @@ case class Upper(child: Expression) extends UnaryExpression with CaseConversionE
 case class Lower(child: Expression) extends UnaryExpression with CaseConversionExpression {
   
   override def convert(v: String): String = v.toLowerCase()
+
+  override def toString() = s"Lower($child)"
 }

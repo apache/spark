@@ -28,7 +28,9 @@ import scala.collection.JavaConversions._
 
 import akka.actor._
 import akka.pattern.ask
+
 import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util._
 import scala.collection.mutable
@@ -119,14 +121,17 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       Await.result(future, timeout)
     } catch {
       case e: Exception =>
+        logError("Error communicating with MapOutputTracker", e)
         throw new SparkException("Error communicating with MapOutputTracker", e)
     }
   }
 
   /** Send a one-way message to the trackerActor, to which we expect it to reply with true. */
   protected def sendTracker(message: Any) {
-    if (askTracker(message) != true) {
-      throw new SparkException("Error reply received from MapOutputTracker")
+    val response = askTracker(message)
+    if (response != true) {
+      throw new SparkException(
+        "Error reply received from MapOutputTracker. Expecting true, got " + response.toString)
     }
   }
 
@@ -227,8 +232,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       if (fetchedStatuses != null) {
         fetchedStatuses
       } else {
-        throw new FetchFailedException(null, shuffleId, -1, reduceId,
-          new Exception("Missing all output locations for shuffle " + shuffleId))
+        throw new MetadataFetchFailedException(
+          shuffleId, reduceId, "Missing all output locations for shuffle " + shuffleId)
       }
     } else {
       statuses
@@ -484,8 +489,8 @@ private[spark] object MapOutputTracker {
           if(isPartial){
             (null, 0.toLong)
           } else {
-            throw new FetchFailedException(null, shuffleId, -1, reduceId,
-              new Exception("Missing an output location for shuffle " + shuffleId))
+            throw new MetadataFetchFailedException(
+              shuffleId, reduceId, "Missing an output location for shuffle " + shuffleId)
           }
         } else {
           (status.location, decompressSize(status.compressedSizes(reduceId)))
@@ -515,7 +520,7 @@ private[spark] object MapOutputTracker {
     if (compressedSize == 0) {
       0
     } else {
-      math.pow(LOG_BASE, (compressedSize & 0xFF)).toLong
+      math.pow(LOG_BASE, compressedSize & 0xFF).toLong
     }
   }
 }

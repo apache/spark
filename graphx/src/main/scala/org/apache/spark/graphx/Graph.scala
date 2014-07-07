@@ -106,8 +106,18 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
 
   /**
    * Repartitions the edges in the graph according to `partitionStrategy`.
+   *
+   * @param the partitioning strategy to use when partitioning the edges in the graph.
    */
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
+
+  /**
+   * Repartitions the edges in the graph according to `partitionStrategy`.
+   *
+   * @param the partitioning strategy to use when partitioning the edges in the graph.
+   * @param numPartitions the number of edge partitions in the new graph.
+   */
+  def partitionBy(partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED]
 
   /**
    * Transforms each vertex attribute in the graph using the map function.
@@ -128,7 +138,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * }}}
    *
    */
-  def mapVertices[VD2: ClassTag](map: (VertexId, VD) => VD2): Graph[VD2, ED]
+  def mapVertices[VD2: ClassTag](map: (VertexId, VD) => VD2)
+    (implicit eq: VD =:= VD2 = null): Graph[VD2, ED]
 
   /**
    * Transforms each edge attribute in the graph using the map function.  The map function is not
@@ -338,7 +349,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * }}}
    */
   def outerJoinVertices[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
-      (mapFunc: (VertexId, VD, Option[U]) => VD2)
+      (mapFunc: (VertexId, VD, Option[U]) => VD2)(implicit eq: VD =:= VD2 = null)
     : Graph[VD2, ED]
 
   /**

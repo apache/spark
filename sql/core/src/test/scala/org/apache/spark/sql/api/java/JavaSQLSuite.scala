@@ -22,6 +22,7 @@ import scala.beans.BeanProperty
 import org.scalatest.FunSuite
 
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.test.TestSQLContext
 
 // Implicits
@@ -110,5 +111,49 @@ class JavaSQLSuite extends FunSuite {
           |FROM allTypes
         """.stripMargin).collect.head.row ===
         Seq.fill(8)(null))
+  }
+
+  test("loads JSON datasets") {
+    val jsonString =
+      """{"string":"this is a simple string.",
+          "integer":10,
+          "long":21474836470,
+          "bigInteger":92233720368547758070,
+          "double":1.7976931348623157E308,
+          "boolean":true,
+          "null":null
+      }""".replaceAll("\n", " ")
+    val rdd = javaCtx.parallelize(jsonString :: Nil)
+
+    var schemaRDD = javaSqlCtx.jsonRDD(rdd)
+
+    schemaRDD.registerAsTable("jsonTable1")
+
+    assert(
+      javaSqlCtx.sql("select * from jsonTable1").collect.head.row ===
+        Seq(BigDecimal("92233720368547758070"),
+            true,
+            1.7976931348623157E308,
+            10,
+            21474836470L,
+            null,
+            "this is a simple string."))
+
+    val file = getTempFilePath("json")
+    val path = file.toString
+    rdd.saveAsTextFile(path)
+    schemaRDD = javaSqlCtx.jsonFile(path)
+
+    schemaRDD.registerAsTable("jsonTable2")
+
+    assert(
+      javaSqlCtx.sql("select * from jsonTable2").collect.head.row ===
+        Seq(BigDecimal("92233720368547758070"),
+            true,
+            1.7976931348623157E308,
+            10,
+            21474836470L,
+            null,
+            "this is a simple string."))
   }
 }

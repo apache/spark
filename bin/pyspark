@@ -26,7 +26,7 @@ export SPARK_HOME="$FWDIR"
 SCALA_VERSION=2.10
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  echo "Usage: ./bin/pyspark [options]"
+  echo "Usage: ./bin/pyspark [options]" 1>&2
   $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   exit 0
 fi
@@ -36,8 +36,8 @@ if [ ! -f "$FWDIR/RELEASE" ]; then
   # Exit if the user hasn't compiled Spark
   ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*.jar >& /dev/null
   if [[ $? != 0 ]]; then
-    echo "Failed to find Spark assembly in $FWDIR/assembly/target" >&2
-    echo "You need to build Spark before running this program" >&2
+    echo "Failed to find Spark assembly in $FWDIR/assembly/target" 1>&2
+    echo "You need to build Spark before running this program" 1>&2
     exit 1
   fi
 fi
@@ -45,7 +45,7 @@ fi
 . $FWDIR/bin/load-spark-env.sh
 
 # Figure out which Python executable to use
-if [ -z "$PYSPARK_PYTHON" ] ; then
+if [[ -z "$PYSPARK_PYTHON" ]]; then
   PYSPARK_PYTHON="python"
 fi
 export PYSPARK_PYTHON
@@ -59,7 +59,7 @@ export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
 export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
 
 # If IPython options are specified, assume user wants to run IPython
-if [ -n "$IPYTHON_OPTS" ]; then
+if [[ -n "$IPYTHON_OPTS" ]]; then
   IPYTHON=1
 fi
 
@@ -75,6 +75,16 @@ for i in "$@"; do
   PYSPARK_SUBMIT_ARGS="$PYSPARK_SUBMIT_ARGS $i"
 done
 export PYSPARK_SUBMIT_ARGS
+
+# For pyspark tests
+if [[ -n "$SPARK_TESTING" ]]; then
+  if [[ -n "$PYSPARK_DOC_TEST" ]]; then
+    exec "$PYSPARK_PYTHON" -m doctest $1
+  else
+    exec "$PYSPARK_PYTHON" $1
+  fi
+  exit
+fi
 
 # If a python file is provided, directly run spark-submit.
 if [[ "$1" =~ \.py$ ]]; then

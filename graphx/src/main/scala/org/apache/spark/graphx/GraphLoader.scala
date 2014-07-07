@@ -49,8 +49,8 @@ object GraphLoader extends Logging {
    * @param canonicalOrientation whether to orient edges in the positive
    *        direction
    * @param minEdgePartitions the number of partitions for the edge RDD
-   * @param edgeStorageLevel the desired storage level for the edge partitions. To set the vertex
-   *        storage level, call [[org.apache.spark.graphx.Graph#persistVertices]].
+   * @param edgeStorageLevel the desired storage level for the edge partitions
+   * @param vertexStorageLevel the desired storage level for the vertex partitions
    */
   def edgeListFile(
       sc: SparkContext,

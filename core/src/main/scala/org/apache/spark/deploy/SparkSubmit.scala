@@ -19,7 +19,7 @@ package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
 import java.lang.reflect.InvocationTargetException
-import java.net.{URI, URL}
+import java.net.URL
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
@@ -117,14 +117,25 @@ object SparkSubmit {
     val isPython = args.isPython
     val isYarnCluster = clusterManager == YARN && deployOnCluster
 
+    // For mesos, only client mode is supported
     if (clusterManager == MESOS && deployOnCluster) {
-      printErrorAndExit("Cannot currently run driver on the cluster in Mesos")
+      printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
+    }
+
+    // For standalone, only client mode is supported
+    if (clusterManager == STANDALONE && deployOnCluster) {
+      printErrorAndExit("Cluster deploy mode is currently not supported for standalone clusters.")
+    }
+
+    // For shells, only client mode is applicable
+    if (isShell(args.primaryResource) && deployOnCluster) {
+      printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
     }
 
     // If we're running a python app, set the main class to our specific python runner
     if (isPython) {
       if (deployOnCluster) {
-        printErrorAndExit("Cannot currently run Python driver programs on cluster")
+        printErrorAndExit("Cluster deploy mode is currently not supported for python.")
       }
       if (args.primaryResource == PYSPARK_SHELL) {
         args.mainClass = "py4j.GatewayServer"
