@@ -824,8 +824,8 @@ class DAGScheduler(
             if (partialValue != acc.zero) {
               val stringPartialValue = s"${partialValue}"
               val stringValue = s"${acc.value}"
-              stageToInfos(stage).accumulatorValues(name) = stringValue
-              event.taskInfo.accumValues += ((name, stringPartialValue))
+              stageToInfos(stage).accumulatedValues(name) = stringValue
+              event.taskInfo.accumulableValues += ((name, stringPartialValue))
             }
           }
         }

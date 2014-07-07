@@ -76,7 +76,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
     poolToActiveStages(stageIdToPool(stageId)).remove(stageId)
 
     val accumulables = stageIdToAccumulables.getOrElseUpdate(stageId, HashMap[String, String]())
-    stageCompleted.stageInfo.accumulatorValues.foreach { case (name, value) =>
+    stageCompleted.stageInfo.accumulatedValues.foreach { case (name, value) =>
       accumulables(name) = value
     }
 
@@ -156,7 +156,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
 
     if (info != null) {
       val accumulables = stageIdToAccumulables.getOrElseUpdate(sid, HashMap[String, String]())
-      info.accumValues.map { case (name, value) =>
+      info.accumulableValues.map { case (name, value) =>
         accumulables(name) = value
       }
 

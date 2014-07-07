@@ -44,9 +44,10 @@ class TaskInfo(
   var gettingResultTime: Long = 0
 
   /**
-   * Terminal values of accumulables updated during this task.
+   * Intermediate updates to accumulables during this task. Note that it is valid for the same
+   * accumulable to be updated multiple times in a single task.
    */
-  val accumValues = ListBuffer[(String, String)]()
+  val accumulableValues = ListBuffer[(String, String)]()
 
   /**
    * The time when the task has completed successfully (including the time to remotely fetch

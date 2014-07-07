@@ -190,10 +190,14 @@ private[spark] object JsonProtocol {
     ("Details" -> stageInfo.details) ~
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
-    ("Failure Reason" -> failureReason)
+    ("Failure Reason" -> failureReason) ~
+    ("Accumulated Values" -> mapToJson(stageInfo.accumulatedValues))
   }
 
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
+    val accumUpdateMap = taskInfo.accumulableValues.map { case (k, v) =>
+      mapToJson(Map(k -> v))
+    }.toList
     ("Task ID" -> taskInfo.taskId) ~
     ("Index" -> taskInfo.index) ~
     ("Attempt" -> taskInfo.attempt) ~
@@ -204,7 +208,8 @@ private[spark] object JsonProtocol {
     ("Speculative" -> taskInfo.speculative) ~
     ("Getting Result Time" -> taskInfo.gettingResultTime) ~
     ("Finish Time" -> taskInfo.finishTime) ~
-    ("Failed" -> taskInfo.failed)
+    ("Failed" -> taskInfo.failed) ~
+    ("Accumulable Updates" -> JArray(accumUpdateMap))
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
@@ -485,11 +490,17 @@ private[spark] object JsonProtocol {
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val failureReason = Utils.jsonOption(json \ "Failure Reason").map(_.extract[String])
+    val accumulatedValues = (json \ "Accumulated Values").extractOpt[JObject].map(mapFromJson(_))
 
     val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfos, details)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.failureReason = failureReason
+    accumulatedValues.foreach { values =>
+      for ((k, v) <- values) {
+        stageInfo.accumulatedValues(k) = v
+      }
+    }
     stageInfo
   }
 
@@ -505,12 +516,19 @@ private[spark] object JsonProtocol {
     val gettingResultTime = (json \ "Getting Result Time").extract[Long]
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
+    val accumulableUpdates = (json \ "Accumulable Updates").extractOpt[Seq[JValue]].map(
+      updates => updates.map(mapFromJson(_)))
 
     val taskInfo =
       new TaskInfo(taskId, index, attempt, launchTime, executorId, host, taskLocality, speculative)
     taskInfo.gettingResultTime = gettingResultTime
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed
+    accumulableUpdates.foreach { maps =>
+      for (m <- maps) {
+        taskInfo.accumulableValues += m.head
+      }
+    }
     taskInfo
   }
 

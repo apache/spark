@@ -261,6 +261,7 @@ class JsonProtocolSuite extends FunSuite {
     (0 until info1.rddInfos.size).foreach { i =>
       assertEquals(info1.rddInfos(i), info2.rddInfos(i))
     }
+    assert(info1.accumulatedValues === info2.accumulatedValues)
     assert(info1.details === info2.details)
   }
 
@@ -293,6 +294,7 @@ class JsonProtocolSuite extends FunSuite {
     assert(info1.gettingResultTime === info2.gettingResultTime)
     assert(info1.finishTime === info2.finishTime)
     assert(info1.failed === info2.failed)
+    assert(info1.accumulableValues === info2.accumulableValues)
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
@@ -477,11 +479,19 @@ class JsonProtocolSuite extends FunSuite {
 
   private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
     val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
-    new StageInfo(a, "greetings", b, rddInfos, "details")
+    val stageInfo = new StageInfo(a, "greetings", b, rddInfos, "details")
+    stageInfo.accumulatedValues("acc1") = "val1"
+    stageInfo.accumulatedValues("acc2") = "val2"
+    stageInfo
   }
 
   private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
-    new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL, speculative)
+    val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
+      speculative)
+    taskInfo.accumulableValues += (("acc1", "val1"))
+    taskInfo.accumulableValues += (("acc1", "val1"))
+    taskInfo.accumulableValues += (("acc2", "val2"))
+    taskInfo
   }
 
   /**
@@ -538,7 +548,8 @@ class JsonProtocolSuite extends FunSuite {
   private val stageSubmittedJsonString =
     """
       {"Event":"SparkListenerStageSubmitted","Stage Info":{"Stage ID":100,"Stage Name":
-      "greetings","Number of Tasks":200,"RDD Info":[],"Details":"details"},"Properties":
+      "greetings","Number of Tasks":200,"RDD Info":[],"Details":"details",
+      "AccumulatedValues":{"acc2":"val2","acc1":"val1"}},"Properties":
       {"France":"Paris","Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
     """
 
@@ -548,7 +559,8 @@ class JsonProtocolSuite extends FunSuite {
       "greetings","Number of Tasks":201,"RDD Info":[{"RDD ID":101,"Name":"mayor","Storage
       Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
       "Replication":1},"Number of Partitions":201,"Number of Cached Partitions":301,
-      "Memory Size":401,"Tachyon Size":0,"Disk Size":501}],"Details":"details"}}
+      "Memory Size":401,"Tachyon Size":0,"Disk Size":501}],"Details":"details",
+      "AccumulatedValues":{"acc2":"val2","acc1":"val1"}}}
     """
 
   private val taskStartJsonString =
@@ -556,7 +568,7 @@ class JsonProtocolSuite extends FunSuite {
       |{"Event":"SparkListenerTaskStart","Stage ID":111,"Task Info":{"Task ID":222,
       |"Index":333,"Attempt":1,"Launch Time":444,"Executor ID":"executor","Host":"your kind sir",
       |"Locality":"NODE_LOCAL","Speculative":false,"Getting Result Time":0,"Finish Time":0,
-      |"Failed":false}}
+      |"Failed":false,"AccumulableUpdates":[{"acc1":"val1"},{"acc1":"val1"},{"acc2":"val2"}]}}
     """.stripMargin
 
   private val taskGettingResultJsonString =
@@ -564,7 +576,8 @@ class JsonProtocolSuite extends FunSuite {
       |{"Event":"SparkListenerTaskGettingResult","Task Info":
       |  {"Task ID":1000,"Index":2000,"Attempt":5,"Launch Time":3000,"Executor ID":"executor",
       |   "Host":"your kind sir","Locality":"NODE_LOCAL","Speculative":true,"Getting Result Time":0,
-      |   "Finish Time":0,"Failed":false
+      |   "Finish Time":0,"Failed":false,
+      |   "AccumulableUpdates":[{"acc1":"val1"},{"acc1":"val1"},{"acc2":"val2"}]
       |  }
       |}
     """.stripMargin
@@ -576,7 +589,8 @@ class JsonProtocolSuite extends FunSuite {
       |"Task Info":{
       |  "Task ID":123,"Index":234,"Attempt":67,"Launch Time":345,"Executor ID":"executor",
       |  "Host":"your kind sir","Locality":"NODE_LOCAL","Speculative":false,
-      |  "Getting Result Time":0,"Finish Time":0,"Failed":false
+      |  "Getting Result Time":0,"Finish Time":0,"Failed":false,
+      |  "AccumulableUpdates":[{"acc1":"val1"},{"acc1":"val1"},{"acc2":"val2"}]
       |},
       |"Task Metrics":{
       |  "Host Name":"localhost","Executor Deserialize Time":300,"Executor Run Time":400,
@@ -616,7 +630,8 @@ class JsonProtocolSuite extends FunSuite {
       |"Task Info":{
       |  "Task ID":123,"Index":234,"Attempt":67,"Launch Time":345,"Executor ID":"executor",
       |  "Host":"your kind sir","Locality":"NODE_LOCAL","Speculative":false,
-      |  "Getting Result Time":0,"Finish Time":0,"Failed":false
+      |  "Getting Result Time":0,"Finish Time":0,"Failed":false,
+      |  "AccumulableUpdates":[{"acc1":"val1"},{"acc1":"val1"},{"acc2":"val2"}]
       |},
       |"Task Metrics":{
       |  "Host Name":"localhost","Executor Deserialize Time":300,"Executor Run Time":400,

@@ -119,7 +119,8 @@ class HadoopRDD[K, V](
       minPartitions)
   }
 
-  val hadoopInputBytes = sc.accumulator(0L, s"rdd-$id.input.bytes.hadoop")(SparkContext.LongAccumulatorParam)
+  private val accName = s"rdd-$id.input.bytes.hadoop"
+  val hadoopInputBytes = sc.accumulator(0L, accName)(SparkContext.LongAccumulatorParam)
 
   protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
 
