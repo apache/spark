@@ -29,56 +29,56 @@ import org.apache.spark.SparkConf
 
 object InMemoryRelation {
   def apply(useCompression: Boolean, child: SparkPlan): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, child)
+    new InMemoryRelation(child.output, useCompression, child)()
 }
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
     useCompression: Boolean,
     child: SparkPlan)
+    (private var _cachedColumnBuffers: RDD[Array[ByteBuffer]] = null)
   extends LogicalPlan with MultiInstanceRelation {
 
+  // If the cached column buffers were not passed in, we calculate them in the constructor.
+  // As in Spark, the actual work of caching is lazy.
+  if (_cachedColumnBuffers == null) {
+    val output = child.output
+    val cached = child.execute().mapPartitions { iterator =>
+      val columnBuilders = output.map { attribute =>
+        ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name, useCompression)
+      }.toArray
+
+      var row: Row = null
+      while (iterator.hasNext) {
+        row = iterator.next()
+        var i = 0
+        while (i < row.length) {
+          columnBuilders(i).appendFrom(row, i)
+          i += 1
+        }
+      }
+
+      Iterator.single(columnBuilders.map(_.build()))
+    }.cache()
+
+    cached.setName(child.toString)
+    _cachedColumnBuffers = cached
+  }
+
+
   override def children = Seq.empty
+
   override def references = Set.empty
 
   override def newInstance() = {
-    val ret =
-      new InMemoryRelation(output.map(_.newInstance), useCompression, child).asInstanceOf[this.type]
-    ret._cachedColumnBuffers = this._cachedColumnBuffers
-    ret
+    new InMemoryRelation(
+      output.map(_.newInstance),
+      useCompression,
+      child)(
+      _cachedColumnBuffers).asInstanceOf[this.type]
   }
 
-  private var _cachedColumnBuffers: RDD[Array[ByteBuffer]] = null
-
-  def cachedColumnBuffers = {
-    if (_cachedColumnBuffers == null) {
-      val output = child.output
-      val cached = child.execute().mapPartitions { iterator =>
-        val columnBuilders = output.map { attribute =>
-          ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name, useCompression)
-        }.toArray
-
-        var row: Row = null
-        while (iterator.hasNext) {
-          row = iterator.next()
-          var i = 0
-          while (i < row.length) {
-            columnBuilders(i).appendFrom(row, i)
-            i += 1
-          }
-        }
-
-        Iterator.single(columnBuilders.map(_.build()))
-      }.cache()
-
-      cached.setName(child.toString)
-      // Force the materialization of the cached RDD.
-      cached.count()
-      _cachedColumnBuffers = cached
-    }
-
-    _cachedColumnBuffers
-  }
+  def cachedColumnBuffers = _cachedColumnBuffers
 }
 
 private[sql] case class InMemoryColumnarTableScan(
