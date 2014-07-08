@@ -770,7 +770,7 @@ class DAGScheduler(
           runningStages -= stage
           return
         case NonFatal(e) => // Other exceptions, such as IllegalArgumentException from Kryo.
-          abortStage(stage, "Task serialization failed: " + e.toString)
+          abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
           runningStages -= stage
           return
       }
