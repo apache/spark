@@ -451,7 +451,9 @@ class JsonSuite extends QueryTest {
     val jsonSchemaRDD = jsonRDD(arrayElementTypeConflict)
 
     val expectedSchema =
-      AttributeReference("array", ArrayType(StringType), true)() :: Nil
+      AttributeReference("array1", ArrayType(StringType), true)() ::
+      AttributeReference("array2", ArrayType(StructType(
+        StructField("field", LongType, true) :: Nil)), true)() :: Nil
 
     comparePlans(Schema(expectedSchema), Schema(jsonSchemaRDD.logicalPlan.output))
 
@@ -460,12 +462,12 @@ class JsonSuite extends QueryTest {
     checkAnswer(
       sql("select * from jsonTable"),
       Seq(Seq("1", "1.1", "true", null, "[]", "{}", "[2,3,4]",
-        """{"field":str}""")) :: Nil
+        """{"field":str}"""), Seq(Seq(214748364700L), Seq(1))) :: Nil
     )
 
     // Treat an element as a number.
     checkAnswer(
-      sql("select array[0] + 1 from jsonTable"),
+      sql("select array1[0] + 1 from jsonTable"),
       2
     )
   }
