@@ -26,6 +26,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import akka.actor._
 import akka.actor.OneForOneStrategy
@@ -766,6 +767,10 @@ class DAGScheduler(
       } catch {
         case e: NotSerializableException =>
           abortStage(stage, "Task not serializable: " + e.toString)
+          runningStages -= stage
+          return
+        case NonFatal(e) => // Other exceptions, such as IllegalArgumentException from Kryo.
+          abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
           runningStages -= stage
           return
       }
