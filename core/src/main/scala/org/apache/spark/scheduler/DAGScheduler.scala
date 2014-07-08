@@ -768,6 +768,10 @@ class DAGScheduler(
           abortStage(stage, "Task not serializable: " + e.toString)
           runningStages -= stage
           return
+        case e: Throwable => // Other exceptions, such as IllegalArgumentException from Kryo.
+          abortStage(stage, "Task serialization failed: " + e.toString)
+          runningStages -= stage
+          return
       }
 
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
