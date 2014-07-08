@@ -281,14 +281,16 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         updaterLock.getOrElseUpdate(shuffleId, new AnyRef).synchronized {
           updaterLock(shuffleId).wait(maxInterval)
         }
-        if (System.currentTimeMillis() - lastUpdate >= minInterval) {
-          lastUpdate = System.currentTimeMillis()
-          if (clearOutdatedMapStatuses(shuffleId)) {
-            getMapStatusesForShuffle(shuffleId, -1)
-            partialEpoch.synchronized {
-              partialEpoch.put(shuffleId, partialEpoch.getOrElse(shuffleId, 0) + 1)
-              partialEpoch.notifyAll()
-            }
+        val interval = System.currentTimeMillis() - lastUpdate
+        if (interval < minInterval) {
+          Thread.sleep(minInterval - interval)
+        }
+        lastUpdate = System.currentTimeMillis()
+        if (clearOutdatedMapStatuses(shuffleId)) {
+          getMapStatusesForShuffle(shuffleId, -1)
+          partialEpoch.synchronized {
+            partialEpoch.put(shuffleId, partialEpoch.getOrElse(shuffleId, 0) + 1)
+            partialEpoch.notifyAll()
           }
         }
       }
