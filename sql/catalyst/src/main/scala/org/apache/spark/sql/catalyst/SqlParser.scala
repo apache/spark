@@ -122,6 +122,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val EXCEPT = Keyword("EXCEPT")
   protected val SKEW = Keyword("SKEW")
 
+
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
     this.getClass

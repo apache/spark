@@ -154,4 +154,4 @@ object Unions {
     case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
     case other => other :: Nil
   }
-} 
+}
