@@ -275,7 +275,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       }
       logInfo("Updater started for shuffle " + shuffleId + ".")
       val minInterval = 1000
-      val maxInterval = 5000
+      val maxInterval = 3000
       var lastUpdate = System.currentTimeMillis()
       while (partialForShuffle.contains(shuffleId)) {
         updaterLock.getOrElseUpdate(shuffleId, new AnyRef).synchronized {

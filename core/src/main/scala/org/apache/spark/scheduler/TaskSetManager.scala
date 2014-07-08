@@ -756,13 +756,7 @@ private[spark] class TaskSetManager(
   }
 
   // Test if this stage is in pre-start state
-  def isPreStart() = {
-    if (sched.dagScheduler.removeStageBarrier) {
-      sched.dagScheduler.isPreStartStage(stageId)
-    } else {
-      false
-    }
-  }
+  def isPreStart() = sched.dagScheduler.isPreStartStage(stageId)
 
   // Kill this task set manager
   def kill() {

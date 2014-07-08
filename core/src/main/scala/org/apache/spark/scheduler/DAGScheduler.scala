@@ -1203,6 +1203,9 @@ class DAGScheduler(
   }
 
   def isPreStartStage(stageId: Int): Boolean = {
+    if (!removeStageBarrier) {
+      return false
+    }
     try {
       val timeout = AkkaUtils.askTimeout(sc.conf)
       val future = eventProcessActor.ask(CheckIfPreStarted(stageId))(timeout)

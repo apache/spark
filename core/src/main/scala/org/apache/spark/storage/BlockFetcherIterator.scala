@@ -375,10 +375,6 @@ object BlockFetcherIterator {
 
     private def getIterator() = {
       while (!newStatusesReady) {
-        if (!isPartial && delegatedStatuses.size >= statuses.size) {
-          //shouldn't get here, just to avoid infinite loop
-          throw new SparkException("All blocks have been delegated for reduceId " + reduceId)
-        }
         logInfo("Still missing " + statuses.filter(_._1 == null).size +
           " map outputs for reduce " + reduceId + " of shuffle " + shuffleId)
         updateStatuses()
