@@ -156,3 +156,54 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
 
   override def toString() = s"Lower($child)"
 }
+
+/** A base class for functions that compare two strings, returning a boolean. */
+abstract class StringComparison extends Expression {
+  self: Product =>
+
+  type EvaluatedType = Any
+
+  def left: Expression
+  def right: Expression
+
+  override def references = children.flatMap(_.references).toSet
+  override def children = left :: right :: Nil
+
+  override def nullable: Boolean = true
+  override def dataType: DataType = BooleanType
+
+  def compare(l: String, r: String): Boolean
+
+  override def eval(input: Row): Any = {
+    val leftEval = left.eval(input).asInstanceOf[String]
+    if(leftEval == null) {
+      null
+    } else {
+      val rightEval = right.eval(input).asInstanceOf[String]
+      if (rightEval == null) null else compare(leftEval, rightEval)
+    }
+  }
+
+  override def toString() = s"$nodeName($left, $right)"
+}
+
+/**
+ * A function that returns true if the string `left` contains the string `right`.
+ */
+case class Contains(left: Expression, right: Expression) extends StringComparison {
+  override def compare(l: String, r: String) = l.contains(r)
+}
+
+/**
+ * A function that returns true if the string `left` starts with the string `right`.
+ */
+case class StartsWith(left: Expression, right: Expression) extends StringComparison {
+  def compare(l: String, r: String) = l.startsWith(r)
+}
+
+/**
+ * A function that returns true if the string `left` ends with the string `right`.
+ */
+case class EndsWith(left: Expression, right: Expression) extends StringComparison {
+  def compare(l: String, r: String) = l.endsWith(r)
+}

@@ -198,11 +198,12 @@ private[sql] object JsonRDD extends Logging {
    * in this JSON object can appear in other JSON objects.
    */
   private def allKeysWithValueTypes(m: Map[String, Any]): Set[(String, DataType)] = {
-    m.map{
+    val keyValuePairs = m.map {
       // Quote the key with backticks to handle cases which have dots
       // in the field name.
-      case (key, dataType) => (s"`$key`", dataType)
-    }.flatMap {
+      case (key, value) => (s"`$key`", value)
+    }.toSet
+    keyValuePairs.flatMap {
       case (key: String, struct: Map[String, Any]) => {
         // The value associted with the key is an JSON object.
         allKeysWithValueTypes(struct).map {
@@ -224,7 +225,7 @@ private[sql] object JsonRDD extends Logging {
         }
       }
       case (key: String, value) => (key, typeOfPrimitiveValue(value)) :: Nil
-    }.toSet
+    }
   }
 
   /**
