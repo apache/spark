@@ -34,6 +34,7 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("ConstantFolding", FixedPoint(100),
       NullPropagation,
       ConstantFolding,
+      LikeSimplification,
       BooleanSimplification,
       SimplifyFilters,
       SimplifyCasts,
@@ -109,6 +110,28 @@ object ColumnPruning extends Rule[LogicalPlan] {
     } else {
       c
     }
+}
+
+/**
+ * Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.
+ * For example, when the expression is just checking to see if a string starts with a given
+ * pattern.
+ */
+object LikeSimplification extends Rule[LogicalPlan] {
+  // if guards below protect from escapes on trailing %.
+  // Cases like "something\%" are not optimized, but this does not affect correctness.
+  val startsWith = "([^_%]+)%".r
+  val endsWith = "%([^_%]+)".r
+  val contains = "%([^_%]+)%".r
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case Like(l, Literal(startsWith(pattern), StringType)) if !pattern.endsWith("\\") =>
+      StartsWith(l, Literal(pattern))
+    case Like(l, Literal(endsWith(pattern), StringType)) =>
+      EndsWith(l, Literal(pattern))
+    case Like(l, Literal(contains(pattern), StringType)) if !pattern.endsWith("\\") =>
+      Contains(l, Literal(pattern))
+  }
 }
 
 /**
