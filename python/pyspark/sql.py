@@ -152,10 +152,12 @@ class SQLContext:
         >>> ofn.close()
         >>> srdd = sqlCtx.jsonFile(jsonFile)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
-        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2, field3 as f3 from table1")
-        >>> srdd2.collect() == [{"f1": 1, "f2": "row1", "f3":{"field4":11}},
-        ...                     {"f1": 2, "f2": "row2", "f3":{"field4":22}},
-        ...                     {"f1": 3, "f2": "row3", "f3":{"field4":33}}]
+        >>> srdd2 = sqlCtx.sql(
+        ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
+        >>> srdd2.collect() == [
+        ... {"f1":1, "f2":"row1", "f3":{"field4":11, "field5": None}, "f4":None},
+        ... {"f1":2, "f2":None, "f3":{"field4":22,  "field5": [10, 11]}, "f4":[{"field7": "row2"}]},
+        ... {"f1":None, "f2":"row3", "f3":{"field4":33, "field5": []}, "f4":None}]
         True
         """
         jschema_rdd = self._ssql_ctx.jsonFile(path)
@@ -167,10 +169,12 @@ class SQLContext:
 
         >>> srdd = sqlCtx.jsonRDD(json)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
-        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2, field3 as f3 from table1")
-        >>> srdd2.collect() == [{"f1": 1, "f2": "row1", "f3":{"field4":11}},
-        ...                     {"f1": 2, "f2": "row2", "f3":{"field4":22}},
-        ...                     {"f1": 3, "f2": "row3", "f3":{"field4":33}}]
+        >>> srdd2 = sqlCtx.sql(
+        ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
+        >>> srdd2.collect() == [
+        ... {"f1":1, "f2":"row1", "f3":{"field4":11, "field5": None}, "f4":None},
+        ... {"f1":2, "f2":None, "f3":{"field4":22,  "field5": [10, 11]}, "f4":[{"field7": "row2"}]},
+        ... {"f1":None, "f2":"row3", "f3":{"field4":33, "field5": []}, "f4":None}]
         True
         """
         def func(split, iterator):
@@ -492,8 +496,8 @@ def _test():
     globs['rdd'] = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
     jsonStrings = ['{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
-       '{"field1" : 2, "field2": "row2", "field3":{"field4":22}}',
-       '{"field1" : 3, "field2": "row3", "field3":{"field4":33}}']
+       '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]}, "field6":[{"field7": "row2"}]}',
+       '{"field1" : null, "field2": "row3", "field3":{"field4":33, "field5": []}}']
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
     globs['nestedRdd1'] = sc.parallelize([

@@ -57,7 +57,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   self =>
 
   @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog
+  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
   @transient
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, EmptyFunctionRegistry, caseSensitive = true)
