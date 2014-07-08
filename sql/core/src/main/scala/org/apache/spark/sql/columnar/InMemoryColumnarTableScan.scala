@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.columnar
 
+import java.nio.ByteBuffer
+
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -38,33 +41,43 @@ private[sql] case class InMemoryRelation(
   override def children = Seq.empty
   override def references = Set.empty
 
-  override def newInstance() =
-    new InMemoryRelation(output.map(_.newInstance), useCompression, child).asInstanceOf[this.type]
+  override def newInstance() = {
+    val ret =
+      new InMemoryRelation(output.map(_.newInstance), useCompression, child).asInstanceOf[this.type]
+    ret._cachedColumnBuffers = this._cachedColumnBuffers
+    ret
+  }
 
-  lazy val cachedColumnBuffers = {
-    val output = child.output
-    val cached = child.execute().mapPartitions { iterator =>
-      val columnBuilders = output.map { attribute =>
-        ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name, useCompression)
-      }.toArray
+  private var _cachedColumnBuffers: RDD[Array[ByteBuffer]] = null
 
-      var row: Row = null
-      while (iterator.hasNext) {
-        row = iterator.next()
-        var i = 0
-        while (i < row.length) {
-          columnBuilders(i).appendFrom(row, i)
-          i += 1
+  def cachedColumnBuffers = {
+    if (_cachedColumnBuffers == null) {
+      val output = child.output
+      val cached = child.execute().mapPartitions { iterator =>
+        val columnBuilders = output.map { attribute =>
+          ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name, useCompression)
+        }.toArray
+
+        var row: Row = null
+        while (iterator.hasNext) {
+          row = iterator.next()
+          var i = 0
+          while (i < row.length) {
+            columnBuilders(i).appendFrom(row, i)
+            i += 1
+          }
         }
-      }
 
-      Iterator.single(columnBuilders.map(_.build()))
-    }.cache()
+        Iterator.single(columnBuilders.map(_.build()))
+      }.cache()
 
-    cached.setName(child.toString)
-    // Force the materialization of the cached RDD.
-    cached.count()
-    cached
+      cached.setName(child.toString)
+      // Force the materialization of the cached RDD.
+      cached.count()
+      _cachedColumnBuffers = cached
+    }
+
+    _cachedColumnBuffers
   }
 }
 
