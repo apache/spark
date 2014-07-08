@@ -214,8 +214,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           val fetchedResults = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
           fetchedStatuses = fetchedResults._1
           if (fetchedResults._2) {
-            if(!partialForShuffle.contains(shuffleId)){
-              partialForShuffle += shuffleId
+            if(partialForShuffle.add(shuffleId)){
               new Thread(new MapStatusUpdater(shuffleId)).start()
             }
           } else {
@@ -482,10 +481,10 @@ private[spark] object MapOutputTracker {
   // any of the statuses is null (indicating a missing location due to a failed mapper),
   // throw a FetchFailedException.
   private def convertMapStatuses(
-        shuffleId: Int,
-        reduceId: Int,
-        statuses: Array[MapStatus],
-        isPartial: Boolean = false): Array[(BlockManagerId, Long)] = {
+      shuffleId: Int,
+      reduceId: Int,
+      statuses: Array[MapStatus],
+      isPartial: Boolean = false): Array[(BlockManagerId, Long)] = {
     assert (statuses != null)
     statuses.map {
       status =>
