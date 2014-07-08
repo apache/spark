@@ -1071,12 +1071,6 @@ private[spark] object BlockManager extends Logging {
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
 
-  /** Return the amount of storage memory used for unrolling RDD partitions. */
-  def getBufferMemory(conf: SparkConf): Long = {
-    val bufferFraction = conf.getDouble("spark.storage.bufferFraction", 0.2)
-    (getMaxMemory(conf) * bufferFraction).toLong
-  }
-
   def getHeartBeatFrequency(conf: SparkConf): Long =
     conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000) / 4
 

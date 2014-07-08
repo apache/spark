@@ -35,6 +35,7 @@ private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
 private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   extends BlockStore(blockManager) {
 
+  private val conf = blockManager.conf
   private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
 
   @volatile private var currentMemory = 0L
@@ -46,9 +47,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   /**
    * The amount of space ensured for unfolding values in memory, shared across all cores.
    * This space is not reserved in advance, but allocated dynamically by dropping existing blocks.
-   * It must be a lazy val in order to access a mocked BlockManager's conf in tests properly.
    */
-  private lazy val globalBufferMemory = BlockManager.getBufferMemory(blockManager.conf)
+  private val globalBufferMemory = {
+    val bufferFraction = conf.getDouble("spark.storage.bufferFraction", 0.2)
+    (maxMemory * bufferFraction).toLong
+  }
 
   logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
 
@@ -66,10 +69,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
-      val elements = values.toArray
-      val sizeEstimate = SizeEstimator.estimate(elements.asInstanceOf[AnyRef])
-      val putAttempt = tryToPut(blockId, elements, sizeEstimate, deserialized = true)
-      PutResult(sizeEstimate, Left(values.toIterator), putAttempt.droppedBlocks)
+      putValues(blockId, values, level, returnValues = true)
     } else {
       val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
@@ -97,7 +97,32 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    putValues(blockId, values.toArray, level, returnValues)
+    val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+    val unfoldedValues = unfoldSafely(blockId, values, level, droppedBlocks)
+    unfoldedValues match {
+      case Left(arrayValues) =>
+        // Values are fully unfolded in memory, so store them as an array
+        val result = putValues(blockId, arrayValues, level, returnValues)
+        droppedBlocks ++= result.droppedBlocks
+        PutResult(result.size, result.data, droppedBlocks)
+      case Right(iteratorValues) =>
+        // Not enough space to unfold this block; drop to disk if applicable
+        logWarning(s"Not enough space to store $blockId in memory! Free memory is ${freeMemory}B.")
+        if (level.useDisk) {
+          logWarning(s"Persisting $blockId to disk instead.")
+          val newLevel = StorageLevel(
+            useDisk = true,
+            useMemory = false,
+            useOffHeap = false,
+            deserialized = false,
+            level.replication)
+          val result = blockManager.diskStore.putValues(
+            blockId, iteratorValues, newLevel, returnValues)
+          PutResult(result.size, result.data, droppedBlocks)
+        } else {
+          PutResult(0, null, droppedBlocks)
+        }
+    }
   }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
@@ -182,7 +207,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         if (count % memoryRequestPeriod == 1) {
           // Calculate the amount of memory to request from the global memory pool
           val currentSize = buffer.estimateSize()
-          val delta = math.max(currentSize - previousSize, 0)
+          val delta = if (previousSize > 0) math.max(currentSize - previousSize, 0) else 0
           val memoryToRequest = currentSize + delta
           previousSize = currentSize
 

@@ -162,15 +162,15 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           arrayValues.iterator.asInstanceOf[Iterator[T]]
         case Right(iteratorValues) =>
           // There is not enough space to cache this partition in memory
+          logWarning(s"Not enough space to cache $key in memory! " +
+            s"Free memory is ${blockManager.memoryStore.freeMemory}B.")
           var returnValues = iteratorValues.asInstanceOf[Iterator[T]]
-          val persistToDisk = storageLevel.useDisk
-          logWarning(s"Failed to cache $key in memory! There is not enough space to unfold the " +
-            s"entire partition. " + (if (persistToDisk) "Persisting to disk instead." else ""))
-          if (persistToDisk) {
+          if (storageLevel.useDisk) {
+            logWarning(s"Persisting $key to disk instead.")
             val newLevel = StorageLevel(
-              storageLevel.useDisk,
+              useDisk = true,
               useMemory = false,
-              storageLevel.useOffHeap,
+              useOffHeap = false,
               deserialized = false,
               storageLevel.replication)
             returnValues = putInBlockManager[T](key, returnValues, newLevel, updatedBlocks)
