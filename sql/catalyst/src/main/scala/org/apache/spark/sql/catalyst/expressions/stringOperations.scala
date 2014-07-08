@@ -19,8 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.regex.Pattern
 
+import scala.collection.IndexedSeqOptimized
+
 import org.apache.spark.sql.catalyst.types.DataType
 import org.apache.spark.sql.catalyst.types.StringType
+import org.apache.spark.sql.catalyst.types.BinaryType
 import org.apache.spark.sql.catalyst.types.BooleanType
 
 trait StringRegexExpression {
@@ -204,4 +207,65 @@ case class StartsWith(left: Expression, right: Expression)
 case class EndsWith(left: Expression, right: Expression)
     extends BinaryExpression with StringComparison {
   def compare(l: String, r: String) = l.endsWith(r)
+}
+
+/**
+ * A function that takes a substring of its first argument starting at a given position.
+ * Defined for String and Binary types.
+ */
+case class Substring(str: Expression, pos: Expression, len: Expression) extends Expression {
+  
+  type EvaluatedType = Any
+  
+  def nullable: Boolean = true
+  def dataType: DataType = {
+    if (str.dataType == BinaryType) str.dataType else StringType
+  }
+  
+  def references = children.flatMap(_.references).toSet
+  
+  override def children = str :: pos :: len :: Nil
+  
+  def slice[T, C <% IndexedSeqOptimized[T,_]](str: C, startPos: Int, sliceLen: Int): Any = {
+    val len = str.length
+    // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
+    // negative indices for start positions. If a start index i is greater than 0, it 
+    // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
+    // to the -ith element before the end of the sequence. If a start index i is 0, it
+    // refers to the first element.
+    
+    val start = startPos match {
+      case pos if pos > 0 => pos - 1
+      case neg if neg < 0 => len + neg
+      case _ => 0
+    }
+    
+    val end = sliceLen match {
+      case max if max == Integer.MAX_VALUE => max
+      case x => start + x
+    }
+      
+    str.slice(start, end)    
+  }
+  
+  override def eval(input: Row): Any = {
+    val string = str.eval(input)
+
+    val po = pos.eval(input)
+    val ln = len.eval(input)
+    
+    if ((string == null) || (po == null) || (ln == null)) {
+      null
+    } else {
+      val start = po.asInstanceOf[Int]
+      val length = ln.asInstanceOf[Int] 
+      
+      string match {
+        case ba: Array[Byte] => slice(ba, start, length)
+        case other => slice(other.toString, start, length)
+      }
+    }
+  }
+  
+  override def toString = s"SUBSTR($str, $pos, $len)"
 }
