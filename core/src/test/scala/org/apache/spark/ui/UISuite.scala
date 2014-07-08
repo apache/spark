@@ -21,7 +21,6 @@ import java.net.ServerSocket
 import javax.servlet.http.HttpServletRequest
 
 import scala.io.Source
-import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 import org.eclipse.jetty.server.Server
