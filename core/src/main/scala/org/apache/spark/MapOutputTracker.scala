@@ -101,6 +101,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   protected val partialEpoch = new mutable.HashMap[Int, Int]()
 
+  protected val updaterLock = new ConcurrentHashMap[Int, AnyRef]()
+
   /**
    * Incremented every time a fetch fails so that client nodes know to clear
    * their cache of map output locations if this happens.
@@ -265,26 +267,23 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   // A proxy to update partial map statuses periodically
   class MapStatusUpdater(shuffleId: Int) extends Runnable {
     override def run() {
+      updaterLock.put(shuffleId, new AnyRef)
       partialEpoch.synchronized {
         if (!partialEpoch.contains(shuffleId)) {
           partialEpoch.put(shuffleId, 0)
         }
       }
       logInfo("Updater started for shuffle "+shuffleId+".")
-      val minInterval = 1000
-      val maxInterval = 3000
-      var sleepInterval = minInterval
       while (partialForShuffle.contains(shuffleId)) {
-        Thread.sleep(sleepInterval)
+        updaterLock.getOrElseUpdate(shuffleId, new AnyRef).synchronized {
+          updaterLock(shuffleId).wait(3000)
+        }
         if (clearOutdatedMapStatuses(shuffleId)) {
           getMapStatusesForShuffle(shuffleId, -1)
           partialEpoch.synchronized {
             partialEpoch.put(shuffleId, partialEpoch.getOrElse(shuffleId, 0) + 1)
             partialEpoch.notifyAll()
           }
-          sleepInterval = math.max(minInterval, sleepInterval - 500)
-        } else {
-          sleepInterval = math.min(maxInterval, sleepInterval + 200)
         }
       }
       logInfo("Map status for shuffle "+shuffleId+" is now complete. Updater terminated.")
@@ -302,6 +301,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         return (getServerStatuses(shuffleId, reduceId), 0)
       }
       if (partialEpoch.get(shuffleId).get <= localEpoch) {
+        updaterLock.getOrElseUpdate(shuffleId, new AnyRef).synchronized {
+          updaterLock(shuffleId).notifyAll()
+        }
         logInfo("Reduce "+reduceId+" waiting for map outputs of shuffle "+shuffleId+".")
         partialEpoch.wait()
       }
