@@ -118,6 +118,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
  * pattern.
  */
 object LikeSimplification extends Rule[LogicalPlan] {
+  // if guards below protect from escapes on trailing %.
+  // Cases like "something\%" are not optimized, but this does not affect correctness.
   val startsWith = "([^_%]+)%".r
   val endsWith = "%([^_%]+)".r
   val contains = "%([^_%]+)%".r
