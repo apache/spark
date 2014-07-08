@@ -36,6 +36,7 @@ import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
 import org.apache.spark.sql.json._
+import org.apache.spark.sql.csv._
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.SparkContext
 
@@ -128,6 +129,22 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
     new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
+
+
+  def csvFile(path: String,
+      delimiter: String = ",",
+      useHeader: Boolean = false,
+      quote: String = "\""): SchemaRDD = {
+    val csv = sparkContext.textFile(path)
+    csvRdd(csv, delimiter, useHeader)
+  }
+
+  def csvRdd(csv: RDD[String],
+      delimiter: String = ",",
+      useHeader: Boolean = false,
+      quote: String = "\""): SchemaRDD = {
+    new SchemaRDD(this, CsvRDD.inferSchema(csv, delimiter, useHeader))
+  }
 
   /**
    * :: Experimental ::
