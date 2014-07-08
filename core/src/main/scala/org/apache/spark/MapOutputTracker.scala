@@ -273,20 +273,26 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           partialEpoch.put(shuffleId, 0)
         }
       }
-      logInfo("Updater started for shuffle "+shuffleId+".")
+      logInfo("Updater started for shuffle " + shuffleId + ".")
+      val minInterval = 1000
+      val maxInterval = 5000
+      var lastUpdate = System.currentTimeMillis()
       while (partialForShuffle.contains(shuffleId)) {
         updaterLock.getOrElseUpdate(shuffleId, new AnyRef).synchronized {
-          updaterLock(shuffleId).wait(3000)
+          updaterLock(shuffleId).wait(maxInterval)
         }
-        if (clearOutdatedMapStatuses(shuffleId)) {
-          getMapStatusesForShuffle(shuffleId, -1)
-          partialEpoch.synchronized {
-            partialEpoch.put(shuffleId, partialEpoch.getOrElse(shuffleId, 0) + 1)
-            partialEpoch.notifyAll()
+        if (System.currentTimeMillis() - lastUpdate >= minInterval) {
+          lastUpdate = System.currentTimeMillis()
+          if (clearOutdatedMapStatuses(shuffleId)) {
+            getMapStatusesForShuffle(shuffleId, -1)
+            partialEpoch.synchronized {
+              partialEpoch.put(shuffleId, partialEpoch.getOrElse(shuffleId, 0) + 1)
+              partialEpoch.notifyAll()
+            }
           }
         }
       }
-      logInfo("Map status for shuffle "+shuffleId+" is now complete. Updater terminated.")
+      logInfo("Map status for shuffle " + shuffleId + " is now complete. Updater terminated.")
       partialEpoch.synchronized {
         partialEpoch.remove(shuffleId)
         partialEpoch.notifyAll()
