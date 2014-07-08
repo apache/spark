@@ -120,7 +120,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
             blockId, iteratorValues, newLevel, returnValues)
           PutResult(result.size, result.data, droppedBlocks)
         } else {
-          PutResult(0, null, droppedBlocks)
+          PutResult(0, Left(iteratorValues), droppedBlocks)
         }
     }
   }
