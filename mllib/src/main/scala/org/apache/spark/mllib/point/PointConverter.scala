@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.point
 
+import scala.language.implicitConversions
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 
