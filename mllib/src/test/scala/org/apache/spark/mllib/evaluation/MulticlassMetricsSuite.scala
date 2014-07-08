@@ -30,7 +30,7 @@ class MulticlassMetricsSuite extends FunSuite with LocalSparkContext {
     * |0|0|1| true class2 (1 instance)
     *
     */
-    val labels = Seq(0.0, 1.0, 2.0)
+    val labels = Array(0.0, 1.0, 2.0)
     val scoreAndLabels = sc.parallelize(
       Seq((0.0, 0.0), (0.0, 1.0), (0.0, 0.0), (1.0, 0.0), (1.0, 1.0),
         (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)), 2)
@@ -65,6 +65,6 @@ class MulticlassMetricsSuite extends FunSuite with LocalSparkContext {
       ((4.0 / 9.0) * recall0 + (4.0 / 9.0) * recall1 + (1.0 / 9.0) * recall2)) < delta)
     assert(math.abs(metrics.weightedF1Measure -
       ((4.0 / 9.0) * f1measure0 + (4.0 / 9.0) * f1measure1 + (1.0 / 9.0) * f1measure2)) < delta)
-    assert(metrics.labels == labels)
+    assert(metrics.labels.sameElements(labels))
   }
 }
