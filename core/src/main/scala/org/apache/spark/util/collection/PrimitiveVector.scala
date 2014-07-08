@@ -54,6 +54,9 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
     var index = 0
     override def hasNext: Boolean = index < _numElements
     override def next(): V = {
+      if (!hasNext) {
+        throw new NoSuchElementException
+      }
       val value = _array(index)
       index += 1
       value
