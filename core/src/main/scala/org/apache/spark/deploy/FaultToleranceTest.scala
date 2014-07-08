@@ -25,7 +25,6 @@ import scala.collection.mutable.ListBuffer
 import scala.concurrent.{Await, future, promise}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.sys.process._
 
 import org.json4s._

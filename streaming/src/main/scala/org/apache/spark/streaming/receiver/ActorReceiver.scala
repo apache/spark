@@ -20,7 +20,6 @@ package org.apache.spark.streaming.receiver
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import akka.actor._

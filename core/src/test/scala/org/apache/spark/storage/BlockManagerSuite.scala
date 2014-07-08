@@ -39,7 +39,6 @@ import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, U
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
-import scala.language.postfixOps
 
 class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   with PrivateMethodTester {

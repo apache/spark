@@ -33,7 +33,6 @@ import scala.collection.mutable.SynchronizedQueue
 
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.spark._
 import org.apache.spark.util.{SystemClock, Utils}
