@@ -216,9 +216,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     val samplingFunc = if (withReplacement) {
       val counts = if (exact) Some(this.countByKey()) else None
-        StratifiedSampler.getPoissonSamplingFunction(self, fractions, exact, counts, seed)
+      StratifiedSampler.getPoissonSamplingFunction(self, fractions, exact, counts, seed)
     } else {
-        StratifiedSampler.getBernoulliSamplingFunction(self, fractions, exact, seed)
+      StratifiedSampler.getBernoulliSamplingFunction(self, fractions, exact, seed)
     }
     self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning=true)
   }

@@ -155,8 +155,7 @@ private[spark] object StratifiedSampler extends Logging {
    * to be included in the sample.
    */
   def computeThresholdByKey[K](finalResult: Map[K, Stratum],
-      fractions: Map[K, Double]):
-    Map[K, Double] = {
+      fractions: Map[K, Double]): Map[K, Double] = {
     val thresholdByKey = new HashMap[K, Double]()
     for ((key, stratum) <- finalResult) {
       val s = math.ceil(stratum.numItems * fractions(key)).toLong
