@@ -122,7 +122,7 @@ class DAGScheduler(
   private[scheduler] var eventProcessActor: ActorRef = _
 
   // Whether to enable remove stage barrier
-  private val removeStageBarrier = env.conf.getBoolean("spark.scheduler.removeStageBarrier", false)
+  val removeStageBarrier = env.conf.getBoolean("spark.scheduler.removeStageBarrier", false)
   // Track the pre-started stages depending on a stage (the key)
   private val dependantStagePreStarted = new HashMap[Stage, ArrayBuffer[Stage]]()
 

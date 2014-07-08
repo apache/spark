@@ -302,6 +302,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         return (getServerStatuses(shuffleId, reduceId), 0)
       }
       if (partialEpoch.get(shuffleId).get <= localEpoch) {
+        logInfo("Reduce "+reduceId+" waiting for map outputs of shuffle "+shuffleId+".")
         partialEpoch.wait()
       }
       (getServerStatuses(shuffleId, reduceId), partialEpoch.getOrElse(shuffleId, 0))
