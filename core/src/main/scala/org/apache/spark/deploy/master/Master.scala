@@ -646,7 +646,7 @@ private[spark] class Master(
       // If application events are logged, use them to rebuild the UI
       if (!rebuildSparkUI(app)) {
         // Avoid broken links if the UI is not reconstructed
-        app.desc.appUiUrl = ""
+        app.desc.appUiUrl = "/history/not-found"
       }
 
       for (exec <- app.executors.values) {
