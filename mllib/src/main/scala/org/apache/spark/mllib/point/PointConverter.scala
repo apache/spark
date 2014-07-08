@@ -20,6 +20,9 @@ package org.apache.spark.mllib.point
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 
+/**
+ * Class to convert between different point formats.
+ */
 object PointConverter {
 
   implicit def LabeledPoint2WeightedLabeledPoint(
