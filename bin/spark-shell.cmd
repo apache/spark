@@ -17,6 +17,6 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-set SPARK_HOME=%~dp0..
+if "x%SPARK_HOME%" == "x" set SPARK_HOME=%~dp0..
 
 cmd /V /E /C %SPARK_HOME%\bin\spark-submit.cmd spark-shell %* --class org.apache.spark.repl.Main

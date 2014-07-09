@@ -25,7 +25,7 @@ rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0..\
 
 rem Export this as SPARK_HOME
-set SPARK_HOME=%FWDIR%
+if "x%SPARK_HOME%" == "x" set SPARK_HOME=%FWDIR%
 
 rem Load environment variables from conf\spark-env.cmd, if it exists
 if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
