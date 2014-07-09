@@ -22,6 +22,7 @@ import java.io.IOException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import parquet.hadoop.{ParquetFileReader, Footer, ParquetFileWriter}
 import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData}
@@ -365,20 +366,23 @@ private[parquet] object ParquetTypesConverter extends Logging {
         s"Expected $path for be a directory with Parquet files/metadata")
     }
     ParquetRelation.enableLogForwarding()
-    val metadataPath = new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)
-    // if this is a new table that was just created we will find only the metadata file
-    if (fs.exists(metadataPath) && fs.isFile(metadataPath)) {
-      ParquetFileReader.readFooter(conf, metadataPath)
-    } else {
-      // there may be one or more Parquet files in the given directory
-      val footers = ParquetFileReader.readFooters(conf, fs.getFileStatus(path))
-      // TODO: for now we assume that all footers (if there is more than one) have identical
-      // metadata; we may want to add a check here at some point
-      if (footers.size() == 0) {
-        throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path")
-      }
-      footers(0).getParquetMetadata
+
+    val children = fs.listStatus(path).filterNot {
+      _.getPath.getName == FileOutputCommitter.SUCCEEDED_FILE_NAME
     }
+
+    // NOTE (lian): Parquet "_metadata" file can be very slow if the file consists of lots of row
+    // groups. Since Parquet schema is replicated among all row groups, we only need to touch a
+    // single row group to read schema related metadata.
+    children
+      // Try any non-"_metadata" file first...
+      .find(_.getPath.getName != ParquetFileWriter.PARQUET_METADATA_FILE)
+      // ... and fallback to "_metadata" if no such file exists (which implies the Parquet file is
+      // empty, thus normally the "_metadata" file is expected to be fairly small).
+      .orElse(children.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE))
+      .map(ParquetFileReader.readFooter(conf, _))
+      .getOrElse(
+        throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path"))
   }
 
   /**
