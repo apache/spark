@@ -35,7 +35,7 @@ import org.apache.spark.mllib.stat.MultivariateStatisticalSummary
  * [[org.apache.spark.mllib.stat.MultivariateStatisticalSummary]]
  * together with add() and merge() function.
  * A numerically stable algorithm is implemented to compute sample mean and variance:
-  *[[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance variance-wiki]].
+ * [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance variance-wiki]].
  * Zero elements (including explicit zero values) are skipped when calling add() and merge(),
  * to have time complexity O(nnz) instead of O(n) for each column.
  */
@@ -204,7 +204,7 @@ class RowMatrix(
   /**
    * Multiplies the Gramian matrix `A^T A` by a dense vector on the right without computing `A^T A`.
    *
-   @param v a dense vector whose length must match the number of columns of this matrix
+   * @param v a dense vector whose length must match the number of columns of this matrix
    * @return a dense vector representing the product
    */
   private[mllib] def multiplyGramianMatrixBy(v: BDV[Double]): BDV[Double] = {
