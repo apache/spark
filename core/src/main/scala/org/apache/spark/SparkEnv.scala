@@ -79,7 +79,7 @@ class SparkEnv (
 
   private[spark] def stop() {
     pythonWorkers.foreach { case(key, worker) => worker.stop() }
-    httpFileServer.stop()
+    Option(httpFileServer).foreach(_.stop())
     mapOutputTracker.stop()
     shuffleManager.stop()
     broadcastManager.stop()
@@ -228,9 +228,15 @@ object SparkEnv extends Logging {
 
     val cacheManager = new CacheManager(blockManager)
 
-    val httpFileServer = new HttpFileServer(securityManager)
-    httpFileServer.initialize()
-    conf.set("spark.fileserver.uri",  httpFileServer.serverUri)
+    val httpFileServer =
+      if (isDriver) {
+        val server = new HttpFileServer(securityManager)
+        server.initialize()
+        conf.set("spark.fileserver.uri",  server.serverUri)
+        server
+      } else {
+        null
+      }
 
     val metricsSystem = if (isDriver) {
       MetricsSystem.createMetricsSystem("driver", conf, securityManager)
