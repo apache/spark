@@ -82,7 +82,7 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     val flipEvens = ps.mapValues(x => if (x % 2 == 0) -x else x).cache()
     // diff should keep only the changed pairs
     assert(flipEvens.diff(ps).map(_._2).collect().toList.sorted === (2 to n by 2).map(-_).toList.sorted)
-    // diff should keep the vertex values from `this`
+    // diff should keep the values from `this`
     assert(ps.diff(flipEvens).map(_._2).collect().toList.sorted === (2 to n by 2).toList.sorted)
   }
 
@@ -103,7 +103,7 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     val n = 100
     val ps = pairs(sc, n).cache()
     val evens = ps.filter(q => ((q._2 % 2) == 0)).cache()
-    // join with another VertexRDD
+    // join with another IndexedRDD
     assert(ps.join(evens) { (id, a, b) => a - b }.collect.toSet ===
       (0 to n by 2).map(x => (x.toLong, 0)).toSet ++ (1 to n by 2).map(x => (x.toLong, x)).toSet)
     // join with an RDD
@@ -137,5 +137,5 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
 
 // Declared outside of test suite to avoid closure capture
 private object SumFunction extends Function3[IndexedRDD.Id, Int, Int, Int] with Serializable {
-  def apply(id: Long, a: Int, b: Int) = a + b
+  def apply(id: IndexedRDD.Id, a: Int, b: Int) = a + b
 }
