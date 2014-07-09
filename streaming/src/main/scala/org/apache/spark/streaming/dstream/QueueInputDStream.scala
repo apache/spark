@@ -41,7 +41,7 @@ class QueueInputDStream[T: ClassTag](
     if (oneAtATime && queue.size > 0) {
       buffer += queue.dequeue()
     } else {
-      buffer ++= queue
+      buffer ++= queue.dequeueAll(_ => true)
     }
     if (buffer.size > 0) {
       if (oneAtATime) {
