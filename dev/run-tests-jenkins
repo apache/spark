@@ -43,8 +43,8 @@ if [ "$sha1" == "$ghprbActualCommit" ]; then
 else
   start_message="$start_message This patch merges cleanly. "
 fi
-start_message="$start_message<br>To view progress see test ouptut:"
-start_message="$start_message<br>${BUILD_URL}consoleFull"
+start_message="$start_message<br>View progress: "
+start_message="$start_message${BUILD_URL}consoleFull"
 
 post_message "$start_message"
 
