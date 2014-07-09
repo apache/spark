@@ -42,8 +42,7 @@ private[spark] class IndexedRDDPartition[@specialized(Long, Int, Double) V](
     val values: ImmutableVector[V],
     val mask: ImmutableBitSet)
    (implicit val vTag: ClassTag[V])
-  extends IndexedRDDPartitionLike[V]
-  with IndexedRDDPartitionOps[V, IndexedRDDPartition] {
+  extends IndexedRDDPartitionLike[V, IndexedRDDPartition] {
 
   def self: IndexedRDDPartition[V] = this
 

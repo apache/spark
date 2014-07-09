@@ -60,8 +60,7 @@ class VertexRDD[@specialized(Long, Int, Double) VD](
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
    (override implicit protected val vTag: ClassTag[VD])
   extends RDD[(VertexId, VD)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD)))
-  with IndexedRDDLike[VD, ShippableVertexPartition]
-  with IndexedRDDOps[VD, ShippableVertexPartition, VertexRDD] {
+  with IndexedRDDLike[VD, ShippableVertexPartition, VertexRDD] {
 
   override protected def pTag[VD2]: ClassTag[ShippableVertexPartition[VD2]] =
     classTag[ShippableVertexPartition[VD2]]

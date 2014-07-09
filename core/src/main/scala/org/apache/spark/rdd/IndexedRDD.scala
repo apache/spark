@@ -38,8 +38,7 @@ import IndexedRDD.Id
 class IndexedRDD[@specialized(Long, Int, Double) V: ClassTag]
     (val partitionsRDD: RDD[IndexedRDDPartition[V]])
   extends RDD[(Id, V)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD)))
-  with IndexedRDDLike[V, IndexedRDDPartition]
-  with IndexedRDDOps[V, IndexedRDDPartition, IndexedRDD] {
+  with IndexedRDDLike[V, IndexedRDDPartition, IndexedRDD] {
 
   override protected def vTag: ClassTag[V] = classTag[V]
 
