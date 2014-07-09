@@ -44,7 +44,7 @@ private[streaming] class BlockGenerator(
     listener: BlockGeneratorListener,
     receiverId: Int,
     conf: SparkConf
-  ) extends Logging {
+  ) extends RateLimiter(conf) with Logging {
 
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
 
@@ -90,14 +90,7 @@ private[streaming] class BlockGenerator(
    * will be periodically pushed into BlockManager.
    */
   def += (data: Any): Unit = synchronized {
-    if (throttlingBatchSize > 0) {
-      if (throttlingBatchCurrentSize >= throttlingBatchSize) {
-        clock.waitTillTime(nextThrottlingBatchAfter)
-        nextThrottlingBatchAfter = clock.currentTime() + throttlingBatchDelay
-        throttlingBatchCurrentSize = 0
-      }
-      throttlingBatchCurrentSize += 1
-    }
+    waitToPush()
     currentBuffer += data
   }
 
