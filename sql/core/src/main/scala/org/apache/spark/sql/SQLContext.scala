@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
+import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
@@ -28,7 +29,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -87,6 +87,16 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
+
+  /**
+   * Creates a SchemaRDD from an RDD by applying a schema and providing a function to construct
+   * a Row from a RDD record.
+   *
+   * @group userf
+   */
+  def createSchemaRDD[A](rdd: RDD[A], schema: StructType, constructRow: A => Row) = {
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rdd.map(constructRow))))
+  }
 
   /**
    * Loads a Parquet file, returning the result as a [[SchemaRDD]].

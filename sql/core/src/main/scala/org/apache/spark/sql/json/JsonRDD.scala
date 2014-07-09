@@ -344,6 +344,7 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
+  // TODO: Reuse the row instead of creating a new one for every record.
   private def asRow(json: Map[String,Any], schema: StructType): Row = {
     val row = new GenericMutableRow(schema.fields.length)
     schema.fields.zipWithIndex.foreach {

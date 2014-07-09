@@ -33,4 +33,48 @@ package object sql {
   type Row = catalyst.expressions.Row
 
   val Row = catalyst.expressions.Row
+
+  type DataType = catalyst.types.DataType
+
+  val DataType = catalyst.types.DataType
+
+  val NullType = catalyst.types.NullType
+
+  val StringType = catalyst.types.StringType
+
+  val BinaryType = catalyst.types.BinaryType
+
+  val BooleanType = catalyst.types.BooleanType
+
+  val TimestampType = catalyst.types.TimestampType
+
+  val DecimalType = catalyst.types.DecimalType
+
+  val DoubleType = catalyst.types.DoubleType
+
+  val FloatType = catalyst.types.FloatType
+
+  val ByteType = catalyst.types.ByteType
+
+  val IntegerType = catalyst.types.IntegerType
+
+  val LongType = catalyst.types.LongType
+
+  val ShortType = catalyst.types.ShortType
+
+  type ArrayType = catalyst.types.ArrayType
+
+  val ArrayType = catalyst.types.ArrayType
+
+  type MapType = catalyst.types.MapType
+
+  val MapType = catalyst.types.MapType
+
+  type StructType = catalyst.types.StructType
+
+  val StructType = catalyst.types.StructType
+
+  type StructField = catalyst.types.StructField
+
+  val StructField = catalyst.types.StructField
 }

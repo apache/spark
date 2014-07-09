@@ -21,7 +21,9 @@ import scala.language.dynamics
 
 import org.apache.spark.sql.catalyst.types.DataType
 
-case object DynamicType extends DataType
+case object DynamicType extends DataType {
+  def simpleString: String = "dynamic"
+}
 
 case class WrapDynamic(children: Seq[Attribute]) extends Expression {
   type EvaluatedType = DynamicRow
