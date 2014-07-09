@@ -69,13 +69,10 @@ abstract class CodeGenerator extends Logging {
    * @param objectTerm An possibly boxed version of the result of evaluating this expression.
    */
   protected case class EvaluatedExpression(
-                                            code: Seq[Tree],
-                                            nullTerm: TermName,
-                                            primitiveTerm: TermName,
-                                            objectTerm: TermName) {
-
-    def withObjectTerm = ???
-  }
+      code: Seq[Tree],
+      nullTerm: TermName,
+      primitiveTerm: TermName,
+      objectTerm: TermName)
 
   /**
    * Given an expression tree returns the code required to determine both if the result is NULL

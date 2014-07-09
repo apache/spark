@@ -54,7 +54,7 @@ package object expressions  {
   abstract class MutableProjection extends Projection {
     def currentValue: Row
 
-    /* Updates the target of this projection to a new MutableRow */
+    /** Updates the target of this projection to a new MutableRow */
     def target(row: MutableRow): MutableProjection
   }
 }
