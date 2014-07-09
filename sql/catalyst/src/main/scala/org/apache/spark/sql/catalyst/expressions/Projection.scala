@@ -58,12 +58,12 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
   private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.size)
   def currentValue: Row = mutableRow
 
-  def target(row: MutableRow): MutableProjection = {
+  override def target(row: MutableRow): MutableProjection = {
     mutableRow = row
     this
   }
 
-  def apply(input: Row): Row = {
+  override def apply(input: Row): Row = {
     var i = 0
     while (i < exprArray.length) {
       mutableRow(i) = exprArray(i).eval(input)
