@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Logging, Row}
+import org.apache.spark.sql.{Logging, Row, SQLConf}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -67,7 +67,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
  */
 @DeveloperApi
 case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
-  extends LogicalPlan with MultiInstanceRelation {
+  extends LogicalPlan with MultiInstanceRelation with SQLConf {
 
   def output = alreadyPlanned.output
   override def references = Set.empty
@@ -80,6 +80,19 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
         case _ => sys.error("Multiple instance of the same relation detected.")
       }).asInstanceOf[this.type]
   }
+
+  override lazy val statistics = new Statistics {
+    // If this is wrapping around ExistingRdd and no reasonable estimation logic is implemented,
+    // return a default value.
+    override lazy val sizeInBytes: Long = {
+      val defaultSum = childrenStats.map(_.sizeInBytes).sum
+      alreadyPlanned match {
+        case e: ExistingRdd if defaultSum == 0 => statsDefaultSizeInBytes
+        case _ => defaultSum
+      }
+    }
+  }
+
 }
 
 private[sql] trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {

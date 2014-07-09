@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.planning
+package org.apache.spark.sql
 
 import java.util.Properties
 
@@ -40,8 +40,8 @@ private object SQLConf {
 trait SQLConf {
   import SQLConf._
 
-  import SQLConf._
-  protected[spark] val settings = confSettings
+  import org.apache.spark.sql.SQLConf._
+  @transient protected[spark] val settings = confSettings
 
   /** ************************ Spark SQL Params/Hints ******************* */
   // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?

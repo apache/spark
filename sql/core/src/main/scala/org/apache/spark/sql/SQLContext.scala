@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
@@ -30,7 +29,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.planning.SQLConf
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types._
