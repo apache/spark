@@ -25,10 +25,8 @@ import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
-import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage._
+import org.apache.spark.shuffle.ShuffleWriter
 
 private[spark] object ShuffleMapTask {
 
@@ -37,7 +35,7 @@ private[spark] object ShuffleMapTask {
   // expensive on the master node if it needs to launch thousands of tasks.
   private val serializedInfoCache = new HashMap[Int, Array[Byte]]
 
-  def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_]): Array[Byte] = {
+  def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_, _, _]): Array[Byte] = {
     synchronized {
       val old = serializedInfoCache.get(stageId).orNull
       if (old != null) {
@@ -56,12 +54,12 @@ private[spark] object ShuffleMapTask {
     }
   }
 
-  def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], ShuffleDependency[_,_]) = {
+  def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], ShuffleDependency[_, _, _]) = {
     val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val objIn = ser.deserializeStream(in)
     val rdd = objIn.readObject().asInstanceOf[RDD[_]]
-    val dep = objIn.readObject().asInstanceOf[ShuffleDependency[_,_]]
+    val dep = objIn.readObject().asInstanceOf[ShuffleDependency[_, _, _]]
     (rdd, dep)
   }
 
@@ -99,7 +97,7 @@ private[spark] object ShuffleMapTask {
 private[spark] class ShuffleMapTask(
     stageId: Int,
     var rdd: RDD[_],
-    var dep: ShuffleDependency[_,_],
+    var dep: ShuffleDependency[_, _, _],
     _partitionId: Int,
     @transient private var locs: Seq[TaskLocation])
   extends Task[MapStatus](stageId, _partitionId)
@@ -141,66 +139,20 @@ private[spark] class ShuffleMapTask(
   }
 
   override def runTask(context: TaskContext): MapStatus = {
-    val numOutputSplits = dep.partitioner.numPartitions
     metrics = Some(context.taskMetrics)
-
-    val blockManager = SparkEnv.get.blockManager
-    val shuffleBlockManager = blockManager.shuffleBlockManager
-    var shuffle: ShuffleWriterGroup = null
-    var success = false
-
+    var writer: ShuffleWriter[Any, Any] = null
     try {
-      // Obtain all the block writers for shuffle blocks.
-      val ser = Serializer.getSerializer(dep.serializer)
-      shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, partitionId, numOutputSplits, ser)
-
-      // Write the map output to its associated buckets.
-      for (elem <- rdd.iterator(split, context)) {
-        val pair = elem.asInstanceOf[Product2[Any, Any]]
-        val bucketId = dep.partitioner.getPartition(pair._1)
-        shuffle.writers(bucketId).write(pair)
-      }
-
-      // Commit the writes. Get the size of each bucket block (total block size).
-      var totalBytes = 0L
-      var totalTime = 0L
-      val compressedSizes: Array[Byte] = shuffle.writers.map { writer: BlockObjectWriter =>
-        writer.commit()
-        writer.close()
-        val size = writer.fileSegment().length
-        totalBytes += size
-        totalTime += writer.timeWriting()
-        MapOutputTracker.compressSize(size)
-      }
-
-      // Update shuffle metrics.
-      val shuffleMetrics = new ShuffleWriteMetrics
-      shuffleMetrics.shuffleBytesWritten = totalBytes
-      shuffleMetrics.shuffleWriteTime = totalTime
-      metrics.get.shuffleWriteMetrics = Some(shuffleMetrics)
-
-      success = true
-      new MapStatus(blockManager.blockManagerId, compressedSizes)
-    } catch { case e: Exception =>
-      // If there is an exception from running the task, revert the partial writes
-      // and throw the exception upstream to Spark.
-      if (shuffle != null && shuffle.writers != null) {
-        for (writer <- shuffle.writers) {
-          writer.revertPartialWrites()
-          writer.close()
+      val manager = SparkEnv.get.shuffleManager
+      writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
+      writer.write(rdd.iterator(split, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
+      return writer.stop(success = true).get
+    } catch {
+      case e: Exception =>
+        if (writer != null) {
+          writer.stop(success = false)
         }
-      }
-      throw e
+        throw e
     } finally {
-      // Release the writers back to the shuffle block manager.
-      if (shuffle != null && shuffle.writers != null) {
-        try {
-          shuffle.releaseWriters(success)
-        } catch {
-          case e: Exception => logError("Failed to release shuffle writers", e)
-        }
-      }
-      // Execute the callbacks on task completion.
       context.executeOnCompleteCallbacks()
     }
   }

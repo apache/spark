@@ -17,7 +17,9 @@
 
 package org.apache.spark.graphx.lib
 
+import scala.collection.mutable
 import org.apache.spark._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.PartitionStrategy._
 
@@ -28,18 +30,20 @@ object Analytics extends Logging {
 
   def main(args: Array[String]): Unit = {
     if (args.length < 2) {
-      System.err.println("Usage: Analytics <taskType> <file> [other options]")
+      System.err.println(
+        "Usage: Analytics <taskType> <file> --numEPart=<num_edge_partitions> [other options]")
       System.exit(1)
     }
 
     val taskType = args(0)
     val fname = args(1)
-    val options =  args.drop(2).map { arg =>
+    val optionsList = args.drop(2).map { arg =>
       arg.dropWhile(_ == '-').split('=') match {
         case Array(opt, v) => (opt -> v)
         case _ => throw new IllegalArgumentException("Invalid argument: " + arg)
       }
     }
+    val options = mutable.Map(optionsList: _*)
 
     def pickPartitioner(v: String): PartitionStrategy = {
       // TODO: Use reflection rather than listing all the partitioning strategies here.
@@ -57,20 +61,24 @@ object Analytics extends Logging {
       .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
       .set("spark.locality.wait", "100000")
 
+    val numEPart = options.remove("numEPart").map(_.toInt).getOrElse {
+      println("Set the number of edge partitions using --numEPart.")
+      sys.exit(1)
+    }
+    val partitionStrategy: Option[PartitionStrategy] = options.remove("partStrategy")
+      .map(pickPartitioner(_))
+    val edgeStorageLevel = options.remove("edgeStorageLevel")
+      .map(StorageLevel.fromString(_)).getOrElse(StorageLevel.MEMORY_ONLY)
+    val vertexStorageLevel = options.remove("vertexStorageLevel")
+      .map(StorageLevel.fromString(_)).getOrElse(StorageLevel.MEMORY_ONLY)
+
     taskType match {
       case "pagerank" =>
-        var tol: Float = 0.001F
-        var outFname = ""
-        var numEPart = 4
-        var partitionStrategy: Option[PartitionStrategy] = None
-        var numIterOpt: Option[Int] = None
+        val tol = options.remove("tol").map(_.toFloat).getOrElse(0.001F)
+        val outFname = options.remove("output").getOrElse("")
+        val numIterOpt = options.remove("numIter").map(_.toInt)
 
-        options.foreach{
-          case ("tol", v) => tol = v.toFloat
-          case ("output", v) => outFname = v
-          case ("numEPart", v) => numEPart = v.toInt
-          case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
-          case ("numIter", v) => numIterOpt = Some(v.toInt)
+        options.foreach {
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
         }
 
@@ -81,7 +89,9 @@ object Analytics extends Logging {
         val sc = new SparkContext(conf.setAppName("PageRank(" + fname + ")"))
 
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart).cache()
+          minEdgePartitions = numEPart,
+          edgeStorageLevel = edgeStorageLevel,
+          vertexStorageLevel = vertexStorageLevel).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
         println("GRAPHX: Number of vertices " + graph.vertices.count)
@@ -102,32 +112,19 @@ object Analytics extends Logging {
         sc.stop()
 
       case "cc" =>
-        var numIter = Int.MaxValue
-        var numVPart = 4
-        var numEPart = 4
-        var isDynamic = false
-        var partitionStrategy: Option[PartitionStrategy] = None
-
-        options.foreach{
-          case ("numIter", v) => numIter = v.toInt
-          case ("dynamic", v) => isDynamic = v.toBoolean
-          case ("numEPart", v) => numEPart = v.toInt
-          case ("numVPart", v) => numVPart = v.toInt
-          case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
+        options.foreach {
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
         }
 
-        if (!isDynamic && numIter == Int.MaxValue) {
-          println("Set number of iterations!")
-          sys.exit(1)
-        }
         println("======================================")
         println("|      Connected Components          |")
         println("======================================")
 
         val sc = new SparkContext(conf.setAppName("ConnectedComponents(" + fname + ")"))
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart).cache()
+          minEdgePartitions = numEPart,
+          edgeStorageLevel = edgeStorageLevel,
+          vertexStorageLevel = vertexStorageLevel).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
         val cc = ConnectedComponents.run(graph)
@@ -135,24 +132,25 @@ object Analytics extends Logging {
         sc.stop()
 
       case "triangles" =>
-        var numEPart = 4
-        // TriangleCount requires the graph to be partitioned
-        var partitionStrategy: PartitionStrategy = RandomVertexCut
-
-        options.foreach{
-          case ("numEPart", v) => numEPart = v.toInt
-          case ("partStrategy", v) => partitionStrategy = pickPartitioner(v)
+        options.foreach {
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
         }
+
         println("======================================")
         println("|      Triangle Count                |")
         println("======================================")
+
         val sc = new SparkContext(conf.setAppName("TriangleCount(" + fname + ")"))
-        val graph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
-          minEdgePartitions = numEPart).partitionBy(partitionStrategy).cache()
+        val graph = GraphLoader.edgeListFile(sc, fname,
+          canonicalOrientation = true,
+          minEdgePartitions = numEPart,
+          edgeStorageLevel = edgeStorageLevel,
+          vertexStorageLevel = vertexStorageLevel)
+        // TriangleCount requires the graph to be partitioned
+          .partitionBy(partitionStrategy.getOrElse(RandomVertexCut)).cache()
         val triangles = TriangleCount.run(graph)
         println("Triangles: " + triangles.vertices.map {
-          case (vid,data) => data.toLong
+          case (vid, data) => data.toLong
         }.reduce(_ + _) / 3)
         sc.stop()
 

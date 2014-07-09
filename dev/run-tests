@@ -21,6 +21,9 @@
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd $FWDIR
 
+export SPARK_HADOOP_VERSION=2.3.0
+export SPARK_YARN=true
+
 # Remove work directory
 rm -rf ./work
 
@@ -73,13 +76,9 @@ fi
 echo "========================================================================="
 echo "Running PySpark tests"
 echo "========================================================================="
-if [ -z "$PYSPARK_PYTHON" ]; then
-  export PYSPARK_PYTHON=/usr/local/bin/python2.7
-fi
 ./python/run-tests
 
 echo "========================================================================="
 echo "Detecting binary incompatibilites with MiMa"
 echo "========================================================================="
-./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
-echo -e "q\n" | sbt/sbt mima-report-binary-issues | grep -v -e "info.*Resolving" 
+dev/mima

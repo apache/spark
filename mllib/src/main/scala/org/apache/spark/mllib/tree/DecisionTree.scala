@@ -401,7 +401,7 @@ object DecisionTree extends Serializable with Logging {
      */
     def isSampleValid(parentFilters: List[Filter], labeledPoint: LabeledPoint): Boolean = {
       // leaf
-      if ((level > 0) & (parentFilters.length == 0)) {
+      if ((level > 0) && (parentFilters.length == 0)) {
         return false
       }
 
@@ -454,7 +454,7 @@ object DecisionTree extends Serializable with Logging {
           val bin = binForFeatures(mid)
           val lowThreshold = bin.lowSplit.threshold
           val highThreshold = bin.highSplit.threshold
-          if ((lowThreshold < feature) & (highThreshold >= feature)){
+          if ((lowThreshold < feature) && (highThreshold >= feature)){
             return mid
           }
           else if (lowThreshold >= feature) {
@@ -807,10 +807,10 @@ object DecisionTree extends Serializable with Logging {
               // calculating right node aggregate for a split as a sum of right node aggregate of a
               // higher split and the right bin aggregate of a bin where the split is a low split
               rightNodeAgg(featureIndex)(2 * (numBins - 2 - splitIndex)) =
-                binData(shift + (2 *(numBins - 2 - splitIndex))) +
+                binData(shift + (2 *(numBins - 1 - splitIndex))) +
                 rightNodeAgg(featureIndex)(2 * (numBins - 1 - splitIndex))
               rightNodeAgg(featureIndex)(2 * (numBins - 2 - splitIndex) + 1) =
-                binData(shift + (2* (numBins - 2 - splitIndex) + 1)) +
+                binData(shift + (2* (numBins - 1 - splitIndex) + 1)) +
                   rightNodeAgg(featureIndex)(2 * (numBins - 1 - splitIndex) + 1)
 
               splitIndex += 1
@@ -855,13 +855,13 @@ object DecisionTree extends Serializable with Logging {
               // calculating right node aggregate for a split as a sum of right node aggregate of a
               // higher split and the right bin aggregate of a bin where the split is a low split
               rightNodeAgg(featureIndex)(3 * (numBins - 2 - splitIndex)) =
-                binData(shift + (3 * (numBins - 2 - splitIndex))) +
+                binData(shift + (3 * (numBins - 1 - splitIndex))) +
                   rightNodeAgg(featureIndex)(3 * (numBins - 1 - splitIndex))
               rightNodeAgg(featureIndex)(3 * (numBins - 2 - splitIndex) + 1) =
-                binData(shift + (3 * (numBins - 2 - splitIndex) + 1)) +
+                binData(shift + (3 * (numBins - 1 - splitIndex) + 1)) +
                   rightNodeAgg(featureIndex)(3 * (numBins - 1 - splitIndex) + 1)
               rightNodeAgg(featureIndex)(3 * (numBins - 2 - splitIndex) + 2) =
-                binData(shift + (3 * (numBins - 2 - splitIndex) + 2)) +
+                binData(shift + (3 * (numBins - 1 - splitIndex) + 2)) +
                   rightNodeAgg(featureIndex)(3 * (numBins - 1 - splitIndex) + 2)
 
               splitIndex += 1

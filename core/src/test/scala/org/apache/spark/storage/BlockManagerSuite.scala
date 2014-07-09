@@ -28,18 +28,21 @@ import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
-import org.scalatest.matchers.ShouldMatchers._
+import org.scalatest.Matchers
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
+import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
-class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
+class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
+  with PrivateMethodTester {
   private val conf = new SparkConf(false)
   var store: BlockManager = null
   var store2: BlockManager = null
@@ -78,8 +81,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   after {
-    System.clearProperty("spark.driver.port")
-
     if (store != null) {
       store.stop()
       store = null
@@ -416,6 +417,39 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     }
   }
 
+  test("correct BlockResult returned from get() calls") {
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf, securityMgr,
+      mapOutputTracker)
+    val list1 = List(new Array[Byte](200), new Array[Byte](200))
+    val list1ForSizeEstimate = new ArrayBuffer[Any]
+    list1ForSizeEstimate ++= list1.iterator
+    val list1SizeEstimate = SizeEstimator.estimate(list1ForSizeEstimate)
+    val list2 = List(new Array[Byte](50), new Array[Byte](100), new Array[Byte](150))
+    val list2ForSizeEstimate = new ArrayBuffer[Any]
+    list2ForSizeEstimate ++= list2.iterator
+    val list2SizeEstimate = SizeEstimator.estimate(list2ForSizeEstimate)
+    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.put("list2memory", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.put("list2disk", list2.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
+    val list1Get = store.get("list1")
+    assert(list1Get.isDefined, "list1 expected to be in store")
+    assert(list1Get.get.data.size === 2)
+    assert(list1Get.get.inputMetrics.bytesRead === list1SizeEstimate)
+    assert(list1Get.get.inputMetrics.readMethod === DataReadMethod.Memory)
+    val list2MemoryGet = store.get("list2memory")
+    assert(list2MemoryGet.isDefined, "list2memory expected to be in store")
+    assert(list2MemoryGet.get.data.size === 3)
+    assert(list2MemoryGet.get.inputMetrics.bytesRead === list2SizeEstimate)
+    assert(list2MemoryGet.get.inputMetrics.readMethod === DataReadMethod.Memory)
+    val list2DiskGet = store.get("list2disk")
+    assert(list2DiskGet.isDefined, "list2memory expected to be in store")
+    assert(list2DiskGet.get.data.size === 3)
+    System.out.println(list2DiskGet)
+    // We don't know the exact size of the data on disk, but it should certainly be > 0.
+    assert(list2DiskGet.get.inputMetrics.bytesRead > 0)
+    assert(list2DiskGet.get.inputMetrics.readMethod === DataReadMethod.Disk)
+  }
+
   test("in-memory LRU storage") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
       securityMgr, mapOutputTracker)
@@ -631,18 +665,18 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.put("list3", list3.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.size == 2)
+    assert(store.get("list2").get.data.size === 2)
     assert(store.get("list3").isDefined, "list3 was not in store")
-    assert(store.get("list3").get.size == 2)
+    assert(store.get("list3").get.data.size === 2)
     assert(store.get("list1") === None, "list1 was in store")
     assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.size == 2)
+    assert(store.get("list2").get.data.size === 2)
     // At this point list2 was gotten last, so LRU will getSingle rid of list3
     store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.get("list1").isDefined, "list1 was not in store")
-    assert(store.get("list1").get.size == 2)
+    assert(store.get("list1").get.data.size === 2)
     assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.size == 2)
+    assert(store.get("list2").get.data.size === 2)
     assert(store.get("list3") === None, "list1 was in store")
   }
 
@@ -657,28 +691,31 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
     store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
     store.put("list3", list3.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
+    val listForSizeEstimate = new ArrayBuffer[Any]
+    listForSizeEstimate ++= list1.iterator
+    val listSize = SizeEstimator.estimate(listForSizeEstimate)
     // At this point LRU should not kick in because list3 is only on disk
-    assert(store.get("list1").isDefined, "list2 was not in store")
-    assert(store.get("list1").get.size === 2)
-    assert(store.get("list2").isDefined, "list3 was not in store")
-    assert(store.get("list2").get.size === 2)
-    assert(store.get("list3").isDefined, "list1 was not in store")
-    assert(store.get("list3").get.size === 2)
-    assert(store.get("list1").isDefined, "list2 was not in store")
-    assert(store.get("list1").get.size === 2)
-    assert(store.get("list2").isDefined, "list3 was not in store")
-    assert(store.get("list2").get.size === 2)
-    assert(store.get("list3").isDefined, "list1 was not in store")
-    assert(store.get("list3").get.size === 2)
+    assert(store.get("list1").isDefined, "list1 was not in store")
+    assert(store.get("list1").get.data.size === 2)
+    assert(store.get("list2").isDefined, "list2 was not in store")
+    assert(store.get("list2").get.data.size === 2)
+    assert(store.get("list3").isDefined, "list3 was not in store")
+    assert(store.get("list3").get.data.size === 2)
+    assert(store.get("list1").isDefined, "list1 was not in store")
+    assert(store.get("list1").get.data.size === 2)
+    assert(store.get("list2").isDefined, "list2 was not in store")
+    assert(store.get("list2").get.data.size === 2)
+    assert(store.get("list3").isDefined, "list3 was not in store")
+    assert(store.get("list3").get.data.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
     store.put("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
     assert(store.get("list1") === None, "list1 was in store")
-    assert(store.get("list2").isDefined, "list3 was not in store")
-    assert(store.get("list2").get.size === 2)
-    assert(store.get("list3").isDefined, "list1 was not in store")
-    assert(store.get("list3").get.size === 2)
+    assert(store.get("list2").isDefined, "list2 was not in store")
+    assert(store.get("list2").get.data.size === 2)
+    assert(store.get("list3").isDefined, "list3 was not in store")
+    assert(store.get("list3").get.data.size === 2)
     assert(store.get("list4").isDefined, "list4 was not in store")
-    assert(store.get("list4").get.size === 2)
+    assert(store.get("list4").get.data.size === 2)
   }
 
   test("negative byte values in ByteBufferInputStream") {

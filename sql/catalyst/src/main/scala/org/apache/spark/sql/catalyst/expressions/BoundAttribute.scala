@@ -33,14 +33,16 @@ case class BoundReference(ordinal: Int, baseReference: Attribute)
 
   type EvaluatedType = Any
 
-  def nullable = baseReference.nullable
-  def dataType = baseReference.dataType
-  def exprId = baseReference.exprId
-  def qualifiers = baseReference.qualifiers
-  def name = baseReference.name
+  override def nullable = baseReference.nullable
+  override def dataType = baseReference.dataType
+  override def exprId = baseReference.exprId
+  override def qualifiers = baseReference.qualifiers
+  override def name = baseReference.name
 
-  def newInstance = BoundReference(ordinal, baseReference.newInstance)
-  def withQualifiers(newQualifiers: Seq[String]) =
+  override def newInstance = BoundReference(ordinal, baseReference.newInstance)
+  override def withNullability(newNullability: Boolean) =
+    BoundReference(ordinal, baseReference.withNullability(newNullability))
+  override def withQualifiers(newQualifiers: Seq[String]) =
     BoundReference(ordinal, baseReference.withQualifiers(newQualifiers))
 
   override def toString = s"$baseReference:$ordinal"
@@ -68,7 +70,7 @@ class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {
 }
 
 object BindReferences extends Logging {
-  def bindReference(expression: Expression, input: Seq[Attribute]): Expression = {
+  def bindReference[A <: Expression](expression: A, input: Seq[Attribute]): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
         val ordinal = input.indexWhere(_.exprId == a.exprId)
@@ -83,6 +85,6 @@ object BindReferences extends Logging {
           BoundReference(ordinal, a)
         }
       }
-    }
+    }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
   }
 }

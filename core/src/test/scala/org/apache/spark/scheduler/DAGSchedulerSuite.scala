@@ -17,18 +17,18 @@
 
 package org.apache.spark.scheduler
 
-import scala.Tuple2
 import scala.collection.mutable.{HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 
 import akka.actor._
 import akka.testkit.{ImplicitSender, TestKit, TestActorRef}
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.{BeforeAndAfter, FunSuiteLike}
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
+import org.apache.spark.util.CallSite
 
 class BuggyDAGEventProcessActor extends Actor {
   val state = 0
@@ -37,7 +37,9 @@ class BuggyDAGEventProcessActor extends Actor {
   }
 }
 
-class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuite
+class DAGSchedulerSuiteDummyException extends Exception
+
+class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuiteLike
   with ImplicitSender with BeforeAndAfter with LocalSparkContext {
 
   val conf = new SparkConf
@@ -114,6 +116,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     sc = new SparkContext("local", "DAGSchedulerSuite")
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
+    failure = null
     sc.addSparkListener(sparkListener)
     taskSets.clear()
     cancelledStages.clear()
@@ -211,7 +214,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       allowLocal: Boolean = false,
       listener: JobListener = jobListener): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, func, partitions, allowLocal, null, listener))
+    runEvent(JobSubmitted(jobId, rdd, func, partitions, allowLocal, CallSite("", ""), listener))
     jobId
   }
 
@@ -251,8 +254,22 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       override def toString = "DAGSchedulerSuite Local RDD"
     }
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, null, jobListener))
+    runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, CallSite("", ""), jobListener))
     assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
+  }
+
+  test("local job oom") {
+    val rdd = new MyRDD(sc, Nil) {
+      override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
+        throw new java.lang.OutOfMemoryError("test local job oom")
+      override def getPartitions = Array( new Partition { override def index = 0 } )
+      override def getPreferredLocations(split: Partition) = Nil
+      override def toString = "DAGSchedulerSuite Local RDD"
+    }
+    val jobId = scheduler.nextJobId.getAndIncrement()
+    runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, CallSite("", ""), jobListener))
+    assert(results.size == 0)
     assertDataStructuresEmpty
   }
 
@@ -297,6 +314,53 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assert(sparkListener.failedStages.contains(0))
     assert(sparkListener.failedStages.size === 1)
     assertDataStructuresEmpty
+  }
+
+  test("job cancellation no-kill backend") {
+    // make sure that the DAGScheduler doesn't crash when the TaskScheduler
+    // doesn't implement killTask()
+    val noKillTaskScheduler = new TaskScheduler() {
+      override def rootPool: Pool = null
+      override def schedulingMode: SchedulingMode = SchedulingMode.NONE
+      override def start() = {}
+      override def stop() = {}
+      override def submitTasks(taskSet: TaskSet) = {
+        taskSets += taskSet
+      }
+      override def cancelTasks(stageId: Int, interruptThread: Boolean) {
+        throw new UnsupportedOperationException
+      }
+      override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
+      override def defaultParallelism() = 2
+    }
+    val noKillScheduler = new DAGScheduler(
+      sc,
+      noKillTaskScheduler,
+      sc.listenerBus,
+      mapOutputTracker,
+      blockManagerMaster,
+      sc.env) {
+      override def runLocally(job: ActiveJob) {
+        // don't bother with the thread while unit testing
+        runLocallyWithinThread(job)
+      }
+    }
+    dagEventProcessTestActor = TestActorRef[DAGSchedulerEventProcessActor](
+      Props(classOf[DAGSchedulerEventProcessActor], noKillScheduler))(system)
+    val rdd = makeRdd(1, Nil)
+    val jobId = submit(rdd, Array(0))
+    cancel(jobId)
+    // Because the job wasn't actually cancelled, we shouldn't have received a failure message.
+    assert(failure === null)
+
+    // When the task set completes normally, state should be correctly updated.
+    complete(taskSets(0), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
+
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sparkListener.failedStages.isEmpty)
+    assert(sparkListener.successfulStages.contains(0))
   }
 
   test("run trivial shuffle") {
@@ -528,6 +592,59 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     complete(taskSets(4), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
+  }
+
+  // TODO: Fix this and un-ignore the test.
+  ignore("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
+    val acc = new Accumulator[Int](0, new AccumulatorParam[Int] {
+      override def addAccumulator(t1: Int, t2: Int): Int = t1 + t2
+      override def zero(initialValue: Int): Int = 0
+      override def addInPlace(r1: Int, r2: Int): Int = {
+        throw new DAGSchedulerSuiteDummyException
+      }
+    })
+
+    // Run this on executors
+    intercept[SparkDriverExecutionException] {
+      sc.parallelize(1 to 10, 2).foreach { item => acc.add(1) }
+    }
+
+    // Run this within a local thread
+    intercept[SparkDriverExecutionException] {
+      sc.parallelize(1 to 10, 2).map { item => acc.add(1) }.take(1)
+    }
+
+    // Make sure we can still run local commands as well as cluster commands.
+    assert(sc.parallelize(1 to 10, 2).count() === 10)
+    assert(sc.parallelize(1 to 10, 2).first() === 1)
+  }
+
+  test("misbehaved resultHandler should not crash DAGScheduler and SparkContext") {
+    val e1 = intercept[SparkDriverExecutionException] {
+      val rdd = sc.parallelize(1 to 10, 2)
+      sc.runJob[Int, Int](
+        rdd,
+        (context: TaskContext, iter: Iterator[Int]) => iter.size,
+        Seq(0),
+        allowLocal = true,
+        (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
+    }
+    assert(e1.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
+
+    val e2 = intercept[SparkDriverExecutionException] {
+      val rdd = sc.parallelize(1 to 10, 2)
+      sc.runJob[Int, Int](
+        rdd,
+        (context: TaskContext, iter: Iterator[Int]) => iter.size,
+        Seq(0, 1),
+        allowLocal = false,
+        (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
+    }
+    assert(e2.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
+
+    // Make sure we can still run local commands as well as cluster commands.
+    assert(sc.parallelize(1 to 10, 2).count() === 10)
+    assert(sc.parallelize(1 to 10, 2).first() === 1)
   }
 
   test("DAGSchedulerActorSupervisor closes the SparkContext when EventProcessActor crashes") {

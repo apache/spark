@@ -39,13 +39,12 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "execut
  * A SparkListener that prepares information to be displayed on the ExecutorsTab
  */
 @DeveloperApi
-class ExecutorsListener(storageStatusListener: StorageStatusListener)
-  extends SparkListener {
-
+class ExecutorsListener(storageStatusListener: StorageStatusListener) extends SparkListener {
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()
   val executorToDuration = HashMap[String, Long]()
+  val executorToInputBytes = HashMap[String, Long]()
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
 
@@ -72,6 +71,10 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener)
       // Update shuffle read/write
       val metrics = taskEnd.taskMetrics
       if (metrics != null) {
+        metrics.inputMetrics.foreach { inputMetrics =>
+          executorToInputBytes(eid) =
+            executorToInputBytes.getOrElse(eid, 0L) + inputMetrics.bytesRead
+        }
         metrics.shuffleReadMetrics.foreach { shuffleRead =>
           executorToShuffleRead(eid) =
             executorToShuffleRead.getOrElse(eid, 0L) + shuffleRead.remoteBytesRead

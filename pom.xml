@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+  <version>1.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -206,6 +206,17 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>spring-releases</id>
+      <name>Spring Release Repository</name>
+      <url>http://repo.spring.io/libs-release</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
   </repositories>
 
   <dependencyManagement>
@@ -239,6 +250,11 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
         <version>3.3.2</version>
+      </dependency>
+      <dependency>
+	  <groupId>commons-codec</groupId>
+	    <artifactId>commons-codec</artifactId>
+	    <version>1.5</version>
       </dependency>
       <dependency>
         <groupId>com.google.code.findbugs</groupId>
@@ -284,9 +300,9 @@
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
-        <version>2.5.1</version>
+        <version>2.7.0</version>
         <exclusions>
-          <!-- Only HyperLogLog is used, which doesn't depend on fastutil -->
+          <!-- Only HyperLogLogPlus is used, which doesn't depend on fastutil -->
           <exclusion>
             <groupId>it.unimi.dsi</groupId>
             <artifactId>fastutil</artifactId>
@@ -443,25 +459,38 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>1.9.1</version>
+        <version>2.1.5</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.easymock</groupId>
-        <artifactId>easymock</artifactId>
+        <artifactId>easymockclassextension</artifactId>
         <version>3.1</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- Needed by cglib which is needed by easymock. -->
+      <dependency>
+        <groupId>asm</groupId>
+        <artifactId>asm</artifactId>
+        <version>3.3.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-all</artifactId>
-        <version>1.8.5</version>
+        <version>1.9.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.10.0</version>
+        <version>1.11.3</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>junit</groupId>
+        <artifactId>junit</artifactId>
+        <version>4.10</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -763,6 +792,7 @@
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
               <arg>-feature</arg>
+              <arg>-language:postfixOps</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
@@ -809,6 +839,10 @@
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
             <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
             <stderr/>
+            <environmentVariables>
+              <SPARK_HOME>${session.executionRootDirectory}</SPARK_HOME>
+              <SPARK_TESTING>1</SPARK_TESTING>
+            </environmentVariables>
           </configuration>
           <executions>
             <execution>
@@ -960,11 +994,15 @@
           <artifactId>avro</artifactId>
         </dependency>
       </dependencies>
+      <properties>
+        <hadoop.version>0.23.10</hadoop.version>
+      </properties>
     </profile>
 
     <profile>
       <id>hadoop-2.2</id>
       <properties>
+        <hadoop.version>2.2.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
       </properties>
     </profile>
@@ -972,6 +1010,7 @@
     <profile>
       <id>hadoop-2.3</id>
       <properties>
+        <hadoop.version>2.3.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
       </properties>
@@ -980,6 +1019,7 @@
     <profile>
       <id>hadoop-2.4</id>
       <properties>
+        <hadoop.version>2.4.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
       </properties>

@@ -18,13 +18,13 @@
 package org.apache.spark.mllib.optimization
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LocalSparkContext
 
-class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
 
   val nPoints = 10000
   val A = 2.0
@@ -43,7 +43,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
   // Add an extra variable consisting of all 1.0's for the intercept.
   val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
   val data = testData.map { case LabeledPoint(label, features) =>
-    label -> Vectors.dense(1.0, features.toArray: _*)
+    label -> Vectors.dense(1.0 +: features.toArray)
   }
 
   lazy val dataRDD = sc.parallelize(data, 2).cache()
@@ -55,7 +55,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
   test("LBFGS loss should be decreasing and match the result of Gradient Descent.") {
     val regParam = 0
 
-    val initialWeightsWithIntercept = Vectors.dense(1.0, initialWeights: _*)
+    val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
     val convergenceTol = 1e-12
     val maxNumIterations = 10
 
@@ -194,5 +194,39 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
     // Based on observation, lossLBFGS2 runs 5 iterations, no theoretically guaranteed.
     assert(lossLBFGS3.length == 6)
     assert((lossLBFGS3(4) - lossLBFGS3(5)) / lossLBFGS3(4) < convergenceTol)
+  }
+
+  test("Optimize via class LBFGS.") {
+    val regParam = 0.2
+
+    // Prepare another non-zero weights to compare the loss in the first iteration.
+    val initialWeightsWithIntercept = Vectors.dense(0.3, 0.12)
+    val convergenceTol = 1e-12
+    val maxNumIterations = 10
+
+    val lbfgsOptimizer = new LBFGS(gradient, squaredL2Updater)
+      .setNumCorrections(numCorrections)
+      .setConvergenceTol(convergenceTol)
+      .setMaxNumIterations(maxNumIterations)
+      .setRegParam(regParam)
+
+    val weightLBFGS = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
+
+    val numGDIterations = 50
+    val stepSize = 1.0
+    val (weightGD, _) = GradientDescent.runMiniBatchSGD(
+      dataRDD,
+      gradient,
+      squaredL2Updater,
+      stepSize,
+      numGDIterations,
+      regParam,
+      miniBatchFrac,
+      initialWeightsWithIntercept)
+
+    // for class LBFGS and the optimize method, we only look at the weights
+    assert(compareDouble(weightLBFGS(0), weightGD(0), 0.02) &&
+      compareDouble(weightLBFGS(1), weightGD(1), 0.02),
+      "The weight differences between LBFGS and GD should be within 2%.")
   }
 }

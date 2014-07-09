@@ -105,51 +105,39 @@ object PhysicalOperation extends PredicateHelper {
 }
 
 /**
- * A pattern that finds joins with equality conditions that can be evaluated using hashing
- * techniques.  For inner joins, any filters on top of the join operator are also matched.
+ * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
  */
-object HashFilteredJoin extends Logging with PredicateHelper {
+object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
   type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    // All predicates can be evaluated for inner join (i.e., those that are in the ON
-    // clause and WHERE clause.)
-    case FilteredOperation(predicates, join @ Join(left, right, Inner, condition)) =>
-      logger.debug(s"Considering hash inner join on: ${predicates ++ condition}")
-      splitPredicates(predicates ++ condition, join)
     case join @ Join(left, right, joinType, condition) =>
-      logger.debug(s"Considering hash join on: $condition")
-      splitPredicates(condition.toSeq, join)
-    case _ => None
-  }
+      logger.debug(s"Considering join on: $condition")
+      // Find equi-join predicates that can be evaluated before the join, and thus can be used
+      // as join keys.
+      val (joinPredicates, otherPredicates) = 
+        condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
+          case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
+            (canEvaluate(l, right) && canEvaluate(r, left)) => true
+          case _ => false
+        }
 
-  // Find equi-join predicates that can be evaluated before the join, and thus can be used
-  // as join keys.
-  def splitPredicates(allPredicates: Seq[Expression], join: Join): Option[ReturnType] = {
-    val Join(left, right, joinType, _) = join
-    val (joinPredicates, otherPredicates) = allPredicates.partition {
-      case Equals(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
-        (canEvaluate(l, right) && canEvaluate(r, left)) => true
-      case _ => false
-    }
-
-    val joinKeys = joinPredicates.map {
-      case Equals(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
-      case Equals(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
-    }
-
-    // Do not consider this strategy if there are no join keys.
-    if (joinKeys.nonEmpty) {
+      val joinKeys = joinPredicates.map {
+        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
+        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
+      }
       val leftKeys = joinKeys.map(_._1)
       val rightKeys = joinKeys.map(_._2)
 
-      Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
-    } else {
-      logger.debug(s"Avoiding hash join with no join keys.")
-      None
-    }
+      if (joinKeys.nonEmpty) {
+        logger.debug(s"leftKeys:${leftKeys} | rightKeys:${rightKeys}")
+        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
+      } else {
+        None
+      }
+    case _ => None
   }
 }
 

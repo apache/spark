@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx
 
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
 
@@ -48,12 +49,16 @@ object GraphLoader extends Logging {
    * @param canonicalOrientation whether to orient edges in the positive
    *        direction
    * @param minEdgePartitions the number of partitions for the edge RDD
+   * @param edgeStorageLevel the desired storage level for the edge partitions
+   * @param vertexStorageLevel the desired storage level for the vertex partitions
    */
   def edgeListFile(
       sc: SparkContext,
       path: String,
       canonicalOrientation: Boolean = false,
-      minEdgePartitions: Int = 1)
+      minEdgePartitions: Int = 1,
+      edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
+      vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
     : Graph[Int, Int] =
   {
     val startTime = System.currentTimeMillis
@@ -78,12 +83,13 @@ object GraphLoader extends Logging {
         }
       }
       Iterator((pid, builder.toEdgePartition))
-    }.cache().setName("GraphLoader.edgeListFile - edges (%s)".format(path))
+    }.persist(edgeStorageLevel).setName("GraphLoader.edgeListFile - edges (%s)".format(path))
     edges.count()
 
     logInfo("It took %d ms to load the edges".format(System.currentTimeMillis - startTime))
 
-    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1)
+    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1, edgeStorageLevel = edgeStorageLevel,
+      vertexStorageLevel = vertexStorageLevel)
   } // end of edgeListFile
 
 }

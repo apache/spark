@@ -93,7 +93,15 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_MASTER_OPTS</code></td>
-    <td>Configuration properties that apply only to the master in the form "-Dx=y" (default: none).</td>
+    <td>Configuration properties that apply only to the master in the form "-Dx=y" (default: none). See below for a list of possible options.</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_LOCAL_DIRS</code></td>
+    <td>
+    Directory to use for "scratch" space in Spark, including map output files and RDDs that get 
+    stored on disk. This should be on a fast, local disk in your system. It can also be a 
+    comma-separated list of multiple directories on different disks.
+    </td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_CORES</code></td>
@@ -126,7 +134,7 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_WORKER_OPTS</code></td>
-    <td>Configuration properties that apply only to the worker in the form "-Dx=y" (default: none).</td>
+    <td>Configuration properties that apply only to the worker in the form "-Dx=y" (default: none). See below for a list of possible options.</td>
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
@@ -144,10 +152,77 @@ You can optionally configure the cluster further by setting environment variable
 
 **Note:** The launch scripts do not currently support Windows. To run a Spark cluster on Windows, start the master and workers by hand.
 
+SPARK_MASTER_OPTS supports the following system properties:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.deploy.spreadOut</code></td>
+  <td>true</td>
+  <td>
+    Whether the standalone cluster manager should spread applications out across nodes or try
+    to consolidate them onto as few nodes as possible. Spreading out is usually better for
+    data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.deploy.defaultCores</code></td>
+  <td>(infinite)</td>
+  <td>
+    Default number of cores to give to applications in Spark's standalone mode if they don't
+    set <code>spark.cores.max</code>. If not set, applications always get all available
+    cores unless they configure <code>spark.cores.max</code> themselves.
+    Set this lower on a shared cluster to prevent users from grabbing
+    the whole cluster by default. <br/>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.timeout</code></td>
+  <td>60</td>
+  <td>
+    Number of seconds after which the standalone deploy master considers a worker lost if it
+    receives no heartbeats.
+  </td>
+</tr>
+</table>
+
+SPARK_WORKER_OPTS supports the following system properties:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.worker.cleanup.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
+    mode, as YARN works differently. Applications directories are cleaned up regardless of whether
+    the application is still running.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.cleanup.interval</code></td>
+  <td>1800 (30 minutes)</td>
+  <td>
+    Controls the interval, in seconds, at which the worker cleans up old application work dirs
+    on the local machine.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.cleanup.appDataTtl</code></td>
+  <td>7 * 24 * 3600 (7 days)</td>
+  <td>
+    The number of seconds to retain application work directories on each worker.  This is a Time To Live
+    and should depend on the amount of available disk space you have.  Application logs and jars are
+    downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
+    especially if you run jobs very frequently.
+  </td>
+</tr>
+</table>
+
 # Connecting an Application to the Cluster
 
 To run an application on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
-constructor](scala-programming-guide.html#initializing-spark).
+constructor](programming-guide.html#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
 
@@ -160,11 +235,10 @@ You can also pass an option `--cores <numCores>` to control the number of cores 
 
 # Launching Compiled Spark Applications
 
-Spark supports two deploy modes: applications may run with the driver inside the client process or
-entirely inside the cluster. The
-[Spark submit script](cluster-overview.html#launching-applications-with-spark-submit) provides the
-most straightforward way to submit a compiled Spark application to the cluster in either deploy
-mode.
+The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
+submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
+only supports deploying the driver inside the client process that is submitting the application
+(`client` deploy mode).
 
 If your application is launched through Spark submit, then the application jar is automatically
 distributed to all worker nodes. For any additional jars that your application depends on, you
@@ -211,6 +285,94 @@ In addition, detailed log output for each job is also written to the work direct
 
 You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the same machines. To access Hadoop data from Spark, just use a hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
 
+
+# Configuring Ports for Network Security
+
+Spark makes heavy use of the network, and some environments have strict requirements for using tight
+firewall settings.  Below are the primary ports that Spark uses for its communication and how to
+configure those ports.
+
+<table class="table">
+  <tr>
+    <th>From</th><th>To</th><th>Default Port</th><th>Purpose</th><th>Configuration
+    Setting</th><th>Notes</th>
+  </tr>
+  <!-- Web UIs -->
+  <tr>
+    <td>Browser</td>
+    <td>Standalone Cluster Master</td>
+    <td>8080</td>
+    <td>Web UI</td>
+    <td><code>master.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>Driver</td>
+    <td>4040</td>
+    <td>Web UI</td>
+    <td><code>spark.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>History Server</td>
+    <td>18080</td>
+    <td>Web UI</td>
+    <td><code>spark.history.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <tr>
+    <td>Browser</td>
+    <td>Worker</td>
+    <td>8081</td>
+    <td>Web UI</td>
+    <td><code>worker.ui.port</code></td>
+    <td>Jetty-based</td>
+  </tr>
+  <!-- Cluster interactions -->
+  <tr>
+    <td>Application</td>
+    <td>Standalone Cluster Master</td>
+    <td>7077</td>
+    <td>Submit job to cluster</td>
+    <td><code>spark.driver.port</code></td>
+    <td>Akka-based.  Set to "0" to choose a port randomly</td>
+  </tr>
+  <tr>
+    <td>Worker</td>
+    <td>Standalone Cluster Master</td>
+    <td>7077</td>
+    <td>Join cluster</td>
+    <td><code>spark.driver.port</code></td>
+    <td>Akka-based.  Set to "0" to choose a port randomly</td>
+  </tr>
+  <tr>
+    <td>Application</td>
+    <td>Worker</td>
+    <td>(random)</td>
+    <td>Join cluster</td>
+    <td><code>SPARK_WORKER_PORT</code> (standalone cluster)</td>
+    <td>Akka-based</td>
+  </tr>
+
+  <!-- Other misc stuff -->
+  <tr>
+    <td>Driver and other Workers</td>
+    <td>Worker</td>
+    <td>(random)</td>
+    <td>
+      <ul>
+        <li>File server for file and jars</li>
+        <li>Http Broadcast</li>
+        <li>Class file server (Spark Shell only)</li>
+      </ul>
+    </td>
+    <td>None</td>
+    <td>Jetty-based.  Each of these services starts on a random port that cannot be configured</td>
+  </tr>
+
+</table>
 
 # High Availability
 

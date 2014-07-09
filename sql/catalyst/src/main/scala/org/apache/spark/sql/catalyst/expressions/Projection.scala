@@ -45,8 +45,10 @@ class Projection(expressions: Seq[Expression]) extends (Row => Row) {
  * that schema.
  *
  * In contrast to a normal projection, a MutableProjection reuses the same underlying row object
- * each time an input row is added.  This significatly reduces the cost of calcuating the
- * projection, but means that it is not safe
+ * each time an input row is added.  This significantly reduces the cost of calculating the
+ * projection, but means that it is not safe to hold on to a reference to a [[Row]] after `next()`
+ * has been called on the [[Iterator]] that produced it. Instead, the user must call `Row.copy()`
+ * and hold on to the returned [[Row]] before calling `next()`.
  */
 case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
@@ -67,7 +69,7 @@ case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) 
 }
 
 /**
- * A mutable wrapper that makes two rows appear appear as a single concatenated row.  Designed to
+ * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
  * be instantiated once per thread and reused.
  */
 class JoinedRow extends Row {
@@ -78,6 +80,18 @@ class JoinedRow extends Row {
   def apply(r1: Row, r2: Row): Row = {
     row1 = r1
     row2 = r2
+    this
+  }
+
+  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
+  def withLeft(newLeft: Row): Row = {
+    row1 = newLeft
+    this
+  }
+
+  /** Updates this JoinedRow by updating its right base row.  Returns itself. */
+  def withRight(newRight: Row): Row = {
+    row2 = newRight
     this
   }
 
@@ -123,5 +137,10 @@ class JoinedRow extends Row {
       i += 1
     }
     new GenericRow(copiedValues)
+  }
+
+  override def toString() = {
+    val row = (if (row1 != null) row1 else Seq[Any]()) ++ (if (row2 != null) row2 else Seq[Any]())
+    s"[${row.mkString(",")}]"
   }
 }

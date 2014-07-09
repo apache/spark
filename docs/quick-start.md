@@ -9,7 +9,7 @@ title: Quick Start
 This tutorial provides a quick introduction to using Spark. We will first introduce the API through Spark's
 interactive shell (in Python or Scala),
 then show how to write standalone applications in Java, Scala, and Python.
-See the [programming guide](scala-programming-guide.html) for a more complete reference.
+See the [programming guide](programming-guide.html) for a more complete reference.
 
 To follow along with this guide, first download a packaged release of Spark from the
 [Spark website](http://spark.apache.org/downloads.html). Since we won't be using HDFS,
@@ -35,7 +35,7 @@ scala> val textFile = sc.textFile("README.md")
 textFile: spark.RDD[String] = spark.MappedRDD@2ee9b6e3
 {% endhighlight %}
 
-RDDs have _[actions](scala-programming-guide.html#actions)_, which return values, and _[transformations](scala-programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
+RDDs have _[actions](programming-guide.html#actions)_, which return values, and _[transformations](programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
 
 {% highlight scala %}
 scala> textFile.count() // Number of items in this RDD
@@ -45,7 +45,7 @@ scala> textFile.first() // First item in this RDD
 res1: String = # Apache Spark
 {% endhighlight %}
 
-Now let's use a transformation. We will use the [`filter`](scala-programming-guide.html#transformations) transformation to return a new RDD with a subset of the items in the file.
+Now let's use a transformation. We will use the [`filter`](programming-guide.html#transformations) transformation to return a new RDD with a subset of the items in the file.
 
 {% highlight scala %}
 scala> val linesWithSpark = textFile.filter(line => line.contains("Spark"))
@@ -70,7 +70,7 @@ Spark's primary abstraction is a distributed collection of items called a Resili
 >>> textFile = sc.textFile("README.md")
 {% endhighlight %}
 
-RDDs have _[actions](scala-programming-guide.html#actions)_, which return values, and _[transformations](scala-programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
+RDDs have _[actions](programming-guide.html#actions)_, which return values, and _[transformations](programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
 
 {% highlight python %}
 >>> textFile.count() # Number of items in this RDD
@@ -80,7 +80,7 @@ RDDs have _[actions](scala-programming-guide.html#actions)_, which return values
 u'# Apache Spark'
 {% endhighlight %}
 
-Now let's use a transformation. We will use the [`filter`](scala-programming-guide.html#transformations) transformation to return a new RDD with a subset of the items in the file.
+Now let's use a transformation. We will use the [`filter`](programming-guide.html#transformations) transformation to return a new RDD with a subset of the items in the file.
 
 {% highlight python %}
 >>> linesWithSpark = textFile.filter(lambda line: "Spark" in line)
@@ -125,7 +125,7 @@ scala> val wordCounts = textFile.flatMap(line => line.split(" ")).map(word => (w
 wordCounts: spark.RDD[(String, Int)] = spark.ShuffledAggregatedRDD@71f027b8
 {% endhighlight %}
 
-Here, we combined the [`flatMap`](scala-programming-guide.html#transformations), [`map`](scala-programming-guide.html#transformations) and [`reduceByKey`](scala-programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (String, Int) pairs. To collect the word counts in our shell, we can use the [`collect`](scala-programming-guide.html#actions) action:
+Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations) and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (String, Int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
 
 {% highlight scala %}
 scala> wordCounts.collect()
@@ -162,7 +162,7 @@ One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can i
 >>> wordCounts = textFile.flatMap(lambda line: line.split()).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
 {% endhighlight %}
 
-Here, we combined the [`flatMap`](scala-programming-guide.html#transformations), [`map`](scala-programming-guide.html#transformations) and [`reduceByKey`](scala-programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (string, int) pairs. To collect the word counts in our shell, we can use the [`collect`](scala-programming-guide.html#actions) action:
+Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations) and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (string, int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
 
 {% highlight python %}
 >>> wordCounts.collect()
@@ -192,7 +192,7 @@ res9: Long = 15
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
 that these same functions can be used on very large data sets, even when they are striped across
 tens or hundreds of nodes. You can also do this interactively by connecting `bin/spark-shell` to
-a cluster, as described in the [programming guide](scala-programming-guide.html#initializing-spark).
+a cluster, as described in the [programming guide](programming-guide.html#initializing-spark).
 
 </div>
 <div data-lang="python" markdown="1">
@@ -210,7 +210,7 @@ a cluster, as described in the [programming guide](scala-programming-guide.html#
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
 that these same functions can be used on very large data sets, even when they are striped across
 tens or hundreds of nodes. You can also do this interactively by connecting `bin/pyspark` to
-a cluster, as described in the [programming guide](scala-programming-guide.html#initializing-spark).
+a cluster, as described in the [programming guide](programming-guide.html#initializing-spark).
 
 </div>
 </div>
@@ -252,11 +252,11 @@ we initialize a SparkContext as part of the program.
 We pass the SparkContext constructor a 
 [SparkConf](api/scala/index.html#org.apache.spark.SparkConf)
 object which contains information about our
-application. We also call sc.addJar to make sure that when our application is launched in cluster
-mode, the jar file containing it will be shipped automatically to worker nodes.
+application. 
 
-This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt`
-which explains that Spark is a dependency. This file also adds a repository that Spark depends on:
+Our application depends on the Spark API, so we'll also include an sbt configuration file, 
+`simple.sbt` which explains that Spark is a dependency. This file also adds a repository that 
+Spark depends on:
 
 {% highlight scala %}
 name := "Simple Project"
@@ -266,8 +266,6 @@ version := "1.0"
 scalaVersion := "{{site.SCALA_VERSION}}"
 
 libraryDependencies += "org.apache.spark" %% "spark-core" % "{{site.SPARK_VERSION}}"
-
-resolvers += "Akka Repository" at "http://repo.akka.io/releases/"
 {% endhighlight %}
 
 For sbt to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt`
@@ -336,7 +334,7 @@ As with the Scala example, we initialize a SparkContext, though we use the speci
 `JavaSparkContext` class to get a Java-friendly one. We also create RDDs (represented by
 `JavaRDD`) and run transformations on them. Finally, we pass functions to Spark by creating classes
 that extend `spark.api.java.function.Function`. The
-[Java programming guide](java-programming-guide.html) describes these differences in more detail.
+[Spark programming guide](programming-guide.html) describes these differences in more detail.
 
 To build the program, we also write a Maven `pom.xml` file that lists Spark as a dependency.
 Note that Spark artifacts are tagged with a Scala version.
@@ -349,12 +347,6 @@ Note that Spark artifacts are tagged with a Scala version.
   <name>Simple Project</name>
   <packaging>jar</packaging>
   <version>1.0</version>
-  <repositories>
-    <repository>
-      <id>Akka repository</id>
-      <url>http://repo.akka.io/releases</url>
-    </repository>
-  </repositories>
   <dependencies>
     <dependency> <!-- Spark dependency -->
       <groupId>org.apache.spark</groupId>
@@ -442,6 +434,19 @@ Lines with a: 46, Lines with b: 23
 # Where to Go from Here
 Congratulations on running your first Spark application!
 
-* For an in-depth overview of the API see "Programming Guides" menu section.
-* For running applications on a cluster head to the [deployment overview](cluster-overview.html).
-* For configuration options available to Spark applications see the [configuration page](configuration.html).
+* For an in-depth overview of the API, start with the [Spark programming guide](programming-guide.html),
+  or see "Programming Guides" menu for other components.
+* For running applications on a cluster, head to the [deployment overview](cluster-overview.html).
+* Finally, Spark includes several samples in the `examples` directory
+([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
+ [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
+ [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python)).
+You can run them as follows:
+
+{% highlight bash %}
+# For Scala and Java, use run-example:
+./bin/run-example SparkPi
+
+# For Python examples, use spark-submit directly:
+./bin/spark-submit examples/src/main/python/pi.py
+{% endhighlight %}

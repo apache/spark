@@ -52,7 +52,7 @@ private[spark] class YarnClientSchedulerBackend(
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
       "--class", "notused",
-      "--jar", null,
+      "--jar", null, // The primary jar will be added dynamically in SparkContext.
       "--args", hostport,
       "--am-class", classOf[ExecutorLauncher].getName
     )
@@ -63,16 +63,14 @@ private[spark] class YarnClientSchedulerBackend(
     // variables.
     List(("--driver-memory", "SPARK_MASTER_MEMORY", "spark.master.memory"),
       ("--driver-memory", "SPARK_DRIVER_MEMORY", "spark.driver.memory"),
-      ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.worker.instances"),
+      ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.executor.instances"),
       ("--num-executors", "SPARK_EXECUTOR_INSTANCES", "spark.executor.instances"),
       ("--executor-memory", "SPARK_WORKER_MEMORY", "spark.executor.memory"),
       ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
       ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
       ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
       ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
-      ("--name", "SPARK_YARN_APP_NAME", "spark.app.name"),
-      ("--files", "SPARK_YARN_DIST_FILES", "spark.yarn.dist.files"),
-      ("--archives", "SPARK_YARN_DIST_ARCHIVES", "spark.yarn.dist.archives"))
+      ("--name", "SPARK_YARN_APP_NAME", "spark.app.name"))
     .foreach { case (optName, envVar, sysProp) => addArg(optName, envVar, sysProp, argsArrayBuf) }
 
     logDebug("ClientArguments called with: " + argsArrayBuf)
@@ -112,8 +110,8 @@ private[spark] class YarnClientSchedulerBackend(
 
   override def stop() {
     super.stop()
-    client.stop()
-    logInfo("Stoped")
+    client.stop
+    logInfo("Stopped")
   }
 
 }

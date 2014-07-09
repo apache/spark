@@ -118,7 +118,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
       } catch {
         case e: Exception =>
-          SparkSubmit.printErrorAndExit("Failed to read JAR: " + primaryResource)
+          SparkSubmit.printErrorAndExit("Cannot load main class from JAR: " + primaryResource)
           return
       }
     }
@@ -146,6 +146,18 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     }
     if (pyFiles != null && !isPython) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
+    }
+
+    // Require all python files to be local, so we can add them to the PYTHONPATH
+    if (isPython) {
+      if (Utils.nonLocalPaths(primaryResource).nonEmpty) {
+        SparkSubmit.printErrorAndExit(s"Only local python files are supported: $primaryResource")
+      }
+      val nonLocalPyFiles = Utils.nonLocalPaths(pyFiles).mkString(",")
+      if (nonLocalPyFiles.nonEmpty) {
+        SparkSubmit.printErrorAndExit(
+          s"Only local additional python files are supported: $nonLocalPyFiles")
+      }
     }
 
     if (master.startsWith("yarn")) {
@@ -263,19 +275,19 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         parse(tail)
 
       case ("--files") :: value :: tail =>
-        files = value
+        files = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--py-files") :: value :: tail =>
-        pyFiles = value
+        pyFiles = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--archives") :: value :: tail =>
-        archives = value
+        archives = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--jars") :: value :: tail =>
-        jars = value
+        jars = Utils.resolveURIs(value)
         parse(tail)
 
       case ("--help" | "-h") :: tail =>
@@ -296,13 +308,20 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               val errMessage = s"Unrecognized option '$value'."
               SparkSubmit.printErrorAndExit(errMessage)
             case v =>
-              primaryResource = v
+              primaryResource =
+                if (!SparkSubmit.isShell(v)) {
+                  Utils.resolveURI(v).toString
+                } else {
+                  v
+                }
               inSparkOpts = false
-              isPython = v.endsWith(".py")
+              isPython = SparkSubmit.isPython(v)
               parse(tail)
           }
         } else {
-          childArgs += value
+          if (!value.isEmpty) {
+            childArgs += value
+          }
           parse(tail)
         }
 
@@ -319,15 +338,15 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       """Usage: spark-submit [options] <app jar | python file> [app options]
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
-        |  --deploy-mode DEPLOY_MODE   Where to run the driver program: either "client" to run
-        |                              on the local machine, or "cluster" to run inside cluster.
+        |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
+        |                              on one of the worker machines inside the cluster ("cluster")
+        |                              (Default: client).
         |  --class CLASS_NAME          Your application's main class (for Java / Scala apps).
         |  --name NAME                 A name of your application.
         |  --jars JARS                 Comma-separated list of local jars to include on the driver
-        |                              and executor classpaths. Doesn't work for drivers in
-        |                              standalone mode with "cluster" deploy mode.
-        |  --py-files PY_FILES         Comma-separated list of .zip or .egg files to place on the
-        |                              PYTHONPATH for Python apps.
+        |                              and executor classpaths.
+        |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
+        |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
@@ -341,6 +360,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |                              classpath.
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
+        |
+        |  --help, -h                  Show this help message and exit
+        |  --verbose, -v               Print additional debug output
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
@@ -363,16 +385,19 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 object SparkSubmitArguments {
   /** Load properties present in the given file. */
   def getPropertiesFromFile(file: File): Seq[(String, String)] = {
-    require(file.exists(), s"Properties file ${file.getName} does not exist")
+    require(file.exists(), s"Properties file $file does not exist")
+    require(file.isFile(), s"Properties file $file is not a normal file")
     val inputStream = new FileInputStream(file)
-    val properties = new Properties()
     try {
+      val properties = new Properties()
       properties.load(inputStream)
+      properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
     } catch {
       case e: IOException =>
-        val message = s"Failed when loading Spark properties file ${file.getName}"
+        val message = s"Failed when loading Spark properties file $file"
         throw new SparkException(message, e)
+    } finally {
+      inputStream.close()
     }
-    properties.stringPropertyNames().toSeq.map(k => (k, properties(k).trim))
   }
 }

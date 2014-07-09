@@ -37,7 +37,7 @@ import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SignalLogger, Utils}
 
 /**
  * An application master that runs the users driver program and allocates executors.
@@ -277,7 +277,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         yarnAllocator.allocateContainers(
           math.max(args.numExecutors - yarnAllocator.getNumExecutorsRunning, 0))
         ApplicationMaster.incrementAllocatorLoop(1)
-        Thread.sleep(100)
+        Thread.sleep(ApplicationMaster.ALLOCATE_HEARTBEAT_INTERVAL)
       }
     } finally {
       // In case of exceptions, etc - ensure that count is at least ALLOCATOR_LOOP_WAIT_COUNT,
@@ -409,13 +409,14 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
 }
 
-object ApplicationMaster {
+object ApplicationMaster extends Logging {
   // Number of times to wait for the allocator loop to complete.
   // Each loop iteration waits for 100ms, so maximum of 3 seconds.
   // This is to ensure that we have reasonable number of containers before we start
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
   private val ALLOCATOR_LOOP_WAIT_COUNT = 30
+  private val ALLOCATE_HEARTBEAT_INTERVAL = 100
 
   def incrementAllocatorLoop(by: Int) {
     val count = yarnAllocatorLoop.getAndAdd(by)
@@ -467,16 +468,26 @@ object ApplicationMaster {
       })
     }
 
-    // Wait for initialization to complete and atleast 'some' nodes can get allocated.
+    modified
+  }
+
+
+  /**
+   * Returns when we've either
+   *  1) received all the requested executors,
+   *  2) waited ALLOCATOR_LOOP_WAIT_COUNT * ALLOCATE_HEARTBEAT_INTERVAL ms,
+   *  3) hit an error that causes us to terminate trying to get containers.
+   */
+  def waitForInitialAllocations() {
     yarnAllocatorLoop.synchronized {
       while (yarnAllocatorLoop.get() <= ALLOCATOR_LOOP_WAIT_COUNT) {
         yarnAllocatorLoop.wait(1000L)
       }
     }
-    modified
   }
 
   def main(argStrings: Array[String]) {
+    SignalLogger.register(log)
     val args = new ApplicationMasterArguments(argStrings)
     SparkHadoopUtil.get.runAsSparkUser { () =>
       new ApplicationMaster(args).run()

@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.mllib
 
+import scala.collection.mutable
+
 import com.esotericsoftware.kryo.Kryo
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
@@ -29,12 +31,19 @@ import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
+ * Run with
+ * {{{
+ * bin/run-example org.apache.spark.examples.mllib.MovieLensALS
+ * }}}
+ * A synthetic dataset in MovieLens format can be found at `data/mllib/sample_movielens_data.txt`.
+ * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object MovieLensALS {
 
   class ALSRegistrator extends KryoRegistrator {
     override def registerClasses(kryo: Kryo) {
       kryo.register(classOf[Rating])
+      kryo.register(classOf[mutable.BitSet])
     }
   }
 
@@ -44,6 +53,8 @@ object MovieLensALS {
       numIterations: Int = 20,
       lambda: Double = 1.0,
       rank: Int = 10,
+      numUserBlocks: Int = -1,
+      numProductBlocks: Int = -1,
       implicitPrefs: Boolean = false)
 
   def main(args: Array[String]) {
@@ -61,8 +72,14 @@ object MovieLensALS {
         .text(s"lambda (smoothing constant), default: ${defaultParams.lambda}")
         .action((x, c) => c.copy(lambda = x))
       opt[Unit]("kryo")
-        .text(s"use Kryo serialization")
+        .text("use Kryo serialization")
         .action((_, c) => c.copy(kryo = true))
+      opt[Int]("numUserBlocks")
+        .text(s"number of user blocks, default: ${defaultParams.numUserBlocks} (auto)")
+        .action((x, c) => c.copy(numUserBlocks = x))
+      opt[Int]("numProductBlocks")
+        .text(s"number of product blocks, default: ${defaultParams.numProductBlocks} (auto)")
+        .action((x, c) => c.copy(numProductBlocks = x))
       opt[Unit]("implicitPrefs")
         .text("use implicit preference")
         .action((_, c) => c.copy(implicitPrefs = true))
@@ -70,6 +87,15 @@ object MovieLensALS {
         .required()
         .text("input paths to a MovieLens dataset of ratings")
         .action((x, c) => c.copy(input = x))
+      note(
+        """
+          |For example, the following command runs this app on a synthetic dataset:
+          |
+          | bin/spark-submit --class org.apache.spark.examples.mllib.MovieLensALS \
+          |  examples/target/scala-*/spark-examples-*.jar \
+          |  --rank 5 --numIterations 20 --lambda 1.0 --kryo \
+          |  data/mllib/sample_movielens_data.txt
+        """.stripMargin)
     }
 
     parser.parse(args, defaultParams).map { params =>
@@ -145,6 +171,8 @@ object MovieLensALS {
       .setIterations(params.numIterations)
       .setLambda(params.lambda)
       .setImplicitPrefs(params.implicitPrefs)
+      .setUserBlocks(params.numUserBlocks)
+      .setProductBlocks(params.numProductBlocks)
       .run(training)
 
     val rmse = computeRmse(model, test, params.implicitPrefs)
