@@ -37,9 +37,11 @@ import org.apache.spark.util.MutablePair
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output = projectList.map(_.toAttribute)
 
-  override def execute() = child.execute().mapPartitions { iter =>
-    @transient val reusableProjection = new MutableProjection(projectList)
-    iter.map(reusableProjection)
+  @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
+
+  def execute() = child.execute().mapPartitions { iter =>
+    val resuableProjection = buildProjection()
+    iter.map(resuableProjection)
   }
 }
 
@@ -50,8 +52,10 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output = child.output
 
-  override def execute() = child.execute().mapPartitions { iter =>
-    iter.filter(condition.eval(_).asInstanceOf[Boolean])
+  @transient lazy val conditionEvaluator = newPredicate(condition, child.output)
+
+  def execute() = child.execute().mapPartitions { iter =>
+    iter.filter(conditionEvaluator)
   }
 }
 
@@ -170,6 +174,7 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
   @transient
   lazy val ordering = new RowOrdering(sortOrder)
 
+  // TODO: Is this copying for no reason?
   override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ordering)
 
   // TODO: Terminal split should be implemented differently from non-terminal split.

@@ -158,8 +158,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object ImplicitGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case Project(Seq(Alias(g: Generator, _)), child) =>
-        Generate(g, join = false, outer = false, None, child)
+      case Project(Seq(Alias(g: Generator, alias)), child) =>
+        Generate(g, join = false, outer = false, Some(alias), child)
     }
   }
 

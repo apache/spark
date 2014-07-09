@@ -47,4 +47,14 @@ package org.apache.spark.sql.catalyst
  * ==Evaluation==
  * The result of expressions can be evaluated using the `Expression.apply(Row)` method.
  */
-package object expressions
+package object expressions  {
+
+  abstract class Projection extends (Row => Row)
+
+  abstract class MutableProjection extends Projection {
+    def currentValue: Row
+
+    /* Updates the target of this projection to a new MutableRow */
+    def target(row: MutableRow): MutableProjection
+  }
+}

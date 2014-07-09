@@ -19,16 +19,40 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.Try
 
+import org.apache.spark.sql.{SchemaRDD, Row}
+import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{SchemaRDD, Row}
 
 case class TestData(a: Int, b: String)
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
+class HiveCacheSuite extends HiveComparisonTest {
+  //cache("src", "key" :: "value" :: Nil, "value" :: Nil)
+
+  println(catalog.lookupRelation(None, "src"))
+
+  println(executeSql("SELECT SUM(key) FROM src GROUP BY value"))
+
+  createQueryTest("Simple Average",
+    "SELECT SUM(key) FROM src GROUP BY value")
+}
+
+/**
+ * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
+ */
 class HiveQuerySuite extends HiveComparisonTest {
+
+  createQueryTest("single case",
+    """SELECT case when true then 1 else 2 end FROM src""")
+
+  createQueryTest("double case",
+    """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else 2 end FROM src""")
+
+  createQueryTest("case else null",
+    """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else null end FROM src""")
 
   test("CREATE TABLE AS runs once") {
     hql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()

@@ -22,7 +22,7 @@ package org.apache.spark.sql.catalyst.expressions
  * new row. If the schema of the input row is specified, then the given expression will be bound to
  * that schema.
  */
-class Projection(expressions: Seq[Expression]) extends (Row => Row) {
+class InterpretedProjection(expressions: Seq[Expression]) extends (Row => Row) {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
@@ -40,7 +40,7 @@ class Projection(expressions: Seq[Expression]) extends (Row => Row) {
 }
 
 /**
- * Converts a [[Row]] to another Row given a sequence of expression that define each column of th
+ * Converts a [[Row]] to another Row given a sequence of expression that define each column of the
  * new row. If the schema of the input row is specified, then the given expression will be bound to
  * that schema.
  *
@@ -50,13 +50,18 @@ class Projection(expressions: Seq[Expression]) extends (Row => Row) {
  * has been called on the [[Iterator]] that produced it. Instead, the user must call `Row.copy()`
  * and hold on to the returned [[Row]] before calling `next()`.
  */
-case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) {
+case class InterpretedMutableProjection(expressions: Seq[Expression]) extends MutableProjection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
   private[this] val exprArray = expressions.toArray
-  private[this] val mutableRow = new GenericMutableRow(exprArray.size)
+  private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.size)
   def currentValue: Row = mutableRow
+
+  def target(row: MutableRow): MutableProjection = {
+    mutableRow = row
+    this
+  }
 
   def apply(input: Row): Row = {
     var i = 0
@@ -75,6 +80,12 @@ case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) 
 class JoinedRow extends Row {
   private[this] var row1: Row = _
   private[this] var row2: Row = _
+
+  def this(left: Row, right: Row) = {
+    this()
+    row1 = left
+    row2 = right
+  }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
   def apply(r1: Row, r2: Row): Row = {

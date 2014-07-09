@@ -180,6 +180,34 @@ class GenericRow(protected[catalyst] val values: Array[Any]) extends Row {
     values(i).asInstanceOf[String]
   }
 
+  override def hashCode(): Int = {
+    var result: Int = 37
+
+    var i = 0
+    while (i < values.length) {
+      val update: Int =
+        if (isNullAt(i)) {
+          0
+        } else {
+          apply(i) match {
+            case b: Boolean => if (b) 0 else 1
+            case b: Byte => b.toInt
+            case s: Short => s.toInt
+            case i: Int => i
+            case l: Long => (l ^ (l >>> 32)).toInt
+            case f: Float => java.lang.Float.floatToIntBits(f)
+            case d: Double =>
+              val b = java.lang.Double.doubleToLongBits(d)
+              (b ^ (b >>> 32)).toInt
+            case other => other.hashCode()
+          }
+        }
+      result = 37 * result + update
+      i += 1
+    }
+    result
+  }
+
   def copy() = this
 }
 

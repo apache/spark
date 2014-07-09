@@ -22,7 +22,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Logging, Row}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -51,8 +52,19 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
    */
   def executeCollect(): Array[Row] = execute().map(_.copy()).collect()
 
-  protected def buildRow(values: Seq[Any]): Row =
-    new GenericRow(values.toArray)
+  def newProjection(expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection =
+    GenerateProjection(expressions)
+
+  def newMutableProjection(
+      expressions: Seq[Expression],
+      inputSchema: Seq[Attribute]): () => MutableProjection = {
+    GenerateMutableProjection(expressions)
+  }
+
+
+  def newPredicate(expression: Expression, inputSchema: Seq[Attribute]): (Row) => Boolean = {
+    GeneratePredicate(expression, inputSchema)
+  }
 }
 
 /**

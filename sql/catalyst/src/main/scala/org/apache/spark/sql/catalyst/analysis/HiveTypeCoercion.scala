@@ -259,7 +259,7 @@ trait HiveTypeCoercion {
       case Cast(e, BooleanType) if e.dataType != BooleanType => Not(EqualTo(e, Literal(0)))
       // Turn true into 1, and false into 0 if casting boolean into other types.
       case Cast(e, dataType) if e.dataType == BooleanType =>
-        Cast(If(e, Literal(1), Literal(0)), dataType)
+        If(e, Cast(Literal(1), dataType), Cast(Literal(0), dataType))
     }
   }
 

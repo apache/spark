@@ -23,6 +23,16 @@ import org.apache.spark.sql.catalyst.types.DataType
 import org.apache.spark.sql.catalyst.types.StringType
 import org.apache.spark.sql.catalyst.types.BooleanType
 
+case class SubString(string: Expression, start: Expression, end: Expression) extends Expression {
+  def children = string :: start :: end :: Nil
+  def references = children.flatMap(_.references).toSet
+  def dataType = StringType
+  def nullable = string.nullable
+
+  override def eval(input: Row) = ???
+
+  override def toString = s"substr($string, $start, $end"
+}
 
 trait StringRegexExpression {
   self: BinaryExpression =>

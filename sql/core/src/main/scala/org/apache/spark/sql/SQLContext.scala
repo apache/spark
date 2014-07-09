@@ -308,9 +308,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: DeveloperApi ::
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
    * access to the intermediate phases of query execution for developers.
    */
+  @DeveloperApi
   protected abstract class QueryExecution {
     def logical: LogicalPlan
 

@@ -38,6 +38,8 @@ case object BuildLeft extends BuildSide
 case object BuildRight extends BuildSide
 
 trait HashJoin {
+  self: SparkPlan =>
+
   val leftKeys: Seq[Expression]
   val rightKeys: Seq[Expression]
   val buildSide: BuildSide
@@ -56,9 +58,9 @@ trait HashJoin {
 
   def output = left.output ++ right.output
 
-  @transient lazy val buildSideKeyGenerator = new Projection(buildKeys, buildPlan.output)
+  @transient lazy val buildSideKeyGenerator = newProjection(buildKeys, buildPlan.output)
   @transient lazy val streamSideKeyGenerator =
-    () => new MutableProjection(streamedKeys, streamedPlan.output)
+    newMutableProjection(streamedKeys, streamedPlan.output)
 
   def joinIterators(buildIter: Iterator[Row], streamIter: Iterator[Row]): Iterator[Row] = {
     // TODO: Use Spark's HashMap implementation.
@@ -300,8 +302,16 @@ case class LeftSemiJoinBNL(
 case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   def output = left.output ++ right.output
 
-  def execute() = left.execute().map(_.copy()).cartesian(right.execute().map(_.copy())).map {
-    case (l: Row, r: Row) => buildRow(l ++ r)
+  def execute() = {
+    val leftResults = left.execute().map(_.copy())
+    val rightResults = right.execute().map(_.copy())
+
+    leftResults.cartesian(rightResults).mapPartitions { iter =>
+      val joinedRow = new JoinedRow
+      iter.map {
+        case (l: Row, r: Row) => joinedRow(l, r)
+      }
+    }
   }
 }
 
@@ -352,6 +362,7 @@ case class BroadcastNestedLoopJoin(
       // TODO: Use Spark's BitSet.
       val includedBroadcastTuples = new BitSet(broadcastedRelation.value.size)
       val joinedRow = new JoinedRow
+      val rightNulls = new GenericMutableRow(right.output.size)
 
       streamedIter.foreach { streamedRow =>
         var i = 0
@@ -361,7 +372,7 @@ case class BroadcastNestedLoopJoin(
           // TODO: One bitset per partition instead of per row.
           val broadcastedRow = broadcastedRelation.value(i)
           if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
-            matchedRows += buildRow(streamedRow ++ broadcastedRow)
+            matchedRows += joinedRow(streamedRow, broadcastedRow).copy()
             matched = true
             includedBroadcastTuples += i
           }
@@ -369,7 +380,7 @@ case class BroadcastNestedLoopJoin(
         }
 
         if (!matched && (joinType == LeftOuter || joinType == FullOuter)) {
-          matchedRows += buildRow(streamedRow ++ Array.fill(right.output.size)(null))
+          matchedRows += joinedRow(streamedRow, rightNulls).copy()
         }
       }
       Iterator((matchedRows, includedBroadcastTuples))
@@ -383,13 +394,13 @@ case class BroadcastNestedLoopJoin(
         streamedPlusMatches.map(_._2).reduce(_ ++ _)
       }
 
+    val leftNulls = new GenericMutableRow(left.output.size)
     val rightOuterMatches: Seq[Row] =
       if (joinType == RightOuter || joinType == FullOuter) {
         broadcastedRelation.value.zipWithIndex.filter {
           case (row, i) => !allIncludedBroadcastTuples.contains(i)
         }.map {
-          // TODO: Use projection.
-          case (row, _) => buildRow(Vector.fill(left.output.size)(null) ++ row)
+          case (row, _) => new JoinedRow(leftNulls, row)
         }
       } else {
         Vector()

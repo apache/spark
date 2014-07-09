@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.util.Utils
 
 /**
- *
+ * Utility functions for working with DataTypes
  */
 object DataType extends RegexParsers {
   protected lazy val primitiveType: Parser[DataType] =
@@ -97,6 +97,13 @@ abstract class DataType {
 
 case object NullType extends DataType
 
+object NativeType {
+  def all = Seq(
+    IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
+
+  def unapply(dt: DataType): Boolean = all.contains(dt)
+}
+
 trait PrimitiveType extends DataType {
   override def isPrimitive = true
 }
@@ -143,6 +150,13 @@ abstract class NumericType extends NativeType with PrimitiveType {
   // desugared by the compiler into an argument to the objects constructor. This means there is no
   // longer an no argument constructor and thus the JVM cannot serialize the object anymore.
   val numeric: Numeric[JvmType]
+}
+
+object NumericType {
+  def unapply(a: Expression): Boolean = a match {
+    case e: Expression if e.dataType.isInstanceOf[NumericType] => true
+    case _ => false
+  }
 }
 
 /** Matcher for any expressions that evaluate to [[IntegralType]]s */

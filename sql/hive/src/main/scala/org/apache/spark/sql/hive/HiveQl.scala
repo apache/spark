@@ -840,6 +840,7 @@ private[hive] object HiveQl {
 
   /* Case insensitive matches */
   val COUNT = "(?i)COUNT".r
+  val SUBSTR = "(?i)SUBSTR".r
   val AVG = "(?i)AVG".r
   val SUM = "(?i)SUM".r
   val MAX = "(?i)MAX".r
@@ -852,10 +853,10 @@ private[hive] object HiveQl {
   val NOT = "(?i)NOT".r
   val TRUE = "(?i)TRUE".r
   val FALSE = "(?i)FALSE".r
+  val IN = "(?i)IN".r
   val LIKE = "(?i)LIKE".r
   val RLIKE = "(?i)RLIKE".r
   val REGEXP = "(?i)REGEXP".r
-  val IN = "(?i)IN".r
   val DIV = "(?i)DIV".r
   val BETWEEN = "(?i)BETWEEN".r
   val WHEN = "(?i)WHEN".r
@@ -949,13 +950,14 @@ private[hive] object HiveQl {
       IsNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
+    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: str :: start :: end :: Nil) =>
+      SubString(nodeToExpr(str), nodeToExpr(start), nodeToExpr(end))
     case Token("TOK_FUNCTION",
            Token(BETWEEN(), Nil) ::
            Token("KW_FALSE", Nil) ::
            target ::
            minValue ::
            maxValue :: Nil) =>
-
       val targetExpression = nodeToExpr(target)
       And(
         GreaterThanOrEqual(targetExpression, nodeToExpr(minValue)),

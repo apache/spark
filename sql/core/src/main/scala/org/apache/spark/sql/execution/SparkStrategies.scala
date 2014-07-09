@@ -49,6 +49,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * evaluated by matching hash keys.
    */
   object HashJoin extends Strategy with PredicateHelper {
+
     private[this] def broadcastHashJoin(
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
@@ -171,12 +172,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   protected lazy val singleRowRdd =
     sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
 
-  def convertToCatalyst(a: Any): Any = a match {
-    case s: Seq[Any] => s.map(convertToCatalyst)
-    case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
-    case other => other
-  }
-
   object TakeOrdered extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Limit(IntegerLiteral(limit), logical.Sort(order, child)) =>
@@ -265,10 +260,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Sample(fraction, withReplacement, seed, child) =>
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
-        val dataAsRdd =
-          sparkContext.parallelize(data.map(r =>
-            new GenericRow(r.productIterator.map(convertToCatalyst).toArray): Row))
-        execution.ExistingRdd(output, dataAsRdd) :: Nil
+        ExistingRdd(
+          output,
+          ExistingRdd.productToRowRdd(sparkContext.parallelize(data, numPartitions))) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child))(sqlContext) :: Nil
       case Unions(unionChildren) =>
