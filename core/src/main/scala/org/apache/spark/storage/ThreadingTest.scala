@@ -78,7 +78,7 @@ private[spark] object ThreadingTest {
         val startTime = System.currentTimeMillis()
         manager.get(blockId) match {
           case Some(retrievedBlock) =>
-            assert(retrievedBlock.toList.asInstanceOf[List[Int]] == block.toList,
+            assert(retrievedBlock.data.toList.asInstanceOf[List[Int]] == block.toList,
               "Block " + blockId + " did not match")
             println("Got block " + blockId + " in " +
               (System.currentTimeMillis - startTime) + " ms")
