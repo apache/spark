@@ -473,7 +473,7 @@ object RowMatrix {
   /**
    * Fills a full square matrix from its upper triangular part.
    */
-  private def triuToFull(n: Int, U: Array[Double]): Matrix = {
+  private[mllib] def triuToFull(n: Int, U: Array[Double]): Matrix = {
     val G = new BDM[Double](n, n)
 
     var row = 0

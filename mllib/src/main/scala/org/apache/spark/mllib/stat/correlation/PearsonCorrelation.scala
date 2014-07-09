@@ -17,15 +17,25 @@
 
 package org.apache.spark.mllib.stat.correlation
 
-import org.apache.spark.SparkException
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector}
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import breeze.linalg.{DenseMatrix => BDM}
 
-class PearsonCorrelation extends Correlation {
+import org.apache.spark.SparkException
+import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector}
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.rdd.RDD
 
-  def computeCorrelationMatrix(x: RDD[Double], y: RDD[Double]): Double = {
+/**
+ * Compute Pearson correlation for two RDDs of the type RDD[Double] or the correlation matrix
+ * for an RDD of the type RDD[Vector].
+ *
+ * Definition of Pearson correlation can be found at
+ * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
+ */
+object PearsonCorrelation extends Correlation {
+
+  //TODO clean everything up here
+
+  override def computeCorrelation(x: RDD[Double], y: RDD[Double]): Double = {
 
     var paired: Option[RDD[(Double, Double)]] = None
 
@@ -36,15 +46,15 @@ class PearsonCorrelation extends Correlation {
         + "for RDDs of different sizes.")
     }
 
-    val stats = paired.get.aggregate(new Stats)((m: Stats, i: (Double, Double)) => m.seqOp(i),
-      (m1: Stats, m2: Stats) => m1.combOp(m2))
+    val stats = paired.get.aggregate(new Stats)((m: Stats, i: (Double, Double)) => m.merge(i),
+      (m1: Stats, m2: Stats) => m1.merge(m2))
 
     val cov = stats.xyMean - stats.xMean * stats.yMean
 
-    return cov / (stats.xStdev * stats.yStdev)
+    cov / (stats.xStdev * stats.yStdev)
   }
 
-  def computeCorrelationMatrix(X: RDD[Vector]): Matrix = {
+  override def computeCorrelationMatrix(X: RDD[Vector]): Matrix = {
     val rowMatrix = new RowMatrix(X)
     val cov = rowMatrix.computeCovariance().toBreeze.asInstanceOf[BDM[Double]]
     val n = cov.cols
@@ -57,18 +67,19 @@ class PearsonCorrelation extends Correlation {
     }
     // or we could put the stddev in its own array
 
-    // we could use blas.dspr instead to compute the correlation matrix if the covariance matrix
+    // TODO: we could use blas.dspr instead to compute the correlation matrix if the covariance matrix
     // is upper triangular.
     // Loop through columns since cov is column major
-    i = 0
+
     var j = 0
     var sigma = 0.0
     while (j < n) {
       sigma = cov(j, j)
-      while (i < n) {
-        if (i != j) { // we need to keep the stddev values on the diagonals throughout the update
-          cov(i, j) = cov(i, j) / (sigma * cov(i, i))
-        }
+      i = 0
+      while (i < j) {
+        val covariance = cov(i, j) / (sigma * cov(i, i))
+        cov(i, j) = covariance
+        cov(j, i) = covariance
         i += 1
       }
       j += 1
@@ -89,7 +100,7 @@ class PearsonCorrelation extends Correlation {
  * Custom version of StatCounter to allow for computation of all necessary statistics in one pass
  * over both input RDDs since passes over large RDDs are expensive
  */
-private class Stats() extends Serializable {
+private class Stats extends Serializable {
   private var n: Long = 0L
   private var Exy: Double = 0.0
   private var Ex: Double = 0.0
@@ -109,7 +120,7 @@ private class Stats() extends Serializable {
 
   def yStdev: Double = if (n == 0) Double.NaN else math.sqrt(Sy / n)
 
-  def seqOp(xy:(Double, Double)): Stats = {
+  def merge(xy:(Double, Double)): Stats = {
     val dX = xy._1 - Ex
     val dY = xy._2 - Ey
     n += 1
@@ -121,7 +132,7 @@ private class Stats() extends Serializable {
     this
   }
 
-  def combOp(other: Stats): Stats = {
+  def merge(other: Stats): Stats = {
     if (n == 0) {
       return other
     } else if (other.n > 0) {

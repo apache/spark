@@ -17,30 +17,18 @@
 
 package org.apache.spark.mllib.stat
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.mllib.linalg.{Matrix, Vector}
+import org.apache.spark.mllib.stat.correlation.Correlations
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.Matrix
-import org.apache.spark.mllib.linalg.Vector
 
-@DeveloperApi
-trait Statistics { //change trait to object
-  val DEFAULT_CORR_METHOD = "pearson"
-  val SUPPORTED_CORR_METHODS = Array("pearson", "kendall")
+object Statistics {
 
-  def corr(X: RDD[Vector]): Matrix
+  def corr(X: RDD[Vector]): Matrix = Correlations.corrMatrix(X)
 
-  def corr(X: RDD[Vector], method: String): Matrix
+  def corr(X: RDD[Vector], method: String): Matrix = Correlations.corrMatrix(X, method)
 
-  def corr(x: RDD[Double], y: RDD[Double], method: String): Matrix
+  def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
 
-  def corr(x: RDD[Double], y: RDD[Double]): Matrix
-
-  //Use a Correlations class to instantiate the specific instance based on method value
-  //Move default values to Correlations class (a "driver class").
-
-  //Have an abstract class called Correlation that takes care of common behaviors
-  // - for two column vectors, create a RDD[Vector] and use the implementation for computing the
-  // matrix and vice versa, depending on which is more efficient.
-  // - use dense vector when RDD[Double] passed in since we can't assume anything about missing values
+  def corr(x: RDD[Double], y: RDD[Double]): Double = Correlations.corr(x, y)
 
 }
