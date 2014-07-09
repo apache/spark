@@ -288,7 +288,7 @@ private class PythonException(msg: String, cause: Exception) extends RuntimeExce
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from Python.
  * This is used by PySpark's shuffle operations.
  */
-private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
+private[spark] class PairwiseRDD(prev: RDD[Array[Byte]]) extends
   RDD[(Long, Array[Byte])](prev) {
   override def getPartitions = prev.partitions
   override def compute(split: Partition, context: TaskContext) =
