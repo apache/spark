@@ -26,18 +26,17 @@ import org.apache.spark.sql.catalyst.trees
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   self: Product =>
 
-  // TODO: make a case class?
   /**
    * Estimates of various statistics.  The default estimation logic simply sums up the corresponding
    * statistic produced by the children.  To override this behavior, override `statistics` and
    * assign it a overriden version of `Statistics`.
    */
-  protected class Statistics {
-    lazy val childrenStats = children.map(_.statistics)
-    lazy val numTuples: Long = childrenStats.map(_.numTuples).sum
-    lazy val sizeInBytes: Long = childrenStats.map(_.sizeInBytes).sum
-  }
+  case class Statistics(
+    numTuples: Long = childrenStats.map(_.numTuples).sum,
+    sizeInBytes: Long = childrenStats.map(_.sizeInBytes).sum
+  )
   lazy val statistics: Statistics = new Statistics
+  lazy val childrenStats = children.map(_.statistics)
 
   /**
    * Returns the set of attributes that are referenced by this node

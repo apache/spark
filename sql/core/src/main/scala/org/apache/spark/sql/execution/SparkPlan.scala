@@ -81,19 +81,19 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
       }).asInstanceOf[this.type]
   }
 
-  override lazy val statistics = new Statistics {
+  @transient override lazy val statistics = Statistics(
     // If this is wrapping around ExistingRdd and no reasonable estimation logic is implemented,
     // return a default value.
-    override lazy val sizeInBytes: Long = {
+    sizeInBytes = {
       val defaultSum = childrenStats.map(_.sizeInBytes).sum
       alreadyPlanned match {
         // TODO: Instead of returning a default value here, find a way to return a meaningful
-        // estimate for RDDs. See PR 1238 for more discussions.
+        // size estimate for RDDs. See PR 1238 for more discussions.
         case e: ExistingRdd if defaultSum == 0 => statsDefaultSizeInBytes
         case _ => defaultSum
       }
     }
-  }
+  )
 
 }
 

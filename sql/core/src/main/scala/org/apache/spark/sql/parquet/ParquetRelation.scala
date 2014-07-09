@@ -53,14 +53,14 @@ private[sql] case class ParquetRelation(
 
   self: Product =>
 
-  @transient override lazy val statistics = new Statistics {
+  @transient override lazy val statistics = Statistics(
     // TODO: investigate getting encoded column statistics in the parquet file?
-    override lazy val sizeInBytes: Long = {
+    sizeInBytes = {
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(conf.getOrElse(ContextUtil.getConfiguration(new Job())))
       fs.getContentSummary(hdfsPath).getLength // TODO: in bytes or system-dependent?
     }
-  }
+  )
 
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =

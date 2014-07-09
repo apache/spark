@@ -273,7 +273,7 @@ private[hive] case class MetastoreRelation
   @transient override lazy val statistics = new Statistics {
     // TODO: check if this estimate is valid for tables after partition pruning.
     // Size getters adapted from SizeBasedBigTableSelectorForAutoSMJ.java in Hive (version 0.13).
-    override lazy val sizeInBytes: Long =
+    override val sizeInBytes: Long =
       maybeGetSize(hiveConf, hiveQlTable.getProperty("totalSize"), path)
 
     private[this] def maybeGetSize(conf: HiveConf, size: String, path: Path): Long = {
