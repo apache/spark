@@ -495,9 +495,9 @@ object SparkBuild extends Build {
     // assumptions about the the expression ids being contiguous.  Running tests in parallel breaks
     // this non-deterministically.  TODO: FIX THIS.
     parallelExecution in Test := false,
-    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.0-M8" cross CrossVersion.full),
+    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full),
     libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
-    libraryDependencies += "org.scalamacros" %% "quasiquotes" % "2.0.0-M8",
+    libraryDependencies += "org.scalamacros" %% "quasiquotes" % "2.0.1",
     libraryDependencies ++= Seq(
       "com.typesafe" %% "scalalogging-slf4j" % "1.0.1"
     )
