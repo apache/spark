@@ -43,8 +43,23 @@ class MulticlassMetrics(predictionsAndLabels: RDD[(Double, Double)]) extends Log
   private lazy val fpByClass: Map[Double, Int] = predictionsAndLabels
     .map { case (prediction, label) =>
       (prediction, if (prediction != label) 1 else 0)
-  }.reduceByKey(_ + _)
+    }.reduceByKey(_ + _)
     .collectAsMap()
+
+  /**
+   * Returns true positive rate for a given label (category)
+   * @param label the label.
+   */
+  def truePositiveRate(label: Double): Double = recall(label)
+
+  /**
+   * Returns false positive rate for a given label (category)
+   * @param label the label.
+   */
+  def falsePositiveRate(label: Double): Double = {
+    val fp = fpByClass.getOrElse(label, 0)
+    fp.toDouble / (labelCount - labelCountByClass(label))
+  }
 
   /**
    * Returns precision for a given label (category)
@@ -65,6 +80,7 @@ class MulticlassMetrics(predictionsAndLabels: RDD[(Double, Double)]) extends Log
   /**
    * Returns f-measure for a given label (category)
    * @param label the label.
+   * @param beta the beta parameter.
    */
   def fMeasure(label: Double, beta: Double): Double = {
     val p = precision(label)
@@ -114,14 +130,22 @@ class MulticlassMetrics(predictionsAndLabels: RDD[(Double, Double)]) extends Log
   }.sum
 
   /**
+   * Returns weighted averaged f-measure
+   * @param beta the beta parameter.
+   */
+  def weightedFMeasure(beta: Double): Double = labelCountByClass.map { case (category, count) =>
+    fMeasure(category, beta) * count.toDouble / labelCount
+  }.sum
+
+  /**
    * Returns weighted averaged f1-measure
    */
-  lazy val weightedF1Measure: Double = labelCountByClass.map { case (category, count) =>
-    fMeasure(category) * count.toDouble / labelCount
+  lazy val weightedFMeasure: Double = labelCountByClass.map { case (category, count) =>
+    fMeasure(category, 1.0) * count.toDouble / labelCount
   }.sum
 
   /**
    * Returns the sequence of labels in ascending order
    */
-  lazy val labels:Array[Double] = tpByClass.keys.toArray.sorted
+  lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted
 }
