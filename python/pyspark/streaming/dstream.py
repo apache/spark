@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -26,18 +27,50 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 from pyspark.streaming.utils import rddToFileName
 
+=======
+from base64 import standard_b64encode as b64enc
+import copy
+from collections import defaultdict
+from collections import namedtuple
+from itertools import chain, ifilter, imap
+import operator
+import os
+import sys
+import shlex
+import traceback
+from subprocess import Popen, PIPE
+from tempfile import NamedTemporaryFile
+from threading import Thread
+import warnings
+import heapq
+from random import Random
+
+from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
+    BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
+from pyspark.join import python_join, python_left_outer_join, \
+    python_right_outer_join, python_cogroup
+from pyspark.statcounter import StatCounter
+from pyspark.rddsampler import RDDSampler
+from pyspark.storagelevel import StorageLevel
+#from pyspark.resultiterable import ResultIterable
+from pyspark.rdd import _JavaStackTrace
+>>>>>>> initial commit for pySparkStreaming
 
 from py4j.java_collections import ListConverter, MapConverter
 
 __all__ = ["DStream"]
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> initial commit for pySparkStreaming
 class DStream(object):
     def __init__(self, jdstream, ssc, jrdd_deserializer):
         self._jdstream = jdstream
         self._ssc = ssc
         self.ctx = ssc._sc
         self._jrdd_deserializer = jrdd_deserializer
+<<<<<<< HEAD
         self.is_cached = False
         self.is_checkpointed = False
 
@@ -73,12 +106,81 @@ class DStream(object):
     def filter(self, f):
         """
         Return a new DStream containing only the elements that satisfy predicate.
+=======
+
+    def generatedRDDs(self):
+        """
+         // RDDs generated, marked as private[streaming] so that testsuites can access it
+         @transient
+        """
+        pass
+
+    def print_(self):
+        """
+        """
+        # print is a resrved name of Python. We cannot give print to function name
+        getattr(self._jdstream, "print")()
+
+    def pyprint(self):
+        """
+        """
+        self._jdstream.pyprint()
+
+    def cache(self):
+        """
+        """
+        raise NotImplementedError
+
+    def checkpoint(self):
+        """
+        """
+        raise NotImplementedError
+
+    def compute(self, time):
+        """
+        """
+        raise NotImplementedError
+
+    def context(self):
+        """
+        """
+        raise NotImplementedError
+
+    def count(self):
+        """
+        """
+        raise NotImplementedError
+
+    def countByValue(self, numPartitions=None):
+        """
+        """
+        raise NotImplementedError
+
+    def countByValueAndWindow(self, duration, slideDuration=None):
+        """
+        """
+        raise NotImplementedError
+
+    def countByWindow(self, duration, slideDuration=None):
+        """
+        """
+        raise NotImplementedError
+
+    def dstream(self):
+        """
+        """
+        raise NotImplementedError
+
+    def filter(self, f):
+        """
+>>>>>>> initial commit for pySparkStreaming
         """
         def func(iterator): return ifilter(f, iterator)
         return self.mapPartitions(func)
 
     def flatMap(self, f, preservesPartitioning=False):
         """
+<<<<<<< HEAD
         Pass each value in the key-value pair DStream through flatMap function
         without changing the keys: this also retains the original RDD's partition.
         """
@@ -137,6 +239,51 @@ class DStream(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
+=======
+        """
+        def func(s, iterator): return chain.from_iterable(imap(f, iterator))
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
+
+    def foreachRDD(self, f, time):
+        """
+        """
+        raise NotImplementedError
+
+    def glom(self):
+        """
+        """
+        raise NotImplementedError
+
+    def map(self, f, preservesPartitioning=False):
+        """
+        """
+        def func(split, iterator): return imap(f, iterator)
+        return PipelinedDStream(self, func, preservesPartitioning)
+
+    def mapPartitions(self, f):
+        """
+        """
+        def func(s, iterator): return f(iterator)
+        return self.mapPartitionsWithIndex(func)
+
+    def perist(self, storageLevel):
+        """
+        """
+        raise NotImplementedError
+
+    def reduce(self, func, numPartitions=None):
+        """
+
+        """
+        return self._combineByKey(lambda x:x, func, func, numPartitions)
+
+    def _combineByKey(self, createCombiner, mergeValue, mergeCombiners,
+                      numPartitions = None):
+        """
+        """
+        if numPartitions is None:
+            numPartitions = self.ctx._defaultParallelism()
+>>>>>>> initial commit for pySparkStreaming
         def combineLocally(iterator):
             combiners = {}
             for x in iterator:
@@ -148,7 +295,10 @@ class DStream(object):
             return combiners.iteritems()
         locally_combined = self.mapPartitions(combineLocally)
         shuffled = locally_combined.partitionBy(numPartitions)
+<<<<<<< HEAD
 
+=======
+>>>>>>> initial commit for pySparkStreaming
         def _mergeCombiners(iterator):
             combiners = {}
             for (k, v) in iterator:
@@ -157,25 +307,43 @@ class DStream(object):
                 else:
                     combiners[k] = mergeCombiners(combiners[k], v)
             return combiners.iteritems()
+<<<<<<< HEAD
 
         return shuffled.mapPartitions(_mergeCombiners)
 
     def partitionBy(self, numPartitions, partitionFunc=None):
         """
         Return a copy of the DStream partitioned using the specified partitioner.
+=======
+        return shuffled.mapPartitions(_mergeCombiners) 
+
+
+   def partitionBy(self, numPartitions, partitionFunc=None):
+        """
+        Return a copy of the DStream partitioned using the specified partitioner.
+
+>>>>>>> initial commit for pySparkStreaming
         """
         if numPartitions is None:
             numPartitions = self.ctx._defaultReducePartitions()
 
         if partitionFunc is None:
             partitionFunc = lambda x: 0 if x is None else hash(x)
+<<<<<<< HEAD
 
+=======
+>>>>>>> initial commit for pySparkStreaming
         # Transferring O(n) objects to Java is too expensive.  Instead, we'll
         # form the hash buckets in Python, transferring O(numPartitions) objects
         # to Java.  Each object is a (splitNumber, [objects]) pair.
         outputSerializer = self.ctx._unbatched_serializer
+<<<<<<< HEAD
 
         def add_shuffle_key(split, iterator):
+=======
+        def add_shuffle_key(split, iterator):
+
+>>>>>>> initial commit for pySparkStreaming
             buckets = defaultdict(list)
 
             for (k, v) in iterator:
@@ -186,16 +354,26 @@ class DStream(object):
         keyed = PipelinedDStream(self, add_shuffle_key)
         keyed._bypass_serializer = True
         with _JavaStackTrace(self.ctx) as st:
+<<<<<<< HEAD
             partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
                                                       id(partitionFunc))
             jdstream = self.ctx._jvm.PythonPairwiseDStream(keyed._jdstream.dstream(),
                                                            partitioner).asJavaDStream()
+=======
+            #JavaDStream
+            #pairRDD = self.ctx._jvm.PairwiseDStream(keyed._jdstream.dstream()).asJavaPairRDD()
+            pairDStream = self.ctx._jvm.PairwiseDStream(keyed._jdstream.dstream()).asJavaPairDStream()
+            partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
+                                                          id(partitionFunc))
+        jdstream = pairDStream.partitionBy(partitioner).values()
+>>>>>>> initial commit for pySparkStreaming
         dstream = DStream(jdstream, self._ssc, BatchedSerializer(outputSerializer))
         # This is required so that id(partitionFunc) remains unique, even if
         # partitionFunc is a lambda:
         dstream._partitionFunc = partitionFunc
         return dstream
 
+<<<<<<< HEAD
     def _defaultReducePartitions(self):
         """
         Returns the default number of partitions to use during reduce tasks (e.g., groupBy).
@@ -432,6 +610,53 @@ class DStream(object):
 # TODO: implement join
 # TODO: implement leftOuterJoin
 # TODO: implemtnt rightOuterJoin
+=======
+
+
+    def reduceByWindow(self, reduceFunc, windowDuration, slideDuration, inReduceTunc):
+        """
+        """
+
+        raise NotImplementedError
+
+    def repartition(self, numPartitions):
+        """
+        """
+        raise NotImplementedError
+
+    def slice(self, fromTime, toTime):
+        """
+        """
+        raise NotImplementedError
+
+    def transform(self, transformFunc):
+        """
+        """
+        raise NotImplementedError
+
+    def transformWith(self, other, transformFunc):
+        """
+        """
+        raise NotImplementedError
+
+    def union(self, that):
+        """
+        """
+        raise NotImplementedError
+
+    def window(self, windowDuration, slideDuration=None):
+        """
+        """
+        raise NotImplementedError
+
+    def wrapRDD(self, rdd):
+        """
+        """
+        raise NotImplementedError
+
+    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+        return PipelinedDStream(self, f, preservesPartitioning)
+>>>>>>> initial commit for pySparkStreaming
 
 
 class PipelinedDStream(DStream):

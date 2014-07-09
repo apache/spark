@@ -22,6 +22,8 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 import scala.deprecated
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+import scala.util.control.Breaks._
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.{BlockRDD, RDD}
@@ -616,6 +618,68 @@ abstract class DStream[T: ClassTag] (
     }
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
   }
+
+
+
+
+
+  /**
+   * Print the first ten elements of each PythonRDD generated in this PythonDStream. This is an output
+   * operator, so this PythonDStream will be registered as an output stream and there materialized.
+   * Since serialized Python object is readable by Python, pyprint writes out binary data to
+   * temporary file and run python script to deserialized and print the first ten elements
+   */
+  private[streaming] def pyprint() {
+    def foreachFunc = (rdd: RDD[T], time: Time) => {
+      val iter = rdd.take(11).iterator
+
+      // make a temporary file
+      val prefix = "spark"
+      val suffix = ".tmp"
+      val tempFile = File.createTempFile(prefix, suffix)
+      val tempFileStream = new DataOutputStream(new FileOutputStream(tempFile.getAbsolutePath))
+      //write out serialized python object
+      PythonRDD.writeIteratorToStream(iter, tempFileStream)
+      tempFileStream.close()
+
+      // This value has to be passed from python
+      val pythonExec = new ProcessBuilder().environment().get("PYSPARK_PYTHON")
+      val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
+      //val pb = new ProcessBuilder(Seq(pythonExec, sparkHome + "/python/pyspark/streaming/pyprint.py", tempFile.getAbsolutePath())) // why this fails to compile???
+      //absolute path to the python script is needed to change because we do not use pysparkstreaming
+      val pb = new ProcessBuilder(pythonExec, sparkHome + "/python/pyspark/streaming/pyprint.py", tempFile.getAbsolutePath)
+      val workerEnv = pb.environment()
+
+      //envVars also need to be pass
+      //workerEnv.putAll(envVars)
+      val pythonPath = sparkHome + "/python/" + File.pathSeparator + workerEnv.get("PYTHONPATH")
+      workerEnv.put("PYTHONPATH", pythonPath)
+      val worker = pb.start()
+      val is = worker.getInputStream()
+      val isr = new InputStreamReader(is)
+      val br = new BufferedReader(isr)
+
+      println ("-------------------------------------------")
+      println ("Time: " + time)
+      println ("-------------------------------------------")
+
+      //print value from python std out
+      var line = ""
+      breakable {
+        while (true) {
+          line = br.readLine()
+          if (line == null) break()
+          println(line)
+        }
+      }
+      //delete temporary file
+      tempFile.delete()
+      println()
+
+    }
+    new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
+  }
+
 
   /**
    * Return a new DStream in which each RDD contains all the elements in seen in a

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -18,6 +19,12 @@
 from pyspark.streaming import utils
 
 
+=======
+__author__ = 'ktakagiw'
+
+from pyspark.streaming import utils
+
+>>>>>>> initial commit for pySparkStreaming
 class Duration(object):
     """
     Duration for Spark Streaming application. Used to set duration
@@ -43,6 +50,7 @@ class Duration(object):
         self._jduration = _jvm.Duration(millis)
 
     def toString(self):
+<<<<<<< HEAD
         """
         Return duration as string
 
@@ -63,11 +71,19 @@ class Duration(object):
         >>> d_0.isZero()
         True
         """
+=======
+        """ Return duration as string """
+        return str(self._millis) + " ms"
+
+    def isZero(self):
+        """ Check if millis is zero """
+>>>>>>> initial commit for pySparkStreaming
         return self._millis == 0
 
     def prettyPrint(self):
         """
         Return a human-readable string representing a duration
+<<<<<<< HEAD
 
         >>> d_10 = Duration(10)
         >>> d_10.prettyPrint()
@@ -81,10 +97,13 @@ class Duration(object):
         >>> d_1hour = Duration(60 * 60 * 1000)
         >>> d_1hour.prettyPrint()
         '1.00 h'
+=======
+>>>>>>> initial commit for pySparkStreaming
         """
         return utils.msDurationToString(self._millis)
 
     def milliseconds(self):
+<<<<<<< HEAD
         """
         Return millisecond
 
@@ -117,6 +136,17 @@ class Duration(object):
         100 ms
 
         """
+=======
+        """ Return millisecond """
+        return self._millis
+
+    def toFormattedString(self):
+        """ Return millisecond """
+        return str(self._millis)
+
+    def max(self, other):
+        """ Return higher Duration """
+>>>>>>> initial commit for pySparkStreaming
         Duration._is_duration(other)
         if self > other:
             return self
@@ -124,6 +154,7 @@ class Duration(object):
             return other
 
     def min(self, other):
+<<<<<<< HEAD
         """
         Return lower Durattion
 
@@ -134,6 +165,9 @@ class Duration(object):
         10 ms
 
         """
+=======
+        """ Return lower Durattion """
+>>>>>>> initial commit for pySparkStreaming
         Duration._is_duration(other)
         if self < other:
             return self
@@ -141,6 +175,7 @@ class Duration(object):
             return other
 
     def __str__(self):
+<<<<<<< HEAD
         """
         >>> d_10 = Duration(10)
         >>> str(d_10)
@@ -159,10 +194,17 @@ class Duration(object):
         >>> print d_110
         110 ms
         """
+=======
+        return self.toString()
+
+    def __add__(self, other):
+        """ Add Duration and Duration """
+>>>>>>> initial commit for pySparkStreaming
         Duration._is_duration(other)
         return Duration(self._millis + other._millis)
 
     def __sub__(self, other):
+<<<<<<< HEAD
         """
         Subtract Duration by Duration
 
@@ -173,10 +215,14 @@ class Duration(object):
         90 ms
 
         """
+=======
+        """ Subtract Duration by Duration  """
+>>>>>>> initial commit for pySparkStreaming
         Duration._is_duration(other)
         return Duration(self._millis - other._millis)
 
     def __mul__(self, other):
+<<<<<<< HEAD
         """
         Multiple Duration by Duration
 
@@ -187,6 +233,9 @@ class Duration(object):
         1000 ms
 
         """
+=======
+        """ Multiple Duration by Duration """
+>>>>>>> initial commit for pySparkStreaming
         Duration._is_duration(other)
         return Duration(self._millis * other._millis)
 
@@ -194,6 +243,7 @@ class Duration(object):
         """
         Divide Duration by Duration
         for Python 2.X
+<<<<<<< HEAD
 
         >>> d_10 = Duration(10)
         >>> d_20 = Duration(20)
@@ -201,6 +251,8 @@ class Duration(object):
         >>> print d_2
         2 ms
 
+=======
+>>>>>>> initial commit for pySparkStreaming
         """
         Duration._is_duration(other)
         return Duration(self._millis / other._millis)
@@ -209,6 +261,7 @@ class Duration(object):
         """
         Divide Duration by Duration
         for Python 3.0
+<<<<<<< HEAD
 
         >>> d_10 = Duration(10)
         >>> d_20 = Duration(20)
@@ -216,11 +269,14 @@ class Duration(object):
         >>> print d_2
         2 ms
 
+=======
+>>>>>>> initial commit for pySparkStreaming
         """
         Duration._is_duration(other)
         return Duration(self._millis / other._millis)
 
     def __floordiv__(self, other):
+<<<<<<< HEAD
         """
         Divide Duration by Duration
 
@@ -246,10 +302,23 @@ class Duration(object):
         False
 
         """
+=======
+        """ Divide Duration by Duration """
+        Duration._is_duration(other)
+        return Duration(self._millis // other._millis)
+
+    def __len__(self):
+        """ Length of miilisecond in Duration """
+        return len(self._millis)
+
+    def __lt__(self, other):
+        """ Duration < Duration """
+>>>>>>> initial commit for pySparkStreaming
         Duration._is_duration(other)
         return self._millis < other._millis
 
     def __le__(self, other):
+<<<<<<< HEAD
         """
         Duration <= Duration
 
@@ -277,10 +346,19 @@ class Duration(object):
         True
 
         """
+=======
+        """ Duration <= Duration """
+        Duration._is_duration(other)
+        return self.millis <= other._millis
+
+    def __eq__(self, other):
+        """ Duration ==  Duration """
+>>>>>>> initial commit for pySparkStreaming
         Duration._is_duration(other)
         return self._millis == other._millis
 
     def __ne__(self, other):
+<<<<<<< HEAD
         """
         Duration != Duration
 
@@ -293,10 +371,14 @@ class Duration(object):
         False
 
         """
+=======
+        """ Duration != Duration """
+>>>>>>> initial commit for pySparkStreaming
         Duration._is_duration(other)
         return self._millis != other._millis
 
     def __gt__(self, other):
+<<<<<<< HEAD
         """
         Duration > Duration
 
@@ -308,10 +390,14 @@ class Duration(object):
         True
 
         """
+=======
+        """ Duration > Duration """
+>>>>>>> initial commit for pySparkStreaming
         Duration._is_duration(other)
         return self._millis > other._millis
 
     def __ge__(self, other):
+<<<<<<< HEAD
         """
         Duration >= Duration
 
@@ -324,6 +410,9 @@ class Duration(object):
 
 
         """
+=======
+        """ Duration >= Duration """
+>>>>>>> initial commit for pySparkStreaming
         Duration._is_duration(other)
         return self._millis >= other._millis
 
@@ -337,12 +426,15 @@ def Milliseconds(milliseconds):
     """
     Helper function that creates instance of [[pysparkstreaming.duration]] representing
     a given number of milliseconds.
+<<<<<<< HEAD
 
     >>> milliseconds = Milliseconds(1)
     >>> d_1 = Duration(1)
     >>> milliseconds == d_1
     True
 
+=======
+>>>>>>> initial commit for pySparkStreaming
     """
     return Duration(milliseconds)
 
@@ -350,6 +442,7 @@ def Seconds(seconds):
     """
     Helper function that creates instance of [[pysparkstreaming.duration]] representing
     a given number of seconds.
+<<<<<<< HEAD
 
     >>> seconds = Seconds(1)
     >>> d_1sec = Duration(1000)
@@ -371,3 +464,20 @@ def Minutes(minutes):
 
     """
     return Duration(minutes * 60 * 1000)
+=======
+    """
+    return Duration(seconds * 1000)
+
+def Minites(minites):
+    """
+    Helper function that creates instance of [[pysparkstreaming.duration]] representing
+    a given number of minutes.
+    """
+    return Duration(minutes * 60000)
+
+if __name__ == "__main__":
+    d = Duration(1)
+    print d
+    print d.milliseconds()
+
+>>>>>>> initial commit for pySparkStreaming
