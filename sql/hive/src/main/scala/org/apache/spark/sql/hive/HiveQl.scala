@@ -950,8 +950,6 @@ private[hive] object HiveQl {
       IsNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
-    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: str :: start :: end :: Nil) =>
-      SubString(nodeToExpr(str), nodeToExpr(start), nodeToExpr(end))
     case Token("TOK_FUNCTION",
            Token(BETWEEN(), Nil) ::
            Token("KW_FALSE", Nil) ::

@@ -216,6 +216,7 @@ abstract class CodeGenerator extends Logging {
       case EqualTo(e1, e2) =>
         (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 == $eval2" }
 
+      /* TODO: Fix null semantics.
       case In(e1, list) if !list.exists(!_.isInstanceOf[expressions.Literal]) =>
         val eval = expressionEvaluator(e1)
 
@@ -238,6 +239,7 @@ abstract class CodeGenerator extends Logging {
             val $nullTerm = false
             val $primitiveTerm = $funcName
         """.children
+      */
 
       case GreaterThan(e1 @ NumericType(), e2 @ NumericType()) =>
         (e1, e2).evaluateAs (BooleanType) { case (eval1, eval2) => q"$eval1 > $eval2" }
@@ -351,27 +353,6 @@ abstract class CodeGenerator extends Logging {
             $nullTerm = ${falseEval.nullTerm}
             $primitiveTerm = ${falseEval.primitiveTerm}
           }
-        """.children
-
-      case SubString(str, start, end) =>
-        val stringEval = expressionEvaluator(str)
-        val startEval = expressionEvaluator(start)
-        val endEval = expressionEvaluator(end)
-
-        stringEval.code ++ startEval.code ++ endEval.code ++
-          q"""
-          var $nullTerm = ${stringEval.nullTerm}
-          var $primitiveTerm: String =
-            if($nullTerm) {
-              null
-            } else {
-              val len =
-                if(${endEval.primitiveTerm} <= ${stringEval.primitiveTerm}.length)
-                  ${endEval.primitiveTerm}
-                else
-                  ${stringEval.primitiveTerm}.length
-              ${stringEval.primitiveTerm}.substring(${startEval.primitiveTerm}, len)
-            }
         """.children
     }
 
