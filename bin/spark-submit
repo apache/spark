@@ -37,6 +37,12 @@ done
 
 DEPLOY_MODE=${DEPLOY_MODE:-"client"}
 
+# Figure out which Python executable to use
+if [[ -z "$PYSPARK_PYTHON" ]]; then
+  PYSPARK_PYTHON="python"
+fi
+export PYSPARK_PYTHON
+
 if [ -n "$DRIVER_MEMORY" ] && [ $DEPLOY_MODE == "client" ]; then
   export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
 fi
