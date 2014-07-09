@@ -69,7 +69,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               condition,
               left,
               right)
-        if right.estimates.sizeInBytes <= sqlContext.autoConvertJoinSize =>
+        if right.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize =>
           broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
       case ExtractEquiJoinKeys(
@@ -79,7 +79,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               condition,
               left,
               right)
-        if left.estimates.sizeInBytes <= sqlContext.autoConvertJoinSize =>
+        if left.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize =>
           broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
@@ -271,8 +271,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Limit(limit, planLater(child))(sqlContext) :: Nil
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater))(sqlContext) :: Nil
-      case logical.Except(left,right) =>                                        
-        execution.Except(planLater(left),planLater(right)) :: Nil   
+      case logical.Except(left,right) =>
+        execution.Except(planLater(left),planLater(right)) :: Nil
       case logical.Intersect(left, right) =>
         execution.Intersect(planLater(left), planLater(right)) :: Nil
       case logical.Generate(generator, join, outer, _, child) =>

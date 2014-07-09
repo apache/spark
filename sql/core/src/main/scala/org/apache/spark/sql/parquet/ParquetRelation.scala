@@ -53,7 +53,7 @@ private[sql] case class ParquetRelation(
 
   self: Product =>
 
-  @transient override lazy val estimates = new Estimates {
+  @transient override lazy val statistics = new Statistics {
     // TODO: investigate getting encoded column statistics in the parquet file?
     override lazy val sizeInBytes: Long = {
       val hdfsPath = new Path(path)

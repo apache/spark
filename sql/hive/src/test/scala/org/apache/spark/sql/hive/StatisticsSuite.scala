@@ -25,14 +25,14 @@ import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.parquet.{ParquetRelation, ParquetTestData}
 import org.apache.spark.util.Utils
 
-class EstimatesSuite extends QueryTest {
+class StatisticsSuite extends QueryTest {
 
   test("estimates the size of a test ParquetRelation") {
     ParquetTestData.writeFile()
     val testRDD = parquetFile(ParquetTestData.testDir.toString)
 
     val sizes = testRDD.logicalPlan.collect { case j: ParquetRelation =>
-      (j.estimates.sizeInBytes, j.newInstance.estimates.sizeInBytes)
+      (j.statistics.sizeInBytes, j.newInstance.statistics.sizeInBytes)
     }
     assert(sizes.size === 1)
     assert(sizes(0)._1 == sizes(0)._2, "after .newInstance, estimates are different from before")
@@ -44,7 +44,7 @@ class EstimatesSuite extends QueryTest {
   test("estimates the size of a test MetastoreRelation") {
     val rdd = hql("""SELECT * FROM src""")
     val sizes = rdd.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
-      mr.estimates.sizeInBytes
+      mr.statistics.sizeInBytes
     }
     assert(sizes.size === 1 && sizes(0) > 0)
   }
@@ -63,7 +63,7 @@ class EstimatesSuite extends QueryTest {
       // Assert src has a size smaller than the threshold.
       val sizes = rdd.queryExecution.analyzed.collect {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) =>
-          r.estimates.sizeInBytes
+          r.statistics.sizeInBytes
       }
       assert(sizes.size === 2 && sizes(0) <= autoConvertJoinSize,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
