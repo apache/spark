@@ -699,6 +699,7 @@ def ssh(host, opts, command):
             time.sleep(30)
             tries = tries + 1
 
+
 # Backported from Python 2.7 for compatiblity with 2.6 (See SPARK-1990)
 def _check_output(*popenargs, **kwargs):
     if 'stdout' in kwargs:
