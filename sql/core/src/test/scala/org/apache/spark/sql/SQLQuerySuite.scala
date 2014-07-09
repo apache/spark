@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -369,40 +371,66 @@ class SQLQuerySuite extends QueryTest {
         (3, null)))
   }
 
-  test("SET commands semantics using sql()") {
-    clear()
-    val testKey = "test.key.0"
-    val testVal = "test.val.0"
-    val nonexistentKey = "nonexistent"
+  test("EXCEPT") {
 
-    // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size == 0)
-
-    // "set key=val"
-    sql(s"SET $testKey=$testVal")
     checkAnswer(
-      sql("SET"),
-      Seq(Seq(testKey, testVal))
-    )
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM upperCaseData "),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
     checkAnswer(
-      sql("set"),
-      Seq(
-        Seq(testKey, testVal),
-        Seq(testKey + testKey, testVal + testVal))
-    )
-
-    // "set key"
+      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM lowerCaseData "), Nil)
     checkAnswer(
-      sql(s"SET $testKey"),
-      Seq(Seq(testKey, testVal))
-    )
-    checkAnswer(
-      sql(s"SET $nonexistentKey"),
-      Seq(Seq(nonexistentKey, "<undefined>"))
-    )
-    clear()
+      sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData "), Nil)
   }
 
+ test("INTERSECT") {
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM upperCaseData"), Nil)
+  }
+
+  test("SET commands semantics using sql()") {
+    TestSQLContext.settings.synchronized {
+      clear()
+      val testKey = "test.key.0"
+      val testVal = "test.val.0"
+      val nonexistentKey = "nonexistent"
+
+      // "set" itself returns all config variables currently specified in SQLConf.
+      assert(sql("SET").collect().size == 0)
+
+      // "set key=val"
+      sql(s"SET $testKey=$testVal")
+      checkAnswer(
+        sql("SET"),
+        Seq(Seq(testKey, testVal))
+      )
+
+      sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+      checkAnswer(
+        sql("set"),
+        Seq(
+          Seq(testKey, testVal),
+          Seq(testKey + testKey, testVal + testVal))
+      )
+
+      // "set key"
+      checkAnswer(
+        sql(s"SET $testKey"),
+        Seq(Seq(testKey, testVal))
+      )
+      checkAnswer(
+        sql(s"SET $nonexistentKey"),
+        Seq(Seq(nonexistentKey, "<undefined>"))
+      )
+      clear()
+    }
+  }
 }

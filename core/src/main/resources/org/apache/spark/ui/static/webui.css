@@ -95,6 +95,10 @@ span.expand-details {
   float: right;
 }
 
+pre {
+  font-size: 0.8em;
+}
+
 .stage-details {
   max-height: 100px;
   overflow-y: auto;
@@ -108,3 +112,8 @@ span.expand-details {
   padding-bottom: 0;
   border: none;
 }
+
+.tooltip {
+ font-weight: normal;
+}
+

@@ -35,7 +35,7 @@ class CoarseGrainedSchedulerBackendSuite extends FunSuite with LocalSparkContext
     val thrown = intercept[SparkException] {
       larger.collect()
     }
-    assert(thrown.getMessage.contains("Consider using broadcast variables for large values"))
+    assert(thrown.getMessage.contains("using broadcast variables for large values"))
     val smaller = sc.parallelize(1 to 4).collect()
     assert(smaller.size === 4)
   }

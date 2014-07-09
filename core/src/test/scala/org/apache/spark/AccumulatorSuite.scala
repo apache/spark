@@ -61,7 +61,7 @@ class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
     val acc : Accumulator[Int] = sc.accumulator(0)
 
     val d = sc.parallelize(1 to 20)
-    evaluating {d.foreach{x => acc.value = x}} should produce [Exception]
+    an [Exception] should be thrownBy {d.foreach{x => acc.value = x}}
   }
 
   test ("add value to collection accumulators") {
@@ -87,11 +87,11 @@ class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
       sc = new SparkContext("local[" + nThreads + "]", "test")
       val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
       val d = sc.parallelize(1 to maxI)
-      evaluating {
+      an [SparkException] should be thrownBy {
         d.foreach {
           x => acc.value += x
         }
-      } should produce [SparkException]
+      }
       resetSparkContext()
     }
   }

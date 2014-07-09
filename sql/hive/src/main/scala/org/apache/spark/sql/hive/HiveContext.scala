@@ -258,7 +258,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         struct.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ))=>
+      case (seq: Seq[_], ArrayType(typ)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
       case (map: Map[_,_], MapType(kType, vType)) =>
         map.map {

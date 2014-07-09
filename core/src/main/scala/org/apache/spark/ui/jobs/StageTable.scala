@@ -23,7 +23,7 @@ import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.apache.spark.scheduler.{StageInfo, TaskInfo}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
@@ -43,8 +43,16 @@ private[ui] class StageTableBase(
     <th>Submitted</th>
     <th>Duration</th>
     <th>Tasks: Succeeded/Total</th>
-    <th>Shuffle Read</th>
-    <th>Shuffle Write</th>
+    <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+    <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
+    <th>
+      <!-- Place the shuffle write tooltip on the left (rather than the default position
+        of on top) because the shuffle write column is the last column on the right side and
+        the tooltip is wider than the column, so it doesn't fit on top. -->
+      <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
+        Shuffle Write
+      </span>
+    </th>
   }
 
   def toNodeSeq: Seq[Node] = {
@@ -91,13 +99,13 @@ private[ui] class StageTableBase(
         {s.name}
       </a>
 
-    val details = if (s.details.nonEmpty) (
+    val details = if (s.details.nonEmpty) {
       <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
             class="expand-details">
         +show details
       </span>
       <pre class="stage-details collapsed">{s.details}</pre>
-    )
+    }
 
     listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink} {killLink}</div>)
@@ -123,6 +131,11 @@ private[ui] class StageTableBase(
       case _ => ""
     }
     val totalTasks = s.numTasks
+    val inputSortable = listener.stageIdToInputBytes.getOrElse(s.stageId, 0L)
+    val inputRead = inputSortable match {
+      case 0 => ""
+      case b => Utils.bytesToString(b)
+    }
     val shuffleReadSortable = listener.stageIdToShuffleRead.getOrElse(s.stageId, 0L)
     val shuffleRead = shuffleReadSortable match {
       case 0 => ""
@@ -150,6 +163,7 @@ private[ui] class StageTableBase(
     <td class="progress-cell">
       {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
     </td>
+    <td sorttable_customekey={inputSortable.toString}>{inputRead}</td>
     <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
     <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
   }
@@ -168,7 +182,7 @@ private[ui] class FailedStageTable(
 
   override protected def stageRow(s: StageInfo): Seq[Node] = {
     val basicColumns = super.stageRow(s)
-    val failureReason = <td valign="middle">{s.failureReason.getOrElse("")}</td>
+    val failureReason = <td valign="middle"><pre>{s.failureReason.getOrElse("")}</pre></td>
     basicColumns ++ failureReason
   }
 }
