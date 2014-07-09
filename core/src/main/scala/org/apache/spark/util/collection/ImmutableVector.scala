@@ -106,8 +106,9 @@ private class InternalNode[@specialized(Long, Int) A: ClassTag](
   extends VectorNode[A] {
 
   require(children.length > 0, "InternalNode must have children")
-  require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
-  require(depth >= 1, "InternalNode must have depth >= 1 (got $depth)")
+  require(children.length <= 32,
+    s"nodes cannot have more than 32 children (got ${children.length})")
+  require(depth >= 1, s"InternalNode must have depth >= 1 (got $depth)")
 
   def childAt(index: Int): VectorNode[A] = children(index)
 
@@ -148,7 +149,8 @@ private class LeafNode[@specialized(Long, Int) A: ClassTag](
     children: Array[A])
   extends VectorNode[A] {
 
-  require(children.length <= 32, "nodes cannot have more than 32 children (got ${children.length})")
+  require(children.length <= 32,
+    s"nodes cannot have more than 32 children (got ${children.length})")
 
   override def apply(index: Int): A = children(index)
 
