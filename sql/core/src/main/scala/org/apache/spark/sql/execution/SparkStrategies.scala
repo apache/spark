@@ -95,58 +95,57 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object PartialAggregation extends Strategy {
+  object HashAggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
-        // Collect all aggregate expressions.
-        val allAggregates =
-          aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a })
-        // Collect all aggregate expressions that can be computed partially.
-        val partialAggregates =
-          aggregateExpressions.flatMap(_ collect { case p: PartialAggregate => p })
+      // Aggregations that can be performed in two phases, before and after the shuffle.
 
-        // Only do partial aggregation if supported by all aggregate expressions.
-        if (allAggregates.size == partialAggregates.size) {
-          // Create a map of expressions to their partial evaluations for all aggregate expressions.
-          val partialEvaluations: Map[Long, SplitEvaluation] =
-            partialAggregates.map(a => (a.id, a.asPartial)).toMap
-
-          // We need to pass all grouping expressions though so the grouping can happen a second
-          // time. However some of them might be unnamed so we alias them allowing them to be
-          // referenced in the second aggregation.
-          val namedGroupingExpressions: Map[Expression, NamedExpression] = groupingExpressions.map {
-            case n: NamedExpression => (n, n)
-            case other => (other, Alias(other, "PartialGroup")())
-          }.toMap
-
-          // Replace aggregations with a new expression that computes the result from the already
-          // computed partial evaluations and grouping values.
-          val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
-            case e: Expression if partialEvaluations.contains(e.id) =>
-              partialEvaluations(e.id).finalEvaluation
-            case e: Expression if namedGroupingExpressions.contains(e) =>
-              namedGroupingExpressions(e).toAttribute
-          }).asInstanceOf[Seq[NamedExpression]]
-
-          val partialComputation =
-            (namedGroupingExpressions.values ++
-             partialEvaluations.values.flatMap(_.partialEvaluations)).toSeq
-
-          // Construct two phased aggregation.
-          execution.Aggregate(
+      // Where all aggregates can be codegened.
+      case PartialAggregation(
+             namedGroupingAttributes,
+             rewrittenAggregateExpressions,
+             groupingExpressions,
+             partialComputation,
+             child)
+             if canBeCodeGened(
+                  allAggregates(partialComputation) ++
+                  allAggregates(rewrittenAggregateExpressions))=>
+          execution.HashAggregate(
             partial = false,
-            namedGroupingExpressions.values.map(_.toAttribute).toSeq,
+            namedGroupingAttributes,
             rewrittenAggregateExpressions,
-            execution.Aggregate(
+            execution.HashAggregate(
               partial = true,
               groupingExpressions,
               partialComputation,
               planLater(child))(sqlContext))(sqlContext) :: Nil
-        } else {
-          Nil
-        }
+
+
+      // Where some aggregate can not be codegened
+      case PartialAggregation(
+             namedGroupingAttributes,
+             rewrittenAggregateExpressions,
+             groupingExpressions,
+             partialComputation,
+             child) =>
+        execution.Aggregate(
+          partial = false,
+          namedGroupingAttributes,
+          rewrittenAggregateExpressions,
+          execution.Aggregate(
+            partial = true,
+            groupingExpressions,
+            partialComputation,
+            planLater(child))(sqlContext))(sqlContext) :: Nil
       case _ => Nil
     }
+
+    def canBeCodeGened(aggs: Seq[AggregateExpression]) = !aggs.exists {
+      case _: Sum | _: Count => false
+      case _ => true
+    }
+
+    def allAggregates(exprs: Seq[Expression]) =
+      exprs.flatMap(_.collect { case a: AggregateExpression => a })
   }
 
   object BroadcastNestedLoopJoin extends Strategy {

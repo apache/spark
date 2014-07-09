@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -33,11 +34,13 @@ import org.apache.spark.sql.catalyst.types._
  * @param child the input data source.
  */
 case class HashAggregate(
-                      partial: Boolean,
-                      groupingExpressions: Seq[Expression],
-                      aggregateExpressions: Seq[NamedExpression],
-                      child: SparkPlan)(@transient sc: SparkContext)
+    partial: Boolean,
+    groupingExpressions: Seq[Expression],
+    aggregateExpressions: Seq[NamedExpression],
+    child: SparkPlan)(@transient sqlContext: SQLContext)
   extends UnaryNode with NoBind {
+
+  private def sc = sqlContext.sparkContext
 
   override def requiredChildDistribution =
     if (partial) {
@@ -50,7 +53,7 @@ case class HashAggregate(
       }
     }
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   def output = aggregateExpressions.map(_.toAttribute)
 
