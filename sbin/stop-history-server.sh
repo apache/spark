@@ -22,4 +22,7 @@
 sbin=`dirname "$0"`
 sbin=`cd "$sbin"; pwd`
 
+. "$sbin/spark-config.sh"
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
+
 "$sbin"/spark-daemon.sh stop org.apache.spark.deploy.history.HistoryServer 1
