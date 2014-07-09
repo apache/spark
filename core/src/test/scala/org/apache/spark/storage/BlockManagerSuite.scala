@@ -1016,4 +1016,69 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(store.memoryStore.contains(rdd(0, 1)), "rdd_0_1 was not in store")
     assert(!store.memoryStore.contains(rdd(1, 0)), "rdd_1_0 was in store")
   }
+
+  test("safely unfold blocks") {
+    conf.set("spark.storage.bufferFraction", "0.2")
+    store = new BlockManager(
+      "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)
+    /*
+     * After a1 and a2 are cached, there is less than 4000 bytes of free space left. When we try
+     * to cache a3, we attempt to ensure free space of only 12000 * 0.2 = 2400 bytes, which is
+     * not enough to drop a1 or a2, as there is already >= 2400 bytes of free space. Therefore,
+     * we give up and drop a3 on the spot.
+     */
+    store.putSingle("a1", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingle("a2", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingle("a3", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    // Memory store should contain a1, a2
+    assert(store.memoryStore.contains("a1"), "a1 was not in store")
+    assert(store.memoryStore.contains("a2"), "a2 was not in store")
+    assert(!store.memoryStore.contains("a3"), "a3 was in store")
+    /*
+     * After a4 is cached, and there is less than 2000 bytes of free space left. Now we try
+     * to cache a5, which is the same size as a3. Ensuring free space of 2400 bytes now drops
+     * the LRU block (i.e. a1) from memory to accommodate a5.
+     */
+    store.putSingle("a4", new Array[Byte](2000), StorageLevel.MEMORY_ONLY)
+    store.putSingle("a5", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    // Memory store should contain a2, a4, a5
+    assert(!store.memoryStore.contains("a1"), "a1 was in store")
+    assert(store.memoryStore.contains("a2"), "a2 was not in store")
+    assert(!store.memoryStore.contains("a3"), "a3 was in store")
+    assert(store.memoryStore.contains("a4"), "a4 was not in store")
+    assert(store.memoryStore.contains("a5"), "a5 was not in store")
+  }
+
+  test("safely unfold blocks (disk)") {
+    conf.set("spark.storage.bufferFraction", "0.2")
+    store = new BlockManager(
+      "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)
+    /*
+     * This test is the same as the previous, except it caches each block using MEMORY_AND_DISK.
+     * The effect is that all dropped blocks now go to disk instead of simply disappear.
+     */
+    store.putSingle("a1", new Array[Byte](4000), StorageLevel.MEMORY_AND_DISK)
+    store.putSingle("a2", new Array[Byte](4000), StorageLevel.MEMORY_AND_DISK)
+    store.putSingle("a3", new Array[Byte](4000), StorageLevel.MEMORY_AND_DISK)
+    // Memory store should contain a1, a2; disk store should contain a3
+    assert(store.memoryStore.contains("a1"), "a1 was not in memory store")
+    assert(store.memoryStore.contains("a2"), "a2 was not in memory store")
+    assert(!store.memoryStore.contains("a3"), "a3 was in memory store")
+    assert(!store.diskStore.contains("a1"), "a1 was in disk store")
+    assert(!store.diskStore.contains("a2"), "a2 was in disk store")
+    assert(store.diskStore.contains("a3"), "a3 was not in disk store")
+    store.putSingle("a4", new Array[Byte](2000), StorageLevel.MEMORY_AND_DISK)
+    store.putSingle("a5", new Array[Byte](4000), StorageLevel.MEMORY_AND_DISK)
+    // Memory store should contain a2, a4, a5; disk store should contain a1, a3
+    assert(!store.memoryStore.contains("a1"), "a1 was in memory store")
+    assert(store.memoryStore.contains("a2"), "a2 was not in memory store")
+    assert(!store.memoryStore.contains("a3"), "a3 was in memory store")
+    assert(store.memoryStore.contains("a4"), "a4 was not in memory store")
+    assert(store.memoryStore.contains("a5"), "a5 was not in memory store")
+    assert(store.diskStore.contains("a1"), "a1 was not in disk store")
+    assert(!store.diskStore.contains("a2"), "a2 was in disk store")
+    assert(store.diskStore.contains("a3"), "a3 was not in disk store")
+    assert(!store.diskStore.contains("a4"), "a4 was in disk store")
+    assert(!store.diskStore.contains("a5"), "a5 was in disk store")
+  }
 }
