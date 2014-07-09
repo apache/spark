@@ -4,7 +4,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
-class ChiSquared(labeledData:RDD[LabeledPoint]) extends java.io.Serializable {
+class ChiSquared(labeledData: RDD[LabeledPoint]) extends java.io.Serializable {
 
   val indexByLabel = labeledData.map(labeledPoint =>
     labeledPoint.label).distinct.collect.zipWithIndex.toMap
