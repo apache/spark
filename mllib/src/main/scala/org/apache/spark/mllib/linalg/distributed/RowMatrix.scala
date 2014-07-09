@@ -202,32 +202,23 @@ class RowMatrix(
   }
 
   /**
-   * Multiply the Gramian matrix `A^T A` by a DenseVector on the right.
+   * Multiplies the Gramian matrix `A^T A` by a dense vector on the right without computing `A^T A`.
    *
-   * @param v a local DenseVector whose length must match the number of columns of this matrix.
-   * @return a local DenseVector representing the product.
+   @param v a dense vector whose length must match the number of columns of this matrix
+   * @return a dense vector representing the product
    */
   private[mllib] def multiplyGramianMatrixBy(v: BDV[Double]): BDV[Double] = {
     val n = numCols().toInt
     val vbr = rows.context.broadcast(v)
-
-    val bv = rows.aggregate(BDV.zeros[Double](n))(
+    rows.aggregate(BDV.zeros[Double](n))(
       seqOp = (U, r) => {
         val rBrz = r.toBreeze
         val a = rBrz.dot(vbr.value)
-        rBrz match {
-          case _: BDV[_] => brzAxpy(a, rBrz.asInstanceOf[BDV[Double]], U)
-          case _: BSV[_] => brzAxpy(a, rBrz.asInstanceOf[BSV[Double]], U)
-          case _ =>
-            throw new UnsupportedOperationException(
-              s"Do not support vector operation from type ${rBrz.getClass.getName}.")
-        }
+        brzAxpy(a, rBrz, U.asInstanceOf[BV[Double]])
         U
       },
       combOp = (U1, U2) => U1 += U2
     )
-
-    bv
   }
 
   /**
