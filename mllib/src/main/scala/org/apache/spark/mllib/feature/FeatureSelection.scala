@@ -4,12 +4,10 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
-abstract class FeatureSelection {
+trait FeatureSelection {
 
   /** make LabeledPoint or Vector a type parameter so it can select from both */
   def select(data: RDD[LabeledPoint]): Set[Int]
-
-  def selectAndFilter(data: RDD[LabeledPoint]): RDD[LabeledPoint]
 }
 
 object FeatureSelection extends java.io.Serializable {
