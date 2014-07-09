@@ -53,8 +53,12 @@ private[spark] class MesosExecutorBackend
     logInfo("Registered with Mesos as executor ID " + executorInfo.getExecutorId.getValue)
     this.driver = driver
     val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
+
+    // we need to include the slave id in the spark executor id,
+    // because mesos executor ids are only unique on a per-node basis
+    val executorId = s"${slaveInfo.getId.getValue}:${executorInfo.getExecutorId.getValue}"
     executor = new Executor(
-      executorInfo.getExecutorId.getValue,
+      executorId,
       slaveInfo.getHostname,
       properties)
   }
