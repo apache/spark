@@ -123,7 +123,7 @@ object SparkBuild extends PomBuild {
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
       "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
       "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
-      "spark-core").map(versionArtifact(_).get intransitive())
+      "spark-core", "spark-sql").map(versionArtifact(_).get intransitive())
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -138,9 +138,8 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  /* Enable Mima for all projects except spark, hive, catalyst, sql  and repl */
-  // TODO: Add Sql to mima checks
-  allProjects.filterNot(y => Seq(spark, sql, hive, catalyst, repl).exists(x => x == y)).
+  /* Enable Mima for all projects except spark, hive, catalyst and repl */
+  allProjects.filterNot(y => Seq(spark, hive, catalyst, repl).exists(x => x == y)).
     foreach (x => enable(MimaBuild.mimaSettings(sparkHome, x))(x))
 
   /* Enable Assembly for all assembly projects */
