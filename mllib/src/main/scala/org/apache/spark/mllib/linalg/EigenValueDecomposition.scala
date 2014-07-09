@@ -47,7 +47,7 @@ private[mllib] object EigenValueDecomposition {
    *       function.
    */
   private[mllib] def symmetricEigs(
-      mul: DenseVector => DenseVector,
+      mul: BDV[Double] => BDV[Double],
       n: Int,
       k: Int,
       tol: Double,
@@ -102,9 +102,9 @@ private[mllib] object EigenValueDecomposition {
       // multiply working vector with the matrix
       val inputOffset = ipntr(0) - 1
       val outputOffset = ipntr(1) - 1
-      val x = w(inputOffset until inputOffset + n)
-      val y = w(outputOffset until outputOffset + n)
-      y := BDV(mul(Vectors.fromBreeze(x).asInstanceOf[DenseVector]).toArray)
+      val x = w.slice(inputOffset, inputOffset + n)
+      val y = w.slice(outputOffset, outputOffset + n)
+      y := mul(x)
       // call ARPACK's reverse communication
       arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr,
         workd, workl, workl.length, info)
@@ -143,13 +143,12 @@ private[mllib] object EigenValueDecomposition {
 
     // copy eigenvectors in descending order of eigenvalues
     val sortedU = BDM.zeros[Double](n, computed)
-    sortedEigenPairs.zipWithIndex.foreach { r => {
-        val b = r._2 * n
-        var i = 0
-        while (i < n) {
-          sortedU.data(b + i) = r._1._2(i)
-          i += 1
-        }
+    sortedEigenPairs.zipWithIndex.foreach { r =>
+      val b = r._2 * n
+      var i = 0
+      while (i < n) {
+        sortedU.data(b + i) = r._1._2(i)
+        i += 1
       }
     }
 
