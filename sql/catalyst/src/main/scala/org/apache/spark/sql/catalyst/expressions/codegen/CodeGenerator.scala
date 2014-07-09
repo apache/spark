@@ -37,14 +37,13 @@ abstract class CodeGenerator extends Logging {
 
   val toolBox = runtimeMirror(getClass.getClassLoader).mkToolBox()
 
-  // TODO: Use typetags?
-  val rowType = tq"org.apache.spark.sql.catalyst.expressions.Row"
-  val mutableRowType = tq"org.apache.spark.sql.catalyst.expressions.MutableRow"
-  val genericRowType = tq"org.apache.spark.sql.catalyst.expressions.GenericRow"
-  val genericMutableRowType = tq"org.apache.spark.sql.catalyst.expressions.GenericMutableRow"
+  val rowType = typeOf[Row]
+  val mutableRowType = typeOf[MutableRow]
+  val genericRowType = typeOf[GenericRow]
+  val genericMutableRowType = typeOf[GenericMutableRow]
 
-  val projectionType = tq"org.apache.spark.sql.catalyst.expressions.Projection"
-  val mutableProjectionType = tq"org.apache.spark.sql.catalyst.expressions.MutableProjection"
+  val projectionType = typeOf[Projection]
+  val mutableProjectionType = typeOf[MutableProjection]
 
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
   private val javaSeperator = "$"
