@@ -110,7 +110,7 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
     <java.version>1.6</java.version>
-
+    <sbt.project.name>spark</sbt.project.name>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
     <mesos.version>0.18.1</mesos.version>

@@ -59,11 +59,11 @@ object SparkBuild extends PomBuild {
     var isAlphaYarn = false
     var profiles: mutable.Seq[String] = mutable.Seq.empty
     if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
-      println("NOTE: SPARK_GANGLIA_LGPL is deprecated, Use the -Pganglia-lgpl flag.")
+      println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pganglia-lgpl flag.")
       profiles ++= Seq("spark-ganglia-lgpl")
     }
     if (Properties.envOrNone("SPARK_HIVE").isDefined) {
-      println("NOTE: SPARK_HIVE is deprecated, Use the -Phive flag.")
+      println("NOTE: SPARK_HIVE is deprecated, please use -Phive flag.")
       profiles ++= Seq("hive")
     }
     Properties.envOrNone("SPARK_HADOOP_VERSION") match {
@@ -75,11 +75,11 @@ object SparkBuild extends PomBuild {
     }
     if (Properties.envOrNone("SPARK_YARN").isDefined) {
       if(isAlphaYarn) {
-        println("NOTE: SPARK_YARN is deprecated, Use the -Pyarn-alpha flag.")
+        println("NOTE: SPARK_YARN is deprecated, please use -Pyarn-alpha flag.")
         profiles ++= Seq("yarn-alpha")
       }
       else {
-        println("NOTE: SPARK_YARN is deprecated, Use the -Pyarn flag.")
+        println("NOTE: SPARK_YARN is deprecated, please use -Pyarn flag.")
         profiles ++= Seq("yarn")
       }
     }
