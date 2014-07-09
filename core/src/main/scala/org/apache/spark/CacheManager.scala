@@ -155,7 +155,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
        * single partition. Instead, we unfold the values cautiously, potentially aborting and
        * dropping the partition to disk if applicable.
        */
-      blockManager.memoryStore.unfoldSafely(key, values, storageLevel, updatedBlocks) match {
+      blockManager.memoryStore.unfoldSafely(key, values, updatedBlocks) match {
         case Left(arrayValues) =>
           // We have successfully unfolded the entire partition, so cache it in memory
           updatedBlocks ++= blockManager.put(key, arrayValues, storageLevel, tellMaster = true)

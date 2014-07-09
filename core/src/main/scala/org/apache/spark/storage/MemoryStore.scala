@@ -98,7 +98,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-    val unfoldedValues = unfoldSafely(blockId, values, level, droppedBlocks)
+    val unfoldedValues = unfoldSafely(blockId, values, droppedBlocks)
     unfoldedValues match {
       case Left(arrayValues) =>
         // Values are fully unfolded in memory, so store them as an array
@@ -187,7 +187,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   def unfoldSafely(
       blockId: BlockId,
       values: Iterator[Any],
-      storageLevel: StorageLevel,
       droppedBlocks: ArrayBuffer[(BlockId, BlockStatus)])
     : Either[Array[Any], Iterator[Any]] = {
 
