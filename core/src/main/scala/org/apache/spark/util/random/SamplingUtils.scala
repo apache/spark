@@ -96,9 +96,12 @@ private[spark] object PoissonBounds {
   }
 
   def getMinCount(lmbd: Double): Double = {
-    if (lmbd == 0) return 0
-    val poisson = new PoissonDistribution(lmbd, epsilon)
-    poisson.inverseCumulativeProbability(delta)
+    if (lmbd == 0) {
+      0
+    } else {
+      val poisson = new PoissonDistribution(lmbd, epsilon)
+      poisson.inverseCumulativeProbability(delta)
+    }
   }
 
   /**

@@ -88,8 +88,11 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       (x: Int) => if (x % 10 < (10 * fractionPositive).toInt) "1" else "0"
     }
 
-    def checkSize(exact: Boolean, withReplacement: Boolean,
-        expected: Long, actual: Long, p: Double): Boolean = {
+    def checkSize(exact: Boolean,
+        withReplacement: Boolean,
+        expected: Long,
+        actual: Long,
+        p: Double): Boolean = {
       if (exact) {
         return expected == actual
       }
@@ -110,8 +113,8 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       val sample = stratifiedData.sampleByKey(false, fractions, exact, seed)
       val sampleCounts = sample.countByKey()
       val takeSample = sample.collect()
-      assert(sampleCounts.forall({case(k,v) =>
-        checkSize(exact, false, expectedSampleSize(k), v, samplingRate)}))
+      assert(sampleCounts.forall {case(k,v) =>
+        checkSize(exact, false, expectedSampleSize(k), v, samplingRate)})
       assert(takeSample.size === takeSample.toSet.size)
       assert(takeSample.forall(x => 1 <= x._2 && x._2 <= n), s"elements not in [1, $n]")
     }
@@ -128,9 +131,9 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       val sample = stratifiedData.sampleByKey(true, fractions, exact, seed)
       val sampleCounts = sample.countByKey()
       val takeSample = sample.collect()
-      assert(sampleCounts.forall({case(k,v) =>
-        checkSize(exact, true, expectedSampleSize(k), v, samplingRate)}))
-      val groupedByKey = takeSample.groupBy({case(k, v) => k})
+      assert(sampleCounts.forall {case(k,v) =>
+        checkSize(exact, true, expectedSampleSize(k), v, samplingRate)})
+      val groupedByKey = takeSample.groupBy {case(k, v) => k}
       for ((key, v) <- groupedByKey) {
         if (expectedSampleSize(key) >= 100 && samplingRate >= 0.1) {
           // sample large enough for there to be repeats with high likelihood
@@ -146,8 +149,10 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       assert(takeSample.forall(x => 1 <= x._2 && x._2 <= n), s"elements not in [1, $n]")
     }
 
-    def checkAllCombos(stratifiedData: RDD[(String, Int)], samplingRate: Double,
-        seed: Long, n: Long) {
+    def checkAllCombos(stratifiedData: RDD[(String, Int)],
+        samplingRate: Double,
+        seed: Long,
+        n: Long) = {
       takeSampleAndValidateBernoulli(stratifiedData, true, samplingRate, seed, n)
       takeSampleAndValidateBernoulli(stratifiedData, false, samplingRate, seed, n)
       takeSampleAndValidatePoisson(stratifiedData, true, samplingRate, seed, n)
