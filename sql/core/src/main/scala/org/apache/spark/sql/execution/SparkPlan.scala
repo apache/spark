@@ -53,12 +53,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   def executeCollect(): Array[Row] = execute().map(_.copy()).collect()
 
   def newProjection(expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection =
-    GenerateProjection(expressions)
+    GenerateProjection(expressions, inputSchema)
 
   def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute]): () => MutableProjection = {
-    GenerateMutableProjection(expressions)
+    GenerateMutableProjection(expressions, inputSchema)
   }
 
 
