@@ -62,7 +62,6 @@ class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {
     plan.transform {
       case n: NoBind => n.asInstanceOf[TreeNode]
       case leafNode if leafNode.children.isEmpty => leafNode
-      case nb: NoBind => nb.asInstanceOf[TreeNode]
       case unaryNode if unaryNode.children.size == 1 => unaryNode.transformExpressions { case e =>
         bindReference(e, unaryNode.children.head.output)
       }

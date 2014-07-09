@@ -37,7 +37,7 @@ object GenerateProjection extends CodeGenerator {
     apply(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
   // TODO: Safe to fire up multiple instances of the compiler?
-  def apply(expressions: Seq[Expression]): Projection = CodeGeneration.synchronized {
+  def apply(expressions: Seq[Expression]): Projection = globalLock.synchronized {
     val cleanedExpressions = expressions.map(ExpressionCanonicalizer(_))
     projectionCache.getOrElseUpdate(cleanedExpressions, createProjection(cleanedExpressions))
   }

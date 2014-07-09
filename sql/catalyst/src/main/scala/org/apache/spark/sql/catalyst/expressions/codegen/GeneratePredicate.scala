@@ -30,7 +30,7 @@ object GeneratePredicate extends CodeGenerator {
   val predicateCache = new collection.mutable.HashMap[Expression, (Row) => Boolean]
 
   // TODO: Safe to fire up multiple instances of the compiler?
-  def apply(predicate: Expression): (Row => Boolean) = CodeGeneration.synchronized {
+  def apply(predicate: Expression): (Row => Boolean) = globalLock.synchronized {
     val cleanedExpression = ExpressionCanonicalizer(predicate)
     predicateCache.getOrElseUpdate(cleanedExpression, createPredicate(cleanedExpression))
   }

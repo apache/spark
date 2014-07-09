@@ -35,7 +35,7 @@ object GenerateMutableProjection extends CodeGenerator {
 
   // TODO: Safe to fire up multiple instances of the compiler?
   def apply(expressions: Seq[Expression]): () => MutableProjection =
-    CodeGeneration.synchronized {
+    globalLock.synchronized {
       val cleanedExpressions = expressions.map(ExpressionCanonicalizer(_))
       projectionCache.getOrElseUpdate(cleanedExpressions, createProjection(cleanedExpressions))
     }

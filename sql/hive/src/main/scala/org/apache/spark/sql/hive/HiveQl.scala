@@ -840,7 +840,6 @@ private[hive] object HiveQl {
 
   /* Case insensitive matches */
   val COUNT = "(?i)COUNT".r
-  val SUBSTR = "(?i)SUBSTR".r
   val AVG = "(?i)AVG".r
   val SUM = "(?i)SUM".r
   val MAX = "(?i)MAX".r
@@ -853,10 +852,10 @@ private[hive] object HiveQl {
   val NOT = "(?i)NOT".r
   val TRUE = "(?i)TRUE".r
   val FALSE = "(?i)FALSE".r
-  val IN = "(?i)IN".r
   val LIKE = "(?i)LIKE".r
   val RLIKE = "(?i)RLIKE".r
   val REGEXP = "(?i)REGEXP".r
+  val IN = "(?i)IN".r
   val DIV = "(?i)DIV".r
   val BETWEEN = "(?i)BETWEEN".r
   val WHEN = "(?i)WHEN".r
@@ -956,6 +955,7 @@ private[hive] object HiveQl {
            target ::
            minValue ::
            maxValue :: Nil) =>
+
       val targetExpression = nodeToExpr(target)
       And(
         GreaterThanOrEqual(targetExpression, nodeToExpr(minValue)),

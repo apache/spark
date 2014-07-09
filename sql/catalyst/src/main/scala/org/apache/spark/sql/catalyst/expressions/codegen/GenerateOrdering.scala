@@ -31,7 +31,7 @@ object GenerateOrdering extends CodeGenerator {
   val orderingCache = new collection.mutable.HashMap[Seq[SortOrder], Ordering[Row]]
 
   // TODO: Safe to fire up multiple instances of the compiler?
-  def apply(ordering: Seq[SortOrder]): Ordering[Row] = CodeGeneration.synchronized {
+  def apply(ordering: Seq[SortOrder]): Ordering[Row] = globalLock.synchronized {
     val cleanedExpression = ordering.map(ExpressionCanonicalizer(_)).asInstanceOf[Seq[SortOrder]]
     orderingCache.getOrElseUpdate(cleanedExpression, createOrdering(cleanedExpression))
   }
