@@ -412,9 +412,8 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val stats = bestSplits(0)._2
     assert(stats.gain > 0)
-    assert(stats.predict === 0)
-    assert(stats.prob > 0.5)
-    assert(stats.prob < 0.6)
+    assert(stats.predict === 1)
+    assert(stats.prob == 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -440,8 +439,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val stats = bestSplits(0)._2
     assert(stats.gain > 0)
-    assert(stats.predict > 0.4)
-    assert(stats.predict < 0.5)
+    assert(stats.predict == 0.6)
     assert(stats.impurity > 0.2)
   }
 
@@ -657,7 +655,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val bestSplit = bestSplits(0)._1
     assert(bestSplit.feature === 0)
     assert(bestSplit.categories.length === 1)
-    println(bestSplit)
     assert(bestSplit.categories.contains(1.0))
     assert(bestSplit.featureType === Categorical)
   }

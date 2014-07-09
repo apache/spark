@@ -1012,7 +1012,7 @@ object DecisionTree extends Serializable with Logging {
               = binData(shift + numClasses * splitIndex + innerClassIndex) +
                 leftNodeAgg(featureIndex)(splitIndex - 1)(innerClassIndex)
             rightNodeAgg(featureIndex)(numBins - 2 - splitIndex)(innerClassIndex) =
-              binData(shift + (numClasses * (numBins - 2 - splitIndex) + innerClassIndex)) +
+              binData(shift + (numClasses * (numBins - 1 - splitIndex) + innerClassIndex)) +
                 rightNodeAgg(featureIndex)(numBins - 1 - splitIndex)(innerClassIndex)
             innerClassIndex += 1
           }
@@ -1077,13 +1077,13 @@ object DecisionTree extends Serializable with Logging {
           // calculating right node aggregate for a split as a sum of right node aggregate of a
           // higher split and the right bin aggregate of a bin where the split is a low split
           rightNodeAgg(featureIndex)(numBins - 2 - splitIndex)(0) =
-            binData(shift + (3 * (numBins - 2 - splitIndex))) +
+            binData(shift + (3 * (numBins - 1 - splitIndex))) +
               rightNodeAgg(featureIndex)(numBins - 1 - splitIndex)(0)
           rightNodeAgg(featureIndex)(numBins - 2 - splitIndex)(1) =
-            binData(shift + (3 * (numBins - 2 - splitIndex) + 1)) +
+            binData(shift + (3 * (numBins - 1 - splitIndex) + 1)) +
               rightNodeAgg(featureIndex)(numBins - 1 - splitIndex)(1)
           rightNodeAgg(featureIndex)(numBins - 2 - splitIndex)(2) =
-            binData(shift + (3 * (numBins - 2 - splitIndex) + 2)) +
+            binData(shift + (3 * (numBins - 1 - splitIndex) + 2)) +
               rightNodeAgg(featureIndex)(numBins - 1 - splitIndex)(2)
 
           splitIndex += 1
