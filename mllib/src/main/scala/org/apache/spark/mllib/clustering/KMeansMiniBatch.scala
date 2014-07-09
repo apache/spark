@@ -43,13 +43,14 @@ class KMeansMiniBatch private (
     private var batchSize: Int,
     private var runs: Int,
     private var initializationMode: String,
-    private var initializationSteps: Int) extends Serializable with KMeansCommons with Logging {
+    private var initializationSteps: Int,
+    private var rng: XORShiftRandom) extends Serializable with KMeansCommons with Logging {
  
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
    * batchSize: 1000, initializationMode: "k-means||", initializationSteps: 5}.
    */
-  def this() = this(2, 20, 1, 1000, KMeansMiniBatch.K_MEANS_PARALLEL, 5)
+  def this() = this(2, 20, 1, 1000, KMeansMiniBatch.K_MEANS_PARALLEL, 5, new XORShiftRandom())
 
   def setBatchSize(batchSize: Int): KMeansMiniBatch = {
     this.batchSize = batchSize
@@ -158,14 +159,13 @@ class KMeansMiniBatch private (
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations) {
 
-      val sampledPoints = data.sample(false, batchSize)
+      val sampledPoints = data.takeSample(false, batchSize, rng.nextInt())
       
       val groupedPoints = sampledPoints.map { p =>
         val (center, cost) = KMeansMiniBatch.findClosest(centers, p)
 
         (center, p.vector, cost)
-      }.collect()
-      
+      }
 
       // Update the cluster centers and costs
       costs = 0.0

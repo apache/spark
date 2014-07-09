@@ -28,7 +28,7 @@ class KMeansMiniBatchSuite extends FunSuite with LocalSparkContext {
 
   import KMeans.{RANDOM, K_MEANS_PARALLEL}
   
-  val epsilon = 1e-04
+  val epsilon = 1e-01
 
   test("single cluster with big dataset") {
     val smallData = Array(
@@ -36,25 +36,29 @@ class KMeansMiniBatchSuite extends FunSuite with LocalSparkContext {
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0)
     )
-    val data = sc.parallelize((1 to 10).flatMap(_ => smallData), 4)
+    
+    // produce 300 data points
+    val data = sc.parallelize((1 to 100).flatMap(_ => smallData), 4)
     
     data.persist()
 
     // result should converge to given center after a few iterations
     val center = Vectors.dense(1.0, 3.0, 4.0).toBreeze
 
-    var model = KMeansMiniBatch.train(data, k=1, batchSize=10, maxIterations=10, runs=1, initializationMode=RANDOM)
+    var model = KMeansMiniBatch.train(data, k=1, batchSize=50, maxIterations=50, runs=1, initializationMode=RANDOM)
     var error = breezeNorm(model.clusterCenters.head.toBreeze - center, 2.0)
-    assert(error < epsilon)
+    assert(error < epsilon, "Error (" + error + ") was larger than expected value of " + epsilon)
 
-    model = KMeansMiniBatch.train(data, k=1, batchSize=10, maxIterations=10, runs=1, initializationMode=K_MEANS_PARALLEL)
+    model = KMeansMiniBatch.train(data, k=1, batchSize=50, maxIterations=50, runs=1, initializationMode=K_MEANS_PARALLEL)
     error = breezeNorm(model.clusterCenters.head.toBreeze - center, 2.0)
-    assert(error < epsilon)
+    assert(error < epsilon, "Error (" + error + ") was larger than expected value of " + epsilon)
+
   }
 
   test("single cluster with sparse data") {
 
     val n = 10000
+    // 600 data points
     val data = sc.parallelize((1 to 100).flatMap { i =>
       val x = i / 1000.0
       Array(
@@ -71,14 +75,14 @@ class KMeansMiniBatchSuite extends FunSuite with LocalSparkContext {
     
     val center = Vectors.sparse(n, Seq((0, 1.0), (1, 3.0), (2, 4.0))).toBreeze
 
-    var model = KMeansMiniBatch.train(data, k=1, batchSize=10, maxIterations=10, runs=1, initializationMode=RANDOM)
+    var model = KMeansMiniBatch.train(data, k=1, batchSize=100, maxIterations=50, runs=1, initializationMode=RANDOM)
     var error = breezeNorm(model.clusterCenters.head.toBreeze - center, 2.0)
-    assert(error < epsilon)
+    assert(error < epsilon, "Error (" + error + ") was larger than expected value of " + epsilon)
 
 
-    model = KMeansMiniBatch.train(data, k=1, batchSize=10, maxIterations=10, runs=1, initializationMode=K_MEANS_PARALLEL)
+    model = KMeansMiniBatch.train(data, k=1, batchSize=100, maxIterations=50, runs=1, initializationMode=K_MEANS_PARALLEL)
     error = breezeNorm(model.clusterCenters.head.toBreeze - center, 2.0)
-    assert(error < epsilon)
+    assert(error < epsilon, "Error (" + error + ") was larger than expected value of " + epsilon)
 
 
     data.unpersist()
