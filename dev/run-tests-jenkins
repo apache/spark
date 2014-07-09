@@ -37,8 +37,14 @@ function post_message {
     $COMMENTS_URL | head -n 8
 }
 
-start_message="QA tests have started for PR $ghprbPullId. For more information see test ouptut:"
-start_message="${start_message}<br>${BUILD_URL}consoleFull"
+start_message="QA tests have started for PR $ghprbPullId."
+if [ "$sha1" == "$ghprbActualCommit" ]; then
+  start_message="$start_message This patch DID NOT merge cleanly! "
+else
+  start_message="$start_message This patch merges cleanly. "
+fi
+start_message="$start_message<br>To view progress see test ouptut:"
+start_message="$start_message<br>${BUILD_URL}consoleFull"
 
 post_message "$start_message"
 
@@ -53,9 +59,7 @@ else
   result_message="$result_message- This patch FAILED unit tests.<br>"
 fi
 
-if [ "$sha1" == "$ghprbActualCommit" ]; then
-  result_message="$result_message- This patch DID NOT merge cleanly<br>"
-else
+if [ "$sha1" != "$ghprbActualCommit" ]; then
   result_message="$result_message- This patch merges cleanly<br>"
   non_test_files=$(git diff master --name-only | grep -v "\/test" | tr "\n" " ")
   new_public_classes=$(git diff master $non_test_files \
