@@ -44,6 +44,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  // TODO: add comments to explain optimization
   /**
    * Uses the ExtractEquiJoinKeys pattern to find joins where at least some of the predicates can be
    * evaluated by matching hash keys.
@@ -82,11 +83,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if left.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize =>
           broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
-      // TODO: use optimization here as well
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
+        val buildSide =
+          if (right.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize) BuildRight
+          else BuildLeft
         val hashJoin =
           execution.ShuffledHashJoin(
-            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
+            leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
       case _ => Nil
@@ -147,11 +150,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  // TODO: add comments to explain optimization
   object BroadcastNestedLoopJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
+        val (streamed, broadcast) =
+          if (right.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize)
+            (planLater(left), planLater(right))
+          else (planLater(right), planLater(left))
         execution.BroadcastNestedLoopJoin(
-          planLater(left), planLater(right), joinType, condition)(sqlContext) :: Nil
+          streamed, broadcast, joinType, condition)(sqlContext) :: Nil
       case _ => Nil
     }
   }
