@@ -20,7 +20,8 @@ package org.apache.spark.sql.hive
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.execution.BroadcastHashJoin
+import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.parquet.{ParquetRelation, ParquetTestData}
 import org.apache.spark.util.Utils
@@ -36,7 +37,7 @@ class StatisticsSuite extends QueryTest {
     }
     assert(sizes.size === 1)
     assert(sizes(0)._1 == sizes(0)._2, "after .newInstance, estimates are different from before")
-    assert(sizes(0)._1 > 0)
+    assert(sizes(0)._1 > 1, "1 is the default, indicating the absence of a meaningful estimate")
 
     Utils.deleteRecursively(ParquetTestData.testDir)
   }
@@ -46,7 +47,8 @@ class StatisticsSuite extends QueryTest {
     val sizes = rdd.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
       mr.statistics.sizeInBytes
     }
-    assert(sizes.size === 1 && sizes(0) > 0)
+    assert(sizes.size === 1)
+    assert(sizes(0) > 1, "1 is the default, indicating the absence of a meaningful estimate")
   }
 
   test("auto converts to broadcast hash join, by size estimate of a relation") {
@@ -62,8 +64,7 @@ class StatisticsSuite extends QueryTest {
 
       // Assert src has a size smaller than the threshold.
       val sizes = rdd.queryExecution.analyzed.collect {
-        case r if ct.runtimeClass.isAssignableFrom(r.getClass) =>
-          r.statistics.sizeInBytes
+        case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
       assert(sizes.size === 2 && sizes(0) <= autoConvertJoinSize,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
@@ -74,16 +75,22 @@ class StatisticsSuite extends QueryTest {
       assert(bhj.size === 1,
         s"actual query plans do not contain broadcast join: ${rdd.queryExecution}")
 
-      checkAnswer(rdd, expectedAnswer)
+      checkAnswer(rdd, expectedAnswer) // check correctness of output
 
-      // TODO(zongheng): synchronize on TestHive.settings, or use Sequential/Stepwise.
-      val tmp = autoConvertJoinSize
-      hql("""SET spark.sql.auto.convert.join.size=0""")
-      rdd = hql(query)
-      bhj = rdd.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
-      assert(bhj.isEmpty)
+      TestHive.settings.synchronized {
+        val tmp = autoConvertJoinSize
 
-      hql(s"""SET spark.sql.auto.convert.join.size=$tmp""")
+        hql("""SET spark.sql.auto.convert.join.size=-1""")
+        rdd = hql(query)
+        bhj = rdd.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
+        assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
+
+        val shj = rdd.queryExecution.sparkPlan.collect { case j: ShuffledHashJoin => j }
+        assert(shj.size === 1,
+          "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
+
+        hql(s"""SET spark.sql.auto.convert.join.size=$tmp""")
+      }
 
       after()
     }
