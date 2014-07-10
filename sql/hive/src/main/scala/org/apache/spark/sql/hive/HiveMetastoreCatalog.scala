@@ -274,7 +274,7 @@ private[hive] case class MetastoreRelation
     // TODO: check if this estimate is valid for tables after partition pruning.
     // Size getters adapted from SizeBasedBigTableSelectorForAutoSMJ.java in Hive (version 0.13).
     override val sizeInBytes: Long =
-      maybeGetSize(hiveConf, hiveQlTable.getProperty("totalSize"), path)
+      math.max(maybeGetSize(hiveConf, hiveQlTable.getProperty("totalSize"), path), 1L)
 
     private[this] def maybeGetSize(conf: HiveConf, size: String, path: Path): Long = {
       val res = try { Some(size.toLong) } catch { case _: Exception => None }

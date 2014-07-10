@@ -85,12 +85,12 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
     // If this is wrapping around ExistingRdd and no reasonable estimation logic is implemented,
     // return a default value.
     sizeInBytes = {
-      val defaultSum = childrenStats.map(_.sizeInBytes).sum
+      val naiveVal = childrenStats.map(_.sizeInBytes).product
       alreadyPlanned match {
         // TODO: Instead of returning a default value here, find a way to return a meaningful
         // size estimate for RDDs. See PR 1238 for more discussions.
-        case e: ExistingRdd if defaultSum == 0 => statsDefaultSizeInBytes
-        case _ => defaultSum
+        case e: ExistingRdd if naiveVal == 1L => statsDefaultSizeInBytes
+        case _ => naiveVal
       }
     }
   )

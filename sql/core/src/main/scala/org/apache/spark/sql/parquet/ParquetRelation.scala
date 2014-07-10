@@ -58,7 +58,7 @@ private[sql] case class ParquetRelation(
     sizeInBytes = {
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(conf.getOrElse(ContextUtil.getConfiguration(new Job())))
-      fs.getContentSummary(hdfsPath).getLength // TODO: in bytes or system-dependent?
+      math.max(fs.getContentSummary(hdfsPath).getLength, 1L) // TODO: in bytes or system-dependent?
     }
   )
 

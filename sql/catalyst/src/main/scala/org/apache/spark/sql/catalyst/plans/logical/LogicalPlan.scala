@@ -26,14 +26,24 @@ import org.apache.spark.sql.catalyst.trees
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   self: Product =>
 
+  // TODO: handle overflow?
   /**
    * Estimates of various statistics.  The default estimation logic simply sums up the corresponding
    * statistic produced by the children.  To override this behavior, override `statistics` and
    * assign it a overriden version of `Statistics`.
    */
   case class Statistics(
-    numTuples: Long = childrenStats.map(_.numTuples).sum,
-    sizeInBytes: Long = childrenStats.map(_.sizeInBytes).sum
+    /**
+     * Number of output tuples. For leaf operators this defaults to 1, otherwise it is set to the
+     * product of children's `numTuples`.
+     */
+    numTuples: Long = childrenStats.map(_.numTuples).product,
+
+    /**
+     * Physical size in bytes. For leaf operators this defaults to 1, otherwise it is set to the
+     * product of children's `sizeInBytes`.
+     */
+    sizeInBytes: Long = childrenStats.map(_.sizeInBytes).product
   )
   lazy val statistics: Statistics = new Statistics
   lazy val childrenStats = children.map(_.statistics)
@@ -103,6 +113,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
  */
 abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
   self: Product =>
+
+  override lazy val statistics = Statistics(numTuples = 1L, sizeInBytes = 1L)
 
   // Leaf nodes by definition cannot reference any input attributes.
   override def references = Set.empty
