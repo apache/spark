@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.sql.csv.CsvRDD
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
@@ -121,6 +122,47 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    */
   def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD =
     new JavaSchemaRDD(sqlContext, JsonRDD.inferSchema(json, 1.0))
+
+   /**
+   * Loads a CSV file (according to RFC 4180) and returns the result as a [[JavaSchemaRDD]].
+   *
+   * NOTE: If there are new line characters inside quoted fields this method may fail to
+   * parse correctly, because the two lines may be in different partitions. Use
+   * [[SQLContext#csvRDD]] to parse such files.
+   *
+   * @param path path to input file
+   * @param delimiter Optional delimiter (default is comma)
+   * @param quote Optional quote character or string (default is '"')
+   * @param header Optional flag to indicate first line of each file is the header
+   *               (default is false)
+   */
+  def csvFile(path: String,
+      delimiter: String = ",",
+      quote: String = "\"",
+      header: Boolean = false): JavaSchemaRDD = {
+    val csv = sqlContext.sparkContext.textFile(path)
+    csvRDD(csv, delimiter, quote, header)
+  }
+
+  /**
+   * Parses an RDD of String as a CSV (according to RFC 4180) and returns the result as a
+   * [[JavaSchemaRDD]].
+   *
+   * NOTE: If there are new line characters inside quoted fields, use
+   * [[JavaSparkContext#wholeTextFiles]] to read each file into a single partition.
+   *
+   * @param csv input RDD
+   * @param delimiter Optional delimiter (default is comma)
+   * @param quote Optional quote character of strig (default is '"')
+   * @param header Optional flag to indicate first line of each file is the hader
+   *               (default is false)
+   */
+  def csvRDD(csv: JavaRDD[String],
+      delimiter: String = ",",
+      quote: String = "\"",
+      header: Boolean = false): JavaSchemaRDD = {
+    new JavaSchemaRDD(sqlContext, CsvRDD.inferSchema(csv, delimiter, quote, header))
+  }
 
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
