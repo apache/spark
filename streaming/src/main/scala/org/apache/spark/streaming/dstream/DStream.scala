@@ -291,28 +291,28 @@ abstract class DStream[T: ClassTag] (
           try {
             compute(time) match {
               case Some(newRDD) =>
-                if(newRDD.partitions.size==0){
+                if (storageLevel != StorageLevel.NONE) {
+                  newRDD.persist(storageLevel)
+                  logInfo("Persisting RDD " + newRDD.id + " for time " +
+                    time + " to " + storageLevel + " at time " + time)
+                }
+                if (checkpointDuration != null &&
+                  (time - zeroTime).isMultipleOf(checkpointDuration)) {
+                  newRDD.checkpoint()
+                  logInfo("Marking RDD " + newRDD.id + " for time " + time +
+                    " for checkpointing at time " + time)
+                }
+                generatedRDDs.put(time, newRDD)
+                if (newRDD.partitions.size == 0) {
                   None
-                }else{
-                  if (storageLevel != StorageLevel.NONE) {
-                    newRDD.persist(storageLevel)
-                    logInfo("Persisting RDD " + newRDD.id + " for time " +
-                      time + " to " + storageLevel + " at time " + time)
-                  }
-                  if (checkpointDuration != null &&
-                    (time - zeroTime).isMultipleOf(checkpointDuration)) {
-                    newRDD.checkpoint()
-                    logInfo("Marking RDD " + newRDD.id + " for time " + time +
-                      " for checkpointing at time " + time)
-                  }
-                  generatedRDDs.put(time, newRDD)
+                } else {
                   Some(newRDD)
                 }
               case None =>
                 None
             }
           } catch {
-            case e: NullPointerException =>{
+            case e: NullPointerException => {
               None
             }
           }
