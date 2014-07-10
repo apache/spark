@@ -1164,15 +1164,7 @@ abstract class RDD[T: ClassTag](
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
   }
 
-  /**
-   * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
-   * directory set with SparkContext.setCheckpointDir() and all references to its parent
-   * RDDs will be removed. This function must be called before any job has been executed
-   * on this RDD. It is strongly recommended that this RDD is persisted in memory,
-   * otherwise saving it on a file will require recomputation.
-   * By providing the optional f function the file saving and RDD reloading logic can be
-   * altered (ie. save to Parquet file etc.)
-   */
+  /** A private method to execute checkpointing with the provided f function */
   private[spark] def checkpoint(f: Option[RDD[T] => RDD[T]]) {
     if (context.checkpointDir.isEmpty) {
       throw new Exception("Checkpoint directory has not been set in the SparkContext")
@@ -1181,8 +1173,26 @@ abstract class RDD[T: ClassTag](
       checkpointData.get.markForCheckpoint()
     }
   }
-
+  
+  /**
+   * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
+   * directory set with SparkContext.setCheckpointDir() and all references to its parent
+   * RDDs will be removed. This function must be called before any job has been executed
+   * on this RDD. It is strongly recommended that this RDD is persisted in memory,
+   * otherwise saving it on a file will require recomputation.
+   * Not providing any parameters invokes the default implementation. 
+   */
   def checkpoint(): Unit = checkpoint(None)
+  
+  /**
+   * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
+   * directory set with SparkContext.setCheckpointDir() and all references to its parent
+   * RDDs will be removed. This function must be called before any job has been executed
+   * on this RDD. It is strongly recommended that this RDD is persisted in memory,
+   * otherwise saving it on a file will require recomputation.
+   * By providing the f function the file saving and RDD reloading logic can be
+   * altered (ie. save to Parquet file etc.)
+   */
   def checkpoint(f: RDD[T] => RDD[T]): Unit = checkpoint(Some(f))
 
   /**
