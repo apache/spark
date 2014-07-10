@@ -31,7 +31,6 @@ import com.typesafe.tools.mima.core._
  * MimaBuild.excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap")
  */
 object MimaExcludes {
-<<<<<<< HEAD
 
   def excludes(version: String) = version match {
     case v if v.startsWith("1.1") =>
