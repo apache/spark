@@ -58,10 +58,10 @@ object StreamingLinearRegressionWithSGD {
    * @param numFeatures Number of features per record, must be constant for all batches of data.
    */
   def start(
-     stepSize: Double,
-     numIterations: Int,
-     miniBatchFraction: Double,
-     numFeatures: Int): StreamingLinearRegressionWithSGD = {
+      stepSize: Double,
+      numIterations: Int,
+      miniBatchFraction: Double,
+      numFeatures: Int): StreamingLinearRegressionWithSGD = {
     new StreamingLinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction, numFeatures)
   }
 
@@ -73,9 +73,9 @@ object StreamingLinearRegressionWithSGD {
    * @param numFeatures Number of features per record, must be constant for all batches of data.
    */
   def start(
-    numIterations: Int,
-    stepSize: Double,
-    numFeatures: Int): StreamingLinearRegressionWithSGD = {
+      numIterations: Int,
+      stepSize: Double,
+      numFeatures: Int): StreamingLinearRegressionWithSGD = {
     start(stepSize, numIterations, 1.0, numFeatures)
   }
 
@@ -86,8 +86,8 @@ object StreamingLinearRegressionWithSGD {
    * @param numFeatures Number of features per record, must be constant for all batches of data.
    */
   def start(
-     numIterations: Int,
-     numFeatures: Int): StreamingLinearRegressionWithSGD = {
+      numIterations: Int,
+      numFeatures: Int): StreamingLinearRegressionWithSGD = {
     start(0.1, numIterations, 1.0, numFeatures)
   }
 
