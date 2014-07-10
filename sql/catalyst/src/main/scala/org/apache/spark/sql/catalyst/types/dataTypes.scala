@@ -121,10 +121,12 @@ case object StringType extends NativeType with PrimitiveType {
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   def simpleString: String = "string"
 }
+
 case object BinaryType extends DataType with PrimitiveType {
   private[sql] type JvmType = Array[Byte]
   def simpleString: String = "binary"
 }
+
 case object BooleanType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Boolean
   @transient private[sql] lazy val tag = typeTag[JvmType]
@@ -292,7 +294,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
 
   def toAttributes = fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
 
-  def formattedSchemaString: String = {
+  def schemaString: String = {
     val builder = new StringBuilder
     builder.append("root\n")
     val prefix = " |"
@@ -301,7 +303,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
     builder.toString()
   }
 
-  def printSchema(): Unit = println(formattedSchemaString)
+  def printSchema(): Unit = println(schemaString)
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     fields.foreach(field => field.buildFormattedString(prefix, builder))

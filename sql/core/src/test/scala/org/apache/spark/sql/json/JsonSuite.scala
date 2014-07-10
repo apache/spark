@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, compatibleType}
+import org.apache.spark.sql.json.JsonRDD.{castToType, compatibleType}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.TestSQLContext._
 
@@ -41,19 +41,19 @@ class JsonSuite extends QueryTest {
     }
 
     val intNumber: Int = 2147483647
-    checkTypePromotion(intNumber, enforceCorrectType(intNumber, IntegerType))
-    checkTypePromotion(intNumber.toLong, enforceCorrectType(intNumber, LongType))
-    checkTypePromotion(intNumber.toDouble, enforceCorrectType(intNumber, DoubleType))
-    checkTypePromotion(BigDecimal(intNumber), enforceCorrectType(intNumber, DecimalType))
+    checkTypePromotion(intNumber, castToType(intNumber, IntegerType))
+    checkTypePromotion(intNumber.toLong, castToType(intNumber, LongType))
+    checkTypePromotion(intNumber.toDouble, castToType(intNumber, DoubleType))
+    checkTypePromotion(BigDecimal(intNumber), castToType(intNumber, DecimalType))
 
     val longNumber: Long = 9223372036854775807L
-    checkTypePromotion(longNumber, enforceCorrectType(longNumber, LongType))
-    checkTypePromotion(longNumber.toDouble, enforceCorrectType(longNumber, DoubleType))
-    checkTypePromotion(BigDecimal(longNumber), enforceCorrectType(longNumber, DecimalType))
+    checkTypePromotion(longNumber, castToType(longNumber, LongType))
+    checkTypePromotion(longNumber.toDouble, castToType(longNumber, DoubleType))
+    checkTypePromotion(BigDecimal(longNumber), castToType(longNumber, DecimalType))
 
     val doubleNumber: Double = 1.7976931348623157E308d
-    checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
-    checkTypePromotion(BigDecimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType))
+    checkTypePromotion(doubleNumber.toDouble, castToType(doubleNumber, DoubleType))
+    checkTypePromotion(BigDecimal(doubleNumber), castToType(doubleNumber, DecimalType))
   }
 
   test("Get compatible type") {

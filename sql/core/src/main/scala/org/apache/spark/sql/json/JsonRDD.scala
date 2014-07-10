@@ -25,30 +25,25 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.Logging
+import org.apache.spark.sql.util
 
 private[sql] object JsonRDD extends Logging {
 
-  private[sql] def inferSchema(
-      json: RDD[String],
-      samplingRatio: Double = 1.0): LogicalPlan = {
-    require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
-    val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
-    val allKeys = parseJson(schemaData).map(allKeysWithValueTypes).reduce(_ ++ _)
-    val baseSchema = createSchema(allKeys)
-
-    createLogicalPlan(json, baseSchema)
+  def jsonStringToRow(schema: StructType, jsonIter: Iterator[String]): Iterator[Row] = {
+    parseJson(jsonIter).map(parsed => asRow(parsed, schema))
   }
 
-  private def createLogicalPlan(
+  private[sql] def inferSchema(
       json: RDD[String],
-      baseSchema: StructType): LogicalPlan = {
-    val schema = nullTypeToStringType(baseSchema)
-
-    SparkLogicalPlan(ExistingRdd(asAttributes(schema), parseJson(json).map(asRow(_, schema))))
+      samplingRatio: Double = 1.0): StructType = {
+    require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
+    val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
+    val allKeys =
+      schemaData.mapPartitions(iter => parseJson(iter)).map(allKeysWithValueTypes).reduce(_ ++ _)
+    createSchema(allKeys)
   }
 
   private def createSchema(allKeys: Set[(String, DataType)]): StructType = {
@@ -106,6 +101,22 @@ private[sql] object JsonRDD extends Logging {
     makeStruct(resolved.keySet.toSeq, Nil)
   }
 
+  private[sql] def nullTypeToStringType(struct: StructType): StructType = {
+    val fields = struct.fields.map {
+      case StructField(fieldName, dataType, nullable) => {
+        val newType = dataType match {
+          case NullType => StringType
+          case ArrayType(NullType) => ArrayType(StringType)
+          case struct: StructType => nullTypeToStringType(struct)
+          case other: DataType => other
+        }
+        StructField(fieldName, newType, nullable)
+      }
+    }
+
+    StructType(fields)
+  }
+
   /**
    * Returns the most general data type for two given data types.
    */
@@ -145,18 +156,13 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def typeOfPrimitiveValue(value: Any): DataType = {
-    value match {
-      case value: java.lang.String => StringType
-      case value: java.lang.Integer => IntegerType
-      case value: java.lang.Long => LongType
+  private def typeOfPrimitiveValue: PartialFunction[Any, DataType] = {
+    ScalaReflection.typeOfObject orElse {
       // Since we do not have a data type backed by BigInteger,
       // when we see a Java BigInteger, we use DecimalType.
       case value: java.math.BigInteger => DecimalType
-      case value: java.lang.Double => DoubleType
+      // DecimalType's JVMType is scala BigDecimal.
       case value: java.math.BigDecimal => DecimalType
-      case value: java.lang.Boolean => BooleanType
-      case null => NullType
       // Unexpected data type.
       case _ => StringType
     }
@@ -245,7 +251,7 @@ private[sql] object JsonRDD extends Logging {
     case atom => atom
   }
 
-  private def parseJson(json: RDD[String]): RDD[Map[String, Any]] = {
+  private def parseJson(jsonIter: Iterator[String]): Iterator[Map[String, Any]] = {
     // According to [Jackson-72: https://jira.codehaus.org/browse/JACKSON-72],
     // ObjectMapper will not return BigDecimal when
     // "DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS" is disabled
@@ -254,38 +260,23 @@ private[sql] object JsonRDD extends Logging {
     // for every float number, which will be slow.
     // So, right now, we will have Infinity for those BigDecimal number.
     // TODO: Support BigDecimal.
-    json.mapPartitions(iter => {
-      // When there is a key appearing multiple times (a duplicate key),
-      // the ObjectMapper will take the last value associated with this duplicate key.
-      // For example: for {"key": 1, "key":2}, we will get "key"->2.
-      val mapper = new ObjectMapper()
-      iter.map(record => mapper.readValue(record, classOf[java.util.Map[String, Any]]))
-      }).map(scalafy).map(_.asInstanceOf[Map[String, Any]])
-  }
-
-  private def toLong(value: Any): Long = {
-    value match {
-      case value: java.lang.Integer => value.asInstanceOf[Int].toLong
-      case value: java.lang.Long => value.asInstanceOf[Long]
+    // Also, when there is a key appearing multiple times (a duplicate key),
+    // the ObjectMapper will take the last value associated with this duplicate key.
+    // For example: for {"key": 1, "key":2}, we will get "key"->2.
+    val mapper = new ObjectMapper()
+    jsonIter.map {
+      record =>
+        val parsed = scalafy(mapper.readValue(record, classOf[java.util.Map[String, Any]]))
+        parsed.asInstanceOf[Map[String, Any]]
     }
   }
 
-  private def toDouble(value: Any): Double = {
-    value match {
-      case value: java.lang.Integer => value.asInstanceOf[Int].toDouble
-      case value: java.lang.Long => value.asInstanceOf[Long].toDouble
-      case value: java.lang.Double => value.asInstanceOf[Double]
+  private def toDecimalValue: PartialFunction[Any, BigDecimal] = {
+    def bigIntegerToDecimalValue: PartialFunction[Any, BigDecimal] = {
+      case v: java.math.BigInteger => BigDecimal(v)
     }
-  }
 
-  private def toDecimal(value: Any): BigDecimal = {
-    value match {
-      case value: java.lang.Integer => BigDecimal(value)
-      case value: java.lang.Long => BigDecimal(value)
-      case value: java.math.BigInteger => BigDecimal(value)
-      case value: java.lang.Double => BigDecimal(value)
-      case value: java.math.BigDecimal => BigDecimal(value)
-    }
+    bigIntegerToDecimalValue orElse util.toDecimalValue
   }
 
   private def toJsonArrayString(seq: Seq[Any]): String = {
@@ -296,7 +287,7 @@ private[sql] object JsonRDD extends Logging {
       element =>
         if (count > 0) builder.append(",")
         count += 1
-        builder.append(toString(element))
+        builder.append(toStringValue(element))
     }
     builder.append("]")
 
@@ -311,41 +302,35 @@ private[sql] object JsonRDD extends Logging {
       case (key, value) =>
         if (count > 0) builder.append(",")
         count += 1
-        builder.append(s"""\"${key}\":${toString(value)}""")
+        builder.append(s"""\"${key}\":${toStringValue(value)}""")
     }
     builder.append("}")
 
     builder.toString()
   }
 
-  private def toString(value: Any): String = {
-    value match {
-      case value: Map[String, Any] => toJsonObjectString(value)
-      case value: Seq[Any] => toJsonArrayString(value)
-      case value => Option(value).map(_.toString).orNull
+  private def toStringValue: PartialFunction[Any, String] = {
+    def complexValueToStringValue: PartialFunction[Any, String] = {
+      case v: Map[String, Any] => toJsonObjectString(v)
+      case v: Seq[Any] => toJsonArrayString(v)
     }
+
+    complexValueToStringValue orElse util.toStringValue
   }
 
-  private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
-    if (value == null) {
-      null
-    } else {
-      desiredType match {
-        case ArrayType(elementType) =>
-          value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
-        case StringType => toString(value)
-        case IntegerType => value.asInstanceOf[IntegerType.JvmType]
-        case LongType => toLong(value)
-        case DoubleType => toDouble(value)
-        case DecimalType => toDecimal(value)
-        case BooleanType => value.asInstanceOf[BooleanType.JvmType]
-        case NullType => null
-      }
+  private[json] def castToType: PartialFunction[(Any, DataType), Any] = {
+    def jsonSpecificCast: PartialFunction[(Any, DataType), Any] = {
+      case (v, StringType) => toStringValue(v)
+      case (v, DecimalType) => toDecimalValue(v)
+      case (v, ArrayType(elementType)) =>
+        v.asInstanceOf[Seq[Any]].map(castToType(_, elementType))
     }
+
+    jsonSpecificCast orElse util.castToType
   }
 
-  // TODO: Reuse the row instead of creating a new one for every record.
   private def asRow(json: Map[String,Any], schema: StructType): Row = {
+    // TODO: Reuse the row instead of creating a new one for every record.
     val row = new GenericMutableRow(schema.fields.length)
     schema.fields.zipWithIndex.foreach {
       // StructType
@@ -363,37 +348,9 @@ private[sql] object JsonRDD extends Logging {
       // Other cases
       case (StructField(name, dataType, _), i) =>
         row.update(i, json.get(name).flatMap(v => Option(v)).map(
-          enforceCorrectType(_, dataType)).getOrElse(null))
+          castToType(_, dataType)).getOrElse(null))
     }
 
     row
-  }
-
-  private def nullTypeToStringType(struct: StructType): StructType = {
-    val fields = struct.fields.map {
-      case StructField(fieldName, dataType, nullable) => {
-        val newType = dataType match {
-          case NullType => StringType
-          case ArrayType(NullType) => ArrayType(StringType)
-          case struct: StructType => nullTypeToStringType(struct)
-          case other: DataType => other
-        }
-        StructField(fieldName, newType, nullable)
-      }
-    }
-
-    StructType(fields)
-  }
-
-  private def asAttributes(struct: StructType): Seq[AttributeReference] = {
-    struct.fields.map(f => AttributeReference(f.name, f.dataType, nullable = true)())
-  }
-
-  private def asStruct(attributes: Seq[AttributeReference]): StructType = {
-    val fields = attributes.map {
-      case AttributeReference(name, dataType, nullable) => StructField(name, dataType, nullable)
-    }
-
-    StructType(fields)
   }
 }

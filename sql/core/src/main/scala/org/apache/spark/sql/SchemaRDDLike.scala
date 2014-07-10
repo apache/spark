@@ -127,8 +127,8 @@ private[sql] trait SchemaRDDLike {
   def schema: StructType = queryExecution.analyzed.schema
 
   /** Returns the output schema in the tree format. */
-  def formattedSchemaString: String = schema.formattedSchemaString
+  def schemaString: String = schema.schemaString
 
   /** Prints out the schema in the tree format. */
-  def printSchema(): Unit = println(formattedSchemaString)
+  def printSchema(): Unit = println(schemaString)
 }

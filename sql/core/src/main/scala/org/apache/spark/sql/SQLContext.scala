@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
-import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
@@ -26,12 +25,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.SparkStrategies
@@ -89,14 +88,31 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
 
   /**
-   * Creates a SchemaRDD from an RDD by applying a schema and providing a function to construct
-   * a Row from a RDD record.
+   * Creates a [[SchemaRDD]] from an [[RDD]] by applying a schema to this RDD and using a function
+   * that will be applied to each partition of the RDD to convert RDD records to [[Row]]s.
    *
    * @group userf
    */
-  def createSchemaRDD[A](rdd: RDD[A], schema: StructType, constructRow: A => Row) = {
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema.toAttributes, rdd.map(constructRow))))
-  }
+  def applySchema[A](rdd: RDD[A],schema: StructType, f: A => Row): SchemaRDD =
+    applySchemaPartitions(rdd, schema, (iter: Iterator[A]) => iter.map(f))
+
+  /**
+   * Creates a [[SchemaRDD]] from an [[RDD]] by applying a schema to this RDD and using a function
+   * that will be applied to each partition of the RDD to convert RDD records to [[Row]]s.
+   *
+   * @group userf
+   */
+  def applySchemaPartitions[A](
+      rdd: RDD[A],
+      schema: StructType,
+      f: Iterator[A] => Iterator[Row]): SchemaRDD =
+    new SchemaRDD(this, makeCustomRDDScan(rdd, schema, f))
+
+  protected[sql] def makeCustomRDDScan[A](
+      rdd: RDD[A],
+      schema: StructType,
+      f: Iterator[A] => Iterator[Row]): LogicalPlan =
+    SparkLogicalPlan(ExistingRdd(schema.toAttributes, rdd.mapPartitions(f)))
 
   /**
    * Loads a Parquet file, returning the result as a [[SchemaRDD]].
@@ -136,8 +152,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * :: Experimental ::
    */
   @Experimental
-  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
-    new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
+  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
+    val schema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
+    applySchemaPartitions(json, schema, JsonRDD.jsonStringToRow(schema, _: Iterator[String]))
+  }
 
   /**
    * :: Experimental ::
@@ -352,28 +370,29 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Peek at the first row of the RDD and infer its schema.
-   * TODO: consolidate this with the type system developed in SPARK-2060.
    */
   private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
     import scala.collection.JavaConversions._
-    def typeFor(obj: Any): DataType = obj match {
-      case c: java.lang.String => StringType
-      case c: java.lang.Integer => IntegerType
-      case c: java.lang.Long => LongType
-      case c: java.lang.Double => DoubleType
-      case c: java.lang.Boolean => BooleanType
-      case c: java.util.List[_] => ArrayType(typeFor(c.head))
-      case c: java.util.Set[_] => ArrayType(typeFor(c.head))
+    def typeOfComplexValue: PartialFunction[Any, DataType] = {
+      case c: java.util.List[_] =>
+        ArrayType(ScalaReflection.typeOfObject(c.head))
+      case c: java.util.Set[_] =>
+        ArrayType(ScalaReflection.typeOfObject(c.head))
       case c: java.util.Map[_, _] =>
         val (key, value) = c.head
-        MapType(typeFor(key), typeFor(value))
+        MapType(
+          ScalaReflection.typeOfObject(key),
+          ScalaReflection.typeOfObject(value))
       case c if c.getClass.isArray =>
         val elem = c.asInstanceOf[Array[_]].head
-        ArrayType(typeFor(elem))
+        ArrayType(ScalaReflection.typeOfObject(elem))
       case c => throw new Exception(s"Object of type $c cannot be used")
     }
+
+    def typeOfObject = ScalaReflection.typeOfObject orElse typeOfComplexValue
+
     val schema = rdd.first().map { case (fieldName, obj) =>
-      AttributeReference(fieldName, typeFor(obj), true)()
+      AttributeReference(fieldName, typeOfObject(obj), true)()
     }.toSeq
 
     val rowRdd = rdd.mapPartitions { iter =>

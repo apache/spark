@@ -119,8 +119,13 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    *
    * @group userf
    */
-  def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD =
-    new JavaSchemaRDD(sqlContext, JsonRDD.inferSchema(json, 1.0))
+  def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD = {
+    val schema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, 1.0))
+    val logicalPlan =
+      sqlContext.makeCustomRDDScan[String](json, schema, JsonRDD.jsonStringToRow(schema, _))
+
+    new JavaSchemaRDD(sqlContext, logicalPlan)
+  }
 
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
