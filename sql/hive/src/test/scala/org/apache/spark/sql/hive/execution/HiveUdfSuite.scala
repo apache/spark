@@ -122,6 +122,3 @@ class PairUdf extends GenericUDF {
 
   override def getDisplayString(p1: Array[String]): String = ""
 }
-
-
-

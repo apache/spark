@@ -210,6 +210,22 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
   }
 
+  createQueryTest("case sensitivity: Hive table",
+    "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
+
+  test("case sensitivity: registered table") {
+    val testData: SchemaRDD =
+      TestHive.sparkContext.parallelize(
+        TestData(1, "str1") ::
+        TestData(2, "str2") :: Nil)
+    testData.registerAsTable("REGisteredTABle")
+
+    assertResult(Array(Array(2, "str2"))) {
+      hql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
+        "WHERE TableAliaS.a > 1").collect()
+    }
+  }
+
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
     explanation.size > 1 && explanation.head.startsWith("Physical execution plan")
@@ -228,7 +244,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
       .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
     TestHive.sparkContext.parallelize(fixture).registerAsTable("having_test")
-    val results = 
+    val results =
       hql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
       .map(x => Pair(x.getString(0), x.getInt(1)))
@@ -236,7 +252,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     assert(results === Array(Pair("foo", 4)))
     TestHive.reset()
   }
-  
+
   test("SPARK-2180: HAVING with non-boolean clause raises no exceptions") {
     hql("select key, count(*) c from src group by key having c").collect()
   }
@@ -370,6 +386,16 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
   }
 
+  test("SPARK-2263: Insert Map<K, V> values") {
+    hql("CREATE TABLE m(value MAP<INT, STRING>)")
+    hql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
+    hql("SELECT * FROM m").collect().zip(hql("SELECT * FROM src LIMIT 10").collect()).map {
+      case (Row(map: Map[Int, String]), Row(key: Int, value: String)) =>
+        assert(map.size === 1)
+        assert(map.head === (key, value))
+    }
+  }
+
   test("parse HQL set commands") {
     // Adapted from its SQL counterpart.
     val testKey = "spark.sql.key.usedfortestonly"
@@ -460,7 +486,6 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   // Put tests that depend on specific Hive settings before these last two test,
   // since they modify /clear stuff.
-
 }
 
 // for SPARK-2180 test

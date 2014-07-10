@@ -31,6 +31,7 @@ import org.apache.spark.Logging
 import org.apache.spark.Partition
 import org.apache.spark.SerializableWritable
 import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 
 private[spark] class NewHadoopPartition(
     rddId: Int,
@@ -111,6 +112,18 @@ class NewHadoopRDD[K, V](
       val reader = format.createRecordReader(
         split.serializableHadoopSplit.value, hadoopAttemptContext)
       reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+
+      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
+      try {
+        /* bytesRead may not exactly equal the bytes read by a task: split boundaries aren't
+         * always at record boundaries, so tasks may need to read into other splits to complete
+         * a record. */
+        inputMetrics.bytesRead = split.serializableHadoopSplit.value.getLength()
+      } catch {
+        case e: Exception =>
+          logWarning("Unable to get input split size in order to set task input bytes", e)
+      }
+      context.taskMetrics.inputMetrics = Some(inputMetrics)
 
       // Register an on-task-completion callback to close the input stream.
       context.addOnCompleteCallback(() => close())

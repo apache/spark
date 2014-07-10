@@ -85,8 +85,27 @@ while (( "$#" )); do
 done
 
 if [ -z "$JAVA_HOME" ]; then
+  # Fall back on JAVA_HOME from rpm, if found
+  if which rpm &>/dev/null; then
+    RPM_JAVA_HOME=$(rpm -E %java_home 2>/dev/null)
+    if [ "$RPM_JAVA_HOME" != "%java_home" ]; then
+      JAVA_HOME=$RPM_JAVA_HOME
+      echo "No JAVA_HOME set, proceeding with '$JAVA_HOME' learned from rpm"
+    fi
+  fi
+fi
+
+if [ -z "$JAVA_HOME" ]; then
   echo "Error: JAVA_HOME is not set, cannot proceed."
   exit -1
+fi
+
+if which git &>/dev/null; then
+    GITREV=$(git rev-parse --short HEAD 2>/dev/null || :)
+    if [ ! -z $GITREV ]; then
+	 GITREVSTRING=" (git revision $GITREV)"
+    fi
+    unset GITREV
 fi
 
 if ! which mvn &>/dev/null; then
@@ -175,7 +194,7 @@ ${BUILD_COMMAND}
 # Make directories
 rm -rf "$DISTDIR"
 mkdir -p "$DISTDIR/lib"
-echo "Spark $VERSION built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
+echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
 
 # Copy jars
 cp $FWDIR/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"

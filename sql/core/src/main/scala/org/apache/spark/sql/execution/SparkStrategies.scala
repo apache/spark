@@ -21,19 +21,18 @@ import org.apache.spark.sql.{SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.parquet._
 import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
+import org.apache.spark.sql.parquet._
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      // Find left semi joins where at least some predicates can be evaluated by matching hash
-      // keys using the HashFilteredJoin pattern.
-      case HashFilteredJoin(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
+      // Find left semi joins where at least some predicates can be evaluated by matching join keys
+      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
         val semiJoin = execution.LeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
@@ -45,14 +44,52 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  /**
+   * Uses the ExtractEquiJoinKeys pattern to find joins where at least some of the predicates can be
+   * evaluated by matching hash keys.
+   */
   object HashJoin extends Strategy with PredicateHelper {
+    private[this] def broadcastHashJoin(
+        leftKeys: Seq[Expression],
+        rightKeys: Seq[Expression],
+        left: LogicalPlan,
+        right: LogicalPlan,
+        condition: Option[Expression],
+        side: BuildSide) = {
+      val broadcastHashJoin = execution.BroadcastHashJoin(
+        leftKeys, rightKeys, side, planLater(left), planLater(right))(sqlContext)
+      condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
+    }
+
+    def broadcastTables: Seq[String] = sqlContext.joinBroadcastTables.split(",").toBuffer
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      // Find inner joins where at least some predicates can be evaluated by matching hash keys
-      // using the HashFilteredJoin pattern.
-      case HashFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
+      case ExtractEquiJoinKeys(
+              Inner,
+              leftKeys,
+              rightKeys,
+              condition,
+              left,
+              right @ PhysicalOperation(_, _, b: BaseRelation))
+        if broadcastTables.contains(b.tableName) =>
+          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
+
+      case ExtractEquiJoinKeys(
+              Inner,
+              leftKeys,
+              rightKeys,
+              condition,
+              left @ PhysicalOperation(_, _, b: BaseRelation),
+              right)
+        if broadcastTables.contains(b.tableName) =>
+          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
+
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val hashJoin =
-          execution.HashJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
+          execution.ShuffledHashJoin(
+            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
+
       case _ => Nil
     }
   }
@@ -62,10 +99,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
         // Collect all aggregate expressions.
         val allAggregates =
-          aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a})
+          aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a })
         // Collect all aggregate expressions that can be computed partially.
         val partialAggregates =
-          aggregateExpressions.flatMap(_ collect { case p: PartialAggregate => p})
+          aggregateExpressions.flatMap(_ collect { case p: PartialAggregate => p })
 
         // Only do partial aggregation if supported by all aggregate expressions.
         if (allAggregates.size == partialAggregates.size) {
@@ -236,13 +273,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Limit(limit, planLater(child))(sqlContext) :: Nil
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater))(sqlContext) :: Nil
+      case logical.Except(left,right) =>                                        
+        execution.Except(planLater(left),planLater(right)) :: Nil   
+      case logical.Intersect(left, right) =>
+        execution.Intersect(planLater(left), planLater(right)) :: Nil
       case logical.Generate(generator, join, outer, _, child) =>
         execution.Generate(generator, join = join, outer = outer, planLater(child)) :: Nil
       case logical.NoRelation =>
         execution.ExistingRdd(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
-      case SparkLogicalPlan(existingPlan) => existingPlan :: Nil
+      case SparkLogicalPlan(existingPlan, _) => existingPlan :: Nil
       case _ => Nil
     }
   }

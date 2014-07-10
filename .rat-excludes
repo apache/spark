@@ -22,6 +22,8 @@ slaves
 spark-env.sh
 spark-env.sh.template
 log4j-defaults.properties
+bootstrap-tooltip.js
+jquery-1.11.1.min.js
 sorttable.js
 .*txt
 .*json

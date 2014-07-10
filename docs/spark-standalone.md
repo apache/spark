@@ -235,11 +235,10 @@ You can also pass an option `--cores <numCores>` to control the number of cores 
 
 # Launching Compiled Spark Applications
 
-Spark supports two deploy modes: applications may run with the driver inside the client process or
-entirely inside the cluster. The
-[`spark-submit` script](submitting-applications.html) provides the
-most straightforward way to submit a compiled Spark application to the cluster in either deploy
-mode.
+The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
+submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
+only supports deploying the driver inside the client process that is submitting the application
+(`client` deploy mode).
 
 If your application is launched through Spark submit, then the application jar is automatically
 distributed to all worker nodes. For any additional jars that your application depends on, you

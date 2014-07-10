@@ -338,8 +338,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
       """Usage: spark-submit [options] <app jar | python file> [app options]
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
-        |  --deploy-mode DEPLOY_MODE   Where to run the driver program: either "client" to run
-        |                              on the local machine, or "cluster" to run inside cluster.
+        |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
+        |                              on one of the worker machines inside the cluster ("cluster")
+        |                              (Default: client).
         |  --class CLASS_NAME          Your application's main class (for Java / Scala apps).
         |  --name NAME                 A name of your application.
         |  --jars JARS                 Comma-separated list of local jars to include on the driver

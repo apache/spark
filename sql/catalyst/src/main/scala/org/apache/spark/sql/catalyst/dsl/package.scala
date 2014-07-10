@@ -108,6 +108,17 @@ package object dsl {
 
     implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
 
+    def sum(e: Expression) = Sum(e)
+    def sumDistinct(e: Expression) = SumDistinct(e)
+    def count(e: Expression) = Count(e)
+    def countDistinct(e: Expression*) = CountDistinct(e)
+    def avg(e: Expression) = Average(e)
+    def first(e: Expression) = First(e)
+    def min(e: Expression) = Min(e)
+    def max(e: Expression) = Max(e)
+    def upper(e: Expression) = Upper(e)
+    def lower(e: Expression) = Lower(e)
+
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
