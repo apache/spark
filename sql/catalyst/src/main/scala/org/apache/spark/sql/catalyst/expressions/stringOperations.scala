@@ -21,10 +21,9 @@ import java.util.regex.Pattern
 
 import scala.collection.IndexedSeqOptimized
 
-import org.apache.spark.sql.catalyst.types.DataType
-import org.apache.spark.sql.catalyst.types.StringType
-import org.apache.spark.sql.catalyst.types.BinaryType
-import org.apache.spark.sql.catalyst.types.BooleanType
+
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.types.{BinaryType, BooleanType, DataType, StringType}
 
 trait StringRegexExpression {
   self: BinaryExpression =>
@@ -219,6 +218,9 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
   
   def nullable: Boolean = true
   def dataType: DataType = {
+    if (!resolved) {
+      throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
+    }
     if (str.dataType == BinaryType) str.dataType else StringType
   }
   
@@ -226,6 +228,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
   
   override def children = str :: pos :: len :: Nil
   
+  @inline
   def slice[T, C <% IndexedSeqOptimized[T,_]](str: C, startPos: Int, sliceLen: Int): Any = {
     val len = str.length
     // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
@@ -267,5 +270,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
     }
   }
   
-  override def toString = s"SUBSTR($str, $pos, $len)"
+  override def toString = len match {
+    case max if max == Integer.MAX_VALUE => s"SUBSTR($str, $pos)"
+    case _ => s"SUBSTR($str, $pos, $len)"
+  }
 }

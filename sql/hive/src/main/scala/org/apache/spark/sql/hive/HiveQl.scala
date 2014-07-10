@@ -860,7 +860,7 @@ private[hive] object HiveQl {
   val BETWEEN = "(?i)BETWEEN".r
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
-  val SUBSTR = "(?i)I_SUBSTR(?:ING)?".r
+  val SUBSTR = "(?i)SUBSTR(?:ING)?".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
