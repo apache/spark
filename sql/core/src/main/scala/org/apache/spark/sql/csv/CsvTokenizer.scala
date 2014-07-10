@@ -19,14 +19,12 @@ package org.apache.spark.sql.csv
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.Logging
-
 /**
  * Tokenizer based on RFC 4180 for comma separated values.
  * It implements an iterator that returns each tokenized line as an Array[Any].
  */
 private[sql] class CsvTokenizer(inputIter: Iterator[String],
-    delimiter: String, quote: String) extends Iterator[Array[Any]] with Logging {
+    delimiter: String, quote: String) extends Iterator[Array[Any]] {
 
   private  val DELIM = delimiter.charAt(0)
   private  val QUOTE = quote.charAt(0)
