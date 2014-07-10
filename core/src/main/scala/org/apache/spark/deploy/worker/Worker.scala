@@ -366,11 +366,15 @@ private[spark] class Worker(
 }
 
 private[spark] object Worker extends Logging {
+  var HACKworkerActorSystem: ActorSystem = null
+  var HACKakkaHost: String = null
+
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val args = new WorkerArguments(argStrings)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir)
+
     actorSystem.awaitTermination()
   }
 
@@ -387,11 +391,17 @@ private[spark] object Worker extends Logging {
     val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
+
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
       conf = conf, securityManager = securityMgr)
+
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
       masterUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
+
+    Worker.HACKakkaHost = "akka.tcp://%s@%s:%s/user/".format(systemName, host, boundPort)
+    Worker.HACKworkerActorSystem = actorSystem
+
     (actorSystem, boundPort)
   }
 

@@ -39,7 +39,7 @@ object BinaryClassification {
 
   object Algorithm extends Enumeration {
     type Algorithm = Value
-    val SVM, LR, Pegasos = Value
+    val SVM, LR, Pegasos, PegasosAsync = Value
   }
 
   object RegType extends Enumeration {
@@ -107,7 +107,7 @@ object BinaryClassification {
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
-    val examples = MLUtils.loadLibSVMFile(sc, params.input).cache()
+    val examples = MLUtils.loadLibSVMFile(sc, params.input).repartition(4).cache()
 
     val splits = examples.randomSplit(Array(0.8, 0.2))
     val training = splits(0).cache()
@@ -115,6 +115,9 @@ object BinaryClassification {
 
     val numTraining = training.count()
     val numTest = test.count()
+
+    println(s"defaultparallelism: ${sc.defaultParallelism} minpart: ${sc.defaultMinPartitions}")
+
     println(s"Training: $numTraining, test: $numTest.")
 
     examples.unpersist(blocking = false)
@@ -144,6 +147,10 @@ object BinaryClassification {
       case Pegasos =>
         val algorithm = new PegasosSVM()
         algorithm.run(training)
+      case PegasosAsync =>
+        val algorithm = new PegasosSVM(async = true)
+        algorithm.run(training)
+
     }
 
     val prediction = model.predict(test.map(_.features))

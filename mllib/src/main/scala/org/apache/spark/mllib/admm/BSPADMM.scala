@@ -5,7 +5,7 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
 
-case class SubProblem(points: Array[BV], labels: Array[Double])
+case class BSPSubProblem(points: Array[BV], labels: Array[Double])
 
 object BSPADMMwithSGD {
   def train(input: RDD[(Double, Vector)],
@@ -13,11 +13,11 @@ object BSPADMMwithSGD {
             gradient: BVGradient,
             initialWeights: Vector) = {
 
-    val subProblems: RDD[SubProblem] = input.mapPartitions{ iter =>
+    val subProblems: RDD[BSPSubProblem] = input.mapPartitions{ iter =>
       val localData = iter.toArray
       val points = localData.map { case (y, x) => x.toBreeze }
       val labels = localData.map { case (y, x) => y }
-      Iterator(SubProblem(points, labels))
+      Iterator(BSPSubProblem(points, labels))
     }
 
     val solvers = subProblems.map { s =>

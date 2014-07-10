@@ -8,7 +8,8 @@ import org.apache.spark.rdd.RDD
 
 class PegasosSVM(val iterations: Integer = 10,
                  val rho: Double = .1,
-                 val lambda: Double = 0.1) extends SVMWithSGD {
+                 val lambda: Double = 0.1,
+                 val async: Boolean = false) extends SVMWithSGD {
 
   override def run(input: RDD[LabeledPoint]): SVMModel = {
     println("Running pegasos svm")
@@ -32,7 +33,11 @@ class PegasosSVM(val iterations: Integer = 10,
     }
 
     val weightsWithIntercept =
+    if(!async)
       Vectors.fromBreeze(BSPADMMwithSGD.train(data, iterations, new PegasosBVGradient(lambda), initialWeights))
+    else
+      Vectors.fromBreeze(AsyncADMMwithSGD.train(data, iterations, new PegasosBVGradient(lambda), initialWeights))
+
 
     val intercept = if (addIntercept) weightsWithIntercept(0) else 0.0
     val weights =

@@ -25,6 +25,7 @@ import com.typesafe.config.ConfigFactory
 import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.deploy.worker.Worker
 
 /**
  * Various utility classes for working with Akka.
@@ -104,6 +105,11 @@ private[spark] object AkkaUtils extends Logging {
     val actorSystem = ActorSystem(name, akkaConf)
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
     val boundPort = provider.getDefaultAddress.port.get
+
+    Worker.HACKakkaHost = "akka.tcp://%s@%s:%s/user/".format(name, host, boundPort)
+    Worker.HACKworkerActorSystem = actorSystem
+
+
     (actorSystem, boundPort)
   }
 
