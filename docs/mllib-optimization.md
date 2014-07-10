@@ -116,7 +116,7 @@ is a stochastic gradient. Here `$S$` is the sampled subset of size `$|S|=$ miniB
 $\cdot n$`.
 
 In each iteration, the sampling over the distributed dataset
-([RDD](scala-programming-guide.html#resilient-distributed-datasets-rdds)), as well as the
+([RDD](programming-guide.html#resilient-distributed-datasets-rdds)), as well as the
 computation of the sum of the partial results from each worker machine is performed by the
 standard spark routines.
 
@@ -147,9 +147,9 @@ are developed, see the
 <a href="mllib-linear-methods.html">linear methods</a> 
 section for example.
 
-The SGD method
-[GradientDescent.runMiniBatchSGD](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
-has the following parameters:
+The SGD class
+[GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+sets the following parameters:
 
 * `Gradient` is a class that computes the stochastic gradient of the function
 being optimized, i.e., with respect to a single training example, at the
@@ -171,7 +171,7 @@ each iteration, to compute the gradient direction.
 
 Available algorithms for gradient descent:
 
-* [GradientDescent.runMiniBatchSGD](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+* [GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 
 ### L-BFGS
 L-BFGS is currently only a low-level optimization primitive in `MLlib`. If you want to use L-BFGS in various 

@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, PipelinedRDD
+from pyspark.serializers import BatchedSerializer, PickleSerializer
 
 from py4j.protocol import Py4JError
 
@@ -76,11 +77,24 @@ class SQLContext:
         """Infer and apply a schema to an RDD of L{dict}s.
 
         We peek at the first row of the RDD to determine the fields names
-        and types, and then use that to extract all the dictionaries.
+        and types, and then use that to extract all the dictionaries. Nested
+        collections are supported, which include array, dict, list, set, and
+        tuple.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"},
         ...                    {"field1" : 3, "field2": "row3"}]
+        True
+
+        >>> from array import array
+        >>> srdd = sqlCtx.inferSchema(nestedRdd1)
+        >>> srdd.collect() == [{"f1" : array('i', [1, 2]), "f2" : {"row1" : 1.0}},
+        ...                    {"f1" : array('i', [2, 3]), "f2" : {"row2" : 2.0}}]
+        True
+
+        >>> srdd = sqlCtx.inferSchema(nestedRdd2)
+        >>> srdd.collect() == [{"f1" : [[1, 2], [2, 3]], "f2" : set([1, 2]), "f3" : (1, 2)},
+        ...                    {"f1" : [[2, 3], [3, 4]], "f2" : set([2, 3]), "f3" : (2, 3)}]
         True
         """
         if (rdd.__class__ is SchemaRDD):
@@ -117,10 +131,61 @@ class SQLContext:
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.saveAsParquetFile(parquetFile)
         >>> srdd2 = sqlCtx.parquetFile(parquetFile)
-        >>> srdd.collect() == srdd2.collect()
+        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
         jschema_rdd = self._ssql_ctx.parquetFile(path)
+        return SchemaRDD(jschema_rdd, self)
+
+
+    def jsonFile(self, path):
+        """Loads a text file storing one JSON object per line,
+           returning the result as a L{SchemaRDD}.
+           It goes through the entire dataset once to determine the schema.
+
+        >>> import tempfile, shutil
+        >>> jsonFile = tempfile.mkdtemp()
+        >>> shutil.rmtree(jsonFile)
+        >>> ofn = open(jsonFile, 'w')
+        >>> for json in jsonStrings:
+        ...   print>>ofn, json
+        >>> ofn.close()
+        >>> srdd = sqlCtx.jsonFile(jsonFile)
+        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
+        >>> srdd2 = sqlCtx.sql(
+        ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
+        >>> srdd2.collect() == [
+        ... {"f1":1, "f2":"row1", "f3":{"field4":11, "field5": None}, "f4":None},
+        ... {"f1":2, "f2":None, "f3":{"field4":22,  "field5": [10, 11]}, "f4":[{"field7": "row2"}]},
+        ... {"f1":None, "f2":"row3", "f3":{"field4":33, "field5": []}, "f4":None}]
+        True
+        """
+        jschema_rdd = self._ssql_ctx.jsonFile(path)
+        return SchemaRDD(jschema_rdd, self)
+
+    def jsonRDD(self, rdd):
+        """Loads an RDD storing one JSON object per string, returning the result as a L{SchemaRDD}.
+           It goes through the entire dataset once to determine the schema.
+
+        >>> srdd = sqlCtx.jsonRDD(json)
+        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
+        >>> srdd2 = sqlCtx.sql(
+        ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
+        >>> srdd2.collect() == [
+        ... {"f1":1, "f2":"row1", "f3":{"field4":11, "field5": None}, "f4":None},
+        ... {"f1":2, "f2":None, "f3":{"field4":22,  "field5": [10, 11]}, "f4":[{"field7": "row2"}]},
+        ... {"f1":None, "f2":"row3", "f3":{"field4":33, "field5": []}, "f4":None}]
+        True
+        """
+        def func(split, iterator):
+            for x in iterator:
+                if not isinstance(x, basestring):
+                    x = unicode(x)
+                yield x.encode("utf-8")
+        keyed = PipelinedRDD(rdd, func)
+        keyed._bypass_serializer = True
+        jrdd = keyed._jrdd.map(self._jvm.BytesToString())
+        jschema_rdd = self._ssql_ctx.jsonRDD(jrdd.rdd())
         return SchemaRDD(jschema_rdd, self)
 
     def sql(self, sqlQuery):
@@ -141,7 +206,7 @@ class SQLContext:
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.table("table1")
-        >>> srdd.collect() == srdd2.collect()
+        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
         return SchemaRDD(self._ssql_ctx.table(tableName), self)
@@ -251,7 +316,7 @@ class SchemaRDD(RDD):
 
     For normal L{pyspark.rdd.RDD} operations (map, count, etc.) the
     L{SchemaRDD} is not operated on directly, as it's underlying
-    implementation is a RDD composed of Java objects. Instead it is
+    implementation is an RDD composed of Java objects. Instead it is
     converted to a PythonRDD in the JVM, on which Python operations can
     be done.
     """
@@ -293,7 +358,7 @@ class SchemaRDD(RDD):
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.saveAsParquetFile(parquetFile)
         >>> srdd2 = sqlCtx.parquetFile(parquetFile)
-        >>> srdd2.collect() == srdd.collect()
+        >>> sorted(srdd2.collect()) == sorted(srdd.collect())
         True
         """
         self._jschema_rdd.saveAsParquetFile(path)
@@ -307,7 +372,7 @@ class SchemaRDD(RDD):
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.registerAsTable("test")
         >>> srdd2 = sqlCtx.sql("select * from test")
-        >>> srdd.collect() == srdd2.collect()
+        >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
         self._jschema_rdd.registerAsTable(name)
@@ -322,6 +387,14 @@ class SchemaRDD(RDD):
     def saveAsTable(self, tableName):
         """Creates a new table with the contents of this SchemaRDD."""
         self._jschema_rdd.saveAsTable(tableName)
+
+    def schemaString(self):
+        """Returns the output schema in the tree format."""
+        return self._jschema_rdd.schemaString()
+
+    def printSchema(self):
+        """Prints out the schema in the tree format."""
+        print self.schemaString()
 
     def count(self):
         """Return the number of elements in this RDD.
@@ -346,7 +419,8 @@ class SchemaRDD(RDD):
         # TODO: This is inefficient, we should construct the Python Row object
         # in Java land in the javaToPython function. May require a custom
         # pickle serializer in Pyrolite
-        return RDD(jrdd, self._sc, self._sc.serializer).map(lambda d: Row(d))
+        return RDD(jrdd, self._sc, BatchedSerializer(
+                        PickleSerializer())).map(lambda d: Row(d))
 
     # We override the default cache/persist/checkpoint behavior as we want to cache the underlying
     # SchemaRDD object in the JVM, not the PythonRDD checkpointed by the super class
@@ -411,6 +485,7 @@ class SchemaRDD(RDD):
 
 def _test():
     import doctest
+    from array import array
     from pyspark.context import SparkContext
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
@@ -420,6 +495,17 @@ def _test():
     globs['sqlCtx'] = SQLContext(sc)
     globs['rdd'] = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+    jsonStrings = ['{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
+       '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]}, "field6":[{"field7": "row2"}]}',
+       '{"field1" : null, "field2": "row3", "field3":{"field4":33, "field5": []}}']
+    globs['jsonStrings'] = jsonStrings
+    globs['json'] = sc.parallelize(jsonStrings)
+    globs['nestedRdd1'] = sc.parallelize([
+        {"f1" : array('i', [1, 2]), "f2" : {"row1" : 1.0}},
+        {"f1" : array('i', [2, 3]), "f2" : {"row2" : 2.0}}])
+    globs['nestedRdd2'] = sc.parallelize([
+        {"f1" : [[1, 2], [2, 3]], "f2" : set([1, 2]), "f3" : (1, 2)},
+        {"f1" : [[2, 3], [3, 4]], "f2" : set([2, 3]), "f3" : (2, 3)}])
     (failure_count, test_count) = doctest.testmod(globs=globs,optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

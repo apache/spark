@@ -80,7 +80,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   @transient val triplets: RDD[EdgeTriplet[VD, ED]]
 
   /**
-   * Caches the vertices and edges associated with this graph at the specified storage level.
+   * Caches the vertices and edges associated with this graph at the specified storage level,
+   * ignoring any target storage levels previously set.
    *
    * @param newLevel the level at which to cache the graph.
    *
@@ -89,9 +90,9 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def persist(newLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, ED]
 
   /**
-   * Caches the vertices and edges associated with this graph. This is used to
-   * pin a graph in memory enabling multiple queries to reuse the same
-   * construction process.
+   * Caches the vertices and edges associated with this graph at the previously-specified target
+   * storage levels, which default to `MEMORY_ONLY`. This is used to pin a graph in memory enabling
+   * multiple queries to reuse the same construction process.
    */
   def cache(): Graph[VD, ED]
 
@@ -105,8 +106,18 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
 
   /**
    * Repartitions the edges in the graph according to `partitionStrategy`.
+   *
+   * @param the partitioning strategy to use when partitioning the edges in the graph.
    */
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
+
+  /**
+   * Repartitions the edges in the graph according to `partitionStrategy`.
+   *
+   * @param the partitioning strategy to use when partitioning the edges in the graph.
+   * @param numPartitions the number of edge partitions in the new graph.
+   */
+  def partitionBy(partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED]
 
   /**
    * Transforms each vertex attribute in the graph using the map function.
@@ -127,7 +138,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * }}}
    *
    */
-  def mapVertices[VD2: ClassTag](map: (VertexId, VD) => VD2): Graph[VD2, ED]
+  def mapVertices[VD2: ClassTag](map: (VertexId, VD) => VD2)
+    (implicit eq: VD =:= VD2 = null): Graph[VD2, ED]
 
   /**
    * Transforms each edge attribute in the graph using the map function.  The map function is not
@@ -337,7 +349,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * }}}
    */
   def outerJoinVertices[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
-      (mapFunc: (VertexId, VD, Option[U]) => VD2)
+      (mapFunc: (VertexId, VD, Option[U]) => VD2)(implicit eq: VD =:= VD2 = null)
     : Graph[VD2, ED]
 
   /**
@@ -358,9 +370,12 @@ object Graph {
    * Construct a graph from a collection of edges encoded as vertex id pairs.
    *
    * @param rawEdges a collection of edges in (src, dst) form
+   * @param defaultValue the vertex attributes with which to create vertices referenced by the edges
    * @param uniqueEdges if multiple identical edges are found they are combined and the edge
    * attribute is set to the sum.  Otherwise duplicate edges are treated as separate. To enable
    * `uniqueEdges`, a [[PartitionStrategy]] must be provided.
+   * @param edgeStorageLevel the desired storage level at which to cache the edges if necessary
+   * @param vertexStorageLevel the desired storage level at which to cache the vertices if necessary
    *
    * @return a graph with edge attributes containing either the count of duplicate edges or 1
    * (if `uniqueEdges` is `None`) and vertex attributes containing the total degree of each vertex.
@@ -368,10 +383,12 @@ object Graph {
   def fromEdgeTuples[VD: ClassTag](
       rawEdges: RDD[(VertexId, VertexId)],
       defaultValue: VD,
-      uniqueEdges: Option[PartitionStrategy] = None): Graph[VD, Int] =
+      uniqueEdges: Option[PartitionStrategy] = None,
+      edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
+      vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, Int] =
   {
     val edges = rawEdges.map(p => Edge(p._1, p._2, 1))
-    val graph = GraphImpl(edges, defaultValue)
+    val graph = GraphImpl(edges, defaultValue, edgeStorageLevel, vertexStorageLevel)
     uniqueEdges match {
       case Some(p) => graph.partitionBy(p).groupEdges((a, b) => a + b)
       case None => graph
@@ -383,14 +400,18 @@ object Graph {
    *
    * @param edges the RDD containing the set of edges in the graph
    * @param defaultValue the default vertex attribute to use for each vertex
+   * @param edgeStorageLevel the desired storage level at which to cache the edges if necessary
+   * @param vertexStorageLevel the desired storage level at which to cache the vertices if necessary
    *
    * @return a graph with edge attributes described by `edges` and vertices
    *         given by all vertices in `edges` with value `defaultValue`
    */
   def fromEdges[VD: ClassTag, ED: ClassTag](
       edges: RDD[Edge[ED]],
-      defaultValue: VD): Graph[VD, ED] = {
-    GraphImpl(edges, defaultValue)
+      defaultValue: VD,
+      edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
+      vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, ED] = {
+    GraphImpl(edges, defaultValue, edgeStorageLevel, vertexStorageLevel)
   }
 
   /**
@@ -405,12 +426,16 @@ object Graph {
    * @param edges the collection of edges in the graph
    * @param defaultVertexAttr the default vertex attribute to use for vertices that are
    *                          mentioned in edges but not in vertices
+   * @param edgeStorageLevel the desired storage level at which to cache the edges if necessary
+   * @param vertexStorageLevel the desired storage level at which to cache the vertices if necessary
    */
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: RDD[(VertexId, VD)],
       edges: RDD[Edge[ED]],
-      defaultVertexAttr: VD = null.asInstanceOf[VD]): Graph[VD, ED] = {
-    GraphImpl(vertices, edges, defaultVertexAttr)
+      defaultVertexAttr: VD = null.asInstanceOf[VD],
+      edgeStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY,
+      vertexStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, ED] = {
+    GraphImpl(vertices, edges, defaultVertexAttr, edgeStorageLevel, vertexStorageLevel)
   }
 
   /**

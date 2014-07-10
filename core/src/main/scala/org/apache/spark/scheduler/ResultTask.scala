@@ -17,11 +17,12 @@
 
 package org.apache.spark.scheduler
 
+import scala.language.existentials
+
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.HashMap
-import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}

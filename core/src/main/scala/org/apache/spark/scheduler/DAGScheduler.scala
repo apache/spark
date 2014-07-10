@@ -26,6 +26,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import akka.actor._
 import akka.actor.OneForOneStrategy
@@ -38,7 +39,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -61,7 +62,8 @@ class DAGScheduler(
     listenerBus: LiveListenerBus,
     mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,
-    env: SparkEnv)
+    env: SparkEnv,
+    clock: Clock = SystemClock)
   extends Logging {
 
   import DAGScheduler._
@@ -189,12 +191,14 @@ class DAGScheduler(
    * The jobId value passed in will be used if the stage doesn't already exist with
    * a lower jobId (jobId always increases across jobs.)
    */
-  private def getShuffleMapStage(shuffleDep: ShuffleDependency[_,_], jobId: Int): Stage = {
+  private def getShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): Stage = {
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) => stage
       case None =>
         val stage =
-          newOrUsedStage(shuffleDep.rdd, shuffleDep.rdd.partitions.size, shuffleDep, jobId)
+          newOrUsedStage(
+            shuffleDep.rdd, shuffleDep.rdd.partitions.size, shuffleDep, jobId,
+            shuffleDep.rdd.creationSite)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
         stage
     }
@@ -209,9 +213,9 @@ class DAGScheduler(
   private def newStage(
       rdd: RDD[_],
       numTasks: Int,
-      shuffleDep: Option[ShuffleDependency[_,_]],
+      shuffleDep: Option[ShuffleDependency[_, _, _]],
       jobId: Int,
-      callSite: Option[String] = None)
+      callSite: CallSite)
     : Stage =
   {
     val id = nextStageId.getAndIncrement()
@@ -232,9 +236,9 @@ class DAGScheduler(
   private def newOrUsedStage(
       rdd: RDD[_],
       numTasks: Int,
-      shuffleDep: ShuffleDependency[_,_],
+      shuffleDep: ShuffleDependency[_, _, _],
       jobId: Int,
-      callSite: Option[String] = None)
+      callSite: CallSite)
     : Stage =
   {
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId, callSite)
@@ -268,7 +272,7 @@ class DAGScheduler(
         // we can't do it in its constructor because # of partitions is unknown
         for (dep <- r.dependencies) {
           dep match {
-            case shufDep: ShuffleDependency[_,_] =>
+            case shufDep: ShuffleDependency[_, _, _] =>
               parents += getShuffleMapStage(shufDep, jobId)
             case _ =>
               visit(dep.rdd)
@@ -289,7 +293,7 @@ class DAGScheduler(
         if (getCacheLocs(rdd).contains(Nil)) {
           for (dep <- rdd.dependencies) {
             dep match {
-              case shufDep: ShuffleDependency[_,_] =>
+              case shufDep: ShuffleDependency[_, _, _] =>
                 val mapStage = getShuffleMapStage(shufDep, stage.jobId)
                 if (!mapStage.isAvailable) {
                   missing += mapStage
@@ -412,7 +416,7 @@ class DAGScheduler(
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
-      callSite: String,
+      callSite: CallSite,
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
       properties: Properties = null): JobWaiter[U] =
@@ -442,7 +446,7 @@ class DAGScheduler(
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
-      callSite: String,
+      callSite: CallSite,
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
       properties: Properties = null)
@@ -451,7 +455,7 @@ class DAGScheduler(
     waiter.awaitResult() match {
       case JobSucceeded => {}
       case JobFailed(exception: Exception) =>
-        logInfo("Failed to run " + callSite)
+        logInfo("Failed to run " + callSite.short)
         throw exception
     }
   }
@@ -460,7 +464,7 @@ class DAGScheduler(
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
-      callSite: String,
+      callSite: CallSite,
       timeout: Long,
       properties: Properties = null)
     : PartialResult[R] =
@@ -578,8 +582,9 @@ class DAGScheduler(
       }
     } catch {
       case e: Exception =>
-        jobResult = JobFailed(e)
-        job.listener.jobFailed(e)
+        val exception = new SparkDriverExecutionException(e)
+        jobResult = JobFailed(exception)
+        job.listener.jobFailed(exception)
       case oom: OutOfMemoryError =>
         val exception = new SparkException("Local job aborted due to out of memory error", oom)
         jobResult = JobFailed(exception)
@@ -619,16 +624,6 @@ class DAGScheduler(
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
-    for (stage <- stageIdToStage.get(task.stageId); stageInfo <- stageToInfos.get(stage)) {
-      if (taskInfo.serializedSize > DAGScheduler.TASK_SIZE_TO_WARN * 1024 &&
-        !stageInfo.emittedTaskSizeWarning) {
-        stageInfo.emittedTaskSizeWarning = true
-        logWarning(("Stage %d (%s) contains a task of very large " +
-          "size (%d KB). The maximum recommended task size is %d KB.").format(
-            task.stageId, stageInfo.name, taskInfo.serializedSize / 1024,
-            DAGScheduler.TASK_SIZE_TO_WARN))
-      }
-    }
     listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
     submitWaitingStages()
   }
@@ -665,7 +660,7 @@ class DAGScheduler(
       func: (TaskContext, Iterator[_]) => _,
       partitions: Array[Int],
       allowLocal: Boolean,
-      callSite: String,
+      callSite: CallSite,
       listener: JobListener,
       properties: Properties = null)
   {
@@ -673,7 +668,7 @@ class DAGScheduler(
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
-      finalStage = newStage(finalRDD, partitions.size, None, jobId, Some(callSite))
+      finalStage = newStage(finalRDD, partitions.size, None, jobId, callSite)
     } catch {
       case e: Exception =>
         logWarning("Creating new stage failed due to exception - job: " + jobId, e)
@@ -684,7 +679,7 @@ class DAGScheduler(
       val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
       clearCacheLocs()
       logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".format(
-        job.jobId, callSite, partitions.length, allowLocal))
+        job.jobId, callSite.short, partitions.length, allowLocal))
       logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
       logInfo("Parents of final stage: " + finalStage.parents)
       logInfo("Missing parents: " + getMissingParentStages(finalStage))
@@ -774,6 +769,10 @@ class DAGScheduler(
           abortStage(stage, "Task not serializable: " + e.toString)
           runningStages -= stage
           return
+        case NonFatal(e) => // Other exceptions, such as IllegalArgumentException from Kryo.
+          abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
+          runningStages -= stage
+          return
       }
 
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
@@ -781,7 +780,7 @@ class DAGScheduler(
       logDebug("New pending tasks: " + myPending)
       taskScheduler.submitTasks(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
-      stageToInfos(stage).submissionTime = Some(System.currentTimeMillis())
+      stageToInfos(stage).submissionTime = Some(clock.getTime())
     } else {
       logDebug("Stage " + stage + " is actually done; %b %d %d".format(
         stage.isAvailable, stage.numAvailableOutputs, stage.numPartitions))
@@ -807,11 +806,11 @@ class DAGScheduler(
 
     def markStageAsFinished(stage: Stage) = {
       val serviceTime = stageToInfos(stage).submissionTime match {
-        case Some(t) => "%.03f".format((System.currentTimeMillis() - t) / 1000.0)
+        case Some(t) => "%.03f".format((clock.getTime() - t) / 1000.0)
         case _ => "Unknown"
       }
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
-      stageToInfos(stage).completionTime = Some(System.currentTimeMillis())
+      stageToInfos(stage).completionTime = Some(clock.getTime())
       listenerBus.post(SparkListenerStageCompleted(stageToInfos(stage)))
       runningStages -= stage
     }
@@ -819,6 +818,7 @@ class DAGScheduler(
       case Success =>
         logInfo("Completed " + task)
         if (event.accumUpdates != null) {
+          // TODO: fail the stage if the accumulator update fails...
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
         }
         pendingTasks(stage) -= task
@@ -835,7 +835,16 @@ class DAGScheduler(
                     cleanupStateForJobAndIndependentStages(job, Some(stage))
                     listenerBus.post(SparkListenerJobEnd(job.jobId, JobSucceeded))
                   }
-                  job.listener.taskSucceeded(rt.outputId, event.result)
+
+                  // taskSucceeded runs some user code that might throw an exception. Make sure
+                  // we are resilient against that.
+                  try {
+                    job.listener.taskSucceeded(rt.outputId, event.result)
+                  } catch {
+                    case e: Exception =>
+                      // TODO: Perhaps we want to mark the stage as failed?
+                      job.listener.jobFailed(new SparkDriverExecutionException(e))
+                  }
                 }
               case None =>
                 logInfo("Ignoring result from " + rt + " because its job has finished")
@@ -1015,7 +1024,7 @@ class DAGScheduler(
       return
     }
     val dependentStages = resultStageToJob.keys.filter(x => stageDependsOn(x, failedStage)).toSeq
-    stageToInfos(failedStage).completionTime = Some(System.currentTimeMillis())
+    stageToInfos(failedStage).completionTime = Some(clock.getTime())
     for (resultStage <- dependentStages) {
       val job = resultStageToJob(resultStage)
       failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason",
@@ -1035,7 +1044,7 @@ class DAGScheduler(
   private def failJobAndIndependentStages(job: ActiveJob, failureReason: String,
       resultStage: Option[Stage]) {
     val error = new SparkException(failureReason)
-    job.listener.jobFailed(error)
+    var ableToCancelStages = true
 
     val shouldInterruptThread =
       if (job.properties == null) false
@@ -1059,18 +1068,26 @@ class DAGScheduler(
           // This is the only job that uses this stage, so fail the stage if it is running.
           val stage = stageIdToStage(stageId)
           if (runningStages.contains(stage)) {
-            taskScheduler.cancelTasks(stageId, shouldInterruptThread)
-            val stageInfo = stageToInfos(stage)
-            stageInfo.stageFailed(failureReason)
-            listenerBus.post(SparkListenerStageCompleted(stageToInfos(stage)))
+            try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
+              taskScheduler.cancelTasks(stageId, shouldInterruptThread)
+              val stageInfo = stageToInfos(stage)
+              stageInfo.stageFailed(failureReason)
+              listenerBus.post(SparkListenerStageCompleted(stageToInfos(stage)))
+            } catch {
+              case e: UnsupportedOperationException =>
+                logInfo(s"Could not cancel tasks for stage $stageId", e)
+              ableToCancelStages = false
+            }
           }
         }
       }
     }
 
-    cleanupStateForJobAndIndependentStages(job, resultStage)
-
-    listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
+    if (ableToCancelStages) {
+      job.listener.jobFailed(error)
+      cleanupStateForJobAndIndependentStages(job, resultStage)
+      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
+    }
   }
 
   /**
@@ -1087,7 +1104,7 @@ class DAGScheduler(
         visitedRdds += rdd
         for (dep <- rdd.dependencies) {
           dep match {
-            case shufDep: ShuffleDependency[_,_] =>
+            case shufDep: ShuffleDependency[_, _, _] =>
               val mapStage = getShuffleMapStage(shufDep, stage.jobId)
               if (!mapStage.isAvailable) {
                 visitedStages += mapStage
@@ -1150,9 +1167,12 @@ private[scheduler] class DAGSchedulerActorSupervisor(dagScheduler: DAGScheduler)
   override val supervisorStrategy =
     OneForOneStrategy() {
       case x: Exception =>
-        logError("eventProcesserActor failed due to the error %s; shutting down SparkContext"
-          .format(x.getMessage))
-        dagScheduler.doCancelAllJobs()
+        logError("eventProcesserActor failed; shutting down SparkContext", x)
+        try {
+          dagScheduler.doCancelAllJobs()
+        } catch {
+          case t: Throwable => logError("DAGScheduler failed to cancel all jobs.", t)
+        }
         dagScheduler.sc.stop()
         Stop
     }
@@ -1229,7 +1249,4 @@ private[spark] object DAGScheduler {
   // The time, in millis, to wake up between polls of the completion queue in order to potentially
   // resubmit failed stages
   val POLL_TIMEOUT = 10L
-
-  // Warns the user if a stage contains a task with size greater than this value (in KB)
-  val TASK_SIZE_TO_WARN = 100
 }

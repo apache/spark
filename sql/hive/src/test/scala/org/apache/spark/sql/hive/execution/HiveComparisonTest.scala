@@ -19,11 +19,13 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
-import org.apache.spark.sql.Logging
-import org.apache.spark.sql.catalyst.plans.logical.{ExplainCommand, NativeCommand}
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.Sort
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
+
+import org.apache.spark.sql.Logging
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand => LogicalNativeCommand}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -128,17 +130,27 @@ abstract class HiveComparisonTest
   protected def prepareAnswer(
     hiveQuery: TestHive.type#HiveQLQueryExecution,
     answer: Seq[String]): Seq[String] = {
+
+    def isSorted(plan: LogicalPlan): Boolean = plan match {
+      case _: Join | _: Aggregate | _: BaseRelation | _: Generate | _: Sample | _: Distinct => false
+      case PhysicalOperation(_, _, Sort(_, _)) => true
+      case _ => plan.children.iterator.exists(isSorted)
+    }
+
     val orderedAnswer = hiveQuery.logical match {
       // Clean out non-deterministic time schema info.
-      case _: NativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
+      // Hack: Hive simply prints the result of a SET command to screen,
+      // and does not return it as a query answer.
+      case _: SetCommand => Seq("0")
+      case _: LogicalNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
-      case _ =>
-        // TODO: Really we only care about the final total ordering here...
-        val isOrdered = hiveQuery.executedPlan.collect {
-          case s @ Sort(_, global, _) if global => s
-        }.nonEmpty
-        // If the query results aren't sorted, then sort them to ensure deterministic answers.
-        if (!isOrdered) answer.sorted else answer
+      case _: DescribeCommand =>
+        // Filter out non-deterministic lines and lines which do not have actual results but
+        // can introduce problems because of the way Hive formats these lines.
+        // Then, remove empty lines. Do not sort the results.
+        answer.filterNot(
+          r => nonDeterministicLine(r) || ignoredLine(r)).map(_.trim).filterNot(_ == "")
+      case plan => if (isSorted(plan)) answer else answer.sorted
     }
     orderedAnswer.map(cleanPaths)
   }
@@ -161,7 +173,17 @@ abstract class HiveComparisonTest
     "minFileSize"
   )
   protected def nonDeterministicLine(line: String) =
-    nonDeterministicLineIndicators.map(line contains _).reduceLeft(_||_)
+    nonDeterministicLineIndicators.exists(line contains _)
+
+  // This list contains indicators for those lines which do not have actual results and we
+  // want to ignore.
+  lazy val ignoredLineIndicators = Seq(
+    "# Partition Information",
+    "# col_name"
+  )
+
+  protected def ignoredLine(line: String) =
+    ignoredLineIndicators.exists(line contains _)
 
   /**
    * Removes non-deterministic paths from `str` so cached answers will compare correctly.
@@ -323,10 +345,16 @@ abstract class HiveComparisonTest
 
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) && preparedHive != catalyst) {
 
-              val hivePrintOut = s"== HIVE - ${hive.size} row(s) ==" +: preparedHive
+              val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive
               val catalystPrintOut = s"== CATALYST - ${catalyst.size} row(s) ==" +: catalyst
 
               val resultComparison = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
+
+              println("hive output")
+              hive.foreach(println)
+
+              println("catalyst printout")
+              catalyst.foreach(println)
 
               if (recomputeCache) {
                 logger.warn(s"Clearing cache files for failed test $testCaseName")

@@ -22,8 +22,18 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types._
 
+object HiveTypeCoercion {
+  // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
+  // The conversion for integral and floating point types have a linear widening hierarchy:
+  val numericPrecedence =
+    Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
+  // Boolean is only wider than Void
+  val booleanPrecedence = Seq(NullType, BooleanType)
+  val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil
+}
+
 /**
- * A collection of [[catalyst.rules.Rule Rules]] that can be used to coerce differing types that
+ * A collection of [[Rule Rules]] that can be used to coerce differing types that
  * participate in operations into compatible ones.  Most of these rules are based on Hive semantics,
  * but they do not introduce any dependencies on the hive codebase.  For this reason they remain in
  * Catalyst until we have a more standard set of coercions.
@@ -31,12 +41,20 @@ import org.apache.spark.sql.catalyst.types._
 trait HiveTypeCoercion {
 
   val typeCoercionRules =
-    List(PropagateTypes, ConvertNaNs, WidenTypes, PromoteStrings, BooleanComparisons, BooleanCasts,
-      StringToIntegralCasts, FunctionArgumentConversion)
+    PropagateTypes ::
+    ConvertNaNs ::
+    WidenTypes ::
+    PromoteStrings ::
+    BooleanComparisons ::
+    BooleanCasts ::
+    StringToIntegralCasts ::
+    FunctionArgumentConversion ::
+    CastNulls ::
+    Nil
 
   /**
-   * Applies any changes to [[catalyst.expressions.AttributeReference AttributeReference]] data
-   * types that are made by other rules to instances higher in the query tree.
+   * Applies any changes to [[AttributeReference]] data types that are made by other rules to
+   * instances higher in the query tree.
    */
   object PropagateTypes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -108,19 +126,18 @@ trait HiveTypeCoercion {
    *
    * Additionally, all types when UNION-ed with strings will be promoted to strings.
    * Other string conversions are handled by PromoteStrings.
+   *
+   * Widening types might result in loss of precision in the following cases:
+   * - IntegerType to FloatType
+   * - LongType to FloatType
+   * - LongType to DoubleType
    */
   object WidenTypes extends Rule[LogicalPlan] {
-    // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
-    // The conversion for integral and floating point types have a linear widening hierarchy:
-    val numericPrecedence =
-      Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
-    // Boolean is only wider than Void
-    val booleanPrecedence = Seq(NullType, BooleanType)
-    val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil
 
     def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
       // Try and find a promotion rule that contains both types in question.
-      val applicableConversion = allPromotions.find(p => p.contains(t1) && p.contains(t2))
+      val applicableConversion =
+        HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p.contains(t2))
 
       // If found return the widest common type, otherwise None
       applicableConversion.map(_.filter(t => t == t1 || t == t2).last)
@@ -217,8 +234,8 @@ trait HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      // No need to change Equals operators as that actually makes sense for boolean types.
-      case e: Equals => e
+      // No need to change EqualTo operators as that actually makes sense for boolean types.
+      case e: EqualTo => e
       // Otherwise turn them to Byte types so that there exists and ordering.
       case p: BinaryComparison
           if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
@@ -227,15 +244,20 @@ trait HiveTypeCoercion {
   }
 
   /**
-   * Casts to/from [[catalyst.types.BooleanType BooleanType]] are transformed into comparisons since
+   * Casts to/from [[BooleanType]] are transformed into comparisons since
    * the JVM does not consider Booleans to be numeric types.
    */
   object BooleanCasts extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
-      case Cast(e, BooleanType) => Not(Equals(e, Literal(0)))
+      // Skip if the type is boolean type already. Note that this extra cast should be removed
+      // by optimizer.SimplifyCasts.
+      case Cast(e, BooleanType) if e.dataType == BooleanType => e
+      // If the data type is not boolean and is being cast boolean, turn it into a comparison
+      // with the numeric value, i.e. x != 0. This will coerce the type into numeric type.
+      case Cast(e, BooleanType) if e.dataType != BooleanType => Not(EqualTo(e, Literal(0)))
+      // Turn true into 1, and false into 0 if casting boolean into other types.
       case Cast(e, dataType) if e.dataType == BooleanType =>
         Cast(If(e, Literal(1), Literal(0)), dataType)
     }
@@ -264,10 +286,51 @@ trait HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      // Promote SUM to largest types to prevent overflows.
+      // Promote SUM, SUM DISTINCT and AVERAGE to largest types to prevent overflows.
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
       case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
       case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
+
+      case s @ SumDistinct(e @ DecimalType()) => s // Decimal is already the biggest.
+      case SumDistinct(e @ IntegralType()) if e.dataType != LongType =>
+        SumDistinct(Cast(e, LongType))
+      case SumDistinct(e @ FractionalType()) if e.dataType != DoubleType =>
+        SumDistinct(Cast(e, DoubleType))
+
+      case s @ Average(e @ DecimalType()) => s // Decimal is already the biggest.
+      case Average(e @ IntegralType()) if e.dataType != LongType =>
+        Average(Cast(e, LongType))
+      case Average(e @ FractionalType()) if e.dataType != DoubleType =>
+        Average(Cast(e, DoubleType))
     }
   }
+
+  /**
+   * Ensures that NullType gets casted to some other types under certain circumstances.
+   */
+  object CastNulls extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case cw @ CaseWhen(branches) =>
+        val valueTypes = branches.sliding(2, 2).map {
+          case Seq(_, value) if value.resolved => Some(value.dataType)
+          case Seq(elseVal) if elseVal.resolved => Some(elseVal.dataType)
+          case _ => None
+        }.toSeq
+        if (valueTypes.distinct.size == 2 && valueTypes.exists(_ == Some(NullType))) {
+          val otherType = valueTypes.filterNot(_ == Some(NullType))(0).get
+          val transformedBranches = branches.sliding(2, 2).map {
+            case Seq(cond, value) if value.resolved && value.dataType == NullType =>
+              Seq(cond, Cast(value, otherType))
+            case Seq(elseVal) if elseVal.resolved && elseVal.dataType == NullType =>
+              Seq(Cast(elseVal, otherType))
+            case s => s
+          }.reduce(_ ++ _)
+          CaseWhen(transformedBranches)
+        } else {
+          // It is possible to have more types due to the possibility of short-circuiting.
+          cw
+        }
+    }
+  }
+
 }

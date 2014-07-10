@@ -31,7 +31,7 @@ MLlib is a new component under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 
 and we will provide migration guide between releases.
 
-## Dependencies
+# Dependencies
 
 MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/), which depends on
 [netlib-java](https://github.com/fommil/netlib-java), and
@@ -50,9 +50,9 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 
 ---
 
-## Migration guide
+# Migration Guide
 
-### From 0.9 to 1.0
+## From 0.9 to 1.0
 
 In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few
 breaking changes.  If your data is sparse, please store it in a sparse format instead of dense to
@@ -84,9 +84,9 @@ val vector: Vector = Vectors.dense(array) // a dense vector
 <div data-lang="java" markdown="1">
 
 We used to represent a feature vector by `double[]`, which is replaced by
-[`Vector`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used
+[`Vector`](api/java/index.html?org/apache/spark/mllib/linalg/Vector.html) in v1.0. Algorithms that used
 to accept `RDD<double[]>` now take
-`RDD<Vector>`. [`LabeledPoint`](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint)
+`RDD<Vector>`. [`LabeledPoint`](api/java/index.html?org/apache/spark/mllib/regression/LabeledPoint.html)
 is now a wrapper of `(double, Vector)` instead of `(double, double[])`. Converting `double[]` to
 `Vector` is straightforward:
 

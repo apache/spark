@@ -35,7 +35,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
       BOOLEAN -> 1, STRING -> 8, BINARY -> 16, GENERIC -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
-      expectResult(expectedSize, s"Wrong defaultSize for $columnType") {
+      assertResult(expectedSize, s"Wrong defaultSize for $columnType") {
         columnType.defaultSize
       }
     }
@@ -47,7 +47,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
         value: JvmType,
         expected: Int) {
 
-      expectResult(expected, s"Wrong actualSize for $columnType") {
+      assertResult(expected, s"Wrong actualSize for $columnType") {
         columnType.actualSize(value)
       }
     }
@@ -127,7 +127,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
     val length = buffer.getInt()
     assert(length === serializedObj.length)
 
-    expectResult(obj, "Deserialized object didn't equal to the original object") {
+    assertResult(obj, "Deserialized object didn't equal to the original object") {
       val bytes = new Array[Byte](length)
       buffer.get(bytes, 0, length)
       SparkSqlSerializer.deserialize(bytes)
@@ -136,7 +136,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
     buffer.rewind()
     buffer.putInt(serializedObj.length).put(serializedObj)
 
-    expectResult(obj, "Deserialized object didn't equal to the original object") {
+    assertResult(obj, "Deserialized object didn't equal to the original object") {
       buffer.rewind()
       SparkSqlSerializer.deserialize(GENERIC.extract(buffer))
     }

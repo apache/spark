@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 
-class QueryTest extends FunSuite {
+class QueryTest extends PlanTest {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param rdd the [[SchemaRDD]] to be executed
@@ -37,20 +35,20 @@ class QueryTest extends FunSuite {
       case singleItem => Seq(Seq(singleItem))
     }
 
-    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s}.nonEmpty
+    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
     def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
     val sparkAnswer = try rdd.collect().toSeq catch {
       case e: Exception =>
         fail(
           s"""
             |Exception thrown while executing query:
-            |${rdd.logicalPlan}
+            |${rdd.queryExecution}
             |== Exception ==
             |$e
           """.stripMargin)
     }
 
-    if(prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
+    if (prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
       fail(s"""
         |Results do not match for query:
         |${rdd.logicalPlan}

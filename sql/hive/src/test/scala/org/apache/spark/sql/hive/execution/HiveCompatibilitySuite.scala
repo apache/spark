@@ -78,7 +78,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_merge",
     "alter_concatenate_indexed_table",
     "protectmode2",
-    "describe_table",
+    //"describe_table",
     "describe_comment_nonascii",
     "udf5",
     "udf_java_method",
@@ -172,7 +172,21 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "case_sensitivity",
 
     // Flaky test, Hive sometimes returns different set of 10 rows.
-    "lateral_view_outer"
+    "lateral_view_outer",
+
+    // After stop taking the `stringOrError` route, exceptions are thrown from these cases.
+    // See SPARK-2129 for details.
+    "join_view",
+    "mergejoins_mixed",
+
+    // Returning the result of a describe state as a JSON object is not supported.
+    "describe_table_json",
+    "describe_database_json",
+    "describe_formatted_view_partitioned_json",
+
+    // Hive returns the results of describe as plain text. Comments with multiple lines
+    // introduce extra lines in the Hive results, which make the result comparison fail.
+    "describe_comment_indent"
   )
 
   /**
@@ -287,11 +301,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "default_partition_name",
     "delimiter",
     "desc_non_existent_tbl",
-    "describe_comment_indent",
-    "describe_database_json",
     "describe_formatted_view_partitioned",
-    "describe_formatted_view_partitioned_json",
-    "describe_table_json",
     "diff_part_input_formats",
     "disable_file_format_check",
     "drop_function",
@@ -476,10 +486,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "join_reorder3",
     "join_reorder4",
     "join_star",
-    "join_view",
     "lateral_view",
     "lateral_view_cp",
     "lateral_view_ppd",
+    "leftsemijoin",
+    "leftsemijoin_mr",
     "lineage1",
     "literal_double",
     "literal_ints",
@@ -505,7 +516,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "merge1",
     "merge2",
     "mergejoins",
-    "mergejoins_mixed",
     "multigroupby_singlemr",
     "multi_insert_gby",
     "multi_insert_gby3",
@@ -595,6 +605,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "select_unquote_and",
     "select_unquote_not",
     "select_unquote_or",
+    "semijoin",
     "serde_regex",
     "serde_reported_schema",
     "set_variable_sub",

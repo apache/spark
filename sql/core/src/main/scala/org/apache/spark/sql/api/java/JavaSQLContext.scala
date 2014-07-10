@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
 import org.apache.spark.sql.catalyst.types._
@@ -40,19 +41,13 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   /**
    * Executes a query expressed in SQL, returning the result as a JavaSchemaRDD
    */
-  def sql(sqlQuery: String): JavaSchemaRDD = {
-    val result = new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlQuery))
-    // We force query optimization to happen right away instead of letting it happen lazily like
-    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-    // generates the RDD lineage for DML queries, but do not perform any execution.
-    result.queryExecution.toRdd
-    result
-  }
+  def sql(sqlQuery: String): JavaSchemaRDD =
+    new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlQuery))
 
   /**
    * :: Experimental ::
    * Creates an empty parquet file with the schema of class `beanClass`, which can be registered as
-   * a table. This registered table can be used as the target of future insertInto` operations.
+   * a table. This registered table can be used as the target of future `insertInto` operations.
    *
    * {{{
    *   JavaSQLContext sqlCtx = new JavaSQLContext(...)
@@ -62,7 +57,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * }}}
    *
    * @param beanClass A java bean class object that will be used to determine the schema of the
-   *                  parquet file.                          s
+   *                  parquet file.
    * @param path The path where the directory containing parquet metadata should be created.
    *             Data inserted into this table will also be stored at this location.
    * @param allowExisting When false, an exception will be thrown if this directory already exists.
@@ -100,13 +95,32 @@ class JavaSQLContext(val sqlContext: SQLContext) {
     new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
   }
 
-
   /**
    * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
    */
   def parquetFile(path: String): JavaSchemaRDD =
-    new JavaSchemaRDD(sqlContext, ParquetRelation(path))
+    new JavaSchemaRDD(
+      sqlContext,
+      ParquetRelation(path, Some(sqlContext.sparkContext.hadoopConfiguration)))
 
+  /**
+   * Loads a JSON file (one object per line), returning the result as a [[JavaSchemaRDD]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group userf
+   */
+  def jsonFile(path: String): JavaSchemaRDD =
+    jsonRDD(sqlContext.sparkContext.textFile(path))
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
+   * [[JavaSchemaRDD]].
+   * It goes through the entire dataset once to determine the schema.
+   *
+   * @group userf
+   */
+  def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD =
+    new JavaSchemaRDD(sqlContext, JsonRDD.inferSchema(json, 1.0))
 
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
@@ -123,26 +137,25 @@ class JavaSQLContext(val sqlContext: SQLContext) {
 
     val fields = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
     fields.map { property =>
-      val dataType = property.getPropertyType match {
-        case c: Class[_] if c == classOf[java.lang.String] => StringType
-        case c: Class[_] if c == java.lang.Short.TYPE => ShortType
-        case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
-        case c: Class[_] if c == java.lang.Long.TYPE => LongType
-        case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
-        case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
-        case c: Class[_] if c == java.lang.Float.TYPE => FloatType
-        case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+      val (dataType, nullable) = property.getPropertyType match {
+        case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
+        case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
+        case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
+        case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
+        case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
+        case c: Class[_] if c == java.lang.Byte.TYPE => (ByteType, false)
+        case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
+        case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
 
-        case c: Class[_] if c == classOf[java.lang.Short] => ShortType
-        case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
-        case c: Class[_] if c == classOf[java.lang.Long] => LongType
-        case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
-        case c: Class[_] if c == classOf[java.lang.Byte] => ByteType
-        case c: Class[_] if c == classOf[java.lang.Float] => FloatType
-        case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
+        case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
+        case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
+        case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
+        case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
+        case c: Class[_] if c == classOf[java.lang.Byte] => (ByteType, true)
+        case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
+        case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
       }
-      // TODO: Nullability could be stricter.
-      AttributeReference(property.getName, dataType, nullable = true)()
+      AttributeReference(property.getName, dataType, nullable)()
     }
   }
 }

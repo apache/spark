@@ -30,8 +30,8 @@ class PlannerSuite extends FunSuite {
   test("unions are collapsed") {
     val query = testData.unionAll(testData).unionAll(testData).logicalPlan
     val planned = BasicOperators(query).head
-    val logicalUnions = query collect { case u: logical.Union => u}
-    val physicalUnions = planned collect { case u: execution.Union => u}
+    val logicalUnions = query collect { case u: logical.Union => u }
+    val physicalUnions = planned collect { case u: execution.Union => u }
 
     assert(logicalUnions.size === 2)
     assert(physicalUnions.size === 1)
@@ -56,22 +56,5 @@ class PlannerSuite extends FunSuite {
       testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).queryExecution.analyzed
     val planned = PartialAggregation(query)
     assert(planned.isEmpty)
-  }
-
-  test("equi-join is hash-join") {
-    val x = testData2.as('x)
-    val y = testData2.as('y)
-    val join = x.join(y, Inner, Some("x.a".attr === "y.a".attr)).queryExecution.analyzed
-    val planned = planner.HashJoin(join)
-    assert(planned.size === 1)
-  }
-
-  test("multiple-key equi-join is hash-join") {
-    val x = testData2.as('x)
-    val y = testData2.as('y)
-    val join = x.join(y, Inner,
-      Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)).queryExecution.analyzed
-    val planned = planner.HashJoin(join)
-    assert(planned.size === 1)
   }
 }
