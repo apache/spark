@@ -115,3 +115,4 @@ object QuoteState extends Enumeration {
   type State = Value
   val Quoted, Unquoted = Value
 }
+

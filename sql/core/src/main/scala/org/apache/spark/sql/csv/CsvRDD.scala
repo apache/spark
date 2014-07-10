@@ -87,5 +87,5 @@ private[sql] object CsvRDD extends Logging {
   private def asAttributes(struct: StructType): Seq[AttributeReference] = {
     struct.fields.map(field => AttributeReference(field.name, field.dataType, nullable = true)())
   }
-
 }
+
