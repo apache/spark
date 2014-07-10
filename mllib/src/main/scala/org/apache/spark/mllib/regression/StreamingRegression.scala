@@ -43,10 +43,8 @@ abstract class StreamingRegression[M <: GeneralizedLinearModel, A <: Generalized
   /** The algorithm to use for updating. */
   val algorithm: A
 
-  /** Log the latest model parameters and return the model. */
+  /** Return the latest model. */
   def latest(): M = {
-    logInfo("Latest model: weights, %s".format(model.weights.toString))
-    logInfo("Latest model: intercept, %s".format(model.intercept.toString))
     model
   }
 
@@ -65,7 +63,8 @@ abstract class StreamingRegression[M <: GeneralizedLinearModel, A <: Generalized
           model = algorithm.run(rdd, model.weights)
           logInfo("Model updated")
         }
-        this.latest()
+        logInfo("Current model: weights, %s".format(model.weights.toString))
+        logInfo("Current model: intercept, %s".format(model.intercept.toString))
     }
   }
 
