@@ -107,8 +107,8 @@ private[spark] class DiskBlockObjectWriter(
   private var fos: FileOutputStream = null
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
-  private val initialPosition = file.length()
-  private var lastValidPosition = initialPosition
+  private var initialPosition: Long = 0L
+  private var lastValidPosition: Long = 0L
   private var initialized = false
   private var _timeWriting = 0L
 
@@ -116,6 +116,7 @@ private[spark] class DiskBlockObjectWriter(
     fos = new FileOutputStream(file, true)
     ts = new TimeTrackingOutputStream(fos)
     channel = fos.getChannel()
+    initialPosition = file.length()
     lastValidPosition = initialPosition
     bs = compressStream(new BufferedOutputStream(ts, bufferSize))
     objOut = serializer.newInstance().serializeStream(bs)
