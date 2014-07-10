@@ -152,11 +152,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object BroadcastNestedLoopJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
-        val (streamed, broadcast) =
-          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) (left, right)
-          else (right, left)
         execution.BroadcastNestedLoopJoin(
-          planLater(streamed), planLater(broadcast), joinType, condition)(sqlContext) :: Nil
+          planLater(left), planLater(right), joinType, condition)(sqlContext) :: Nil
       case _ => Nil
     }
   }
