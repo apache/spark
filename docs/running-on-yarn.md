@@ -55,7 +55,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
   <td><code>spark.yarn.max.executor.failures</code></td>
-  <td>2*numExecutors</td>
+  <td>numExecutors * 2, with minimum of 3</td>
   <td>
     The maximum number of executor failures before failing the application.
   </td>
@@ -68,22 +68,45 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.memoryOverhead</code></td>
-  <td>384</code></td>
+  <td><code>spark.yarn.dist.archives</code></td>
+  <td>(none)</td>
+  <td>
+    Comma separated list of archives to be extracted into the working directory of each executor.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.dist.files</code></td>
+  <td>(none)</td>
+  <td>
+    Comma-separated list of files to be placed in the working directory of each executor.
+  <td>
+</tr>
+<tr>
+ <td><code>spark.yarn.executor.memoryOverhead</code></td>
+  <td>384</td>
   <td>
     The amount of off heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.driver.memoryOverhead</code></td>
-  <td>384</code></td>
+  <td>384</td>
   <td>
     The amount of off heap memory (in megabytes) to be allocated per driver. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.jar</code></td>
+  <td>(none)</td>
+  <td>
+    The location of the Spark jar file, in case overriding the default location is desired.
+    By default, Spark on YARN will use a Spark jar installed locally, but the Spark jar can also be
+    in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't
+    need to be distributed each time an application runs. To point to a jar on HDFS, for example,
+    set this configuration to "hdfs:///some/path".
+  </td>
+</tr>
 </table>
-
-By default, Spark on YARN will use a Spark jar installed locally, but the Spark JAR can also be in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't need to be distributed each time an application runs. To point to a JAR on HDFS, `export SPARK_JAR=hdfs:///some/path`.
 
 # Launching Spark on YARN
 
@@ -105,7 +128,7 @@ For example:
         --num-executors 3 \
         --driver-memory 4g \
         --executor-memory 2g \
-        --executor-cores 1
+        --executor-cores 1 \
         lib/spark-examples*.jar \
         10
 
@@ -142,7 +165,20 @@ all environment variables used for launching each container. This process is use
 classpath problems in particular. (Note that enabling this requires admin privileges on cluster
 settings and a restart of all node managers. Thus, this is not applicable to hosted clusters).
 
-# Important Notes
+To use a custom log4j configuration for the application master or executors, there are two options:
+
+- upload a custom log4j.properties using spark-submit, by adding it to the "--files" list of files
+  to be uploaded with the application.
+- add "-Dlog4j.configuration=<location of configuration file>" to "spark.driver.extraJavaOptions"
+  (for the driver) or "spark.executor.extraJavaOptions" (for executors). Note that if using a file,
+  the "file:" protocol should be explicitly provided, and the file needs to exist locally on all
+  the nodes.
+
+Note that for the first option, both executors and the application master will share the same
+log4j configuration, which may cause issues when they run on the same node (e.g. trying to write
+to the same log file).
+
+# Important notes
 
 - Before Hadoop 2.2, YARN does not support cores in container resource requests. Thus, when running against an earlier version, the numbers of cores given via command line arguments cannot be passed to YARN.  Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
 - The local directories used by Spark executors will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored.

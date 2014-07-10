@@ -31,11 +31,16 @@ import com.typesafe.tools.mima.core._
  * MimaBuild.excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap")
  */
 object MimaExcludes {
-    val excludes =
-      SparkBuild.SPARK_VERSION match {
+    def excludes(version: String) =
+      version match {
         case v if v.startsWith("1.1") =>
-          Seq(MimaBuild.excludeSparkPackage("graphx")) ++
           Seq(
+            MimaBuild.excludeSparkPackage("deploy"),
+            MimaBuild.excludeSparkPackage("graphx")
+          ) ++
+          Seq(
+            // Adding new method to JavaRDLike trait - we should probably mark this as a developer API.
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitions"),
             // We made a mistake earlier (ed06500d3) in the Java API to use default parameter values
             // for countApproxDistinct* functions, which does not work in Java. We later removed
             // them, and use the following to tell Mima to not care about them.
@@ -58,6 +63,9 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$"
                 + "createZero$1")
+          ) ++
+          Seq(
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this")
           ) ++
           Seq( // Ignore some private methods in ALS.
             ProblemFilters.exclude[MissingMethodProblem](

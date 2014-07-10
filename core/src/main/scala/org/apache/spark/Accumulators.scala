@@ -127,7 +127,7 @@ class Accumulable[R, T] (
     Accumulators.register(this, false)
   }
 
-  override def toString = value_.toString
+  override def toString = if (value_ == null) "null" else value_.toString
 }
 
 /**

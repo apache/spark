@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, Row}
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRow}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.{Row, SQLContext}
 
 trait Command {
   /**
@@ -71,16 +73,25 @@ case class SetCommand(
 }
 
 /**
+ * An explain command for users to see how a command will be executed.
+ *
+ * Note that this command takes in a logical plan, runs the optimizer on the logical plan
+ * (but do NOT actually execute it).
+ *
  * :: DeveloperApi ::
  */
 @DeveloperApi
 case class ExplainCommand(
-    child: SparkPlan, output: Seq[Attribute])(
+    logicalPlan: LogicalPlan, output: Seq[Attribute])(
     @transient context: SQLContext)
-  extends UnaryNode with Command {
+  extends LeafNode with Command {
 
-  // Actually "EXPLAIN" command doesn't cause any side effect.
-  override protected[sql] lazy val sideEffectResult: Seq[String] = this.toString.split("\n")
+  // Run through the optimizer to generate the physical plan.
+  override protected[sql] lazy val sideEffectResult: Seq[String] = try {
+    "Physical execution plan:" +: context.executePlan(logicalPlan).executedPlan.toString.split("\n")
+  } catch { case cause: TreeNodeException[_] =>
+    "Error occurred during query planning: " +: cause.getMessage.split("\n")
+  }
 
   def execute(): RDD[Row] = {
     val explanation = sideEffectResult.map(row => new GenericRow(Array[Any](row)))
@@ -112,4 +123,25 @@ case class CacheCommand(tableName: String, doCache: Boolean)(@transient context:
   }
 
   override def output: Seq[Attribute] = Seq.empty
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class DescribeCommand(child: SparkPlan, output: Seq[Attribute])(
+    @transient context: SQLContext)
+  extends LeafNode with Command {
+
+  override protected[sql] lazy val sideEffectResult: Seq[(String, String, String)] = {
+    Seq(("# Registered as a temporary table", null, null)) ++
+      child.output.map(field => (field.name, field.dataType.toString, null))
+  }
+
+  override def execute(): RDD[Row] = {
+    val rows = sideEffectResult.map {
+      case (name, dataType, comment) => new GenericRow(Array[Any](name, dataType, comment))
+    }
+    context.sparkContext.parallelize(rows, 1)
+  }
 }

@@ -33,8 +33,9 @@ import parquet.hadoop.util.ContextUtil
 import parquet.io.InvalidRecordException
 import parquet.schema.MessageType
 
-import org.apache.spark.{Logging, SerializableWritable, SparkContext, TaskContext}
+import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
 
@@ -48,10 +49,11 @@ case class ParquetTableScan(
     output: Seq[Attribute],
     relation: ParquetRelation,
     columnPruningPred: Seq[Expression])(
-    @transient val sc: SparkContext)
+    @transient val sqlContext: SQLContext)
   extends LeafNode {
 
   override def execute(): RDD[Row] = {
+    val sc = sqlContext.sparkContext
     val job = new Job(sc.hadoopConfiguration)
     ParquetInputFormat.setReadSupportClass(
       job,
@@ -64,10 +66,13 @@ case class ParquetTableScan(
       NewFileInputFormat.addInputPath(job, path)
     }
 
-    // Store Parquet schema in `Configuration`
+    // Store both requested and original schema in `Configuration`
     conf.set(
-        RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
-        ParquetTypesConverter.convertFromAttributes(output).toString)
+      RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+      ParquetTypesConverter.convertToString(output))
+    conf.set(
+      RowWriteSupport.SPARK_ROW_SCHEMA,
+      ParquetTypesConverter.convertToString(relation.output))
 
     // Store record filtering predicate in `Configuration`
     // Note 1: the input format ignores all predicates that cannot be expressed
@@ -89,7 +94,7 @@ case class ParquetTableScan(
       .filter(_ != null) // Parquet's record filters may produce null values
   }
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   /**
    * Applies a (candidate) projection.
@@ -100,7 +105,7 @@ case class ParquetTableScan(
   def pruneColumns(prunedAttributes: Seq[Attribute]): ParquetTableScan = {
     val success = validateProjection(prunedAttributes)
     if (success) {
-      ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sc)
+      ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sqlContext)
     } else {
       sys.error("Warning: Could not validate Parquet schema projection in pruneColumns")
       this
@@ -148,7 +153,7 @@ case class InsertIntoParquetTable(
     relation: ParquetRelation,
     child: SparkPlan,
     overwrite: Boolean = false)(
-    @transient val sc: SparkContext)
+    @transient val sqlContext: SQLContext)
   extends UnaryNode with SparkHadoopMapReduceUtil {
 
   /**
@@ -164,15 +169,20 @@ case class InsertIntoParquetTable(
     val childRdd = child.execute()
     assert(childRdd != null)
 
-    val job = new Job(sc.hadoopConfiguration)
+    val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
 
-    ParquetOutputFormat.setWriteSupportClass(
-      job,
-      classOf[org.apache.spark.sql.parquet.RowWriteSupport])
+    val writeSupport =
+      if (child.output.map(_.dataType).forall(_.isPrimitive)) {
+        logger.debug("Initializing MutableRowWriteSupport")
+        classOf[org.apache.spark.sql.parquet.MutableRowWriteSupport]
+      } else {
+        classOf[org.apache.spark.sql.parquet.RowWriteSupport]
+      }
 
-    // TODO: move that to function in object
+    ParquetOutputFormat.setWriteSupportClass(job, writeSupport)
+
     val conf = ContextUtil.getConfiguration(job)
-    conf.set(RowWriteSupport.PARQUET_ROW_SCHEMA, relation.parquetSchema.toString)
+    RowWriteSupport.setSchema(relation.output, conf)
 
     val fspath = new Path(relation.path)
     val fs = fspath.getFileSystem(conf)
@@ -195,7 +205,7 @@ case class InsertIntoParquetTable(
 
   override def output = child.output
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   /**
    * Stores the given Row RDD as a Hadoop file.
@@ -222,7 +232,7 @@ case class InsertIntoParquetTable(
     val wrappedConf = new SerializableWritable(job.getConfiguration)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
-    val stageId = sc.newRddId()
+    val stageId = sqlContext.sparkContext.newRddId()
 
     val taskIdOffset =
       if (overwrite) {
@@ -261,7 +271,7 @@ case class InsertIntoParquetTable(
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
-    sc.runJob(rdd, writeShard _)
+    sqlContext.sparkContext.runJob(rdd, writeShard _)
     jobCommitter.commitJob(jobTaskContext)
   }
 }

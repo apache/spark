@@ -33,14 +33,11 @@ abstract class Expression extends TreeNode[Expression] {
    * executed.
    *
    * The following conditions are used to determine suitability for constant folding:
-   *  - A [[expressions.Coalesce Coalesce]] is foldable if all of its children are foldable
-   *  - A [[expressions.BinaryExpression BinaryExpression]] is foldable if its both left and right
-   *    child are foldable
-   *  - A [[expressions.Not Not]], [[expressions.IsNull IsNull]], or
-   *    [[expressions.IsNotNull IsNotNull]] is foldable if its child is foldable.
-   *  - A [[expressions.Literal]] is foldable.
-   *  - A [[expressions.Cast Cast]] or [[expressions.UnaryMinus UnaryMinus]] is foldable if its
-   *    child is foldable.
+   *  - A [[Coalesce]] is foldable if all of its children are foldable
+   *  - A [[BinaryExpression]] is foldable if its both left and right child are foldable
+   *  - A [[Not]], [[IsNull]], or [[IsNotNull]] is foldable if its child is foldable
+   *  - A [[Literal]] is foldable
+   *  - A [[Cast]] or [[UnaryMinus]] is foldable if its child is foldable
    */
   def foldable: Boolean = false
   def nullable: Boolean
@@ -58,7 +55,7 @@ abstract class Expression extends TreeNode[Expression] {
   lazy val resolved: Boolean = childrenResolved
 
   /**
-   * Returns the [[types.DataType DataType]] of the result of evaluating this expression.  It is
+   * Returns the [[DataType]] of the result of evaluating this expression.  It is
    * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
   def dataType: DataType
@@ -114,7 +111,7 @@ abstract class Expression extends TreeNode[Expression] {
       } else {
         e1.dataType match {
           case n: NumericType =>
-            f.asInstanceOf[(Numeric[n.JvmType], n.JvmType, n.JvmType) => Int](
+            f.asInstanceOf[(Numeric[n.JvmType], n.JvmType, n.JvmType) => n.JvmType](
               n.numeric, evalE1.asInstanceOf[n.JvmType], evalE2.asInstanceOf[n.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }
