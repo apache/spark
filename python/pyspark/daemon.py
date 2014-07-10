@@ -33,6 +33,26 @@ try:
 except NotImplementedError:
     POOLSIZE = 4
 
+def hijack_hash():
+    original_hash = __builtins__.hash
+    def new_hash(x):
+        if x is None:
+            return 0
+        if isinstance(x, tuple):
+            # http://effbot.org/zone/python-hash.htm 
+            h = 0x345678L
+            for i in x:
+                h *= 1000003
+                h &= 0xffffffff
+                h ^= new_hash(i)
+            h ^= len(x)
+            if h == -1:
+                h = -2
+            return h
+        return original_hash(x)
+    __builtins__.hash = new_hash
+
+
 exit_flag = multiprocessing.Value(c_bool, False)
 
 
@@ -191,4 +211,5 @@ def manager():
 
 
 if __name__ == '__main__':
+    hijack_hash()
     manager()
