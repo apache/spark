@@ -2,18 +2,23 @@ package org.apache.spark.mllib.admm
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vector
 
-case class SubProblem(val points: Array[BV], val labels: Array[Double])
+import breeze.util.Implicits._
 
-class BSPADMMwithSGD {
-  def train(input: RDD[LabeledPoint],
+
+case class SubProblem(points: Array[BV], labels: Array[Double])
+
+object BSPADMMwithSGD {
+  def train(input: RDD[(Double, Vector)],
             numADMMIterations: Int,
             rho: Double,
-            gradient: BVGradient) = {
+            gradient: BVGradient,
+            initialWeights: Vector) = {
     val subProblems: RDD[SubProblem] = input.mapPartitions{ iter =>
       val localData = iter.toArray
-      val points = localData.map { pt => pt.features.toBreeze }
-      val labels = localData.map { pt => pt.label }
+      val points = localData.map { case (y, x) => x.toBreeze }
+      val labels = localData.map { case (y, x) => y }
       Iterator(SubProblem(points, labels))
     }
 
@@ -30,7 +35,8 @@ class BSPADMMwithSGD {
     val epsilon = 0.01
     var iter = 0
 
-    var w_avg: BV = input.take(1)(0).features.toBreeze*0
+    // Make a zero vector
+    var w_avg: BV = input.first()._2.toBreeze*0
 
     while (iter < numADMMIterations && primalResidual < epsilon && dualResidual < epsilon) {
       val local_w = solvers.map { s => s.solveLocal(w_avg, rho, epsilon) } . collect()

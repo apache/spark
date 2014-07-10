@@ -2,9 +2,11 @@ package org.apache.spark.mllib.admm
 
 import scala.util.Random
 import breeze.linalg.axpy
+import breeze.util.Implicits._
+
 
 abstract class ADMMLocalSolver(val points: Array[BV], val labels: Array[Double]) {
-  var lagrangian: BV = points(0)*0
+  var lagrangian: BV = points(0) * 0.0
   var w_prev: BV = lagrangian.copy
 
   def solveLocal(theta_avg: BV, rho: Double, epsilon: Double = 0.01, initial_w: BV = null): BV

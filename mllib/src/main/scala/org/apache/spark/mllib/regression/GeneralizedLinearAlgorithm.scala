@@ -125,7 +125,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /** Prepends one to the input vector. */
-  private def prependOne(vector: Vector): Vector = {
+  def prependOne(vector: Vector): Vector = {
     val vector1 = vector.toBreeze match {
       case dv: BDV[Double] => BDV.vertcat(BDV.ones[Double](1), dv)
       case sv: BSV[Double] => BSV.vertcat(new BSV[Double](Array(0), Array(1.0), 1), sv)
