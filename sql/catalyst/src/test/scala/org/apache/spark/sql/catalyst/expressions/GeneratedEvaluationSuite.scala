@@ -66,7 +66,7 @@ class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
       }
     }
 
-    futures.foreach(Await.result(_, 10 seconds))
+    futures.foreach(Await.result(_, 10.seconds))
   }
 }
 

@@ -99,7 +99,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Aggregations that can be performed in two phases, before and after the shuffle.
 
-      // Where all aggregates can be codegened.
+      // Cases where all aggregates can be codegened.
       case PartialAggregation(
              namedGroupingAttributes,
              rewrittenAggregateExpressions,
@@ -109,18 +109,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              if canBeCodeGened(
                   allAggregates(partialComputation) ++
                   allAggregates(rewrittenAggregateExpressions))=>
-          execution.HashAggregate(
+          execution.GeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
             rewrittenAggregateExpressions,
-            execution.HashAggregate(
+            execution.GeneratedAggregate(
               partial = true,
               groupingExpressions,
               partialComputation,
               planLater(child))(sqlContext))(sqlContext) :: Nil
 
 
-      // Where some aggregate can not be codegened
+      // Cases where some aggregate can not be codegened
       case PartialAggregation(
              namedGroupingAttributes,
              rewrittenAggregateExpressions,
@@ -136,6 +136,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             groupingExpressions,
             partialComputation,
             planLater(child))(sqlContext))(sqlContext) :: Nil
+
       case _ => Nil
     }
 

@@ -18,14 +18,24 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types._
 
+case class AggregateEvaluation(
+    schema: Seq[Attribute],
+    initialValues: Seq[Expression],
+    update: Seq[Expression],
+    result: Expression)
+
 /**
- * Attempt to rewrite aggregate to be more efficient.
+ * :: DeveloperApi ::
+ * Alternate version of aggregation that leverages projection and thus code generation.
+ * Aggregations are converted into a set of projections from a aggregation buffer tuple back onto
+ * itself. Currently only used for simple aggregations like SUM, COUNT, or AVERAGE are supported.
  *
  * @param partial if true then aggregation is done partially on local data without shuffling to
  *                ensure all values where `groupingExpressions` are equal are present.
@@ -33,7 +43,8 @@ import org.apache.spark.sql.catalyst.types._
  * @param aggregateExpressions expressions that are computed for each group.
  * @param child the input data source.
  */
-case class HashAggregate(
+@DeveloperApi
+case class GeneratedAggregate(
     partial: Boolean,
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
@@ -59,12 +70,11 @@ case class HashAggregate(
 
   def execute() = {
     val aggregatesToCompute = aggregateExpressions.flatMap { a =>
-      a.collect { case agg: AggregateExpression => agg }
+      a.collect { case agg: AggregateExpression => agg}
     }
 
-    // Move these into expressions... have fall back that uses standard aggregate interface.
     val computeFunctions = aggregatesToCompute.map {
-      case c @ Count(expr) =>
+      case c@Count(expr) =>
         val currentCount = AttributeReference("currentCount", LongType, true)()
         val initialValue = Literal(0L)
         val updateFunction = If(IsNotNull(expr), Add(currentCount, Literal(1L)), currentCount)
@@ -83,7 +93,7 @@ case class HashAggregate(
 
         AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
 
-      case a @ Average(expr) =>
+      case a@Average(expr) =>
         val currentCount = AttributeReference("currentCount", LongType, true)()
         val currentSum = AttributeReference("currentSum", expr.dataType, true)()
         val initialCount = Literal(0L)
@@ -99,29 +109,11 @@ case class HashAggregate(
           updateCount :: updateSum :: Nil,
           result
         )
-
-        /*
-      case otherAggregate =>
-        val ref =
-          AttributeReference("aggregateFunction", otherAggregate.dataType, otherAggregate.nullable)
-
-        AggregateEvaluation(
-          ref :: Nil,
-          ScalaUdf(() => otherAggregate.newInstance, NullType, ),
-      )
-      */
     }
 
-    @transient val computationSchema = computeFunctions.flatMap(_.schema)
-    @transient lazy val newComputationBuffer =
-      newProjection(computeFunctions.flatMap(_.initialValues), child.output)
-    @transient lazy val updateProjectionBuilder =
-      newMutableProjection(
-        computeFunctions.flatMap(_.update),
-        computeFunctions.flatMap(_.schema) ++ child.output)
-    @transient lazy val groupProjection = newProjection(groupingExpressions, child.output)
+    val computationSchema = computeFunctions.flatMap(_.schema)
 
-    @transient val resultMap = aggregatesToCompute.zip(computeFunctions).map {
+    val resultMap = aggregatesToCompute.zip(computeFunctions).map {
       case (agg, func) => agg.id -> func.result
     }.toMap
 
@@ -129,39 +121,57 @@ case class HashAggregate(
       case (ne: NamedExpression, _) => (ne, ne)
       case (e, i) => (e, Alias(e, s"GroupingExpr$i")())
     }
-    val groupMap = namedGroups.map {case (k,v) => k -> v.toAttribute }.toMap
 
-    @transient val resultExpressions = aggregateExpressions.map(_.transform {
+    val groupMap = namedGroups.map { case (k, v) => k -> v.toAttribute}.toMap
+
+    val resultExpressions = aggregateExpressions.map(_.transform {
       case e: Expression if resultMap.contains(e.id) => resultMap(e.id)
       case e: Expression if groupMap.contains(e) => groupMap(e)
     })
-    @transient lazy val resultProjectionBuilder =
-      newMutableProjection(
-        resultExpressions,
-        (namedGroups.map(_._2.toAttribute) ++ computationSchema).toSeq)
 
     child.execute().mapPartitions { iter =>
-      // TODO: Skip hashmap for no grouping exprs...
-      @transient val buffers = new java.util.HashMap[Row, MutableRow]()
-      @transient val updateProjection = updateProjectionBuilder()
-      @transient val joinedRow = new JoinedRow
+      // Builds a new custom class for holding the results of aggregation for a group.
+      val newAggregationBuffer =
+        newProjection(computeFunctions.flatMap(_.initialValues), child.output)
+
+      // A projection that is used to update the aggregate values for a group given a new tuple.
+      // This projection should be targeted at the current values for the group and then applied
+      // to a joined row of the current values with the new input row.
+      val updateProjection =
+        newMutableProjection(
+          computeFunctions.flatMap(_.update),
+          computeFunctions.flatMap(_.schema) ++ child.output)()
+
+      // A projection that computes the group given an input tuple.
+      val groupProjection = newProjection(groupingExpressions, child.output)
+
+      // A projection that produces the final result, given a computation.
+      val resultProjectionBuilder =
+        newMutableProjection(
+          resultExpressions,
+          (namedGroups.map(_._2.toAttribute) ++ computationSchema).toSeq)
+
+      val buffers = new java.util.HashMap[Row, MutableRow]()
+      val joinedRow = new JoinedRow
 
       var currentRow: Row = null
-      while(iter.hasNext) {
+      while (iter.hasNext) {
         currentRow = iter.next()
         val currentGroup = groupProjection(currentRow)
         var currentBuffer = buffers.get(currentGroup)
-        if(currentBuffer == null) {
-          currentBuffer = newComputationBuffer(EmptyRow).asInstanceOf[MutableRow]
+        if (currentBuffer == null) {
+          currentBuffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
           buffers.put(currentGroup, currentBuffer)
         }
         updateProjection.target(currentBuffer)(joinedRow(currentBuffer, currentRow))
       }
 
-      @transient val resultIterator = buffers.entrySet.iterator()
-      @transient val resultProjection = resultProjectionBuilder()
       new Iterator[Row] {
+        private[this] val resultIterator = buffers.entrySet.iterator()
+        private[this] val resultProjection = resultProjectionBuilder()
+
         def hasNext = resultIterator.hasNext
+
         def next() = {
           val currentGroup = resultIterator.next()
           resultProjection(joinedRow(currentGroup.getKey, currentGroup.getValue))
@@ -170,9 +180,3 @@ case class HashAggregate(
     }
   }
 }
-
-case class AggregateEvaluation(
-    schema: Seq[Attribute],
-    initialValues: Seq[Expression],
-    update: Seq[Expression],
-    result: Expression)
