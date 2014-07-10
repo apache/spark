@@ -31,7 +31,7 @@ trait StringRegexExpression {
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
 
-  def nullable: Boolean = true
+  def nullable: Boolean = left.nullable || right.nullable
   def dataType: DataType = BooleanType
 
   // try cache the pattern for Literal
