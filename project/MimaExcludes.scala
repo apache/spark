@@ -70,7 +70,9 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem]( // The only public constructor is the one without arguments.
               "org.apache.spark.mllib.recommendation.ALS.this"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$<init>$default$7")
+              "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$<init>$default$7"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.rdd.RDD.org$apache$spark$rdd$RDD$$debugString$1")
           ) ++
           MimaBuild.excludeSparkClass("rdd.ZippedRDD") ++
           MimaBuild.excludeSparkClass("rdd.ZippedPartition") ++
