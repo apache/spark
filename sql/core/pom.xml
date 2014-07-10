@@ -31,6 +31,9 @@
   <packaging>jar</packaging>
   <name>Spark Project SQL</name>
   <url>http://spark.apache.org/</url>
+  <properties>
+     <sbt.project.name>sql</sbt.project.name>
+  </properties>
 
   <dependencies>
     <dependency>

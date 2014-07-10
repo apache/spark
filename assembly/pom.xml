@@ -32,6 +32,7 @@
   <packaging>pom</packaging>
 
   <properties>
+    <sbt.project.name>assembly</sbt.project.name>
     <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
     <spark.jar.basename>spark-assembly-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
     <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>

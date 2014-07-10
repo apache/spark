@@ -29,7 +29,11 @@
   <artifactId>spark-ganglia-lgpl_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Ganglia Integration</name>
-  
+
+  <properties>
+    <sbt.project.name>ganglia-lgpl</sbt.project.name>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>

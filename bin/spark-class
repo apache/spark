@@ -110,9 +110,9 @@ export JAVA_OPTS
 
 TOOLS_DIR="$FWDIR"/tools
 SPARK_TOOLS_JAR=""
-if [ -e "$TOOLS_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar ]; then
+if [ -e "$TOOLS_DIR"/target/scala-$SCALA_VERSION/spark-tools*[0-9Tg].jar ]; then
   # Use the JAR from the SBT build
-  export SPARK_TOOLS_JAR=`ls "$TOOLS_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar`
+  export SPARK_TOOLS_JAR=`ls "$TOOLS_DIR"/target/scala-$SCALA_VERSION/spark-tools*[0-9Tg].jar`
 fi
 if [ -e "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar ]; then
   # Use the JAR from the Maven build

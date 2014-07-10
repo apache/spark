@@ -31,6 +31,9 @@
   <packaging>jar</packaging>
   <name>Spark Project Catalyst</name>
   <url>http://spark.apache.org/</url>
+  <properties>
+     <sbt.project.name>catalyst</sbt.project.name>
+  </properties>
 
   <dependencies>
     <dependency>
