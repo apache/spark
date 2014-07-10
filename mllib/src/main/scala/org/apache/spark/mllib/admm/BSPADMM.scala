@@ -1,10 +1,8 @@
 package org.apache.spark.mllib.admm
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.regression.LabeledPoint
+import breeze.linalg.norm
 import org.apache.spark.mllib.linalg.Vector
-
-import breeze.util.Implicits._
+import org.apache.spark.rdd.RDD
 
 
 case class SubProblem(points: Array[BV], labels: Array[Double])
@@ -12,7 +10,6 @@ case class SubProblem(points: Array[BV], labels: Array[Double])
 object BSPADMMwithSGD {
   def train(input: RDD[(Double, Vector)],
             numADMMIterations: Int,
-            rho: Double,
             gradient: BVGradient,
             initialWeights: Vector) = {
     val subProblems: RDD[SubProblem] = input.mapPartitions{ iter =>
@@ -34,18 +31,31 @@ object BSPADMMwithSGD {
     var dualResidual = Double.MaxValue
     val epsilon = 0.01
     var iter = 0
+    var rho  = 0.0
 
     // Make a zero vector
-    var w_avg: BV = input.first()._2.toBreeze*0
+    var w_avg: BV = input.first()._2.toBreeze * 0.0
 
     while (iter < numADMMIterations && primalResidual < epsilon && dualResidual < epsilon) {
       val local_w = solvers.map { s => s.solveLocal(w_avg, rho, epsilon) } . collect()
-      val new_w_avg: BV = local_w.sum / numSolvers
+      val new_w_avg: BV = local_w.reduce(_ + _) / numSolvers.toDouble
 
-      primalResidual = Math.pow(local_w.foldLeft(0.0){ (sum , w) => (w - new_w_avg).norm() }, 2)
-      dualResidual = rho * Math.pow((new_w_avg - w_avg).norm(), 2)
+      // Update the residuals
+      // primalResidual = sum( ||w_i - w_avg||_2^2 )
+      primalResidual = Math.pow(local_w.foldLeft(0.0){ (sum , w) => norm(w - new_w_avg, 2.0) }, 2)
+      dualResidual = rho * Math.pow(norm(new_w_avg - w_avg, 2.0), 2)
+
+      // Rho upate from Boyd text
+      if (rho == 0) {
+        rho = epsilon
+      } else if (primalResidual > 10.0 * dualResidual) {
+        rho = 2.0 * rho
+      } else if (10.0 * dualResidual > primalResidual) {
+        rho = rho / 2.0
+      }
 
       w_avg = new_w_avg
+
       iter += 1
     }
 

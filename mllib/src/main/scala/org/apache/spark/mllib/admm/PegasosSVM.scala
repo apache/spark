@@ -1,10 +1,9 @@
 package org.apache.spark.mllib.admm
 
 import org.apache.spark.SparkException
-import org.apache.spark.mllib.classification.{SVMWithSGD, SVMModel}
+import org.apache.spark.mllib.classification.{SVMModel, SVMWithSGD}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.optimization.Optimizer
-import org.apache.spark.mllib.regression.{LabeledPoint, GeneralizedLinearAlgorithm}
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
 class PegasosSVM(val iterations: Integer = 10,
@@ -31,7 +30,7 @@ class PegasosSVM(val iterations: Integer = 10,
     }
 
     val weightsWithIntercept =
-      Vectors.fromBreeze(BSPADMMwithSGD.train(data, iterations, rho, new PegasosBVGradient(lambda), initialWeights))
+      Vectors.fromBreeze(BSPADMMwithSGD.train(data, iterations, new PegasosBVGradient(lambda), initialWeights))
 
     val intercept = if (addIntercept) weightsWithIntercept(0) else 0.0
     val weights =
