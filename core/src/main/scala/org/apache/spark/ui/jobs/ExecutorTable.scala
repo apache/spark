@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import scala.collection.mutable
 import scala.xml.Node
 
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing executor summary */
@@ -35,7 +35,7 @@ private[ui] class ExecutorTable(stageId: Int, parent: JobProgressTab) {
 
   /** Special table which merges two header cells. */
   private def executorTable[T](): Seq[Node] = {
-    <table class="table table-bordered table-striped table-condensed sortable">
+    <table class={UIUtils.TABLE_CLASS}>
       <thead>
         <th>Executor ID</th>
         <th>Address</th>
@@ -43,9 +43,9 @@ private[ui] class ExecutorTable(stageId: Int, parent: JobProgressTab) {
         <th>Total Tasks</th>
         <th>Failed Tasks</th>
         <th>Succeeded Tasks</th>
-        <th>Input Bytes</th>
-        <th>Shuffle Read</th>
-        <th>Shuffle Write</th>
+        <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
+        <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_WRITE}>Shuffle Write</span></th>
         <th>Shuffle Spill (Memory)</th>
         <th>Shuffle Spill (Disk)</th>
       </thead>
