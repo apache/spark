@@ -807,10 +807,10 @@ object DecisionTree extends Serializable with Logging {
               // calculating right node aggregate for a split as a sum of right node aggregate of a
               // higher split and the right bin aggregate of a bin where the split is a low split
               rightNodeAgg(featureIndex)(2 * (numBins - 2 - splitIndex)) =
-                binData(shift + (2 *(numBins - 2 - splitIndex))) +
+                binData(shift + (2 *(numBins - 1 - splitIndex))) +
                 rightNodeAgg(featureIndex)(2 * (numBins - 1 - splitIndex))
               rightNodeAgg(featureIndex)(2 * (numBins - 2 - splitIndex) + 1) =
-                binData(shift + (2* (numBins - 2 - splitIndex) + 1)) +
+                binData(shift + (2* (numBins - 1 - splitIndex) + 1)) +
                   rightNodeAgg(featureIndex)(2 * (numBins - 1 - splitIndex) + 1)
 
               splitIndex += 1
@@ -855,13 +855,13 @@ object DecisionTree extends Serializable with Logging {
               // calculating right node aggregate for a split as a sum of right node aggregate of a
               // higher split and the right bin aggregate of a bin where the split is a low split
               rightNodeAgg(featureIndex)(3 * (numBins - 2 - splitIndex)) =
-                binData(shift + (3 * (numBins - 2 - splitIndex))) +
+                binData(shift + (3 * (numBins - 1 - splitIndex))) +
                   rightNodeAgg(featureIndex)(3 * (numBins - 1 - splitIndex))
               rightNodeAgg(featureIndex)(3 * (numBins - 2 - splitIndex) + 1) =
-                binData(shift + (3 * (numBins - 2 - splitIndex) + 1)) +
+                binData(shift + (3 * (numBins - 1 - splitIndex) + 1)) +
                   rightNodeAgg(featureIndex)(3 * (numBins - 1 - splitIndex) + 1)
               rightNodeAgg(featureIndex)(3 * (numBins - 2 - splitIndex) + 2) =
-                binData(shift + (3 * (numBins - 2 - splitIndex) + 2)) +
+                binData(shift + (3 * (numBins - 1 - splitIndex) + 2)) +
                   rightNodeAgg(featureIndex)(3 * (numBins - 1 - splitIndex) + 2)
 
               splitIndex += 1
