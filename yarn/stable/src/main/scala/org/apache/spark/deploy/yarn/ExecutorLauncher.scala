@@ -186,7 +186,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
       appAttemptId,
       args,
       preferredNodeLocationData,
-      sparkConf)
+      sparkConf,
+      null)
 
     logInfo("Requesting " + args.numExecutors + " executors.")
     // Wait until all containers have launched

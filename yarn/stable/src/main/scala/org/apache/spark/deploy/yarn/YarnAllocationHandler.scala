@@ -26,9 +26,11 @@ import scala.collection
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.scheduler.{SplitInfo,TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.util.Utils
 
 import org.apache.hadoop.conf.Configuration
@@ -39,7 +41,7 @@ import org.apache.hadoop.yarn.api.records.{Priority, Resource, ResourceRequest}
 import org.apache.hadoop.yarn.api.protocolrecords.{AllocateRequest, AllocateResponse}
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
-import org.apache.hadoop.yarn.util.{RackResolver, Records}
+import org.apache.hadoop.yarn.util.{ConverterUtils, RackResolver, Records}
 
 
 object AllocationType extends Enumeration {
@@ -69,7 +71,8 @@ private[yarn] class YarnAllocationHandler(
     val executorCores: Int,
     val preferredHostToCount: Map[String, Int], 
     val preferredRackToCount: Map[String, Int],
-    val sparkConf: SparkConf)
+    val sparkConf: SparkConf,
+    val sparkUi: SparkUI)
   extends Logging {
   // These three are locked on allocatedHostToContainersMap. Complementary data structures
   // allocatedHostToContainersMap : containers which are running : host, Set<containerid>
@@ -118,6 +121,13 @@ private[yarn] class YarnAllocationHandler(
     pendingReleaseContainers.put(containerId, true)
     amClient.releaseAssignedContainer(containerId)
   }
+
+  private val user = Option(System.getenv("SPARK_USER")).getOrElse(SparkContext.SPARK_UNKNOWN_USER)
+
+  def buildLogLocation(container: Container) =
+    "http://%s/node/containerlogs/%s/%s".format(container.getNodeHttpAddress(),
+                                                ConverterUtils.toString(container.getId()),
+                                                user)
 
   def allocateResources() {
     // We have already set the container request. Poll the ResourceManager for a response.
@@ -284,6 +294,17 @@ private[yarn] class YarnAllocationHandler(
               allocatedRackCount.put(rack, allocatedRackCount.getOrElse(rack, 0) + 1)
             }
           }
+
+          if (sparkUi != null) {
+            val logLocation = buildLogLocation(container)
+            logInfo("Updating log location for %s to %s".format(
+              containerId, logLocation))
+            sparkUi.getTabs.find(_.name == "Executors").foreach {
+              _.asInstanceOf[ExecutorsTab].updateExecutorLogLocation(executorId, logLocation)
+            }
+          }
+
+
           logInfo("Launching ExecutorRunnable. driverUrl: %s,  executorHostname: %s".format(
             driverUrl, executorHostname))
           val executorRunnable = new ExecutorRunnable(
@@ -577,7 +598,8 @@ object YarnAllocationHandler {
       amClient: AMRMClient[ContainerRequest],
       appAttemptId: ApplicationAttemptId,
       args: ApplicationMasterArguments,
-      sparkConf: SparkConf
+      sparkConf: SparkConf,
+      sparkUi: SparkUI
     ): YarnAllocationHandler = {
     new YarnAllocationHandler(
       conf,
@@ -588,7 +610,8 @@ object YarnAllocationHandler {
       args.executorCores,
       Map[String, Int](),
       Map[String, Int](),
-      sparkConf)
+      sparkConf,
+      sparkUi)
   }
 
   def newAllocator(
@@ -598,7 +621,8 @@ object YarnAllocationHandler {
       args: ApplicationMasterArguments,
       map: collection.Map[String,
       collection.Set[SplitInfo]],
-      sparkConf: SparkConf
+      sparkConf: SparkConf,
+      sparkUi: SparkUI
     ): YarnAllocationHandler = {
     val (hostToSplitCount, rackToSplitCount) = generateNodeToWeight(conf, map)
     new YarnAllocationHandler(
@@ -610,7 +634,8 @@ object YarnAllocationHandler {
       args.executorCores,
       hostToSplitCount,
       rackToSplitCount,
-      sparkConf)
+      sparkConf,
+      sparkUi)
   }
 
   def newAllocator(
@@ -621,7 +646,8 @@ object YarnAllocationHandler {
       executorMemory: Int,
       executorCores: Int,
       map: collection.Map[String, collection.Set[SplitInfo]],
-      sparkConf: SparkConf
+      sparkConf: SparkConf,
+      sparkUi: SparkUI
     ): YarnAllocationHandler = {
     val (hostToCount, rackToCount) = generateNodeToWeight(conf, map)
     new YarnAllocationHandler(
@@ -633,7 +659,8 @@ object YarnAllocationHandler {
       executorCores,
       hostToCount,
       rackToCount,
-      sparkConf)
+      sparkConf,
+      sparkUi)
   }
 
   // A simple method to copy the split info map.

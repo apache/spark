@@ -25,13 +25,20 @@ import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.{SparkUI, WebUITab}
 
-private[ui] class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "executors") {
+class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "executors") {
   val appName = parent.appName
   val basePath = parent.basePath
   val listener = new ExecutorsListener(parent.storageStatusListener)
 
+  val executorToLogLocation = HashMap[String, String]()
+
   attachPage(new ExecutorsPage(this))
   parent.registerListener(listener)
+
+  def updateExecutorLogLocation(executorId: String, logs: String) = synchronized {
+    val eid = parent.storageStatusListener.formatExecutorId(executorId)
+    executorToLogLocation(eid) = logs
+  }
 }
 
 /**
