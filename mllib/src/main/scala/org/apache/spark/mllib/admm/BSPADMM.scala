@@ -12,6 +12,7 @@ object BSPADMMwithSGD {
             numADMMIterations: Int,
             gradient: BVGradient,
             initialWeights: Vector) = {
+
     val subProblems: RDD[SubProblem] = input.mapPartitions{ iter =>
       val localData = iter.toArray
       val points = localData.map { case (y, x) => x.toBreeze }
@@ -22,8 +23,10 @@ object BSPADMMwithSGD {
     val solvers = subProblems.map { s =>
       val regularizer = 0.1
       val gradient = new PegasosBVGradient(regularizer)
+      println("Building Solver")
       new ADMMSGDLocalSolver(s.points, s.labels, gradient, eta_0 = regularizer, maxIterations = 5)
     }.cache()
+    println(s"number of solver ${solvers.count()}")
 
     val numSolvers = solvers.partitions.length
 
@@ -35,8 +38,8 @@ object BSPADMMwithSGD {
 
     // Make a zero vector
     var w_avg: BV = input.first()._2.toBreeze * 0.0
-
-    while (iter < numADMMIterations && primalResidual < epsilon && dualResidual < epsilon) {
+    while (iter < numADMMIterations || primalResidual > epsilon || dualResidual > epsilon) {
+      println(s"Starting iteration ${iter}.")
       val local_w = solvers.map { s => s.solveLocal(w_avg, rho, epsilon) } . collect()
       val new_w_avg: BV = local_w.reduce(_ + _) / numSolvers.toDouble
 
@@ -46,15 +49,20 @@ object BSPADMMwithSGD {
       dualResidual = rho * Math.pow(norm(new_w_avg - w_avg, 2.0), 2)
 
       // Rho upate from Boyd text
-      if (rho == 0) {
+      if (rho == 0.0) {
         rho = epsilon
       } else if (primalResidual > 10.0 * dualResidual) {
         rho = 2.0 * rho
-      } else if (10.0 * dualResidual > primalResidual) {
+        println("Increasing rho")
+      } else if (dualResidual > 10.0 * primalResidual) {
         rho = rho / 2.0
+        println("Decreasing rho")
       }
 
       w_avg = new_w_avg
+
+      println(s"Iteration: ${iter}")
+      println(s"(Primal Resid, Dual Resid, Rho): ${primalResidual}, \t ${dualResidual}, \t ${rho}")
 
       iter += 1
     }

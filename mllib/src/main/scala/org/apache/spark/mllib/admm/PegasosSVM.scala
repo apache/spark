@@ -11,10 +11,12 @@ class PegasosSVM(val iterations: Integer = 10,
                  val lambda: Double = 0.1) extends SVMWithSGD {
 
   override def run(input: RDD[LabeledPoint]): SVMModel = {
+    println("Running pegasos svm")
     // Check the data properties before running the optimizer
     if (validateData && !validators.forall(func => func(input))) {
       throw new SparkException("Input validation failed.")
     }
+
     // Prepend an extra variable consisting of all 1.0's for the intercept.
     val data = if (addIntercept) {
       input.map(labeledPoint => (labeledPoint.label, prependOne(labeledPoint.features)))
