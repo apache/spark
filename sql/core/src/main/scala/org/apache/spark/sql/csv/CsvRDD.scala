@@ -28,31 +28,35 @@ private[sql] object CsvRDD extends Logging {
 
   private[sql] def inferSchema(
       csv: RDD[String],
-      delimiter: String = ",",
-      useHeader: Boolean = false): LogicalPlan = {
+      delimiter: String,
+      quote: String,
+      useHeader: Boolean): LogicalPlan = {
 
-    // TODO: Read header. For now assume there is no header
-    // TODO: What if first row is not representative
+    // Constructing schema
+    // TODO: Infer types based on a sample and/or let user specify types/schema
     val firstLine = csv.first()
-    val firstRow = firstLine.split(delimiter)
+    // Assuming first row is representative and using it to determine number of fields
+    val firstRow = new CsvTokenizer(Seq(firstLine).iterator, delimiter, quote).next()
     val header = if (useHeader) {
       firstRow
     } else {
       firstRow.zipWithIndex.map { case (value, index) => s"V$index" }
     }
 
-    // TODO: Infer types based on a sample
-    // TODO: Figure out a way for user to specify types/schema
-    val fields = header.map( fieldName => StructField(fieldName, StringType, nullable = true))
-    val schema = StructType(fields)
+    val schemaFields = header.map { fieldName =>
+      StructField(fieldName.asInstanceOf[String], StringType, nullable = true)
+    }
+    val schema = StructType(schemaFields)
+
     val parsedCSV = csv.mapPartitions { iter =>
+      // When using header, any input line that equals firstLine is assumed to be header
       val csvIter = if (useHeader) {
-        // Any input line that equals the headerLine is assumed to be header and filtered
         iter.filter(_ != firstLine)
       } else {
         iter
       }
-      parseCSV(csvIter, delimiter, schema)
+      val tokenIter = new CsvTokenizer(csvIter, delimiter, quote)
+      parseCSV(tokenIter, schema)
     }
 
     SparkLogicalPlan(ExistingRdd(asAttributes(schema), parsedCSV))
@@ -69,12 +73,9 @@ private[sql] object CsvRDD extends Logging {
     case _ => null
   }
 
-  private def parseCSV(iter: Iterator[String],
-      delimiter: String,
-      schema: StructType): Iterator[Row] = {
+  private def parseCSV(iter: Iterator[Array[Any]], schema: StructType): Iterator[Row] = {
     val row = new GenericMutableRow(schema.fields.length)
-    iter.map { line =>
-      val tokens = line.split(delimiter)
+    iter.map { tokens =>
       schema.fields.zipWithIndex.foreach {
         case (StructField(name, dataType, _), index) =>
           row.update(index, castToType(tokens(index), dataType))
