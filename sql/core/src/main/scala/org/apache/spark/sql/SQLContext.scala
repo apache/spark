@@ -139,9 +139,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @param path path to input file
    * @param delimiter Optional delimiter (default is comma)
-   * @param header Optional flag to indicate first line of each file is the header
-   *                  (default is false)
    * @param quote Optional quote character or string (default is '"')
+   * @param header Optional flag to indicate first line of each file is the header
+   *               (default is false)
    */
   def csvFile(path: String,
       delimiter: String = ",",
@@ -160,9 +160,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @param csv input RDD
    * @param delimiter Optional delimiter (default is comma)
-   * @param header Optional flag to indicate first line of each file is the hader
-   *                  (default is false)
    * @param quote Optional quote character of strig (default is '"')
+   * @param header Optional flag to indicate first line of each file is the hader
+   *               (default is false)
    */
   def csvRDD(csv: RDD[String],
       delimiter: String = ",",
