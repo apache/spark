@@ -273,14 +273,18 @@ case class StructField(name: String, dataType: DataType, nullable: Boolean) {
 }
 
 object StructType {
-  def fromAttributes(attributes: Seq[Attribute]): StructType = {
+  def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
-  }
 
   private def validateFields(fields: Seq[StructField]): Boolean =
     fields.map(field => field.name).distinct.size == fields.size
 
-  // def apply(fields: Seq[StructField]) = new StructType(fields.toIndexedSeq)
+  def apply[A <: String: ClassTag, B <: DataType: ClassTag](fields: (A, B)*): StructType =
+    StructType(fields.map(field => StructField(field._1, field._2, true)))
+
+  def apply[A <: String: ClassTag, B <: DataType: ClassTag, C <: Boolean: ClassTag](
+      fields: (A, B, C)*): StructType =
+    StructType(fields.map(field => StructField(field._1, field._2, field._3)))
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
