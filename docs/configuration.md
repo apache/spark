@@ -774,6 +774,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.streaming.receiver.maxRate</code></td>
+  <td>infinite</td>
+  <td>
+    Maximum rate (per second) at which each receiver will push data into blocks. Effectively,
+    each stream will consume at most this number of records per second.
+    Setting this configuration to 0 or a negative number will put no limit on the rate.
+  </td>
+</tr>
+<tr>
   <td><code>spark.streaming.unpersist</code></td>
   <td>true</td>
   <td>
