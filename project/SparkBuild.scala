@@ -326,6 +326,7 @@ object SparkBuild extends Build {
   val excludeJBossNetty = ExclusionRule(organization = "org.jboss.netty")
   val excludeIONetty = ExclusionRule(organization = "io.netty")
   val excludeEclipseJetty = ExclusionRule(organization = "org.eclipse.jetty")
+  val excludeMortbayJetty = ExclusionRule(organization = "org.mortbay.jetty")
   val excludeAsm = ExclusionRule(organization = "org.ow2.asm")
   val excludeOldAsm = ExclusionRule(organization = "asm")
   val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
@@ -371,7 +372,7 @@ object SparkBuild extends Build {
         "net.java.dev.jets3t"        % "jets3t"           % jets3tVersion excludeAll(excludeCommonsLogging),
         "commons-codec"              % "commons-codec"    % "1.5", // Prevent jets3t from including the older version of commons-codec
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
-        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeJBossNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm, excludeServletApi),
+        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeJBossNetty, excludeMortbayJetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm, excludeServletApi),
         "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeJBossNetty),
         "com.codahale.metrics"       % "metrics-core"     % codahaleMetricsVersion,
         "com.codahale.metrics"       % "metrics-jvm"      % codahaleMetricsVersion,
@@ -528,9 +529,9 @@ object SparkBuild extends Build {
     name := "spark-hive",
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
-      "org.spark-project.hive" % "hive-metastore" % hiveVersion,
-      "org.spark-project.hive" % "hive-exec"      % hiveVersion excludeAll(excludeCommonsLogging),
-      "org.spark-project.hive" % "hive-serde"     % hiveVersion
+      "org.spark-project.hive" % "hive-metastore" % hiveVersion excludeAll(excludeJBossNetty, excludeMortbayJetty, excludeCommonsLogging, excludeSLF4J),
+      "org.spark-project.hive" % "hive-exec"      % hiveVersion excludeAll(excludeJBossNetty, excludeMortbayJetty, excludeCommonsLogging, excludeSLF4J),
+      "org.spark-project.hive" % "hive-serde"     % hiveVersion excludeAll(excludeJBossNetty, excludeMortbayJetty, excludeCommonsLogging, excludeSLF4J)
     ),
     // Multiple queries rely on the TestHive singleton.  See comments there for more details.
     parallelExecution in Test := false,
