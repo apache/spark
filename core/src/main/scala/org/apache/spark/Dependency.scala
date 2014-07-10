@@ -34,8 +34,6 @@ abstract class Dependency[T] extends Serializable {
 
 /**
  * :: DeveloperApi ::
- * Base class for dependencies where each partition of the parent RDD is used by at most one
- * partition of the child RDD.  Narrow dependencies allow for pipelined execution.
  */
 @DeveloperApi
 abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
