@@ -56,15 +56,6 @@ private[streaming] class BlockGenerator(
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
 
-  // Variables to throttle consumption
-  private val throttlingBatchDelay = 100L
-  private var throttlingBatchCurrentSize = 0
-  private var nextThrottlingBatchAfter = 0L
-  private val throttlingBatchSize = conf.getInt("spark.streaming.receiver.maxRate",0) match {
-    case x if x > 0 => x/(1000L / throttlingBatchDelay).toInt
-    case _ => -1
-  }
-
   @volatile private var currentBuffer = new ArrayBuffer[Any]
   @volatile private var stopped = false
 
