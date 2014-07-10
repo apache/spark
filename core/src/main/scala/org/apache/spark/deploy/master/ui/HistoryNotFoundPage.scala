@@ -30,8 +30,9 @@ private[spark] class HistoryNotFoundPage(parent: MasterWebUI)
     val content =
       <div class="row-fluid">
         <div class="span12" style="font-size:14px;font-weight:bold">
-          No event logs were found for this application. Did you forget to set
-          <a href="http://spark.apache.org/docs/latest/monitoring.html">spark.eventLog.enabled</a>?
+          No event logs were found for this application. To enable event logging, please set
+          <a href="http://spark.apache.org/docs/latest/monitoring.html">spark.eventLog.enabled</a>
+          to true.
         </div>
       </div>
     UIUtils.basicSparkPage(content, "Application history not found")
