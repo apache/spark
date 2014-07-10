@@ -92,7 +92,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
         new GenericRow(extractors.map(e => e.invoke(row)).toArray[Any]): ScalaRow
       }
     }
-    new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+    new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd))(sqlContext))
   }
 
   /**
@@ -120,7 +120,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * @group userf
    */
   def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD =
-    new JavaSchemaRDD(sqlContext, JsonRDD.inferSchema(json, 1.0))
+    new JavaSchemaRDD(sqlContext, JsonRDD.inferSchema(sqlContext, json, 1.0))
 
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
