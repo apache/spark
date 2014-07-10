@@ -1101,7 +1101,6 @@ class DAGScheduler(
       return true
     }
     val visitedRdds = new HashSet[RDD[_]]
-    val visitedStages = new HashSet[Stage]
     def visit(rdd: RDD[_]) {
       if (!visitedRdds(rdd)) {
         visitedRdds += rdd
@@ -1110,7 +1109,6 @@ class DAGScheduler(
             case shufDep: ShuffleDependency[_, _, _] =>
               val mapStage = getShuffleMapStage(shufDep, stage.jobId)
               if (!mapStage.isAvailable) {
-                visitedStages += mapStage
                 visit(mapStage.rdd)
               }  // Otherwise there's no need to follow the dependency back
             case narrowDep: NarrowDependency[_] =>
