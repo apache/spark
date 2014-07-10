@@ -428,11 +428,11 @@ def launch_cluster(conn, opts, cluster_name):
     for master in master_nodes:
         master.add_tag(
             key='Name',
-            value='spark-{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+            value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
     for slave in slave_nodes:
         slave.add_tag(
             key='Name',
-            value='spark-{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+            value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
 
     # Return all the instances
     return (master_nodes, slave_nodes)
@@ -698,6 +698,7 @@ def ssh(host, opts, command):
                 "Error executing remote command, retrying after 30 seconds: {0}".format(e)
             time.sleep(30)
             tries = tries + 1
+
 
 # Backported from Python 2.7 for compatiblity with 2.6 (See SPARK-1990)
 def _check_output(*popenargs, **kwargs):
