@@ -23,8 +23,10 @@ import scala.collection.mutable.ArrayBuffer
  * Tokenizer based on RFC 4180 for comma separated values.
  * It implements an iterator that returns each tokenized line as an Array[Any].
  */
-private[sql] class CsvTokenizer(inputIter: Iterator[String],
-    delimiter: String, quote: String) extends Iterator[Array[Any]] {
+private[sql] class CsvTokenizer(
+    inputIter: Iterator[String],
+    delimiter: String,
+    quote: String) extends Iterator[Array[String]] {
 
   private  val DELIM = delimiter.charAt(0)
   private  val QUOTE = quote.charAt(0)
@@ -52,13 +54,13 @@ private[sql] class CsvTokenizer(inputIter: Iterator[String],
 
   def hasNext: Boolean = inputIter.hasNext
 
-  def next(): Array[Any] = {
+  def next(): Array[String] = {
     var curState = Unquoted
     var curPosition = 0
     var startPosition = 0
     var curChar: Char = '\0'
     var leftOver: String = ""             // Used to keep track of tokens that span multiple lines
-    val tokens = new ArrayBuffer[Any]()
+    val tokens = new ArrayBuffer[String]()
     var line = inputIter.next() + '\n'
 
     while (curPosition < line.length) {

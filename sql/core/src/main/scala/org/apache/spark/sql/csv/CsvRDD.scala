@@ -73,7 +73,7 @@ private[sql] object CsvRDD extends Logging {
     case _ => null
   }
 
-  private def parseCSV(iter: Iterator[Array[Any]], schema: StructType): Iterator[Row] = {
+  private def parseCSV(iter: Iterator[Array[String]], schema: StructType): Iterator[Row] = {
     val row = new GenericMutableRow(schema.fields.length)
     iter.map { tokens =>
       schema.fields.zipWithIndex.foreach {

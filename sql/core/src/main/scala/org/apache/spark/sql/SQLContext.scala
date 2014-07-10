@@ -143,7 +143,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @param header Optional flag to indicate first line of each file is the header
    *               (default is false)
    */
-  def csvFile(path: String,
+  def csvFile(
+      path: String,
       delimiter: String = ",",
       quote: String = "\"",
       header: Boolean = false): SchemaRDD = {
@@ -164,7 +165,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @param header Optional flag to indicate first line of each file is the hader
    *               (default is false)
    */
-  def csvRDD(csv: RDD[String],
+  def csvRDD(
+      csv: RDD[String],
       delimiter: String = ",",
       quote: String = "\"",
       header: Boolean = false): SchemaRDD = {

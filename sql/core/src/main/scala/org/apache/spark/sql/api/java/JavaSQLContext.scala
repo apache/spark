@@ -136,7 +136,8 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * @param header Optional flag to indicate first line of each file is the header
    *               (default is false)
    */
-  def csvFile(path: String,
+  def csvFile(
+      path: String,
       delimiter: String = ",",
       quote: String = "\"",
       header: Boolean = false): JavaSchemaRDD = {
@@ -157,7 +158,8 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * @param header Optional flag to indicate first line of each file is the hader
    *               (default is false)
    */
-  def csvRDD(csv: JavaRDD[String],
+  def csvRDD(
+      csv: JavaRDD[String],
       delimiter: String = ",",
       quote: String = "\"",
       header: Boolean = false): JavaSchemaRDD = {
