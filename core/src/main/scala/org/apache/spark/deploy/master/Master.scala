@@ -674,6 +674,7 @@ private[spark] class Master(
     val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
     val eventLogPaths = eventLogInfo.logPaths
     val compressionCodec = eventLogInfo.compressionCodec
+    fileSystemsUsed += fileSystem
     if (!eventLogPaths.isEmpty) {
       try {
         val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
