@@ -24,6 +24,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.SQLContext
 
 /**
  * :: DeveloperApi ::
@@ -41,7 +42,7 @@ case class Aggregate(
     partial: Boolean,
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    child: SparkPlan)(@transient sc: SparkContext)
+    child: SparkPlan)(@transient sqlContext: SQLContext)
   extends UnaryNode with NoBind {
 
   override def requiredChildDistribution =
@@ -55,7 +56,7 @@ case class Aggregate(
       }
     }
 
-  override def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sqlContext :: Nil
 
   // HACK: Generators don't correctly preserve their output through serializations so we grab
   // out child's output attributes statically here.
@@ -77,20 +78,18 @@ case class Aggregate(
       resultAttribute: AttributeReference)
 
   /** A list of aggregates that need to be computed for each group. */
-  @transient
-  private[this] lazy val computedAggregates = aggregateExpressions.flatMap { agg =>
+  private[this] val computedAggregates = aggregateExpressions.flatMap { agg =>
     agg.collect {
       case a: AggregateExpression =>
         ComputedAggregate(
           a,
-          BindReferences.bindReference(a, childOutput).asInstanceOf[AggregateExpression],
-          AttributeReference(s"aggResult:$a", a.dataType, nullable = true)())
+          BindReferences.bindReference(a, childOutput),
+          AttributeReference(s"aggResult:$a", a.dataType, a.nullable)())
     }
   }.toArray
 
   /** The schema of the result of all aggregate evaluations */
-  @transient
-  private[this] lazy val computedSchema = computedAggregates.map(_.resultAttribute)
+  private[this] val computedSchema = computedAggregates.map(_.resultAttribute)
 
   /** Creates a new aggregate buffer for a group. */
   private[this] def newAggregateBuffer(): Array[AggregateFunction] = {
@@ -104,8 +103,7 @@ case class Aggregate(
   }
 
   /** Named attributes used to substitute grouping attributes into the final result. */
-  @transient
-  private[this] lazy val namedGroups = groupingExpressions.map {
+  private[this] val namedGroups = groupingExpressions.map {
     case ne: NamedExpression => ne -> ne.toAttribute
     case e => e -> Alias(e, s"groupingExpr:$e")().toAttribute
   }
@@ -114,16 +112,14 @@ case class Aggregate(
    * A map of substitutions that are used to insert the aggregate expressions and grouping
    * expression into the final result expression.
    */
-  @transient
-  private[this] lazy val resultMap =
-    (computedAggregates.map { agg => agg.unbound -> agg.resultAttribute} ++ namedGroups).toMap
+  private[this] val resultMap =
+    (computedAggregates.map { agg => agg.unbound -> agg.resultAttribute } ++ namedGroups).toMap
 
   /**
    * Substituted version of aggregateExpressions expressions which are used to compute final
    * output rows given a group and the result of all aggregate computations.
    */
-  @transient
-  private[this] lazy val resultExpressions = aggregateExpressions.map { agg =>
+  private[this] val resultExpressions = aggregateExpressions.map { agg =>
     agg.transform {
       case e: Expression if resultMap.contains(e) => resultMap(e)
     }

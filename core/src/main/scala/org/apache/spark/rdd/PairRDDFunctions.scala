@@ -28,7 +28,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import com.clearspring.analytics.stream.cardinality.HyperLogLog
+import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.SequenceFile.CompressionType
@@ -46,7 +46,6 @@ import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.SerializableHyperLogLog
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -91,21 +90,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       self.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
-    } else if (mapSideCombine) {
-      val combined = self.mapPartitionsWithContext((context, iter) => {
-        aggregator.combineValuesByKey(iter, context)
-      }, preservesPartitioning = true)
-      val partitioned = new ShuffledRDD[K, C, (K, C)](combined, partitioner)
-        .setSerializer(serializer)
-      partitioned.mapPartitionsWithContext((context, iter) => {
-        new InterruptibleIterator(context, aggregator.combineCombinersByKey(iter, context))
-      }, preservesPartitioning = true)
     } else {
-      // Don't apply map-side combiner.
-      val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializer)
-      values.mapPartitionsWithContext((context, iter) => {
-        new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
-      }, preservesPartitioning = true)
+      new ShuffledRDD[K, V, C, (K, C)](self, partitioner)
+        .setSerializer(serializer)
+        .setAggregator(aggregator)
+        .setMapSideCombine(mapSideCombine)
     }
   }
 
@@ -117,6 +106,56 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       mergeCombiners: (C, C) => C,
       numPartitions: Int): RDD[(K, C)] = {
     combineByKey(createCombiner, mergeValue, mergeCombiners, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * Aggregate the values of each key, using given combine functions and a neutral "zero value".
+   * This function can return a different result type, U, than the type of the values in this RDD,
+   * V. Thus, we need one operation for merging a V into a U and one operation for merging two U's,
+   * as in scala.TraversableOnce. The former operation is used for merging values within a
+   * partition, and the latter is used for merging values between partitions. To avoid memory
+   * allocation, both of these functions are allowed to modify and return their first argument
+   * instead of creating a new U.
+   */
+  def aggregateByKey[U: ClassTag](zeroValue: U, partitioner: Partitioner)(seqOp: (U, V) => U,
+      combOp: (U, U) => U): RDD[(K, U)] = {
+    // Serialize the zero value to a byte array so that we can get a new clone of it on each key
+    val zeroBuffer = SparkEnv.get.closureSerializer.newInstance().serialize(zeroValue)
+    val zeroArray = new Array[Byte](zeroBuffer.limit)
+    zeroBuffer.get(zeroArray)
+
+    lazy val cachedSerializer = SparkEnv.get.closureSerializer.newInstance()
+    def createZero() = cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
+
+    combineByKey[U]((v: V) => seqOp(createZero(), v), seqOp, combOp, partitioner)
+  }
+
+  /**
+   * Aggregate the values of each key, using given combine functions and a neutral "zero value".
+   * This function can return a different result type, U, than the type of the values in this RDD,
+   * V. Thus, we need one operation for merging a V into a U and one operation for merging two U's,
+   * as in scala.TraversableOnce. The former operation is used for merging values within a
+   * partition, and the latter is used for merging values between partitions. To avoid memory
+   * allocation, both of these functions are allowed to modify and return their first argument
+   * instead of creating a new U.
+   */
+  def aggregateByKey[U: ClassTag](zeroValue: U, numPartitions: Int)(seqOp: (U, V) => U,
+      combOp: (U, U) => U): RDD[(K, U)] = {
+    aggregateByKey(zeroValue, new HashPartitioner(numPartitions))(seqOp, combOp)
+  }
+
+  /**
+   * Aggregate the values of each key, using given combine functions and a neutral "zero value".
+   * This function can return a different result type, U, than the type of the values in this RDD,
+   * V. Thus, we need one operation for merging a V into a U and one operation for merging two U's,
+   * as in scala.TraversableOnce. The former operation is used for merging values within a
+   * partition, and the latter is used for merging values between partitions. To avoid memory
+   * allocation, both of these functions are allowed to modify and return their first argument
+   * instead of creating a new U.
+   */
+  def aggregateByKey[U: ClassTag](zeroValue: U)(seqOp: (U, V) => U,
+      combOp: (U, U) => U): RDD[(K, U)] = {
+    aggregateByKey(zeroValue, defaultPartitioner(self))(seqOp, combOp)
   }
 
   /**
@@ -214,39 +253,88 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * :: Experimental ::
+   *
    * Return approximate number of distinct values for each key in this RDD.
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vice versa. Uses the provided
-   * Partitioner to partition the output RDD.
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero `sp > p`
+   * would trigger sparse representation of registers, which may reduce the memory consumption
+   * and increase accuracy when the cardinality is small.
+   *
+   * @param p The precision value for the normal set.
+   *          `p` must be a value between 4 and `sp` if `sp` is not zero (32 max).
+   * @param sp The precision value for the sparse set, between 0 and 32.
+   *           If `sp` equals 0, the sparse representation is skipped.
+   * @param partitioner Partitioner to use for the resulting RDD.
    */
-  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
-    val createHLL = (v: V) => new SerializableHyperLogLog(new HyperLogLog(relativeSD)).add(v)
-    val mergeValueHLL = (hll: SerializableHyperLogLog, v: V) => hll.add(v)
-    val mergeHLL = (h1: SerializableHyperLogLog, h2: SerializableHyperLogLog) => h1.merge(h2)
+  @Experimental
+  def countApproxDistinctByKey(p: Int, sp: Int, partitioner: Partitioner): RDD[(K, Long)] = {
+    require(p >= 4, s"p ($p) must be >= 4")
+    require(sp <= 32, s"sp ($sp) must be <= 32")
+    require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
+    val createHLL = (v: V) => {
+      val hll = new HyperLogLogPlus(p, sp)
+      hll.offer(v)
+      hll
+    }
+    val mergeValueHLL = (hll: HyperLogLogPlus, v: V) => {
+      hll.offer(v)
+      hll
+    }
+    val mergeHLL = (h1: HyperLogLogPlus, h2: HyperLogLogPlus) => {
+      h1.addAll(h2)
+      h1
+    }
 
-    combineByKey(createHLL, mergeValueHLL, mergeHLL, partitioner).mapValues(_.value.cardinality())
+    combineByKey(createHLL, mergeValueHLL, mergeHLL, partitioner).mapValues(_.cardinality())
   }
 
   /**
    * Return approximate number of distinct values for each key in this RDD.
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vice versa. HashPartitions the
-   * output RDD into numPartitions.
    *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It must be greater than 0.000017.
+   * @param partitioner partitioner of the resulting RDD
+   */
+  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
+    require(relativeSD > 0.000017, s"accuracy ($relativeSD) must be greater than 0.000017")
+    val p = math.ceil(2.0 * math.log(1.054 / relativeSD) / math.log(2)).toInt
+    assert(p <= 32)
+    countApproxDistinctByKey(if (p < 4) 4 else p, 0, partitioner)
+  }
+
+  /**
+   * Return approximate number of distinct values for each key in this RDD.
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It must be greater than 0.000017.
+   * @param numPartitions number of partitions of the resulting RDD
    */
   def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): RDD[(K, Long)] = {
     countApproxDistinctByKey(relativeSD, new HashPartitioner(numPartitions))
   }
 
   /**
-   * Return approximate number of distinct values for each key this RDD.
-   * The accuracy of approximation can be controlled through the relative standard deviation
-   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
-   * more accurate counts but increase the memory footprint and vice versa. The default value of
-   * relativeSD is 0.05. Hash-partitions the output RDD using the existing partitioner/parallelism
-   * level.
+   * Return approximate number of distinct values for each key in this RDD.
+   *
+   * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
+   * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
+   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   *
+   * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
+   *                   It must be greater than 0.000017.
    */
   def countApproxDistinctByKey(relativeSD: Double = 0.05): RDD[(K, Long)] = {
     countApproxDistinctByKey(relativeSD, defaultPartitioner(self))
@@ -303,7 +391,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     if (self.partitioner == Some(partitioner)) {
       self
     } else {
-      new ShuffledRDD[K, V, (K, V)](self, partitioner)
+      new ShuffledRDD[K, V, V, (K, V)](self, partitioner)
     }
   }
 
@@ -470,6 +558,28 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
+   */
+  def cogroup[W1, W2, W3](other1: RDD[(K, W1)],
+      other2: RDD[(K, W2)],
+      other3: RDD[(K, W3)],
+      partitioner: Partitioner)
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+    if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
+      throw new SparkException("Default partitioner cannot partition array keys.")
+    }
+    val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
+    cg.mapValues { case Seq(vs, w1s, w2s, w3s) =>
+      (vs.asInstanceOf[Seq[V]],
+        w1s.asInstanceOf[Seq[W1]],
+        w2s.asInstanceOf[Seq[W2]],
+        w3s.asInstanceOf[Seq[W3]])
+    }
+  }
+
+  /**
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
@@ -499,6 +609,16 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
        w1s.asInstanceOf[Seq[W1]],
        w2s.asInstanceOf[Seq[W2]])
     }
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
+   */
+  def cogroup[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)])
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+    cogroup(other1, other2, other3, defaultPartitioner(self, other1, other2, other3))
   }
 
   /**
@@ -535,6 +655,19 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     cogroup(other1, other2, new HashPartitioner(numPartitions))
   }
 
+  /**
+   * For each key k in `this` or `other1` or `other2` or `other3`,
+   * return a resulting RDD that contains a tuple with the list of values
+   * for that key in `this`, `other1`, `other2` and `other3`.
+   */
+  def cogroup[W1, W2, W3](other1: RDD[(K, W1)],
+      other2: RDD[(K, W2)],
+      other3: RDD[(K, W3)],
+      numPartitions: Int)
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+    cogroup(other1, other2, other3, new HashPartitioner(numPartitions))
+  }
+
   /** Alias for cogroup. */
   def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, defaultPartitioner(self, other))
@@ -544,6 +677,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
     cogroup(other1, other2, defaultPartitioner(self, other1, other2))
+  }
+
+  /** Alias for cogroup. */
+  def groupWith[W1, W2, W3](other1: RDD[(K, W1)], other2: RDD[(K, W2)], other3: RDD[(K, W3)])
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
+    cogroup(other1, other2, other3, defaultPartitioner(self, other1, other2, other3))
   }
 
   /**
@@ -623,7 +762,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
       conf: Configuration = self.context.hadoopConfiguration)
   {
-    val job = new NewAPIHadoopJob(conf)
+    // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
+    val hadoopConf = conf
+    val job = new NewAPIHadoopJob(hadoopConf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
     job.setOutputFormatClass(outputFormatClass)
@@ -656,22 +797,25 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
       conf: JobConf = new JobConf(self.context.hadoopConfiguration),
       codec: Option[Class[_ <: CompressionCodec]] = None) {
-    conf.setOutputKeyClass(keyClass)
-    conf.setOutputValueClass(valueClass)
+    // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
+    val hadoopConf = conf
+    hadoopConf.setOutputKeyClass(keyClass)
+    hadoopConf.setOutputValueClass(valueClass)
     // Doesn't work in Scala 2.9 due to what may be a generics bug
     // TODO: Should we uncomment this for Scala 2.10?
     // conf.setOutputFormat(outputFormatClass)
-    conf.set("mapred.output.format.class", outputFormatClass.getName)
+    hadoopConf.set("mapred.output.format.class", outputFormatClass.getName)
     for (c <- codec) {
-      conf.setCompressMapOutput(true)
-      conf.set("mapred.output.compress", "true")
-      conf.setMapOutputCompressorClass(c)
-      conf.set("mapred.output.compression.codec", c.getCanonicalName)
-      conf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
+      hadoopConf.setCompressMapOutput(true)
+      hadoopConf.set("mapred.output.compress", "true")
+      hadoopConf.setMapOutputCompressorClass(c)
+      hadoopConf.set("mapred.output.compression.codec", c.getCanonicalName)
+      hadoopConf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
     }
-    conf.setOutputCommitter(classOf[FileOutputCommitter])
-    FileOutputFormat.setOutputPath(conf, SparkHadoopWriter.createPathFromString(path, conf))
-    saveAsHadoopDataset(conf)
+    hadoopConf.setOutputCommitter(classOf[FileOutputCommitter])
+    FileOutputFormat.setOutputPath(hadoopConf,
+      SparkHadoopWriter.createPathFromString(path, hadoopConf))
+    saveAsHadoopDataset(hadoopConf)
   }
 
   /**
@@ -681,7 +825,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * configured for a Hadoop MapReduce job.
    */
   def saveAsNewAPIHadoopDataset(conf: Configuration) {
-    val job = new NewAPIHadoopJob(conf)
+    // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
+    val hadoopConf = conf
+    val job = new NewAPIHadoopJob(hadoopConf)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
@@ -689,7 +835,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
 
-    if (jobFormat.isInstanceOf[NewFileOutputFormat[_, _]]) {
+    if (self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)) {
       // FileOutputFormat ignores the filesystem parameter
       jobFormat.checkOutputSpecs(job)
     }
@@ -738,9 +884,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * MapReduce job.
    */
   def saveAsHadoopDataset(conf: JobConf) {
-    val outputFormatInstance = conf.getOutputFormat
-    val keyClass = conf.getOutputKeyClass
-    val valueClass = conf.getOutputValueClass
+    // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
+    val hadoopConf = conf
+    val outputFormatInstance = hadoopConf.getOutputFormat
+    val keyClass = hadoopConf.getOutputKeyClass
+    val valueClass = hadoopConf.getOutputValueClass
     if (outputFormatInstance == null) {
       throw new SparkException("Output format class not set")
     }
@@ -750,18 +898,18 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     if (valueClass == null) {
       throw new SparkException("Output value class not set")
     }
-    SparkHadoopUtil.get.addCredentials(conf)
+    SparkHadoopUtil.get.addCredentials(hadoopConf)
 
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
 
-    if (outputFormatInstance.isInstanceOf[FileOutputFormat[_, _]]) {
+    if (self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)) {
       // FileOutputFormat ignores the filesystem parameter
-      val ignoredFs = FileSystem.get(conf)
-      conf.getOutputFormat.checkOutputSpecs(ignoredFs, conf)
+      val ignoredFs = FileSystem.get(hadoopConf)
+      hadoopConf.getOutputFormat.checkOutputSpecs(ignoredFs, hadoopConf)
     }
 
-    val writer = new SparkHadoopWriter(conf)
+    val writer = new SparkHadoopWriter(hadoopConf)
     writer.preSetup()
 
     def writeToFile(context: TaskContext, iter: Iterator[(K, V)]) {

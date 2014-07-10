@@ -96,37 +96,44 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
 
   test("svd of a full-rank matrix") {
     for (mat <- Seq(denseMat, sparseMat)) {
-      val localMat = mat.toBreeze()
-      val (localU, localSigma, localVt) = brzSvd(localMat)
-      val localV: BDM[Double] = localVt.t.toDenseMatrix
-      for (k <- 1 to n) {
-        val svd = mat.computeSVD(k, computeU = true)
-        val U = svd.U
-        val s = svd.s
-        val V = svd.V
-        assert(U.numRows() === m)
-        assert(U.numCols() === k)
-        assert(s.size === k)
-        assert(V.numRows === n)
-        assert(V.numCols === k)
-        assertColumnEqualUpToSign(U.toBreeze(), localU, k)
-        assertColumnEqualUpToSign(V.toBreeze.asInstanceOf[BDM[Double]], localV, k)
-        assert(closeToZero(s.toBreeze.asInstanceOf[BDV[Double]] - localSigma(0 until k)))
+      for (mode <- Seq("auto", "local-svd", "local-eigs", "dist-eigs")) {
+        val localMat = mat.toBreeze()
+        val (localU, localSigma, localVt) = brzSvd(localMat)
+        val localV: BDM[Double] = localVt.t.toDenseMatrix
+        for (k <- 1 to n) {
+          val skip = (mode == "local-eigs" || mode == "dist-eigs") && k == n
+          if (!skip) {
+            val svd = mat.computeSVD(k, computeU = true, 1e-9, 300, 1e-10, mode)
+            val U = svd.U
+            val s = svd.s
+            val V = svd.V
+            assert(U.numRows() === m)
+            assert(U.numCols() === k)
+            assert(s.size === k)
+            assert(V.numRows === n)
+            assert(V.numCols === k)
+            assertColumnEqualUpToSign(U.toBreeze(), localU, k)
+            assertColumnEqualUpToSign(V.toBreeze.asInstanceOf[BDM[Double]], localV, k)
+            assert(closeToZero(s.toBreeze.asInstanceOf[BDV[Double]] - localSigma(0 until k)))
+          }
+        }
+        val svdWithoutU = mat.computeSVD(1, computeU = false, 1e-9, 300, 1e-10, mode)
+        assert(svdWithoutU.U === null)
       }
-      val svdWithoutU = mat.computeSVD(n)
-      assert(svdWithoutU.U === null)
     }
   }
 
   test("svd of a low-rank matrix") {
-    val rows = sc.parallelize(Array.fill(4)(Vectors.dense(1.0, 1.0)), 2)
-    val mat = new RowMatrix(rows, 4, 2)
-    val svd = mat.computeSVD(2, computeU = true)
-    assert(svd.s.size === 1, "should not return zero singular values")
-    assert(svd.U.numRows() === 4)
-    assert(svd.U.numCols() === 1)
-    assert(svd.V.numRows === 2)
-    assert(svd.V.numCols === 1)
+    val rows = sc.parallelize(Array.fill(4)(Vectors.dense(1.0, 1.0, 1.0)), 2)
+    val mat = new RowMatrix(rows, 4, 3)
+    for (mode <- Seq("auto", "local-svd", "local-eigs", "dist-eigs")) {
+      val svd = mat.computeSVD(2, computeU = true, 1e-6, 300, 1e-10, mode)
+      assert(svd.s.size === 1, s"should not return zero singular values but got ${svd.s}")
+      assert(svd.U.numRows() === 4)
+      assert(svd.U.numCols() === 1)
+      assert(svd.V.numRows === 3)
+      assert(svd.V.numCols === 1)
+    }
   }
 
   def closeToZero(G: BDM[Double]): Boolean = {

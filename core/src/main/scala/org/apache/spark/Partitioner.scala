@@ -17,11 +17,13 @@
 
 package org.apache.spark
 
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.CollectionsUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.util.{CollectionsUtils, Utils}
 
 /**
  * An object that defines how the elements in a key-value pair RDD are partitioned by key.
@@ -83,22 +85,28 @@ class HashPartitioner(partitions: Int) extends Partitioner {
     case _ =>
       false
   }
+
+  override def hashCode: Int = numPartitions
 }
 
 /**
  * A [[org.apache.spark.Partitioner]] that partitions sortable records by range into roughly
  * equal ranges. The ranges are determined by sampling the content of the RDD passed in.
+ *
+ * Note that the actual number of partitions created by the RangePartitioner might not be the same
+ * as the `partitions` parameter, in the case where the number of sampled records is less than
+ * the value of `partitions`.
  */
 class RangePartitioner[K : Ordering : ClassTag, V](
-    partitions: Int,
+    @transient partitions: Int,
     @transient rdd: RDD[_ <: Product2[K,V]],
-    private val ascending: Boolean = true)
+    private var ascending: Boolean = true)
   extends Partitioner {
 
-  private val ordering = implicitly[Ordering[K]]
+  private var ordering = implicitly[Ordering[K]]
 
   // An array of upper bounds for the first (partitions - 1) partitions
-  private val rangeBounds: Array[K] = {
+  private var rangeBounds: Array[K] = {
     if (partitions == 1) {
       Array()
     } else {
@@ -119,9 +127,9 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     }
   }
 
-  def numPartitions = partitions
+  def numPartitions = rangeBounds.length + 1
 
-  private val binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
+  private var binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
 
   def getPartition(key: Any): Int = {
     val k = key.asInstanceOf[K]
@@ -154,5 +162,53 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       r.rangeBounds.sameElements(rangeBounds) && r.ascending == ascending
     case _ =>
       false
+  }
+
+  override def hashCode(): Int = {
+    val prime = 31
+    var result = 1
+    var i = 0
+    while (i < rangeBounds.length) {
+      result = prime * result + rangeBounds(i).hashCode
+      i += 1
+    }
+    result = prime * result + ascending.hashCode
+    result
+  }
+
+  @throws(classOf[IOException])
+  private def writeObject(out: ObjectOutputStream) {
+    val sfactory = SparkEnv.get.serializer
+    sfactory match {
+      case js: JavaSerializer => out.defaultWriteObject()
+      case _ =>
+        out.writeBoolean(ascending)
+        out.writeObject(ordering)
+        out.writeObject(binarySearch)
+
+        val ser = sfactory.newInstance()
+        Utils.serializeViaNestedStream(out, ser) { stream =>
+          stream.writeObject(scala.reflect.classTag[Array[K]])
+          stream.writeObject(rangeBounds)
+        }
+    }
+  }
+
+  @throws(classOf[IOException])
+  private def readObject(in: ObjectInputStream) {
+    val sfactory = SparkEnv.get.serializer
+    sfactory match {
+      case js: JavaSerializer => in.defaultReadObject()
+      case _ =>
+        ascending = in.readBoolean()
+        ordering = in.readObject().asInstanceOf[Ordering[K]]
+        binarySearch = in.readObject().asInstanceOf[(Array[K], K) => Int]
+
+        val ser = sfactory.newInstance()
+        Utils.deserializeViaNestedStream(in, ser) { ds =>
+          implicit val classTag = ds.readObject[ClassTag[Array[K]]]()
+          rangeBounds = ds.readObject[Array[K]]()
+        }
+    }
   }
 }

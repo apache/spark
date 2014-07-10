@@ -942,7 +942,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
   def createSparkContext(): SparkContext = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
-    val jars = SparkILoop.getAddedJars.map(new java.io.File(_).getAbsolutePath)
+    val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster())
       .setAppName("Spark shell")
@@ -997,7 +997,8 @@ object SparkILoop {
     val propJars = sys.props.get("spark.jars").flatMap { p =>
       if (p == "") None else Some(p)
     }
-    propJars.orElse(envJars).map(_.split(",")).getOrElse(Array.empty)
+    val jars = propJars.orElse(envJars).getOrElse("")
+    Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
   }
 
   // Designed primarily for use by test code: take a String with a

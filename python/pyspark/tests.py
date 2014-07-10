@@ -35,6 +35,14 @@ from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int
 
+_have_scipy = False
+try:
+    import scipy.sparse
+    _have_scipy = True
+except:
+    # No SciPy, but that's okay, we'll skip those tests
+    pass
+
 
 SPARK_HOME = os.environ["SPARK_HOME"]
 
@@ -49,10 +57,6 @@ class PySparkTestCase(unittest.TestCase):
     def tearDown(self):
         self.sc.stop()
         sys.path = self._old_sys_path
-        # To avoid Akka rebinding to the same port, since it doesn't unbind
-        # immediately on shutdown
-        self.sc._jvm.System.clearProperty("spark.driver.port")
-
 
 class TestCheckpoint(PySparkTestCase):
 
@@ -184,6 +188,21 @@ class TestRDDFunctions(PySparkTestCase):
         os.unlink(tempFile.name)
         self.assertRaises(Exception, lambda: filtered_data.count())
 
+    def testAggregateByKey(self):
+        data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
+        def seqOp(x, y):
+            x.add(y)
+            return x
+
+        def combOp(x, y):
+            x |= y
+            return x
+          
+        sets = dict(data.aggregateByKey(set(), seqOp, combOp).collect())
+        self.assertEqual(3, len(sets))
+        self.assertEqual(set([1]), sets[1])
+        self.assertEqual(set([2]), sets[3])
+        self.assertEqual(set([1, 3]), sets[5])
 
 class TestIO(PySparkTestCase):
 
@@ -192,6 +211,151 @@ class TestIO(PySparkTestCase):
         def func(x):
             subprocess.check_call('ls', shell=True)
         self.sc.parallelize([1]).foreach(func)
+
+
+class TestInputFormat(PySparkTestCase):
+
+    def setUp(self):
+        PySparkTestCase.setUp(self)
+        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(self.tempdir.name)
+        self.sc._jvm.WriteInputFormatTestDataGenerator.generateData(self.tempdir.name, self.sc._jsc)
+
+    def tearDown(self):
+        PySparkTestCase.tearDown(self)
+        shutil.rmtree(self.tempdir.name)
+
+    def test_sequencefiles(self):
+        basepath = self.tempdir.name
+        ints = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfint/",
+                                           "org.apache.hadoop.io.IntWritable",
+                                           "org.apache.hadoop.io.Text").collect())
+        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
+        self.assertEqual(ints, ei)
+
+        doubles = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfdouble/",
+                                              "org.apache.hadoop.io.DoubleWritable",
+                                              "org.apache.hadoop.io.Text").collect())
+        ed = [(1.0, u'aa'), (1.0, u'aa'), (2.0, u'aa'), (2.0, u'bb'), (2.0, u'bb'), (3.0, u'cc')]
+        self.assertEqual(doubles, ed)
+
+        text = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sftext/",
+                                           "org.apache.hadoop.io.Text",
+                                           "org.apache.hadoop.io.Text").collect())
+        et = [(u'1', u'aa'),
+              (u'1', u'aa'),
+              (u'2', u'aa'),
+              (u'2', u'bb'),
+              (u'2', u'bb'),
+              (u'3', u'cc')]
+        self.assertEqual(text, et)
+
+        bools = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfbool/",
+                                            "org.apache.hadoop.io.IntWritable",
+                                            "org.apache.hadoop.io.BooleanWritable").collect())
+        eb = [(1, False), (1, True), (2, False), (2, False), (2, True), (3, True)]
+        self.assertEqual(bools, eb)
+
+        nulls = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfnull/",
+                                            "org.apache.hadoop.io.IntWritable",
+                                            "org.apache.hadoop.io.BooleanWritable").collect())
+        en = [(1, None), (1, None), (2, None), (2, None), (2, None), (3, None)]
+        self.assertEqual(nulls, en)
+
+        maps = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfmap/",
+                                           "org.apache.hadoop.io.IntWritable",
+                                           "org.apache.hadoop.io.MapWritable").collect())
+        em = [(1, {2.0: u'aa'}),
+              (1, {3.0: u'bb'}),
+              (2, {1.0: u'aa'}),
+              (2, {1.0: u'cc'}),
+              (2, {3.0: u'bb'}),
+              (3, {2.0: u'dd'})]
+        self.assertEqual(maps, em)
+
+        clazz = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
+                                            "org.apache.hadoop.io.Text",
+                                            "org.apache.spark.api.python.TestWritable").collect())
+        ec = (u'1',
+              {u'__class__': u'org.apache.spark.api.python.TestWritable',
+               u'double': 54.0, u'int': 123, u'str': u'test1'})
+        self.assertEqual(clazz[0], ec)
+
+    def test_oldhadoop(self):
+        basepath = self.tempdir.name
+        ints = sorted(self.sc.hadoopFile(basepath + "/sftestdata/sfint/",
+                                         "org.apache.hadoop.mapred.SequenceFileInputFormat",
+                                         "org.apache.hadoop.io.IntWritable",
+                                         "org.apache.hadoop.io.Text").collect())
+        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
+        self.assertEqual(ints, ei)
+
+        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        hello = self.sc.hadoopFile(hellopath,
+                                   "org.apache.hadoop.mapred.TextInputFormat",
+                                   "org.apache.hadoop.io.LongWritable",
+                                   "org.apache.hadoop.io.Text").collect()
+        result = [(0, u'Hello World!')]
+        self.assertEqual(hello, result)
+
+    def test_newhadoop(self):
+        basepath = self.tempdir.name
+        ints = sorted(self.sc.newAPIHadoopFile(
+            basepath + "/sftestdata/sfint/",
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text").collect())
+        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
+        self.assertEqual(ints, ei)
+
+        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        hello = self.sc.newAPIHadoopFile(hellopath,
+                                         "org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
+                                         "org.apache.hadoop.io.LongWritable",
+                                         "org.apache.hadoop.io.Text").collect()
+        result = [(0, u'Hello World!')]
+        self.assertEqual(hello, result)
+
+    def test_newolderror(self):
+        basepath = self.tempdir.name
+        self.assertRaises(Exception, lambda: self.sc.hadoopFile(
+            basepath + "/sftestdata/sfint/",
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text"))
+
+        self.assertRaises(Exception, lambda: self.sc.newAPIHadoopFile(
+            basepath + "/sftestdata/sfint/",
+            "org.apache.hadoop.mapred.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text"))
+
+    def test_bad_inputs(self):
+        basepath = self.tempdir.name
+        self.assertRaises(Exception, lambda: self.sc.sequenceFile(
+            basepath + "/sftestdata/sfint/",
+            "org.apache.hadoop.io.NotValidWritable",
+            "org.apache.hadoop.io.Text"))
+        self.assertRaises(Exception, lambda: self.sc.hadoopFile(
+            basepath + "/sftestdata/sfint/",
+            "org.apache.hadoop.mapred.NotValidInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text"))
+        self.assertRaises(Exception, lambda: self.sc.newAPIHadoopFile(
+            basepath + "/sftestdata/sfint/",
+            "org.apache.hadoop.mapreduce.lib.input.NotValidInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.Text"))
+
+    def test_converter(self):
+        basepath = self.tempdir.name
+        maps = sorted(self.sc.sequenceFile(
+            basepath + "/sftestdata/sfmap/",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.MapWritable",
+            valueConverter="org.apache.spark.api.python.TestConverter").collect())
+        em = [(1, [2.0]), (1, [3.0]), (2, [1.0]), (2, [1.0]), (2, [3.0]), (3, [2.0])]
+        self.assertEqual(maps, em)
 
 
 class TestDaemon(unittest.TestCase):
@@ -359,5 +523,21 @@ class TestSparkSubmit(unittest.TestCase):
         self.assertIn("[2, 4, 6]", out)
 
 
+@unittest.skipIf(not _have_scipy, "SciPy not installed")
+class SciPyTests(PySparkTestCase):
+    """General PySpark tests that depend on scipy """
+
+    def test_serialize(self):
+        from scipy.special import gammaln
+        x = range(1, 5)
+        expected = map(gammaln, x)
+        observed = self.sc.parallelize(x).map(gammaln).collect()
+        self.assertEqual(expected, observed)
+
+
 if __name__ == "__main__":
+    if not _have_scipy:
+        print "NOTE: Skipping SciPy tests as it does not seem to be installed"
     unittest.main()
+    if not _have_scipy:
+        print "NOTE: SciPy tests were skipped as it does not seem to be installed"

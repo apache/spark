@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.columnar.InMemoryRelation
 
 private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
@@ -44,8 +44,9 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
-      case logical.InsertIntoTable(SparkLogicalPlan(InMemoryColumnarTableScan(
-        _, HiveTableScan(_, table, _), _)), partition, child, overwrite) =>
+      case logical.InsertIntoTable(
+             InMemoryRelation(_, _,
+               HiveTableScan(_, table, _)), partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case _ => Nil
     }
@@ -63,15 +64,33 @@ private[hive] trait HiveStrategies {
         val partitionKeyIds = relation.partitionKeys.map(_.exprId).toSet
         val (pruningPredicates, otherPredicates) = predicates.partition {
           _.references.map(_.exprId).subsetOf(partitionKeyIds)
-
         }
 
         pruneFilterProject(
           projectList,
           otherPredicates,
+          identity[Seq[Expression]],
           HiveTableScan(_, relation, pruningPredicates.reduceLeftOption(And))(hiveContext)) :: Nil
       case _ =>
         Nil
+    }
+  }
+
+  case class HiveCommandStrategy(context: HiveContext) extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.NativeCommand(sql) =>
+        NativeCommand(sql, plan.output)(context) :: Nil
+
+      case describe: logical.DescribeCommand =>
+        val resolvedTable = context.executePlan(describe.table).analyzed
+        resolvedTable match {
+          case t: MetastoreRelation =>
+            Seq(DescribeHiveTableCommand(t, describe.output, describe.isExtended)(context))
+          case o: LogicalPlan =>
+            Seq(DescribeCommand(planLater(o), describe.output)(context))
+        }
+
+      case _ => Nil
     }
   }
 }

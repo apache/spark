@@ -84,7 +84,7 @@ private[hive] object HiveFunctionRegistry
     case c: Class[_] if c == classOf[hadoopIo.FloatWritable] => FloatType
     case c: Class[_] if c == classOf[hadoopIo.BooleanWritable] => BooleanType
     case c: Class[_] if c == classOf[hadoopIo.BytesWritable] => BinaryType
-    
+
     // java class
     case c: Class[_] if c == classOf[java.lang.String] => StringType
     case c: Class[_] if c == classOf[java.sql.Timestamp] => TimestampType
@@ -98,7 +98,7 @@ private[hive] object HiveFunctionRegistry
     case c: Class[_] if c == classOf[java.lang.Byte] => ByteType
     case c: Class[_] if c == classOf[java.lang.Float] => FloatType
     case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
-    
+
     // primitive type
     case c: Class[_] if c == java.lang.Short.TYPE => ShortType
     case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
@@ -107,7 +107,7 @@ private[hive] object HiveFunctionRegistry
     case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
     case c: Class[_] if c == java.lang.Float.TYPE => FloatType
     case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
-    
+
     case c: Class[_] if c.isArray => ArrayType(javaClassToDataType(c.getComponentType))
   }
 }
@@ -148,7 +148,7 @@ private[hive] trait HiveFunctionFactory {
     case p: java.lang.Byte => p
     case p: java.lang.Boolean => p
     case str: String => str
-    case p: BigDecimal => p
+    case p: java.math.BigDecimal => p
     case p: Array[Byte] => p
     case p: java.sql.Timestamp => p
   }
@@ -187,7 +187,8 @@ private[hive] case class HiveSimpleUdf(name: String, children: Seq[Expression]) 
     val primitiveClasses = Seq(
       Integer.TYPE, classOf[java.lang.Integer], classOf[java.lang.String], java.lang.Double.TYPE,
       classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long],
-      classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte]
+      classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte],
+      classOf[java.sql.Timestamp]
     )
     val matchingConstructor = argClass.getConstructors.find { c =>
       c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
@@ -334,6 +335,9 @@ private[hive] trait HiveInspectors {
     case BinaryType => PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector
     case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
     case DecimalType => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
+    case StructType(fields) =>
+      ObjectInspectorFactory.getStandardStructObjectInspector(
+        fields.map(f => f.name), fields.map(f => toInspector(f.dataType)))
   }
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {

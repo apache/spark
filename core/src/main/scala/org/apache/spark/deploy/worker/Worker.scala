@@ -34,7 +34,7 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 /**
   * @param masterUrls Each url should look like spark://host:port.
@@ -235,7 +235,7 @@ private[spark] class Worker(
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
             self, workerId, host,
             appDesc.sparkHome.map(userSparkHome => new File(userSparkHome)).getOrElse(sparkHome),
-            workDir, akkaUrl, ExecutorState.RUNNING)
+            workDir, akkaUrl, conf, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -263,14 +263,20 @@ private[spark] class Worker(
       }
       val fullId = appId + "/" + execId
       if (ExecutorState.isFinished(state)) {
-        val executor = executors(fullId)
-        logInfo("Executor " + fullId + " finished with state " + state +
-          message.map(" message " + _).getOrElse("") +
-          exitStatus.map(" exitStatus " + _).getOrElse(""))
-        executors -= fullId
-        finishedExecutors(fullId) = executor
-        coresUsed -= executor.cores
-        memoryUsed -= executor.memory
+        executors.get(fullId) match {
+          case Some(executor) => 
+            logInfo("Executor " + fullId + " finished with state " + state +
+              message.map(" message " + _).getOrElse("") +
+              exitStatus.map(" exitStatus " + _).getOrElse(""))
+            executors -= fullId
+            finishedExecutors(fullId) = executor
+            coresUsed -= executor.cores
+            memoryUsed -= executor.memory
+          case None =>
+            logInfo("Unknown Executor " + fullId + " finished with state " + state +
+              message.map(" message " + _).getOrElse("") +
+              exitStatus.map(" exitStatus " + _).getOrElse(""))
+        }
       }
 
     case KillExecutor(masterUrl, appId, execId) =>
@@ -311,10 +317,14 @@ private[spark] class Worker(
       state match {
         case DriverState.ERROR =>
           logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+        case DriverState.FAILED =>
+          logWarning(s"Driver $driverId exited with failure")
         case DriverState.FINISHED =>
           logInfo(s"Driver $driverId exited successfully")
         case DriverState.KILLED =>
           logInfo(s"Driver $driverId was killed by user")
+        case _ =>
+          logDebug(s"Driver $driverId changed state to $state")
       }
       masterLock.synchronized {
         master ! DriverStateChanged(driverId, state, exception)
@@ -355,8 +365,9 @@ private[spark] class Worker(
   }
 }
 
-private[spark] object Worker {
+private[spark] object Worker extends Logging {
   def main(argStrings: Array[String]) {
+    SignalLogger.register(log)
     val args = new WorkerArguments(argStrings)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir)

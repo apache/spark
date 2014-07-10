@@ -32,6 +32,8 @@ import org.apache.spark.util.Utils
 class ReplSuite extends FunSuite {
 
   def runInterpreter(master: String, input: String): String = {
+    val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"
+
     val in = new BufferedReader(new StringReader(input + "\n"))
     val out = new StringWriter()
     val cl = getClass.getClassLoader
@@ -44,25 +46,35 @@ class ReplSuite extends FunSuite {
         }
       }
     }
+    val classpath = paths.mkString(File.pathSeparator)
+
+    val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
+    System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
+
     val interp = new SparkILoop(in, new PrintWriter(out), master)
     org.apache.spark.repl.Main.interp = interp
-    interp.process(Array("-classpath", paths.mkString(File.pathSeparator)))
+    interp.process(Array("-classpath", classpath))
     org.apache.spark.repl.Main.interp = null
     if (interp.sparkContext != null) {
       interp.sparkContext.stop()
     }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
+    if (oldExecutorClasspath != null) {
+      System.setProperty(CONF_EXECUTOR_CLASSPATH, oldExecutorClasspath)
+    } else {
+      System.clearProperty(CONF_EXECUTOR_CLASSPATH)
+    }
     return out.toString
   }
 
   def assertContains(message: String, output: String) {
-    assert(output.contains(message),
+    val isContain = output.contains(message)
+    assert(isContain,
       "Interpreter output did not contain '" + message + "':\n" + output)
   }
 
   def assertDoesNotContain(message: String, output: String) {
-    assert(!output.contains(message),
+    val isContain = output.contains(message)
+    assert(!isContain,
       "Interpreter output contained '" + message + "':\n" + output)
   }
 
@@ -221,6 +233,18 @@ class ReplSuite extends FunSuite {
     assertContains("res1: Int = 100", output)
     assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
     assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
+  }
+
+  test("SPARK-1199-simple-reproduce") {
+    val output = runInterpreter("local-cluster[1,1,512]",
+      """
+        |case class Sum(exp: String, exp2: String)
+        |val a = Sum("A", "B")
+        |def b(a: Sum): String = a match { case Sum(_, _) => "Found Sum" }
+        |b(a)
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
   }
 
   if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {

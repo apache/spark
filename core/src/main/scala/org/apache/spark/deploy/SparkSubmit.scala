@@ -19,7 +19,7 @@ package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
 import java.lang.reflect.InvocationTargetException
-import java.net.{URI, URL}
+import java.net.URL
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
@@ -117,14 +117,25 @@ object SparkSubmit {
     val isPython = args.isPython
     val isYarnCluster = clusterManager == YARN && deployOnCluster
 
+    // For mesos, only client mode is supported
     if (clusterManager == MESOS && deployOnCluster) {
-      printErrorAndExit("Cannot currently run driver on the cluster in Mesos")
+      printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
+    }
+
+    // For standalone, only client mode is supported
+    if (clusterManager == STANDALONE && deployOnCluster) {
+      printErrorAndExit("Cluster deploy mode is currently not supported for standalone clusters.")
+    }
+
+    // For shells, only client mode is applicable
+    if (isShell(args.primaryResource) && deployOnCluster) {
+      printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
     }
 
     // If we're running a python app, set the main class to our specific python runner
     if (isPython) {
       if (deployOnCluster) {
-        printErrorAndExit("Cannot currently run Python driver programs on cluster")
+        printErrorAndExit("Cluster deploy mode is currently not supported for python.")
       }
       if (args.primaryResource == PYSPARK_SHELL) {
         args.mainClass = "py4j.GatewayServer"
@@ -136,9 +147,9 @@ object SparkSubmit {
         args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
         args.files = mergeFileLists(args.files, args.primaryResource)
       }
-      val pyFiles = Option(args.pyFiles).getOrElse("")
-      args.files = mergeFileLists(args.files, pyFiles)
-      sysProps("spark.submit.pyFiles") = pyFiles
+      args.files = mergeFileLists(args.files, args.pyFiles)
+      // Format python file paths properly before adding them to the PYTHONPATH
+      sysProps("spark.submit.pyFiles") = PythonRunner.formatPaths(args.pyFiles).mkString(",")
     }
 
     // If we're deploying into YARN, use yarn.Client as a wrapper around the user class
@@ -299,13 +310,18 @@ object SparkSubmit {
   }
 
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
-    val localJarFile = new File(localJar)
-    if (!localJarFile.exists()) {
-      printWarning(s"Jar $localJar does not exist, skipping.")
+    val uri = Utils.resolveURI(localJar)
+    uri.getScheme match {
+      case "file" | "local" =>
+        val file = new File(uri.getPath)
+        if (file.exists()) {
+          loader.addURL(file.toURI.toURL)
+        } else {
+          printWarning(s"Local jar $file does not exist, skipping.")
+        }
+      case _ =>
+        printWarning(s"Skip remote jar $uri.")
     }
-
-    val url = localJarFile.getAbsoluteFile.toURI.toURL
-    loader.addURL(url)
   }
 
   /**
@@ -318,7 +334,7 @@ object SparkSubmit {
   /**
    * Return whether the given primary resource represents a shell.
    */
-  private def isShell(primaryResource: String): Boolean = {
+  private[spark] def isShell(primaryResource: String): Boolean = {
     primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL
   }
 

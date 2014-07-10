@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.types._
  *
  *  // These unresolved attributes can be used to create more complicated expressions.
  *  scala> 'a === 'b
- *  res2: org.apache.spark.sql.catalyst.expressions.Equals = ('a = 'b)
+ *  res2: org.apache.spark.sql.catalyst.expressions.EqualTo = ('a = 'b)
  *
  *  // SQL verbs can be used to construct logical query plans.
  *  scala> import org.apache.spark.sql.catalyst.plans.logical._
@@ -76,8 +76,8 @@ package object dsl {
     def <= (other: Expression) = LessThanOrEqual(expr, other)
     def > (other: Expression) = GreaterThan(expr, other)
     def >= (other: Expression) = GreaterThanOrEqual(expr, other)
-    def === (other: Expression) = Equals(expr, other)
-    def !== (other: Expression) = Not(Equals(expr, other))
+    def === (other: Expression) = EqualTo(expr, other)
+    def !== (other: Expression) = Not(EqualTo(expr, other))
 
     def like(other: Expression) = Like(expr, other)
     def rlike(other: Expression) = RLike(expr, other)
@@ -107,6 +107,17 @@ package object dsl {
     implicit def binaryToLiteral(a: Array[Byte]) = Literal(a)
 
     implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
+
+    def sum(e: Expression) = Sum(e)
+    def sumDistinct(e: Expression) = SumDistinct(e)
+    def count(e: Expression) = Count(e)
+    def countDistinct(e: Expression*) = CountDistinct(e)
+    def avg(e: Expression) = Average(e)
+    def first(e: Expression) = First(e)
+    def min(e: Expression) = Min(e)
+    def max(e: Expression) = Max(e)
+    def upper(e: Expression) = Upper(e)
+    def lower(e: Expression) = Lower(e)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
     // TODO more implicit class for literal?
@@ -174,6 +185,8 @@ package object dsl {
     def select(exprs: NamedExpression*) = Project(exprs, logicalPlan)
 
     def where(condition: Expression) = Filter(condition, logicalPlan)
+
+    def limit(limitExpr: Expression) = Limit(limitExpr, logicalPlan)
 
     def join(
         otherPlan: LogicalPlan,
