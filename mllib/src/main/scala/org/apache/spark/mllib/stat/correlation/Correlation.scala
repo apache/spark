@@ -17,21 +17,38 @@
 
 package org.apache.spark.mllib.stat.correlation
 
-import org.apache.spark.mllib.linalg.{Matrix, Vector}
+import org.apache.spark.mllib.linalg.{DenseVector, Matrix, Vector}
 import org.apache.spark.rdd.RDD
 
+/**
+ * New correlation algorithms should implement this trait
+ */
 trait Correlation {
 
   def computeCorrelation(x: RDD[Double], y: RDD[Double]): Double
 
   def computeCorrelationMatrix(X: RDD[Vector]): Matrix
 
+  def computeCorrelationWithMatrixImpl(x: RDD[Double], y: RDD[Double]): Double = {
+    val mat: RDD[Vector] = x.zip(y).map {case(xi, yi) => new DenseVector(Array(xi, yi))}
+    computeCorrelationMatrix(mat)(0, 1)
+  }
+
 }
 
 /**
  * Delegates computation to the specific correlation object based on the input method name
  *
- * Maintains the default correlation type
+ * Currently supported correlations: pearson, spearman.
+ * After new correlation algorithms are added, please update the documentation here and in
+ * Statistics.scala for the correlation APIs.
+ *
+ * Cases are ignored when doing method matching. We also allow initials, e.g. "P" for "pearson", as
+ * long as initials are unique in the supported set of correlation algorithms. In addition, a
+ * supported method name has to be a substring of the input method name for it to be matched (e.g.
+ * "spearmansrho" will be matched to "spearman")
+ *
+ * Maintains the default correlation type, pearson
  */
 object Correlations {
 
@@ -52,8 +69,10 @@ object Correlations {
 
   /**
    * Perform simple string processing to match the input correlation name with a known name
+   *
+   * private to mllib for ease of unit testing
    */
-  private def getCorrelationFromName(method: String): Correlation = {
+  private[mllib] def getCorrelationFromName(method: String): Correlation = {
     if (method.equals(defaultCorrName)) {
       defaultCorr
     } else {
@@ -74,7 +93,8 @@ object Correlations {
       if (matched) {
         correlation
       } else {
-        throw new IllegalArgumentException("Correlation name not recognized.")
+        throw new IllegalArgumentException("Correlation name not recognized." +
+          " Supported correlations: " + nameToObjectMap.keys.mkString(", "))
       }
     }
   }

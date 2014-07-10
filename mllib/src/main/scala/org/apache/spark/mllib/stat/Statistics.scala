@@ -23,12 +23,30 @@ import org.apache.spark.rdd.RDD
 
 object Statistics {
 
+  /**
+   * Compute the Pearson correlation matrix for the input RDD of Vectors.
+   */
   def corr(X: RDD[Vector]): Matrix = Correlations.corrMatrix(X)
 
+  /**
+   * Compute the correlation matrix for the input RDD of Vectors using the specified method.
+   *
+   * Methods currently supported: pearson (default), spearman
+   */
   def corr(X: RDD[Vector], method: String): Matrix = Correlations.corrMatrix(X, method)
 
+  /**
+   * Compute the Pearson correlation for the input RDDs.
+   */
+  def corr(x: RDD[Double], y: RDD[Double]): Double = Correlations.corr(x, y)
+
+  /**
+   * Compute the correlation for the input RDDs using the specified method.
+   *
+   * Methods currently supported: pearson (default), spearman
+   */
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
 
-  def corr(x: RDD[Double], y: RDD[Double]): Double = Correlations.corr(x, y)
+
 
 }

@@ -33,30 +33,41 @@ import org.apache.spark.rdd.RDD
  */
 object PearsonCorrelation extends Correlation {
 
-  //TODO clean everything up here
-
+  /**
+   * Compute the Pearson correlation for two datasets.
+   */
   override def computeCorrelation(x: RDD[Double], y: RDD[Double]): Double = {
 
-    var paired: Option[RDD[(Double, Double)]] = None
-
-    try {
-      paired = Some(x.zip(y))
+    val paired = try {
+      x.zip(y)
     } catch {
       case se: SparkException => throw new IllegalArgumentException("Cannot compute correlation"
         + "for RDDs of different sizes.")
     }
 
-    val stats = paired.get.aggregate(new Stats)((m: Stats, i: (Double, Double)) => m.merge(i),
+    val stats = paired.aggregate(new Stats)((m: Stats, i: (Double, Double)) => m.merge(i),
       (m1: Stats, m2: Stats) => m1.merge(m2))
-
     val cov = stats.xyMean - stats.xMean * stats.yMean
-
     cov / (stats.xStdev * stats.yStdev)
   }
 
+  /**
+   * Compute the Pearson correlation matrix S, for the input matrix.
+   *
+   * S(i, j) = computeCorrelationMatrix(columnI, columnJ),
+   * where columnI and columnJ are the ith and jth column in the input matrix.
+   */
   override def computeCorrelationMatrix(X: RDD[Vector]): Matrix = {
     val rowMatrix = new RowMatrix(X)
-    val cov = rowMatrix.computeCovariance().toBreeze.asInstanceOf[BDM[Double]]
+    val cov = rowMatrix.computeCovariance()
+    computeCorrelationMatrixFromCovariance(cov)
+  }
+
+  /**
+   * Compute the pearson correlation matrix from the covariance matrix
+   */
+  def computeCorrelationMatrixFromCovariance(covarianceMatrix: Matrix): Matrix = {
+    val cov = covarianceMatrix.toBreeze.asInstanceOf[BDM[Double]]
     val n = cov.cols
 
     // Compute the standard deviation on the diagonals first
@@ -65,12 +76,12 @@ object PearsonCorrelation extends Correlation {
       cov(i, i) = math.sqrt(cov(i, i))
       i +=1
     }
-    // or we could put the stddev in its own array
+    // or we could put the stddev in its own array to trade space for one less pass over the matrix
 
-    // TODO: we could use blas.dspr instead to compute the correlation matrix if the covariance matrix
-    // is upper triangular.
+    // TODO: use blas.dspr instead to compute the correlation matrix
+    // if the covariance matrix comes in the upper triangular form for free
+
     // Loop through columns since cov is column major
-
     var j = 0
     var sigma = 0.0
     while (j < n) {
@@ -101,12 +112,12 @@ object PearsonCorrelation extends Correlation {
  * over both input RDDs since passes over large RDDs are expensive
  */
 private class Stats extends Serializable {
-  private var n: Long = 0L
-  private var Exy: Double = 0.0
-  private var Ex: Double = 0.0
-  private var Sx: Double = 0.0
-  private var Ey: Double = 0.0
-  private var Sy: Double = 0.0
+  private var n: Long = 0L      // Size of the pair RDD
+  private var Exy: Double = 0.0 // E[X * Y] = sum(x * y) / n over the (x, y) pairs in the RDD
+  private var Ex: Double = 0.0  // E[X] = sum(x) / n
+  private var Sx: Double = 0.0  // Var[X] * n = sum((x - E[X]) ^ 2)
+  private var Ey: Double = 0.0  // E[Y] = sum(y) / n
+  private var Sy: Double = 0.0  // Var[Y] * n = sum((y - E[Y]) ^ 2)
 
   def count: Long = n
 
