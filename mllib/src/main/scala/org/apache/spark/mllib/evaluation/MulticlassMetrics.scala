@@ -17,10 +17,10 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.rdd.RDD
 
 import scala.collection.Map
 
@@ -28,23 +28,41 @@ import scala.collection.Map
  * ::Experimental::
  * Evaluator for multiclass classification.
  *
- * @param predictionsAndLabels an RDD of (prediction, label) pairs.
+ * @param predictionAndLabels an RDD of (prediction, label) pairs.
  */
 @Experimental
-class MulticlassMetrics(predictionsAndLabels: RDD[(Double, Double)]) extends Logging {
+class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) extends Logging {
 
-  private lazy val labelCountByClass: Map[Double, Long] = predictionsAndLabels.values.countByValue()
+  private lazy val labelCountByClass: Map[Double, Long] = predictionAndLabels.values.countByValue()
   private lazy val labelCount: Long = labelCountByClass.values.sum
-  private lazy val tpByClass: Map[Double, Int] = predictionsAndLabels
+  private lazy val tpByClass: Map[Double, Int] = predictionAndLabels
     .map { case (prediction, label) =>
-      (label, if (label == prediction) 1 else 0)
-    }.reduceByKey(_ + _)
+    (label, if (label == prediction) 1 else 0)
+  }.reduceByKey(_ + _)
     .collectAsMap()
-  private lazy val fpByClass: Map[Double, Int] = predictionsAndLabels
+  private lazy val fpByClass: Map[Double, Int] = predictionAndLabels
     .map { case (prediction, label) =>
-      (prediction, if (prediction != label) 1 else 0)
-    }.reduceByKey(_ + _)
+    (prediction, if (prediction != label) 1 else 0)
+  }.reduceByKey(_ + _)
     .collectAsMap()
+  private lazy val confusions = predictionAndLabels.map {
+    case (prediction, label) => ((prediction, label), 1)
+  }.reduceByKey(_ + _).collectAsMap()
+
+  /**
+   * Returns confusion matrix:
+   * predicted classes are in columns,
+   * they are ordered by class label ascending,
+   * as in "labels"
+   */
+  lazy val confusionMatrix: Array[Array[Int]] = {
+    val matrix = Array.ofDim[Int](labels.size, labels.size)
+    println(matrix.length, matrix(0).length)
+    for (i <- 0 to labels.size - 1; j <- 0 to labels.size - 1) {
+      matrix(j)(i) = confusions.getOrElse((labels(i), labels(j)), 0)
+    }
+    matrix
+  }
 
   /**
    * Returns true positive rate for a given label (category)
@@ -103,8 +121,8 @@ class MulticlassMetrics(predictionsAndLabels: RDD[(Double, Double)]) extends Log
   /**
    * Returns recall
    * (equals to precision for multiclass classifier
-   *  because sum of all false positives is equal to sum
-   *  of all false negatives)
+   * because sum of all false positives is equal to sum
+   * of all false negatives)
    */
   lazy val recall: Double = precision
 
@@ -113,6 +131,19 @@ class MulticlassMetrics(predictionsAndLabels: RDD[(Double, Double)]) extends Log
    * (equals to precision and recall because precision equals recall)
    */
   lazy val fMeasure: Double = precision
+
+  /**
+   * Returns weighted true positive rate
+   * (equals to precision, recall and f-measure)
+   */
+  lazy val weightedTruePositiveRate: Double = weightedRecall
+
+  /**
+   * Returns weighted false positive rate
+   */
+  lazy val weightedFalsePositiveRate: Double = labelCountByClass.map { case (category, count) =>
+    falsePositiveRate(category) * count.toDouble / labelCount
+  }.sum
 
   /**
    * Returns weighted averaged recall

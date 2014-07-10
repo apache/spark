@@ -17,24 +17,23 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.mllib.util.LocalSparkContext
+import org.scalatest.FunSuite
 
 class MulticlassMetricsSuite extends FunSuite with LocalSparkContext {
   test("Multiclass evaluation metrics") {
     /*
-    * Confusion matrix for 3-class classification with total 9 instances:
-    * |2|1|1| true class0 (4 instances)
-    * |1|3|0| true class1 (4 instances)
-    * |0|0|1| true class2 (1 instance)
-    *
-    */
+     * Confusion matrix for 3-class classification with total 9 instances:
+     * |2|1|1| true class0 (4 instances)
+     * |1|3|0| true class1 (4 instances)
+     * |0|0|1| true class2 (1 instance)
+     */
+    val confusionMatrix = Array(Array(2, 1, 1), Array(1, 3, 0), Array(0, 0, 1))
     val labels = Array(0.0, 1.0, 2.0)
-    val scoreAndLabels = sc.parallelize(
+    val predictionAndLabels = sc.parallelize(
       Seq((0.0, 0.0), (0.0, 1.0), (0.0, 0.0), (1.0, 0.0), (1.0, 1.0),
         (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)), 2)
-    val metrics = new MulticlassMetrics(scoreAndLabels)
+    val metrics = new MulticlassMetrics(predictionAndLabels)
     val delta = 0.0000001
     val fpRate0 = 1.0 / (9 - 4)
     val fpRate1 = 1.0 / (9 - 4)
@@ -48,6 +47,11 @@ class MulticlassMetricsSuite extends FunSuite with LocalSparkContext {
     val f1measure0 = 2 * precision0 * recall0 / (precision0 + recall0)
     val f1measure1 = 2 * precision1 * recall1 / (precision1 + recall1)
     val f1measure2 = 2 * precision2 * recall2 / (precision2 + recall2)
+    val f2measure0 = (1 + 2 * 2) * precision0 * recall0 / (2 * 2 * precision0 + recall0)
+    val f2measure1 = (1 + 2 * 2) * precision1 * recall1 / (2 * 2 * precision1 + recall1)
+    val f2measure2 = (1 + 2 * 2) * precision2 * recall2 / (2 * 2 * precision2 + recall2)
+
+    assert(metrics.confusionMatrix.deep == confusionMatrix.deep)
     assert(math.abs(metrics.falsePositiveRate(0.0) - fpRate0) < delta)
     assert(math.abs(metrics.falsePositiveRate(1.0) - fpRate1) < delta)
     assert(math.abs(metrics.falsePositiveRate(2.0) - fpRate2) < delta)
@@ -60,17 +64,25 @@ class MulticlassMetricsSuite extends FunSuite with LocalSparkContext {
     assert(math.abs(metrics.fMeasure(0.0) - f1measure0) < delta)
     assert(math.abs(metrics.fMeasure(1.0) - f1measure1) < delta)
     assert(math.abs(metrics.fMeasure(2.0) - f1measure2) < delta)
+    assert(math.abs(metrics.fMeasure(0.0, 2.0) - f2measure0) < delta)
+    assert(math.abs(metrics.fMeasure(1.0, 2.0) - f2measure1) < delta)
+    assert(math.abs(metrics.fMeasure(2.0, 2.0) - f2measure2) < delta)
+
     assert(math.abs(metrics.recall -
       (2.0 + 3.0 + 1.0) / ((2 + 3 + 1) + (1 + 1 + 1))) < delta)
     assert(math.abs(metrics.recall - metrics.precision) < delta)
     assert(math.abs(metrics.recall - metrics.fMeasure) < delta)
     assert(math.abs(metrics.recall - metrics.weightedRecall) < delta)
+    assert(math.abs(metrics.weightedFalsePositiveRate -
+      ((4.0 / 9) * fpRate0 + (4.0 / 9) * fpRate1 + (1.0 / 9) * fpRate2)) < delta)
     assert(math.abs(metrics.weightedPrecision -
       ((4.0 / 9) * precision0 + (4.0 / 9) * precision1 + (1.0 / 9) * precision2)) < delta)
     assert(math.abs(metrics.weightedRecall -
       ((4.0 / 9) * recall0 + (4.0 / 9) * recall1 + (1.0 / 9) * recall2)) < delta)
     assert(math.abs(metrics.weightedFMeasure -
       ((4.0 / 9) * f1measure0 + (4.0 / 9) * f1measure1 + (1.0 / 9) * f1measure2)) < delta)
+    assert(math.abs(metrics.weightedFMeasure(2.0) -
+      ((4.0 / 9) * f2measure0 + (4.0 / 9) * f2measure1 + (1.0 / 9) * f2measure2)) < delta)
     assert(metrics.labels.sameElements(labels))
   }
 }
