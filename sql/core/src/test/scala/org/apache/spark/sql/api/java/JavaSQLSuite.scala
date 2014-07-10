@@ -47,7 +47,7 @@ class AllTypesBean extends Serializable {
   @BeanProperty var booleanField: java.lang.Boolean = _
 }
 
-  class JavaSQLSuite extends FunSuite {
+class JavaSQLSuite extends FunSuite {
   val javaCtx = new JavaSparkContext(TestSQLContext.sparkContext)
   val javaSqlCtx = new JavaSQLContext(javaCtx)
 
