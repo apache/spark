@@ -64,6 +64,9 @@ object MimaExcludes {
               "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$"
                 + "createZero$1")
           ) ++
+          Seq(
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this")
+          ) ++
           Seq( // Ignore some private methods in ALS.
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateFeatures"),
