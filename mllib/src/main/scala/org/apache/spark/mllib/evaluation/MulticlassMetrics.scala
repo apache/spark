@@ -57,7 +57,6 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) extends Logg
    */
   lazy val confusionMatrix: Array[Array[Int]] = {
     val matrix = Array.ofDim[Int](labels.size, labels.size)
-    println(matrix.length, matrix(0).length)
     for (i <- 0 to labels.size - 1; j <- 0 to labels.size - 1) {
       matrix(j)(i) = confusions.getOrElse((labels(i), labels(j)), 0)
     }
