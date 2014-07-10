@@ -130,20 +130,45 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD =
     new SchemaRDD(this, JsonRDD.inferSchema(json, samplingRatio))
 
-
+  /**
+   * Loads a CSV file (according to RFC 4180) and returns the result as a [[SchemaRDD]].
+   *
+   * NOTE: If there are new line characters inside quoted fields this method may fail to
+   * parse correctly, because the two lines may be in different partitions. Use
+   * [[SQLContext#csvRDD]] to parse such files.
+   *
+   * @param path path to input file
+   * @param delimiter Optional delimiter (default is comma)
+   * @param header Optional flag to indicate first line of each file is the header
+   *                  (default is false)
+   * @param quote Optional quote character or string (default is '"')
+   */
   def csvFile(path: String,
       delimiter: String = ",",
-      useHeader: Boolean = false,
-      quote: String = "\""): SchemaRDD = {
+      quote: String = "\"",
+      header: Boolean = false): SchemaRDD = {
     val csv = sparkContext.textFile(path)
-    csvRdd(csv, delimiter, useHeader)
+    csvRDD(csv, delimiter, quote, header)
   }
 
-  def csvRdd(csv: RDD[String],
+  /**
+   * Parses an RDD of String as a CSV (according to RFC 4180) and returns the result as a
+   * [[SchemaRDD]].
+   *
+   * NOTE: If there are new line characters inside quoted fields, use
+   * [[SparkContext#wholeTextFiles]] to read each file into a single partition.
+   *
+   * @param csv input RDD
+   * @param delimiter Optional delimiter (default is comma)
+   * @param header Optional flag to indicate first line of each file is the hader
+   *                  (default is false)
+   * @param quote Optional quote character of strig (default is '"')
+   */
+  def csvRDD(csv: RDD[String],
       delimiter: String = ",",
-      useHeader: Boolean = false,
-      quote: String = "\""): SchemaRDD = {
-    new SchemaRDD(this, CsvRDD.inferSchema(csv, delimiter, useHeader))
+      quote: String = "\"",
+      header: Boolean = false): SchemaRDD = {
+    new SchemaRDD(this, CsvRDD.inferSchema(csv, delimiter, quote, header))
   }
 
   /**
