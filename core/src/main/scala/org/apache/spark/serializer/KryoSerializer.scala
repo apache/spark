@@ -187,7 +187,8 @@ private[serializer] object KryoSerializer {
     classOf[MapStatus],
     classOf[BlockManagerId],
     classOf[Array[Byte]],
-    classOf[BoundedPriorityQueue[_]]
+    classOf[BoundedPriorityQueue[_]],
+    classOf[SparkConf]
   )
 }
 
