@@ -229,9 +229,9 @@ private[parquet] class CatalystGroupConverter(
     this(attributes.map(a => new FieldType(a.name, a.dataType, a.nullable)), 0, null)
 
   protected [parquet] val converters: Array[Converter] =
-    schema.map(field =>
-      CatalystConverter.createConverter(field, schema.indexOf(field), this))
-    .toArray
+    schema.zipWithIndex.map {
+      case (field, idx) => CatalystConverter.createConverter(field, idx, this)
+    }.toArray
 
   override val size = schema.size
 
@@ -288,9 +288,9 @@ private[parquet] class CatalystPrimitiveRowConverter(
       new ParquetRelation.RowType(attributes.length))
 
   protected [parquet] val converters: Array[Converter] =
-    schema.map(field =>
-      CatalystConverter.createConverter(field, schema.indexOf(field), this))
-      .toArray
+    schema.zipWithIndex.map {
+      case (field, idx) => CatalystConverter.createConverter(field, idx, this)
+    }.toArray
 
   override val size = schema.size
 
