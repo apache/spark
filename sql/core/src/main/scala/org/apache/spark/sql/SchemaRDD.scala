@@ -257,6 +257,26 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Union(logicalPlan, otherPlan.logicalPlan))
 
   /**
+   * Performs a relational except on two SchemaRDDs
+   *
+   * @param otherPlan the [[SchemaRDD]] that should be excepted from this one.
+   *
+   * @group Query
+   */
+  def except(otherPlan: SchemaRDD): SchemaRDD =
+    new SchemaRDD(sqlContext, Except(logicalPlan, otherPlan.logicalPlan))
+
+  /**
+   * Performs a relational intersect on two SchemaRDDs
+   *
+   * @param otherPlan the [[SchemaRDD]] that should be intersected with this one.
+   *
+   * @group Query
+   */
+  def intersect(otherPlan: SchemaRDD): SchemaRDD =
+    new SchemaRDD(sqlContext, Intersect(logicalPlan, otherPlan.logicalPlan))
+
+  /**
    * Filters tuples using a function over the value of the specified column.
    *
    * {{{
