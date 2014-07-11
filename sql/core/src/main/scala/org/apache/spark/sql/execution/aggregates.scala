@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types._
@@ -51,8 +49,6 @@ case class GeneratedAggregate(
     child: SparkPlan)(@transient sqlContext: SQLContext)
   extends UnaryNode with NoBind {
 
-  private def sc = sqlContext.sparkContext
-
   override def requiredChildDistribution =
     if (partial) {
       UnspecifiedDistribution :: Nil
@@ -66,16 +62,16 @@ case class GeneratedAggregate(
 
   override def otherCopyArgs = sqlContext :: Nil
 
-  def output = aggregateExpressions.map(_.toAttribute)
+  override def output = aggregateExpressions.map(_.toAttribute)
 
-  def execute() = {
+  override def execute() = {
     val aggregatesToCompute = aggregateExpressions.flatMap { a =>
       a.collect { case agg: AggregateExpression => agg}
     }
 
     val computeFunctions = aggregatesToCompute.map {
-      case c@Count(expr) =>
-        val currentCount = AttributeReference("currentCount", LongType, true)()
+      case c @ Count(expr) =>
+        val currentCount = AttributeReference("currentCount", LongType, nullable = false)()
         val initialValue = Literal(0L)
         val updateFunction = If(IsNotNull(expr), Add(currentCount, Literal(1L)), currentCount)
         val result = currentCount
@@ -83,7 +79,7 @@ case class GeneratedAggregate(
         AggregateEvaluation(currentCount :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
 
       case Sum(expr) =>
-        val currentSum = AttributeReference("currentSum", expr.dataType, true)()
+        val currentSum = AttributeReference("currentSum", expr.dataType, nullable = false)()
         val initialValue = Cast(Literal(0L), expr.dataType)
 
         // Coalasce avoids double calculation...
@@ -93,9 +89,9 @@ case class GeneratedAggregate(
 
         AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
 
-      case a@Average(expr) =>
-        val currentCount = AttributeReference("currentCount", LongType, true)()
-        val currentSum = AttributeReference("currentSum", expr.dataType, true)()
+      case a @ Average(expr) =>
+        val currentCount = AttributeReference("currentCount", LongType, nullable = false)()
+        val currentSum = AttributeReference("currentSum", expr.dataType, nullable = false)()
         val initialCount = Literal(0L)
         val initialSum = Cast(Literal(0L), expr.dataType)
         val updateCount = If(IsNotNull(expr), Add(currentCount, Literal(1L)), currentCount)
@@ -131,50 +127,70 @@ case class GeneratedAggregate(
 
     child.execute().mapPartitions { iter =>
       // Builds a new custom class for holding the results of aggregation for a group.
+      @transient
       val newAggregationBuffer =
         newProjection(computeFunctions.flatMap(_.initialValues), child.output)
 
       // A projection that is used to update the aggregate values for a group given a new tuple.
       // This projection should be targeted at the current values for the group and then applied
       // to a joined row of the current values with the new input row.
+      @transient
       val updateProjection =
         newMutableProjection(
           computeFunctions.flatMap(_.update),
           computeFunctions.flatMap(_.schema) ++ child.output)()
 
       // A projection that computes the group given an input tuple.
+      @transient
       val groupProjection = newProjection(groupingExpressions, child.output)
 
       // A projection that produces the final result, given a computation.
+      @transient
       val resultProjectionBuilder =
         newMutableProjection(
           resultExpressions,
           (namedGroups.map(_._2.toAttribute) ++ computationSchema).toSeq)
 
-      val buffers = new java.util.HashMap[Row, MutableRow]()
       val joinedRow = new JoinedRow
 
-      var currentRow: Row = null
-      while (iter.hasNext) {
-        currentRow = iter.next()
-        val currentGroup = groupProjection(currentRow)
-        var currentBuffer = buffers.get(currentGroup)
-        if (currentBuffer == null) {
-          currentBuffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
-          buffers.put(currentGroup, currentBuffer)
+      if (groupingExpressions.isEmpty) {
+        // TODO: Codegening anything other than the updateProjection is probably over kill.
+        val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
+        var currentRow: Row = null
+        while (iter.hasNext) {
+          currentRow = iter.next()
+          updateProjection.target(buffer)(joinedRow(buffer, currentRow))
         }
-        updateProjection.target(currentBuffer)(joinedRow(currentBuffer, currentRow))
-      }
 
-      new Iterator[Row] {
-        private[this] val resultIterator = buffers.entrySet.iterator()
-        private[this] val resultProjection = resultProjectionBuilder()
+        val resultProjection = resultProjectionBuilder()
+        Iterator(resultProjection(buffer))
+      } else {
+        val buffers = new java.util.HashMap[Row, MutableRow]()
 
-        def hasNext = resultIterator.hasNext
+        var currentRow: Row = null
+        while (iter.hasNext) {
+          currentRow = iter.next()
+          val currentGroup = groupProjection(currentRow)
+          var currentBuffer = buffers.get(currentGroup)
+          if (currentBuffer == null) {
+            currentBuffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
+            buffers.put(currentGroup, currentBuffer)
+          }
+          // Target the projection at the current aggregation buffer and then project the updated
+          // values.
+          updateProjection.target(currentBuffer)(joinedRow(currentBuffer, currentRow))
+        }
 
-        def next() = {
-          val currentGroup = resultIterator.next()
-          resultProjection(joinedRow(currentGroup.getKey, currentGroup.getValue))
+        new Iterator[Row] {
+          private[this] val resultIterator = buffers.entrySet.iterator()
+          private[this] val resultProjection = resultProjectionBuilder()
+
+          def hasNext = resultIterator.hasNext
+
+          def next() = {
+            val currentGroup = resultIterator.next()
+            resultProjection(joinedRow(currentGroup.getKey, currentGroup.getValue))
+          }
         }
       }
     }

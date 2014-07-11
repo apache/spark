@@ -23,6 +23,9 @@ import org.apache.spark.sql.catalyst.types.BooleanType
 
 
 object InterpretedPredicate {
+  def apply(expression: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
+    apply(BindReferences.bindReference(expression, inputSchema))
+
   def apply(expression: Expression): (Row => Boolean) = {
     (r: Row) => expression.eval(r).asInstanceOf[Boolean]
   }

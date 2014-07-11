@@ -22,7 +22,7 @@ package org.apache.spark.sql.catalyst.expressions
  * new row. If the schema of the input row is specified, then the given expression will be bound to
  * that schema.
  */
-class InterpretedProjection(expressions: Seq[Expression]) extends (Row => Row) {
+class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 

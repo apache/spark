@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Logging, Row}
+import org.apache.spark.sql.{SQLContext, Logging, Row}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
@@ -34,6 +34,8 @@ import org.apache.spark.sql.catalyst.plans.physical._
 @DeveloperApi
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   self: Product =>
+
+  val codegenEnabled = true
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
@@ -53,17 +55,29 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   def executeCollect(): Array[Row] = execute().map(_.copy()).collect()
 
   def newProjection(expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection =
-    GenerateProjection(expressions, inputSchema)
+    if (codegenEnabled) {
+      GenerateProjection(expressions, inputSchema)
+    } else {
+      new InterpretedProjection(expressions, inputSchema)
+    }
 
   def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute]): () => MutableProjection = {
-    GenerateMutableProjection(expressions, inputSchema)
+    if(codegenEnabled) {
+      GenerateMutableProjection(expressions, inputSchema)
+    } else {
+      () => new InterpretedMutableProjection(expressions, inputSchema)
+    }
   }
 
 
   def newPredicate(expression: Expression, inputSchema: Seq[Attribute]): (Row) => Boolean = {
-    GeneratePredicate(expression, inputSchema)
+    if (codegenEnabled) {
+      GeneratePredicate(expression, inputSchema)
+    } else {
+      InterpretedPredicate(expression, inputSchema)
+    }
   }
 }
 

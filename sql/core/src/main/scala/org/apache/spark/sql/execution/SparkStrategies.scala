@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, execution}
+import org.apache.spark.sql.{SQLConf, SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -108,7 +108,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              child)
              if canBeCodeGened(
                   allAggregates(partialComputation) ++
-                  allAggregates(rewrittenAggregateExpressions))=>
+                  allAggregates(rewrittenAggregateExpressions)) &&
+               codegenEnabled =>
           execution.GeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
@@ -118,7 +119,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               groupingExpressions,
               partialComputation,
               planLater(child))(sqlContext))(sqlContext) :: Nil
-
 
       // Cases where some aggregate can not be codegened
       case PartialAggregation(

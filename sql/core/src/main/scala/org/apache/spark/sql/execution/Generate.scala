@@ -50,6 +50,9 @@ case class Generate(
   override def output =
     if (join) child.output ++ generatorOutput else generatorOutput
 
+  /** Codegenned rows are not serializable... */
+  override val codegenEnabled = false
+
   override def execute() = {
     if (join) {
       child.execute().mapPartitions { iter =>

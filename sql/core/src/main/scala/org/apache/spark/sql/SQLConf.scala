@@ -36,6 +36,18 @@ trait SQLConf {
   private[spark] def numShufflePartitions: Int = get("spark.sql.shuffle.partitions", "200").toInt
 
   /**
+   * When set to true, Spark SQL will use the scala compiler at runtime to generate custom bytecode
+   * that evaluates expressions found in queries.  In general this custom code runs much faster
+   * than interpreted evaluation, but there are significant start-up costs due to compilation.
+   * As a result codegen is only benificial when queries run for a long time, or when the same
+   * expressions are used multiple times.
+   *
+   * Defaults to false as this feature is currently experimental.
+   */
+  private[spark] def codegenEnabled: Boolean =
+    if (get("spark.sql.codegen", "true") == "true") true else false
+
+  /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
    * a broadcast value during the physical executions of join operations.  Setting this to 0
    * effectively disables auto conversion.
