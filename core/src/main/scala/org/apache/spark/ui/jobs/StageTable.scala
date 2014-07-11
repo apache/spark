@@ -89,7 +89,8 @@ private[ui] class StageTableBase(
     // scalastyle:off
     val killLink = if (killEnabled) {
       <span class="kill-link">
-        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>kill</a>)
+        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}
+            onclick={"return window.confirm('Are you sure you want to kill stage %s ?');".format(s.stageId)}>kill</a>)
       </span>
     }
     // scalastyle:on
@@ -109,7 +110,7 @@ private[ui] class StageTableBase(
 
     listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink} {killLink}</div>)
-      .getOrElse(<div>{killLink} {nameLink} {details}</div>)
+      .getOrElse(<div>{nameLink} {killLink} {details}</div>)
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {
