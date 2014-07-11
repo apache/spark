@@ -31,7 +31,9 @@ import org.apache.spark.sql.Logging
 
 private[sql] object JsonRDD extends Logging {
 
-  private[sql] def jsonStringToRow(schema: StructType, jsonIter: Iterator[String]): Iterator[Row] = {
+  private[sql] def jsonStringToRow(
+      schema: StructType,
+      jsonIter: Iterator[String]): Iterator[Row] = {
     parseJson(jsonIter).map(parsed => asRow(parsed, schema))
   }
 

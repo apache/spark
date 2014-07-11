@@ -128,15 +128,23 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0)
+  def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0, None)
+
+  /**
+   * Loads a JSON file (one object per line) and applies the given schema,
+   * returning the result as a [[SchemaRDD]].
+   *
+   * @group userf
+   */
+  def jsonFile(path: String, schema: StructType): SchemaRDD = jsonFile(path, 1.0, Option(schema))
 
   /**
    * :: Experimental ::
    */
   @Experimental
-  def jsonFile(path: String, samplingRatio: Double): SchemaRDD = {
+  def jsonFile(path: String, samplingRatio: Double, schema: Option[StructType]): SchemaRDD = {
     val json = sparkContext.textFile(path)
-    jsonRDD(json, samplingRatio)
+    jsonRDD(json, samplingRatio, schema)
   }
 
   /**
@@ -146,15 +154,28 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonRDD(json: RDD[String]): SchemaRDD = jsonRDD(json, 1.0)
+  def jsonRDD(json: RDD[String]): SchemaRDD = jsonRDD(json, 1.0, None)
+
+  /**
+   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
+   * returning the result as a [[SchemaRDD]].
+   *
+   * @group userf
+   */
+  def jsonRDD(json: RDD[String], schema: StructType): SchemaRDD = jsonRDD(json, 1.0, Option(schema))
 
   /**
    * :: Experimental ::
    */
   @Experimental
-  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
-    val schema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
-    applySchemaToPartitions(json, schema, JsonRDD.jsonStringToRow(schema, _: Iterator[String]))
+  def jsonRDD(json: RDD[String], samplingRatio: Double, schema: Option[StructType]): SchemaRDD = {
+    val appliedSchema =
+      schema.getOrElse(JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio)))
+
+    applySchemaToPartitions(
+      json,
+      appliedSchema,
+      JsonRDD.jsonStringToRow(appliedSchema, _: Iterator[String]))
   }
 
   /**
