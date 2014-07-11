@@ -224,7 +224,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
      LEFT ~ opt(OUTER) ^^^ LeftOuter |
      RIGHT ~ opt(OUTER) ^^^ RightOuter |
      FULL ~ opt(OUTER) ^^^ FullOuter
-    
+
   protected lazy val filter: Parser[Expression] = WHERE ~ expression ^^ { case _ ~ e => e }
 
   protected lazy val orderBy: Parser[Seq[SortOrder]] =
