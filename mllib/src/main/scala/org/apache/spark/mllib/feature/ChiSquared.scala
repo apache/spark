@@ -4,13 +4,14 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
-private[feature] trait FeatureSelector extends java.io.Serializable {
+private[feature] trait FeatureSort extends java.io.Serializable {
   /** methods for feature filtering based on statistics */
   protected def top(featureClassValues: RDD[((Int, Double), Double)], n: Int): Set[Int] = {
+    println(featureClassValues.first())
     val (featureIndexes, _) = featureClassValues.map {
       case ((featureIndex, label), value) => (featureIndex, value)
     }.reduceByKey(Math.max(_, _)).collect().sortBy(- _._2).unzip
-    featureIndexes.toSet
+    featureIndexes.take(n).toSet
   }
 }
 
@@ -42,14 +43,18 @@ private[feature] trait CombinationsCalculator extends java.io.Serializable {
 }
 
 class ChiSquared(labeledData: RDD[LabeledPoint])
-extends java.io.Serializable with CombinationsCalculator with LabeledPointFeatureFilter {
+extends java.io.Serializable with CombinationsCalculator
+with LabeledPointFeatureFilter with FeatureSort {
 
   override def data: RDD[LabeledPoint] = labeledData
 
-  override def select: Set[Int] = Set(1, 2)
+  override def select: Set[Int] = {
 
-  val indexByLabel = indexByLabelMap(labeledData)
-  val labelsByIndex = indexByLabel.map(_.swap)
+    println(chi2Data.first())
+    top(chi2Data, 1)
+  }
+
+  val labelsByIndex = indexByLabelMap(labeledData).map(_.swap)
   val combinations = featureLabelCombinations(labeledData)
 
   val chi2Data: RDD[((Int, Double), Double)] = combinations.flatMap {

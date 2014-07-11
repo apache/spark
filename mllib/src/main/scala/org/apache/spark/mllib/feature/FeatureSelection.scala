@@ -14,9 +14,10 @@ sealed trait FeatureFilter[T] extends FeatureSelection[T] {
 }
 
 trait LabeledPointFeatureFilter extends FeatureFilter[LabeledPoint] {
-  lazy val indices = select
-  def filter: RDD[LabeledPoint] =
+  def filter: RDD[LabeledPoint] = {
+    val indices = select
     data.map { lp => new LabeledPoint(lp.label, Compress(lp.features, indices)) }
+  }
 }
 
 object Compress {

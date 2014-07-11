@@ -15,9 +15,12 @@ class ChiSquaredSuite extends FunSuite with LocalSparkContext {
            new LabeledPoint(1.0, Vectors.sparse(3, Seq((0, 1.1),(2, 3.3)))),
            new LabeledPoint(1.0, Vectors.sparse(3, Seq((1, 2.2),(2, 4.4))))
       ), 2)
+    labeledData.foreach(println)
 
     val chiSquared = new ChiSquared(labeledData)
     chiSquared.chi2Data.foreach{println}
+    val filteredData = chiSquared.filter
+    filteredData.foreach(println)
   }
 
 
