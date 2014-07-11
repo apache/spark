@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.Logging
-import org.apache.spark.sql.util
 
 private[sql] object JsonRDD extends Logging {
 
@@ -271,12 +270,29 @@ private[sql] object JsonRDD extends Logging {
     }
   }
 
-  private def toDecimalValue: PartialFunction[Any, BigDecimal] = {
-    def bigIntegerToDecimalValue: PartialFunction[Any, BigDecimal] = {
-      case v: java.math.BigInteger => BigDecimal(v)
+  private def toLong(value: Any): Long = {
+    value match {
+      case value: java.lang.Integer => value.asInstanceOf[Int].toLong
+      case value: java.lang.Long => value.asInstanceOf[Long]
     }
+  }
 
-    bigIntegerToDecimalValue orElse util.toDecimalValue
+  private def toDouble(value: Any): Double = {
+    value match {
+      case value: java.lang.Integer => value.asInstanceOf[Int].toDouble
+      case value: java.lang.Long => value.asInstanceOf[Long].toDouble
+      case value: java.lang.Double => value.asInstanceOf[Double]
+    }
+  }
+
+  private def toDecimal(value: Any): BigDecimal = {
+    value match {
+      case value: java.lang.Integer => BigDecimal(value)
+      case value: java.lang.Long => BigDecimal(value)
+      case value: java.math.BigInteger => BigDecimal(value)
+      case value: java.lang.Double => BigDecimal(value)
+      case value: java.math.BigDecimal => BigDecimal(value)
+    }
   }
 
   private def toJsonArrayString(seq: Seq[Any]): String = {
@@ -287,7 +303,7 @@ private[sql] object JsonRDD extends Logging {
       element =>
         if (count > 0) builder.append(",")
         count += 1
-        builder.append(toStringValue(element))
+        builder.append(toString(element))
     }
     builder.append("]")
 
@@ -302,31 +318,37 @@ private[sql] object JsonRDD extends Logging {
       case (key, value) =>
         if (count > 0) builder.append(",")
         count += 1
-        builder.append(s"""\"${key}\":${toStringValue(value)}""")
+        builder.append(s"""\"${key}\":${toString(value)}""")
     }
     builder.append("}")
 
     builder.toString()
   }
 
-  private def toStringValue: PartialFunction[Any, String] = {
-    def complexValueToStringValue: PartialFunction[Any, String] = {
-      case v: Map[String, Any] => toJsonObjectString(v)
-      case v: Seq[Any] => toJsonArrayString(v)
+  private def toString(value: Any): String = {
+    value match {
+      case value: Map[String, Any] => toJsonObjectString(value)
+      case value: Seq[Any] => toJsonArrayString(value)
+      case value => Option(value).map(_.toString).orNull
     }
-
-    complexValueToStringValue orElse util.toStringValue
   }
 
-  private[json] def castToType: PartialFunction[(Any, DataType), Any] = {
-    def jsonSpecificCast: PartialFunction[(Any, DataType), Any] = {
-      case (v, StringType) => toStringValue(v)
-      case (v, DecimalType) => toDecimalValue(v)
-      case (v, ArrayType(elementType)) =>
-        v.asInstanceOf[Seq[Any]].map(castToType(_, elementType))
+  private[json] def enforceCorrectType(value: Any, desiredType: DataType): Any ={
+    if (value == null) {
+      null
+    } else {
+      desiredType match {
+        case ArrayType(elementType) =>
+          value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
+        case StringType => toString(value)
+        case IntegerType => value.asInstanceOf[IntegerType.JvmType]
+        case LongType => toLong(value)
+        case DoubleType => toDouble(value)
+        case DecimalType => toDecimal(value)
+        case BooleanType => value.asInstanceOf[BooleanType.JvmType]
+        case NullType => null
+      }
     }
-
-    jsonSpecificCast orElse util.castToType
   }
 
   private def asRow(json: Map[String,Any], schema: StructType): Row = {
@@ -348,7 +370,7 @@ private[sql] object JsonRDD extends Logging {
       // Other cases
       case (StructField(name, dataType, _), i) =>
         row.update(i, json.get(name).flatMap(v => Option(v)).map(
-          castToType(_, dataType)).getOrElse(null))
+          enforceCorrectType(_, dataType)).getOrElse(null))
     }
 
     row

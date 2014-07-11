@@ -94,7 +94,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def applySchema[A](rdd: RDD[A],schema: StructType, f: A => Row): SchemaRDD =
-    applySchemaPartitions(rdd, schema, (iter: Iterator[A]) => iter.map(f))
+    applySchemaToPartitions(rdd, schema, (iter: Iterator[A]) => iter.map(f))
 
   /**
    * Creates a [[SchemaRDD]] from an [[RDD]] by applying a schema to this RDD and using a function
@@ -102,7 +102,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def applySchemaPartitions[A](
+  def applySchemaToPartitions[A](
       rdd: RDD[A],
       schema: StructType,
       f: Iterator[A] => Iterator[Row]): SchemaRDD =
@@ -154,7 +154,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
     val schema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
-    applySchemaPartitions(json, schema, JsonRDD.jsonStringToRow(schema, _: Iterator[String]))
+    applySchemaToPartitions(json, schema, JsonRDD.jsonStringToRow(schema, _: Iterator[String]))
   }
 
   /**
