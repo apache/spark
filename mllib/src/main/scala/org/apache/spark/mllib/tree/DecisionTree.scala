@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.tree
 
-import org.apache.spark.mllib.point.PointConverter._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -29,7 +28,6 @@ import org.apache.spark.mllib.tree.impurity.Impurity
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.mllib.point.WeightedLabeledPoint
 
 /**
  * :: Experimental ::
@@ -47,7 +45,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
    * @return a DecisionTreeModel that can be used for prediction
    */
-  def train(input: RDD[WeightedLabeledPoint]): DecisionTreeModel = {
+  def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
 
     // Cache input RDD for speedup during multiple passes.
     input.cache()
@@ -352,7 +350,7 @@ object DecisionTree extends Serializable with Logging {
    * @return array of splits with best splits for all nodes at a given level.
    */
   protected[tree] def findBestSplits(
-      input: RDD[WeightedLabeledPoint],
+      input: RDD[LabeledPoint],
       parentImpurities: Array[Double],
       strategy: Strategy,
       level: Int,
@@ -400,7 +398,7 @@ object DecisionTree extends Serializable with Logging {
    * @return array of splits with best splits for all nodes at a given level.
    */
   private def findBestSplitsPerGroup(
-      input: RDD[WeightedLabeledPoint],
+      input: RDD[LabeledPoint],
       parentImpurities: Array[Double],
       strategy: Strategy,
       level: Int,
@@ -469,7 +467,7 @@ object DecisionTree extends Serializable with Logging {
      * Find whether the sample is valid input for the current node, i.e., whether it passes through
      * all the filters for the current node.
      */
-    def isSampleValid(parentFilters: List[Filter], labeledPoint: WeightedLabeledPoint): Boolean = {
+    def isSampleValid(parentFilters: List[Filter], labeledPoint: LabeledPoint): Boolean = {
       // leaf
       if ((level > 0) && (parentFilters.length == 0)) {
         return false
@@ -506,7 +504,7 @@ object DecisionTree extends Serializable with Logging {
     /**
      * Find bin for one feature.
      */
-    def findBin(featureIndex: Int, labeledPoint: WeightedLabeledPoint,
+    def findBin(featureIndex: Int, labeledPoint: LabeledPoint,
         isFeatureContinuous: Boolean, isSpaceSufficientForAllCategoricalSplits: Boolean): Int = {
       val binForFeatures = bins(featureIndex)
       val feature = labeledPoint.features(featureIndex)
@@ -595,7 +593,7 @@ object DecisionTree extends Serializable with Logging {
      * classification and the categorical feature value in  multiclass classification.
      * Invalid sample is denoted by noting bin for feature 1 as -1.
      */
-    def findBinsForLevel(labeledPoint: WeightedLabeledPoint): Array[Double] = {
+    def findBinsForLevel(labeledPoint: LabeledPoint): Array[Double] = {
       // Calculate bin index and label per feature per node.
       val arr = new Array[Double](1 + (numFeatures * numNodes))
       // First element of the array is the label of the instance.
@@ -1283,7 +1281,7 @@ object DecisionTree extends Serializable with Logging {
    *         .spark.mllib.tree.model.Bin] of size (numFeatures, numSplits1)
    */
   protected[tree] def findSplitsBins(
-      input: RDD[WeightedLabeledPoint],
+      input: RDD[LabeledPoint],
       strategy: Strategy): (Array[Array[Split]], Array[Array[Bin]]) = {
     val count = input.count()
 
