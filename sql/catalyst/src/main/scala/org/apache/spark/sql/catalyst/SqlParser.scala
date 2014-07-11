@@ -212,7 +212,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
    protected lazy val joinedRelation: Parser[LogicalPlan] =
      relationFactor ~ opt(joinType) ~ JOIN ~ relationFactor ~ opt(joinConditions) ^^ {
       case r1 ~ jt ~ _ ~ r2 ~ cond =>
-        Join(r1, r2, joinType = jt.getOrElse(Inner), cond)         
+        Join(r1, r2, joinType = jt.getOrElse(Inner), cond)
      }
 
    protected lazy val joinConditions: Parser[Expression] =
@@ -223,7 +223,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
      LEFT ~ SEMI ^^^ LeftSemi |
      LEFT ~ opt(OUTER) ^^^ LeftOuter |
      RIGHT ~ opt(OUTER) ^^^ RightOuter |
-     FULL ~ opt(OUTER) ^^^ FullOuter |
+     FULL ~ opt(OUTER) ^^^ FullOuter
     
   protected lazy val filter: Parser[Expression] = WHERE ~ expression ^^ { case _ ~ e => e }
 
