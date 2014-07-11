@@ -407,67 +407,52 @@ case class BroadcastNestedLoopJoin(
  * In some case ,data skew happens.SkewJoin  sample the table rdd to find the largest key,
  * then make the largest key rows as a table rdd.The left rdd will be made  leftSkewedtable
  * rdd without the largest key and the maxkeyskewedtable rdd with the largest key.
- *  Then,join the two table  with the righttable.
+ * Then,join the two table  with the righttable.
  * Finally,union the two result rdd.
  */
 @DeveloperApi
-case class SkewJoinCartesianProduct(
+case class SkewHashJoin(
+    leftKeys: Seq[Expression],
+    rightKeys: Seq[Expression],
+    buildSide: BuildSide,
     left: SparkPlan,
-    right: SparkPlan,
-    condition: Option[Expression])(@transient sc: SparkContext) extends BinaryNode {
+    right: SparkPlan) extends BinaryNode with HashJoin {
   override def output = left.output ++ right.output
 
-  @transient lazy val boundCondition =
-    InterpretedPredicate(
-      condition
-              .map(c => BindReferences.bindReference(c, left.output ++ right.output))
-              .getOrElse(Literal(true)))
+  override def requiredChildDistribution =
+        ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  def execute() = {
-
+  override def execute() = {
     val skewedTable = left.execute()
     //This will later write as configuration
     val sample = skewedTable.sample(false, 0.3, 9).collect()
-    val sortedSample = sample.sortWith((row1, row2) => row1.hashCode() > row2.hashCode())
-    var max = 0
-    var num = sample.size - 1
-    var temp = 0
-    var maxrowKey = sortedSample(0)
-    //find the largest key
-    if (sortedSample.size > 1) {
-      for (i <- 1 to num) {
-        if (sortedSample(i - 1) == sortedSample(i)) {
-          temp += 1
-        }
-        else {
-          if (temp > max) {
-            max = temp
-            maxrowKey = sortedSample(i - 1)
-          }
-          temp = 0
-        }
-      }
-    }
-    // I also Send a Pull Request as RDD API span fun to offer the function 
+    val maxrowKey = sample.map(row => buildSideKeyGenerator(row)).groupBy(r =>
+      r).map(rows => (rows._2.size, rows._1)).maxBy(rows => rows._1)._2
+    // I also Send a Pull Request as RDD API span fun to offer the function
     //split a RDD as two through span function
     // .https://github.com/apache/spark/pull/1306
     //    val (maxKeySkewedTable, mainSkewedTable) = skewedTable.span(row => {
     //      skewSideKeyGenerator(row).toString().equals(maxrowKey.toString())
     //    })
     val maxKeySkewedTable = skewedTable.filter(row => {
-      row.toString().equals(maxrowKey.toString())
-    })
-    val mainSkewedTable = skewedTable.filter(row => {
-      !row.toString().equals(maxrowKey.toString())
-    })
-    val buildRdd = right.execute()
-    val joinedRow = new JoinedRow
-    val maxKeyJoinedRdd = maxKeySkewedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())).filter(rows =>{boundCondition(joinedRow(rows._1, rows._2))})..map {
-      case (l: Row, r: Row) => buildRow(l ++ r)
+      buildSideKeyGenerator(row) == maxrowKey
+        })
+        val mainSkewedTable = skewedTable.filter(row => {
+          !(buildSideKeyGenerator(row) == maxrowKey)
+        })
+        val buildRdd = right.execute()
+        val maxKeyJoinedRdd = maxKeySkewedTable.map(_.copy()).cartesian(buildRdd.map(_.copy()
+          ).filter(rows => {
+            (buildSideKeyGenerator(rows._1) == streamSideKeyGenerator(rows._2))
+        }).map {
+            case (l: Row, r: Row) => buildRow(l ++ r)
+        }
+        val mainJoinedRdd = mainSkewedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())
+          ).filter(rows => {
+            (buildSideKeyGenerator(rows._1) == streamSideKeyGenerator(rows._2))
+        }).map {
+          case (l: Row, r: Row) => buildRow(l ++ r)
+        }
+        sc.union(maxKeyJoinedRdd, mainJoinedRdd)
     }
-    val mainJoinedRdd = mainSkewedTable.map(_.copy()).cartesian(buildRdd.map(_.copy())).filter(rows =>{boundCondition(joinedRow(rows._1, rows._2))})..map {
-      case (l: Row, r: Row) => buildRow(l ++ r)
-    }
-    sc.union(maxKeyJoinedRdd, mainJoinedRdd)
-  }
 }
