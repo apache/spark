@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.stat.correlation
 
-import org.apache.spark.SparkException
+import org.apache.spark.Partitioner
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.linalg.{DenseVector, Matrices, Matrix, Vector}
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.{DenseVector, Matrix, Vector}
+import org.apache.spark.rdd.{CoGroupedRDD, RDD}
 
 /**
  * Compute Spearman's correlation for two RDDs of the type RDD[Double] or the correlation matrix
@@ -36,16 +35,12 @@ object SpearmansCorrelation extends Correlation {
    * Compute Spearman's correlation for two datasets.
    */
   override def computeCorrelation(x: RDD[Double], y: RDD[Double]): Double = {
-    PearsonCorrelation.computeCorrelation(getRanks(x), getRanks(y))
+    computeCorrelationWithMatrixImpl(x, y)
   }
 
   /**
-   * Compute Spearman's correlation matrix S, for the input matrix.
-   *
-   * S(i, j) = computeCorrelationMatrix(columnI, columnJ),
-   * where columnI and columnJ are the ith and jth column in the input matrix.
-   *
-   * TODO support for sparse column vectors
+   * Compute Spearman's correlation matrix S, for the input matrix, where S(i, j) is the
+   * correlation between column i and j.
    */
   override def computeCorrelationMatrix(X: RDD[Vector]): Matrix = {
     val indexed = X.zipWithIndex()
@@ -62,7 +57,7 @@ object SpearmansCorrelation extends Correlation {
 
     println("numCols:" + numCols)
 
-    val ranks = new Array[RDD[Double]](numCols)
+    val ranks = new Array[RDD[(Long, Double)]](numCols)
     var k = 0
     while (k < numCols) {
       println(k)
@@ -70,38 +65,14 @@ object SpearmansCorrelation extends Correlation {
         println(vector.toString, k)
         (vector(k), index)}
       }
-      ranks(k) = getRanksWithIndex(column)
+      ranks(k) = getRanks(column)
       ranks(k).foreach(println)
 
       k += 1
     }
 
-    // TODO make into rank matrix
-
-    // only compute for upper triangular since the correlation matrix is symmetric and
-    // each pairwise computation is expensive
-    val triuSize = numCols * (numCols + 1) / 2
-    val correlations = new Array[Double](triuSize)
-    var i = 0
-    var j = 0
-    var idx = 0
-    while (j < numCols) {
-      i = 0
-      while (i <= j) {
-        correlations(idx) = if (i == j) {
-          1.0
-        }  else {
-          val rankPairs = makeRankPairs(ranks(i), ranks(j))
-          computeCorrelationFromRanks(rankPairs)
-        }
-        idx += 1
-        i += 1
-      }
-      j += 1
-    }
-    println("correlations")
-    correlations.foreach(println)
-    Matrices.fromBreeze(RowMatrix.triuToFull(numCols, correlations).toBreeze)
+    val ranksMat: RDD[Vector] = makeRankMatrix(ranks)
+    PearsonCorrelation.computeCorrelationMatrix(ranksMat)
   }
 
   /**
@@ -109,9 +80,9 @@ object SpearmansCorrelation extends Correlation {
    *
    * With the average method, elements with the same value receive the same rank that's computed
    * by taking the average of their positions in the sorted list.
-   * e.g. ranks([2, 1, 0, 2]) = [2.5, 1.0, 0.0, 2.5]
+   * e.g. ranks([2, 1, 0, 2]) = [3.5, 2.0, 1.0, 3.5]
    */
-  private def getRanksWithIndex(indexed: RDD[(Double, Long)]): RDD[Double] = {
+  private def getRanks(indexed: RDD[(Double, Long)]): RDD[(Long, Double)] = {
     // Get elements' positions in the sorted list for computing average rank for duplicate values
     val sorted = indexed.sortByKey().zipWithIndex()
     val groupedByValue = sorted.groupBy(_._1._1)
@@ -124,45 +95,14 @@ object SpearmansCorrelation extends Correlation {
         duplicates.map(entry => (entry._1._2, entry._2.toDouble + 1)).toSeq
       }
     }
-    ranks.sortByKey().values
+    ranks.sortByKey()
   }
 
-  private def getRanks(input: RDD[Double]): RDD[Double] = getRanksWithIndex(input.zipWithIndex())
-
-  /**
-   * TODO remove
-   *
-   * Compute Spearman's rank correlation, rho, given ranks.
-   *
-   * rho = 1 - 6 * sum(di) / (n * (n * n - 1)), where di = xi - yi for xi in ranks1 & yi in ranks2
-   *
-   * The size n and sum(di) are computed in the same pass over the rank pairs.
-   * We check that the rank RDDs have the same size while making the rank pairs with zip.
-   */
-  private def computeCorrelationFromRanks(rankPairs: RDD[(Double, Double)]): Double = {
-    val results = rankPairs.mapPartitions(it => {
-      val results = it.foldLeft((0L, 0.0)) {(r, item) =>
-        (r._1 + 1, r._2 + (item._1 - item._2) * (item._1 - item._2))}
-      Iterator(results)
-    }, preservesPartitioning = true).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
-
-    val n = results._1
-    val D = results._2
-    println("n = " + n + " D = " + D)
-    1.0 - 6.0 * D / (n * (n * n - 1.0))
-  }
-
-  private def computeCorrelationFromRanks(rankMatrix: RDD[Vector]): Matrix = {
-    val cov = new RowMatrix(rankMatrix).computeCovariance()
-    PearsonCorrelation.computeCorrelationMatrixFromCovariance(cov)
-  }
-
-  private def makeRankMatrix(ranks1: RDD[Double], ranks2: RDD[Double]): RDD[Vector] = {
-    try {
-       ranks1.zip(ranks2).map {case(v1, v2) => new DenseVector(Array(v1, v2))}
-    } catch {
-      case se: SparkException => throw new IllegalArgumentException("Cannot compute correlation"
-        + "for RDDs of different sizes.")
-    }
+  private def makeRankMatrix(ranks: Array[RDD[(Long, Double)]]): RDD[Vector] = {
+    val partitioner = Partitioner.defaultPartitioner(ranks(0), ranks.tail: _*)
+    val cogrouped = new CoGroupedRDD[Long](ranks, partitioner)
+    cogrouped.mapPartitions({ iter =>
+      iter.map {case (index, values:Seq[Seq[Double]]) => new DenseVector(values.flatten.toArray)}
+    })
   }
 }

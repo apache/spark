@@ -19,7 +19,6 @@ package org.apache.spark.mllib.stat.correlation
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.SparkException
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.rdd.RDD
@@ -37,25 +36,12 @@ object PearsonCorrelation extends Correlation {
    * Compute the Pearson correlation for two datasets.
    */
   override def computeCorrelation(x: RDD[Double], y: RDD[Double]): Double = {
-
-    val paired = try {
-      x.zip(y)
-    } catch {
-      case se: SparkException => throw new IllegalArgumentException("Cannot compute correlation"
-        + "for RDDs of different sizes.")
-    }
-
-    val stats = paired.aggregate(new Stats)((m: Stats, i: (Double, Double)) => m.merge(i),
-      (m1: Stats, m2: Stats) => m1.merge(m2))
-    val cov = stats.xyMean - stats.xMean * stats.yMean
-    cov / (stats.xStdev * stats.yStdev)
+    computeCorrelationWithMatrixImpl(x, y)
   }
 
   /**
-   * Compute the Pearson correlation matrix S, for the input matrix.
-   *
-   * S(i, j) = computeCorrelationMatrix(columnI, columnJ),
-   * where columnI and columnJ are the ith and jth column in the input matrix.
+   * Compute the Pearson correlation matrix S, for the input matrix, where S(i, j) is the
+   * correlation between column i and j.
    */
   override def computeCorrelationMatrix(X: RDD[Vector]): Matrix = {
     val rowMatrix = new RowMatrix(X)
@@ -104,69 +90,5 @@ object PearsonCorrelation extends Correlation {
     }
 
     Matrices.fromBreeze(cov)
-  }
-}
-
-/**
- * Custom version of StatCounter to allow for computation of all necessary statistics in one pass
- * over both input RDDs since passes over large RDDs are expensive
- */
-private class Stats extends Serializable {
-  private var n: Long = 0L      // Size of the pair RDD
-  private var Exy: Double = 0.0 // E[X * Y] = sum(x * y) / n over the (x, y) pairs in the RDD
-  private var Ex: Double = 0.0  // E[X] = sum(x) / n
-  private var Sx: Double = 0.0  // Var[X] * n = sum((x - E[X]) ^ 2)
-  private var Ey: Double = 0.0  // E[Y] = sum(y) / n
-  private var Sy: Double = 0.0  // Var[Y] * n = sum((y - E[Y]) ^ 2)
-
-  def count: Long = n
-
-  def xyMean: Double = Exy
-
-  def xMean: Double = Ex
-
-  def xStdev: Double = if (n == 0) Double.NaN else math.sqrt(Sx / n)
-
-  def yMean: Double = Ey
-
-  def yStdev: Double = if (n == 0) Double.NaN else math.sqrt(Sy / n)
-
-  def merge(xy:(Double, Double)): Stats = {
-    val dX = xy._1 - Ex
-    val dY = xy._2 - Ey
-    n += 1
-    Ex += dX / n
-    Sx += dX * (xy._1 - Ex)
-    Ey += dY / n
-    Sy += dY * (xy._2 - Ey)
-    Exy += (xy._1 * xy._2 - Exy) / n
-    this
-  }
-
-  def merge(other: Stats): Stats = {
-    if (n == 0) {
-      return other
-    } else if (other.n > 0) {
-      val dX = other.Ex - Ex
-      val dY = other.Ey - Ey
-      val sum = n + other.n
-      if (other.n * 10 < n) {
-        Ex += dX * other.n / sum
-        Ey += dY * other.n / sum
-        Exy += (other.Exy - Exy) * other.n / sum
-      } else if (n * 10 < other.n) {
-        Ex = other.Ex - dX * n / sum
-        Ey = other.Ey - dY * n / sum
-        Exy += other.Exy - (other.Exy - Exy) * n / sum
-      } else {
-        Ex = (Ex * n + other.Ex * other.n) / sum
-        Ey = (Ey * n + other.Ey * other.n) / sum
-        Exy = (Exy * n + other.Exy * other.n) / sum
-      }
-      Sx += other.Sx + (dX * dX * n * other.n) / sum
-      Sy += other.Sy + (dY * dY * n * other.n) / sum
-      n += other.n
-    }
-    this
   }
 }

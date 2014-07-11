@@ -25,12 +25,25 @@ import org.apache.spark.rdd.RDD
  */
 trait Correlation {
 
+  /**
+   * Compute correlation for two datasets.
+   */
   def computeCorrelation(x: RDD[Double], y: RDD[Double]): Double
 
+  /**
+   * Compute the correlation matrix S, for the input matrix, where S(i, j) is the correlation
+   * between column i and j.
+   */
   def computeCorrelationMatrix(X: RDD[Vector]): Matrix
 
+  /**
+   * Combine the two input RDD[Double]s into an RDD[Vector] and compute the correlation using the
+   * correlation implementation for RDD[Vector]
+   */
   def computeCorrelationWithMatrixImpl(x: RDD[Double], y: RDD[Double]): Double = {
-    val mat: RDD[Vector] = x.zip(y).map {case(xi, yi) => new DenseVector(Array(xi, yi))}
+    val mat: RDD[Vector] = x.zip(y).mapPartitions({ iter =>
+      iter.map {case(xi, yi) => new DenseVector(Array(xi, yi))}
+    }, preservesPartitioning = true)
     computeCorrelationMatrix(mat)(0, 1)
   }
 
