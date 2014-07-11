@@ -86,14 +86,19 @@ object SparkBuild extends PomBuild {
     profiles
   }
 
-  override val profiles = Properties.envOrNone("MAVEN_PROFILES") match {
+  override val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
     case None => backwardCompatibility
-    // Rationale: If -P option exists no need to support backwardCompatibility.
     case Some(v) =>
       if (backwardCompatibility.nonEmpty)
         println("Note: We ignore environment variables, when use of profile is detected in " +
           "conjunction with environment variable.")
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
+  }
+
+  Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
+    case Some(v) =>
+      v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.split("=")).foreach(x => System.setProperty(x(0), x(1)))
+    case _ => 
   }
 
   override val userPropertiesMap = System.getProperties.toMap
