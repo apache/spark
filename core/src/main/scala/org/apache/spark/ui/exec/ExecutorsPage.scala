@@ -72,7 +72,14 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
           <th>Task Time</th>
           <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
           <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
-          <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_WRITE}>Shuffle Write</span></th>
+          <th>
+            <!-- Place the shuffle write tooltip on the left (rather than the default position
+              of on top) because the shuffle write column is the last column on the right side and
+              the tooltip is wider than the column, so it doesn't fit on top. -->
+            <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
+              Shuffle Write
+            </span>
+          </th>
           {if (SparkHadoopUtil.get.isYarnMode)
             <th>Logs</th>
           }
@@ -103,6 +110,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       parent.headerTabs, parent)
   }
 
+  // The log location string used when the log location is unknown
   private val NoLogs = "-none-"
 
   /** Render an HTML row representing an executor */
@@ -139,9 +147,9 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       </td>
       {if (SparkHadoopUtil.get.isYarnMode) <td>
         {if (info.logLocation == NoLogs)
-          <span>&#9940;</span>
+          <span>&#9940;</span>  // Unicode "do not enter" sign
         else
-          <a href={info.logLocation}>&#9654;</a>
+          <a href={info.logLocation}>&#9654;</a>  // Unicode right black triangle
         }
       </td>}
     </tr>

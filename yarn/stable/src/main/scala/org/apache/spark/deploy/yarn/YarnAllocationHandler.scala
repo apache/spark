@@ -122,6 +122,7 @@ private[yarn] class YarnAllocationHandler(
     amClient.releaseAssignedContainer(containerId)
   }
 
+  /** Build the URL for a container's log location. */
   def buildLogLocation(container: Container) =
     "http://%s/node/containerlogs/%s/%s".format(container.getNodeHttpAddress(),
                                                 ConverterUtils.toString(container.getId()),
@@ -293,6 +294,7 @@ private[yarn] class YarnAllocationHandler(
             }
           }
 
+          // If a UI is available, update it with this container's log location.
           if (sparkUi != null) {
             val logLocation = buildLogLocation(container)
             logInfo("Updating log location for %s to %s".format(

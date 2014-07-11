@@ -35,6 +35,7 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "execut
   attachPage(new ExecutorsPage(this))
   parent.registerListener(listener)
 
+  /** Update the location of an executor's logs. */
   def updateExecutorLogLocation(executorId: String, logs: String) = synchronized {
     val eid = parent.storageStatusListener.formatExecutorId(executorId)
     executorToLogLocation(eid) = logs

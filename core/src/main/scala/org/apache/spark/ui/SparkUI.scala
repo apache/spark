@@ -57,7 +57,8 @@ private[spark] class SparkUI(
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
 
-  var executorsTab : ExecutorsTab = null
+  // The executors tab created during initialize()
+  private var executorsTab : ExecutorsTab = null
 
   initialize()
 
@@ -89,6 +90,7 @@ private[spark] class SparkUI(
     listenerBus.addListener(listener)
   }
 
+  /** Update the location of an executor's logs reported in the executors tab. */
   def updateExecutorLogLocation(executorId: String, logs: String) {
     executorsTab.updateExecutorLogLocation(executorId, logs)
   }
