@@ -581,41 +581,6 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
-  test("stratifiedSample") {
-    val numStrata = 2
-    val stratifier = (x: Int) => { x % numStrata }
-    val strata = 0 to (numStrata-1)
-    val data = sc.parallelize(1 to 100, 2)
-    val strataTotals = data.keyBy(stratifier).countByKey()
-
-    for (fraction <- List(.1, .2, 1)) {
-      val sample = data.stratifiedSample(stratifier, fraction)
-      assert(sample.collect.toSet.size === sample.count) // Elements are distinct
-      assert(sample.collect.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
-      val stratSampleTotals = sample.keyBy(stratifier).countByKey()
-      for (stratum <- strata) {
-        assert(math.abs(stratSampleTotals(stratum) - strataTotals(stratum) * fraction) <= 1) // Proportional sampling
-      }
-    }
-    for (seed <- 1 to 5) {
-      val fraction = .2
-      val sample = data.stratifiedSample(stratifier, fraction, seed)
-      assert(sample.collect.toSet.size === sample.count) // Elements are distinct
-      assert(sample.collect.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
-      val stratSampleTotals = sample.keyBy(stratifier).countByKey()
-      for (stratum <- strata) {
-        assert(math.abs(stratSampleTotals(stratum) - strataTotals(stratum) * fraction) <= 1) // Proportional sampling
-      }
-    }
-  }
-
-  test("stratifiedSample from an empty rdd") {
-    val stratifier = (x: Int) => { x % 2 }
-    val emptySet = sc.parallelize(Seq.empty[Int], 2)
-    val sample = emptySet.stratifiedSample(stratifier, .2)
-    assert(sample.count == 0, "sampleMap should be empty but is not")
-  }
-
   test("runJob on an invalid partition") {
     intercept[IllegalArgumentException] {
       sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2), false)
