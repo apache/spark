@@ -37,7 +37,11 @@ class TransformedDStream[U: ClassTag] (
   override def slideDuration: Duration = parents.head.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
-    val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq
-    Some(transformFunc(parentRDDs, validTime))
+    val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).filter(_ != null).toSeq
+    if (parentRDDs.size > 0) {
+      Some(transformFunc(parentRDDs, validTime))
+    } else {
+      None
+    }
   }
 }
