@@ -28,50 +28,46 @@ class SQLConfSuite extends QueryTest {
   val testVal = "test.val.0"
 
   test("programmatic ways of basic setting and getting") {
-    TestSQLContext.settings.synchronized {
-      clear()
-      assert(getOption(testKey).isEmpty)
-      assert(getAll.toSet === Set())
+    clear()
+    assert(getOption(testKey).isEmpty)
+    assert(getAll.toSet === Set())
 
-      set(testKey, testVal)
-      assert(get(testKey) == testVal)
-      assert(get(testKey, testVal + "_") == testVal)
-      assert(getOption(testKey) == Some(testVal))
-      assert(contains(testKey))
+    set(testKey, testVal)
+    assert(get(testKey) == testVal)
+    assert(get(testKey, testVal + "_") == testVal)
+    assert(getOption(testKey) == Some(testVal))
+    assert(contains(testKey))
 
-      // Tests SQLConf as accessed from a SQLContext is mutable after
-      // the latter is initialized, unlike SparkConf inside a SparkContext.
-      assert(TestSQLContext.get(testKey) == testVal)
-      assert(TestSQLContext.get(testKey, testVal + "_") == testVal)
-      assert(TestSQLContext.getOption(testKey) == Some(testVal))
-      assert(TestSQLContext.contains(testKey))
+    // Tests SQLConf as accessed from a SQLContext is mutable after
+    // the latter is initialized, unlike SparkConf inside a SparkContext.
+    assert(TestSQLContext.get(testKey) == testVal)
+    assert(TestSQLContext.get(testKey, testVal + "_") == testVal)
+    assert(TestSQLContext.getOption(testKey) == Some(testVal))
+    assert(TestSQLContext.contains(testKey))
 
-      clear()
-    }
+    clear()
   }
 
   test("parse SQL set commands") {
-    TestSQLContext.settings.synchronized {
-      clear()
-      sql(s"set $testKey=$testVal")
-      assert(get(testKey, testVal + "_") == testVal)
-      assert(TestSQLContext.get(testKey, testVal + "_") == testVal)
+    clear()
+    sql(s"set $testKey=$testVal")
+    assert(get(testKey, testVal + "_") == testVal)
+    assert(TestSQLContext.get(testKey, testVal + "_") == testVal)
 
-      sql("set mapred.reduce.tasks=20")
-      assert(get("mapred.reduce.tasks", "0") == "20")
-      sql("set mapred.reduce.tasks = 40")
-      assert(get("mapred.reduce.tasks", "0") == "40")
+    sql("set mapred.reduce.tasks=20")
+    assert(get("mapred.reduce.tasks", "0") == "20")
+    sql("set mapred.reduce.tasks = 40")
+    assert(get("mapred.reduce.tasks", "0") == "40")
 
-      val key = "spark.sql.key"
-      val vs = "val0,val_1,val2.3,my_table"
-      sql(s"set $key=$vs")
-      assert(get(key, "0") == vs)
+    val key = "spark.sql.key"
+    val vs = "val0,val_1,val2.3,my_table"
+    sql(s"set $key=$vs")
+    assert(get(key, "0") == vs)
 
-      sql(s"set $key=")
-      assert(get(key, "0") == "")
+    sql(s"set $key=")
+    assert(get(key, "0") == "")
 
-      clear()
-    }
+    clear()
   }
 
 }
