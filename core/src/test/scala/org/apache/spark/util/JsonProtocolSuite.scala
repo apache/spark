@@ -33,8 +33,8 @@ class JsonProtocolSuite extends FunSuite {
 
   test("SparkListenerEvent") {
     val stageSubmitted =
-      SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
-    val stageCompleted = SparkListenerStageCompleted(makeStageInfo(101, 201, 301, 401L, 501L))
+      SparkListenerStageSubmitted(makeStageInfo(100, 150, 200, 300, 400L, 500L), properties)
+    val stageCompleted = SparkListenerStageCompleted(makeStageInfo(101, 151, 201, 301, 401L, 501L))
     val taskStart = SparkListenerTaskStart(111, makeTaskInfo(222L, 333, 1, 444L, false))
     val taskGettingResult =
       SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
@@ -78,7 +78,7 @@ class JsonProtocolSuite extends FunSuite {
 
   test("Dependent Classes") {
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
-    testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
+    testStageInfo(makeStageInfo(10, 15, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500, 1000))
@@ -125,7 +125,7 @@ class JsonProtocolSuite extends FunSuite {
 
   test("StageInfo.details backward compatibility") {
     // StageInfo.details was added after 1.0.0.
-    val info = makeStageInfo(1, 2, 3, 4L, 5L)
+    val info = makeStageInfo(1, 11, 2, 3, 4L, 5L)
     assert(info.details.nonEmpty)
     val newJson = JsonProtocol.stageInfoToJson(info)
     val oldJson = newJson.removeField { case (field, _) => field == "Details" }
@@ -253,6 +253,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private def assertEquals(info1: StageInfo, info2: StageInfo) {
     assert(info1.stageId === info2.stageId)
+    assert(info1.attemptId === info2.attemptId)
     assert(info1.name === info2.name)
     assert(info1.numTasks === info2.numTasks)
     assert(info1.submissionTime === info2.submissionTime)
@@ -475,9 +476,9 @@ class JsonProtocolSuite extends FunSuite {
     r
   }
 
-  private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
+  private def makeStageInfo(a: Int, attemptId: Int, b: Int, c: Int, d: Long, e: Long) = {
     val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
-    new StageInfo(a, "greetings", b, rddInfos, "details")
+    new StageInfo(a, attemptId, "greetings", b, rddInfos, "details")
   }
 
   private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
@@ -537,14 +538,14 @@ class JsonProtocolSuite extends FunSuite {
 
   private val stageSubmittedJsonString =
     """
-      {"Event":"SparkListenerStageSubmitted","Stage Info":{"Stage ID":100,"Stage Name":
+      {"Event":"SparkListenerStageSubmitted","Stage Info":{"Stage ID":100,"AttemptID":150,"Stage Name":
       "greetings","Number of Tasks":200,"RDD Info":[],"Details":"details"},"Properties":
       {"France":"Paris","Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
     """
 
   private val stageCompletedJsonString =
     """
-      {"Event":"SparkListenerStageCompleted","Stage Info":{"Stage ID":101,"Stage Name":
+      {"Event":"SparkListenerStageCompleted","Stage Info":{"Stage ID":101,"AttemptID":151,"Stage Name":
       "greetings","Number of Tasks":201,"RDD Info":[{"RDD ID":101,"Name":"mayor","Storage
       Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
       "Replication":1},"Number of Partitions":201,"Number of Cached Partitions":301,

@@ -31,19 +31,19 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     conf.set("spark.ui.retainedStages", 5.toString)
     val listener = new JobProgressListener(conf)
 
-    def createStageStartEvent(stageId: Int) = {
-      val stageInfo = new StageInfo(stageId, stageId.toString, 0, null, "")
+    def createStageStartEvent(stageId: Int, stageAttemptId: Int) = {
+      val stageInfo = new StageInfo(stageId, stageAttemptId, stageId.toString, 0, null, "")
       SparkListenerStageSubmitted(stageInfo)
     }
 
-    def createStageEndEvent(stageId: Int) = {
-      val stageInfo = new StageInfo(stageId, stageId.toString, 0, null, "")
+    def createStageEndEvent(stageId: Int, stageAttemptId: Int) = {
+      val stageInfo = new StageInfo(stageId, stageAttemptId, stageId.toString, 0, null, "")
       SparkListenerStageCompleted(stageInfo)
     }
 
     for (i <- 1 to 50) {
-      listener.onStageSubmitted(createStageStartEvent(i))
-      listener.onStageCompleted(createStageEndEvent(i))
+      listener.onStageSubmitted(createStageStartEvent(i, 50-i))
+      listener.onStageCompleted(createStageEndEvent(i, 50-i))
     }
 
     listener.completedStages.size should be (5)
