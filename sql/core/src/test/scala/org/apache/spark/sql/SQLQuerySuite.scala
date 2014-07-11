@@ -385,6 +385,7 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData "), Nil)
   }
 
+ System.setProperty("spark.optimize.skewjoin", "true")
  test(" Skew Join") {
    checkAnswer(
      sql("SELECT * FROM upperCaseData x SKEW JOIN lowerCaseData y ON s.N=y.n"),
