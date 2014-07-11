@@ -375,17 +375,15 @@ class SQLContext(@transient val sparkContext: SparkContext)
     import scala.collection.JavaConversions._
     def typeOfComplexValue: PartialFunction[Any, DataType] = {
       case c: java.util.List[_] =>
-        ArrayType(ScalaReflection.typeOfObject(c.head))
+        ArrayType(typeOfObject(c.head))
       case c: java.util.Set[_] =>
-        ArrayType(ScalaReflection.typeOfObject(c.head))
+        ArrayType(typeOfObject(c.head))
       case c: java.util.Map[_, _] =>
         val (key, value) = c.head
-        MapType(
-          ScalaReflection.typeOfObject(key),
-          ScalaReflection.typeOfObject(value))
+        MapType(typeOfObject(key), typeOfObject(value))
       case c if c.getClass.isArray =>
         val elem = c.asInstanceOf[Array[_]].head
-        ArrayType(ScalaReflection.typeOfObject(elem))
+        ArrayType(typeOfObject(elem))
       case c => throw new Exception(s"Object of type $c cannot be used")
     }
 
