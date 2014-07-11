@@ -21,6 +21,7 @@ import socket
 import sys
 import traceback
 import multiprocessing
+import __builtin__
 from ctypes import c_bool
 from errno import EINTR, ECHILD
 from socket import AF_INET, SOCK_STREAM, SOMAXCONN
@@ -34,7 +35,7 @@ except NotImplementedError:
     POOLSIZE = 4
 
 def hijack_hash():
-    original_hash = __builtins__.hash
+    original_hash = __builtin__.hash
     def new_hash(x):
         if x is None:
             return 0
@@ -50,7 +51,7 @@ def hijack_hash():
                 h = -2
             return h
         return original_hash(x)
-    __builtins__.hash = new_hash
+    __builtin__.hash = new_hash
 
 
 exit_flag = multiprocessing.Value(c_bool, False)
