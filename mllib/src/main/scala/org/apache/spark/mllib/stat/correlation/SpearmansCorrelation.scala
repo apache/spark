@@ -54,21 +54,15 @@ object SpearmansCorrelation extends Correlation {
     }
 
     val numCols = X.first.size
-
-    println("numCols:" + numCols)
-
     val ranks = new Array[RDD[(Long, Double)]](numCols)
-    var k = 0
-    while (k < numCols) {
-      println(k)
+
+    // Note: we use a for loop here instead of a while loop with a single index variable
+    // to avoid race condition caused by closure serialization
+    for (k <- 0 until numCols) {
       val column = indexed.map {case(vector, index) => {
-        println(vector.toString, k)
         (vector(k), index)}
       }
       ranks(k) = getRanks(column)
-      ranks(k).foreach(println)
-
-      k += 1
     }
 
     val ranksMat: RDD[Vector] = makeRankMatrix(ranks)
