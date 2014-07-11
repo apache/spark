@@ -29,15 +29,6 @@ import org.apache.spark.sql.parquet._
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
-  object SkewJoin extends Strategy with PredicateHelper {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Join(left, right, Skew, condition) =>
-        execution.SkewJoinCartesianProduct(
-          planLater(left), planLater(right), condition)(sparkContext) :: Nil
-      case _ => Nil
-    }
-  }
-
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
@@ -94,11 +85,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
-        val hashJoin =
-          execution.ShuffledHashJoin(
-            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
-        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
-
+        val hashJoin ={
+          val skew=System.getProperty("spark.optimization.skew").toBoolean  
+            if(!skew)  
+              {execution.ShuffledHashJoin(
+                leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
+              condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil}
+            else
+              {execution.SkewHashJoin(
+                leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
+              condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil}
+        }
       case _ => Nil
     }
   }
