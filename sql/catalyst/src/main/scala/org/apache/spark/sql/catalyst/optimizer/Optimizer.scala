@@ -123,6 +123,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
   val startsWith = "([^_%]+)%".r
   val endsWith = "%([^_%]+)".r
   val contains = "%([^_%]+)%".r
+  val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Like(l, Literal(startsWith(pattern), StringType)) if !pattern.endsWith("\\") =>
@@ -131,6 +132,8 @@ object LikeSimplification extends Rule[LogicalPlan] {
       EndsWith(l, Literal(pattern))
     case Like(l, Literal(contains(pattern), StringType)) if !pattern.endsWith("\\") =>
       Contains(l, Literal(pattern))
+    case Like(l, Literal(equalTo(pattern), StringType)) =>
+      EqualTo(l, Literal(pattern))
   }
 }
 
