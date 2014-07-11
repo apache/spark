@@ -229,7 +229,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
   override def children = str :: pos :: len :: Nil
   
   @inline
-  def slice[T, C <: Any](str: C, startPos: Int, sliceLen: Int)(implicit ev: (C=>IndexedSeqOptimized[T,_])): Any = {
+  def slice[T, C <: Any](str: C, startPos: Int, sliceLen: Int)
+      (implicit ev: (C=>IndexedSeqOptimized[T,_])): Any = {
     val len = str.length
     // Hive and SQL use one-based indexing for SUBSTR arguments but also accept zero and
     // negative indices for start positions. If a start index i is greater than 0, it 
