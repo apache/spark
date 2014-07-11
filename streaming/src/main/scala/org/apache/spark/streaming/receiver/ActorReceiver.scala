@@ -68,13 +68,13 @@ object ActorSupervisorStrategy {
  *       should be same.
  */
 @DeveloperApi
-trait ActorHelper {
+trait ActorHelper extends Logging{
 
   self: Actor => // to ensure that this can be added to Actor classes only
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store[T](iter: Iterator[T]) {
-    println("Storing iterator")
+    logInfo("Storing iterator")
     context.parent ! IteratorData(iter)
   }
 
@@ -93,7 +93,7 @@ trait ActorHelper {
    * being pushed into Spark's memory.
    */
   def store[T](item: T) {
-    println("Storing item")
+    logInfo("Storing item")
     context.parent ! SingleItemData(item)
   }
 }
@@ -157,11 +157,11 @@ private[streaming] class ActorReceiver[T: ClassTag](
     def receive = {
 
       case IteratorData(iterator) =>
-        println("received iterator")
+        logInfo("received iterator")
         store(iterator.asInstanceOf[Iterator[T]])
 
       case SingleItemData(msg) =>
-        println("received single")
+        logInfo("received single")
         store(msg.asInstanceOf[T])
         n.incrementAndGet
 
