@@ -4,9 +4,14 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
-private[feature] trait FeatureFilter extends java.io.Serializable {
+private[feature] trait FeatureSelector extends java.io.Serializable {
   /** methods for feature filtering based on statistics */
-  protected def topForClass
+  protected def top(featureClassValues: RDD[((Int, Double), Double)], n: Int): Set[Int] = {
+    val (featureIndexes, _) = featureClassValues.map {
+      case ((featureIndex, label), value) => (featureIndex, value)
+    }.reduceByKey(Math.max(_, _)).collect().sortBy(- _._2).unzip
+    featureIndexes.toSet
+  }
 }
 
 private[feature] trait CombinationsCalculator extends java.io.Serializable {
@@ -36,15 +41,18 @@ private[feature] trait CombinationsCalculator extends java.io.Serializable {
   }
 }
 
-private[feature] class ChiSquared(labeledData: RDD[LabeledPoint])
-  extends java.io.Serializable with CombinationsCalculator with FeatureSelection {
+class ChiSquared(labeledData: RDD[LabeledPoint])
+extends java.io.Serializable with CombinationsCalculator with LabeledPointFeatureFilter {
 
-  private val indexByLabel = indexByLabelMap(labeledData)
-  private val labelsByIndex = indexByLabel.map(_.swap)
-  private val combinations = featureLabelCombinations(labeledData)
+  override def data: RDD[LabeledPoint] = labeledData
 
-  /** not private for test purposes */
-  lazy val chi2Data: RDD[((Int, Double), Double)] = combinations.flatMap {
+  override def select: Set[Int] = Set(1, 2)
+
+  val indexByLabel = indexByLabelMap(labeledData)
+  val labelsByIndex = indexByLabel.map(_.swap)
+  val combinations = featureLabelCombinations(labeledData)
+
+  val chi2Data: RDD[((Int, Double), Double)] = combinations.flatMap {
     case (featureIndex, counts) =>
       val (featureClassCounts, notFeatureClassCounts) = counts.unzip
       val featureCount = featureClassCounts.sum
@@ -61,14 +69,6 @@ private[feature] class ChiSquared(labeledData: RDD[LabeledPoint])
           ((n11 + n01) * (n11 + n10) * (n10 + n00) * (n01 + n00))
         ((featureIndex, labelsByIndex(labelIndex)), chi2)}
   }
+
   private def sqr(x: Int): Int = x * x
-
-  override def select(data: RDD[LabeledPoint]): Set[Int] = {
-    /** the actual selection process should run here*/
-    Set(1, 2)
-  }
-}
-
-object ChiSquared{
-  def compute(labeledData: RDD[LabeledPoint]) = new ChiSquared(labeledData)
 }

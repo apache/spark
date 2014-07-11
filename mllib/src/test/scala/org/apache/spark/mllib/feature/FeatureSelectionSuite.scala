@@ -14,7 +14,7 @@ class FeatureSelectionSuite extends FunSuite with LocalSparkContext{
         new LabeledPoint(1.0, Vectors.sparse(3, Seq((1, 2.2),(2, 4.4))))
       ), 2)
     labeledData.foreach(println)
-    val filteredData = FeatureSelection.filter(labeledData, Set(1,2))
+    val filteredData = new ChiSquared(labeledData).filter
     filteredData.foreach(println)
   }
 

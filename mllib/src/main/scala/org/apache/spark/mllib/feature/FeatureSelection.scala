@@ -4,21 +4,23 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
-trait FeatureSelection {
-
-  /** make LabeledPoint or Vector a type parameter so it can select from both */
-  def select(data: RDD[LabeledPoint]): Set[Int]
+trait FeatureSelection[T] extends java.io.Serializable {
+  def data: RDD[T]
+  def select: Set[Int]
 }
 
-object FeatureSelection extends java.io.Serializable {
+sealed trait FeatureFilter[T] extends FeatureSelection[T] {
+  def filter: RDD[T]
+}
 
-  /** make LabeledPoint or Vector a type parameter so it can filter both */
-  def filter(data: RDD[LabeledPoint], indexes: Set[Int]): RDD[LabeledPoint] =
-    data.map {labeledPoint =>
-      new LabeledPoint(labeledPoint.label, filter(labeledPoint.features, indexes))
-  }
+trait LabeledPointFeatureFilter extends FeatureFilter[LabeledPoint] {
+  lazy val indices = select
+  def filter: RDD[LabeledPoint] =
+    data.map { lp => new LabeledPoint(lp.label, Compress(lp.features, indices)) }
+}
 
-  def filter(features: Vector, indexes: Set[Int]): Vector = {
+object Compress {
+  def apply(features: Vector, indexes: Set[Int]): Vector = {
     val (values, _) =
       features.toArray.zipWithIndex.filter { case (value, index) =>
         indexes.contains(index)}.unzip
