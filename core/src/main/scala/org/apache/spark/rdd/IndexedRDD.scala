@@ -22,6 +22,7 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.storage.StorageLevel
 
 import IndexedRDD.Id
@@ -35,6 +36,7 @@ import IndexedRDD.Id
  *
  * @tparam V the value associated with each entry in the set.
  */
+@Experimental
 class IndexedRDD[@specialized(Long, Int, Double) V: ClassTag]
     (val partitionsRDD: RDD[IndexedRDDPartition[V]])
   extends RDD[(Id, V)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD)))
