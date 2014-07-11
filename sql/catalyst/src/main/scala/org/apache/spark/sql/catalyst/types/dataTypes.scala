@@ -292,6 +292,15 @@ object StructType {
 case class StructType(fields: Seq[StructField]) extends DataType {
   require(StructType.validateFields(fields), "Found fields with the same name.")
 
+  def apply(name: String): StructField = {
+    fields.find(f => f.name == name).orNull
+  }
+
+  def apply(names: String*): StructType = {
+    val nameSet = names.toSet
+    StructType(fields.filter(f => nameSet.contains(f.name)))
+  }
+
   def toAttributes = fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
 
   def schemaString: String = {
