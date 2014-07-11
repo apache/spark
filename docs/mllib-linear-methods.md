@@ -246,6 +246,11 @@ calling `.rdd()` on your `JavaRDD` object. A standalone application example
 that is equivalent to the provided example in Scala is given bellow:
 
 {% highlight java %}
+import java.util.Random;
+
+import scala.Product2;
+import scala.Tuple2;
+
 import org.apache.spark.api.java.*;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.Function;
@@ -256,58 +261,52 @@ import org.apache.spark.mllib.classification.*;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
 
-import java.util.Random;
-
-import scala.Product2;
-import scala.Tuple2;
-
-/**
- * Simple SVM example written in Java using Spark.
- */
 public class SVMClassifier {
-    public static void main( String[] args ) {
-        SparkConf conf = new SparkConf().setAppName("SVM Classifier Example");
-        SparkContext sc = new SparkContext(conf);
-        String path = "{SPARK_HOME}/mllib/data/sample_libsvm_data.txt";
-        JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
-        //Split initial RDD into two... [60% training data, 40% testing data].
-        JavaRDD<LabeledPoint> training = data.filter(
-            new Function<LabeledPoint, Boolean>() {
-                public final Random random = new Random();
-                public Boolean call(LabeledPoint p) {
-                    if (random.nextDouble() <= 0.6)
-                        return true;
-                    else
-                        return false;
-                }
-            }
-        );
-        training.cache();
-        JavaRDD<LabeledPoint> test = data.subtract(training);
-        
-        // Run training algorithm to build the model.
-        int numIterations = 100;
-        final SVMModel model = SVMWithSGD.train(JavaRDD.toRDD(training), numIterations);
-        
-        // Clear the default threshold.
-        model.clearThreshold();
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("SVM Classifier Example");
+    SparkContext sc = new SparkContext(conf);
+    String path = "{SPARK_HOME}/mllib/data/sample_libsvm_data.txt";
+    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
+    //Split initial RDD into two... [60% training data, 40% testing data].
+    JavaRDD<LabeledPoint> training = data.filter(
+      new Function<LabeledPoint, Boolean>() {
+        public final Random random = new Random();
+        public Boolean call(LabeledPoint p) {
+          if (random.nextDouble() <= 0.6)
+            return true;
+          else
+            return false;
+        }
+      }
+    );
+    training.cache();
+    JavaRDD<LabeledPoint> test = data.subtract(training);
+    
+    // Run training algorithm to build the model.
+    int numIterations = 100;
+    final SVMModel model = SVMWithSGD.train(JavaRDD.toRDD(training), numIterations);
+    
+    // Clear the default threshold.
+    model.clearThreshold();
 
-        // Compute raw scores on the test set.
-        JavaRDD<Tuple2<Object, Object>> scoreAndLabels = test.map(
-            new Function<LabeledPoint, Tuple2<Object, Object>>() {
-                public final SVMModel m = model;
-                public Tuple2<Object, Object> call(LabeledPoint p) {
-                    Double score = m.predict((Vector) p.productElement(1));
-                    return new Tuple2<Object, Object>(score, (Double) p.productElement(0));
-                }
-            }
-        );
-        
-        // Get evaluation metrics.
-        BinaryClassificationMetrics metrics = new BinaryClassificationMetrics(JavaRDD.toRDD(scoreAndLabels));
-        double auROC = metrics.areaUnderROC();
-        
-        System.out.println("Area under ROC = " + auROC);
+    // Compute raw scores on the test set.
+    JavaRDD<Tuple2<Object, Object>> scoreAndLabels = test.map(
+      new Function<LabeledPoint, Tuple2<Object, Object>>() {
+        public final SVMModel m = model;
+        public Tuple2<Object, Object> call(LabeledPoint p) {
+          Double score = m.predict((Vector) p.productElement(1));
+          return new Tuple2<Object, Object>(score, (Double) p.productElement(0));
+        }
+      }
+    );
+    
+    // Get evaluation metrics.
+    BinaryClassificationMetrics metrics = 
+      new BinaryClassificationMetrics(JavaRDD.toRDD(scoreAndLabels));
+    double auROC = metrics.areaUnderROC();
+    
+    System.out.println("Area under ROC = " + auROC);
+  }
 }
 {% endhighlight %}
 
@@ -332,8 +331,7 @@ final SVMModel modelL1 = svmAlg.run(JavaRDD.toRDD(training));
 In order to run the following standalone application using Spark framework make
 sure that you follow the instructions provided at section [Standalone
 Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your **pom.xml** file both *spark-core_2.10* and
-*spark-mllib_2.10* as dependencies.
+should include to your build file *spark-mllib* as a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
@@ -433,6 +431,8 @@ calling `.rdd()` on your `JavaRDD` object. The corresponding Java example to
 the Scala snippet provided, is presented bellow:
 
 {% highlight java %}
+import scala.Product2;
+
 import org.apache.spark.api.java.*;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.Function;
@@ -443,62 +443,60 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.linalg.Vector;
 
-import scala.Product2;
-
 public class LinearRegression {
-    public static void main( String[] args ) {
-        SparkConf conf = new SparkConf().setAppName("Linear Regression Example");
-        JavaSparkContext sc = new JavaSparkContext(conf);
-        
-        // Load and parse the data
-        String path = "{SPARK_HOME}/mllib/data/ridge-data/lpsa.data";
-        JavaRDD<String> data = sc.textFile(path);
-        JavaRDD<LabeledPoint> parsedData = data.map(
-            new Function<String, LabeledPoint>() {
-                public LabeledPoint call(String line) {
-                    String[] parts = line.split(",");
-                    String[] features = parts[1].split(" ");
-                    double[] v = new double[features.length];
-                    for (int i = 0; i < features.length - 1; i++)
-                        v[i] = Double.parseDouble(features[i]);
-                    return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
-                }
-            }
-        );
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("Linear Regression Example");
+    JavaSparkContext sc = new JavaSparkContext(conf);
+    
+    // Load and parse the data
+    String path = "{SPARK_HOME}/mllib/data/ridge-data/lpsa.data";
+    JavaRDD<String> data = sc.textFile(path);
+    JavaRDD<LabeledPoint> parsedData = data.map(
+      new Function<String, LabeledPoint>() {
+        public LabeledPoint call(String line) {
+          String[] parts = line.split(",");
+          String[] features = parts[1].split(" ");
+          double[] v = new double[features.length];
+          for (int i = 0; i < features.length - 1; i++)
+            v[i] = Double.parseDouble(features[i]);
+          return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
+        }
+      }
+    );
 
-        // Building the model
-        int numIterations = 100;
-        final LinearRegressionModel model = LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations);
+    // Building the model
+    int numIterations = 100;
+    final LinearRegressionModel model = 
+      LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations);
 
-        // Evaluate model on training examples and compute training error
-        JavaRDD<double[]> valuesAndPreds = parsedData.map(
-            new Function<LabeledPoint, double[]>() {
-                public final LinearRegressionModel m = model;
-                public double[] call(LabeledPoint point) {
-                    double prediction = m.predict((Vector) point.productElement(1));
-                    return new double[] {(Double) point.productElement(0), prediction};
-                }
-            }
-        );
-        JavaRDD<Object> MSERdd = valuesAndPreds.map(
-            new Function<double[], Object>() {
-                public Object call(double[] lp) {
-                    return Math.pow(lp[0] - lp[1], 2.0);
-                }
-            }
-        );
-        JavaDoubleRDD MSEDoubleRdd = new JavaDoubleRDD(JavaRDD.toRDD(MSERdd));
-        double MSE = MSEDoubleRdd.mean();
-        System.out.println("training Mean Squared Error = " + MSE);
-    }
+    // Evaluate model on training examples and compute training error
+    JavaRDD<double[]> valuesAndPreds = parsedData.map(
+      new Function<LabeledPoint, double[]>() {
+        public final LinearRegressionModel m = model;
+        public double[] call(LabeledPoint point) {
+          double prediction = m.predict((Vector) point.productElement(1));
+          return new double[] {prediction, (Double) point.productElement(0)};
+        }
+      }
+    );
+    JavaRDD<Object> MSERdd = valuesAndPreds.map(
+      new Function<double[], Object>() {
+        public Object call(double[] lp) {
+          return Math.pow(lp[0] - lp[1], 2.0);
+        }
+      }
+    );
+    JavaDoubleRDD MSEDoubleRdd = new JavaDoubleRDD(JavaRDD.toRDD(MSERdd));
+    double MSE = MSEDoubleRdd.mean();
+    System.out.println("training Mean Squared Error = " + MSE);
+  }
 }
 {% endhighlight %}
 
 In order to run the following standalone application using Spark framework make
 sure that you follow the instructions provided at section [Standalone
 Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your **pom.xml** file both *spark-core_2.10* and
-*spark-mllib_2.10* as dependencies.
+should include to your build file *spark-mllib* as a dependency.
 </div>
 
 <div data-lang="python" markdown="1">

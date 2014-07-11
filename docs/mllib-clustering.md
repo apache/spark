@@ -81,43 +81,42 @@ import org.apache.spark.mllib.clustering.KMeansModel;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.linalg.Vector;
 
-public class Classifier {
-    public static void main( String[] args ) {
-        SparkConf conf = new SparkConf().setAppName("K-means Example");
-        JavaSparkContext sc = new JavaSparkContext(conf);
+public class KMeansExample {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("K-means Example");
+    JavaSparkContext sc = new JavaSparkContext(conf);
 
-        // Load and parse data
-        String path = "{SPARK_HOME}/data/kmeans_data.txt";
-        JavaRDD<String> data = sc.textFile(path);
-        JavaRDD<Vector> parsedData = data.map(
-            new Function<String, Vector>() {
-                public Vector call( String s ) {
-                    String[] sarray = s.split(" ");
-                    double[] values = new double[sarray.length];
-                    for (int i = 0; i < sarray.length; i++)
-                        values[i] = Double.parseDouble(sarray[i]);
-                    return Vectors.dense(values);
-                }
-            }
-        );
+    // Load and parse data
+    String path = "{SPARK_HOME}/data/kmeans_data.txt";
+    JavaRDD<String> data = sc.textFile(path);
+    JavaRDD<Vector> parsedData = data.map(
+      new Function<String, Vector>() {
+        public Vector call(String s) {
+          String[] sarray = s.split(" ");
+          double[] values = new double[sarray.length];
+          for (int i = 0; i < sarray.length; i++)
+            values[i] = Double.parseDouble(sarray[i]);
+          return Vectors.dense(values);
+        }
+      }
+    );
 
-        // Cluster the data into two classes using KMeans
-        int numClusters = 2;
-        int numIterations = 20;
-        KMeansModel clusters = KMeans.train(JavaRDD.toRDD(parsedData), numClusters, numIterations);
+    // Cluster the data into two classes using KMeans
+    int numClusters = 2;
+    int numIterations = 20;
+    KMeansModel clusters = KMeans.train(JavaRDD.toRDD(parsedData), numClusters, numIterations);
 
-        // Evaluate clustering by computing Within Set Sum of Squared Errors
-        double WSSSE = clusters.computeCost(JavaRDD.toRDD(parsedData));
-        System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
-    }
+    // Evaluate clustering by computing Within Set Sum of Squared Errors
+    double WSSSE = clusters.computeCost(JavaRDD.toRDD(parsedData));
+    System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
+  }
 }
 {% endhighlight %}
 
 In order to run the following standalone application using Spark framework make
 sure that you follow the instructions provided at section [Standalone
 Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your **pom.xml** file both *spark-core_2.10* and
-*spark-mllib_2.10* as dependencies.
+should include to your build file *spark-mllib* as a dependency.
 </div>
 
 <div data-lang="python" markdown="1">

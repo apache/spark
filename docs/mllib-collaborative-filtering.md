@@ -103,6 +103,9 @@ calling `.rdd()` on your `JavaRDD` object. A standalone application example
 that is equivalent to the provided example in Scala is given bellow:
 
 {% highlight java %}
+import scala.Tuple2;
+import scala.Product;
+
 import org.apache.spark.api.java.*;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.Function;
@@ -110,72 +113,76 @@ import org.apache.spark.mllib.recommendation.ALS;
 import org.apache.spark.mllib.recommendation.Rating;
 import org.apache.spark.mllib.recommendation.MatrixFactorizationModel;
 
-import scala.Tuple2;
-import scala.Product;
-
 public class CollaborativeFiltering {
-    public static void main( String[] args ) {
-        SparkConf conf = new SparkConf().setAppName("Collaborative Filtering Example");
-        JavaSparkContext sc = new JavaSparkContext(conf);
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("Collaborative Filtering Example");
+    JavaSparkContext sc = new JavaSparkContext(conf);
 
-        // Load and parse the data
-        String path = "{SPARK_HOME}/mllib/data/als/test.data";
-        JavaRDD<String> data = sc.textFile(path);
-        JavaRDD<Rating> ratings = data.map(
-            new Function<String, Rating>() {
-                public Rating call( String s ) {
-                    String[] sarray = s.split(",");
-                    return new Rating(Integer.parseInt(sarray[0]), Integer.parseInt(sarray[1]), Double.parseDouble(sarray[2]));
-                }
-            }
-        );
+    // Load and parse the data
+    String path = "{SPARK_HOME}/mllib/data/als/test.data";
+    JavaRDD<String> data = sc.textFile(path);
+    JavaRDD<Rating> ratings = data.map(
+      new Function<String, Rating>() {
+        public Rating call(String s) {
+          String[] sarray = s.split(",");
+          return new Rating(Integer.parseInt(sarray[0]), Integer.parseInt(sarray[1]), 
+                            Double.parseDouble(sarray[2]));
+        }
+      }
+    );
 
-        // Build the recommendation model using ALS
-        int rank = 10;
-        int numIterations = 20;
-        MatrixFactorizationModel model = ALS.train(JavaRDD.toRDD(ratings), rank, numIterations, 0.01); 
+    // Build the recommendation model using ALS
+    int rank = 10;
+    int numIterations = 20;
+    MatrixFactorizationModel model = ALS.train(JavaRDD.toRDD(ratings), rank, numIterations, 0.01); 
 
-        // Evaluate the model on rating data
-        JavaRDD<Tuple2<Object, Object>> userProducts = ratings.map(
-            new Function<Rating, Tuple2<Object, Object>>() {
-                public Tuple2<Object, Object> call( Rating r ) {
-                    return new Tuple2<Object, Object>(r.productElement(0), r.productElement(1));
-                }
-            }
-        );
-        JavaPairRDD<Tuple2<Integer, Integer>, Double> predictions = JavaPairRDD.fromJavaRDD(model.predict(JavaRDD.toRDD(userProducts)).toJavaRDD().map(
-            new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
-                public Tuple2<Tuple2<Integer, Integer>, Double> call( Rating r ){
-                    return new Tuple2<Tuple2<Integer, Integer>, Double>(new Tuple2<Integer, Integer>((Integer) r.productElement(0), (Integer) r.productElement(1)), (Double) r.productElement(2));
-                }
-            }
-        ));
-        JavaPairRDD<Tuple2<Integer, Integer>, Tuple2<Double, Double>> ratesAndPreds = JavaPairRDD.fromJavaRDD(ratings.map(
-            new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
-                public Tuple2<Tuple2<Integer, Integer>, Double> call( Rating r ){
-                    return new Tuple2<Tuple2<Integer, Integer>, Double>(new Tuple2<Integer, Integer>((Integer) r.productElement(0), (Integer) r.productElement(1)), (Double) r.productElement(2));
-                }
-            }
-        )).join(predictions);
-        double MSE = JavaDoubleRDD.fromRDD(JavaRDD.toRDD(ratesAndPreds.map(
-            new Function<Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>>, Object>() {
-                public Object call( Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>> key_value ) {
-                    Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>> val = (Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>>) key_value.productElement(1);
-                    Double err = ((Double) val.productElement(0)) - ((Double) val.productElement(1));
-                    return err * err;
-                }
-            }
-        ))).mean();
-        System.out.println("Mean Squared Error = " + MSE);
-    }
+    // Evaluate the model on rating data
+    JavaRDD<Tuple2<Object, Object>> userProducts = ratings.map(
+      new Function<Rating, Tuple2<Object, Object>>() {
+        public Tuple2<Object, Object> call(Rating r) {
+          return new Tuple2<Object, Object>(r.productElement(0), r.productElement(1));
+        }
+      }
+    );
+    JavaPairRDD<Tuple2<Integer, Integer>, Double> predictions = JavaPairRDD.fromJavaRDD(
+      model.predict(JavaRDD.toRDD(userProducts)).toJavaRDD().map(
+        new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
+          public Tuple2<Tuple2<Integer, Integer>, Double> call(Rating r){
+            return new Tuple2<Tuple2<Integer, Integer>, Double>(
+              new Tuple2<Integer, Integer>((Integer) r.productElement(0), 
+                          (Integer) r.productElement(1)), (Double) r.productElement(2));
+          }
+        }
+    ));
+    JavaPairRDD<Tuple2<Integer, Integer>, Tuple2<Double, Double>> ratesAndPreds = 
+      JavaPairRDD.fromJavaRDD(ratings.map(
+        new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
+          public Tuple2<Tuple2<Integer, Integer>, Double> call(Rating r){
+            return new Tuple2<Tuple2<Integer, Integer>, Double>(
+              new Tuple2<Integer, Integer>((Integer) r.productElement(0), 
+                          (Integer) r.productElement(1)), (Double) r.productElement(2));
+          }
+        }
+    )).join(predictions);
+    double MSE = JavaDoubleRDD.fromRDD(JavaRDD.toRDD(ratesAndPreds.map(
+      new Function<Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>>, Object>() {
+        public Object call(Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>> key_value) {
+          Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>> val = 
+            (Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>>) key_value.productElement(1);
+          Double err = ((Double) val.productElement(0)) - ((Double) val.productElement(1));
+          return err * err;
+        }
+      }
+    ))).mean();
+    System.out.println("Mean Squared Error = " + MSE);
+  }
 }
 {% endhighlight %}
 
 In order to run the following standalone application using Spark framework make
 sure that you follow the instructions provided at section [Standalone
 Applications](quick-start.html) of the quick-start guide. What is more, you
-should include to your **pom.xml** file both *spark-core_2.10* and
-*spark-mllib_2.10* as dependencies.
+should include to your build file *spark-mllib* as a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
