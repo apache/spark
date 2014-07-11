@@ -101,19 +101,6 @@ object SparkSubmit {
       case _ => printErrorAndExit("Deploy mode must be either client or cluster"); -1
     }
 
-    // The following modes are not supported or applicable
-    (clusterManager, deployMode) match {
-      case (MESOS, CLUSTER) =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
-      case (STANDALONE, CLUSTER) =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for Standalone clusters.")
-      case (_, CLUSTER) if args.isPython =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
-      case (_, CLUSTER) if isShell(args.primaryResource) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
-      case _ =>
-    }
-
     // Because "yarn-cluster" and "yarn-client" encapsulate both the master
     // and deploy mode, we have some logic to infer the master and deploy mode
     // from each other if only one is specified, or exit early if they are at odds.
@@ -139,6 +126,19 @@ object SparkSubmit {
           "Could not load YARN classes. " +
           "This copy of Spark may not have been compiled with YARN support.")
       }
+    }
+
+    // The following modes are not supported or applicable
+    (clusterManager, deployMode) match {
+      case (MESOS, CLUSTER) =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
+      case (STANDALONE, CLUSTER) =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for Standalone clusters.")
+      case (_, CLUSTER) if args.isPython =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
+      case (_, CLUSTER) if isShell(args.primaryResource) =>
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
+      case _ =>
     }
 
     // If we're running a python app, set the main class to our specific python runner
