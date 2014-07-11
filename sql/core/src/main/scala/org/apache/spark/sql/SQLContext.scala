@@ -246,7 +246,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
-      SkewJoin ::
       BroadcastNestedLoopJoin :: Nil
 
     /**
