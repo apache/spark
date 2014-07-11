@@ -86,7 +86,7 @@ object ScalaReflection {
   }
 
   def typeOfObject: PartialFunction[Any, DataType] = {
-    // The type of the can be determined without ambiguity.
+    // The data type can be determined without ambiguity.
     case obj: BooleanType.JvmType => BooleanType
     case obj: BinaryType.JvmType => BinaryType
     case obj: StringType.JvmType => StringType
@@ -99,10 +99,10 @@ object ScalaReflection {
     case obj: DecimalType.JvmType => DecimalType
     case obj: TimestampType.JvmType => TimestampType
     case null => NullType
-    // There is no obvious mapping from the type of the given object to a Catalyst data type.
-    // A user should provide his/her specific rules (in a user-defined PartialFunction) to infer
-    // the Catalyst data type for other types of objects and then compose the user-defined
-    // PartialFunction with this one.
+    // For other cases, there is no obvious mapping from the type of the given object to a
+    // Catalyst data type. A user should provide his/her specific rules
+    // (in a user-defined PartialFunction) to infer the Catalyst data type for other types of
+    // objects and then compose the user-defined PartialFunction with this one.
   }
 
   implicit class CaseClassRelation[A <: Product : TypeTag](data: Seq[A]) {
