@@ -46,6 +46,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     parquetType.getPrimitiveTypeName match {
       case ParquetPrimitiveTypeName.BINARY
         if parquetType.getOriginalType == ParquetOriginalType.UTF8 => StringType
+      case ParquetPrimitiveTypeName.BINARY => BinaryType
       case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
       case ParquetPrimitiveTypeName.DOUBLE => DoubleType
       case ParquetPrimitiveTypeName.FLOAT => FloatType
@@ -167,6 +168,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
   def fromPrimitiveDataType(ctype: DataType):
       Option[(ParquetPrimitiveTypeName, Option[ParquetOriginalType])] = ctype match {
     case StringType => Some(ParquetPrimitiveTypeName.BINARY, Some(ParquetOriginalType.UTF8))
+    case BinaryType => Some(ParquetPrimitiveTypeName.BINARY, None)
     case BooleanType => Some(ParquetPrimitiveTypeName.BOOLEAN, None)
     case DoubleType => Some(ParquetPrimitiveTypeName.DOUBLE, None)
     case FloatType => Some(ParquetPrimitiveTypeName.FLOAT, None)
