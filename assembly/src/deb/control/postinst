@@ -1,0 +1,40 @@
+#!/bin/sh
+set -e
+
+SPARK_HOME=/usr/share/apache-spark
+SPARK_LOG_DIR=/var/log/apache-spark
+SPARK_USER=apache-spark
+SPARK_GROUP=apache-spark
+
+[ -f /etc/default/apache-spark ] && . /etc/default/apache-spark
+
+case "$1" in
+	configure)
+	if ! getent group "$SPARK_GROUP" > /dev/null 2>&1 ; then
+	    addgroup --system "$SPARK_GROUP" --quiet
+	fi
+	if ! id $SPARK_USER > /dev/null 2>&1 ; then
+	    adduser --system --home "$SPARK_HOME" --no-create-home \
+		--ingroup "$SPARK_GROUP" --disabled-password --shell /bin/false \
+		"$SPARK_USER"
+	fi
+
+	# Set user permissions on /var/log/spark
+	mkdir -p $SPARK_LOG_DIR
+	chown -R $SPARK_USER:$SPARK_GROUP $SPARK_LOG_DIR
+	chmod 755 $SPARK_LOG_DIR
+
+	# this is a fresh installation
+	if [ -z $2 ] ; then
+        echo "### To start a Spark master by default on bootup, please execute"
+        echo " sudo update-rc.d spark-master defaults 95 10"
+        echo "### To start a Spark slave by default on bootup, please execute"
+        echo " sudo update-rc.d spark-slave defaults 95 10"
+        echo "### In order to start a Spark master, execute"
+        echo " sudo /etc/init.d/spark-master start"
+        echo "### In order to start a Spark slave, execute"
+        echo " sudo /etc/init.d/spark-slave start"
+	fi
+	;;
+esac
+

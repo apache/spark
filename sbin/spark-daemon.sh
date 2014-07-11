@@ -123,6 +123,10 @@ if [ "$SPARK_NICENESS" = "" ]; then
     export SPARK_NICENESS=0
 fi
 
+sudoUser=""
+if [ "$SPARK_USER" = "" ]; then
+    sudoUser = "sudo -u $SPARK_USER"
+fi
 
 case $startStop in
 
@@ -145,7 +149,7 @@ case $startStop in
     spark_rotate_log "$log"
     echo starting $command, logging to $log
     cd "$SPARK_PREFIX"
-    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+    nohup nice -n $SPARK_NICENESS $sudoUser "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
     newpid=$!
     echo $newpid > $pid
     sleep 2

@@ -1,0 +1,89 @@
+#!/bin/sh
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+#
+# /etc/init.d/apache-spark-master -- startup script for the Spark master
+#
+### BEGIN INIT INFO
+# Provides:          apache-spark-master
+# Required-Start:    $network $named
+# Required-Stop:     $network $named
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Starts Apache Spark master
+# Description:       Starts Apache Spark matser
+### END INIT INFO
+
+DESC="Apache Spark master"
+NAME=apache-spark-master
+
+export SPARK_HOME=/usr/share/apache-spark
+export SPARK_PREFIX=$SPARK_HOME
+export SPARK_CONF_DIR=/etc/apache-spark
+export SPARK_LOG_DIR=/var/log/apache-spark
+export SPARK_PID_DIR=/var/run/
+export SPARK_USER=apache-spark
+export SPARK_IDENT_STRING=$SPARK_USER
+
+# ensure we don't try compute incorrect path
+export SPARK_CONFIG_LOADED=1
+
+if [ `id -u` -ne 0 ]; then
+	echo "You need root privileges to run this script"
+	exit 1
+fi
+
+. /lib/lsb/init-functions
+
+if [ -r /etc/default/rcS ]; then
+	. /etc/default/rcS
+fi
+
+. "$SPARK_HOME/bin/load-spark-env.sh"
+
+set -a
+[ -f /etc/default/apache-spark ] && . /etc/default/apache-spark
+set -a
+
+if [ "$SPARK_MASTER_PORT" = "" ]; then
+  SPARK_MASTER_PORT=7077
+fi
+if [ "$SPARK_MASTER_IP" = "" ]; then
+  SPARK_MASTER_IP=`hostname`
+fi
+if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then
+  SPARK_MASTER_WEBUI_PORT=8080
+fi
+
+case "$1" in
+  start)
+	log_daemon_msg "Starting Spark master"
+	"$SPARK_HOME/sbin/spark-daemon.sh" start org.apache.spark.deploy.master.Master 1 --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT
+	log_end_msg $?
+	;;
+  stop)
+	log_daemon_msg "Stopping Spark master"
+	"$SPARK_HOME/sbin/spark-daemon.sh" stop org.apache.spark.deploy.master.Master 1
+	log_end_msg 0
+	;;
+  *)
+	log_success_msg "Usage: $0 {start|stop}"
+	exit 1
+	;;
+esac
+
+exit 0

@@ -1,0 +1,2 @@
+/etc/default/apache-spark
+/etc/apache-spark/log4j.properties

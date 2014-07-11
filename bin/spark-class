@@ -42,6 +42,10 @@ if [ -n "$SPARK_MEM" ]; then
   echo -e "(e.g., spark.executor.memory or SPARK_DRIVER_MEMORY)." 1>&2
 fi
 
+if [ "$SPARK_CONF_DIR" = "" ]; then
+  export SPARK_CONF_DIR="$FWDIR/conf"
+fi
+
 # Use SPARK_MEM or 512m as the default memory, to be overridden by specific options
 DEFAULT_MEM=${SPARK_MEM:-512m}
 
@@ -102,8 +106,8 @@ fi
 JAVA_OPTS="-XX:MaxPermSize=128m $OUR_JAVA_OPTS"
 JAVA_OPTS="$JAVA_OPTS -Xms$OUR_JAVA_MEM -Xmx$OUR_JAVA_MEM"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
-if [ -e "$FWDIR/conf/java-opts" ] ; then
-  JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"
+if [ -e "$SPARK_CONF_DIR/java-opts" ] ; then
+  JAVA_OPTS="$JAVA_OPTS `cat $SPARK_CONF_DIR/java-opts`"
 fi
 export JAVA_OPTS
 # Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in CommandUtils.scala!
@@ -152,4 +156,8 @@ if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
   echo -e "========================================\n" 1>&2
 fi
 
-exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
+if [ "$SPARK_USER" = "" ]; then
+  exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
+else
+  exec sudo -E -u $SPARK_USER "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
+fi

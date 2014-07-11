@@ -1,0 +1,40 @@
+#!/bin/sh
+set -e
+
+SPARK_LOG_DIR=/var/log/apache-spark
+SPARK_WORKER_DIR=/tmp/apache-spark-worker
+SPARK_USER=apache-spark
+SPARK_GROUP=apache-spark
+
+[ -f /etc/default/apache-spark ] && . /etc/default/apache-spark
+
+case "$1" in
+    remove)
+        # Remove logs
+        rm -rf $SPARK_LOG_DIR
+    ;;
+
+    purge)
+    	# Remove service
+        update-rc.d apache-spark-master remove >/dev/null || true
+        update-rc.d apache-spark-slave remove >/dev/null || true
+
+        # Remove logs
+        rm -rf $SPARK_LOG_DIR
+        # Remove worker dir
+        rm -rf $SPARK_WORKER_DIR
+
+        # Remove user/group
+        deluser $SPARK_USER || true
+        delgroup $SPARK_GROUP || true
+    ;;
+
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # Nothing to do here
+    ;;
+
+    *)
+        echo "$0 called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
