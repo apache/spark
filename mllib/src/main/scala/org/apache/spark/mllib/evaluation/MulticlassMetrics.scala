@@ -20,6 +20,7 @@ package org.apache.spark.mllib.evaluation
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.linalg.{Matrices, Matrix}
 import org.apache.spark.rdd.RDD
 
 import scala.collection.Map
@@ -31,19 +32,19 @@ import scala.collection.Map
  * @param predictionAndLabels an RDD of (prediction, label) pairs.
  */
 @Experimental
-class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) extends Logging {
+class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
 
   private lazy val labelCountByClass: Map[Double, Long] = predictionAndLabels.values.countByValue()
   private lazy val labelCount: Long = labelCountByClass.values.sum
   private lazy val tpByClass: Map[Double, Int] = predictionAndLabels
     .map { case (prediction, label) =>
-    (label, if (label == prediction) 1 else 0)
-  }.reduceByKey(_ + _)
+      (label, if (label == prediction) 1 else 0)
+    }.reduceByKey(_ + _)
     .collectAsMap()
   private lazy val fpByClass: Map[Double, Int] = predictionAndLabels
     .map { case (prediction, label) =>
-    (prediction, if (prediction != label) 1 else 0)
-  }.reduceByKey(_ + _)
+      (prediction, if (prediction != label) 1 else 0)
+    }.reduceByKey(_ + _)
     .collectAsMap()
   private lazy val confusions = predictionAndLabels.map {
     case (prediction, label) => ((prediction, label), 1)
@@ -55,12 +56,13 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) extends Logg
    * they are ordered by class label ascending,
    * as in "labels"
    */
-  lazy val confusionMatrix: Array[Array[Int]] = {
-    val matrix = Array.ofDim[Int](labels.size, labels.size)
+  lazy val confusionMatrix: Matrix = {
+    val transposedMatrix = Array.ofDim[Double](labels.size, labels.size)
     for (i <- 0 to labels.size - 1; j <- 0 to labels.size - 1) {
-      matrix(j)(i) = confusions.getOrElse((labels(i), labels(j)), 0)
+      transposedMatrix(i)(j) = confusions.getOrElse((labels(i), labels(j)), 0).toDouble
     }
-    matrix
+    val flatMatrix = transposedMatrix.flatMap(arr => arr)
+    Matrices.dense(transposedMatrix.length, transposedMatrix(0).length, flatMatrix)
   }
 
   /**

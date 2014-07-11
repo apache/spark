@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.evaluation
 
+import org.apache.spark.mllib.linalg.Matrices
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.scalatest.FunSuite
 
@@ -28,7 +29,7 @@ class MulticlassMetricsSuite extends FunSuite with LocalSparkContext {
      * |1|3|0| true class1 (4 instances)
      * |0|0|1| true class2 (1 instance)
      */
-    val confusionMatrix = Array(Array(2, 1, 1), Array(1, 3, 0), Array(0, 0, 1))
+    val confusionMatrix = Matrices.dense(3, 3, Array(2, 1, 0, 1, 3, 0, 1, 0, 1))
     val labels = Array(0.0, 1.0, 2.0)
     val predictionAndLabels = sc.parallelize(
       Seq((0.0, 0.0), (0.0, 1.0), (0.0, 0.0), (1.0, 0.0), (1.0, 1.0),
@@ -51,7 +52,7 @@ class MulticlassMetricsSuite extends FunSuite with LocalSparkContext {
     val f2measure1 = (1 + 2 * 2) * precision1 * recall1 / (2 * 2 * precision1 + recall1)
     val f2measure2 = (1 + 2 * 2) * precision2 * recall2 / (2 * 2 * precision2 + recall2)
 
-    assert(metrics.confusionMatrix.deep == confusionMatrix.deep)
+    assert(metrics.confusionMatrix.toArray.sameElements(confusionMatrix.toArray))
     assert(math.abs(metrics.falsePositiveRate(0.0) - fpRate0) < delta)
     assert(math.abs(metrics.falsePositiveRate(1.0) - fpRate1) < delta)
     assert(math.abs(metrics.falsePositiveRate(2.0) - fpRate2) < delta)
