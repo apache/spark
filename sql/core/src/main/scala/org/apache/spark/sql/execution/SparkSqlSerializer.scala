@@ -49,7 +49,7 @@ private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(co
 }
 
 private[execution] class KryoResourcePool(size: Int)
-  extends ResourcePool[SerializerInstance](size) {
+    extends ResourcePool[SerializerInstance](size) {
 
   val ser: KryoSerializer = {
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
@@ -59,8 +59,7 @@ private[execution] class KryoResourcePool(size: Int)
     new KryoSerializer(sparkConf)
   }
 
-  def newInstance() =
-    ser.newInstance()
+  def newInstance() = ser.newInstance()
 }
 
 private[sql] object SparkSqlSerializer {
