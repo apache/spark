@@ -15,29 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples
+package org.apache.spark.ui
 
-import org.apache.spark._
+private[spark] object ToolTips {
+  val SCHEDULER_DELAY =
+    """Scheduler delay includes time to ship the task from the scheduler to
+       the executor, and time the time to send a message from the executor to the scheduler stating
+       that the task has completed. When the scheduler becomes overloaded, task completion messages
+       become queued up, and scheduler delay increases."""
 
+  val INPUT = "Bytes read from Hadoop or from Spark storage."
 
-object HdfsTest {
+  val SHUFFLE_WRITE = "Bytes written to disk in order to be read by a shuffle in a future stage."
 
-  /** Usage: HdfsTest [file] */
-  def main(args: Array[String]) {
-    if (args.length < 1) {
-      System.err.println("Usage: HdfsTest <file>")
-      System.exit(1)
-    }
-    val sparkConf = new SparkConf().setAppName("HdfsTest")
-    val sc = new SparkContext(sparkConf)
-    val file = sc.textFile(args(0))
-    val mapped = file.map(s => s.length).cache()
-    for (iter <- 1 to 10) {
-      val start = System.currentTimeMillis()
-      for (x <- mapped) { x + 2 }
-      val end = System.currentTimeMillis()
-      println("Iteration " + iter + " took " + (end-start) + " ms")
-    }
-    sc.stop()
-  }
+  val SHUFFLE_READ =
+    """Bytes read from remote executors. Typically less than shuffle write bytes
+       because this does not include shuffle data read locally."""
 }

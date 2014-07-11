@@ -78,7 +78,7 @@ case class AllDataTypesWithNonPrimitiveType(
     booleanField: Boolean,
     array: Seq[Int],
     map: Map[Int, String],
-    nested: Nested)
+    data: Data)
 
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   TestData // Load test data tables.
@@ -138,7 +138,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     TestSQLContext.sparkContext.parallelize(range)
       .map(x => AllDataTypesWithNonPrimitiveType(
         s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
-        Seq(x), Map(x -> s"$x"), Nested(x, s"$x")))
+        (0 until x), (0 until x).map(i => i -> s"$i").toMap, Data((0 until x), Nested(x, s"$x"))))
       .saveAsParquetFile(tempDir)
     val result = parquetFile(tempDir).collect()
     range.foreach {
@@ -151,9 +151,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         assert(result(i).getShort(5) === i.toShort)
         assert(result(i).getByte(6) === i.toByte)
         assert(result(i).getBoolean(7) === (i % 2 == 0))
-        assert(result(i)(8) === Seq(i))
-        assert(result(i)(9) === Map(i -> s"$i"))
-        assert(result(i)(10) === new GenericRow(Array[Any](i, s"$i")))
+        assert(result(i)(8) === (0 until i))
+        assert(result(i)(9) === (0 until i).map(i => i -> s"$i").toMap)
+        assert(result(i)(10) === new GenericRow(Array[Any]((0 until i), new GenericRow(Array[Any](i, s"$i")))))
     }
   }
 
