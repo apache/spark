@@ -75,6 +75,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$<init>$default$7")
           ) ++
+          MimaBuild.excludeSparkClass("mllib.linalg.distributed.ColumnStatisticsAggregator") ++
           MimaBuild.excludeSparkClass("rdd.ZippedRDD") ++
           MimaBuild.excludeSparkClass("rdd.ZippedPartition") ++
           MimaBuild.excludeSparkClass("util.SerializableHyperLogLog") ++
