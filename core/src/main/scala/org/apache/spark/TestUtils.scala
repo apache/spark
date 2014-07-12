@@ -92,8 +92,8 @@ private[spark] object TestUtils {
   def createCompiledClass(className: String, destDir: File, value: String = ""): File = {
     val compiler = ToolProvider.getSystemJavaCompiler
     val sourceFile = new JavaSourceFromString(className,
-      "public class " + className + " { @Override public String toString() { " +
-       "return \"" + value + "\";}}")
+      "public class " + className + " implements java.io.Serializable {" +
+      "  @Override public String toString() { return \"" + value + "\"; }}")
 
     // Calling this outputs a class file in pwd. It's easier to just rename the file than
     // build a custom FileManager that controls the output location.
