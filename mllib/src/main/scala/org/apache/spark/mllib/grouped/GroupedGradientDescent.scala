@@ -152,13 +152,14 @@ object GroupedGradientDescent extends Logging {
     val dataWithKey = data.map( x => (x._1, (x._1, x._2._1, x._2._2)))
 
     for (i <- 1 to numIterations) {
+      val weightSet_b = data.context.broadcast(weightSet)
       val gradientOut = dataWithKey.sample(false, miniBatchFraction, 42 + i)
         .combineByKey[(BDV[Double], Double)](
           createCombiner = (x : (K, Double, Vector)) => {
             val key = x._1
             val label = x._2
             val features = x._3
-            val (new_gradient, new_loss) = gradient.compute(features, label, weightSet(key))
+            val (new_gradient, new_loss) = gradient.compute(features, label, weightSet_b.value(key))
             (BDV(new_gradient.toArray), new_loss)
           },
           mergeValue = (x : (BDV[Double],Double), y : (K,Double,Vector)) => {
@@ -167,7 +168,7 @@ object GroupedGradientDescent extends Logging {
             val key = y._1
             val label = y._2
             val features = Vectors.dense(y._3.toArray)
-            val (new_gradient, new_loss) = gradient.compute(features, label, weightSet(key))
+            val (new_gradient, new_loss) = gradient.compute(features, label, weightSet_b.value(key))
             (in_gradient + BDV(new_gradient.toArray), loss + new_loss)
           },
           mergeCombiners = (x:(BDV[Double],Double), y:(BDV[Double],Double)) => {
@@ -182,7 +183,7 @@ object GroupedGradientDescent extends Logging {
       val update = gradientOut.map( x => {
         val a : BDV[Double] = BDV(x._2._1.toArray) / miniBatchSize(x._1)
         val supdate = updater.compute(
-          weightSet(x._1), Vectors.dense(a.toArray), stepSize, i, regParam)
+          weightSet_b.value(x._1), Vectors.dense(a.toArray), stepSize, i, regParam)
         (x._1, supdate)
       })
       val update_c = update.collect()
