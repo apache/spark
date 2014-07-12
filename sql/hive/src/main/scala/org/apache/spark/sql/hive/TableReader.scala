@@ -59,10 +59,6 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
   private val _broadcastedHiveConf =
     sc.sparkContext.broadcast(new SerializableWritable(sc.hiveconf))
 
-  def broadcastedHiveConf = _broadcastedHiveConf
-
-  def hiveConf = _broadcastedHiveConf.value.value
-
   override def makeRDDForTable(hiveTable: HiveTable): RDD[_] =
     makeRDDForTable(
       hiveTable,
@@ -206,17 +202,10 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
     tableDesc: TableDesc,
     path: String,
     inputFormatClass: Class[InputFormat[Writable, Writable]]): RDD[Writable] = {
-
-    val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
-
-    val rdd = new HadoopRDD(
-      sc.sparkContext,
-      _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableWritable[Configuration]]],
-      Some(initializeJobConfFunc),
-      inputFormatClass,
-      classOf[Writable],
-      classOf[Writable],
-      _minSplitsPerRDD)
+    val jobConf = new JobConf(_broadcastedHiveConf.value.value.asInstanceOf[Configuration])
+    HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc)(jobConf)
+    val rdd = sc.sparkContext.hadoopRDD(jobConf, inputFormatClass, classOf[Writable],
+      classOf[Writable],_minSplitsPerRDD)
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
