@@ -72,9 +72,7 @@ private[spark] class Master(
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
   var nextAppNumber = 0
-
   val appIdToUI = new HashMap[String, SparkUI]
-  val fileSystemsUsed = new HashSet[FileSystem]
 
   val drivers = new HashSet[DriverInfo]
   val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -159,7 +157,6 @@ private[spark] class Master(
       recoveryCompletionTask.cancel()
     }
     webUi.stop()
-    fileSystemsUsed.foreach(_.close())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
@@ -481,7 +478,7 @@ private[spark] class Master(
     // First schedule drivers, they take strict precedence over applications
     val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
     for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
-      for (driver <- waitingDrivers) {
+      for (driver <- List(waitingDrivers: _*)) { // iterate over a copy of waitingDrivers
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver

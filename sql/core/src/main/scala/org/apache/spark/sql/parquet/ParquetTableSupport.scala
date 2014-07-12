@@ -156,7 +156,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     writer.startMessage()
     while(index < attributes.size) {
       // null values indicate optional fields but we do not check currently
-      if (record(index) != null && record(index) != Nil) {
+      if (record(index) != null) {
         writer.startField(attributes(index).name, index)
         writeValue(attributes(index).dataType, record(index))
         writer.endField(attributes(index).name, index)
@@ -167,7 +167,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 
   private[parquet] def writeValue(schema: DataType, value: Any): Unit = {
-    if (value != null && value != Nil) {
+    if (value != null) {
       schema match {
         case t @ ArrayType(_) => writeArray(
           t,
@@ -184,7 +184,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 
   private[parquet] def writePrimitive(schema: PrimitiveType, value: Any): Unit = {
-    if (value != null && value != Nil) {
+    if (value != null) {
       schema match {
         case StringType => writer.addBinary(
           Binary.fromByteArray(
@@ -192,9 +192,9 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
           )
         )
         case IntegerType => writer.addInteger(value.asInstanceOf[Int])
-        case ShortType => writer.addInteger(value.asInstanceOf[Int])
+        case ShortType => writer.addInteger(value.asInstanceOf[Short])
         case LongType => writer.addLong(value.asInstanceOf[Long])
-        case ByteType => writer.addInteger(value.asInstanceOf[Int])
+        case ByteType => writer.addInteger(value.asInstanceOf[Byte])
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
         case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
@@ -206,12 +206,12 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writeStruct(
       schema: StructType,
       struct: CatalystConverter.StructScalaType[_]): Unit = {
-    if (struct != null && struct != Nil) {
+    if (struct != null) {
       val fields = schema.fields.toArray
       writer.startGroup()
       var i = 0
       while(i < fields.size) {
-        if (struct(i) != null && struct(i) != Nil) {
+        if (struct(i) != null) {
           writer.startField(fields(i).name, i)
           writeValue(fields(i).dataType, struct(i))
           writer.endField(fields(i).name, i)

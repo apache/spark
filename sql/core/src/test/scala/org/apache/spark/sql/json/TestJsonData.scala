@@ -72,7 +72,8 @@ object TestJsonData {
 
   val arrayElementTypeConflict =
     TestSQLContext.sparkContext.parallelize(
-      """{"array": [1, 1.1, true, null, [], {}, [2,3,4], {"field":"str"}]}""" :: Nil)
+      """{"array1": [1, 1.1, true, null, [], {}, [2,3,4], {"field":"str"}],
+          "array2": [{"field":214748364700}, {"field":1}]}""" :: Nil)
 
   val missingFields =
     TestSQLContext.sparkContext.parallelize(
