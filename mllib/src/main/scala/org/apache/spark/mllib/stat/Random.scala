@@ -150,3 +150,36 @@ class PoissonDistribution(val mean: Double) extends Distribution {
    */
   override def copy(): Distribution = new PoissonDistribution(mean)
 }
+
+// alternative "in-house" implementation of Poisson without using colt
+class PoissonDistributionNative(val mean: Double) extends Distribution {
+
+  private val random = new Random()
+
+  /**
+   * Get a randomly generated value from the distribution
+   */
+  override def nextDouble(): Double = {
+    var k = 0
+    var p = random.nextDouble()
+    val target = math.exp(-mean)
+    while (p > target) {
+      p *= random.nextDouble()
+      k += 1
+    }
+    k
+  }
+
+  /**
+   * Set the seed for the underlying random number generator
+   */
+  override def setSeed(seed: Long): Unit = random.setSeed(seed)
+
+  /**
+   * Make a copy of this distribution object.
+   *
+   * This is essential because most random number generator implementations are locking,
+   * but we need to be able to invoke nextDouble in parallel for each partition.
+   */
+  override def copy(): Distribution = new PoissonDistributionNative(mean)
+}
