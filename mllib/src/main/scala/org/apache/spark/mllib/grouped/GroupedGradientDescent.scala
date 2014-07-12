@@ -159,7 +159,9 @@ object GroupedGradientDescent extends Logging {
             val key = x._1
             val label = x._2
             val features = x._3
-            val (new_gradient, new_loss) = gradient_b.value.compute(features, label, weightSet_b.value(key))
+            val (new_gradient, new_loss) = gradient_b.value.compute(
+              features, label, weightSet_b.value(key)
+            )
             (BDV(new_gradient.toArray), new_loss)
           },
           mergeValue = (x : (BDV[Double],Double), y : (K,Double,Vector)) => {
@@ -168,7 +170,9 @@ object GroupedGradientDescent extends Logging {
             val key = y._1
             val label = y._2
             val features = Vectors.dense(y._3.toArray)
-            val (new_gradient, new_loss) = gradient_b.value.compute(features, label, weightSet_b.value(key))
+            val (new_gradient, new_loss) = gradient_b.value.compute(
+              features, label, weightSet_b.value(key)
+            )
             (in_gradient + BDV(new_gradient.toArray), loss + new_loss)
           },
           mergeCombiners = (x:(BDV[Double],Double), y:(BDV[Double],Double)) => {
