@@ -30,12 +30,13 @@ private[mllib] class RandomRDDPartition(val idx: Int,
 
   override val index: Int = idx
 
-  private val rng = distribution
-  rng.setSeed(seed + idx)
-
-  private val iter = new FixedSizeIterator(size, rng)
-
-  def getIterator = iter
+  // The RNG has to be reset every time the iterator is requested to guarantee same data
+  // every time the content of the RDD is examined.
+  def getIterator = {
+    val newRng = distribution.copy()
+    newRng.setSeed(seed + idx)
+    new FixedSizeIterator(size, newRng)
+  }
 }
 
 private[mllib] class FixedSizeIterator(override val size: Long, val rng: Distribution)
@@ -71,7 +72,7 @@ private[mllib] class RandomRDD(@transient private var sc: SparkContext,
       partitions(i) =  if (i == 0) {
         new RandomRDDPartition(i, firstPartitionSize, distribution, seed)
       } else {
-        new RandomRDDPartition(i, partitionSize, distribution.copy, seed)
+        new RandomRDDPartition(i, partitionSize, distribution, seed)
       }
       i += 1
     }
