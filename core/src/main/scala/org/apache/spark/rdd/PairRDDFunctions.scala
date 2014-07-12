@@ -354,8 +354,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    *
    * Note: This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.reduceByKey]]
-   * or [[PairRDDFunctions.combineByKey]] will provide much better performance.
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupByKey(partitioner: Partitioner): RDD[(K, Iterable[V])] = {
     // groupByKey shouldn't use map side combine because map side combine does not
@@ -374,8 +374,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * resulting RDD with into `numPartitions` partitions.
    *
    * Note: This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.reduceByKey]]
-   * or [[PairRDDFunctions.combineByKey]] will provide much better performance.
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupByKey(numPartitions: Int): RDD[(K, Iterable[V])] = {
     groupByKey(new HashPartitioner(numPartitions))
@@ -463,8 +463,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * resulting RDD with the existing partitioner/parallelism level.
    *
    * Note: This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.reduceByKey]]
-   * or [[PairRDDFunctions.combineByKey]] will provide much better performance.
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupByKey(): RDD[(K, Iterable[V])] = {
     groupByKey(defaultPartitioner(self))
