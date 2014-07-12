@@ -99,8 +99,6 @@ private[spark] object AkkaUtils extends Logging {
       |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
       |akka.log-dead-letters = $lifecycleEvents
       |akka.log-dead-letters-during-shutdown = $lifecycleEvents
-      |akka.actor.debug.recieve on
-      |akka.loglevel "DEBUG"
       """.stripMargin))
 
     val actorSystem = ActorSystem(name, akkaConf)
