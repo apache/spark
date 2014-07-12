@@ -18,9 +18,9 @@
 package org.apache.spark.streaming.flume
 
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaInputDStream, JavaStreamingContext, JavaDStream}
 import org.apache.spark.streaming.dstream.{ReceiverInputDStream, DStream}
+import org.apache.spark.streaming.StreamingContext
 
 object FlumeUtils {
   /**
@@ -55,7 +55,38 @@ object FlumeUtils {
       enableDecompression: Boolean
     ): ReceiverInputDStream[SparkFlumeEvent] = {
     val inputStream = new FlumeInputDStream[SparkFlumeEvent](
-        ssc, hostname, port, storageLevel, enableDecompression)
+        ssc, hostname, port, storageLevel, enableDecompression,
+        false, null, null, null)
+        
+    inputStream
+  }
+  
+  /**
+   * Create a input stream from a Flume source.
+   * @param ssc      StreamingContext object
+   * @param hostname Hostname of the slave machine to which the flume data will be sent
+   * @param port     Port of the slave machine to which the flume data will be sent
+   * @param storageLevel  Storage level to use for storing the received objects
+   * @param enableDecompression  should netty server decompress input stream
+   * @param enableSsl  should netty server decrypt SSL
+   * @param keystore  path to key store file
+   * @param keystorePassword  the password for the key store
+   * @param keystoreType  key store type 
+   */
+  def createStream (
+      ssc: StreamingContext,
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel,
+      enableDecompression: Boolean,
+      enableSsl: Boolean,
+      keystore: String,
+      keystorePassword: String, 
+      keystoreType: String
+    ): ReceiverInputDStream[SparkFlumeEvent] = {
+    val inputStream = new FlumeInputDStream[SparkFlumeEvent](
+        ssc, hostname, port, storageLevel, enableDecompression,
+        enableSsl, keystore, keystorePassword, keystoreType)
         
     inputStream
   }
@@ -104,5 +135,31 @@ object FlumeUtils {
       enableDecompression: Boolean
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
     createStream(jssc.ssc, hostname, port, storageLevel, enableDecompression)
+  }
+  
+  /**
+   * Creates a input stream from a Flume source.
+   * @param hostname Hostname of the slave machine to which the flume data will be sent
+   * @param port     Port of the slave machine to which the flume data will be sent
+   * @param storageLevel  Storage level to use for storing the received objects
+   * @param enableDecompression  should netty server decompress input stream
+   * @param enableSsl  should netty server decrypt SSL
+   * @param keystore  path to key store file
+   * @param keystorePassword  the password for the key store
+   * @param keystoreType  key store type 
+   */
+  def createStream(
+      jssc: JavaStreamingContext,
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel,
+      enableDecompression: Boolean,
+      enableSsl: Boolean,
+      keystore: String,
+      keystorePassword: String, 
+      keystoreType: String
+    ): JavaReceiverInputDStream[SparkFlumeEvent] = {
+    createStream(jssc.ssc, hostname, port, storageLevel, enableDecompression,
+        enableSsl, keystore, keystorePassword, keystoreType)
   }
 }

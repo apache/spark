@@ -19,8 +19,8 @@ package org.apache.spark.streaming.flume;
 
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
-
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
+
 import org.junit.Test;
 
 public class JavaFlumeStreamSuite extends LocalJavaStreamingContext {
@@ -32,5 +32,7 @@ public class JavaFlumeStreamSuite extends LocalJavaStreamingContext {
       StorageLevel.MEMORY_AND_DISK_SER_2());
     JavaReceiverInputDStream<SparkFlumeEvent> test3 = FlumeUtils.createStream(ssc, "localhost", 12345,
       StorageLevel.MEMORY_AND_DISK_SER_2(), false);
+    JavaReceiverInputDStream<SparkFlumeEvent> test4 = FlumeUtils.createStream(ssc, "localhost", 12345,
+    	      StorageLevel.MEMORY_AND_DISK_SER_2(), false, false, null, null, null);
   }
 }
