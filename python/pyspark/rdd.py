@@ -48,6 +48,22 @@ from py4j.java_collections import ListConverter, MapConverter
 __all__ = ["RDD"]
 
 
+def portable_hash(x):
+    if x is None:
+        return 0
+    if isinstance(x, tuple):
+        h = 0x345678L
+        for i in x:
+            h ^= portable_hash(i)
+            h *= 1000003
+            h &= 0xffffffff
+        h += 97531L
+        if h == -1:
+            h = -2
+        return h
+    return hash(x)
+
+
 def _extract_concise_traceback():
     """
     This function returns the traceback info for a callsite, returns a dict
@@ -1144,7 +1160,7 @@ class RDD(object):
         return python_right_outer_join(self, other, numPartitions)
 
     # TODO: add option to control map-side combining
-    def partitionBy(self, numPartitions, partitionFunc=hash):
+    def partitionBy(self, numPartitions, partitionFunc=portable_hash):
         """
         Return a copy of the RDD partitioned using the specified partitioner.
 
