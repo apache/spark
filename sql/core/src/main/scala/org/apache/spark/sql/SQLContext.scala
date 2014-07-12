@@ -93,7 +93,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def applySchema[A](rdd: RDD[A],schema: StructType, f: A => Row): SchemaRDD =
+  def applySchema[A](rdd: RDD[A], schema: StructType, f: A => Row): SchemaRDD =
     applySchemaToPartitions(rdd, schema, (iter: Iterator[A]) => iter.map(f))
 
   /**

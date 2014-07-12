@@ -127,6 +127,18 @@ class JsonSuite extends QueryTest {
     checkDataType(ArrayType(IntegerType), ArrayType(LongType), ArrayType(LongType))
     checkDataType(ArrayType(IntegerType), ArrayType(StringType), ArrayType(StringType))
     checkDataType(ArrayType(IntegerType), StructType(Nil), StringType)
+    checkDataType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType), ArrayType(IntegerType, true))
+    checkDataType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, false), ArrayType(IntegerType, true))
+    checkDataType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), ArrayType(IntegerType, true))
+    checkDataType(
+      ArrayType(IntegerType, false), ArrayType(IntegerType), ArrayType(IntegerType, false))
+    checkDataType(
+      ArrayType(IntegerType, false), ArrayType(IntegerType, false), ArrayType(IntegerType, false))
+    checkDataType(
+      ArrayType(IntegerType, false), ArrayType(IntegerType, false), ArrayType(IntegerType))
 
     // StructType
     checkDataType(StructType(Nil), StructType(Nil), StructType(Nil))
@@ -200,7 +212,7 @@ class JsonSuite extends QueryTest {
       AttributeReference("arrayOfDouble", ArrayType(DoubleType), true)() ::
       AttributeReference("arrayOfInteger", ArrayType(IntegerType), true)() ::
       AttributeReference("arrayOfLong", ArrayType(LongType), true)() ::
-      AttributeReference("arrayOfNull", ArrayType(StringType), true)() ::
+      AttributeReference("arrayOfNull", ArrayType(StringType, true), true)() ::
       AttributeReference("arrayOfString", ArrayType(StringType), true)() ::
       AttributeReference("arrayOfStruct", ArrayType(
         StructType(StructField("field1", BooleanType, true) ::
@@ -451,7 +463,7 @@ class JsonSuite extends QueryTest {
     val jsonSchemaRDD = jsonRDD(arrayElementTypeConflict)
 
     val expectedSchema =
-      AttributeReference("array1", ArrayType(StringType), true)() ::
+      AttributeReference("array1", ArrayType(StringType, true), true)() ::
       AttributeReference("array2", ArrayType(StructType(
         StructField("field", LongType, true) :: Nil)), true)() :: Nil
 

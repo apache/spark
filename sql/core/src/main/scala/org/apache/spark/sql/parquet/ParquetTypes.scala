@@ -113,7 +113,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
         case ParquetOriginalType.LIST => { // TODO: check enums!
           assert(groupType.getFieldCount == 1)
           val field = groupType.getFields.apply(0)
-          new ArrayType(toDataType(field))
+          ArrayType(toDataType(field), false)
         }
         case ParquetOriginalType.MAP => {
           assert(
@@ -127,7 +127,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
           assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
           val valueType = toDataType(keyValueGroup.getFields.apply(1))
           assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
-          new MapType(keyType, valueType)
+          MapType(keyType, valueType)
         }
         case _ => {
           // Note: the order of these checks is important!
@@ -137,10 +137,10 @@ private[parquet] object ParquetTypesConverter extends Logging {
             assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
             val valueType = toDataType(keyValueGroup.getFields.apply(1))
             assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
-            new MapType(keyType, valueType)
+            MapType(keyType, valueType)
           } else if (correspondsToArray(groupType)) { // ArrayType
             val elementType = toDataType(groupType.getFields.apply(0))
-            new ArrayType(elementType)
+            ArrayType(elementType, false)
           } else { // everything else: StructType
             val fields = groupType
               .getFields
@@ -148,7 +148,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
               ptype.getName,
               toDataType(ptype),
               ptype.getRepetition != Repetition.REQUIRED))
-            new StructType(fields)
+            StructType(fields)
           }
         }
       }
@@ -168,7 +168,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     case StringType => Some(ParquetPrimitiveTypeName.BINARY)
     case BooleanType => Some(ParquetPrimitiveTypeName.BOOLEAN)
     case DoubleType => Some(ParquetPrimitiveTypeName.DOUBLE)
-    case ArrayType(ByteType) =>
+    case ArrayType(ByteType, false) =>
       Some(ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)
     case FloatType => Some(ParquetPrimitiveTypeName.FLOAT)
     case IntegerType => Some(ParquetPrimitiveTypeName.INT32)
@@ -231,7 +231,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
       new ParquetPrimitiveType(repetition, primitiveType.get, name)
     } else {
       ctype match {
-        case ArrayType(elementType) => {
+        case ArrayType(elementType, false) => {
           val parquetElementType = fromDataType(
             elementType,
             CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,

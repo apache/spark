@@ -75,11 +75,11 @@ private[sql] object CatalystConverter {
     val fieldType: DataType = field.dataType
     fieldType match {
       // For native JVM types we use a converter with native arrays
-      case ArrayType(elementType: NativeType) => {
+      case ArrayType(elementType: NativeType, false) => {
         new CatalystNativeArrayConverter(elementType, fieldIndex, parent)
       }
       // This is for other types of arrays, including those with nested fields
-      case ArrayType(elementType: DataType) => {
+      case ArrayType(elementType: DataType, false) => {
         new CatalystArrayConverter(elementType, fieldIndex, parent)
       }
       case StructType(fields: Seq[StructField]) => {

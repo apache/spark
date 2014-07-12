@@ -84,7 +84,7 @@ case class Explode(attributeNames: Seq[String], child: Expression)
     (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
 
   private lazy val elementTypes = child.dataType match {
-    case ArrayType(et) => et :: Nil
+    case ArrayType(et, _) => et :: Nil
     case MapType(kt,vt) => kt :: vt :: Nil
   }
 
@@ -102,7 +102,7 @@ case class Explode(attributeNames: Seq[String], child: Expression)
 
   override def eval(input: Row): TraversableOnce[Row] = {
     child.dataType match {
-      case ArrayType(_) =>
+      case ArrayType(_, _) =>
         val inputArray = child.eval(input).asInstanceOf[Seq[Any]]
         if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Array(v)))
       case MapType(_, _) =>

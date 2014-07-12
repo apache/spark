@@ -45,7 +45,9 @@ object DataType extends RegexParsers {
     "TimestampType" ^^^ TimestampType
 
   protected lazy val arrayType: Parser[DataType] =
-    "ArrayType" ~> "(" ~> dataType <~ ")" ^^ ArrayType
+    "ArrayType" ~> "(" ~> dataType ~ "," ~ boolVal <~ ")" ^^ {
+      case tpe ~ _ ~ containsNull => ArrayType(tpe, containsNull)
+    }
 
   protected lazy val mapType: Parser[DataType] =
     "MapType" ~> "(" ~> dataType ~ "," ~ dataType <~ ")" ^^ {
@@ -241,9 +243,14 @@ case object FloatType extends FractionalType {
   def simpleString: String = "float"
 }
 
-case class ArrayType(elementType: DataType) extends DataType {
+object ArrayType {
+  def apply(elementType: DataType): ArrayType = ArrayType(elementType, false)
+}
+
+case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(s"${prefix}-- element: ${elementType.simpleString}\n")
+    builder.append(
+      s"${prefix}-- element: ${elementType.simpleString} (containsNull = ${containsNull})\n")
     elementType match {
       case array: ArrayType =>
         array.buildFormattedString(s"$prefix    |", builder)

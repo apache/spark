@@ -68,8 +68,8 @@ private[sql] object JsonRDD extends Logging {
       val (topLevel, structLike) = values.partition(_.size == 1)
       val topLevelFields = topLevel.filter {
         name => resolved.get(prefix ++ name).get match {
-          case ArrayType(StructType(Nil)) => false
-          case ArrayType(_) => true
+          case ArrayType(StructType(Nil), _) => false
+          case ArrayType(_, _) => true
           case struct: StructType => false
           case _ => true
         }
@@ -83,7 +83,8 @@ private[sql] object JsonRDD extends Logging {
           val structType = makeStruct(nestedFields, prefix :+ name)
           val dataType = resolved.get(prefix :+ name).get
           dataType match {
-            case array: ArrayType => Some(StructField(name, ArrayType(structType), nullable = true))
+            case array: ArrayType =>
+              Some(StructField(name, ArrayType(structType, array.containsNull), nullable = true))
             case struct: StructType => Some(StructField(name, structType, nullable = true))
             // dataType is StringType means that we have resolved type conflicts involving
             // primitive types and complex types. So, the type of name has been relaxed to
@@ -107,7 +108,7 @@ private[sql] object JsonRDD extends Logging {
       case StructField(fieldName, dataType, nullable) => {
         val newType = dataType match {
           case NullType => StringType
-          case ArrayType(NullType) => ArrayType(StringType)
+          case ArrayType(NullType, containsNull) => ArrayType(StringType, containsNull)
           case struct: StructType => nullTypeToStringType(struct)
           case other: DataType => other
         }
@@ -148,8 +149,8 @@ private[sql] object JsonRDD extends Logging {
             case StructField(name, _, _) => name
           })
         }
-        case (ArrayType(elementType1), ArrayType(elementType2)) =>
-          ArrayType(compatibleType(elementType1, elementType2))
+        case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
+          ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
         // TODO: We should use JsonObjectStringType to mark that values of field will be
         // strings and every string is a Json object.
         case (_, _) => StringType
@@ -176,12 +177,13 @@ private[sql] object JsonRDD extends Logging {
    * treat the element as String.
    */
   private def typeOfArray(l: Seq[Any]): ArrayType = {
+    val containsNull = l.exists(v => v == null)
     val elements = l.flatMap(v => Option(v))
     if (elements.isEmpty) {
       // If this JSON array is empty, we use NullType as a placeholder.
       // If this array is not empty in other JSON objects, we can resolve
       // the type after we have passed through all JSON objects.
-      ArrayType(NullType)
+      ArrayType(NullType, containsNull)
     } else {
       val elementType = elements.map {
         e => e match {
@@ -193,7 +195,7 @@ private[sql] object JsonRDD extends Logging {
         }
       }.reduce((type1: DataType, type2: DataType) => compatibleType(type1, type2))
 
-      ArrayType(elementType)
+      ArrayType(elementType, containsNull)
     }
   }
 
@@ -220,15 +222,16 @@ private[sql] object JsonRDD extends Logging {
       case (key: String, array: List[Any]) => {
         // The value associted with the key is an array.
         typeOfArray(array) match {
-          case ArrayType(StructType(Nil)) => {
+          case ArrayType(StructType(Nil), containsNull) => {
             // The elements of this arrays are structs.
             array.asInstanceOf[List[Map[String, Any]]].flatMap {
               element => allKeysWithValueTypes(element)
             }.map {
               case (k, dataType) => (s"$key.$k", dataType)
-            } :+ (key, ArrayType(StructType(Nil)))
+            } :+ (key, ArrayType(StructType(Nil), containsNull))
           }
-          case ArrayType(elementType) => (key, ArrayType(elementType)) :: Nil
+          case ArrayType(elementType, containsNull) =>
+            (key, ArrayType(elementType, containsNull)) :: Nil
         }
       }
       case (key: String, value) => (key, typeOfPrimitiveValue(value)) :: Nil
@@ -340,7 +343,7 @@ private[sql] object JsonRDD extends Logging {
       null
     } else {
       desiredType match {
-        case ArrayType(elementType) =>
+        case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
         case StringType => toString(value)
         case IntegerType => value.asInstanceOf[IntegerType.JvmType]
@@ -363,7 +366,7 @@ private[sql] object JsonRDD extends Logging {
           v => asRow(v.asInstanceOf[Map[String, Any]], fields)).orNull)
 
       // ArrayType(StructType)
-      case (StructField(name, ArrayType(structType: StructType), _), i) =>
+      case (StructField(name, ArrayType(structType: StructType, _), _), i) =>
         row.update(i,
           json.get(name).flatMap(v => Option(v)).map(
             v => v.asInstanceOf[Seq[Any]].map(

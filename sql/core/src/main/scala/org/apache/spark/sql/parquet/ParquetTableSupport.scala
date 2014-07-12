@@ -169,7 +169,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writeValue(schema: DataType, value: Any): Unit = {
     if (value != null) {
       schema match {
-        case t @ ArrayType(_) => writeArray(
+        case t @ ArrayType(_, false) => writeArray(
           t,
           value.asInstanceOf[CatalystConverter.ArrayScalaType[_]])
         case t @ MapType(_, _) => writeMap(
