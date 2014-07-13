@@ -81,7 +81,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
 
       case "kill" =>
         val driverId = driverArgs.driverId
-        val killFuture = masterActor ! RequestKillDriver(driverId)
+        masterActor ! RequestKillDriver(driverId)
     }
   }
 

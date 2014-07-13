@@ -72,8 +72,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     override def preStart() {
       logInfo("Listen to driver: " + driverUrl)
       driver = context.actorSelection(driverUrl)
-      // Send a hello message thus the connection is actually established,
-      // thus we can monitor Lifecycle Events.
+      // Send a hello message to establish the connection, after which
+      // we can monitor Lifecycle Events.
       driver ! "Hello"
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     }
@@ -95,7 +95,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     amClient.init(yarnConf)
     amClient.start()
 
-    appAttemptId = getApplicationAttemptId()
+    appAttemptId = ApplicationMaster.getApplicationAttemptId()
     registerApplicationMaster()
 
     waitForSparkMaster()
@@ -115,7 +115,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     val interval = math.min(timeoutInterval / 2, schedulerInterval)
 
     reporterThread = launchReporterThread(interval)
-    
+
 
     // Wait for the reporter thread to Finish.
     reporterThread.join()
@@ -134,25 +134,16 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
     val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
       .orElse(Option(System.getenv("LOCAL_DIRS")))
- 
+
     localDirs match {
       case None => throw new Exception("Yarn Local dirs can't be empty")
       case Some(l) => l
     }
-  } 
-
-  private def getApplicationAttemptId(): ApplicationAttemptId = {
-    val envs = System.getenv()
-    val containerIdString = envs.get(ApplicationConstants.Environment.CONTAINER_ID.name())
-    val containerId = ConverterUtils.toContainerId(containerIdString)
-    val appAttemptId = containerId.getApplicationAttemptId()
-    logInfo("ApplicationAttemptId: " + appAttemptId)
-    appAttemptId
   }
 
   private def registerApplicationMaster(): RegisterApplicationMasterResponse = {
     logInfo("Registering the ApplicationMaster")
-    // TODO:(Raymond) Find out Spark UI address and fill in here?
+    // TODO: Find out client's Spark UI address and fill in here?
     amClient.registerApplicationMaster(Utils.localHostName(), 0, "")
   }
 
@@ -185,8 +176,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
 
 
   private def allocateExecutors() {
-
-    // Fixme: should get preferredNodeLocationData from SparkContext, just fake a empty one for now.
+    // TODO: should get preferredNodeLocationData from SparkContext, just fake a empty one for now.
     val preferredNodeLocationData: scala.collection.Map[String, scala.collection.Set[SplitInfo]] =
       scala.collection.immutable.Map()
 
@@ -198,8 +188,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
       preferredNodeLocationData,
       sparkConf)
 
-    logInfo("Allocating " + args.numExecutors + " executors.")
-    // Wait until all containers have finished
+    logInfo("Requesting " + args.numExecutors + " executors.")
+    // Wait until all containers have launched
     yarnAllocator.addResourceRequests(args.numExecutors)
     yarnAllocator.allocateResources()
     while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
@@ -221,7 +211,6 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     }
   }
 
-  // TODO: We might want to extend this to allocate more containers in case they die !
   private def launchReporterThread(_sleepTime: Long): Thread = {
     val sleepTime = if (_sleepTime <= 0) 0 else _sleepTime
 
@@ -229,7 +218,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
       override def run() {
         while (!driverClosed) {
           allocateMissingExecutor()
-          sendProgress()
+          logDebug("Sending progress")
+          yarnAllocator.allocateResources()
           Thread.sleep(sleepTime)
         }
       }
@@ -241,19 +231,13 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     t
   }
 
-  private def sendProgress() {
-    logDebug("Sending progress")
-    // simulated with an allocate request with no nodes requested ...
-    yarnAllocator.allocateResources()
-  }
-
   def finishApplicationMaster(status: FinalApplicationStatus) {
-    logInfo("finish ApplicationMaster with " + status)
-    amClient.unregisterApplicationMaster(status, "" /* appMessage */ , "" /* appTrackingUrl */)
+    logInfo("Unregistering ApplicationMaster with " + status)
+    val trackingUrl = sparkConf.get("spark.yarn.historyServer.address", "")
+    amClient.unregisterApplicationMaster(status, "" /* appMessage */ , trackingUrl)
   }
 
 }
-
 
 object ExecutorLauncher {
   def main(argStrings: Array[String]) {

@@ -107,14 +107,16 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   /**
    * Repartitions the edges in the graph according to `partitionStrategy`.
    *
-   * @param the partitioning strategy to use when partitioning the edges in the graph.
+   * @param partitionStrategy the partitioning strategy to use when partitioning the edges
+   * in the graph.
    */
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
 
   /**
    * Repartitions the edges in the graph according to `partitionStrategy`.
    *
-   * @param the partitioning strategy to use when partitioning the edges in the graph.
+   * @param partitionStrategy the partitioning strategy to use when partitioning the edges
+   * in the graph.
    * @param numPartitions the number of edge partitions in the new graph.
    */
   def partitionBy(partitionStrategy: PartitionStrategy, numPartitions: Int): Graph[VD, ED]

@@ -75,7 +75,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           sender ! RegisterExecutorFailed("Duplicate executor ID: " + executorId)
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
-          sender ! RegisteredExecutor(sparkProperties)
+          sender ! RegisteredExecutor
           executorActor(executorId) = sender
           executorHost(executorId) = Utils.parseHostPort(hostPort)._1
           totalCores(executorId) = cores
@@ -124,6 +124,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         addressToExecutorId.get(address).foreach(removeExecutor(_,
           "remote Akka client disassociated"))
 
+      case RetrieveSparkProps =>
+        sender ! sparkProperties
     }
 
     // Make fake resource offers on all executors
@@ -143,14 +145,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       for (task <- tasks.flatten) {
         val ser = SparkEnv.get.closureSerializer.newInstance()
         val serializedTask = ser.serialize(task)
-        if (serializedTask.limit >= akkaFrameSize - 1024) {
+        if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
           val taskSetId = scheduler.taskIdToTaskSetId(task.taskId)
           scheduler.activeTaskSets.get(taskSetId).foreach { taskSet =>
             try {
-              var msg = "Serialized task %s:%d was %d bytes which " +
-                "exceeds spark.akka.frameSize (%d bytes). " +
-                "Consider using broadcast variables for large values."
-              msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize)
+              var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
+                "spark.akka.frameSize (%d bytes) - reserved (%d bytes). Consider increasing " +
+                "spark.akka.frameSize or using broadcast variables for large values."
+              msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize,
+                AkkaUtils.reservedSizeBytes)
               taskSet.abort(msg)
             } catch {
               case e: Exception => logError("Exception in error callback", e)

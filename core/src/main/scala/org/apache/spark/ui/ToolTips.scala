@@ -15,22 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.ui
 
-import org.apache.spark.serializer.Serializer
+private[spark] object ToolTips {
+  val SCHEDULER_DELAY =
+    """Scheduler delay includes time to ship the task from the scheduler to
+       the executor, and time the time to send a message from the executor to the scheduler stating
+       that the task has completed. When the scheduler becomes overloaded, task completion messages
+       become queued up, and scheduler delay increases."""
 
-private[spark] abstract class ShuffleFetcher {
+  val INPUT = "Bytes read from Hadoop or from Spark storage."
 
-  /**
-   * Fetch the shuffle outputs for a given ShuffleDependency.
-   * @return An iterator over the elements of the fetched shuffle outputs.
-   */
-  def fetch[T](
-      shuffleId: Int,
-      reduceId: Int,
-      context: TaskContext,
-      serializer: Serializer = SparkEnv.get.serializer): Iterator[T]
+  val SHUFFLE_WRITE = "Bytes written to disk in order to be read by a shuffle in a future stage."
 
-  /** Stop the fetcher */
-  def stop() {}
+  val SHUFFLE_READ =
+    """Bytes read from remote executors. Typically less than shuffle write bytes
+       because this does not include shuffle data read locally."""
 }
