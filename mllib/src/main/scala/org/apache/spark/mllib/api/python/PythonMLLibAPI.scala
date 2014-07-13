@@ -363,18 +363,18 @@ class PythonMLLibAPI extends Serializable {
   private def unpackRating(ratingBytes: Array[Byte]): Rating = {
     val bb = ByteBuffer.wrap(ratingBytes)
     bb.order(ByteOrder.nativeOrder())
-    val user = bb.getInt()
-    val product = bb.getInt()
+    val user = bb.getLong()
+    val product = bb.getLong()
     val rating = bb.getDouble()
     new Rating(user, product, rating)
   }
 
-  /** Unpack a tuple of Ints from an array of bytes */
-  private[spark] def unpackTuple(tupleBytes: Array[Byte]): (Int, Int) = {
+  /** Unpack a tuple of Longs from an array of bytes */
+  private[spark] def unpackTuple(tupleBytes: Array[Byte]): (Long, Long) = {
     val bb = ByteBuffer.wrap(tupleBytes)
     bb.order(ByteOrder.nativeOrder())
-    val v1 = bb.getInt()
-    val v2 = bb.getInt()
+    val v1 = bb.getLong()
+    val v2 = bb.getLong()
     (v1, v2)
   }
 

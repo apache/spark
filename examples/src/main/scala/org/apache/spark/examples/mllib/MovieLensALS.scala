@@ -133,9 +133,9 @@ object MovieLensALS {
          * The semantics of 0 in this expanded world of non-positive weights
          * are "the same as never having interacted at all".
          */
-        Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
+        Rating(fields(0).toLong, fields(1).toLong, fields(2).toDouble - 2.5)
       } else {
-        Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
+        Rating(fields(0).toLong, fields(1).toLong, fields(2).toDouble)
       }
     }.cache()
 

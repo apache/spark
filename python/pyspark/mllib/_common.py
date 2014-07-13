@@ -374,10 +374,10 @@ def _regression_train_wrapper(sc, train_func, klass, data, initial_weights):
 # Functions for serializing ALS Rating objects and tuples
 
 def _serialize_rating(r):
-    ba = bytearray(16)
-    intpart = ndarray(shape=[2], buffer=ba, dtype=int32)
-    doublepart = ndarray(shape=[1], buffer=ba, dtype=float64, offset=8)
-    intpart[0], intpart[1], doublepart[0] = r
+    ba = bytearray(24)
+    longpart = ndarray(shape=[2], buffer=ba, dtype=int64)
+    doublepart = ndarray(shape=[1], buffer=ba, dtype=float64, offset=16)
+    longpart[0], longpart[1], doublepart[0] = r
     return ba
 
 
@@ -399,9 +399,9 @@ class RatingDeserializer(Serializer):
 
 
 def _serialize_tuple(t):
-    ba = bytearray(8)
-    intpart = ndarray(shape=[2], buffer=ba, dtype=int32)
-    intpart[0], intpart[1] = t
+    ba = bytearray(16)
+    longpart = ndarray(shape=[2], buffer=ba, dtype=int64)
+    longpart[0], longpart[1] = t
     return ba
 
 

@@ -50,7 +50,7 @@ public class JavaALSSuite implements Serializable {
     List<scala.Tuple2<Object, double[]>> userFeatures = model.userFeatures().toJavaRDD().collect();
     for (int i = 0; i < features; ++i) {
       for (scala.Tuple2<Object, double[]> userFeature : userFeatures) {
-        predictedU.put((Integer)userFeature._1(), i, userFeature._2()[i]);
+        predictedU.put(((Number) userFeature._1()).intValue(), i, userFeature._2()[i]);
       }
     }
     DoubleMatrix predictedP = new DoubleMatrix(products, features);
@@ -59,7 +59,7 @@ public class JavaALSSuite implements Serializable {
       model.productFeatures().toJavaRDD().collect();
     for (int i = 0; i < features; ++i) {
       for (scala.Tuple2<Object, double[]> productFeature : productFeatures) {
-        predictedP.put((Integer)productFeature._1(), i, productFeature._2()[i]);
+        predictedP.put(((Number) productFeature._1()).intValue(), i, productFeature._2()[i]);
       }
     }
 

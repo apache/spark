@@ -36,10 +36,10 @@ import org.apache.spark.mllib.api.python.PythonMLLibAPI
  */
 class MatrixFactorizationModel private[mllib] (
     val rank: Int,
-    val userFeatures: RDD[(Int, Array[Double])],
-    val productFeatures: RDD[(Int, Array[Double])]) extends Serializable {
+    val userFeatures: RDD[(Long, Array[Double])],
+    val productFeatures: RDD[(Long, Array[Double])]) extends Serializable {
   /** Predict the rating of one user for one product. */
-  def predict(user: Int, product: Int): Double = {
+  def predict(user: Long, product: Long): Double = {
     val userVector = new DoubleMatrix(userFeatures.lookup(user).head)
     val productVector = new DoubleMatrix(productFeatures.lookup(product).head)
     userVector.dot(productVector)
@@ -53,7 +53,7 @@ class MatrixFactorizationModel private[mllib] (
     * @param usersProducts  RDD of (user, product) pairs.
     * @return RDD of Ratings.
     */
-  def predict(usersProducts: RDD[(Int, Int)]): RDD[Rating] = {
+  def predict(usersProducts: RDD[(Long, Long)]): RDD[Rating] = {
     val users = userFeatures.join(usersProducts).map{
       case (user, (uFeatures, product)) => (product, (user, uFeatures))
     }
