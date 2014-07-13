@@ -17,9 +17,9 @@
 
 package org.apache.spark.shuffle.hash
 
+import org.apache.spark.{InterruptibleIterator, TaskContext}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
-import org.apache.spark.TaskContext
 
 class HashShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
@@ -31,10 +31,24 @@ class HashShuffleReader[K, C](
   require(endPartition == startPartition + 1,
     "Hash shuffle currently only supports fetching one partition")
 
+  private val dep = handle.dependency
+
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context,
-      Serializer.getSerializer(handle.dependency.serializer))
+    val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context,
+      Serializer.getSerializer(dep.serializer))
+
+    if (dep.aggregator.isDefined) {
+      if (dep.mapSideCombine) {
+        new InterruptibleIterator(context, dep.aggregator.get.combineCombinersByKey(iter, context))
+      } else {
+        new InterruptibleIterator(context, dep.aggregator.get.combineValuesByKey(iter, context))
+      }
+    } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
+      throw new IllegalStateException("Aggregator is empty for map-side combine")
+    } else {
+      iter
+    }
   }
 
   /** Close this reader */

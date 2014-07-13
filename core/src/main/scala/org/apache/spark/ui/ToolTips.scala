@@ -15,27 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.api.java
+package org.apache.spark.ui
 
-import org.scalatest.FunSuite
+private[spark] object ToolTips {
+  val SCHEDULER_DELAY =
+    """Scheduler delay includes time to ship the task from the scheduler to
+       the executor, and time the time to send a message from the executor to the scheduler stating
+       that the task has completed. When the scheduler becomes overloaded, task completion messages
+       become queued up, and scheduler delay increases."""
 
-import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.hive.test.TestHive
+  val INPUT = "Bytes read from Hadoop or from Spark storage."
 
-// Implicits
-import scala.collection.JavaConversions._
+  val SHUFFLE_WRITE = "Bytes written to disk in order to be read by a shuffle in a future stage."
 
-class JavaHiveSQLSuite extends FunSuite {
-  ignore("SELECT * FROM src") {
-    val javaCtx = new JavaSparkContext(TestSQLContext.sparkContext)
-    // There is a little trickery here to avoid instantiating two HiveContexts in the same JVM
-    val javaSqlCtx = new JavaHiveContext(javaCtx) {
-      override val sqlContext = TestHive
-    }
-
-    assert(
-      javaSqlCtx.hql("SELECT * FROM src").collect().map(_.getInt(0)) ===
-        TestHive.sql("SELECT * FROM src").collect().map(_.getInt(0)).toSeq)
-  }
+  val SHUFFLE_READ =
+    """Bytes read from remote executors. Typically less than shuffle write bytes
+       because this does not include shuffle data read locally."""
 }

@@ -75,9 +75,11 @@ case class SparkListenerBlockManagerRemoved(blockManagerId: BlockManagerId)
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
+@DeveloperApi
 case class SparkListenerApplicationStart(appName: String, time: Long, sparkUser: String)
   extends SparkListenerEvent
 
+@DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
 /** An event used in the listener to shutdown the listener daemon thread. */

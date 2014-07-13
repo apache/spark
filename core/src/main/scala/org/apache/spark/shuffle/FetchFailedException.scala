@@ -15,31 +15,38 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.shuffle
 
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.{FetchFailed, TaskEndReason}
 
+/**
+ * Failed to fetch a shuffle block. The executor catches this exception and propagates it
+ * back to DAGScheduler (through TaskEndReason) so we'd resubmit the previous stage.
+ *
+ * Note that bmAddress can be null.
+ */
 private[spark] class FetchFailedException(
-    taskEndReason: TaskEndReason,
-    message: String,
-    cause: Throwable)
+    bmAddress: BlockManagerId,
+    shuffleId: Int,
+    mapId: Int,
+    reduceId: Int)
   extends Exception {
 
-  def this (bmAddress: BlockManagerId, shuffleId: Int, mapId: Int, reduceId: Int,
-      cause: Throwable) =
-    this(FetchFailed(bmAddress, shuffleId, mapId, reduceId),
-      "Fetch failed: %s %d %d %d".format(bmAddress, shuffleId, mapId, reduceId),
-      cause)
+  override def getMessage: String =
+    "Fetch failed: %s %d %d %d".format(bmAddress, shuffleId, mapId, reduceId)
 
-  def this (shuffleId: Int, reduceId: Int, cause: Throwable) =
-    this(FetchFailed(null, shuffleId, -1, reduceId),
-      "Unable to fetch locations from master: %d %d".format(shuffleId, reduceId), cause)
+  def toTaskEndReason: TaskEndReason = FetchFailed(bmAddress, shuffleId, mapId, reduceId)
+}
 
-  override def getMessage(): String = message
+/**
+ * Failed to get shuffle metadata from [[org.apache.spark.MapOutputTracker]].
+ */
+private[spark] class MetadataFetchFailedException(
+    shuffleId: Int,
+    reduceId: Int,
+    message: String)
+  extends FetchFailedException(null, shuffleId, -1, reduceId) {
 
-
-  override def getCause(): Throwable = cause
-
-  def toTaskEndReason: TaskEndReason = taskEndReason
-
+  override def getMessage: String = message
 }

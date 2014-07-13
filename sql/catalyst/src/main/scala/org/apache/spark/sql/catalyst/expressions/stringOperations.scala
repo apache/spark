@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.types.DataType
 import org.apache.spark.sql.catalyst.types.StringType
 import org.apache.spark.sql.catalyst.types.BooleanType
 
-
 trait StringRegexExpression {
   self: BinaryExpression =>
 
@@ -32,7 +31,7 @@ trait StringRegexExpression {
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
 
-  def nullable: Boolean = true
+  def nullable: Boolean = left.nullable || right.nullable
   def dataType: DataType = BooleanType
 
   // try cache the pattern for Literal
@@ -155,4 +154,54 @@ case class Lower(child: Expression) extends UnaryExpression with CaseConversionE
   override def convert(v: String): String = v.toLowerCase()
 
   override def toString() = s"Lower($child)"
+}
+
+/** A base trait for functions that compare two strings, returning a boolean. */
+trait StringComparison {
+  self: BinaryExpression =>
+
+  type EvaluatedType = Any
+
+  def nullable: Boolean = left.nullable || right.nullable
+  override def dataType: DataType = BooleanType
+
+  def compare(l: String, r: String): Boolean
+
+  override def eval(input: Row): Any = {
+    val leftEval = left.eval(input).asInstanceOf[String]
+    if(leftEval == null) {
+      null
+    } else {
+      val rightEval = right.eval(input).asInstanceOf[String]
+      if (rightEval == null) null else compare(leftEval, rightEval)
+    }
+  }
+
+  def symbol: String = nodeName
+
+  override def toString() = s"$nodeName($left, $right)"
+}
+
+/**
+ * A function that returns true if the string `left` contains the string `right`.
+ */
+case class Contains(left: Expression, right: Expression)
+    extends BinaryExpression with StringComparison {
+  override def compare(l: String, r: String) = l.contains(r)
+}
+
+/**
+ * A function that returns true if the string `left` starts with the string `right`.
+ */
+case class StartsWith(left: Expression, right: Expression)
+    extends BinaryExpression with StringComparison {
+  def compare(l: String, r: String) = l.startsWith(r)
+}
+
+/**
+ * A function that returns true if the string `left` ends with the string `right`.
+ */
+case class EndsWith(left: Expression, right: Expression)
+    extends BinaryExpression with StringComparison {
+  def compare(l: String, r: String) = l.endsWith(r)
 }

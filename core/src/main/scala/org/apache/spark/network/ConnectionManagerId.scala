@@ -32,6 +32,6 @@ private[spark] case class ConnectionManagerId(host: String, port: Int) {
 
 private[spark] object ConnectionManagerId {
   def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
-    new ConnectionManagerId(socketAddress.getHostName(), socketAddress.getPort())
+    new ConnectionManagerId(socketAddress.getHostName, socketAddress.getPort)
   }
 }
