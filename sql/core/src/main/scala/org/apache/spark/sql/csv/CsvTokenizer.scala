@@ -26,28 +26,31 @@ import scala.collection.mutable.ArrayBuffer
 private[sql] class CsvTokenizer(
     inputIter: Iterator[String],
     delimiter: String,
-    quote: String) extends Iterator[Array[String]] {
+    quote: Char) extends Iterator[Array[String]] {
 
-  private  val DELIM = delimiter.charAt(0)
-  private  val QUOTE = quote.charAt(0)
-  private  val BACKSLASH = '\\'
-  private  val NEWLINE = '\n'
+  private val DELIM = delimiter.charAt(0)
+  private val QUOTE = quote
+  private val DOUBLEQUOTE = quote.toString * 2
+  private val BACKSLASH = '\\'
+  private val NEWLINE = '\n'
 
   private val delimLength = delimiter.length
-  private val quoteLength = quote.length
 
   private def isDelimAt(inStr: String, index: Int): Boolean = {
     inStr.substring(index, index + delimLength) == delimiter
   }
 
-  private def isQuoteAt(inStr: String, index: Int): Boolean = {
-    inStr.substring(index, index + quoteLength) == quote
+  private def isDoubleQuoteAt(inStr: String, index: Int): Boolean = {
+    inStr.substring(index, index + 2) == DOUBLEQUOTE
   }
 
-  private def stripQuotes(inStr: String): String =  if (inStr.startsWith(quote)) {
-    inStr.stripPrefix(quote).stripSuffix(quote)
-  } else {
-    inStr
+  private def stripQuotes(inStr: StringBuilder): String =  {
+    val end = inStr.length - 1
+    if (inStr.charAt(0) == QUOTE && inStr.charAt(end) == QUOTE) {
+      inStr.deleteCharAt(end).deleteCharAt(0).toString()
+    } else {
+      inStr.toString()
+    }
   }
 
   import QuoteState._
@@ -59,53 +62,57 @@ private[sql] class CsvTokenizer(
     var curPosition = 0
     var startPosition = 0
     var curChar: Char = '\0'
-    var leftOver: String = ""             // Used to keep track of tokens that span multiple lines
+    val leftOver = new StringBuilder()    // Used to keep track of tokens that span multiple lines
     val tokens = new ArrayBuffer[String]()
     var line = inputIter.next() + '\n'
 
     while (curPosition < line.length) {
       curChar = line.charAt(curPosition)
 
-      (curState, curChar) match {
-        case (Quoted, QUOTE) =>
-          if (isQuoteAt(line, curPosition)) {
-            curState = Unquoted
-            curPosition += quoteLength
+      if (curChar == QUOTE) {
+        if (curState == Quoted) {
+          if (isDoubleQuoteAt(line, curPosition)) {
+            leftOver.append(line.substring(startPosition, curPosition + 1))
+            curPosition += 2
+            startPosition = curPosition
           } else {
+            curState = Unquoted
             curPosition += 1
           }
-        case (Quoted, NEWLINE) if inputIter.hasNext =>
-          leftOver = leftOver + line.substring(startPosition, curPosition + 1)
+        } else {
+          curState = Quoted
+          curPosition += 1
+        }
+      } else if (curChar == DELIM) {
+        if (curState == Unquoted && isDelimAt(line, curPosition) && curPosition > startPosition) {
+          leftOver.append(line.substring(startPosition, curPosition))
+          tokens.append(stripQuotes(leftOver))
+          leftOver.clear()
+          curPosition += delimLength
+          startPosition = curPosition
+        } else {
+          curPosition += 1
+        }
+      } else if (curChar == NEWLINE) {
+        if (curState == Quoted) {
+          leftOver.append(line.substring(startPosition, curPosition + 1))
           line = inputIter.next() + '\n'
           curPosition = 0
           startPosition = 0
-        case (Unquoted, DELIM) =>
-          if (isDelimAt(line, curPosition) && curPosition > startPosition) {
-            tokens.append(stripQuotes(leftOver + line.substring(startPosition, curPosition)))
-            curPosition += delimLength
-            startPosition = curPosition
-            leftOver = ""
-          } else {
-            curPosition += 1
-          }
-        case (Unquoted, QUOTE) =>
-          if (isQuoteAt(line, curPosition)) {
-            curState = Quoted
-            curPosition += quoteLength
-          } else {
-            curPosition += 1
-          }
-        case (Unquoted, NEWLINE) =>
-          if (startPosition == curPosition) {
+        } else {
+          if (curPosition == startPosition) {
             tokens.append(null)
           } else {
-            tokens.append(stripQuotes(leftOver + line.substring(startPosition, curPosition)))
+            leftOver.append(line.substring(startPosition, curPosition))
+            tokens.append(stripQuotes(leftOver))
           }
+          leftOver.clear()
           curPosition += 1
-        case (_, BACKSLASH) =>
-          curPosition += 2
-        case (_, _) =>
-          curPosition += 1
+        }
+      } else if (curChar == BACKSLASH) {
+        curPosition += 2
+      } else {
+        curPosition += 1
       }
     }
     tokens.toArray
