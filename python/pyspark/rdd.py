@@ -1402,7 +1402,7 @@ class RDD(object):
 
         For each element (k, v) in C{self}, the resulting RDD will either
         contain all pairs (k, (v, w)) for w in C{other}, or the pair
-        (k, (v, None)) if no elements in other have key k.
+        (k, (v, None)) if no elements in C{other} have key k.
 
         Hash-partitions the resulting RDD into the given number of partitions.
 

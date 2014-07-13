@@ -606,8 +606,9 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
-   * The supplied org.apache.spark.Partitioner is used to control the partitioning of each RDD.
+   * Return a new DStream by applying 'left outer join' between RDDs of `this` DStream and
+   * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
+   * the partitioning of each RDD.
    */
   def leftOuterJoin[W](
       other: JavaPairDStream[K, W],
