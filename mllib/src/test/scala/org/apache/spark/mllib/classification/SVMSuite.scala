@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.rdd.RDD
 
 object SVMSuite {
 
@@ -56,10 +57,27 @@ object SVMSuite {
     }
     y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
   }
-
 }
 
 class SVMSuite extends FunSuite with LocalSparkContext {
+
+  def generateRDDs(): (RDD[LabeledPoint], RDD[LabeledPoint]) = {
+    val nPoints = 10000
+
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
+    val B = -1.5
+    val C = 1.0
+
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
+
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
+    val validationRDD  = sc.parallelize(validationData, 2)
+
+    (testRDD, validationRDD)
+  }
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
@@ -70,28 +88,14 @@ class SVMSuite extends FunSuite with LocalSparkContext {
   }
 
   test("SVM with threshold") {
-    val nPoints = 10000
-
-    // NOTE: Intercept should be small for generating equal 0s and 1s
-    val A = 0.01
-    val B = -1.5
-    val C = 1.0
-
-    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
-
-    val testRDD = sc.parallelize(testData, 2)
-    testRDD.cache()
+    val (testRDD, validationRDD) = generateRDDs()
 
     val svm = new SVMWithSGD().setIntercept(true)
     svm.optimizer.setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
 
     val model = svm.run(testRDD)
 
-    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData, 2)
-
     // Test prediction on RDD.
-
     var predictions = model.predict(validationRDD.map(_.features)).collect()
     assert(predictions.count(_ == 0.0) != predictions.length)
 
@@ -106,76 +110,52 @@ class SVMSuite extends FunSuite with LocalSparkContext {
     assert(predictions.count(_ == 1.0) == predictions.length)
   }
 
+
   test("SVM using local random SGD") {
-    val nPoints = 10000
-
-    // NOTE: Intercept should be small for generating equal 0s and 1s
-    val A = 0.01
-    val B = -1.5
-    val C = 1.0
-
-    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
-
-    val testRDD = sc.parallelize(testData, 2)
-    testRDD.cache()
+    val (testRDD, validationRDD) = generateRDDs()
 
     val svm = new SVMWithSGD().setIntercept(true)
     svm.optimizer.setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
 
     val model = svm.run(testRDD)
-
-    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData, 2)
-
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect(),
+      validationRDD.collect())
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(
+      validationRDD.collect().map(row => model.predict(row.features)),
+      validationRDD.collect())
   }
 
   test("SVM local random SGD with initial weights") {
-    val nPoints = 10000
-
-    // NOTE: Intercept should be small for generating equal 0s and 1s
-    val A = 0.01
-    val B = -1.5
-    val C = 1.0
-
-    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val (testRDD, validationRDD) = generateRDDs()
 
     val initialB = -1.0
     val initialC = -1.0
     val initialWeights = Vectors.dense(initialB, initialC)
 
-    val testRDD = sc.parallelize(testData, 2)
-    testRDD.cache()
 
     val svm = new SVMWithSGD().setIntercept(true)
     svm.optimizer.setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
 
     val model = svm.run(testRDD, initialWeights)
 
-    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData,2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect(),
+      validationRDD.collect())
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(
+      validationRDD.collect().map(row => model.predict(row.features)),
+      validationRDD.collect())
   }
 
   test("SVM with invalid labels") {
-    val nPoints = 10000
-
-    // NOTE: Intercept should be small for generating equal 0s and 1s
-    val A = 0.01
-    val B = -1.5
-    val C = 1.0
-
-    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
-    val testRDD = sc.parallelize(testData, 2)
+    val (testRDD, _) = generateRDDs()
 
     val testRDDInvalid = testRDD.map { lp =>
       if (lp.label == 0.0) {
