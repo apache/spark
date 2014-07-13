@@ -165,6 +165,8 @@ private[spark] class TaskSetManager(
 
   override def schedulingMode = SchedulingMode.NONE
 
+  var emittedTaskSizeWarning = false
+
   /**
    * Add a task to all the pending-task lists that it should be on. If readding is set, we are
    * re-adding the task so only include it in each list if it's not already there.
@@ -414,6 +416,13 @@ private[spark] class TaskSetManager(
           // we assume the task can be serialized without exceptions.
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
+          if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
+              !emittedTaskSizeWarning) {
+            emittedTaskSizeWarning = true
+            logWarning(s"Stage ${task.stageId} contains a task of very large size " +
+              s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+              s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+          }
           val timeTaken = clock.getTime() - startTime
           addRunningTask(taskId)
 
@@ -752,4 +761,10 @@ private[spark] class TaskSetManager(
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
   }
+}
+
+private[spark] object TaskSetManager {
+  // The user will be warned if any stages contain a task that has a serialized size greater than
+  // this.
+  val TASK_SIZE_TO_WARN_KB = 100
 }

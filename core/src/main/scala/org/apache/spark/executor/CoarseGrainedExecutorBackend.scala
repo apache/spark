@@ -31,7 +31,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
@@ -97,9 +97,11 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 }
 
-private[spark] object CoarseGrainedExecutorBackend {
+private[spark] object CoarseGrainedExecutorBackend extends Logging {
   def run(driverUrl: String, executorId: String, hostname: String, cores: Int,
     workerUrl: Option[String]) {
+
+    SignalLogger.register(log)
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
       // Debug code
