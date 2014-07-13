@@ -570,7 +570,7 @@ private[spark] class TaskSetManager(
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
 
-      case e: _ =>
+      case e: TaskEndReason =>
         logError("Unknown TaskEndReason: " + e)
     }
     // always add to failed executors
