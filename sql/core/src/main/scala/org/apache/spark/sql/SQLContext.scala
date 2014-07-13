@@ -146,7 +146,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def csvFile(
       path: String,
       delimiter: String = ",",
-      quote: String = "\"",
+      quote: Char = '"',
       header: Boolean = false): SchemaRDD = {
     val csv = sparkContext.textFile(path)
     csvRDD(csv, delimiter, quote, header)
@@ -168,7 +168,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def csvRDD(
       csv: RDD[String],
       delimiter: String = ",",
-      quote: String = "\"",
+      quote: Char = '"',
       header: Boolean = false): SchemaRDD = {
     new SchemaRDD(this, CsvRDD.inferSchema(csv, delimiter, quote, header))
   }

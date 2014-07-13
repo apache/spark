@@ -26,10 +26,18 @@ import org.apache.spark.sql.Logging
 
 private[sql] object CsvRDD extends Logging {
 
+  /**
+   * Infers schema of a CSV file. It uses the first row of the first partition to
+   * infer number of columns. If header flag is set, all lines that equal the first line
+   * are filtered before parsing.
+   *
+   * o If a line contains fewer tokens than the schema, it is padded with nulls
+   * o If a line has more tokens than the schema, extra tokens are ignored.
+   */
   private[sql] def inferSchema(
       csv: RDD[String],
       delimiter: String,
-      quote: String,
+      quote: Char,
       useHeader: Boolean): LogicalPlan = {
 
     // Constructing schema
@@ -37,7 +45,10 @@ private[sql] object CsvRDD extends Logging {
     val firstLine = csv.first()
     // Assuming first row is representative and using it to determine number of fields
     val firstRow = new CsvTokenizer(Seq(firstLine).iterator, delimiter, quote).next()
+    val numFields = firstRow.length
+    logger.info(s"Parsing CSV with $numFields.")
     val header = if (useHeader) {
+      logger.info(s"Using header line: $firstLine")
       firstRow
     } else {
       firstRow.zipWithIndex.map { case (value, index) => s"V$index" }
@@ -46,7 +57,7 @@ private[sql] object CsvRDD extends Logging {
     val schemaFields = header.map { fieldName =>
       StructField(fieldName.asInstanceOf[String], StringType, nullable = true)
     }
-    val schema = StructType(schemaFields)
+    val row = new GenericMutableRow(numFields)
 
     val parsedCSV = csv.mapPartitions { iter =>
       // When using header, any input line that equals firstLine is assumed to be header
@@ -56,9 +67,10 @@ private[sql] object CsvRDD extends Logging {
         iter
       }
       val tokenIter = new CsvTokenizer(csvIter, delimiter, quote)
-      parseCSV(tokenIter, schema)
+      parseCSV(tokenIter, schemaFields, row)
     }
 
+    val schema = StructType(schemaFields)
     SparkLogicalPlan(ExistingRdd(asAttributes(schema), parsedCSV))
   }
 
@@ -73,10 +85,12 @@ private[sql] object CsvRDD extends Logging {
     case _ => null
   }
 
-  private def parseCSV(iter: Iterator[Array[String]], schema: StructType): Iterator[Row] = {
-    val row = new GenericMutableRow(schema.fields.length)
+  private def parseCSV(
+      iter: Iterator[Array[String]],
+      schemaFields: Seq[StructField],
+      row: GenericMutableRow): Iterator[Row] = {
     iter.map { tokens =>
-      schema.fields.zipWithIndex.foreach {
+      schemaFields.zipWithIndex.foreach {
         case (StructField(name, dataType, _), index) =>
           row.update(index, castToType(tokens(index), dataType))
       }

@@ -189,32 +189,41 @@ class SQLContext:
         return SchemaRDD(jschema_rdd, self)
 
     def csvFile(self, path, delimiter = ",", quote = "\"", header = False):
-        """Loads a CSV file (according to RFC 4180) and returns the result as a L{SchemaRDD}.
-            header flag specified if first line of each file should be treated as header.
+        """
+        Loads a CSV file (according to RFC 4180) and returns the result as a L{SchemaRDD}.
+        header flag specified if first line of each file should be treated as header.
 
-            NOTE: If there are new line characters inside quoted fields this method may fail to
-            parse correctly, because the two lines may be in different partitions. Use
-            L{SQLContext#csvRDD} to parse such files.
+        NOTE: If there are new line characters inside quoted fields this method may fail to
+        parse correctly, because the two lines may be in different partitions. Use
+        L{SQLContext#csvRDD} to parse such files.
 
-        >>> csv = sqlCtx.csvFile('/tmp/csvDataFiles', delimiter = ", ", header = True)
+        >>> import tempfile, shutil
+        >>> csvFile = tempfile.mkdtemp()
+        >>> shutil.rmtree(jsonFile)
+        >>> ofn = open(csvFile, 'w')
+        >>> for csvStr in csvStrings:
+        ...   print>>ofn, csvStr
+        >>> ofn.close()
+        >>> csv = sqlCtx.csvFile(csvFile, delimiter = ", ", header = True)
         >>> sqlCtx.registerRDDAsTable(csv, "csvTable")
-        >>> csvRes = sqlCtx.sql("SELECT * FROM csvTable limit 10")
+        >>> csvRes = sqlCtx.sql("SELECT Year FROM csvTable limit 1")
         True
         """
         jschema_rdd = self._ssql_ctx.csvFile(path, delimiter, quote, header)
         return SchemaRDD(jschema_rdd, self)
 
     def csvRDD(self, rdd, delimiter = ",", quote = "\"", header = False):
-        """Parses an RDD of String as a CSV (according to RFC 4180) and returns the result as a
-            L{SchemaRDD}.
+        """
+        Parses an RDD of String as a CSV (according to RFC 4180) and returns the result as a
+        L{SchemaRDD}.
 
-            NOTE: If there are new line characters inside quoted fields, use wholeTextFile to
-            read each file into a single partition.
+        NOTE: If there are new line characters inside quoted fields, use wholeTextFile to
+        read each file into a single partition.
 
-        >>> rdd = sc.textFile("/tmp/csvDataFiles")
-        >>> csv = sqlCtx.csvRDD(rdd, delimiter = ", ", header = True)
-        >>> sqlCtx.registerRDDAsTable(csv, "csvTable")
-        >>> csvRes = sqlCtx.sql("SELECT * FROM csvTable limit 10")
+        >>> csvrdd = sqlCtx.csvRDD(csv, delimiter = ", ", header = True)
+        >>> sqlCtx.registerRDDAsTable(csvrdd, "csvTable2")
+        >>> csvRes = sqlCtx.sql("SELECT count(*) FROM csvTable2")
+        True
         """
         def func(split, iterator):
             for x in iterator:
@@ -539,6 +548,12 @@ def _test():
        '{"field1" : null, "field2": "row3", "field3":{"field4":33, "field5": []}}']
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
+    csvStrings = ['Year,Make,Model,Description'
+                  '"1997","Ford","E350",',
+                  '2000,Mercury,"Cougar", "Really ""Good"" car"',
+                  '2007,Honda,"Civic",']
+    globs['csvString'] = csvStrings
+    globs['csv'] = sc.parallelize(csvStrings)
     globs['nestedRdd1'] = sc.parallelize([
         {"f1" : array('i', [1, 2]), "f2" : {"row1" : 1.0}},
         {"f1" : array('i', [2, 3]), "f2" : {"row2" : 2.0}}])

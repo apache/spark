@@ -139,7 +139,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   def csvFile(
       path: String,
       delimiter: String = ",",
-      quote: String = "\"",
+      quote: Char = '"',
       header: Boolean = false): JavaSchemaRDD = {
     val csv = sqlContext.sparkContext.textFile(path)
     csvRDD(csv, delimiter, quote, header)
@@ -161,7 +161,7 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   def csvRDD(
       csv: JavaRDD[String],
       delimiter: String = ",",
-      quote: String = "\"",
+      quote: Char = '"',
       header: Boolean = false): JavaSchemaRDD = {
     new JavaSchemaRDD(sqlContext, CsvRDD.inferSchema(csv, delimiter, quote, header))
   }
