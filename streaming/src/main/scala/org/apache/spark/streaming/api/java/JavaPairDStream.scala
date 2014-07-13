@@ -625,8 +625,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * number of partitions.
    */
   def rightOuterJoin[W](other: JavaPairDStream[K, W]): JavaPairDStream[K, (Optional[V], W)] = {
-    implicit val cm: ClassTag[W] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    implicit val cm: ClassTag[W] = fakeClassTag
     val joinResult = dstream.rightOuterJoin(other.dstream)
     joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)}
   }
