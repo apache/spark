@@ -195,7 +195,8 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
           iter.map { case value =>
             val deserializedRow = {
               // If partition schema does not match table schema, update the row to match.
-              val convertedRow = partTblObjectInspectorConverter.convert(partSerDe.deserialize(value))
+              val convertedRow =
+                partTblObjectInspectorConverter.convert(partSerDe.deserialize(value))
 
               // If conversion was performed, convertedRow will be a standard Object, but if
               // conversion wasn't necessary, it will still be lazy. We can't have both across
