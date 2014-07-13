@@ -46,15 +46,17 @@ if (depsLen > 0) {
   depsFile <- file(depsFileName, open="wb")
   writeBin(execFunctionDeps, depsFile, endian="big")
   close(depsFile)
-
-  load(depsFileName)
-  unlink(depsFileName)
 }
 
 # Include packages as required
 packageNames <- unserialize(readRaw(inputCon))
 for (pkg in packageNames) {
   suppressPackageStartupMessages(require(as.character(pkg), character.only=TRUE))
+}
+
+if (depsLen > 0) {
+	load(depsFileName)
+	unlink(depsFileName)
 }
 
 # Read and set broadcast variables
