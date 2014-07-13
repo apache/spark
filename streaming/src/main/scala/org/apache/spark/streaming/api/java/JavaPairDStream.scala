@@ -659,6 +659,52 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
+   * Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with Spark's default
+   * number of partitions.
+   */
+  def fullOuterJoin[W](other: JavaPairDStream[K, W])
+      : JavaPairDStream[K, (Optional[V], Optional[W])] = {
+    implicit val cm: ClassTag[W] = fakeClassTag
+    val joinResult = dstream.fullOuterJoin(other.dstream)
+    joinResult.mapValues{ case (v, w) =>
+      (JavaUtils.optionToOptional(v), JavaUtils.optionToOptional(w))
+    }
+  }
+
+  /**
+   * Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with `numPartitions`
+   * partitions.
+   */
+  def fullOuterJoin[W](
+      other: JavaPairDStream[K, W],
+      numPartitions: Int
+    ): JavaPairDStream[K, (Optional[V], Optional[W])] = {
+    implicit val cm: ClassTag[W] = fakeClassTag
+    val joinResult = dstream.fullOuterJoin(other.dstream, numPartitions)
+    joinResult.mapValues{ case (v, w) =>
+      (JavaUtils.optionToOptional(v), JavaUtils.optionToOptional(w))
+    }
+  }
+
+  /**
+   * Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
+   * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
+   * the partitioning of each RDD.
+   */
+  def fullOuterJoin[W](
+      other: JavaPairDStream[K, W],
+      partitioner: Partitioner
+    ): JavaPairDStream[K, (Optional[V], Optional[W])] = {
+    implicit val cm: ClassTag[W] = fakeClassTag
+    val joinResult = dstream.fullOuterJoin(other.dstream, partitioner)
+    joinResult.mapValues{ case (v, w) =>
+      (JavaUtils.optionToOptional(v), JavaUtils.optionToOptional(w))
+    }
+  }
+
+  /**
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
