@@ -522,7 +522,7 @@ class RDD(object):
         >>> tmp2 = [('Mary', 1), ('had', 2), ('a', 3), ('little', 4), ('lamb', 5)]
         >>> tmp2.extend([('whose', 6), ('fleece', 7), ('was', 8), ('white', 9)])
         >>> sc.parallelize(tmp2).sortByKey(True, 3, keyfunc=lambda k: k.lower()).collect()
-        [('a', 3), ('fleece', 7), ('had', 2), ('lamb', 5), ('little', 4), ('Mary', 1), ('was', 8), ('white', 9), ('whose', 6)]
+        [('a', 3), ('fleece', 7), ('had', 2), ('lamb', 5),...('white', 9), ('whose', 6)]
         """
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
@@ -1387,8 +1387,8 @@ class RDD(object):
         >>> sorted(x.subtractByKey(y).collect())
         [('b', 4), ('b', 5)]
         """
-        filter_func = lambda (key, vals): len(
-            vals[0]) > 0 and len(vals[1]) == 0
+        def filter_func((key, vals)):
+            return len(vals[0]) > 0 and len(vals[1]) == 0
         map_func = lambda (key, vals): [(key, val) for val in vals[0]]
         return self.cogroup(other, numPartitions).filter(filter_func).flatMap(map_func)
 
@@ -1401,9 +1401,8 @@ class RDD(object):
         >>> sorted(x.subtract(y).collect())
         [('a', 1), ('b', 4), ('b', 5)]
         """
-        rdd = other.map(
-            lambda x: (x, True))  # note: here 'True' is just a placeholder
         # note: here 'True' is just a placeholder
+        rdd = other.map(lambda x: (x, True))
         return self.map(lambda x: (x, True)).subtractByKey(rdd).map(lambda tpl: tpl[0])
 
     def keyBy(self, f):
