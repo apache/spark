@@ -915,7 +915,7 @@ object DecisionTree extends Serializable with Logging {
             val result = array.foldLeft(-1, Double.MinValue, 0) {
               case ((maxIndex, maxValue, currentIndex), currentValue) =>
                 if(currentValue > maxValue) (currentIndex, currentValue, currentIndex + 1)
-                else (maxIndex, maxValue, currentIndex+1)
+                else (maxIndex, maxValue, currentIndex + 1)
             }
             if (result._1 < 0) 0 else result._1
           }
