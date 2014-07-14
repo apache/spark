@@ -127,7 +127,7 @@ class HadoopRDD[K, V](
   protected def getJobConf(): JobConf = {
     val conf: JobConf = broadcastedConf.value.value
     def f(jc: JobConf) = {}
-    val jobConfFunc = initLocalJobConfFuncOpt.getOrElse(f)
+    val jobConfFunc = initLocalJobConfFuncOpt.getOrElse(f _)
     if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
       // getJobConf() has been called previously, so there is already a local cache of the JobConf
       // needed by this RDD.
