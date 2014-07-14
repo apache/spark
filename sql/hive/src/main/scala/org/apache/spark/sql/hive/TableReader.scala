@@ -164,13 +164,17 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
       hivePartitionRDD.mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val rowWithPartArr = new Array[Object](2)
+
+        // The update and deserializer initialization are intentionally
+        // kept out of the below iter.map loop to save performance.
+        rowWithPartArr.update(1, partValues)
+        val deserializer = localDeserializer.newInstance()
+        deserializer.initialize(hconf, partProps)
+
         // Map each tuple to a row object
         iter.map { value =>
-          val deserializer = localDeserializer.newInstance()
-          deserializer.initialize(hconf, partProps)
           val deserializedRow = deserializer.deserialize(value)
           rowWithPartArr.update(0, deserializedRow)
-          rowWithPartArr.update(1, partValues)
           rowWithPartArr.asInstanceOf[Object]
         }
       }
