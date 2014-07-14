@@ -21,9 +21,6 @@
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd $FWDIR
 
-export SPARK_HADOOP_VERSION=2.3.0
-export SPARK_YARN=true
-
 # Remove work directory
 rm -rf ./work
 
@@ -66,10 +63,10 @@ echo "========================================================================="
 # (either resolution or compilation) prompts the user for input either q, r, 
 # etc to quit or retry. This echo is there to make it not block.
 if [ -n "$_RUN_SQL_TESTS" ]; then
-  echo -e "q\n" | SPARK_HIVE=true sbt/sbt clean package assembly/assembly test | \
-    grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+  echo -e "q\n" | sbt/sbt -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Phive clean package \
+    assembly/assembly test | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 else
-  echo -e "q\n" | sbt/sbt clean package assembly/assembly test | \
+  echo -e "q\n" | sbt/sbt -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 clean package assembly/assembly test | \
     grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 fi
 
