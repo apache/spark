@@ -155,6 +155,9 @@ object SparkBuild extends PomBuild {
   enable(Unidoc.settings)(spark)
 
   /* Hive console settings */
+  enable(SQL.settings)(sql)
+
+  /* Hive console settings */
   enable(Hive.settings)(hive)
 
   // TODO: move this to its upstream project.
@@ -164,6 +167,35 @@ object SparkBuild extends PomBuild {
       else x.settings(Seq[Setting[_]](): _*)
     } ++ Seq[Project](oldDeps)
   }
+
+}
+
+object SQL {
+
+  lazy val settings = Seq(
+
+    javaOptions += "-XX:MaxPermSize=1g",
+    // Multiple queries rely on the TestHive singleton. See comments there for more details.
+    parallelExecution in Test := false,
+    // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
+    // only for this subproject.
+    scalacOptions <<= scalacOptions map { currentOpts: Seq[String] =>
+      currentOpts.filterNot(_ == "-deprecation")
+    },
+    initialCommands in console :=
+      """
+        |import org.apache.spark.sql.catalyst.analysis._
+        |import org.apache.spark.sql.catalyst.dsl._
+        |import org.apache.spark.sql.catalyst.errors._
+        |import org.apache.spark.sql.catalyst.expressions._
+        |import org.apache.spark.sql.catalyst.plans.logical._
+        |import org.apache.spark.sql.catalyst.rules._
+        |import org.apache.spark.sql.catalyst.types._
+        |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.execution
+        |import org.apache.spark.sql.test.TestSQLContext._
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
+  )
 
 }
 
