@@ -106,7 +106,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
         eventBatch.setErrorMsg("Something went wrong. Channel was " +
           "unable to create a transaction!")
       }
-      txOpt.map(tx => {
+      txOpt.foreach(tx => {
         tx.begin()
         val events = new util.ArrayList[SparkSinkEvent](maxBatchSize)
         val loop = new Breaks
@@ -145,7 +145,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
         LOG.error("Error while processing transaction.", e)
         eventBatch.setErrorMsg(e.getMessage)
         try {
-          txOpt.map(tx => {
+          txOpt.foreach(tx => {
             rollbackAndClose(tx, close = true)
           })
         } finally {
@@ -163,7 +163,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
    */
   private def processAckOrNack() {
     batchAckLatch.await(transactionTimeout, TimeUnit.SECONDS)
-    txOpt.map(tx => {
+    txOpt.foreach(tx => {
       if (batchSuccess) {
         try {
           tx.commit()

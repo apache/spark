@@ -59,12 +59,16 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
     val sequenceNumber = seqBase + seqCounter.incrementAndGet()
     val processor = new TransactionProcessor(channel, sequenceNumber,
       n, transactionTimeout, backOffInterval, this)
-    transactionExecutorOpt.map(executor => {
+    transactionExecutorOpt.foreach(executor => {
       executor.submit(processor)
     })
-    processorMap.put(sequenceNumber, processor)
-    // Wait until a batch is available - will be an error if
-    processor.getEventBatch
+    // Wait until a batch is available - will be an error if error message is non-empty
+    val batch = processor.getEventBatch
+    if (batch.getErrorMsg != null && !batch.getErrorMsg.equals("")) {
+      processorMap.put(sequenceNumber, processor)
+    }
+
+    batch
   }
 
   /**
@@ -93,7 +97,7 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
    * @param success Whether the batch was successful or not.
    */
   private def completeTransaction(sequenceNumber: CharSequence, success: Boolean) {
-    Option(removeAndGetProcessor(sequenceNumber)).map(processor => {
+    Option(removeAndGetProcessor(sequenceNumber)).foreach(processor => {
       processor.batchProcessed(success)
     })
   }
@@ -112,7 +116,7 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
    * Shuts down the executor used to process transactions.
    */
   def shutdown() {
-    transactionExecutorOpt.map(executor => {
+    transactionExecutorOpt.foreach(executor => {
       executor.shutdownNow()
     })
   }

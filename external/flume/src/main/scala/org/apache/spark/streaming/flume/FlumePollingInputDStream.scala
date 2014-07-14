@@ -151,7 +151,7 @@ private[streaming] class FlumePollingReceiver(
   override def onStop(): Unit = {
     logInfo("Shutting down Flume Polling Receiver")
     receiverExecutor.shutdownNow()
-    connections.map(connection => {
+    connections.foreach(connection => {
       connection.transceiver.close()
     })
     channelFactory.releaseExternalResources()
