@@ -52,8 +52,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * the two join sides.  When planning a [[execution.BroadcastHashJoin]], if one side has an
    * estimated physical size smaller than the user-settable threshold
    * `spark.sql.auto.convert.join.size`, the planner would mark it as the ''build'' relation and
-   * mark the other relation as the ''stream'' side.  If both estimates exceed the threshold,
-   * they will instead be used to decide the build side in a [[execution.ShuffledHashJoin]].
+   * mark the other relation as the ''stream'' side.  The build table will be ''broadcasted'' to
+   * all of the executors involved in the join, as a [[org.apache.spark.broadcast.Broadcast]]
+   * object.  If both estimates exceed the threshold, they will instead be used to decide the build
+   * side in a [[execution.ShuffledHashJoin]].
    */
   object HashJoin extends Strategy with PredicateHelper {
     private[this] def broadcastHashJoin(
@@ -144,11 +146,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  /**
-   * This strategy applies a simple optimization based on the estimates of the physical sizes of
-   * the two join sides: the planner would mark the relation with the smaller estimated physical
-   * size as the ''build'' (broadcast) relation and mark the other as the ''stream'' relation.
-   */
   object BroadcastNestedLoopJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
