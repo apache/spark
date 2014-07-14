@@ -20,10 +20,11 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Unparsed, Node}
+import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.{Utils, Distribution}
+import org.apache.spark.scheduler.AccumulableInfo
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
@@ -104,9 +105,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         </div>
         // scalastyle:on
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
-      def accumulableRow(acc: (String, String)) = <tr><td>{acc._1}</td><td>{acc._2}</td></tr>
+      def accumulableRow(acc: AccumulableInfo) = <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
       val accumulableTable = UIUtils.listingTable(accumulableHeaders, accumulableRow,
-        accumulables.toSeq)
+        accumulables.values.toSeq)
 
       val taskHeaders: Seq[String] =
         Seq(
@@ -291,7 +292,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
         </td>
         <td>
-          {Unparsed(info.accumulableValues.map{ case (k, v) => s"$k: $v" }.mkString("<br/>"))}
+          {Unparsed(
+            info.accumulables.map{acc => s"${acc.name}: ${acc.update.get}"}.mkString("<br/>")
+          )}
         </td>
         <!--
         TODO: Add this back after we add support to hide certain columns.

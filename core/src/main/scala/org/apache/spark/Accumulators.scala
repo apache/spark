@@ -36,27 +36,29 @@ import org.apache.spark.serializer.JavaSerializer
  *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
+ * @param _name human-readable name for use in Spark's web UI
+ * @param display whether to show accumulator values Spark's web UI
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
 class Accumulable[R, T] (
     @transient initialValue: R,
-    param: AccumulableParam[R, T])
+    param: AccumulableParam[R, T],
+    _name: Option[String],
+    val display: Boolean)
   extends Serializable {
 
-  val id = Accumulators.newId
+  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
+    this(initialValue, param, None, true)
+
+  val id: Long = Accumulators.newId
+  val name = _name.getOrElse(s"accumulator_$id")
+
   @transient private var value_ = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   private var deserialized = false
 
   Accumulators.register(this, true)
-
-  /** A name for this accumulator / accumulable for display in Spark's UI.
-    * Note that names must be unique within a SparkContext. */
-  def name: String = s"accumulator_$id"
-
-  /** Whether to display this accumulator in the web UI. */
-  def display: Boolean = true
 
   /**
    * Add more data to this accumulator / accumulable
@@ -96,6 +98,16 @@ class Accumulable[R, T] (
       throw new UnsupportedOperationException("Can't read accumulator value in task")
     }
   }
+
+  /**
+   * Function to customize printing values of this accumulator.
+   */
+  def prettyValue(_value: R) = s"$value"
+
+  /**
+   * Function to customize printing partially accumulated (local) values of this accumulator.
+   */
+  def prettyPartialValue(_value: R) = prettyValue(_value)
 
   /**
    * Get the current value of this accumulator from within a task.
@@ -226,11 +238,9 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], _name: String,
-    _display: Boolean) extends Accumulable[T,T](initialValue, param) {
-  override def name = if (_name.eq(null)) s"accumulator_$id" else _name
-  override def display = _display
-  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, null, true)
+class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String],
+    display: Boolean) extends Accumulable[T,T](initialValue, param, name, display) {
+  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None, true)
 }
 
 /**

@@ -818,14 +818,15 @@ class DAGScheduler(
           // TODO: fail the stage if the accumulator update fails...
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
           event.accumUpdates.foreach { case (id, partialValue) =>
-            val acc = Accumulators.originals(id)
+            val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
             val name = acc.name
             // To avoid UI cruft, ignore cases where value wasn't updated
             if (partialValue != acc.zero) {
-              val stringPartialValue = s"${partialValue}"
-              val stringValue = s"${acc.value}"
-              stageToInfos(stage).accumulatedValues(name) = stringValue
-              event.taskInfo.accumulableValues += ((name, stringPartialValue))
+              val stringPartialValue = acc.prettyPartialValue(partialValue)
+              val stringValue = acc.prettyValue(acc.value)
+              stageToInfos(stage).accumulables(id) = AccumulableInfo(id, acc.name, stringValue)
+              event.taskInfo.accumulables +=
+                AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
             }
           }
         }

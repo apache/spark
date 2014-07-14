@@ -48,7 +48,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
 
   // TODO: Should probably consolidate all following into a single hash map.
   val stageIdToTime = HashMap[Int, Long]()
-  val stageIdToAccumulables = HashMap[Int, Map[String, String]]()
+  val stageIdToAccumulables = HashMap[Int, Map[Long, AccumulableInfo]]()
   val stageIdToInputBytes = HashMap[Int, Long]()
   val stageIdToShuffleRead = HashMap[Int, Long]()
   val stageIdToShuffleWrite = HashMap[Int, Long]()
@@ -75,9 +75,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
     // Remove by stageId, rather than by StageInfo, in case the StageInfo is from storage
     poolToActiveStages(stageIdToPool(stageId)).remove(stageId)
 
-    val accumulables = stageIdToAccumulables.getOrElseUpdate(stageId, HashMap[String, String]())
-    for ((name, value) <- stageCompleted.stageInfo.accumulatedValues) {
-      accumulables(name) = value
+    val emptyMap = HashMap[Long, AccumulableInfo]()
+    val accumulables = stageIdToAccumulables.getOrElseUpdate(stageId, emptyMap)
+    for ((id, info) <- stageCompleted.stageInfo.accumulables) {
+      accumulables(id) = info
     }
 
     activeStages.remove(stageId)
@@ -155,9 +156,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
     val info = taskEnd.taskInfo
 
     if (info != null) {
-      val accumulables = stageIdToAccumulables.getOrElseUpdate(sid, HashMap[String, String]())
-      for ((name, value) <- info.accumulableValues) {
-        accumulables(name) = value
+      val emptyMap = HashMap[Long, AccumulableInfo]()
+      val accumulables = stageIdToAccumulables.getOrElseUpdate(sid, emptyMap)
+      for (accumulableInfo <- info.accumulables) {
+        accumulables(accumulableInfo.id) = accumulableInfo
       }
 
       // create executor summary map if necessary

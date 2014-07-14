@@ -129,7 +129,7 @@ class JsonProtocolSuite extends FunSuite {
 
     // Fields added after 1.0.0.
     assert(info.details.nonEmpty)
-    assert(info.accumulatedValues.nonEmpty)
+    assert(info.accumulables.nonEmpty)
     val oldJson = newJson
       .removeField { case (field, _) => field == "Details" }
       .removeField { case (field, _) => field == "Accumulated Values" }
@@ -138,7 +138,7 @@ class JsonProtocolSuite extends FunSuite {
 
     assert(info.name === newInfo.name)
     assert("" === newInfo.details)
-    assert(0 === newInfo.accumulatedValues.size)
+    assert(0 === newInfo.accumulables.size)
   }
 
   test("InputMetrics backward compatibility") {
@@ -268,7 +268,7 @@ class JsonProtocolSuite extends FunSuite {
     (0 until info1.rddInfos.size).foreach { i =>
       assertEquals(info1.rddInfos(i), info2.rddInfos(i))
     }
-    assert(info1.accumulatedValues === info2.accumulatedValues)
+    assert(info1.accumulables === info2.accumulables)
     assert(info1.details === info2.details)
   }
 
@@ -301,7 +301,7 @@ class JsonProtocolSuite extends FunSuite {
     assert(info1.gettingResultTime === info2.gettingResultTime)
     assert(info1.finishTime === info2.finishTime)
     assert(info1.failed === info2.failed)
-    assert(info1.accumulableValues === info2.accumulableValues)
+    assert(info1.accumulables === info2.accumulables)
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
@@ -487,17 +487,17 @@ class JsonProtocolSuite extends FunSuite {
   private def makeStageInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
     val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
     val stageInfo = new StageInfo(a, "greetings", b, rddInfos, "details")
-    stageInfo.accumulatedValues("acc1") = "val1"
-    stageInfo.accumulatedValues("acc2") = "val2"
+    stageInfo.accumulables("acc1") = "val1"
+    stageInfo.accumulables("acc2") = "val2"
     stageInfo
   }
 
   private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
     val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
       speculative)
-    taskInfo.accumulableValues += (("acc1", "val1"))
-    taskInfo.accumulableValues += (("acc1", "val1"))
-    taskInfo.accumulableValues += (("acc2", "val2"))
+    taskInfo.accumulables += (("acc1", "val1"))
+    taskInfo.accumulables += (("acc1", "val1"))
+    taskInfo.accumulables += (("acc2", "val2"))
     taskInfo
   }
 

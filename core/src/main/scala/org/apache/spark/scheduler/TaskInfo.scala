@@ -45,9 +45,10 @@ class TaskInfo(
 
   /**
    * Intermediate updates to accumulables during this task. Note that it is valid for the same
-   * accumulable to be updated multiple times in a single task.
+   * accumulable to be updated multiple times in a single task or for two accumulables with the
+   * same name but different ID's to exist in a task.
    */
-  val accumulableValues = ListBuffer[(String, String)]()
+  val accumulables = ListBuffer[AccumulableInfo]()
 
   /**
    * The time when the task has completed successfully (including the time to remotely fetch
