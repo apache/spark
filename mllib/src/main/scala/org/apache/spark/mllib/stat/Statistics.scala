@@ -17,36 +17,56 @@
 
 package org.apache.spark.mllib.stat
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.stat.correlation.Correlations
 import org.apache.spark.rdd.RDD
 
+/**
+ * API for statistical functions in MLlib
+ */
+@Experimental
 object Statistics {
 
   /**
    * Compute the Pearson correlation matrix for the input RDD of Vectors.
+   *
+   * @param X an RDD[Vector] for which the correlation matrix is to be computed.
+   * @return Pearson correlation matrix comparing columns in X.
    */
   def corr(X: RDD[Vector]): Matrix = Correlations.corrMatrix(X)
 
   /**
    * Compute the correlation matrix for the input RDD of Vectors using the specified method.
-   *
    * Methods currently supported: pearson (default), spearman
+   *
+   * Note that for Spearman, a rank correlation, we need to create an RDD[Double] for each column
+   * in order to retrieve the ranks.
+   *
+   * @param X an RDD[Vector] for which the correlation matrix is to be computed.
+   * @param method String specifying the method to use for computing correlation
+   * @return Correlation matrix comparing columns in X.
    */
   def corr(X: RDD[Vector], method: String): Matrix = Correlations.corrMatrix(X, method)
 
   /**
    * Compute the Pearson correlation for the input RDDs.
+   *
+   * @param x RDD[Double] of the same cardinality as y
+   * @param y RDD[Double] of the same cardinality as x
+   * @return A Double containing the Pearson correlation between the two input RDD[Double]s
    */
   def corr(x: RDD[Double], y: RDD[Double]): Double = Correlations.corr(x, y)
 
   /**
    * Compute the correlation for the input RDDs using the specified method.
-   *
    * Methods currently supported: pearson (default), spearman
+   *
+   * @param x RDD[Double] of the same cardinality as y
+   * @param y RDD[Double] of the same cardinality as x
+   * @param method String specifying the method to use for computing correlation
+   * @return A Double containing the correlation between the two input RDD[Double]s using the
+   *         specified method.
    */
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
-
-
-
 }

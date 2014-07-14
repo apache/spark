@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
  * Definition of Pearson correlation can be found at
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
-object PearsonCorrelation extends Correlation {
+private[stat] object PearsonCorrelation extends Correlation {
 
   /**
    * Compute the Pearson correlation for two datasets.
@@ -62,10 +62,6 @@ object PearsonCorrelation extends Correlation {
       cov(i, i) = math.sqrt(cov(i, i))
       i +=1
     }
-    // or we could put the stddev in its own array to trade space for one less pass over the matrix
-
-    // TODO: use blas.dspr instead to compute the correlation matrix
-    // if the covariance matrix comes in the upper triangular form for free
 
     // Loop through columns since cov is column major
     var j = 0
@@ -74,9 +70,10 @@ object PearsonCorrelation extends Correlation {
       sigma = cov(j, j)
       i = 0
       while (i < j) {
-        val covariance = cov(i, j) / (sigma * cov(i, i))
-        cov(i, j) = covariance
-        cov(j, i) = covariance
+        // TODO: figure out what to do when cov(i, i) or cov(j, j) is 0.0
+        val corr = cov(i, j) / (sigma * cov(i, i))
+        cov(i, j) = corr
+        cov(j, i) = corr
         i += 1
       }
       j += 1

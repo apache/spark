@@ -21,9 +21,9 @@ import org.apache.spark.mllib.linalg.{DenseVector, Matrix, Vector}
 import org.apache.spark.rdd.RDD
 
 /**
- * New correlation algorithms should implement this trait
+ * Trait for correlation algorithms.
  */
-trait Correlation {
+private[stat] trait Correlation {
 
   /**
    * Compute correlation for two datasets.
@@ -42,7 +42,7 @@ trait Correlation {
    */
   def computeCorrelationWithMatrixImpl(x: RDD[Double], y: RDD[Double]): Double = {
     val mat: RDD[Vector] = x.zip(y).mapPartitions({ iter =>
-      iter.map {case(xi, yi) => new DenseVector(Array(xi, yi))}
+      iter.map { case (xi, yi) => new DenseVector(Array(xi, yi)) }
     }, preservesPartitioning = true)
     computeCorrelationMatrix(mat)(0, 1)
   }
@@ -56,14 +56,9 @@ trait Correlation {
  * After new correlation algorithms are added, please update the documentation here and in
  * Statistics.scala for the correlation APIs.
  *
- * Cases are ignored when doing method matching. We also allow initials, e.g. "P" for "pearson", as
- * long as initials are unique in the supported set of correlation algorithms. In addition, a
- * supported method name has to be a substring of the input method name for it to be matched (e.g.
- * "spearmansrho" will be matched to "spearman")
- *
  * Maintains the default correlation type, pearson
  */
-object Correlations {
+private[stat] object Correlations {
 
   // Note: after new types of correlations are implemented, please update this map
   val nameToObjectMap = Map(("pearson", PearsonCorrelation), ("spearman", SpearmansCorrelation))
@@ -91,15 +86,10 @@ object Correlations {
     } else {
       var correlation: Correlation = defaultCorr
       var matched = false
-      val initialsAllowed = areInitialsUnique()
-      val inputLower = method.toLowerCase()
       nameToObjectMap.foreach { case (name, corr) =>
-        if (!matched) {
-          if ((initialsAllowed && method.size == 1 && name.startsWith(inputLower)) ||
-            inputLower.contains(name)) { // match names like "spearmans"
-            correlation = corr
-            matched = true
-          }
+        if (!matched && method.equals(name)) {
+          correlation = corr
+          matched = true
         }
       }
 
@@ -110,12 +100,5 @@ object Correlations {
           " Supported correlations: " + nameToObjectMap.keys.mkString(", "))
       }
     }
-  }
-
-  /**
-   * Check if the first letters of known correlation names are all unique
-   */
-  private def areInitialsUnique(): Boolean = {
-    nameToObjectMap.keys.map(key => key.charAt(0)).toSet.size == nameToObjectMap.keySet.size
   }
 }

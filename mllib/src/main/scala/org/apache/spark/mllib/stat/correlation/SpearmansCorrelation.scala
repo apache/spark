@@ -43,7 +43,9 @@ object SpearmansCorrelation extends Correlation {
    * correlation between column i and j.
    */
   override def computeCorrelationMatrix(X: RDD[Vector]): Matrix = {
-    val indexed = X.zipWithIndex()
+    val indexed = X.zipWithUniqueId()
+
+    // TODO: remove this block maybe
     // Attempt to checkpoint the RDD before splitting it into numCols RDD[Double]s to avoid
     // computing the lineage prefix multiple times.
     // If checkpoint directory not set, cache the RDD instead.
@@ -59,9 +61,9 @@ object SpearmansCorrelation extends Correlation {
     // Note: we use a for loop here instead of a while loop with a single index variable
     // to avoid race condition caused by closure serialization
     for (k <- 0 until numCols) {
-      val column = indexed.map {case(vector, index) => {
-        (vector(k), index)}
-      }
+      val column = indexed.mapPartitions[(Double, Long)]({ iter =>
+        iter.map { case (vector, index) => (vector(k), index) }
+      }, true)
       ranks(k) = getRanks(column)
     }
 
@@ -75,10 +77,26 @@ object SpearmansCorrelation extends Correlation {
    * With the average method, elements with the same value receive the same rank that's computed
    * by taking the average of their positions in the sorted list.
    * e.g. ranks([2, 1, 0, 2]) = [3.5, 2.0, 1.0, 3.5]
+   *
+   *
+   */
+  /**
+   * Compute the ranks for elements in the input RDD, using the average method for ties.
+   *
+   * With the average method, elements with the same value receive the same rank that's computed
+   * by taking the average of their positions in the sorted list.
+   * e.g. ranks([2, 1, 0, 2]) = [3.5, 2.0, 1.0, 3.5]
+   *
+   * // TODO the docs here might be a lie depending on if zipWithIndex is used
+   *
+   * @param indexed RDD[(Double, Long)] containing pairs of the format (originalValue, uniqueId),
+   *                where uniqueId is strictly monotonically increasing w.r.t index
+   * @return RDD[(Long, Double)] containing pairs of the format (uniqueId, rank) where uniqueId is
+   *         copied from the input RDD.
    */
   private def getRanks(indexed: RDD[(Double, Long)]): RDD[(Long, Double)] = {
     // Get elements' positions in the sorted list for computing average rank for duplicate values
-    val sorted = indexed.sortByKey().zipWithIndex()
+    val sorted = indexed.sortByKey().zipWithUniqueId()
     val groupedByValue = sorted.groupBy(_._1._1)
     val ranks = groupedByValue.flatMap[(Long, Double)] { item =>
       val duplicates = item._2
@@ -96,7 +114,7 @@ object SpearmansCorrelation extends Correlation {
     val partitioner = Partitioner.defaultPartitioner(ranks(0), ranks.tail: _*)
     val cogrouped = new CoGroupedRDD[Long](ranks, partitioner)
     cogrouped.mapPartitions({ iter =>
-      iter.map {case (index, values:Seq[Seq[Double]]) => new DenseVector(values.flatten.toArray)}
-    })
+      iter.map { case (index, values: Seq[Seq[Double]]) => new DenseVector(values.flatten.toArray)}
+    }, preservesPartitioning = true)
   }
 }
