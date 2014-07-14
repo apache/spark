@@ -34,12 +34,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
    */
   case class Statistics(
     /**
-     * Number of output tuples. For leaf operators this defaults to 1, otherwise it is set to the
-     * product of children's `numTuples`.
-     */
-    numTuples: Long = childrenStats.map(_.numTuples).product,
-
-    /**
      * Physical size in bytes. For leaf operators this defaults to 1, otherwise it is set to the
      * product of children's `sizeInBytes`.
      */
