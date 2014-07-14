@@ -21,11 +21,6 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-private object SQLConf {
-  @transient protected[spark] val confSettings = java.util.Collections.synchronizedMap(
-    new java.util.HashMap[String, String]())
-}
-
 /**
  * A trait that enables the setting and getting of mutable config parameters/hints. The central
  * location for storing them is uniquely located in the same-name private companion object.
@@ -40,8 +35,8 @@ private object SQLConf {
 trait SQLConf {
   import SQLConf._
 
-  import org.apache.spark.sql.SQLConf._
-  @transient protected[spark] val settings = confSettings
+  @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
+    new java.util.HashMap[String, String]())
 
   /** ************************ Spark SQL Params/Hints ******************* */
   // TODO: refactor so that these hints accessors don't pollute the name space of SQLContext?
@@ -70,39 +65,39 @@ trait SQLConf {
   /** ********************** SQLConf functionality methods ************ */
 
   def set(props: Properties): Unit = {
-    confSettings.synchronized {
-      props.asScala.foreach { case (k, v) => confSettings.put(k, v) }
+    settings.synchronized {
+      props.asScala.foreach { case (k, v) => settings.put(k, v) }
     }
   }
 
   def set(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
     require(value != null, s"value cannot be null for key: $key")
-    confSettings.put(key, value)
+    settings.put(key, value)
   }
 
   def get(key: String): String = {
-    Option(confSettings.get(key)).getOrElse(throw new NoSuchElementException(key))
+    Option(settings.get(key)).getOrElse(throw new NoSuchElementException(key))
   }
 
   def get(key: String, defaultValue: String): String = {
-    Option(confSettings.get(key)).getOrElse(defaultValue)
+    Option(settings.get(key)).getOrElse(defaultValue)
   }
 
-  def getAll: Array[(String, String)] = confSettings.synchronized { confSettings.asScala.toArray }
+  def getAll: Array[(String, String)] = settings.synchronized { settings.asScala.toArray }
 
-  def getOption(key: String): Option[String] = Option(confSettings.get(key))
+  def getOption(key: String): Option[String] = Option(settings.get(key))
 
-  def contains(key: String): Boolean = confSettings.containsKey(key)
+  def contains(key: String): Boolean = settings.containsKey(key)
 
   def toDebugString: String = {
-    confSettings.synchronized {
-      confSettings.asScala.toArray.sorted.map{ case (k, v) => s"$k=$v" }.mkString("\n")
+    settings.synchronized {
+      settings.asScala.toArray.sorted.map{ case (k, v) => s"$k=$v" }.mkString("\n")
     }
   }
 
   private[spark] def clear() {
-    confSettings.clear()
+    settings.clear()
   }
 
 }
