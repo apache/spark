@@ -1063,27 +1063,19 @@ object DecisionTree extends Serializable with Logging {
         // Iterate over all splits.
         var splitIndex = 1
         while (splitIndex < numBins - 1) {
-          // calculating left node aggregate for a split as a sum of left node aggregate of a
-          // lower split and the left bin aggregate of a bin where the split is a high split
-          leftNodeAgg(featureIndex)(splitIndex)(0) = binData(shift + 3 * splitIndex) +
-            leftNodeAgg(featureIndex)(splitIndex - 1)(0)
-          leftNodeAgg(featureIndex)(splitIndex)(1) = binData(shift + 3 * splitIndex + 1) +
-            leftNodeAgg(featureIndex)(splitIndex - 1)(1)
-          leftNodeAgg(featureIndex)(splitIndex)(2) = binData(shift + 3 * splitIndex + 2) +
-            leftNodeAgg(featureIndex)(splitIndex - 1)(2)
-
-          // calculating right node aggregate for a split as a sum of right node aggregate of a
-          // higher split and the right bin aggregate of a bin where the split is a low split
-          rightNodeAgg(featureIndex)(numBins - 2 - splitIndex)(0) =
-            binData(shift + (3 * (numBins - 1 - splitIndex))) +
-              rightNodeAgg(featureIndex)(numBins - 1 - splitIndex)(0)
-          rightNodeAgg(featureIndex)(numBins - 2 - splitIndex)(1) =
-            binData(shift + (3 * (numBins - 1 - splitIndex) + 1)) +
-              rightNodeAgg(featureIndex)(numBins - 1 - splitIndex)(1)
-          rightNodeAgg(featureIndex)(numBins - 2 - splitIndex)(2) =
-            binData(shift + (3 * (numBins - 1 - splitIndex) + 2)) +
-              rightNodeAgg(featureIndex)(numBins - 1 - splitIndex)(2)
-
+          var i = 0 // index for regression histograms
+          while (i < 3) { // count, sum, sum^2
+            // calculating left node aggregate for a split as a sum of left node aggregate of a
+            // lower split and the left bin aggregate of a bin where the split is a high split
+            leftNodeAgg(featureIndex)(splitIndex)(i) = binData(shift + 3 * splitIndex + i) +
+              leftNodeAgg(featureIndex)(splitIndex - 1)(i)
+            // calculating right node aggregate for a split as a sum of right node aggregate of a
+            // higher split and the right bin aggregate of a bin where the split is a low split
+            rightNodeAgg(featureIndex)(numBins - 2 - splitIndex)(i) =
+              binData(shift + (3 * (numBins - 1 - splitIndex) + i)) +
+                rightNodeAgg(featureIndex)(numBins - 1 - splitIndex)(i)
+            i += 1
+          }
           splitIndex += 1
         }
       }
