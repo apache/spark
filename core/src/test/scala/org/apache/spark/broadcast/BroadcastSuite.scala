@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.broadcast
 
+import org.apache.spark.storage.{BroadcastBlockId, _}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException}
 import org.scalatest.FunSuite
-
-import org.apache.spark.storage._
-import org.apache.spark.broadcast.{Broadcast, HttpBroadcast}
-import org.apache.spark.storage.BroadcastBlockId
 
 class BroadcastSuite extends FunSuite with LocalSparkContext {
 

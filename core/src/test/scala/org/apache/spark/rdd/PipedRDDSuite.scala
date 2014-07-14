@@ -15,24 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.rdd
 
 import java.io.File
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.rdd.{HadoopRDD, PipedRDD, HadoopPartition}
-import org.apache.hadoop.mapred.{JobConf, TextInputFormat, FileSplit}
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
+import org.apache.spark._
+import org.scalatest.FunSuite
 
 import scala.collection.Map
 import scala.language.postfixOps
 import scala.sys.process._
 import scala.util.Try
-
-import org.apache.hadoop.io.{Text, LongWritable}
-
-import org.apache.spark.executor.TaskMetrics
 
 class PipedRDDSuite extends FunSuite with SharedSparkContext {
 
