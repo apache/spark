@@ -174,14 +174,6 @@ object SQL {
 
   lazy val settings = Seq(
 
-    javaOptions += "-XX:MaxPermSize=1g",
-    // Multiple queries rely on the TestHive singleton. See comments there for more details.
-    parallelExecution in Test := false,
-    // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
-    // only for this subproject.
-    scalacOptions <<= scalacOptions map { currentOpts: Seq[String] =>
-      currentOpts.filterNot(_ == "-deprecation")
-    },
     initialCommands in console :=
       """
         |import org.apache.spark.sql.catalyst.analysis._
