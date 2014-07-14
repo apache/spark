@@ -87,16 +87,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         }
 
       case StatusUpdate(executorId, taskId, state, data) =>
-        scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           if (executorActor.contains(executorId)) {
             freeCores(executorId) += scheduler.CPUS_PER_TASK
-            makeOffers(executorId)
+            // Make offer right away if the task succeeds, otherwise wait for the scheduler to
+            // revive offer
+            // TODO: there may still be deadlock if a task reports success
+            // but we failed retrieving its result
+            if (state == TaskState.FINISHED) {
+              makeOffers(executorId)
+            }
           } else {
             // Ignoring the update since we don't know about the executor.
             val msg = "Ignored task status update (%d state %s) from unknown executor %s with ID %s"
             logWarning(msg.format(taskId, state, sender, executorId))
           }
+          scheduler.statusUpdate(taskId, state, data.value)
         }
 
       case ReviveOffers =>
@@ -246,6 +252,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       case e: Exception =>
         throw new SparkException("Error notifying standalone scheduler's driver actor", e)
     }
+  }
+
+  override def freeSlotAvail(numPendingTask: Int): Boolean = {
+    numPendingTask * scheduler.CPUS_PER_TASK < totalCoreCount.get()
   }
 }
 

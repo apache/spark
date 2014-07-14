@@ -580,6 +580,7 @@ private[spark] class TaskSetManager(
       case TaskResultLost =>
         failureReason = "Lost result for TID %s on host %s".format(tid, info.host)
         logWarning(failureReason)
+        // TODO: may cause some sort of "deadlock" if we lost the reuslt of a shuffle map task
 
       case _ =>
         failureReason = "TID %s on host %s failed for unknown reason".format(tid, info.host)
@@ -636,9 +637,7 @@ private[spark] class TaskSetManager(
   override def removeSchedulable(schedulable: Schedulable) {}
 
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
-    var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]()
-    sortedTaskSetQueue += this
-    sortedTaskSetQueue
+    ArrayBuffer[TaskSetManager](this)
   }
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
@@ -754,6 +753,16 @@ private[spark] class TaskSetManager(
     levels += ANY
     logDebug("Valid locality levels for " + taskSet + ": " + levels.mkString(", "))
     levels.toArray
+  }
+
+  // Test if this stage is in pre-start state
+  def isPreStart() = sched.dagScheduler.isPreStartStage(stageId)
+
+  // Kill this task set manager
+  def kill() {
+    isZombie = true
+    runningTasksSet.clear()
+    maybeFinishTaskSet()
   }
 
   // Re-compute pendingTasksWithNoPrefs since new preferred locations may become available

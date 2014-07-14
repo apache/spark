@@ -19,13 +19,11 @@ package org.apache.spark.storage
 
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashSet
-import scala.collection.mutable.Queue
+import scala.collection.mutable.{HashMap, ArrayBuffer, HashSet, Queue}
 
 import io.netty.buffer.ByteBuf
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.{MapOutputTracker, Logging, SparkException}
 import org.apache.spark.network.BufferMessage
 import org.apache.spark.network.ConnectionManagerId
 import org.apache.spark.network.netty.ShuffleCopier
@@ -344,4 +342,100 @@ object BlockFetcherIterator {
     }
   }
   // End of NettyBlockFetcherIterator
+
+  class PartialBlockFetcherIterator(
+      private val blockManager: BlockManager,
+      private var statuses: Array[(BlockManagerId, Long)],
+      private val mapOutputTracker: MapOutputTracker,
+      serializer: Serializer,
+      shuffleId: Int,
+      reduceId: Int)
+    extends BlockFetcherIterator {
+    private val iterators=new ArrayBuffer[BlockFetcherIterator]()
+
+    // Track the map outputs we've delegated
+    private val delegatedStatuses = new HashSet[Int]()
+
+    private var localEpoch = 0
+
+    // Check if the map output is partial
+    private def isPartial = statuses.exists(_._1 == null)
+
+    // Get the updated map output
+    private def updateStatuses() {
+      val update = mapOutputTracker.getUpdatedStatus(shuffleId, reduceId, localEpoch)
+      statuses = update._1
+      localEpoch = update._2
+    }
+
+    private def readyStatuses = (0 until statuses.size).filter(statuses(_)._1 != null)
+
+    //check if there's new map outputs ready to collect
+    private def newStatusesReady = readyStatuses.exists(!delegatedStatuses.contains(_))
+
+    private def getIterator() = {
+      while (!newStatusesReady) {
+        logInfo("Still missing " + statuses.filter(_._1 == null).size +
+          " map outputs for reduce " + reduceId + " of shuffle " + shuffleId)
+        updateStatuses()
+      }
+      val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
+      for (index <- readyStatuses if !delegatedStatuses.contains(index)) {
+        splitsByAddress.getOrElseUpdate(statuses(index)._1, ArrayBuffer()) += ((index, statuses(index)._2))
+        delegatedStatuses += index
+      }
+      val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
+        case (address, splits) =>
+          (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
+      }
+      logInfo("Delegating " + blocksByAddress.map(_._2.size).sum +
+        " blocks to a new iterator for reduce " + reduceId + " of shuffle " + shuffleId)
+      blockManager.getMultiple(blocksByAddress, serializer)
+    }
+
+    override def initialize(){
+      iterators += getIterator()
+    }
+
+    override def hasNext: Boolean = {
+      // Firstly see if the delegated iterators have more blocks for us
+      if (iterators.exists(_.hasNext)) {
+        return true
+      }
+      // If we have blocks not delegated yet, try to delegate them to a new iterator
+      // and depend on the iterator to tell us if there are valid blocks.
+      while (delegatedStatuses.size < statuses.size) {
+        try {
+          val newItr = getIterator()
+          iterators += newItr
+          if (newItr.hasNext) {
+            return true
+          }
+        } catch {
+          case e: SparkException => return false
+        }
+      }
+      false
+    }
+
+    override def next(): (BlockId, Option[Iterator[Any]]) = {
+      // Try to get a block from the iterators we've created
+      for (itr <- iterators if itr.hasNext) {
+        return itr.next()
+      }
+      // We rely on the iterators for "hasNext", shouldn't get here
+      throw new SparkException("No more blocks to fetch for reduceId " + reduceId)
+    }
+
+    override def totalBlocks = iterators.map(_.totalBlocks).sum
+
+    override def numLocalBlocks = iterators.map(_.numLocalBlocks).sum
+
+    override def numRemoteBlocks = iterators.map(_.numRemoteBlocks).sum
+
+    override def fetchWaitTime = iterators.map(_.fetchWaitTime).sum
+
+    override def remoteBytesRead = iterators.map(_.remoteBytesRead).sum
+  }
+  // End of PartialBlockFetcherIterator
 }

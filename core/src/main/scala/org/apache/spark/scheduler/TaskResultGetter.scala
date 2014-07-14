@@ -105,4 +105,24 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   def stop() {
     getTaskResultExecutor.shutdownNow()
   }
+
+  def enqueueFailedTaskSync(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
+    serializedData: ByteBuffer) {
+    var reason : TaskEndReason = UnknownReason
+    try {
+      if (serializedData != null && serializedData.limit() > 0) {
+        reason = serializer.get().deserialize[TaskEndReason](
+          serializedData, Utils.getSparkClassLoader)
+      }
+    } catch {
+      case cnd: ClassNotFoundException =>
+        // Log an error but keep going here -- the task failed, so not catastropic if we can't
+        // deserialize the reason.
+        val loader = Utils.getContextOrSparkClassLoader
+        logError(
+          "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
+      case ex: Exception => {}
+    }
+    scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
+  }
 }

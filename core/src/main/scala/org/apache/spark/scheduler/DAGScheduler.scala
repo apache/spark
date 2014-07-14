@@ -39,7 +39,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
-import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
+import org.apache.spark.util.{AkkaUtils, CallSite, SystemClock, Clock, Utils}
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -121,6 +121,11 @@ class DAGScheduler(
     env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
 
   private[scheduler] var eventProcessActor: ActorRef = _
+
+  // Whether to enable remove stage barrier
+  val removeStageBarrier = env.conf.getBoolean("spark.scheduler.removeStageBarrier", false)
+  // Track the pre-started stages depending on a stage (the key)
+  private val dependantStagePreStarted = new HashMap[Stage, ArrayBuffer[Stage]]()
 
   private def initializeEventProcessActor() {
     // blocking the thread until supervisor is started, which ensures eventProcessActor is
@@ -244,7 +249,7 @@ class DAGScheduler(
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId, callSite)
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
-      val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
+      val locs = MapOutputTracker.deserializeMapStatuses(serLocs)._1
       for (i <- 0 until locs.size) {
         stage.outputLocs(i) = Option(locs(i)).toList   // locs(i) will be null if missing
       }
@@ -858,6 +863,13 @@ class DAGScheduler(
               logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
             } else {
               stage.addOutputLoc(smt.partitionId, status)
+              // Need to register map outputs progressively if remove stage barrier is enabled
+              if (removeStageBarrier && dependantStagePreStarted.contains(stage) &&
+                  stage.shuffleDep.isDefined) {
+                mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
+                  stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+                  changeEpoch = false, isPartial = true)
+              }
             }
             if (runningStages.contains(stage) && pendingTasks(stage).isEmpty) {
               markStageAsFinished(stage)
@@ -884,6 +896,17 @@ class DAGScheduler(
                 logInfo("Resubmitting " + stage + " (" + stage.name +
                   ") because some of its tasks had failed: " +
                   stage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
+                // Pre-started dependant stages should fail
+                val stages = new ArrayBuffer[Stage]()
+                if (dependantStagePreStarted.contains(stage)) {
+                  for (preStartedStage <- dependantStagePreStarted.get(stage).get) {
+                    logInfo("Marking " + preStartedStage + " (" + preStartedStage.name +
+                      ") for resubmision due to parent stage resubmission")
+                    runningStages -= preStartedStage
+                    stages += preStartedStage
+                  }
+                }
+                failStages(stages.toArray)
                 submitStage(stage)
               } else {
                 val newlyRunnable = new ArrayBuffer[Stage]
@@ -903,6 +926,9 @@ class DAGScheduler(
                   submitMissingTasks(stage, jobId)
                 }
               }
+              dependantStagePreStarted -= stage
+            } else {
+              maybePreStartWaitingStage(stage)
             }
           }
 
@@ -913,31 +939,26 @@ class DAGScheduler(
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
         // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
-        runningStages -= failedStage
-        // TODO: Cancel running tasks in the stage
-        logInfo("Marking " + failedStage + " (" + failedStage.name +
-          ") for resubmision due to a fetch failure")
-        // Mark the map whose fetch failed as broken in the map stage
-        val mapStage = shuffleToMapStage(shuffleId)
-        if (mapId != -1) {
-          mapStage.removeOutputLoc(mapId, bmAddress)
-          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
-        }
-        logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
-          "); marking it for resubmission")
-        if (failedStages.isEmpty && eventProcessActor != null) {
-          // Don't schedule an event to resubmit failed stages if failed isn't empty, because
-          // in that case the event will already have been scheduled. eventProcessActor may be
-          // null during unit tests.
-          import env.actorSystem.dispatcher
-          env.actorSystem.scheduler.scheduleOnce(
-            RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
-        }
-        failedStages += failedStage
-        failedStages += mapStage
-        // TODO: mark the executor as failed only if there were lots of fetch failures on it
-        if (bmAddress != null) {
-          handleExecutorLost(bmAddress.executorId, Some(task.epoch))
+        if(runningStages.remove(failedStage)){
+          val stages = new ArrayBuffer[Stage]()
+          stages += failedStage
+          logInfo("Marking " + failedStage + " (" + failedStage.name +
+            ") for resubmision due to a fetch failure")
+          // Mark the map whose fetch failed as broken in the map stage
+          val mapStage = shuffleToMapStage(shuffleId)
+          if (mapId != -1) {
+            mapStage.removeOutputLoc(mapId, bmAddress)
+            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+          }
+          runningStages -= mapStage
+          stages += mapStage
+          logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
+            "); marking it for resubmission")
+          failStages(stages.toArray)
+          // TODO: mark the executor as failed only if there were lots of fetch failures on it
+          if (bmAddress != null) {
+            handleExecutorLost(bmAddress.executorId, Some(task.epoch))
+          }
         }
 
       case ExceptionFailure(className, description, stackTrace, metrics) =>
@@ -970,7 +991,7 @@ class DAGScheduler(
       for ((shuffleId, stage) <- shuffleToMapStage) {
         stage.removeOutputsOnExecutor(execId)
         val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
-        mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
+        mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true, isPartial = true)
       }
       if (shuffleToMapStage.isEmpty) {
         mapOutputTracker.incrementEpoch()
@@ -1159,6 +1180,91 @@ class DAGScheduler(
     dagSchedulerActorSupervisor ! PoisonPill
     taskScheduler.stop()
   }
+
+  // Select a waiting stage to pre-start
+  private def getPreStartableStage(stage: Stage): Option[Stage] = {
+    for (waitingStage <- waitingStages) {
+      val missingParents = getMissingParentStages(waitingStage)
+      if (missingParents.contains(stage) &&
+        missingParents.forall(
+            parent => !(waitingStages.contains(parent) || failedStages.contains(parent)))) {
+        return Some(waitingStage)
+      }
+    }
+    None
+  }
+
+  // Check if the given stageId is a pre-started stage
+  private[scheduler] def handleCheckIfPreStarted(stageId: Int): Boolean = {
+    if (stageIdToStage.contains(stageId)) {
+      val stage = stageIdToStage(stageId)
+      for (preStartedStages <- dependantStagePreStarted.values) {
+        if (preStartedStages.contains(stage)) {
+          return true
+        }
+      }
+    }
+    false
+  }
+
+  def isPreStartStage(stageId: Int): Boolean = {
+    if (!removeStageBarrier) {
+      return false
+    }
+    try {
+      val timeout = AkkaUtils.askTimeout(sc.conf)
+      val future = eventProcessActor.ask(CheckIfPreStarted(stageId))(timeout)
+      Await.result(future, timeout).asInstanceOf[Boolean]
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Time out asking event processor.", e)
+    }
+  }
+
+  // Mark some stages as failed and resubmit them
+  private def failStages(stages: Array[Stage]) {
+    // Let's first kill all the running tasks in the failed stage
+    for (failedStage <- stages) {
+      taskScheduler.killTasks(failedStage.id, false)
+    }
+    if (failedStages.isEmpty && eventProcessActor != null) {
+      // Don't schedule an event to resubmit failed stages if failed isn't empty, because
+      // in that case the event will already have been scheduled. eventProcessActor may be
+      // null during unit tests.
+      import env.actorSystem.dispatcher
+      env.actorSystem.scheduler.scheduleOnce(
+        RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
+    }
+    failedStages ++= stages
+  }
+
+  private def maybePreStartWaitingStage(stage: Stage) {
+    if (removeStageBarrier && taskScheduler.isInstanceOf[TaskSchedulerImpl]) {
+      // TODO: need a better way to check if there's free slots
+      val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend
+      val numPendingTask = pendingTasks.values.map(_.size).sum
+      val numWaitingStage = waitingStages.size
+      if (backend.freeSlotAvail(numPendingTask) && numWaitingStage > 0 &&
+          stage.shuffleDep.isDefined) {
+        for (preStartStage <- getPreStartableStage(stage)) {
+          logInfo("Pre-start stage " + preStartStage.id)
+          // Register map output finished so far
+          mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
+            stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+            changeEpoch = false, isPartial = true)
+          waitingStages -= preStartStage
+          runningStages += preStartStage
+          // Inform parent stages that the dependant stage has been pre-started
+          for (parentStage <- getMissingParentStages(preStartStage)
+              if runningStages.contains(parentStage)) {
+            dependantStagePreStarted.getOrElseUpdate(
+                parentStage, new ArrayBuffer[Stage]()) += preStartStage
+          }
+          submitMissingTasks(preStartStage, activeJobForStage(preStartStage).get)
+        }
+      }
+    }
+  }
 }
 
 private[scheduler] class DAGSchedulerActorSupervisor(dagScheduler: DAGScheduler)
@@ -1232,6 +1338,9 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
 
     case ResubmitFailedStages =>
       dagScheduler.resubmitFailedStages()
+
+    case CheckIfPreStarted(stageId) =>
+      sender ! dagScheduler.handleCheckIfPreStarted(stageId)
   }
 
   override def postStop() {
