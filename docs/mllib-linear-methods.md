@@ -187,7 +187,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLUtils
 
 // Load training data in LIBSVM format.
-val data = MLUtils.loadLibSVMFile(sc, "mllib/data/sample_libsvm_data.txt")
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
 // Split data into training (60%) and test (40%).
 val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
@@ -259,7 +259,7 @@ def parsePoint(line):
     values = [float(x) for x in line.split(' ')]
     return LabeledPoint(values[0], values[1:])
 
-data = sc.textFile("mllib/data/sample_svm_data.txt")
+data = sc.textFile("data/mllib/sample_svm_data.txt")
 parsedData = data.map(parsePoint)
 
 # Build the model
@@ -309,7 +309,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
-val data = sc.textFile("mllib/data/ridge-data/lpsa.data")
+val data = sc.textFile("data/mllib/ridge-data/lpsa.data")
 val parsedData = data.map { line =>
   val parts = line.split(',')
   LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
@@ -356,7 +356,7 @@ def parsePoint(line):
     values = [float(x) for x in line.replace(',', ' ').split(' ')]
     return LabeledPoint(values[0], values[1:])
 
-data = sc.textFile("mllib/data/ridge-data/lpsa.data")
+data = sc.textFile("data/mllib/ridge-data/lpsa.data")
 parsedData = data.map(parsePoint)
 
 # Build the model

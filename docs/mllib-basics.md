@@ -193,7 +193,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
-val examples: RDD[LabeledPoint] = MLUtils.loadLibSVMFile(sc, "mllib/data/sample_libsvm_data.txt")
+val examples: RDD[LabeledPoint] = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 {% endhighlight %}
 </div>
 
@@ -207,7 +207,7 @@ import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.api.java.JavaRDD;
 
 JavaRDD<LabeledPoint> examples = 
-  MLUtils.loadLibSVMFile(jsc.sc(), "mllib/data/sample_libsvm_data.txt").toJavaRDD();
+  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
 {% endhighlight %}
 </div>
 
@@ -218,7 +218,7 @@ examples stored in LIBSVM format.
 {% highlight python %}
 from pyspark.mllib.util import MLUtils
 
-examples = MLUtils.loadLibSVMFile(sc, "mllib/data/sample_libsvm_data.txt")
+examples = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 {% endhighlight %}
 </div>
 </div>

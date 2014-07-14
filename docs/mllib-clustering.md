@@ -51,7 +51,7 @@ import org.apache.spark.mllib.clustering.KMeans
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
-val data = sc.textFile("data/kmeans_data.txt")
+val data = sc.textFile("data/mllib/kmeans_data.txt")
 val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble)))
 
 // Cluster the data into two classes using KMeans
@@ -86,7 +86,7 @@ from numpy import array
 from math import sqrt
 
 # Load and parse the data
-data = sc.textFile("data/kmeans_data.txt")
+data = sc.textFile("data/mllib/kmeans_data.txt")
 parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
 
 # Build the model (cluster the data)

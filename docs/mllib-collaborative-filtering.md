@@ -58,7 +58,7 @@ import org.apache.spark.mllib.recommendation.ALS
 import org.apache.spark.mllib.recommendation.Rating
 
 // Load and parse the data
-val data = sc.textFile("mllib/data/als/test.data")
+val data = sc.textFile("data/mllib/als/test.data")
 val ratings = data.map(_.split(',') match { case Array(user, item, rate) =>
     Rating(user.toInt, item.toInt, rate.toDouble)
   })
@@ -112,7 +112,7 @@ from pyspark.mllib.recommendation import ALS
 from numpy import array
 
 # Load and parse the data
-data = sc.textFile("mllib/data/als/test.data")
+data = sc.textFile("data/mllib/als/test.data")
 ratings = data.map(lambda line: array([float(x) for x in line.split(',')]))
 
 # Build the recommendation model using Alternating Least Squares

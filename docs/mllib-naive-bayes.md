@@ -40,7 +40,7 @@ import org.apache.spark.mllib.classification.NaiveBayes
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 
-val data = sc.textFile("mllib/data/sample_naive_bayes_data.txt")
+val data = sc.textFile("data/mllib/sample_naive_bayes_data.txt")
 val parsedData = data.map { line =>
   val parts = line.split(',')
   LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))

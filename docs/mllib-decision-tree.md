@@ -122,7 +122,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impurity.Gini
 
 // Load and parse the data file
-val data = sc.textFile("mllib/data/sample_tree_data.csv")
+val data = sc.textFile("data/mllib/sample_tree_data.csv")
 val parsedData = data.map { line =>
   val parts = line.split(',').map(_.toDouble)
   LabeledPoint(parts(0), Vectors.dense(parts.tail))
@@ -161,7 +161,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impurity.Variance
 
 // Load and parse the data file
-val data = sc.textFile("mllib/data/sample_tree_data.csv")
+val data = sc.textFile("data/mllib/sample_tree_data.csv")
 val parsedData = data.map { line =>
   val parts = line.split(',').map(_.toDouble)
   LabeledPoint(parts(0), Vectors.dense(parts.tail))
