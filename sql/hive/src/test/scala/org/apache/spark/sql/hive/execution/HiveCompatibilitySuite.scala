@@ -84,6 +84,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_java_method",
     "create_merge_compressed",
 
+    // DFS commands
+    "symlink_text_input_format",
+
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
     "create_view_translate",
@@ -655,7 +658,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_empty_partition",
     "stats_publisher_error_1",
     "subq2",
-    "symlink_text_input_format",
     "tablename_with_select",
     "timestamp_3",
     "timestamp_comparison",
