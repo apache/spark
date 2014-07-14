@@ -448,7 +448,8 @@ object DecisionTree extends Serializable with Logging {
     logDebug("isMulticlassClassification = " + isMulticlassClassification)
     val isMulticlassClassificationWithCategoricalFeatures
       = strategy.isMulticlassWithCategoricalFeatures
-    logDebug("isMultiClassWithCategoricalFeatures = " + isMulticlassClassificationWithCategoricalFeatures)
+    logDebug("isMultiClassWithCategoricalFeatures = " +
+      isMulticlassClassificationWithCategoricalFeatures)
 
     // shift when more than one group is used at deep tree level
     val groupShift = numNodes * groupIndex
@@ -643,7 +644,8 @@ object DecisionTree extends Serializable with Logging {
       val arrIndex = arrShift + featureIndex
       // Update the left or right count for one bin.
       val aggShift = numClasses * numBins * numFeatures * nodeIndex
-      val aggIndex = aggShift + numClasses * featureIndex * numBins + arr(arrIndex).toInt * numClasses
+      val aggIndex = aggShift + numClasses * featureIndex * numBins
+        + arr(arrIndex).toInt * numClasses
       val labelInt = label.toInt
       agg(aggIndex + labelInt) = agg(aggIndex + labelInt) + labelWeights.getOrElse(labelInt, 1)
     }
@@ -739,7 +741,8 @@ object DecisionTree extends Serializable with Logging {
               val isSpaceSufficientForAllCategoricalSplits
                 = numBins > math.pow(2, featureCategories.toInt - 1) - 1
               if (isSpaceSufficientForAllCategoricalSplits) {
-                updateBinForUnorderedFeature(nodeIndex, featureIndex, arr, label, agg, rightChildShift)
+                updateBinForUnorderedFeature(nodeIndex, featureIndex, arr, label, agg,
+                  rightChildShift)
               } else {
                 updateBinForOrderedFeature(arr, agg, nodeIndex, label, featureIndex)
               }
@@ -909,10 +912,10 @@ object DecisionTree extends Serializable with Logging {
               .map{case (leftCount, rightCount) => leftCount + rightCount}
 
           def indexOfLargestArrayElement(array: Array[Double]): Int = {
-            val result = array.foldLeft(-1,Double.MinValue,0) {
+            val result = array.foldLeft(-1, Double.MinValue, 0) {
               case ((maxIndex, maxValue, currentIndex), currentValue) =>
-                if(currentValue > maxValue) (currentIndex,currentValue,currentIndex+1)
-                else (maxIndex,maxValue,currentIndex+1)
+                if(currentValue > maxValue) (currentIndex, currentValue, currentIndex + 1)
+                else (maxIndex, maxValue, currentIndex+1)
             }
             if (result._1 < 0) 0 else result._1
           }
@@ -1408,8 +1411,8 @@ object DecisionTree extends Serializable with Logging {
               categoriesSortedByCentroid.iterator.zipWithIndex.foreach {
                 case ((key, value), index) =>
                   categoriesForSplit = key :: categoriesForSplit
-                  splits(featureIndex)(index) = new Split(featureIndex, Double.MinValue, Categorical,
-                    categoriesForSplit)
+                  splits(featureIndex)(index) = new Split(featureIndex, Double.MinValue,
+                    Categorical, categoriesForSplit)
                   bins(featureIndex)(index) = {
                     if (index == 0) {
                       new Bin(new DummyCategoricalSplit(featureIndex, Categorical),
