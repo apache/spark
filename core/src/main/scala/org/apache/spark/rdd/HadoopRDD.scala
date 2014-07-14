@@ -131,7 +131,7 @@ class HadoopRDD[K, V](
       // needed by this RDD.
       HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
     } else {
-      conf.synchronized {
+      initLocalJobConfFuncOpt.synchronized {
         initLocalJobConfFuncOpt.map(f => f(conf))
       }
       conf
