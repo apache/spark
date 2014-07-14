@@ -47,11 +47,8 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
   }
 
   override def postStartHook() {
-    val sparkContextInitialized = ApplicationMaster.sparkContextInitialized(sc)
+    ApplicationMaster.sparkContextInitialized(sc)
     super.postStartHook()
-    if (sparkContextInitialized){
-      ApplicationMaster.waitForInitialAllocations()
-    }
     logInfo("YarnClusterScheduler.postStartHook done")
   }
 }
