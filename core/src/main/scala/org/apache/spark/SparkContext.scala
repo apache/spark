@@ -1560,6 +1560,20 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         scheduler
 
+      case "reef" =>
+        val scheduler = try {
+          val clazz = Class.forName("org.apache.spark.scheduler.cluster.REEFClusterScheduler")
+          val cons = clazz.getConstructor(classOf[SparkContext])
+          cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
+        } catch {
+          case e: Exception => {
+            throw new SparkException("REEF mode not available ?", e)
+          }
+        }
+        val backend = new CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+        scheduler.initialize(backend)
+        scheduler
+
       case _ =>
         throw new SparkException("Could not parse Master URL: '" + master + "'")
     }

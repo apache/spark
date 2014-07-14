@@ -103,6 +103,7 @@
     <module>external/zeromq</module>
     <module>external/mqtt</module>
     <module>examples</module>
+    <module>reef</module>
   </modules>
 
   <properties>
