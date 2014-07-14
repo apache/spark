@@ -92,6 +92,7 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
 class HadoopRDD[K, V](
     sc: SparkContext,
     broadcastedConf: Broadcast[SerializableWritable[JobConf]],
+    initLocalJobConfFuncOpt: Option[JobConf => Unit],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
@@ -108,6 +109,7 @@ class HadoopRDD[K, V](
     this(
       sc,
       sc.broadcast(new SerializableWritable(conf)),
+      None /* initLocalJobConfFuncOpt */,
       inputFormatClass,
       keyClass,
       valueClass,
@@ -129,7 +131,9 @@ class HadoopRDD[K, V](
       // needed by this RDD.
       HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
     } else {
-      conf
+      conf.synchronized {
+        initLocalJobConfFuncOpt.map(f => f(conf))
+      }
     }
   }
 
