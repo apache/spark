@@ -474,7 +474,9 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc,
       ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
-    val taskSet = FakeTask.createTaskSet(1, Seq(TaskLocation("host1", "execA")))
+    val taskSet = FakeTask.createTaskSet(2,
+      Seq(TaskLocation("host1", "execA")),
+      Seq(TaskLocation("host1", "execA")))
     val clock = new FakeClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
@@ -482,11 +484,13 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     // Set allowed locality to ANY
     clock.advance(LOCALITY_WAIT * 3)
     // Offer host3
-    // No task is returned if we restrict locality to RACK_LOCAL
+    // No task is scheduled if we restrict locality to RACK_LOCAL
     assert(manager.resourceOffer("execC", "host3", RACK_LOCAL) === None)
+    // Task 0 can be scheduled with ANY
+    assert(manager.resourceOffer("execC", "host3", ANY).get.index === 0)
     // Offer host2
-    // Task 0 should be returned with RACK_LOCAL level
-    assert(manager.resourceOffer("execB", "host2", RACK_LOCAL).get.index === 0)
+    // Task 1 can be scheduled with RACK_LOCAL
+    assert(manager.resourceOffer("execB", "host2", RACK_LOCAL).get.index === 1)
   }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {
