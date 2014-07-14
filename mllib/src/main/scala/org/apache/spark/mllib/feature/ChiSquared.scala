@@ -19,10 +19,10 @@ private[feature] trait CombinationsCalculator extends java.io.Serializable {
 
   protected def indexByLabelMap(labeledData: RDD[LabeledPoint]) = {
     labeledData.map(labeledPoint =>
-      labeledPoint.label).distinct.collect.zipWithIndex.toMap
+      labeledPoint.label).distinct.collect.sorted.zipWithIndex.toMap
   }
 
-  protected def featureLabelCombinations(labeledData: RDD[LabeledPoint]) = {
+  protected def featureLabelCombinations(labeledData: RDD[LabeledPoint]): RDD[(Int, Array[(Int, Int)])] = {
     val indexByLabel = indexByLabelMap(labeledData)
     labeledData.flatMap {
       labeledPoint =>
@@ -43,21 +43,18 @@ private[feature] trait CombinationsCalculator extends java.io.Serializable {
 }
 
 class ChiSquared(labeledData: RDD[LabeledPoint])
-extends java.io.Serializable with CombinationsCalculator
-with LabeledPointFeatureFilter with FeatureSort {
+  extends java.io.Serializable with CombinationsCalculator
+  with LabeledPointFeatureFilter with FeatureSort {
 
   override def data: RDD[LabeledPoint] = labeledData
-
   override def select: Set[Int] = {
-
-    println(chi2Data.first())
-    top(chi2Data, 1)
+    top(chiSquaredValues, 1)
   }
 
-  val labelsByIndex = indexByLabelMap(labeledData).map(_.swap)
-  val combinations = featureLabelCombinations(labeledData)
+  private val labelsByIndex = indexByLabelMap(labeledData).map(_.swap)
+  private val combinations = featureLabelCombinations(labeledData)
 
-  val chi2Data: RDD[((Int, Double), Double)] = combinations.flatMap {
+  lazy val chiSquaredValues: RDD[((Int, Double), Double)] = combinations.flatMap {
     case (featureIndex, counts) =>
       val (featureClassCounts, notFeatureClassCounts) = counts.unzip
       val featureCount = featureClassCounts.sum
@@ -70,8 +67,9 @@ with LabeledPointFeatureFilter with FeatureSort {
         val n10 = featureNotClassCounts(labelIndex)
         val n01 = notFeatureClassCounts(labelIndex)
         val n00 = notFeatureNotClassCounts(labelIndex)
-        val chi2 = (n11 + n10 + n01 + n00) * sqr(n11 * n00 - n10 * n01).toDouble /
-          ((n11 + n01) * (n11 + n10) * (n10 + n00) * (n01 + n00))
+        val numerator = (n11 + n10 + n01 + n00) * sqr(n11 * n00 - n10 * n01)
+        val denominator = (n11 + n01) * (n11 + n10) * (n10 + n00) * (n01 + n00)
+        val chi2 = if (numerator == 0) 0 else numerator.toDouble / denominator
         ((featureIndex, labelsByIndex(labelIndex)), chi2)}
   }
 
