@@ -93,8 +93,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
-          if (executorActor.size >= totalExpectedExecutors.get() * minRegisteredRatio) {
+          if (executorActor.size >= totalExpectedExecutors.get() * minRegisteredRatio && !ready) {
             ready = true
+            logInfo("SchedulerBackend is ready for scheduling beginning, registered executors: " +
+              executorActor.size + ", total expected executors: " + totalExpectedExecutors.get() +
+              ", minRegisteredExecutorsRatio: " + minRegisteredRatio)
           }
           makeOffers()
         }
@@ -264,6 +267,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     }
     if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTime) {
       ready = true
+      logInfo("SchedulerBackend is ready for scheduling beginning after waiting " +
+        "maxRegisteredExecutorsWaitingTime: " + maxRegisteredWaitingTime)
       return true
     }
     false
