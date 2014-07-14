@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.hash
 
 import org.apache.spark.{InterruptibleIterator, TaskContext}
+import org.apache.spark.rdd.SortOrder
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
 
@@ -50,9 +51,9 @@ class HashShuffleReader[K, C](
       iter
     }
 
-    val sortedIter = for (asc <- dep.ascending; ordering <- dep.keyOrdering) yield {
+    val sortedIter = for (sortOrder <- dep.sortOrder; ordering <- dep.keyOrdering) yield {
       val buf = aggregatedIter.toArray
-      if (asc) {
+      if (sortOrder == SortOrder.ASCENDING) {
         buf.sortWith((x, y) => ordering.lt(x._1, y._1)).iterator
       } else {
         buf.sortWith((x, y) => ordering.gt(x._1, y._1)).iterator
