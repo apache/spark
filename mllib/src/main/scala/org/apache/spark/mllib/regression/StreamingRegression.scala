@@ -35,7 +35,9 @@ import org.apache.spark.streaming.dstream.DStream
  */
 @DeveloperApi
 @Experimental
-abstract class StreamingRegression[M <: GeneralizedLinearModel, A <: GeneralizedLinearAlgorithm[M]] extends Logging {
+abstract class StreamingRegression[
+    M <: GeneralizedLinearModel,
+    A <: GeneralizedLinearAlgorithm[M]] extends Logging {
 
   /** The model to be updated and used for prediction. */
   var model: M

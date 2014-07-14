@@ -32,7 +32,8 @@ object StreamingLinearRegression {
   def main(args: Array[String]) {
 
     if (args.length != 4) {
-      System.err.println("Usage: StreamingLinearRegression <trainingData> <testData> <batchDuration> <numFeatures>")
+      System.err.println(
+        "Usage: StreamingLinearRegression <trainingData> <testData> <batchDuration> <numFeatures>")
       System.exit(1)
     }
 
