@@ -46,26 +46,44 @@ case class SetCommand(
     @transient context: SQLContext)
   extends LeafNode with Command {
 
-  override protected[sql] lazy val sideEffectResult: Seq[(String, String)] = (key, value) match {
+  override protected[sql] lazy val sideEffectResult: Seq[String] = (key, value) match {
     // Set value for key k.
     case (Some(k), Some(v)) =>
       context.set(k, v)
-      Array(k -> v)
+      Array(s"$k=$v")
 
     // Query the value bound to key k.
     case (Some(k), _) =>
-      Array(k -> context.getOption(k).getOrElse("<undefined>"))
+      // TODO (lian) This is just a workaround to make the Simba ODBC driver work.
+      // Should remove this once we get the ODBC driver updated.
+      if (k == "-v") {
+        val hiveJars = Seq(
+          "hive-exec-0.12.0.jar",
+          "hive-service-0.12.0.jar",
+          "hive-common-0.12.0.jar",
+          "hive-hwi-0.12.0.jar",
+          "hive-0.12.0.jar").mkString(":")
+
+        Array(
+          "system:java.class.path=" + hiveJars,
+          "system:sun.java.command=shark.SharkServer2")
+      }
+      else {
+        Array(s"$k=${context.getOption(k).getOrElse("<undefined>")}")
+      }
 
     // Query all key-value pairs that are set in the SQLConf of the context.
     case (None, None) =>
-      context.getAll
+      context.getAll.map { case (k, v) =>
+        s"$k=$v"
+      }
 
     case _ =>
       throw new IllegalArgumentException()
   }
 
   def execute(): RDD[Row] = {
-    val rows = sideEffectResult.map { case (k, v) => new GenericRow(Array[Any](k, v)) }
+    val rows = sideEffectResult.map { line => new GenericRow(Array[Any](line)) }
     context.sparkContext.parallelize(rows, 1)
   }
 
