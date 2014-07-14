@@ -84,7 +84,7 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  *     variabe references an instance of JobConf, then that JobConf will be used for the Hadoop job.
  *     Otherwise, a new JobConf will be created on each slave using the enclosed Configuration.
  * @param initLocalJobConfFuncOpt Optional closure used to initialize any JobConf that HadoopRDD
- *     creates.
+ *    creates.
  * @param inputFormatClass Storage format of the data to be read.
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
@@ -128,15 +128,13 @@ class HadoopRDD[K, V](
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
     val conf: JobConf = broadcastedConf.value.value
-    def f(jc: JobConf) = {}
-    val jobConfFunc = initLocalJobConfFuncOpt.getOrElse(f _)
     if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
       // getJobConf() has been called previously, so there is already a local cache of the JobConf
       // needed by this RDD.
       HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
     } else {
-      conf.synchronized {
-        jobConfFunc(conf)
+      initLocalJobConfFuncOpt.synchronized {
+        initLocalJobConfFuncOpt.map(f => f(conf))
       }
       conf
     }
