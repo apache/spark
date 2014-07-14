@@ -204,12 +204,6 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEqual(set([2]), sets[3])
         self.assertEqual(set([1, 3]), sets[5])
 
-    def test_hash_of_none(self):
-        data = self.sc.parallelize([None]*10, 2)
-        h = data.map(lambda x:hash(x))
-        self.assertEqual(h.distinct().collect(), [0])
-
-
 class TestIO(PySparkTestCase):
 
     def test_stdout_redirection(self):

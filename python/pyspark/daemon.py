@@ -21,7 +21,6 @@ import socket
 import sys
 import traceback
 import multiprocessing
-import __builtin__
 from ctypes import c_bool
 from errno import EINTR, ECHILD
 from socket import AF_INET, SOCK_STREAM, SOMAXCONN
