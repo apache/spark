@@ -62,6 +62,7 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
     transactionExecutorOpt.map(executor => {
       executor.submit(processor)
     })
+    processorMap.put(sequenceNumber, processor)
     // Wait until a batch is available - will be an error if
     processor.getEventBatch
   }
