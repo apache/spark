@@ -26,24 +26,18 @@ import org.apache.spark.sql.catalyst.types._
  * [[Expression Expressions]] and a given input [[Row]].  The returned [[Row]] object is custom
  * generated based on the output types of the [[Expression]] to avoid boxing of primitive values.
  */
-object GenerateProjection extends CodeGenerator {
+object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
   import scala.reflect.runtime.{universe => ru}
   import scala.reflect.runtime.universe._
 
-  // TODO: Should be weak references... bounded in size.
-  val projectionCache = new collection.mutable.HashMap[Seq[Expression], Projection]
+  protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
+    in.map(ExpressionCanonicalizer(_))
 
-  def apply(expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection =
-    apply(expressions.map(BindReferences.bindReference(_, inputSchema)))
-
-  // TODO: Safe to fire up multiple instances of the compiler?
-  def apply(expressions: Seq[Expression]): Projection = globalLock.synchronized {
-    val cleanedExpressions = expressions.map(ExpressionCanonicalizer(_))
-    projectionCache.getOrElseUpdate(cleanedExpressions, createProjection(cleanedExpressions))
-  }
+  protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
+    in.map(BindReferences.bindReference(_, inputSchema))
 
   // Make Mutablility optional...
-  def createProjection(expressions: Seq[Expression]): Projection = {
+  protected def create(expressions: Seq[Expression]): Projection = {
     val tupleLength = ru.Literal(Constant(expressions.length))
     val lengthDef = q"final val length = $tupleLength"
 

@@ -194,15 +194,13 @@ case class Sort(
   override def requiredChildDistribution =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
-  @transient
-  lazy val ordering = new RowOrdering(sortOrder)
 
   override def execute() = attachTree(this, "sort") {
-    // TODO: Optimize sorting operation?
     child.execute()
-      .mapPartitions(
-        iterator => iterator.map(_.copy()).toArray.sorted(ordering).iterator,
-        preservesPartitioning = true)
+      .mapPartitions( { iterator =>
+        val ordering = newOrdering(sortOrder, child.output)
+        iterator.map(_.copy()).toArray.sorted(ordering).iterator
+    }, preservesPartitioning = true)
   }
 
   override def output = child.output

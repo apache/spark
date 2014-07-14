@@ -47,7 +47,9 @@ case class GeneratedAggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
     child: SparkPlan)(@transient sqlContext: SQLContext)
-  extends UnaryNode with NoBind {
+  extends UnaryNode {
+
+  println(s"new $codegenEnabled")
 
   override def requiredChildDistribution =
     if (partial) {
@@ -65,6 +67,7 @@ case class GeneratedAggregate(
   override def output = aggregateExpressions.map(_.toAttribute)
 
   override def execute() = {
+    println(s"codegen: $codegenEnabled")
     val aggregatesToCompute = aggregateExpressions.flatMap { a =>
       a.collect { case agg: AggregateExpression => agg}
     }
@@ -157,6 +160,8 @@ case class GeneratedAggregate(
         // TODO: Codegening anything other than the updateProjection is probably over kill.
         val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
         var currentRow: Row = null
+        println(codegenEnabled)
+
         while (iter.hasNext) {
           currentRow = iter.next()
           updateProjection.target(buffer)(joinedRow(buffer, currentRow))
@@ -167,6 +172,7 @@ case class GeneratedAggregate(
       } else {
         val buffers = new java.util.HashMap[Row, MutableRow]()
 
+        println(codegenEnabled)
         var currentRow: Row = null
         while (iter.hasNext) {
           currentRow = iter.next()

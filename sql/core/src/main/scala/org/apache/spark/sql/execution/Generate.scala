@@ -51,7 +51,7 @@ case class Generate(
     if (join) child.output ++ generatorOutput else generatorOutput
 
   /** Codegenned rows are not serializable... */
-  override val codegenEnabled = false
+  override def codegenEnabled = false
 
   override def execute() = {
     if (join) {

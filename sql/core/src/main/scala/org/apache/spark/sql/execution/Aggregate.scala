@@ -43,7 +43,7 @@ case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
     child: SparkPlan)(@transient sqlContext: SQLContext)
-  extends UnaryNode with NoBind {
+  extends UnaryNode {
 
   override def requiredChildDistribution =
     if (partial) {

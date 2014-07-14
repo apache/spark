@@ -25,8 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
  * Overrides our expression evaluation tests to use code generation for evaluation.
  */
 class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
-  val generator = new CodeGenerator() {}
-
   override def checkEvaluation(
       expression: Expression,
       expected: Any,
@@ -35,7 +33,7 @@ class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
       GenerateMutableProjection(Alias(expression, s"Optimized($expression)")() :: Nil)()
     } catch {
       case e: Throwable =>
-        val evaluated = generator.expressionEvaluator(expression)
+        val evaluated = GenerateProjection.expressionEvaluator(expression)
         fail(
           s"""
             |Code generation of $expression failed:
@@ -74,13 +72,11 @@ class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
  * Overrides our expression evaluation tests to use generated code on mutable rows.
  */
 class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
-  val generator = new CodeGenerator() {}
-
   override def checkEvaluation(
-                                expression: Expression,
-                                expected: Any,
-                                inputRow: Row = EmptyRow): Unit = {
-    lazy val evaluated = generator.expressionEvaluator(expression)
+      expression: Expression,
+      expected: Any,
+      inputRow: Row = EmptyRow): Unit = {
+    lazy val evaluated = GenerateProjection.expressionEvaluator(expression)
 
     val plan = try {
       GenerateProjection(Alias(expression, s"Optimized($expression)")() :: Nil)

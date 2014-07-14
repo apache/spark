@@ -35,7 +35,10 @@ import org.apache.spark.sql.catalyst.plans.physical._
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   self: Product =>
 
-  val codegenEnabled = true
+  def codegenEnabled = _codegenEnabled
+
+  /** Will be set to true during planning if code generation should be used for this operator. */
+  private[sql] var _codegenEnabled = false
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
@@ -77,6 +80,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
       GeneratePredicate(expression, inputSchema)
     } else {
       InterpretedPredicate(expression, inputSchema)
+    }
+  }
+
+  def newOrdering(order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[Row] = {
+    if (codegenEnabled) {
+      GenerateOrdering(order, inputSchema)
+    } else {
+      new RowOrdering(order, inputSchema)
     }
   }
 }

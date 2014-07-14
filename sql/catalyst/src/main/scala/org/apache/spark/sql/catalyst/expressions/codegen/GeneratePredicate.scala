@@ -22,23 +22,16 @@ import org.apache.spark.sql.catalyst.expressions._
 /**
  * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[Row]].
  */
-object GeneratePredicate extends CodeGenerator {
+object GeneratePredicate extends CodeGenerator[Expression, (Row) => Boolean] {
   import scala.reflect.runtime.{universe => ru}
   import scala.reflect.runtime.universe._
 
-  // TODO: Should be weak references... bounded in size.
-  val predicateCache = new collection.mutable.HashMap[Expression, (Row) => Boolean]
+  protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer(in)
 
-  // TODO: Safe to fire up multiple instances of the compiler?
-  def apply(predicate: Expression): (Row => Boolean) = globalLock.synchronized {
-    val cleanedExpression = ExpressionCanonicalizer(predicate)
-    predicateCache.getOrElseUpdate(cleanedExpression, createPredicate(cleanedExpression))
-  }
+  protected def bind(in: Expression, inputSchema: Seq[Attribute]): Expression =
+    BindReferences.bindReference(in, inputSchema)
 
-  def apply(predicate: Expression, inputSchema: Seq[Attribute]): (Row => Boolean) =
-    apply(BindReferences.bindReference(predicate, inputSchema))
-
-  def createPredicate(predicate: Expression): ((Row) => Boolean) = {
+  protected def create(predicate: Expression): ((Row) => Boolean) = {
     val cEval = expressionEvaluator(predicate)
 
     val code =

@@ -40,8 +40,6 @@ package object codegen {
 
     object CleanExpressions extends rules.Rule[Expression] {
       def apply(e: Expression): Expression = e transform {
-        case BoundReference(o, a) =>
-          BoundReference(o, AttributeReference("a", a.dataType, a.nullable)(exprId = ExprId(0)))
         case Alias(c, _) => c
       }
     }

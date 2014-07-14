@@ -400,21 +400,21 @@ class ExpressionEvaluationSuite extends FunSuite {
     val typeMap = MapType(StringType, StringType)
     val typeArray = ArrayType(StringType)
 
-    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()), 
+    checkEvaluation(GetItem(BoundReference(3, typeMap, nullable = true),
       Literal("aa")), "bb", row)
     checkEvaluation(GetItem(Literal(null, typeMap), Literal("aa")), null, row)
     checkEvaluation(GetItem(Literal(null, typeMap), Literal(null, StringType)), null, row)
-    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()), 
+    checkEvaluation(GetItem(BoundReference(3, typeMap, nullable = true),
       Literal(null, StringType)), null, row)
 
-    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()), 
+    checkEvaluation(GetItem(BoundReference(4, typeArray, nullable = true),
       Literal(1)), "bb", row)
     checkEvaluation(GetItem(Literal(null, typeArray), Literal(1)), null, row)
     checkEvaluation(GetItem(Literal(null, typeArray), Literal(null, IntegerType)), null, row)
-    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()), 
+    checkEvaluation(GetItem(BoundReference(4, typeArray, nullable = true),
       Literal(null, IntegerType)), null, row)
 
-    checkEvaluation(GetField(BoundReference(2, AttributeReference("c", typeS)()), "a"), "aa", row)
+    checkEvaluation(GetField(BoundReference(2, typeS, nullable = true), "a"), "aa", row)
     checkEvaluation(GetField(Literal(null, typeS), "a"), null, row)
 
     val typeS_notNullable = StructType(
@@ -422,10 +422,8 @@ class ExpressionEvaluationSuite extends FunSuite {
         :: StructField("b", StringType, nullable = false) :: Nil
     )
 
-    assert(GetField(BoundReference(2,
-      AttributeReference("c", typeS)()), "a").nullable === true)
-    assert(GetField(BoundReference(2,
-      AttributeReference("c", typeS_notNullable, nullable = false)()), "a").nullable === false)
+    assert(GetField(BoundReference(2,typeS, nullable = true), "a").nullable === true)
+    assert(GetField(BoundReference(2, typeS_notNullable, nullable = false), "a").nullable === false)
 
     assert(GetField(Literal(null, typeS), "a").nullable === true)
     assert(GetField(Literal(null, typeS_notNullable), "a").nullable === true)

@@ -23,20 +23,17 @@ import org.apache.spark.sql.catalyst.expressions._
  * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
  * [[Expression Expressions]].
  */
-object GenerateOrdering extends CodeGenerator {
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] {
   import scala.reflect.runtime.{universe => ru}
   import scala.reflect.runtime.universe._
 
-  // TODO: Should be weak references... bounded in size.
-  val orderingCache = new collection.mutable.HashMap[Seq[SortOrder], Ordering[Row]]
+ protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
+    in.map(ExpressionCanonicalizer(_).asInstanceOf[SortOrder])
 
-  // TODO: Safe to fire up multiple instances of the compiler?
-  def apply(ordering: Seq[SortOrder]): Ordering[Row] = globalLock.synchronized {
-    val cleanedExpression = ordering.map(ExpressionCanonicalizer(_)).asInstanceOf[Seq[SortOrder]]
-    orderingCache.getOrElseUpdate(cleanedExpression, createOrdering(cleanedExpression))
-  }
+  protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
+    in.map(BindReferences.bindReference(_, inputSchema))
 
-  def createOrdering(ordering: Seq[SortOrder]): Ordering[Row] = {
+  protected def create(ordering: Seq[SortOrder]): Ordering[Row] = {
     val a = newTermName("a")
     val b = newTermName("b")
     val comparisons = ordering.zipWithIndex.map { case (order, i) =>
