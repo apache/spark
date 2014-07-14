@@ -103,8 +103,8 @@ calling `.rdd()` on your `JavaRDD` object. A standalone application example
 that is equivalent to the provided example in Scala is given bellow:
 
 {% highlight java %}
-import scala.Tuple2;
 import scala.Product;
+import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.SparkConf;
@@ -119,7 +119,7 @@ public class CollaborativeFiltering {
     JavaSparkContext sc = new JavaSparkContext(conf);
 
     // Load and parse the data
-    String path = "{SPARK_HOME}/mllib/data/als/test.data";
+    String path = "/home/michael/workspace/spark/mllib/data/als/test.data";
     JavaRDD<String> data = sc.textFile(path);
     JavaRDD<Rating> ratings = data.map(
       new Function<String, Rating>() {
@@ -140,7 +140,7 @@ public class CollaborativeFiltering {
     JavaRDD<Tuple2<Object, Object>> userProducts = ratings.map(
       new Function<Rating, Tuple2<Object, Object>>() {
         public Tuple2<Object, Object> call(Rating r) {
-          return new Tuple2<Object, Object>(r.productElement(0), r.productElement(1));
+          return new Tuple2<Object, Object>(r.user(), r.product());
         }
       }
     );
@@ -149,8 +149,7 @@ public class CollaborativeFiltering {
         new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
           public Tuple2<Tuple2<Integer, Integer>, Double> call(Rating r){
             return new Tuple2<Tuple2<Integer, Integer>, Double>(
-              new Tuple2<Integer, Integer>((Integer) r.productElement(0), 
-                          (Integer) r.productElement(1)), (Double) r.productElement(2));
+              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
           }
         }
     ));
@@ -159,8 +158,7 @@ public class CollaborativeFiltering {
         new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
           public Tuple2<Tuple2<Integer, Integer>, Double> call(Rating r){
             return new Tuple2<Tuple2<Integer, Integer>, Double>(
-              new Tuple2<Integer, Integer>((Integer) r.productElement(0), 
-                          (Integer) r.productElement(1)), (Double) r.productElement(2));
+              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
           }
         }
     )).join(predictions);
@@ -179,7 +177,7 @@ public class CollaborativeFiltering {
 }
 {% endhighlight %}
 
-In order to run the following standalone application using Spark framework make
+In order to run the above standalone application using Spark framework make
 sure that you follow the instructions provided at section [Standalone
 Applications](quick-start.html) of the quick-start guide. What is more, you
 should include to your build file *spark-mllib* as a dependency.

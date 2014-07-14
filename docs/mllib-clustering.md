@@ -113,7 +113,7 @@ public class KMeansExample {
 }
 {% endhighlight %}
 
-In order to run the following standalone application using Spark framework make
+In order to run the above standalone application using Spark framework make
 sure that you follow the instructions provided at section [Standalone
 Applications](quick-start.html) of the quick-start guide. What is more, you
 should include to your build file *spark-mllib* as a dependency.

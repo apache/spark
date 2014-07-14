@@ -248,7 +248,6 @@ that is equivalent to the provided example in Scala is given bellow:
 {% highlight java %}
 import java.util.Random;
 
-import scala.Product2;
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
@@ -267,10 +266,11 @@ public class SVMClassifier {
     SparkContext sc = new SparkContext(conf);
     String path = "{SPARK_HOME}/mllib/data/sample_libsvm_data.txt";
     JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
-    //Split initial RDD into two... [60% training data, 40% testing data].
+
+    // Split initial RDD into two... [60% training data, 40% testing data].
     JavaRDD<LabeledPoint> training = data.filter(
       new Function<LabeledPoint, Boolean>() {
-        public final Random random = new Random();
+        public final Random random = new Random(11L);
         public Boolean call(LabeledPoint p) {
           if (random.nextDouble() <= 0.6)
             return true;
@@ -294,8 +294,8 @@ public class SVMClassifier {
       new Function<LabeledPoint, Tuple2<Object, Object>>() {
         public final SVMModel m = model;
         public Tuple2<Object, Object> call(LabeledPoint p) {
-          Double score = m.predict((Vector) p.productElement(1));
-          return new Tuple2<Object, Object>(score, (Double) p.productElement(0));
+          Double score = m.predict(p.features());
+          return new Tuple2<Object, Object>(score, p.label());
         }
       }
     );
@@ -328,7 +328,7 @@ svmAlg.optimizer().setUpdater(new L1Updater());
 final SVMModel modelL1 = svmAlg.run(JavaRDD.toRDD(training));
 {% endhighlight %}
 
-In order to run the following standalone application using Spark framework make
+In order to run the above standalone application using Spark framework make
 sure that you follow the instructions provided at section [Standalone
 Applications](quick-start.html) of the quick-start guide. What is more, you
 should include to your build file *spark-mllib* as a dependency.
@@ -431,8 +431,6 @@ calling `.rdd()` on your `JavaRDD` object. The corresponding Java example to
 the Scala snippet provided, is presented bellow:
 
 {% highlight java %}
-import scala.Product2;
-
 import org.apache.spark.api.java.*;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.Function;
@@ -474,8 +472,8 @@ public class LinearRegression {
       new Function<LabeledPoint, double[]>() {
         public final LinearRegressionModel m = model;
         public double[] call(LabeledPoint point) {
-          double prediction = m.predict((Vector) point.productElement(1));
-          return new double[] {prediction, (Double) point.productElement(0)};
+          double prediction = m.predict(point.features());
+          return new double[] {prediction, point.label()};
         }
       }
     );
@@ -493,7 +491,7 @@ public class LinearRegression {
 }
 {% endhighlight %}
 
-In order to run the following standalone application using Spark framework make
+In order to run the above standalone application using Spark framework make
 sure that you follow the instructions provided at section [Standalone
 Applications](quick-start.html) of the quick-start guide. What is more, you
 should include to your build file *spark-mllib* as a dependency.
