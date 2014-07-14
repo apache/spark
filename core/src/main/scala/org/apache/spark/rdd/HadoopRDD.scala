@@ -126,13 +126,15 @@ class HadoopRDD[K, V](
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
     val conf: JobConf = broadcastedConf.value.value
+    val f: (JobConf => Unit) = {}
+    val jobConfFunc = initLocalJobConfFuncOpt.getOrElse(f)
     if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
       // getJobConf() has been called previously, so there is already a local cache of the JobConf
       // needed by this RDD.
       HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
     } else {
-      initLocalJobConfFuncOpt.synchronized {
-        initLocalJobConfFuncOpt.map(f => f(conf))
+      conf.synchronized {
+        jobConfFunc(conf)
       }
       conf
     }
