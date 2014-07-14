@@ -1467,7 +1467,7 @@ object DecisionTree extends Serializable with Logging {
         // updating the list of categories.
         categories = j.toDouble :: categories
       }
-      //Right shift by one
+      // Right shift by one
       bitShiftedInput = bitShiftedInput >> 1
       j += 1
     }
