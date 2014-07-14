@@ -134,6 +134,7 @@ class HadoopRDD[K, V](
       conf.synchronized {
         initLocalJobConfFuncOpt.map(f => f(conf))
       }
+      conf
     }
   }
 
