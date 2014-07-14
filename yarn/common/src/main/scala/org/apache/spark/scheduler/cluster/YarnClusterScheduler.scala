@@ -48,9 +48,11 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
 
   override def postStartHook() {
     val sparkContextInitialized = ApplicationMaster.sparkContextInitialized(sc)
+    super.postStartHook()
     if (sparkContextInitialized){
       ApplicationMaster.waitForInitialAllocations()
       // Wait for a few seconds for the slaves to bootstrap and register with master - best case attempt
+      // TODO It needn't after waitBackendReady
       Thread.sleep(3000L)
     }
     logInfo("YarnClusterScheduler.postStartHook done")
