@@ -188,6 +188,11 @@ object NullPropagation extends Rule[LogicalPlan] {
         case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
         case _ => e
       }
+      case e: StringComparison => e.children match {
+        case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
+        case left :: Literal(null, _) :: Nil => Literal(null, e.dataType)
+        case _ => e
+      }
     }
   }
 }
