@@ -187,7 +187,7 @@ object MovieLensALS {
 
     def mapPredictedRating(r: Double) = if (implicitPrefs) math.max(math.min(r, 1.0), 0.0) else r
 
-    val predictions: RDD[Rating] = model.predict(data.map(x => (x.user, x.product)))
+    val predictions: RDD[Rating] = model.predictRDD(data.map(x => (x.user, x.product)))
     val predictionsAndRatings = predictions.map{ x =>
       ((x.user, x.product), mapPredictedRating(x.rating))
     }.join(data.map(x => ((x.user, x.product), x.rating))).values

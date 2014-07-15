@@ -146,7 +146,7 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     val model = ALS.train(ratings, 5, 15)
 
     val pairs = Array.tabulate(50, 50)((u, p) => (u - 25L, p - 25L)).flatten
-    val ans = model.predict(sc.parallelize(pairs)).collect()
+    val ans = model.predictRDD(sc.parallelize(pairs)).collect()
     ans.foreach { r =>
       val u = r.user + 25
       val p = r.product + 25
@@ -219,7 +219,7 @@ class ALSSuite extends FunSuite with LocalSparkContext {
         val usersProducts =
           for (u <- 0 until users; p <- 0 until products) yield (u.toLong, p.toLong)
         val userProductsRDD = sc.parallelize(usersProducts)
-        model.predict(userProductsRDD).collect().foreach { elem =>
+        model.predictRDD(userProductsRDD).collect().foreach { elem =>
           allRatings.put(elem.user.toInt, elem.product.toInt, elem.rating)
         }
         allRatings

@@ -39,6 +39,10 @@ class MatrixFactorizationModel private[mllib] (
     val userFeatures: RDD[(Long, Array[Double])],
     val productFeatures: RDD[(Long, Array[Double])]) extends Serializable {
   /** Predict the rating of one user for one product. */
+  def predict(user: Int, product: Int): Double =
+    predict(user.toLong, product.toLong)
+
+  /** Predict the rating of one user for one product. */
   def predict(user: Long, product: Long): Double = {
     val userVector = new DoubleMatrix(userFeatures.lookup(user).head)
     val productVector = new DoubleMatrix(productFeatures.lookup(product).head)
@@ -53,7 +57,22 @@ class MatrixFactorizationModel private[mllib] (
     * @param usersProducts  RDD of (user, product) pairs.
     * @return RDD of Ratings.
     */
-  def predict(usersProducts: RDD[(Long, Long)]): RDD[Rating] = {
+  def predict(usersProducts: RDD[(Int, Int)]): RDD[Rating] =
+    predictRDD(usersProducts.map(t => (t._1.toLong, t._2.toLong)))
+
+  // The following must be named differently since it can't overload the previous method;
+  // both have the same arguments after erasure.
+  // Might be useful to name the RDD method differently anyway.
+
+  /**
+   * Predict the rating of many users for many products.
+   * The output RDD has an element per each element in the input RDD (including all duplicates)
+   * unless a user or product is missing in the training set.
+   *
+   * @param usersProducts  RDD of (user, product) pairs.
+   * @return RDD of Ratings.
+   */
+  def predictRDD(usersProducts: RDD[(Long, Long)]): RDD[Rating] = {
     val users = userFeatures.join(usersProducts).map{
       case (user, (uFeatures, product)) => (product, (user, uFeatures))
     }
@@ -77,7 +96,7 @@ class MatrixFactorizationModel private[mllib] (
   def predict(usersProductsJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
     val pythonAPI = new PythonMLLibAPI()
     val usersProducts = usersProductsJRDD.rdd.map(xBytes => pythonAPI.unpackTuple(xBytes))
-    predict(usersProducts).map(rate => pythonAPI.serializeRating(rate))
+    predictRDD(usersProducts).map(rate => pythonAPI.serializeRating(rate))
   }
 
   // TODO: Figure out what other good bulk prediction methods would look like.
