@@ -619,10 +619,7 @@ abstract class DStream[T: ClassTag] (
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
   }
 
-
-
-
-
+//TODO move pyprint to PythonDStream
   /**
    * Print the first ten elements of each PythonRDD generated in this PythonDStream. This is an output
    * operator, so this PythonDStream will be registered as an output stream and there materialized.
@@ -643,6 +640,7 @@ abstract class DStream[T: ClassTag] (
       tempFileStream.close()
 
       // This value has to be passed from python
+      // Python currently does not do cluster deployment. But what happened
       val pythonExec = new ProcessBuilder().environment().get("PYSPARK_PYTHON")
       val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
       //val pb = new ProcessBuilder(Seq(pythonExec, sparkHome + "/python/pyspark/streaming/pyprint.py", tempFile.getAbsolutePath())) // why this fails to compile???

@@ -174,7 +174,7 @@ class PythonDStream[T: ClassTag](
   }
 }
 
-
+/*
 private class PairwiseDStream(prev:DStream[Array[Byte]]) extends
 DStream[(Long, Array[Byte])](prev.ssc){
   override def dependencies = List(prev)
@@ -277,6 +277,7 @@ class PythonTransformedDStream(
 =======
   val asJavaPairDStream : JavaPairDStream[Long, Array[Byte]] = JavaPairDStream(this)
 }
+*/
 
 
 
