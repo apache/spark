@@ -34,6 +34,8 @@ private[sql] class CsvTokenizer(
   private val BACKSLASH = '\\'
   private val NEWLINE = '\n'
 
+  private val MAX_QUOTED_LINES = 10
+
   private val delimLength = delimiter.length
 
   private def isDelimAt(inStr: String, index: Int): Boolean = {
@@ -62,6 +64,7 @@ private[sql] class CsvTokenizer(
     var curPosition = 0
     var startPosition = 0
     var curChar: Char = '\0'
+    var quotedLines = 0
     val leftOver = new StringBuilder()    // Used to keep track of tokens that span multiple lines
     val tokens = new ArrayBuffer[String]()
     var line = inputIter.next() + '\n'
@@ -88,17 +91,19 @@ private[sql] class CsvTokenizer(
           leftOver.append(line.substring(startPosition, curPosition))
           tokens.append(stripQuotes(leftOver))
           leftOver.clear()
+          quotedLines = 0
           curPosition += delimLength
           startPosition = curPosition
         } else {
           curPosition += 1
         }
       } else if (curChar == NEWLINE) {
-        if (curState == Quoted) {
+        if (curState == Quoted && quotedLines < MAX_QUOTED_LINES) {
           leftOver.append(line.substring(startPosition, curPosition + 1))
           line = inputIter.next() + '\n'
           curPosition = 0
           startPosition = 0
+          quotedLines += 1
         } else {
           if (curPosition == startPosition) {
             tokens.append(null)
@@ -107,6 +112,7 @@ private[sql] class CsvTokenizer(
             tokens.append(stripQuotes(leftOver))
           }
           leftOver.clear()
+          quotedLines = 0
           curPosition += 1
         }
       } else if (curChar == BACKSLASH) {
