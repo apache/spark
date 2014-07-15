@@ -19,6 +19,7 @@ import scala.util.Properties
 import scala.collection.JavaConversions._
 
 import sbt._
+import sbt.Classpaths.publishTask
 import sbt.Keys._
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
@@ -103,12 +104,23 @@ object SparkBuild extends PomBuild {
 
   override val userPropertiesMap = System.getProperties.toMap
 
+  lazy val MavenCompile = config("m2r") extend(Compile)
+  lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
+
   lazy val sharedSettings = graphSettings ++ ScalaStyleSettings ++ Seq (
     javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
     incOptions := incOptions.value.withNameHashing(true),
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
-    publishMavenStyle := true
+    publishMavenStyle := true,
+
+    otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
+    publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
+      (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
+    },
+    publishMavenStyle in MavenCompile := true,
+    publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
+    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
   )
 
   /** Following project only exists to pull previous artifacts of Spark for generating
