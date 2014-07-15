@@ -196,6 +196,5 @@ private[spark] class FileLogger(
   def stop() {
     hadoopDataStream.foreach(_.close())
     writer.foreach(_.close())
-    fileSystem.close()
   }
 }
