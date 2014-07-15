@@ -52,6 +52,14 @@ object Entropy extends Impurity {
     impurity
   }
 
+  /**
+   * :: DeveloperApi ::
+   * variance calculation
+   * @param count number of instances
+   * @param sum sum of labels
+   * @param sumSquares summation of squares of the labels
+   */
+  @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Entropy.calculate")
 }
