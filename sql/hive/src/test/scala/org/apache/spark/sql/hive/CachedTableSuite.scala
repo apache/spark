@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
 import org.apache.spark.sql.hive.execution.HiveComparisonTest
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -34,7 +34,7 @@ class CachedTableSuite extends HiveComparisonTest {
 
   test("check that table is cached and uncache") {
     TestHive.table("src").queryExecution.analyzed match {
-      case SparkLogicalPlan(_ : InMemoryColumnarTableScan) => // Found evidence of caching
+      case _ : InMemoryRelation => // Found evidence of caching
       case noCache => fail(s"No cache node found in plan $noCache")
     }
     TestHive.uncacheTable("src")
@@ -45,7 +45,7 @@ class CachedTableSuite extends HiveComparisonTest {
 
   test("make sure table is uncached") {
     TestHive.table("src").queryExecution.analyzed match {
-      case cachePlan @ SparkLogicalPlan(_ : InMemoryColumnarTableScan) =>
+      case cachePlan: InMemoryRelation =>
         fail(s"Table still cached after uncache: $cachePlan")
       case noCache => // Table uncached successfully
     }
@@ -55,5 +55,21 @@ class CachedTableSuite extends HiveComparisonTest {
     intercept[IllegalArgumentException] {
       TestHive.uncacheTable("src")
     }
+  }
+
+  test("'CACHE TABLE' and 'UNCACHE TABLE' HiveQL statement") {
+    TestHive.hql("CACHE TABLE src")
+    TestHive.table("src").queryExecution.executedPlan match {
+      case _: InMemoryColumnarTableScan => // Found evidence of caching
+      case _ => fail(s"Table 'src' should be cached")
+    }
+    assert(TestHive.isCached("src"), "Table 'src' should be cached")
+
+    TestHive.hql("UNCACHE TABLE src")
+    TestHive.table("src").queryExecution.executedPlan match {
+      case _: InMemoryColumnarTableScan => fail(s"Table 'src' should not be cached")
+      case _ => // Found evidence of uncaching
+    }
+    assert(!TestHive.isCached("src"), "Table 'src' should not be cached")
   }
 }

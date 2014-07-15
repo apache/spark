@@ -47,8 +47,8 @@ private[graphx]
 class RoutingTableMessageRDDFunctions(self: RDD[RoutingTableMessage]) {
   /** Copartition an `RDD[RoutingTableMessage]` with the vertex RDD with the given `partitioner`. */
   def copartitionWithVertices(partitioner: Partitioner): RDD[RoutingTableMessage] = {
-    new ShuffledRDD[VertexId, (PartitionID, Byte), RoutingTableMessage](self, partitioner)
-      .setSerializer(new RoutingTableMessageSerializer)
+    new ShuffledRDD[VertexId, (PartitionID, Byte), (PartitionID, Byte), RoutingTableMessage](
+      self, partitioner).setSerializer(new RoutingTableMessageSerializer)
   }
 }
 
@@ -120,7 +120,7 @@ object RoutingTablePartition {
  */
 private[graphx]
 class RoutingTablePartition(
-    private val routingTable: Array[(Array[VertexId], BitSet, BitSet)]) {
+    private val routingTable: Array[(Array[VertexId], BitSet, BitSet)]) extends Serializable {
   /** The maximum number of edge partitions this `RoutingTablePartition` is built to join with. */
   val numEdgePartitions: Int = routingTable.size
 

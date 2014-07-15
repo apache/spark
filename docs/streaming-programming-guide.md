@@ -148,7 +148,7 @@ import org.apache.spark.streaming.*;
 import org.apache.spark.streaming.api.java.*;
 import scala.Tuple2;
 // Create a StreamingContext with a local master
-JavaStreamingContext jssc = new JavaStreamingContext("local", "JavaNetworkWordCount", new Duration(1000))
+JavaStreamingContext jssc = new JavaStreamingContext("local[2]", "JavaNetworkWordCount", new Duration(1000))
 {% endhighlight %}
 
 Using this context, we then create a new DStream
@@ -216,7 +216,7 @@ jssc.awaitTermination();   // Wait for the computation to terminate
 {% endhighlight %}
 
 The complete code can be found in the Spark Streaming example
-[JavaNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/index.html?org/apache/spark/examples/streaming/JavaNetworkWordCount.java).
+[JavaNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaNetworkWordCount.java).
 <br>
 
 </div>
@@ -950,7 +950,7 @@ is 200 milliseconds.
 
 An alternative to receiving data with multiple input streams / receivers is to explicitly repartition
 the input data stream (using `inputStream.repartition(<number of partitions>)`).
-This distributes the received batches of data across all the machines in the cluster
+This distributes the received batches of data across specified number of machines in the cluster
 before further processing.
 
 ### Level of Parallelism in Data Processing

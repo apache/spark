@@ -40,7 +40,7 @@ import org.apache.spark.mllib.classification.NaiveBayes
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 
-val data = sc.textFile("mllib/data/sample_naive_bayes_data.txt")
+val data = sc.textFile("data/mllib/sample_naive_bayes_data.txt")
 val parsedData = data.map { line =>
   val parts = line.split(',')
   LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
@@ -51,9 +51,8 @@ val training = splits(0)
 val test = splits(1)
 
 val model = NaiveBayes.train(training, lambda = 1.0)
-val prediction = model.predict(test.map(_.features))
 
-val predictionAndLabel = prediction.zip(test.map(_.label))
+val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
 val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
 {% endhighlight %}
 </div>
@@ -71,6 +70,7 @@ can be used for evaluation and prediction.
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.classification.NaiveBayes;
 import org.apache.spark.mllib.classification.NaiveBayesModel;
 import org.apache.spark.mllib.regression.LabeledPoint;
@@ -81,18 +81,12 @@ JavaRDD<LabeledPoint> test = ... // test set
 
 final NaiveBayesModel model = NaiveBayes.train(training.rdd(), 1.0);
 
-JavaRDD<Double> prediction =
-  test.map(new Function<LabeledPoint, Double>() {
-    @Override public Double call(LabeledPoint p) {
-      return model.predict(p.features());
+JavaPairRDD<Double, Double> predictionAndLabel = 
+  test.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+    @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+      return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
     }
   });
-JavaPairRDD<Double, Double> predictionAndLabel = 
-  prediction.zip(test.map(new Function<LabeledPoint, Double>() {
-    @Override public Double call(LabeledPoint p) {
-      return p.label();
-    }
-  }));
 double accuracy = 1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
     @Override public Boolean call(Tuple2<Double, Double> pl) {
       return pl._1() == pl._2();

@@ -21,7 +21,9 @@ import scala.collection.immutable.LongMap
 
 import org.scalatest.FunSuite
 
-import org.apache.spark._
+import org.apache.spark.SparkConf
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.KryoSerializer
 
 class IndexedRDDPartitionSuite extends FunSuite {
 
@@ -156,4 +158,16 @@ class IndexedRDDPartitionSuite extends FunSuite {
     assert(vp3.index.getPos(2) === -1)
   }
 
+  test("serialization") {
+    val elems = Set((0L, 1), (1L, 1), (2L, 1))
+    val vp = IndexedRDDPartition(elems.iterator)
+    val javaSer = new JavaSerializer(new SparkConf())
+    val kryoSer = new KryoSerializer(new SparkConf()
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer"))
+
+    for (ser <- List(javaSer, kryoSer); s = ser.newInstance()) {
+      val vpSer: IndexedRDDPartition[Int] = s.deserialize(s.serialize(vp))
+      assert(vpSer.iterator.toSet === elems)
+    }
+  }
 }

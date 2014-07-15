@@ -67,12 +67,14 @@ class ReplSuite extends FunSuite {
   }
 
   def assertContains(message: String, output: String) {
-    assert(output.contains(message),
+    val isContain = output.contains(message)
+    assert(isContain,
       "Interpreter output did not contain '" + message + "':\n" + output)
   }
 
   def assertDoesNotContain(message: String, output: String) {
-    assert(!output.contains(message),
+    val isContain = output.contains(message)
+    assert(!isContain,
       "Interpreter output contained '" + message + "':\n" + output)
   }
 
@@ -231,6 +233,18 @@ class ReplSuite extends FunSuite {
     assertContains("res1: Int = 100", output)
     assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
     assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
+  }
+
+  test("SPARK-1199-simple-reproduce") {
+    val output = runInterpreter("local-cluster[1,1,512]",
+      """
+        |case class Sum(exp: String, exp2: String)
+        |val a = Sum("A", "B")
+        |def b(a: Sum): String = a match { case Sum(_, _) => "Found Sum" }
+        |b(a)
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
   }
 
   if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {

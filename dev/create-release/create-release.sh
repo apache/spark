@@ -125,6 +125,7 @@ scp spark-* \
 
 # Docs
 cd spark
+sbt/sbt clean
 cd docs
 PRODUCTION=1 jekyll build
 echo "Copying release documentation"

@@ -128,8 +128,11 @@ def merge_pr(pr_num, target_ref):
 
     merge_message_flags = []
 
-    for p in [title, body]:
-        merge_message_flags += ["-m", p]
+    merge_message_flags += ["-m", title]
+    if body != None:
+        # We remove @ symbols from the body to avoid triggering e-mails
+        # to people every time someone creates a public fork of Spark.
+        merge_message_flags += ["-m", body.replace("@", "")]
 
     authors = "\n".join(["Author: %s" % a for a in distinct_authors])
 

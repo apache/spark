@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Random
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable
 
@@ -77,6 +79,22 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   override def isExecutorAlive(execId: String): Boolean = executors.contains(execId)
 
   override def hasExecutorsAliveOnHost(host: String): Boolean = executors.values.exists(_ == host)
+
+  def addExecutor(execId: String, host: String) {
+    executors.put(execId, host)
+  }
+}
+
+/**
+ * A Task implementation that results in a large serialized task.
+ */
+class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0) {
+  val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024)
+  val random = new Random(0)
+  random.nextBytes(randomBuffer)
+
+  override def runTask(context: TaskContext): Array[Byte] = randomBuffer
+  override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
 }
 
 class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
@@ -139,6 +157,22 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     manager.handleSuccessfulTask(2, createTaskResult(2))
     assert(sched.endedTasks(2) === Success)
     assert(sched.finishedManagers.contains(manager))
+  }
+
+  test("skip unsatisfiable locality levels") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execC", "host2"))
+    val taskSet = FakeTask.createTaskSet(1, Seq(TaskLocation("host1", "execB")))
+    val clock = new FakeClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+
+    // An executor that is not NODE_LOCAL should be rejected.
+    assert(manager.resourceOffer("execC", "host2", ANY) === None)
+
+    // Because there are no alive PROCESS_LOCAL executors, the base locality level should be
+    // NODE_LOCAL. So, we should schedule the task on this offered NODE_LOCAL executor before
+    // any of the locality wait timers expire.
+    assert(manager.resourceOffer("execA", "host1", ANY).get.index === 0)
   }
 
   test("basic delay scheduling") {
@@ -382,6 +416,63 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
     // we have failed the same task 4 times now : task id should now be in taskSetsFailed
     assert(sched.taskSetsFailed.contains(taskSet.id))
+  }
+
+  test("new executors get added") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc)
+    val taskSet = FakeTask.createTaskSet(4,
+      Seq(TaskLocation("host1", "execA")),
+      Seq(TaskLocation("host1", "execB")),
+      Seq(TaskLocation("host2", "execC")),
+      Seq())
+    val clock = new FakeClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+    // All tasks added to no-pref list since no preferred location is available
+    assert(manager.pendingTasksWithNoPrefs.size === 4)
+    // Only ANY is valid
+    assert(manager.myLocalityLevels.sameElements(Array(ANY)))
+    // Add a new executor
+    sched.addExecutor("execD", "host1")
+    manager.executorAdded()
+    // Task 0 and 1 should be removed from no-pref list
+    assert(manager.pendingTasksWithNoPrefs.size === 2)
+    // Valid locality should contain NODE_LOCAL and ANY
+    assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, ANY)))
+    // Add another executor
+    sched.addExecutor("execC", "host2")
+    manager.executorAdded()
+    // No-pref list now only contains task 3
+    assert(manager.pendingTasksWithNoPrefs.size === 1)
+    // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL and ANY
+    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
+  }
+
+  test("do not emit warning when serialized task is small") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    assert(!manager.emittedTaskSizeWarning)
+
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
+
+    assert(!manager.emittedTaskSizeWarning)
+  }
+
+  test("emit warning when serialized task is large") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+
+    val taskSet = new TaskSet(Array(new LargeTask(0)), 0, 0, 0, null)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    assert(!manager.emittedTaskSizeWarning)
+
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
+
+    assert(manager.emittedTaskSizeWarning)
   }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {

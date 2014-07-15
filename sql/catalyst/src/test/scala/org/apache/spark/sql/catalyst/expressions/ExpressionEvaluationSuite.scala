@@ -35,7 +35,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   /**
    * Checks for three-valued-logic.  Based on:
    * http://en.wikipedia.org/wiki/Null_(SQL)#Comparisons_with_NULL_and_the_three-valued_logic_.283VL.29
-   *
+   * I.e. in flat cpo "False -> Unknown -> True", OR is lowest upper bound, AND is greatest lower bound.
    * p       q       p OR q  p AND q  p = q
    * True    True    True    True     True
    * True    False   True    False    False
@@ -331,6 +331,49 @@ class ExpressionEvaluationSuite extends FunSuite {
       Literal("^Ba*n", StringType) :: Nil), true, row)
     checkEvaluation(In(Literal("^Ba*n", StringType),
       Literal("^Ba*n", StringType) :: c2 :: Nil), true, row)
+  }
+
+  test("case when") {
+    val row = new GenericRow(Array[Any](null, false, true, "a", "b", "c"))
+    val c1 = 'a.boolean.at(0)
+    val c2 = 'a.boolean.at(1)
+    val c3 = 'a.boolean.at(2)
+    val c4 = 'a.string.at(3)
+    val c5 = 'a.string.at(4)
+    val c6 = 'a.string.at(5)
+
+    checkEvaluation(CaseWhen(Seq(c1, c4, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(c2, c4, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(c3, c4, c6)), "a", row)
+    checkEvaluation(CaseWhen(Seq(Literal(null, BooleanType), c4, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(Literal(false, BooleanType), c4, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(Literal(true, BooleanType), c4, c6)), "a", row)
+
+    checkEvaluation(CaseWhen(Seq(c3, c4, c2, c5, c6)), "a", row)
+    checkEvaluation(CaseWhen(Seq(c2, c4, c3, c5, c6)), "b", row)
+    checkEvaluation(CaseWhen(Seq(c1, c4, c2, c5, c6)), "c", row)
+    checkEvaluation(CaseWhen(Seq(c1, c4, c2, c5)), null, row)
+
+    assert(CaseWhen(Seq(c2, c4, c6)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4, c3, c5, c6)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4, c3, c5)).nullable === true)
+
+    val c4_notNull = 'a.boolean.notNull.at(3)
+    val c5_notNull = 'a.boolean.notNull.at(4)
+    val c6_notNull = 'a.boolean.notNull.at(5)
+
+    assert(CaseWhen(Seq(c2, c4_notNull, c6_notNull)).nullable === false)
+    assert(CaseWhen(Seq(c2, c4, c6_notNull)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4_notNull, c6)).nullable === true)
+
+    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6_notNull)).nullable === false)
+    assert(CaseWhen(Seq(c2, c4, c3, c5_notNull, c6_notNull)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5, c6_notNull)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6)).nullable === true)
+
+    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4, c3, c5_notNull)).nullable === true)
+    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5)).nullable === true)
   }
 
   test("complex type") {
