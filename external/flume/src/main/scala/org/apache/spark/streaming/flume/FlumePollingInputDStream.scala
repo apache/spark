@@ -20,7 +20,7 @@ package org.apache.spark.streaming.flume
 import java.io.{ObjectOutput, ObjectInput, Externalizable}
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
-import java.util.concurrent.{TimeUnit, Executors}
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit, Executors}
 
 import org.apache.spark.flume.sink.SparkSinkUtils
 
@@ -33,7 +33,7 @@ import org.apache.avro.ipc.specific.SpecificRequestor
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 
 import org.apache.spark.Logging
-import org.apache.spark.flume.{EventBatch, SparkSinkEvent, SparkFlumeProtocol}
+import org.apache.spark.flume.{SparkSinkEvent, SparkFlumeProtocol}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
@@ -83,60 +83,64 @@ private[streaming] class FlumePollingReceiver(
   lazy val receiverExecutor = Executors.newFixedThreadPool(parallelism,
     new ThreadFactoryBuilder().setDaemon(true).setNameFormat("Flume Receiver Thread - %d").build())
 
-  private var connections = Array.empty[FlumeConnection] // temporarily empty, filled in later
+  private val connections = new LinkedBlockingQueue[FlumeConnection]()
 
   override def onStart(): Unit = {
     // Create the connections to each Flume agent.
-    connections = addresses.map(host => {
+    addresses.foreach(host => {
       val transceiver = new NettyTransceiver(host, channelFactory)
       val client = SpecificRequestor.getClient(classOf[SparkFlumeProtocol.Callback], transceiver)
-      new FlumeConnection(transceiver, client)
-    }).toArray
-
+      connections.add(new FlumeConnection(transceiver, client))
+    })
     for (i <- 0 until parallelism) {
       logInfo("Starting Flume Polling Receiver worker threads starting..")
       // Threads that pull data from Flume.
       receiverExecutor.submit(new Runnable {
         override def run(): Unit = {
-          var counter = i
           while (true) {
-            counter = counter % (connections.length)
-            val client = connections(counter).client
-            counter += 1
-            val eventBatch = client.getEventBatch(maxBatchSize)
-            if (!SparkSinkUtils.isErrorBatch(eventBatch)) {
-              // No error, proceed with processing data
-              val seq = eventBatch.getSequenceNumber
-              val events: java.util.List[SparkSinkEvent] = eventBatch.getEvents
-              logDebug(
-                "Received batch of " + events.size() + " events with sequence number: " + seq)
-              try {
-                // Convert each Flume event to a serializable SparkPollingEvent
-                var j = 0
-                while (j < events.size()) {
-                  store(SparkFlumePollingEvent.fromSparkSinkEvent(events(j)))
-                  logDebug("Stored events with seq:" + seq)
-                  j += 1
-                }
-                logInfo("Sending ack for: " +seq)
-                // Send an ack to Flume so that Flume discards the events from its channels.
-                client.ack(seq)
-                logDebug("Ack sent for sequence number: " + seq)
-              } catch {
-                case e: Exception =>
-                  try {
-                    // Let Flume know that the events need to be pushed back into the channel.
-                    client.nack(seq) // If the agent is down, even this could fail and throw
-                  } catch {
-                    case e: Exception => logError(
-                      "Sending Nack also failed. A Flume agent is down.")
+            val connection = connections.poll()
+            val client = connection.client
+            try {
+              val eventBatch = client.getEventBatch(maxBatchSize)
+              if (!SparkSinkUtils.isErrorBatch(eventBatch)) {
+                // No error, proceed with processing data
+                val seq = eventBatch.getSequenceNumber
+                val events: java.util.List[SparkSinkEvent] = eventBatch.getEvents
+                logDebug(
+                  "Received batch of " + events.size() + " events with sequence number: " + seq)
+                try {
+                  // Convert each Flume event to a serializable SparkPollingEvent
+                  var j = 0
+                  while (j < events.size()) {
+                    store(SparkFlumePollingEvent.fromSparkSinkEvent(events(j)))
+                    logDebug("Stored events with seq:" + seq)
+                    j += 1
                   }
-                  TimeUnit.SECONDS.sleep(2L) // for now just leave this as a fixed 2 seconds.
-                  logWarning("Error while attempting to store events", e)
+                  logDebug("Sending ack for: " +seq)
+                  // Send an ack to Flume so that Flume discards the events from its channels.
+                  client.ack(seq)
+                  logDebug("Ack sent for sequence number: " + seq)
+                } catch {
+                  case e: Exception =>
+                    try {
+                      // Let Flume know that the events need to be pushed back into the channel.
+                      client.nack(seq) // If the agent is down, even this could fail and throw
+                    } catch {
+                      case e: Exception => logError(
+                        "Sending Nack also failed. A Flume agent is down.")
+                    }
+                    TimeUnit.SECONDS.sleep(2L) // for now just leave this as a fixed 2 seconds.
+                    logWarning("Error while attempting to store events", e)
+                }
+              } else {
+                logWarning("Did not receive events from Flume agent due to error on the Flume " +
+                  "agent: " + eventBatch.getErrorMsg)
               }
-            } else {
-              logWarning("Did not receive events from Flume agent due to error on the Flume " +
-                "agent: " + eventBatch.getErrorMsg)
+            } catch {
+              case e: Exception =>
+                logWarning("Error while reading data from Flume", e)
+            } finally {
+              connections.add(connection)
             }
           }
         }

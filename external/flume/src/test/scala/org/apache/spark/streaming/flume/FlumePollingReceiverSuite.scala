@@ -66,7 +66,7 @@ import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingCon
     sink.start()
     ssc.start()
     writeAndVerify(Seq(channel), ssc, outputBuffer)
-    assertQueuesAreEmpty(channel)
+    assertChannelIsEmpty(channel)
     sink.stop()
     channel.stop()
   }
@@ -76,7 +76,7 @@ import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingCon
     val ssc = new StreamingContext(conf, batchDuration)
     val flumeStream: ReceiverInputDStream[SparkFlumePollingEvent] =
       FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", testPort),
-        new InetSocketAddress("localhost", testPort + 1)), 100, 2,
+        new InetSocketAddress("localhost", testPort + 1)), 100, 5,
         StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumePollingEvent]]
       with SynchronizedBuffer[Seq[SparkFlumePollingEvent]]
@@ -109,8 +109,8 @@ import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingCon
     sink2.start()
     ssc.start()
     writeAndVerify(Seq(channel, channel2), ssc, outputBuffer)
-    assertQueuesAreEmpty(channel)
-    assertQueuesAreEmpty(channel2)
+    assertChannelIsEmpty(channel)
+    assertChannelIsEmpty(channel2)
     sink.stop()
     channel.stop()
   }
@@ -160,7 +160,7 @@ import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingCon
     assert(counter === 25 * channels.size)
   }
 
-  def assertQueuesAreEmpty(channel: MemoryChannel) = {
+  def assertChannelIsEmpty(channel: MemoryChannel) = {
     val queueRemaining = channel.getClass.getDeclaredField("queueRemaining");
     queueRemaining.setAccessible(true)
     val m = queueRemaining.get(channel).getClass.getDeclaredMethod("availablePermits")
