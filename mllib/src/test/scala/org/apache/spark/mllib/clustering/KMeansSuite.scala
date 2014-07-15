@@ -196,27 +196,20 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
       assert(predicts(0) != predicts(3))
     }
   }
-}
-
-class KMeansTaskSuite extends FunSuite {
 
   test("task size should be small in both training and prediction") {
-    val conf = new SparkConf()
-      .setMaster("local-cluster[2, 1, 512]")
-      .setAppName("test k-means task size")
-      .set("spark.akka.frameSize", "1")
-    val sc = new SparkContext(conf)
-    val m = 10
-    val n = 1000000
+    val m = 4
+    val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
       val random = new Random(idx)
       iter.map(i => Vectors.dense(Array.fill(n)(random.nextDouble)))
     }.cache()
     for (initMode <- Seq(KMeans.RANDOM, KMeans.K_MEANS_PARALLEL)) {
+      // If we serialize data directly in the task closure, the size of the serialized task would be
+      // greater than 1MB and hence Spark would throw an error.
       val model = KMeans.train(points, 2, 2, 1, initMode)
       val predictions = model.predict(points).collect()
       val cost = model.computeCost(points)
     }
-    sc.stop()
   }
 }
