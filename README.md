@@ -1,6 +1,13 @@
 # Apache Spark
 
-Lightning-Fast Cluster Computing - <http://spark.apache.org/>
+Spark is a fast and general cluster computing system. It provides
+high-level APIs in Scala, Java, and Python, and an optimized engine that
+supports general computation graphs for data analysis. It also supports a
+rich set of higher-level tools including Spark SQL for SQL and structured
+data processing, MLLib for machine learning, GraphX for graph processing,
+and Spark Streaming.
+
+<http://spark.apache.org/>
 
 
 ## Online Documentation
