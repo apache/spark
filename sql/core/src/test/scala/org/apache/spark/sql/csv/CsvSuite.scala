@@ -64,9 +64,7 @@ class CsvSuite extends QueryTest {
   }
 
   test("Custom quoted CSV with inner quotes") {
-    val csvSchemaRDD = csvRDD(salesCSVWithDoubleQuotes,
-      delimiter = "; ",
-      quote = "|")
+    val csvSchemaRDD = csvRDD(salesCSVWithDoubleQuotes, delimiter = "; ", quote = '|')
     csvSchemaRDD.registerAsTable("quotedSales")
 
     checkAnswer(
@@ -81,7 +79,7 @@ class CsvSuite extends QueryTest {
 
     checkAnswer(
       sql("select distinct V2 from quotedSales where V2 like '%iPad%'"),
-      """iPad ||Power|| Adapter"""
+      """iPad |Power| Adapter"""
     )
    }
 }
