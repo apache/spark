@@ -870,10 +870,7 @@ private[hive] object HiveQl {
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) =>
           UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr))
-        // The precidence for . seems to be wrong, so [] binds tighter an we need to go inside to
-        // find the underlying attribute references.
-        case GetItem(UnresolvedAttribute(qualifierName), ordinal) =>
-          GetItem(UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr)), ordinal)
+        case other => GetField(other, attr)
       }
 
     /* Stars (*) */
