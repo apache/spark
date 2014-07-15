@@ -165,7 +165,7 @@ class KMeans private (
       val activeCenters = activeRuns.map(r => centers(r)).toArray
       val costAccums = activeRuns.map(_ => sc.accumulator(0.0))
 
-      val bcActiveCenters = data.context.broadcast(activeCenters)
+      val bcActiveCenters = sc.broadcast(activeCenters)
 
       // Find the sum and count of points mapping to each center
       val totalContribs = data.mapPartitions { points =>

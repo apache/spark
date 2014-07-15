@@ -17,14 +17,17 @@
 
 package org.apache.spark.mllib.clustering
 
+import java.util.Random
+
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.LocalSparkContext
 
 class KMeansSuite extends FunSuite with LocalSparkContext {
 
-  import KMeans.{RANDOM, K_MEANS_PARALLEL}
+  import org.apache.spark.mllib.clustering.KMeans.{K_MEANS_PARALLEL, RANDOM}
 
   test("single cluster") {
     val data = sc.parallelize(Array(
@@ -192,5 +195,28 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
       assert(predicts(3) === predicts(5))
       assert(predicts(0) != predicts(3))
     }
+  }
+}
+
+class KMeansTaskSuite extends FunSuite {
+
+  test("task size should be small in both training and prediction") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[2, 1, 512]")
+      .setAppName("test k-means task size")
+      .set("spark.akka.frameSize", "1")
+    val sc = new SparkContext(conf)
+    val m = 10
+    val n = 1000000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => Vectors.dense(Array.fill(n)(random.nextDouble)))
+    }.cache()
+    for (initMode <- Seq(KMeans.RANDOM, KMeans.K_MEANS_PARALLEL)) {
+      val model = KMeans.train(points, 2, 2, 1, initMode)
+      val predictions = model.predict(points).collect()
+      val cost = model.computeCost(points)
+    }
+    sc.stop()
   }
 }
