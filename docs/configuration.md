@@ -350,7 +350,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>32768</td>
   <td>
     Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec
-    is used.
+    is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.lz4.block.size</code></td>
+  <td>32768</td>
+  <td>
+    Block size (in bytes) used in LZ4 compression, in the case when LZ4 compression codec
+    is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
   </td>
 </tr>
 <tr>
@@ -697,6 +705,25 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The interval length for the scheduler to revive the worker resource offers to run tasks.
     (in milliseconds)
+  </td>
+</tr>
+</tr>
+  <td><code>spark.scheduler.minRegisteredExecutorsRatio</code></td>
+  <td>0</td>
+  <td>
+    The minimum ratio of registered executors (registered executors / total expected executors)
+    to wait for before scheduling begins. Specified as a double between 0 and 1.
+    Regardless of whether the minimum ratio of executors has been reached,
+    the maximum amount of time it will wait before scheduling begins is controlled by config 
+    <code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code> 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code></td>
+  <td>30000</td>
+  <td>
+    Maximum amount of time to wait for executors to register before scheduling begins
+    (in milliseconds).  
   </td>
 </tr>
 </table>
