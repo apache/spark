@@ -35,7 +35,7 @@ import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingContext}
 
-class FlumePollingReceiverSuite extends TestSuiteBase {
+  class FlumePollingReceiverSuite extends TestSuiteBase {
 
   val testPort = 9999
 
@@ -43,7 +43,7 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
     val flumeStream: ReceiverInputDStream[SparkFlumePollingEvent] =
-      FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", testPort)), 100, 5,
+      FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", testPort)), 100, 1,
         StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumePollingEvent]]
       with SynchronizedBuffer[Seq[SparkFlumePollingEvent]]
@@ -66,6 +66,7 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
     sink.start()
     ssc.start()
     writeAndVerify(Seq(channel), ssc, outputBuffer)
+    assertQueuesAreEmpty(channel)
     sink.stop()
     channel.stop()
   }
@@ -75,7 +76,7 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
     val ssc = new StreamingContext(conf, batchDuration)
     val flumeStream: ReceiverInputDStream[SparkFlumePollingEvent] =
       FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", testPort),
-        new InetSocketAddress("localhost", testPort + 1)), 100, 5,
+        new InetSocketAddress("localhost", testPort + 1)), 100, 2,
         StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumePollingEvent]]
       with SynchronizedBuffer[Seq[SparkFlumePollingEvent]]
@@ -108,9 +109,10 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
     sink2.start()
     ssc.start()
     writeAndVerify(Seq(channel, channel2), ssc, outputBuffer)
+    assertQueuesAreEmpty(channel)
+    assertQueuesAreEmpty(channel2)
     sink.stop()
     channel.stop()
-
   }
 
   def writeAndVerify(channels: Seq[MemoryChannel], ssc: StreamingContext,
@@ -126,12 +128,12 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
     }
     val startTime = System.currentTimeMillis()
     while (outputBuffer.size < 5 * channels.size &&
-      System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
+      System.currentTimeMillis() - startTime < 15000) {
       logInfo("output.size = " + outputBuffer.size)
       Thread.sleep(100)
     }
     val timeTaken = System.currentTimeMillis() - startTime
-    assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
+    assert(timeTaken < 15000, "Operation timed out after " + timeTaken + " ms")
     logInfo("Stopping context")
     ssc.stop()
 
@@ -156,6 +158,13 @@ class FlumePollingReceiverSuite extends TestSuiteBase {
       }
     }
     assert(counter === 25 * channels.size)
+  }
+
+  def assertQueuesAreEmpty(channel: MemoryChannel) = {
+    val queueRemaining = channel.getClass.getDeclaredField("queueRemaining");
+    queueRemaining.setAccessible(true)
+    val m = queueRemaining.get(channel).getClass.getDeclaredMethod("availablePermits")
+    assert(m.invoke(queueRemaining.get(channel)).asInstanceOf[Int] === 5000)
   }
 
   private class TxnSubmitter(channel: MemoryChannel, clock: ManualClock) extends Callable[Void] {

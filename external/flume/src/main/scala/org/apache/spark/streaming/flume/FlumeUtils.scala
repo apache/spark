@@ -59,7 +59,7 @@ object FlumeUtils {
     ): ReceiverInputDStream[SparkFlumeEvent] = {
     val inputStream = new FlumeInputDStream[SparkFlumeEvent](
         ssc, hostname, port, storageLevel, enableDecompression)
-        
+
     inputStream
   }
 
@@ -112,23 +112,34 @@ object FlumeUtils {
   /**
    * Creates an input stream that is to be used with the Spark Sink deployed on a Flume agent.
    * This stream will poll the sink for data and will pull events as they are available.
+   * This stream will use a batch size of 100 events and run 5 threads to pull data.
+   * @param host The address of the host on which the Spark Sink is running
+   * @param port The port that the host is listening on
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def createPollingStream(
+    ssc: StreamingContext,
+    host: String,
+    port: Int,
+    storageLevel: StorageLevel
+    ): ReceiverInputDStream[SparkFlumePollingEvent] = {
+    new FlumePollingInputDStream[SparkFlumePollingEvent](ssc,
+      Seq(new InetSocketAddress(host, port)), 100, 5, storageLevel)
+  }
+
+  /**
+   * Creates an input stream that is to be used with the Spark Sink deployed on a Flume agent.
+   * This stream will poll the sink for data and will pull events as they are available.
+   * This stream will use a batch size of 100 events and run 5 threads to pull data.
    * @param addresses List of InetSocketAddresses representing the hosts to connect to.
-   * @param maxBatchSize The maximum number of events to be pulled from the Spark sink in a
-   *                     single RPC call
-   * @param parallelism Number of concurrent requests this stream should send to the sink. Note
-   *                    that having a higher number of requests concurrently being pulled will
-   *                    result in this stream using more threads
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createPollingStream (
     ssc: StreamingContext,
     addresses: Seq[InetSocketAddress],
-    maxBatchSize: Int = 100,
-    parallelism: Int = 5,
-    storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+    storageLevel: StorageLevel
   ): ReceiverInputDStream[SparkFlumePollingEvent] = {
-    new FlumePollingInputDStream[SparkFlumePollingEvent](ssc, addresses, maxBatchSize,
-      parallelism, storageLevel)
+    new FlumePollingInputDStream[SparkFlumePollingEvent](ssc, addresses, 100, 5, storageLevel)
   }
 
   /**
@@ -142,14 +153,70 @@ object FlumeUtils {
    *                    result in this stream using more threads
    * @param storageLevel Storage level to use for storing the received objects
    */
-  def createJavaPollingStream (
+  def createPollingStream (
     ssc: StreamingContext,
     addresses: Seq[InetSocketAddress],
-    maxBatchSize: Int = 100,
-    parallelism: Int = 5,
-    storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-  ): JavaReceiverInputDStream[SparkFlumePollingEvent] = {
+    maxBatchSize: Int,
+    parallelism: Int,
+    storageLevel: StorageLevel
+  ): ReceiverInputDStream[SparkFlumePollingEvent] = {
     new FlumePollingInputDStream[SparkFlumePollingEvent](ssc, addresses, maxBatchSize,
+      parallelism, storageLevel)
+  }
+
+  /**
+   * Creates an input stream that is to be used with the Spark Sink deployed on a Flume agent.
+   * This stream will poll the sink for data and will pull events as they are available.
+   * This stream will use a batch size of 100 events and run 5 threads to pull data.
+   * @param addresses List of InetSocketAddresses representing the hosts to connect to.
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def createPollingStream (
+    jssc: JavaStreamingContext,
+    addresses: Seq[InetSocketAddress],
+    storageLevel: StorageLevel
+  ): ReceiverInputDStream[SparkFlumePollingEvent] = {
+    new FlumePollingInputDStream[SparkFlumePollingEvent](jssc.ssc, addresses, 100, 5,
+      StorageLevel.MEMORY_AND_DISK_SER_2)
+  }
+
+  /**
+   * Creates an input stream that is to be used with the Spark Sink deployed on a Flume agent.
+   * This stream will poll the sink for data and will pull events as they are available.
+   * This stream will use a batch size of 100 events and run 5 threads to pull data.
+   * @param host The address of the host on which the Spark Sink is running
+   * @param port The port that the host is listening on
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def createPollingStream(
+    jssc: JavaStreamingContext,
+    host: String,
+    port: Int,
+    storageLevel: StorageLevel
+    ): ReceiverInputDStream[SparkFlumePollingEvent] = {
+    new FlumePollingInputDStream[SparkFlumePollingEvent](jssc.ssc,
+      Seq(new InetSocketAddress(host, port)), 100, 5, storageLevel)
+  }
+
+  /**
+   * Creates an input stream that is to be used with the Spark Sink deployed on a Flume agent.
+   * This stream will poll the sink for data and will pull events as they are available.
+   * @param addresses List of InetSocketAddresses representing the hosts to connect to.
+   * @param maxBatchSize The maximum number of events to be pulled from the Spark sink in a
+   *                     single RPC call
+   * @param parallelism Number of concurrent requests this stream should send to the sink. Note
+   *                    that having a higher number of requests concurrently being pulled will
+   *                    result in this stream using more threads
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def createPollingStream (
+    jssc: JavaStreamingContext,
+    addresses: Seq[InetSocketAddress],
+    maxBatchSize: Int,
+    parallelism: Int,
+    storageLevel: StorageLevel
+  ): JavaReceiverInputDStream[SparkFlumePollingEvent] = {
+    new FlumePollingInputDStream[SparkFlumePollingEvent](jssc.ssc, addresses, maxBatchSize,
       parallelism, storageLevel)
   }
 }

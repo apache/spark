@@ -64,10 +64,9 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
     })
     // Wait until a batch is available - will be an error if error message is non-empty
     val batch = processor.getEventBatch
-    if (batch.getErrorMsg != null && !batch.getErrorMsg.equals("")) {
-      processorMap.put(sequenceNumber, processor)
+    if (!SparkSinkUtils.isErrorBatch(batch)) {
+      processorMap.put(sequenceNumber.toString, processor)
     }
-
     batch
   }
 
