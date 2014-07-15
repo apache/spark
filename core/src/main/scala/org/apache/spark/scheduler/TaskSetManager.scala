@@ -499,7 +499,7 @@ private[spark] class TaskSetManager(
         isZombie = true
       }
     } else {
-      logInfo("Ignorning task-finished event for " + taskSet.id + ":" + info.id +
+      logInfo("Ignoring task-finished event for " + taskSet.id + ":" + info.id +
         " because task " + index + " has already completed successfully")
     }
     failedExecutors.remove(index)
