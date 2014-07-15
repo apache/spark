@@ -606,8 +606,8 @@ object DecisionTree extends Serializable with Logging {
       val arrIndex = arrShift + featureIndex
       // Update the left or right count for one bin.
       val aggShift = numClasses * numBins * numFeatures * nodeIndex
-      val aggIndex = aggShift + numClasses * featureIndex * numBins
-        + arr(arrIndex).toInt * numClasses
+      val aggIndex
+        = aggShift + numClasses * featureIndex * numBins + arr(arrIndex).toInt * numClasses
       val labelInt = label.toInt
       agg(aggIndex + labelInt) = agg(aggIndex + labelInt) + 1
     }
