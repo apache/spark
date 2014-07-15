@@ -199,7 +199,7 @@ class SQLContext:
 
         >>> import tempfile, shutil
         >>> csvFile = tempfile.mkdtemp()
-        >>> shutil.rmtree(jsonFile)
+        >>> shutil.rmtree(csvFile)
         >>> ofn = open(csvFile, 'w')
         >>> for csvStr in csvStrings:
         ...   print>>ofn, csvStr
