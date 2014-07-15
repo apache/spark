@@ -104,7 +104,6 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     registerApplicationMaster()
 
     waitForSparkMaster()
-    // setup AmIpFilter for the SparkUI - do this before we start the UI
     addAmIpFilter()
 
     // Allocate all containers
