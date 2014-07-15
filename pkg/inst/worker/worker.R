@@ -107,8 +107,6 @@ if (isEmpty != 0) {
         acc$data <- list(NULL)
         acc$size <- 1
       }
-      # Fast append to list from
-      # http://stackoverflow.com/questions/17046336/here-we-go-again-append-an-element-to-a-list-in-r
       addItemToAccumulator(acc, tuple)
       res[[bucket]] <- acc
     }
