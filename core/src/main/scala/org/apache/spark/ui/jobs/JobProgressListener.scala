@@ -72,7 +72,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
     val stage = stageCompleted.stageInfo
     val stageId = stage.stageId
     // Remove by stageId, rather than by StageInfo, in case the StageInfo is from storage
-    poolToActiveStages(stageIdToPool(stageId)).remove(stageId)
+    if (stageIdToPool.contains(stageId)) {
+      poolToActiveStages(stageIdToPool(stageId)).remove(stageId)
+    }
     activeStages.remove(stageId)
     if (stage.failureReason.isEmpty) {
       completedStages += stage
