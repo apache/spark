@@ -124,25 +124,28 @@ class JavaSQLContext(val sqlContext: SQLContext) {
     new JavaSchemaRDD(sqlContext, JsonRDD.inferSchema(json, 1.0))
 
    /**
-   * Loads a CSV file (according to RFC 4180) and returns the result as a [[JavaSchemaRDD]].
-   *
-   * NOTE: If there are new line characters inside quoted fields this method may fail to
-   * parse correctly, because the two lines may be in different partitions. Use
-   * [[SQLContext#csvRDD]] to parse such files.
-   *
-   * @param path path to input file
-   * @param delimiter Optional delimiter (default is comma)
-   * @param quote Optional quote character or string (default is '"')
-   * @param header Optional flag to indicate first line of each file is the header
-   *               (default is false)
-   */
+    * Loads a CSV file (according to RFC 4180) and returns the result as a [[JavaSchemaRDD]].
+    *
+    * NOTE: If there are new line characters inside quoted fields this method may fail to
+    * parse correctly, because the two lines may be in different partitions. Use
+    * [[SQLContext#csvRDD]] to parse such files.
+    *
+    * @param path path to input file
+    * @param delimiter Optional delimiter (default is comma)
+    * @param quote Optional quote character or string (default is '"')
+    * @param schema optional StructType object to specify schema (field names and types). This will
+    *               override field names if header is used
+    * @param header Optional flag to indicate first line of each file is the header
+    *               (default is false)
+    */
   def csvFile(
       path: String,
       delimiter: String = ",",
       quote: Char = '"',
+      schema: StructType = null,
       header: Boolean = false): JavaSchemaRDD = {
     val csv = sqlContext.sparkContext.textFile(path)
-    csvRDD(csv, delimiter, quote, header)
+    csvRDD(csv, delimiter, quote, schema, header)
   }
 
   /**
@@ -155,6 +158,8 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * @param csv input RDD
    * @param delimiter Optional delimiter (default is comma)
    * @param quote Optional quote character of strig (default is '"')
+   * @param schema optional StructType object to specify schema (field names and types). This will
+   *               override field names if header is used
    * @param header Optional flag to indicate first line of each file is the hader
    *               (default is false)
    */
@@ -162,8 +167,9 @@ class JavaSQLContext(val sqlContext: SQLContext) {
       csv: JavaRDD[String],
       delimiter: String = ",",
       quote: Char = '"',
+      schema: StructType = null,
       header: Boolean = false): JavaSchemaRDD = {
-    new JavaSchemaRDD(sqlContext, CsvRDD.inferSchema(csv, delimiter, quote, header))
+    new JavaSchemaRDD(sqlContext, CsvRDD.inferSchema(csv, delimiter, quote, schema, header))
   }
 
   /**

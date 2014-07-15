@@ -140,6 +140,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @param path path to input file
    * @param delimiter Optional delimiter (default is comma)
    * @param quote Optional quote character or string (default is '"')
+   * @param schema optional StructType object to specify schema (field names and types). This will
+   *               override field names if header is used
    * @param header Optional flag to indicate first line of each file is the header
    *               (default is false)
    */
@@ -147,9 +149,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       path: String,
       delimiter: String = ",",
       quote: Char = '"',
+      schema: StructType = null,
       header: Boolean = false): SchemaRDD = {
     val csv = sparkContext.textFile(path)
-    csvRDD(csv, delimiter, quote, header)
+    csvRDD(csv, delimiter, quote, schema, header)
   }
 
   /**
@@ -162,6 +165,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @param csv input RDD
    * @param delimiter Optional delimiter (default is comma)
    * @param quote Optional quote character of strig (default is '"')
+   * @param schema optional StructType object to specify schema (field names and types). This will
+   *               override field names if header is used
    * @param header Optional flag to indicate first line of each file is the hader
    *               (default is false)
    */
@@ -169,8 +174,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
       csv: RDD[String],
       delimiter: String = ",",
       quote: Char = '"',
+      schema: StructType = null,
       header: Boolean = false): SchemaRDD = {
-    new SchemaRDD(this, CsvRDD.inferSchema(csv, delimiter, quote, header))
+    new SchemaRDD(this, CsvRDD.inferSchema(csv, delimiter, quote, schema, header))
   }
 
   /**

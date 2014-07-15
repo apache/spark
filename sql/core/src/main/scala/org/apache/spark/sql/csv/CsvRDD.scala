@@ -19,7 +19,7 @@ package org.apache.spark.sql.csv
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.sql.Logging
@@ -38,26 +38,32 @@ private[sql] object CsvRDD extends Logging {
       csv: RDD[String],
       delimiter: String,
       quote: Char,
+      userSchema: StructType,
       useHeader: Boolean): LogicalPlan = {
 
-    // Constructing schema
-    // TODO: Infer types based on a sample and/or let user specify types/schema
     val firstLine = csv.first()
-    // Assuming first row is representative and using it to determine number of fields
-    val firstRow = new CsvTokenizer(Seq(firstLine).iterator, delimiter, quote).next()
-    val numFields = firstRow.length
-    logger.info(s"Parsing CSV with $numFields.")
-    val header = if (useHeader) {
-      logger.info(s"Using header line: $firstLine")
-      firstRow
+    val schema = if (userSchema == null) {
+      // Assume first row is representative and use it to determine number of fields
+      val firstRow = new CsvTokenizer(Seq(firstLine).iterator, delimiter, quote).next()
+      val header = if (useHeader) {
+        logger.info(s"Using header line: $firstLine")
+        firstRow
+      } else {
+        firstRow.zipWithIndex.map { case (value, index) => s"V$index"}
+      }
+      // By default fields are assumed to be StringType
+      val schemaFields = header.map { fieldName =>
+        StructField(fieldName, StringType, nullable = true)
+      }
+       StructType(schemaFields)
     } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"V$index" }
+      userSchema
     }
 
-    val schemaFields = header.map { fieldName =>
-      StructField(fieldName.asInstanceOf[String], StringType, nullable = true)
-    }
+    val numFields = schema.fields.length
+    logger.info(s"Parsing CSV with $numFields.")
     val row = new GenericMutableRow(numFields)
+    val projection = schemaCaster(asAttributes(schema))
 
     val parsedCSV = csv.mapPartitions { iter =>
       // When using header, any input line that equals firstLine is assumed to be header
@@ -67,34 +73,30 @@ private[sql] object CsvRDD extends Logging {
         iter
       }
       val tokenIter = new CsvTokenizer(csvIter, delimiter, quote)
-      parseCSV(tokenIter, schemaFields, row)
+      parseCSV(tokenIter, schema.fields, projection, row)
     }
 
-    val schema = StructType(schemaFields)
     SparkLogicalPlan(ExistingRdd(asAttributes(schema), parsedCSV))
   }
 
-  private def castToType(value: Any, dataType: DataType): Any = dataType match {
-    case StringType => value.asInstanceOf[String]
-    case BooleanType => value.asInstanceOf[Boolean]
-    case DoubleType => value.asInstanceOf[Double]
-    case FloatType => value.asInstanceOf[Float]
-    case IntegerType => value.asInstanceOf[Int]
-    case LongType => value.asInstanceOf[Long]
-    case ShortType => value.asInstanceOf[Short]
-    case _ => null
+  protected def schemaCaster(schema: Seq[AttributeReference]): MutableProjection = {
+    val startSchema = (1 to schema.length).toSeq.map(
+      index => new AttributeReference(s"V$index", StringType, nullable = true)())
+    val casts = schema.zipWithIndex.map { case (ar, i) => Cast(startSchema(i), ar.dataType) }
+    new MutableProjection(casts, startSchema)
   }
 
   private def parseCSV(
       iter: Iterator[Array[String]],
       schemaFields: Seq[StructField],
+      projection: MutableProjection,
       row: GenericMutableRow): Iterator[Row] = {
     iter.map { tokens =>
       schemaFields.zipWithIndex.foreach {
         case (StructField(name, dataType, _), index) =>
-          row.update(index, castToType(tokens(index), dataType))
+          row.update(index, tokens(index))
       }
-      row
+      projection(row)
     }
   }
 
