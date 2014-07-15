@@ -27,6 +27,9 @@
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-mllib_2.10</artifactId>
+  <properties>
+     <sbt.project.name>mllib</sbt.project.name>
+  </properties>  
   <packaging>jar</packaging>
   <name>Spark Project ML Library</name>
   <url>http://spark.apache.org/</url>
@@ -75,6 +78,19 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+  <profiles>
+    <profile>
+      <id>netlib-lgpl</id>
+      <dependencies>
+        <dependency>
+          <groupId>com.github.fommil.netlib</groupId>
+          <artifactId>all</artifactId>
+          <version>1.1.2</version>
+          <type>pom</type>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>

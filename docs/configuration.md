@@ -699,6 +699,25 @@ Apart from these, the following properties are also available, and may be useful
     (in milliseconds)
   </td>
 </tr>
+</tr>
+  <td><code>spark.scheduler.minRegisteredExecutorsRatio</code></td>
+  <td>0</td>
+  <td>
+    The minimum ratio of registered executors (registered executors / total expected executors)
+    to wait for before scheduling begins. Specified as a double between 0 and 1.
+    Regardless of whether the minimum ratio of executors has been reached,
+    the maximum amount of time it will wait before scheduling begins is controlled by config 
+    <code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code> 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.maxRegisteredExecutorsWaitingTime</code></td>
+  <td>30000</td>
+  <td>
+    Maximum amount of time to wait for executors to register before scheduling begins
+    (in milliseconds).  
+  </td>
+</tr>
 </table>
 
 #### Security
@@ -771,6 +790,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Interval (milliseconds) at which data received by Spark Streaming receivers is coalesced
     into blocks of data before storing them in Spark.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.receiver.maxRate</code></td>
+  <td>infinite</td>
+  <td>
+    Maximum rate (per second) at which each receiver will push data into blocks. Effectively,
+    each stream will consume at most this number of records per second.
+    Setting this configuration to 0 or a negative number will put no limit on the rate.
   </td>
 </tr>
 <tr>

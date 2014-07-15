@@ -52,7 +52,7 @@ trait SQLConf {
   /** ********************** SQLConf functionality methods ************ */
 
   @transient
-  protected[sql] val settings = java.util.Collections.synchronizedMap(
+  private val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
 
   def set(props: Properties): Unit = {
