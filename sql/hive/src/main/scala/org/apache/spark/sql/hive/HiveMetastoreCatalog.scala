@@ -50,7 +50,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   def lookupRelation(
       db: Option[String],
       tableName: String,
-      alias: Option[String]): LogicalPlan = client.synchronized {
+      alias: Option[String]): LogicalPlan = synchronized {
     val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
     val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
     val table = client.getTable(databaseName, tblName)
