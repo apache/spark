@@ -48,9 +48,9 @@ the _exact_ Hadoop version you are running to avoid any compatibility errors.
   </tr>
 </table>
 
-In SBT, the equivalent can be achieved by setting the SPARK_HADOOP_VERSION flag:
+In SBT, the equivalent can be achieved by setting the the `hadoop.version` property:
 
-    SPARK_HADOOP_VERSION=1.0.4 sbt/sbt assembly
+    sbt/sbt -Dhadoop.version=1.0.4 assembly
 
 # Linking Applications to the Hadoop Version
 
