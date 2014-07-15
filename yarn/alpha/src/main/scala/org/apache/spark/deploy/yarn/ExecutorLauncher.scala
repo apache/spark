@@ -192,7 +192,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
   // add the yarn amIpFilter that Yarn requires for properly securing the UI
   private def addAmIpFilter() {
     val proxy = YarnConfiguration.getProxyHostAndPort(conf)
-    val parts: Array[String] = proxy.split(":")
+    val parts = proxy.split(":")
     val proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
     val uriBase = "http://" + proxy + proxyBase
     val amFilter = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
