@@ -44,7 +44,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   import HiveMetastoreTypes._
 
   /** Connection to hive metastore.  Usages should lock on `this`. */
-  protected val client = Hive.get(hive.hiveconf)
+  protected[hive] val client = Hive.get(hive.hiveconf)
 
   val caseSensitive: Boolean = false
 
