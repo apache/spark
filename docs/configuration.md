@@ -336,7 +336,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
-  <td>org.apache.spark.io.<br />LZ4CompressionCodec</td>
+  <td>org.apache.spark.io.<br />SnappyCompressionCodec</td>
   <td>
     The codec used to compress internal data such as RDD partitions and shuffle outputs.
     By default, Spark provides three codecs:  <code>org.apache.spark.io.LZ4CompressionCodec</code>,
