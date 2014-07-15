@@ -43,7 +43,8 @@ import scala.collection.JavaConversions._
 private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
   import HiveMetastoreTypes._
 
-  val client = Hive.get(hive.hiveconf)
+  /** Connection to hive metastore.  Usages should lock on `this`. */
+  protected val client = Hive.get(hive.hiveconf)
 
   val caseSensitive: Boolean = false
 
