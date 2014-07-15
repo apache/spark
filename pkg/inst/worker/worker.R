@@ -102,8 +102,14 @@ if (isEmpty != 0) {
       hashVal <- do.call(execFunctionName, list(tuple[[1]]))
       bucket <- as.character(hashVal %% numPartitions)
       acc <- res[[bucket]]
-      # TODO?: http://stackoverflow.com/questions/2436688/append-an-object-to-a-list-in-r-in-amortized-constant-time
-      acc[[length(acc) + 1]] <- tuple
+      # Create a new accumulator
+      if (is.null(acc)) {
+        acc <- new.env()
+        acc$counter <- 0
+        acc$data <- list(NULL)
+        acc$size <- 1
+      }
+      addItemToAccumulator(acc, tuple)
       res[[bucket]] <- acc
     }
     invisible(lapply(data, hashTupleToEnvir))
@@ -112,7 +118,9 @@ if (isEmpty != 0) {
     for (name in ls(res)) {
       writeInt(outputCon, 2L)
       writeInt(outputCon, as.integer(name))
-      writeRaw(outputCon, res[[name]])
+      # Truncate the accumulator list to the number of elements we have
+      length(res[[name]]$data) <- res[[name]]$counter
+      writeRaw(outputCon, res[[name]]$data)
     }
   }
 }
