@@ -45,8 +45,9 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
       (prediction, if (prediction != label) 1 else 0)
     }.reduceByKey(_ + _)
     .collectAsMap()
-  private lazy val confusions = predictionAndLabels.map {
-    case (prediction, label) => ((prediction, label), 1)
+  private lazy val confusions = predictionAndLabels
+    .map { case (prediction, label) =>
+      ((prediction, label), 1)
   }.reduceByKey(_ + _).collectAsMap()
 
   /**
@@ -55,11 +56,18 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
    * they are ordered by class label ascending,
    * as in "labels"
    */
-  lazy val confusionMatrix: Matrix = {
+  def confusionMatrix: Matrix = {
     val transposedFlatMatrix = Array.ofDim[Double](labels.size * labels.size)
-    for (i <- 0 to labels.size - 1; j <- 0 to labels.size - 1) {
-      transposedFlatMatrix(i * labels.size + j)
-        = confusions.getOrElse((labels(i), labels(j)), 0).toDouble
+    val n = labels.size
+    var i, j = 0
+    while(i < n){
+      j = 0
+      while(j < n){
+        transposedFlatMatrix(i * labels.size + j)
+          = confusions.getOrElse((labels(i), labels(j)), 0).toDouble
+        j += 1
+      }
+      i += 1
     }
     Matrices.dense(labels.size, labels.size, transposedFlatMatrix)
   }
