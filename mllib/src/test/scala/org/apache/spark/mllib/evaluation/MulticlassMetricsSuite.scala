@@ -17,9 +17,10 @@
 
 package org.apache.spark.mllib.evaluation
 
+import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.linalg.Matrices
 import org.apache.spark.mllib.util.LocalSparkContext
-import org.scalatest.FunSuite
 
 class MulticlassMetricsSuite extends FunSuite with LocalSparkContext {
   test("Multiclass evaluation metrics") {
