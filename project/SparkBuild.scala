@@ -154,7 +154,7 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
-  /* Hive console settings */
+  /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
 
   /* Hive console settings */
