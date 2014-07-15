@@ -20,6 +20,7 @@ package org.apache.spark.io
 import java.io.{InputStream, OutputStream}
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
+import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
 import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
@@ -56,6 +57,27 @@ private[spark] object CompressionCodec {
   }
 
   val DEFAULT_COMPRESSION_CODEC = classOf[LZFCompressionCodec].getName
+}
+
+
+/**
+ * :: DeveloperApi ::
+ * LZ4 implementation of [[org.apache.spark.io.CompressionCodec]].
+ * Block size can be configured by `spark.io.compression.lz4.block.size`.
+ *
+ * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
+ *       of Spark. This is intended for use as an internal compression utility within a single Spark
+ *       application.
+ */
+@DeveloperApi
+class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
+
+  override def compressedOutputStream(s: OutputStream): OutputStream = {
+    val blockSize = conf.getInt("spark.io.compression.lz4.block.size", 32768)
+    new LZ4BlockOutputStream(s, blockSize)
+  }
+
+  override def compressedInputStream(s: InputStream): InputStream = new LZ4BlockInputStream(s)
 }
 
 
