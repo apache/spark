@@ -116,7 +116,7 @@ private[streaming] class FlumePollingReceiver(
                     logDebug("Stored events with seq:" + seq)
                     j += 1
                   }
-                  logDebug("Sending ack for sequence number: " +seq)
+                  logDebug("Sending ack for sequence number: " + seq)
                   // Send an ack to Flume so that Flume discards the events from its channels.
                   client.ack(seq)
                   logDebug("Ack sent for sequence number: " + seq)

@@ -25,6 +25,6 @@ object SparkSinkUtils {
    * @return - true if the batch represents an error
    */
   def isErrorBatch(batch: EventBatch): Boolean = {
-    !batch.getErrorMsg.toString.equals("") //If there is an error message, it is an error batch.
+    !batch.getErrorMsg.toString.equals("") // If there is an error message, it is an error batch.
   }
 }

@@ -45,9 +45,7 @@ import org.slf4j.LoggerFactory
  */
 private class TransactionProcessor(val channel: Channel, val seqNum: String,
   var maxBatchSize: Int, val transactionTimeout: Int, val backOffInterval: Int,
-  val parent: SparkAvroCallbackHandler) extends Callable[Void] {
-
-  private val LOG = LoggerFactory.getLogger(classOf[TransactionProcessor])
+  val parent: SparkAvroCallbackHandler) extends Callable[Void] with Logging {
 
   // If a real batch is not returned, we always have to return an error batch.
   @volatile private var eventBatch: EventBatch = new EventBatch("Unknown Error", "",
@@ -88,9 +86,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
    * @param success True if an ACK was received and the transaction should be committed, else false.
    */
   def batchProcessed(success: Boolean) {
-    if (LOG.isDebugEnabled) {
-      LOG.debug("Batch processed for sequence number: " + seqNum)
-    }
+    logDebug("Batch processed for sequence number: " + seqNum)
     batchSuccess = success
     batchAckLatch.countDown()
   }
@@ -123,6 +119,8 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
                 gotEventsInThisTxn = true
               case None =>
                 if (!gotEventsInThisTxn) {
+                  logDebug("Sleeping for " + backOffInterval + " millis as no events were read in" +
+                    " the current transaction")
                   TimeUnit.MILLISECONDS.sleep(backOffInterval)
                 } else {
                   loop.break()
@@ -133,7 +131,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
         if (!gotEventsInThisTxn) {
           val msg = "Tried several times, " +
             "but did not get any events from the channel!"
-          LOG.warn(msg)
+          logWarning(msg)
           eventBatch.setErrorMsg(msg)
         } else {
           // At this point, the events are available, so fill them into the event batch
@@ -142,7 +140,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
       })
     } catch {
       case e: Exception =>
-        LOG.error("Error while processing transaction.", e)
+        logWarning("Error while processing transaction.", e)
         eventBatch.setErrorMsg(e.getMessage)
         try {
           txOpt.foreach(tx => {
@@ -166,17 +164,18 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
     txOpt.foreach(tx => {
       if (batchSuccess) {
         try {
+          logDebug("Committing transaction")
           tx.commit()
         } catch {
           case e: Exception =>
-            LOG.warn("Error while attempting to commit transaction. Transaction will be rolled " +
+            logWarning("Error while attempting to commit transaction. Transaction will be rolled " +
               "back", e)
             rollbackAndClose(tx, close = false) // tx will be closed later anyway
         } finally {
           tx.close()
         }
       } else {
-        LOG.warn("Spark could not commit transaction, NACK received. Rolling back transaction.")
+        logWarning("Spark could not commit transaction, NACK received. Rolling back transaction.")
         rollbackAndClose(tx, close = true)
         // This might have been due to timeout or a NACK. Either way the following call does not
         // cause issues. This is required to ensure the TransactionProcessor instance is not leaked
@@ -192,12 +191,12 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
    */
   private def rollbackAndClose(tx: Transaction, close: Boolean) {
     try {
-      LOG.warn("Spark was unable to successfully process the events. Transaction is being " +
+      logWarning("Spark was unable to successfully process the events. Transaction is being " +
         "rolled back.")
       tx.rollback()
     } catch {
       case e: Exception =>
-        LOG.error("Error rolling back transaction. Rollback may have failed!", e)
+        logError("Error rolling back transaction. Rollback may have failed!", e)
     } finally {
       if (close) {
         tx.close()

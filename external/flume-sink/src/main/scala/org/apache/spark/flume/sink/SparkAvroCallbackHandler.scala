@@ -35,8 +35,7 @@ import org.slf4j.LoggerFactory
  *                           is rolled back.
  */
 private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
-  val transactionTimeout: Int, val backOffInterval: Int) extends SparkFlumeProtocol {
-  private val LOG = LoggerFactory.getLogger(classOf[SparkAvroCallbackHandler])
+  val transactionTimeout: Int, val backOffInterval: Int) extends SparkFlumeProtocol with Logging {
   val transactionExecutorOpt = Option(Executors.newFixedThreadPool(threads,
     new ThreadFactoryBuilder().setDaemon(true)
       .setNameFormat("Spark Sink Processor Thread - %d").build()))
@@ -56,6 +55,7 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
    * @return [[EventBatch]] instance that has a sequence number and an array of at most n events
    */
   override def getEventBatch(n: Int): EventBatch = {
+    logDebug("Got getEventBatch call from Spark.")
     val sequenceNumber = seqBase + seqCounter.incrementAndGet()
     val processor = new TransactionProcessor(channel, sequenceNumber,
       n, transactionTimeout, backOffInterval, this)
@@ -66,6 +66,7 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
     val batch = processor.getEventBatch
     if (!SparkSinkUtils.isErrorBatch(batch)) {
       processorMap.put(sequenceNumber.toString, processor)
+      logDebug("Sending event batch with sequence number: " + sequenceNumber)
     }
     batch
   }
@@ -75,6 +76,7 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
    * @param sequenceNumber The sequence number of the event batch that was successful
    */
   override def ack(sequenceNumber: CharSequence): Void = {
+    logDebug("Received Ack for batch with sequence number: " + sequenceNumber)
     completeTransaction(sequenceNumber, success = true)
     null
   }
@@ -86,7 +88,7 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
    */
   override def nack(sequenceNumber: CharSequence): Void = {
     completeTransaction(sequenceNumber, success = false)
-    LOG.info("Spark failed to commit transaction. Will reattempt events.")
+    logInfo("Spark failed to commit transaction. Will reattempt events.")
     null
   }
 
@@ -115,6 +117,7 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
    * Shuts down the executor used to process transactions.
    */
   def shutdown() {
+    logInfo("Shutting down Spark Avro Callback Handler")
     transactionExecutorOpt.foreach(executor => {
       executor.shutdownNow()
     })

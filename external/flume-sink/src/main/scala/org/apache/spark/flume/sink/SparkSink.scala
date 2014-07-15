@@ -48,9 +48,8 @@ import org.apache.spark.flume.SparkFlumeProtocol
 // until an ACK or NACK comes back or the transaction times out (after the specified timeout).
 // When the response comes, the TransactionProcessor is retrieved and then unblocked,
 // at which point the transaction is committed or rolled back.
-class SparkSink extends AbstractSink with Configurable {
+class SparkSink extends AbstractSink with Logging with Configurable {
 
-  private val LOG = LoggerFactory.getLogger(classOf[SparkSink])
   // Size of the pool to use for holding transaction processors.
   private var poolSize: Integer = SparkSinkConfig.DEFAULT_THREADS
 
@@ -74,7 +73,7 @@ class SparkSink extends AbstractSink with Configurable {
   private val blockingLatch = new CountDownLatch(1)
 
   override def start() {
-    LOG.info("Starting Spark Sink: " + getName + " on port: " + port + " and interface: " +
+    logInfo("Starting Spark Sink: " + getName + " on port: " + port + " and interface: " +
       hostname + " with " + "pool size: " + poolSize + " and transaction timeout: " +
       transactionTimeout + ".")
     handler = Option(new SparkAvroCallbackHandler(poolSize, getChannel, transactionTimeout,
@@ -85,19 +84,19 @@ class SparkSink extends AbstractSink with Configurable {
     // Netty dependencies are already available on the JVM as Flume would have pulled them in.
     serverOpt = Option(new NettyServer(responder, new InetSocketAddress(hostname, port)))
     serverOpt.foreach(server => {
-      LOG.info("Starting Avro server for sink: " + getName)
+      logInfo("Starting Avro server for sink: " + getName)
       server.start()
     })
     super.start()
   }
 
   override def stop() {
-    LOG.info("Stopping Spark Sink: " + getName)
+    logInfo("Stopping Spark Sink: " + getName)
     handler.foreach(callbackHandler => {
       callbackHandler.shutdown()
     })
     serverOpt.foreach(server => {
-      LOG.info("Stopping Avro Server for sink: " + getName)
+      logInfo("Stopping Avro Server for sink: " + getName)
       server.close()
       server.join()
     })
@@ -113,12 +112,16 @@ class SparkSink extends AbstractSink with Configurable {
     poolSize = ctx.getInteger(THREADS, DEFAULT_THREADS)
     transactionTimeout = ctx.getInteger(CONF_TRANSACTION_TIMEOUT, DEFAULT_TRANSACTION_TIMEOUT)
     backOffInterval = ctx.getInteger(CONF_BACKOFF_INTERVAL, DEFAULT_BACKOFF_INTERVAL)
+    logInfo("Configured Spark Sink with hostname: " + hostname + ", port: " + port + ", " +
+      "poolSize: " + poolSize + ", transactionTimeout: " + transactionTimeout + ", " +
+      "backoffInterval: " + backOffInterval)
   }
 
   override def process(): Status = {
     // This method is called in a loop by the Flume framework - block it until the sink is
     // stopped to save CPU resources. The sink runner will interrupt this thread when the sink is
     // being shut down.
+    logInfo("Blocking Sink Runner, sink will continue to run..")
     blockingLatch.await()
     Status.BACKOFF
   }
