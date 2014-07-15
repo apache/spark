@@ -18,11 +18,16 @@
 package org.apache.spark.util.random
 
 import scala.collection.Map
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map => MMap}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.math3.random.RandomDataGenerator
+
 import org.apache.spark.Logging
+import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
+
+import scala.reflect.ClassTag
 
 /**
  * Auxiliary functions and data structures for the sampleByKey method in PairRDDFunctions.
@@ -35,8 +40,8 @@ import org.apache.spark.rdd.RDD
  * Like in simple random sampling, we generate a random value for each item from the
  * uniform  distribution [0.0, 1.0]. All items with values <= min(values of items in the waitlist)
  * are accepted into the sample instantly. The threshold for instant accept is designed so that
- * s - numAccepted = O(log(s)), where s is again the desired sample size. Thus, by maintaining a
- * waitlist size = O(log(s)), we will be able to create a sample of the exact size s by adding
+ * s - numAccepted = O(sqrt(s)), where s is again the desired sample size. Thus, by maintaining a
+ * waitlist size = O(sqrt(s)), we will be able to create a sample of the exact size s by adding
  * a portion of the waitlist to the set of items that are instantly accepted. The exact threshold
  * is computed by sorting the values in the waitlist and picking the value at (s - numAccepted).
  *
@@ -47,21 +52,21 @@ import org.apache.spark.rdd.RDD
  * http://jmlr.org/proceedings/papers/v28/meng13a.html
  */
 
-private[spark] object StratifiedSampler extends Logging {
+private[spark] object StratifiedSamplingUtils extends Logging {
 
   /**
    * Count the number of items instantly accepted and generate the waitlist for each stratum.
    *
    * This is only invoked when exact sample size is required.
    */
-  def getCounts[K, V](rdd: RDD[(K, V)],
+  def getAcceptanceResults[K, V](rdd: RDD[(K, V)],
       withReplacement: Boolean,
       fractions: Map[K, Double],
       counts: Option[Map[K, Long]],
-      seed: Long): MMap[K, Stratum] = {
+      seed: Long): mutable.Map[K, AcceptanceResult] = {
     val combOp = getCombOp[K]
     val mappedPartitionRDD = rdd.mapPartitionsWithIndex({ case (partition, iter) =>
-      val zeroU: MMap[K, Stratum] = new HashMap[K, Stratum]()
+      val zeroU: mutable.Map[K, AcceptanceResult] = new mutable.HashMap[K, AcceptanceResult]()
       val rng = new RandomDataGenerator()
       rng.reSeed(seed + partition)
       val seqOp = getSeqOp(withReplacement, fractions, rng, counts)
@@ -76,21 +81,22 @@ private[spark] object StratifiedSampler extends Logging {
   def getSeqOp[K, V](withReplacement: Boolean,
       fractions: Map[K, Double],
       rng: RandomDataGenerator,
-      counts: Option[Map[K, Long]]): (MMap[K, Stratum], (K, V)) => MMap[K, Stratum] = {
+      counts: Option[Map[K, Long]]):
+    (mutable.Map[K, AcceptanceResult], (K, V)) => mutable.Map[K, AcceptanceResult] = {
     val delta = 5e-5
-    (result: MMap[K, Stratum], item: (K, V)) => {
+    (result: mutable.Map[K, AcceptanceResult], item: (K, V)) => {
       val key = item._1
       val fraction = fractions(key)
       if (!result.contains(key)) {
-        result += (key -> new Stratum())
+        result += (key -> new AcceptanceResult())
       }
-      val stratum = result(key)
+      val acceptResult = result(key)
 
       if (withReplacement) {
         // compute acceptBound and waitListBound only if they haven't been computed already
         // since they don't change from iteration to iteration.
         // TODO change this to the streaming version
-        if (stratum.areBoundsEmpty) {
+        if (acceptResult.areBoundsEmpty) {
           val n = counts.get(key)
           val sampleSize = math.ceil(n * fraction).toLong
           val lmbd1 = PoissonBounds.getLowerBound(sampleSize)
@@ -100,37 +106,35 @@ private[spark] object StratifiedSampler extends Logging {
           } else {
             PoissonBounds.getUpperBound(sampleSize - minCount)
           }
-          stratum.acceptBound = lmbd1 / n
-          stratum.waitListBound = lmbd2 / n
+          acceptResult.acceptBound = lmbd1 / n
+          acceptResult.waitListBound = lmbd2 / n
         }
-        val acceptBound = stratum.acceptBound
+        val acceptBound = acceptResult.acceptBound
         val copiesAccepted = if (acceptBound == 0.0) 0L else rng.nextPoisson(acceptBound)
         if (copiesAccepted > 0) {
-          stratum.incrNumAccepted(copiesAccepted)
+          acceptResult.numAccepted += copiesAccepted
         }
-        val copiesWaitlisted = rng.nextPoisson(stratum.waitListBound).toInt
+        val copiesWaitlisted = rng.nextPoisson(acceptResult.waitListBound).toInt
         if (copiesWaitlisted > 0) {
-          stratum.addToWaitList(ArrayBuffer.fill(copiesWaitlisted)(rng.nextUniform(0.0, 1.0)))
+          acceptResult.waitList ++= ArrayBuffer.fill(copiesWaitlisted)(rng.nextUniform(0.0, 1.0))
         }
       } else {
         // We use the streaming version of the algorithm for sampling without replacement to avoid
         // using an extra pass over the RDD for computing the count.
         // Hence, acceptBound and waitListBound change on every iteration.
-        val gamma1 = - math.log(delta) / stratum.numItems
-        val gamma2 = (2.0 / 3.0) * gamma1
-        stratum.acceptBound = math.max(0,
-          fraction + gamma2 - math.sqrt(gamma2 * gamma2 + 3 * gamma2 * fraction))
-        stratum.waitListBound = math.min(1,
-          fraction + gamma1 + math.sqrt(gamma1 * gamma1 + 2 * gamma1 * fraction))
+        acceptResult.acceptBound =
+          BernoulliBounds.getUpperBound(delta, acceptResult.numItems, fraction)
+        acceptResult.waitListBound =
+          BernoulliBounds.getLowerBound(delta, acceptResult.numItems, fraction)
 
         val x = rng.nextUniform(0.0, 1.0)
-        if (x < stratum.acceptBound) {
-          stratum.incrNumAccepted()
-        } else if (x < stratum.waitListBound) {
-          stratum.addToWaitList(x)
+        if (x < acceptResult.acceptBound) {
+          acceptResult.numAccepted += 1
+        } else if (x < acceptResult.waitListBound) {
+          acceptResult.waitList += x
         }
       }
-      stratum.incrNumItems()
+      acceptResult.numItems += 1
       result
     }
   }
@@ -138,10 +142,11 @@ private[spark] object StratifiedSampler extends Logging {
   /**
    * Returns the function used combine results returned by seqOp from different partitions.
    */
-  def getCombOp[K]: (MMap[K, Stratum], MMap[K, Stratum]) => MMap[K, Stratum] = {
-    (result1: MMap[K, Stratum], result2: MMap[K, Stratum]) => {
+  def getCombOp[K]: (mutable.Map[K, AcceptanceResult], mutable.Map[K, AcceptanceResult])
+    => mutable.Map[K, AcceptanceResult] = {
+    (result1: mutable.Map[K, AcceptanceResult], result2: mutable.Map[K, AcceptanceResult]) => {
       // take union of both key sets in case one partition doesn't contain all keys
-      for (key <- result1.keySet.union(result2.keySet)) {
+      result1.keySet.union(result2.keySet).foreach { key =>
         // Use result2 to keep the combined result since r1 is usual empty
         val entry1 = result1.get(key)
         if (result2.contains(key)) {
@@ -169,21 +174,21 @@ private[spark] object StratifiedSampler extends Logging {
    * in the waitlist range would allow all elements that were instantly accepted on the first pass
    * to be included in the sample.
    */
-  def computeThresholdByKey[K](finalResult: Map[K, Stratum],
+  def computeThresholdByKey[K](finalResult: Map[K, AcceptanceResult],
       fractions: Map[K, Double]): Map[K, Double] = {
-    val thresholdByKey = new HashMap[K, Double]()
-    for ((key, stratum) <- finalResult) {
-      val sampleSize = math.ceil(stratum.numItems * fractions(key)).toLong
-      if (stratum.numAccepted > sampleSize) {
+    val thresholdByKey = new mutable.HashMap[K, Double]()
+    for ((key, acceptResult) <- finalResult) {
+      val sampleSize = math.ceil(acceptResult.numItems * fractions(key)).toLong
+      if (acceptResult.numAccepted > sampleSize) {
         logWarning("Pre-accepted too many")
-        thresholdByKey += (key -> stratum.acceptBound)
+        thresholdByKey += (key -> acceptResult.acceptBound)
       } else {
-        val numWaitListAccepted = (sampleSize - stratum.numAccepted).toInt
-        if (numWaitListAccepted >= stratum.waitList.size) {
+        val numWaitListAccepted = (sampleSize - acceptResult.numAccepted).toInt
+        if (numWaitListAccepted >= acceptResult.waitList.size) {
           logWarning("WaitList too short")
-          thresholdByKey += (key -> stratum.waitListBound)
+          thresholdByKey += (key -> acceptResult.waitListBound)
         } else {
-          thresholdByKey += (key -> stratum.waitList.sorted.apply(numWaitListAccepted))
+          thresholdByKey += (key -> acceptResult.waitList.sorted.apply(numWaitListAccepted))
         }
       }
     }
@@ -205,12 +210,14 @@ private[spark] object StratifiedSampler extends Logging {
     var samplingRateByKey = fractions
     if (exact) {
       // determine threshold for each stratum and resample
-      val finalResult = getCounts(rdd, false, fractions, None, seed)
+      val finalResult = getAcceptanceResults(rdd, false, fractions, None, seed)
       samplingRateByKey = computeThresholdByKey(finalResult, fractions)
     }
     (idx: Int, iter: Iterator[(K, V)]) => {
       val rng = new RandomDataGenerator
       rng.reSeed(seed + idx)
+      // Must use the same invoke pattern on the rng as in getSeqOp for without replacement
+      // in order to generate the same sequence of random numbers when creating the sample
       iter.filter(t => rng.nextUniform(0.0, 1.0) < samplingRateByKey(t._1))
     }
   }
@@ -225,14 +232,14 @@ private[spark] object StratifiedSampler extends Logging {
    *
    * The sampling function has a unique seed per partition.
    */
-  def getPoissonSamplingFunction[K, V](rdd: RDD[(K, V)],
+  def getPoissonSamplingFunction[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)],
       fractions: Map[K, Double],
       exact: Boolean,
-      counts: Option[Map[K, Long]],
       seed: Long): (Int, Iterator[(K, V)]) => Iterator[(K, V)] = {
     // TODO implement the streaming version of sampling w/ replacement that doesn't require counts
     if (exact) {
-      val finalResult = getCounts(rdd, true, fractions, counts, seed)
+      val counts = Some(rdd.countByKey())
+      val finalResult = getAcceptanceResults(rdd, true, fractions, counts, seed)
       val thresholdByKey = computeThresholdByKey(finalResult, fractions)
       (idx: Int, iter: Iterator[(K, V)]) => {
         val rng = new RandomDataGenerator()
@@ -240,6 +247,8 @@ private[spark] object StratifiedSampler extends Logging {
         iter.flatMap { item =>
           val key = item._1
           val acceptBound = finalResult(key).acceptBound
+          // Must use the same invoke pattern on the rng as in getSeqOp for with replacement
+          // in order to generate the same sequence of random numbers when creating the sample
           val copiesAccepted = if (acceptBound == 0) 0L else rng.nextPoisson(acceptBound)
           val copiesWailisted = rng.nextPoisson(finalResult(key).waitListBound).toInt
           val copiesInSample = copiesAccepted +
@@ -274,38 +283,20 @@ private[spark] object StratifiedSampler extends Logging {
  *
  * `[random]` here is necessary since it's in the return type signature of seqOp defined above
  */
-private[random] class Stratum(var numItems: Long = 0L, var numAccepted: Long = 0L)
+private[random] class AcceptanceResult(var numItems: Long = 0L, var numAccepted: Long = 0L)
   extends Serializable {
 
-  private val _waitList = new ArrayBuffer[Double]
-  private var _acceptBound: Option[Double] = None // upper bound for accepting item instantly
-  private var _waitListBound: Option[Double] = None // upper bound for adding item to waitlist
+  val waitList = new ArrayBuffer[Double]
+  var acceptBound: Double = Double.NaN // upper bound for accepting item instantly
+  var waitListBound: Double = Double.NaN // upper bound for adding item to waitlist
 
-  def incrNumItems(by: Long = 1L) = numItems += by
+  def areBoundsEmpty = acceptBound.isNaN || waitListBound.isNaN
 
-  def incrNumAccepted(by: Long = 1L) = numAccepted += by
-
-  def addToWaitList(elem: Double) = _waitList += elem
-
-  def addToWaitList(elems: ArrayBuffer[Double]) = _waitList ++= elems
-
-  def waitList = _waitList
-
-  def acceptBound = _acceptBound.getOrElse(0.0)
-
-  def acceptBound_= (value: Double) = _acceptBound = Some(value)
-
-  def waitListBound = _waitListBound.getOrElse(0.0)
-
-  def waitListBound_= (value: Double) = _waitListBound = Some(value)
-
-  def areBoundsEmpty = _acceptBound.isEmpty || _waitListBound.isEmpty
-
-  def merge(other: Option[Stratum]): Unit = {
+  def merge(other: Option[AcceptanceResult]): Unit = {
     if (other.isDefined) {
-      addToWaitList(other.get.waitList)
-      incrNumAccepted(other.get.numAccepted)
-      incrNumItems(other.get.numItems)
+      waitList ++= other.get.waitList
+      numAccepted += other.get.numAccepted
+      numItems += other.get.numItems
     }
   }
 }

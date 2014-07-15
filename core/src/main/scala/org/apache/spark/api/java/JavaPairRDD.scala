@@ -131,6 +131,15 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling).
+   *
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map.
+   *
+   * If `exact` is set to false, create the sample via simple random sampling, with one pass
+   * over the RDD, to produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values; otherwise, use additional passes over
+   * the RDD to create a sample size that's exactly equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values.
    */
   def sampleByKey(withReplacement: Boolean,
       fractions: JMap[K, Double],
@@ -138,9 +147,19 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       seed: Long): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.sampleByKey(withReplacement, fractions, exact, seed))
 
-
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling).
+   *
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map.
+   *
+   * If `exact` is set to false, create the sample via simple random sampling, with one pass
+   * over the RDD, to produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values; otherwise, use additional passes over
+   * the RDD to create a sample size that's exactly equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values.
+   *
+   * Use Utils.random.nextLong as the default seed for the random number generator
    */
   def sampleByKey(withReplacement: Boolean,
       fractions: JMap[K, Double],
@@ -149,17 +168,33 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling).
+   *
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map.
+   *
+   * Produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values with one pass over the RDD via
+   * simple random sampling.
    */
   def sampleByKey(withReplacement: Boolean,
       fractions: JMap[K, Double],
       seed: Long): JavaPairRDD[K, V] =
-    sampleByKey(withReplacement, fractions, true, seed)
+    sampleByKey(withReplacement, fractions, false, seed)
 
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling).
+   *
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map.
+   *
+   * Produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values with one pass over the RDD via
+   * simple random sampling.
+   *
+   * Use Utils.random.nextLong as the default seed for the random number generator
    */
   def sampleByKey(withReplacement: Boolean, fractions: JMap[K, Double]): JavaPairRDD[K, V] =
-    sampleByKey(withReplacement, fractions, true, Utils.random.nextLong)
+    sampleByKey(withReplacement, fractions, false, Utils.random.nextLong)
 
   /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple

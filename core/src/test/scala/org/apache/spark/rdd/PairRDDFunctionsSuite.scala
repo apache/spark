@@ -107,16 +107,16 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
         samplingRate: Double,
         seed: Long,
         n: Long) = {
-      val expectedSampleSize = stratifiedData.countByKey().mapValues(count =>
-        math.ceil(count * samplingRate).toInt)
+      val expectedSampleSize = stratifiedData.countByKey()
+        .mapValues(count => math.ceil(count * samplingRate).toInt)
       val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
       val sample = stratifiedData.sampleByKey(false, fractions, exact, seed)
       val sampleCounts = sample.countByKey()
       val takeSample = sample.collect()
-      assert(sampleCounts.forall {case(k,v) =>
-        checkSize(exact, false, expectedSampleSize(k), v, samplingRate)})
+      sampleCounts.foreach { case(k, v) =>
+        assert(checkSize(exact, false, expectedSampleSize(k), v, samplingRate)) }
       assert(takeSample.size === takeSample.toSet.size)
-      assert(takeSample.forall(x => 1 <= x._2 && x._2 <= n), s"elements not in [1, $n]")
+      takeSample.foreach { x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]") }
     }
 
     // With replacement validation
@@ -131,9 +131,9 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       val sample = stratifiedData.sampleByKey(true, fractions, exact, seed)
       val sampleCounts = sample.countByKey()
       val takeSample = sample.collect()
-      assert(sampleCounts.forall {case(k,v) =>
-        checkSize(exact, true, expectedSampleSize(k), v, samplingRate)})
-      val groupedByKey = takeSample.groupBy {case(k, v) => k}
+      sampleCounts.foreach { case(k, v) =>
+        assert(checkSize(exact, true, expectedSampleSize(k), v, samplingRate)) }
+      val groupedByKey = takeSample.groupBy(_._1)
       for ((key, v) <- groupedByKey) {
         if (expectedSampleSize(key) >= 100 && samplingRate >= 0.1) {
           // sample large enough for there to be repeats with high likelihood
@@ -146,7 +146,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
           }
         }
       }
-      assert(takeSample.forall(x => 1 <= x._2 && x._2 <= n), s"elements not in [1, $n]")
+      takeSample.foreach { x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]") }
     }
 
     def checkAllCombos(stratifiedData: RDD[(String, Int)],
@@ -161,7 +161,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
     val defaultSeed = 42L
 
-    //vary RDD size
+    // vary RDD size
     for (n <- List(100, 1000, 1000000)) {
       val data = sc.parallelize(1 to n, 2)
       val fractionPositive = 0.3
@@ -172,7 +172,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       checkAllCombos(stratifiedData, samplingRate, seed, n)
     }
 
-    //vary fractionPositive
+    // vary fractionPositive
     for (fractionPositive <- List(0.1, 0.3, 0.5, 0.7, 0.9)) {
       val n = 100
       val data = sc.parallelize(1 to n, 2)
@@ -183,19 +183,19 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       checkAllCombos(stratifiedData, samplingRate, seed, n)
     }
 
-    //Use the same data for the rest of the tests
+    // Use the same data for the rest of the tests
     val fractionPositive = 0.3
     val n = 100
     val data = sc.parallelize(1 to n, 2)
     val stratifiedData = data.keyBy(stratifier(fractionPositive))
 
-    //vary seed
+    // vary seed
     for (seed <- defaultSeed to defaultSeed + 5L) {
       val samplingRate = 0.1
       checkAllCombos(stratifiedData, samplingRate, seed, n)
     }
 
-    //vary sampling rate
+    // vary sampling rate
     for (samplingRate <- List(0.01, 0.05, 0.1, 0.5)) {
       val seed = defaultSeed
       checkAllCombos(stratifiedData, samplingRate, seed, n)

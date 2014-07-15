@@ -43,7 +43,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
-import org.apache.spark.util.random.StratifiedSampler
+import org.apache.spark.util.random.StratifiedSamplingUtils
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -195,32 +195,36 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling).
    *
-   * If exact set to true, we guarantee, with high probability, a sample size =
-   * math.ceil(fraction * S_i), where S_i is the size of the ith stratum (collection of entries
-   * that share the same key). When sampling without replacement, we need one additional pass over
-   * the RDD to guarantee sample size with a 99.99% confidence; when sampling with replacement, we
-   * need two additional passes.
+   * Create a sample of this RDD using variable sampling rates for different keys as specified by
+   * `fractions`, a key to sampling rate map.
+   *
+   * If `exact` is set to false, create the sample via simple random sampling, with one pass
+   * over the RDD, to produce a sample of size that's approximately equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values; otherwise, use
+   * additional passes over the RDD to create a sample size that's exactly equal to the sum of
+   * math.ceil(numItems * samplingRate) over all key values with a 99.99% confidence. When sampling
+   * without replacement, we need one additional pass over the RDD to guarantee sample size;
+   * when sampling with replacement, we need two additional passes.
    *
    * @param withReplacement whether to sample with or without replacement
    * @param fractions map of specific keys to sampling rates
    * @param seed seed for the random number generator
-   * @param exact whether sample size needs to be exactly math.ceil(fraction * size) per stratum
+   * @param exact whether sample size needs to be exactly math.ceil(fraction * size) per key
    * @return RDD containing the sampled subset
    */
   def sampleByKey(withReplacement: Boolean,
       fractions: Map[K, Double],
-      exact: Boolean = true,
+      exact: Boolean = false,
       seed: Long = Utils.random.nextLong): RDD[(K, V)]= {
 
-    require(fractions.forall {case(k, v) => v >= 0.0}, "Invalid sampling rates.")
+    require(fractions.values.forall(v => v >= 0.0), "Negative sampling rates.")
 
     val samplingFunc = if (withReplacement) {
-      val counts = if (exact) Some(this.countByKey()) else None
-      StratifiedSampler.getPoissonSamplingFunction(self, fractions, exact, counts, seed)
+      StratifiedSamplingUtils.getPoissonSamplingFunction(self, fractions, exact, seed)
     } else {
-      StratifiedSampler.getBernoulliSamplingFunction(self, fractions, exact, seed)
+      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, exact, seed)
     }
-    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning=true)
+    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
   }
 
   /**

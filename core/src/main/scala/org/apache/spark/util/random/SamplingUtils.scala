@@ -52,10 +52,7 @@ private[spark] object SamplingUtils {
       val numStDev = if (sampleSizeLowerBound < 12) 9 else 5
       math.max(1e-10, fraction + numStDev * math.sqrt(fraction / total))
     } else {
-      val delta = 1e-4
-      val gamma = - math.log(delta) / total
-      math.min(1,
-        math.max(1e-10, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction)))
+      BernoulliBounds.getLowerBound(1e-4, total, fraction)
     }
   }
 }
@@ -123,5 +120,23 @@ private[spark] object PoissonBounds {
       if (y >= s) ub = m else lb = m
     }
     ub
+  }
+}
+
+
+private[spark] object BernoulliBounds {
+
+  val minSamplingRate = 1e-10
+
+  def getUpperBound(delta: Double, n: Long, fraction: Double): Double = {
+    val gamma = - math.log(delta) / n * (2.0 / 3.0)
+    math.max(minSamplingRate,
+      fraction + gamma - math.sqrt(gamma * gamma + 3 * gamma * fraction))
+  }
+
+  def getLowerBound(delta: Double, n: Long, fraction: Double): Double = {
+    val gamma = - math.log(delta) / n
+    math.min(1,
+      math.max(minSamplingRate, fraction + gamma + math.sqrt(gamma * gamma + 2 * gamma * fraction)))
   }
 }
