@@ -103,15 +103,14 @@ calling `.rdd()` on your `JavaRDD` object. A standalone application example
 that is equivalent to the provided example in Scala is given bellow:
 
 {% highlight java %}
-import scala.Product;
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.recommendation.ALS;
-import org.apache.spark.mllib.recommendation.Rating;
 import org.apache.spark.mllib.recommendation.MatrixFactorizationModel;
+import org.apache.spark.mllib.recommendation.Rating;
+import org.apache.spark.SparkConf;
 
 public class CollaborativeFiltering {
   public static void main(String[] args) {
@@ -119,7 +118,7 @@ public class CollaborativeFiltering {
     JavaSparkContext sc = new JavaSparkContext(conf);
 
     // Load and parse the data
-    String path = "/home/michael/workspace/spark/mllib/data/als/test.data";
+    String path = "data/mllib/als/test.data";
     JavaRDD<String> data = sc.textFile(path);
     JavaRDD<Rating> ratings = data.map(
       new Function<String, Rating>() {
@@ -153,7 +152,7 @@ public class CollaborativeFiltering {
           }
         }
     ));
-    JavaPairRDD<Tuple2<Integer, Integer>, Tuple2<Double, Double>> ratesAndPreds = 
+    JavaRDD<Tuple2<Double, Double>> ratesAndPreds = 
       JavaPairRDD.fromJavaRDD(ratings.map(
         new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Double>>() {
           public Tuple2<Tuple2<Integer, Integer>, Double> call(Rating r){
@@ -161,17 +160,15 @@ public class CollaborativeFiltering {
               new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
           }
         }
-    )).join(predictions);
-    double MSE = JavaDoubleRDD.fromRDD(JavaRDD.toRDD(ratesAndPreds.map(
-      new Function<Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>>, Object>() {
-        public Object call(Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>> key_value) {
-          Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>> val = 
-            (Tuple2<Tuple2<Integer, Integer>, Tuple2<Double, Double>>) key_value.productElement(1);
-          Double err = ((Double) val.productElement(0)) - ((Double) val.productElement(1));
+    )).join(predictions).values();
+    double MSE = JavaDoubleRDD.fromRDD(ratesAndPreds.map(
+      new Function<Tuple2<Double, Double>, Object>() {
+        public Object call(Tuple2<Double, Double> pair) {
+          Double err = pair._1() - pair._2();
           return err * err;
         }
       }
-    ))).mean();
+    ).rdd()).mean();
     System.out.println("Mean Squared Error = " + MSE);
   }
 }

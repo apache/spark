@@ -74,12 +74,12 @@ that is equivalent to the provided example in Scala is given bellow:
 
 {% highlight java %}
 import org.apache.spark.api.java.*;
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.clustering.KMeans;
 import org.apache.spark.mllib.clustering.KMeansModel;
-import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.SparkConf;
 
 public class KMeansExample {
   public static void main(String[] args) {
@@ -87,7 +87,7 @@ public class KMeansExample {
     JavaSparkContext sc = new JavaSparkContext(conf);
 
     // Load and parse data
-    String path = "{SPARK_HOME}/data/kmeans_data.txt";
+    String path = "data/mllib/kmeans_data.txt";
     JavaRDD<String> data = sc.textFile(path);
     JavaRDD<Vector> parsedData = data.map(
       new Function<String, Vector>() {
@@ -104,10 +104,10 @@ public class KMeansExample {
     // Cluster the data into two classes using KMeans
     int numClusters = 2;
     int numIterations = 20;
-    KMeansModel clusters = KMeans.train(JavaRDD.toRDD(parsedData), numClusters, numIterations);
+    KMeansModel clusters = KMeans.train(parsedData.rdd(), numClusters, numIterations);
 
     // Evaluate clustering by computing Within Set Sum of Squared Errors
-    double WSSSE = clusters.computeCost(JavaRDD.toRDD(parsedData));
+    double WSSSE = clusters.computeCost(parsedData.rdd());
     System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
   }
 }

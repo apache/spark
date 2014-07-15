@@ -71,14 +71,14 @@ should include to your build file *spark-mllib* as a dependency.
 import java.util.LinkedList;
 
 import org.apache.spark.api.java.*;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-import org.apache.spark.rdd.RDD;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+import org.apache.spark.mllib.linalg.Matrix;
+import org.apache.spark.mllib.linalg.SingularValueDecomposition;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.linalg.Matrix;
-import org.apache.spark.mllib.linalg.distributed.RowMatrix;
-import org.apache.spark.mllib.linalg.SingularValueDecomposition;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
 
 public class SVD {
   public static void main(String[] args) {
@@ -94,7 +94,7 @@ public class SVD {
     JavaRDD<Vector> rows = JavaSparkContext.fromSparkContext(sc).parallelize(rowsList);
 
     // Create a RowMatrix from JavaRDD<Vector>.
-    RowMatrix mat = new RowMatrix(JavaRDD.toRDD(rows));
+    RowMatrix mat = new RowMatrix(rows.rdd());
 
     // Compute the top 4 singular values and corresponding singular vectors.
     SingularValueDecomposition<RowMatrix, Matrix> svd = mat.computeSVD(4, true, 1.0E-9d);
@@ -149,13 +149,13 @@ The number of columns should be small, e.g, less than 1000.
 import java.util.LinkedList;
 
 import org.apache.spark.api.java.*;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-import org.apache.spark.rdd.RDD;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.linalg.Matrix;
-import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
 
 public class PCA {
   public static void main(String[] args) {
@@ -171,7 +171,7 @@ public class PCA {
     JavaRDD<Vector> rows = JavaSparkContext.fromSparkContext(sc).parallelize(rowsList);
 
     // Create a RowMatrix from JavaRDD<Vector>.
-    RowMatrix mat = new RowMatrix(JavaRDD.toRDD(rows));
+    RowMatrix mat = new RowMatrix(rows.rdd());
 
     // Compute the top 3 principal components.
     Matrix pc = mat.computePrincipalComponents(3);

@@ -271,44 +271,33 @@ println("Area under ROC = " + auROC)
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import java.util.Random;
 import java.util.Arrays;
+import java.util.Random;
 
-import scala.Product2;
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.mllib.classification.LogisticRegressionModel;
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.optimization.*;
-import org.apache.spark.mllib.classification.LogisticRegressionModel;
-import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
 
 public class LBFGSExample {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf().setAppName("L-BFGS Example");
     SparkContext sc = new SparkContext(conf);
-    String path = "{SPARK_HOME}/mllib/data/sample_libsvm_data.txt";
+    String path = "data/mllib/sample_libsvm_data.txt";
     JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
     int numFeatures = data.take(1).get(0).features().size();
     
     // Split initial RDD into two... [60% training data, 40% testing data].
-    JavaRDD<LabeledPoint> trainingInit = data.filter(
-      new Function<LabeledPoint, Boolean>() {
-      public final Random random = new Random(11L);
-      public Boolean call(LabeledPoint p) {
-        if (random.nextDouble() <= 0.6)
-        return true;
-        else
-        return false;
-      }
-      }
-    );
+    JavaRDD<LabeledPoint> trainingInit = data.sample(false, 0.6, 11L);
     JavaRDD<LabeledPoint> test = data.subtract(trainingInit);
     
     // Append 1 into the training data as intercept.
@@ -328,20 +317,20 @@ public class LBFGSExample {
     Vector initialWeightsWithIntercept = Vectors.dense(new double[numFeatures + 1]);
 
     Tuple2<Vector, double[]> result = LBFGS.runLBFGS(
-        JavaRDD.toRDD(training),
-        new LogisticGradient(),
-        new SquaredL2Updater(),
-        numCorrections,
-        convergenceTol,
-        maxNumIterations,
-        regParam,
-        initialWeightsWithIntercept);
-    Vector weightsWithIntercept = (Vector) result.productElement(0);
-    double[] loss = (double[]) result.productElement(1);
+      training.rdd(),
+      new LogisticGradient(),
+      new SquaredL2Updater(),
+      numCorrections,
+      convergenceTol,
+      maxNumIterations,
+      regParam,
+      initialWeightsWithIntercept);
+    Vector weightsWithIntercept = result._1();
+    double[] loss = result._2();
 
     final LogisticRegressionModel model = new LogisticRegressionModel(
-        Vectors.dense(Arrays.copyOf(weightsWithIntercept.toArray(), weightsWithIntercept.size() - 1)),
-        (weightsWithIntercept.toArray())[weightsWithIntercept.size() - 1]);
+      Vectors.dense(Arrays.copyOf(weightsWithIntercept.toArray(), weightsWithIntercept.size() - 1)),
+      (weightsWithIntercept.toArray())[weightsWithIntercept.size() - 1]);
 
     // Clear the default threshold.
     model.clearThreshold();
@@ -349,17 +338,15 @@ public class LBFGSExample {
     // Compute raw scores on the test set.
     JavaRDD<Tuple2<Object, Object>> scoreAndLabels = test.map(
       new Function<LabeledPoint, Tuple2<Object, Object>>() {
-      public final LogisticRegressionModel m = model;
       public Tuple2<Object, Object> call(LabeledPoint p) {
-        Double score = m.predict(p.features());
+        Double score = model.predict(p.features());
         return new Tuple2<Object, Object>(score, p.label());
       }
-      }
-    );
+    });
 
     // Get evaluation metrics.
     BinaryClassificationMetrics metrics = 
-      new BinaryClassificationMetrics(JavaRDD.toRDD(scoreAndLabels));
+      new BinaryClassificationMetrics(scoreAndLabels.rdd());
     double auROC = metrics.areaUnderROC();
      
     System.out.println("Loss of each step in training process");
