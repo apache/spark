@@ -357,7 +357,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.io.compression.lz4.block.size</code></td>
   <td>32768</td>
   <td>
-    Block size (in bytes) used in Snappy compression, in the case when LZ4 compression codec
+    Block size (in bytes) used in LZ4 compression, in the case when LZ4 compression codec
     is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
   </td>
 </tr>
