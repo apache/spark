@@ -33,11 +33,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
 import org.apache.spark.mllib.optimization.NNLS
+import org.apache.spark.mllib.optimization.QuadraticMinimizer
 import breeze.linalg.CSCMatrix
 import breeze.linalg.norm
 import breeze.linalg.DenseVector
 import com.verizon.cvxoptimizer.ecos.QpSolver
-import com.verizon.cvxoptimizer.admm.DirectQpSolver
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
@@ -599,26 +599,26 @@ class ALS private (
         }
       }
 
-      val directQpSolver = qpProblem match {
-        case 1 => new DirectQpSolver(rank)
-        case 2 => new DirectQpSolver(rank, None, None, None, 1.0, 1.0).setProximal(1)
+      val quadraticMinimizer = qpProblem match {
+        case 1 => new QuadraticMinimizer(rank)
+        case 2 => new QuadraticMinimizer(rank, None, None, None).setProximal(1)
         case 3 => {
           //Direct QP with bounds
           val lb = DoubleMatrix.zeros(rank, 1)
           val ub = DoubleMatrix.zeros(rank, 1).addi(1.0)
-          new DirectQpSolver(rank, Some(lb), Some(ub), None, 1.0, 1.0).setProximal(2)
+          new QuadraticMinimizer(rank, Some(lb), Some(ub), None).setProximal(2)
         }
         case 4 => {
           //Direct QP with equality constraint
           val Aeq = DoubleMatrix.ones(1, rank)
           val lbeq = DoubleMatrix.zeros(rank, 1)
           val ubeq = DoubleMatrix.ones(rank, 1)
-          val directQpMl = new DirectQpSolver(rank, Some(lbeq), Some(ubeq), Some(Aeq), 1.0, 1.0, true).setProximal(2)
+          val directQpMl = new QuadraticMinimizer(rank, Some(lbeq), Some(ubeq), Some(Aeq), true).setProximal(2)
           directQpMl
         }
         case 5 => {
           //Direct QP with L1
-          val qpSolverL1 = new DirectQpSolver(rank, None, None, None, 1.0, 1.0).setProximal(4)
+          val qpSolverL1 = new QuadraticMinimizer(rank, None, None, None).setProximal(4)
           qpSolverL1.setLambda(lambdaL1)
           qpSolverL1
         }
@@ -645,23 +645,18 @@ class ALS private (
           } else {
             f.data
           }
-          
-          val qpStart = System.currentTimeMillis()
           val qpResult = DenseVector(qpSolver.solve(H, falpha)._2)
-          qpTime = qpTime + (System.currentTimeMillis() - qpStart)
           
-          val directQpStart = System.currentTimeMillis()
           val directQpResult = if(qpProblem == 4) {
             val beq = DoubleMatrix.ones(1,1)
-            DenseVector(directQpSolver.solve(H, f, Some(beq)).data)
+            DenseVector(quadraticMinimizer.solve(H, f, Some(beq)).data)
           } else {
-            DenseVector(directQpSolver.solve(H, f).data)
+            DenseVector(quadraticMinimizer.solve(H, f).data)
           }
-          directQpTime = directQpTime + (System.currentTimeMillis() - directQpStart)
 
-          val lsStart = System.currentTimeMillis()
+          val lsStart = System.nanoTime()
           val result = DenseVector(solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws))
-          lsTime = lsTime + (System.currentTimeMillis() - lsStart)
+          lsTime = lsTime + (System.nanoTime - lsStart)
           
           var qpFail = 0
           if(qpProblem == 1 || qpProblem == 2) {
@@ -682,7 +677,6 @@ class ALS private (
             diagnose(H, f, qpResult, directQpResult, result)
             failed = failed + 1
           }
-          
           directQpResult.data
         } else {
           val H = fullXtX
@@ -694,22 +688,18 @@ class ALS private (
             f.data
           }
           
-          val qpStart = System.currentTimeMillis()
           val qpResult = DenseVector(qpSolver.solve(H, falpha)._2)
-          qpTime = qpTime + (System.currentTimeMillis() - qpStart)
 
-          val directQpStart = System.currentTimeMillis()
           val directQpResult = if(qpProblem == 4) {
             val beq = DoubleMatrix.ones(1,1)
-            DenseVector(directQpSolver.solve(H, f, Some(beq)).data)
+            DenseVector(quadraticMinimizer.solve(H, f, Some(beq)).data)
           } else {
-            DenseVector(directQpSolver.solve(H, f).data)
+            DenseVector(quadraticMinimizer.solve(H, f).data)
           }
-          directQpTime = directQpTime + (System.currentTimeMillis() - directQpStart)
           
-          val lsStart = System.currentTimeMillis()
+          val lsStart = System.nanoTime()
           val result = DenseVector(solveLeastSquares(fullXtX, userXy(index), ws))
-          lsTime = lsTime + (System.currentTimeMillis() - lsStart)
+          lsTime = lsTime + (System.nanoTime() - lsStart)
 
           var qpFail = 0
           if (qpProblem == 1 || qpProblem == 2) {
@@ -734,7 +724,7 @@ class ALS private (
         }
         result
       }
-      println("lsTime " + lsTime + " qpTime " + qpTime + " directQpTime " + directQpTime + " failed " + failed)
+      println("lsTime " + lsTime/1e6 + " qpTime " + qpSolver.solveTime/1e6 + " directQpTime " + quadraticMinimizer.solveTime/1e6 + " failed " + failed)
       factors
     }
 

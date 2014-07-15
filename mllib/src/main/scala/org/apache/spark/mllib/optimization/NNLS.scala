@@ -67,7 +67,7 @@ private[mllib] object NNLS {
 
     val n = atb.rows
     val scratch = ws.scratch
-
+    
     // find the optimal unconstrained step
     def steplen(dir: DoubleMatrix, res: DoubleMatrix): Double = {
       val top = SimpleBlas.dot(dir, res)
