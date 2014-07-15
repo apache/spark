@@ -18,11 +18,11 @@
 package org.apache.spark.util.collection
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.spark.util.SizeEstimator
 
-class ImmutableLongOpenHashSetSuite extends FunSuite with ShouldMatchers {
+class ImmutableLongOpenHashSetSuite extends FunSuite with Matchers {
 
   test("size for primitive long") {
     val loadFactor = 0.7
