@@ -268,10 +268,10 @@ class ExternalAppendOnlyMap[K, V, C](
     private def mergeIfKeyExists(key: K, baseCombiner: C, buffer: StreamBuffer): C = {
       var i = 0
       while (i < buffer.pairs.length) {
-        val (k, c) = buffer.pairs(i)
-        if (k == key) {
+        val pair = buffer.pairs(i)
+        if (pair._1 == key) {
           buffer.pairs.remove(i)
-          return mergeCombiners(baseCombiner, c)
+          return mergeCombiners(baseCombiner, pair._2)
         }
         i += 1
       }
@@ -293,9 +293,11 @@ class ExternalAppendOnlyMap[K, V, C](
       }
       // Select a key from the StreamBuffer that holds the lowest key hash
       val minBuffer = mergeHeap.dequeue()
-      val (minPairs, minHash) = (minBuffer.pairs, minBuffer.minKeyHash)
+      val minPairs = minBuffer.pairs
+      val minHash = minBuffer.minKeyHash
       val minPair = minPairs.remove(0)
-      var (minKey, minCombiner) = minPair
+      val minKey = minPair._1
+      var minCombiner = minPair._2
       assert(getKeyHashCode(minPair) == minHash)
 
       // For all other streams that may have this key (i.e. have the same minimum key hash),
