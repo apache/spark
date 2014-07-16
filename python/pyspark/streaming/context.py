@@ -15,15 +15,6 @@
 # limitations under the License.
 #
 
-import os
-import shutil
-import sys
-from threading import Lock
-from tempfile import NamedTemporaryFile
-
-from pyspark import accumulators
-from pyspark.accumulators import Accumulator
-from pyspark.broadcast import Broadcast
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
