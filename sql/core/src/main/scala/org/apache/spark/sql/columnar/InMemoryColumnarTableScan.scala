@@ -96,7 +96,11 @@ private[sql] case class InMemoryColumnarTableScan(
       new Iterator[Row] {
         // Find the ordinals of the requested columns.  If none are requested, use the first.
         val requestedColumns =
-          if (attributes.isEmpty) Seq(0) else attributes.map(relation.output.indexOf(_))
+          if (attributes.isEmpty) {
+            Seq(0)
+          } else {
+            attributes.map(a => relation.output.indexWhere(_.exprId == a.exprId))
+          }
 
         val columnAccessors = requestedColumns.map(columnBuffers(_)).map(ColumnAccessor(_))
         val nextRow = new GenericMutableRow(columnAccessors.length)
