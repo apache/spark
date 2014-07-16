@@ -1207,8 +1207,10 @@ abstract class RDD[T: ClassTag](
   // =======================================================================
 
   /**
-   * Broadcasted copy of this RDD, used to dispatch tasks to executors. Note that this is
-   * a lazy val so the broadcast is created only when tasks are scheduled on this RDD.
+   * Broadcasted copy of this RDD, used to dispatch tasks to executors. Note that we broadcast
+   * the serialized copy of the RDD and for each task we will deserialize it, which means each
+   * task gets a different copy of the RDD. This provides stronger isolation between tasks that
+   * might modify state of objects referenced in their closures.
    */
   @transient private[spark] lazy val broadcasted = {
     val ser = SparkEnv.get.closureSerializer.newInstance()
