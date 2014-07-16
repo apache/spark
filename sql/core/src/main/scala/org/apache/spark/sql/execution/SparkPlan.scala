@@ -82,15 +82,12 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)(@transient sqlContext: SQ
   }
 
   @transient override lazy val statistics = Statistics(
-    // If this is wrapping around ExistingRdd and no reasonable estimation logic is implemented,
-    // return a default value.
     sizeInBytes = {
-      val naiveVal = childrenStats.map(_.sizeInBytes).product
       alreadyPlanned match {
         // TODO: Instead of returning a default value here, find a way to return a meaningful
         // size estimate for RDDs. See PR 1238 for more discussions.
-        case e: ExistingRdd if naiveVal == 1L => sqlContext.statsDefaultSizeInBytes
-        case _ => naiveVal
+        case e: ExistingRdd => sqlContext.statsDefaultSizeInBytes
+        case _ => 1L  // TODO: consider adding statistics to physical plans as well.
       }
     }
   )
