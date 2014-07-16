@@ -74,7 +74,7 @@ trait ActorHelper extends Logging{
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store[T](iter: Iterator[T]) {
-    logInfo("Storing iterator")
+    logDebug("Storing iterator")
     context.parent ! IteratorData(iter)
   }
 
@@ -84,6 +84,7 @@ trait ActorHelper extends Logging{
    * that Spark is configured to use.
    */
   def store(bytes: ByteBuffer) {
+    logDebug("Storing Bytes")
     context.parent ! ByteBufferData(bytes)
   }
 
@@ -93,7 +94,7 @@ trait ActorHelper extends Logging{
    * being pushed into Spark's memory.
    */
   def store[T](item: T) {
-    logInfo("Storing item")
+    logDebug("Storing item")
     context.parent ! SingleItemData(item)
   }
 }
@@ -157,15 +158,16 @@ private[streaming] class ActorReceiver[T: ClassTag](
     def receive = {
 
       case IteratorData(iterator) =>
-        logInfo("received iterator")
+        logDebug("received iterator")
         store(iterator.asInstanceOf[Iterator[T]])
 
       case SingleItemData(msg) =>
-        logInfo("received single")
+        logDebug("received single")
         store(msg.asInstanceOf[T])
         n.incrementAndGet
 
       case ByteBufferData(bytes) =>
+        logDebug("received bytes")
         store(bytes)
 
       case props: Props =>
