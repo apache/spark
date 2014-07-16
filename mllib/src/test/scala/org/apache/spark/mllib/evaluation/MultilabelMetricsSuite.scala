@@ -17,10 +17,10 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.rdd.RDD
 import org.scalatest.FunSuite
 
+import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.rdd.RDD
 
 class MultilabelMetricsSuite extends FunSuite with LocalSparkContext {
   test("Multilabel evaluation metrics") {
@@ -45,7 +45,7 @@ class MultilabelMetricsSuite extends FunSuite with LocalSparkContext {
     * class 2 - doc 0, 3, 4, 6 (total 4)
     *
     */
-    val scoreAndLabels:RDD[(Set[Double], Set[Double])] = sc.parallelize(
+    val scoreAndLabels: RDD[(Set[Double], Set[Double])] = sc.parallelize(
       Seq((Set(0.0, 1.0), Set(0.0, 2.0)),
         (Set(0.0, 2.0), Set(0.0, 1.0)),
         (Set(), Set(0.0)),
@@ -70,7 +70,6 @@ class MultilabelMetricsSuite extends FunSuite with LocalSparkContext {
     val microRecallClass = sumTp.toDouble / (4 + 1 + 2 + 1 + 2 + 2)
     val microF1MeasureClass = 2.0 * sumTp.toDouble /
       (2 * sumTp.toDouble + (1 + 1 + 2) + (0 + 1 + 2))
-
     val macroPrecisionDoc = 1.0 / 7 *
       (1.0 / 2 + 1.0 / 2 + 0 + 1.0 / 1 + 2.0 / 2 + 2.0 / 3 + 1.0 / 1.0)
     val macroRecallDoc = 1.0 / 7 *
@@ -78,12 +77,9 @@ class MultilabelMetricsSuite extends FunSuite with LocalSparkContext {
     val macroF1MeasureDoc = (1.0 / 7) *
       2 * ( 1.0 / (2 + 2) + 1.0 / (2 + 2) + 0 + 1.0 / (1 + 1) +
         2.0 / (2 + 2) + 2.0 / (3 + 2) + 1.0 / (1 + 2) )
-
     val hammingLoss = (1.0 / (7 * 3)) * (2 + 2 + 1 + 0 + 0 + 1 + 1)
-
     val strictAccuracy = 2.0 / 7
     val accuracy = 1.0 / 7 * (1.0 / 3 + 1.0 /3 + 0 + 1.0 / 1 + 2.0 / 2 + 2.0 / 3 + 1.0 / 2)
-
     assert(math.abs(metrics.precisionClass(0.0) - precision0) < delta)
     assert(math.abs(metrics.precisionClass(1.0) - precision1) < delta)
     assert(math.abs(metrics.precisionClass(2.0) - precision2) < delta)
@@ -93,20 +89,14 @@ class MultilabelMetricsSuite extends FunSuite with LocalSparkContext {
     assert(math.abs(metrics.f1MeasureClass(0.0) - f1measure0) < delta)
     assert(math.abs(metrics.f1MeasureClass(1.0) - f1measure1) < delta)
     assert(math.abs(metrics.f1MeasureClass(2.0) - f1measure2) < delta)
-
     assert(math.abs(metrics.microPrecisionClass - microPrecisionClass) < delta)
     assert(math.abs(metrics.microRecallClass - microRecallClass) < delta)
     assert(math.abs(metrics.microF1MeasureClass - microF1MeasureClass) < delta)
-
     assert(math.abs(metrics.macroPrecisionDoc - macroPrecisionDoc) < delta)
     assert(math.abs(metrics.macroRecallDoc - macroRecallDoc) < delta)
     assert(math.abs(metrics.macroF1MeasureDoc - macroF1MeasureDoc) < delta)
-
     assert(math.abs(metrics.hammingLoss - hammingLoss) < delta)
     assert(math.abs(metrics.strictAccuracy - strictAccuracy) < delta)
     assert(math.abs(metrics.accuracy - accuracy) < delta)
-
-
   }
-
 }
