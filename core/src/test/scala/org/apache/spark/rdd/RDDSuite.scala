@@ -379,6 +379,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("mapWith") {
     import java.util.Random
     val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
+    @deprecated("suppress compile time deprecation warning", "1.0.0")
     val randoms = ones.mapWith(
       (index: Int) => new Random(index + 42))
       {(t: Int, prng: Random) => prng.nextDouble * t}.collect()
@@ -397,6 +398,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("flatMapWith") {
     import java.util.Random
     val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
+    @deprecated("suppress compile time deprecation warning", "1.0.0")
     val randoms = ones.flatMapWith(
       (index: Int) => new Random(index + 42))
       {(t: Int, prng: Random) =>
@@ -418,6 +420,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("filterWith") {
     import java.util.Random
     val ints = sc.makeRDD(Array(1, 2, 3, 4, 5, 6), 2)
+    @deprecated("suppress compile time deprecation warning", "1.0.0")
     val sample = ints.filterWith(
       (index: Int) => new Random(index + 42))
       {(t: Int, prng: Random) => prng.nextInt(3) == 0}.
