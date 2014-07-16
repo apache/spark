@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.regression
 
+import scala.util.Random
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
   LocalSparkContext}
-
-import scala.util.Random
 
 class LassoSuite extends FunSuite with LocalSparkContext {
 

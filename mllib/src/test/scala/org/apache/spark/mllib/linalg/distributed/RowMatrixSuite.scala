@@ -17,14 +17,13 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
-import org.scalatest.FunSuite
+import scala.util.Random
 
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, norm => brzNorm, svd => brzSvd}
+import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector}
-
-import scala.util.Random
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 
 class RowMatrixSuite extends FunSuite with LocalSparkContext {
 

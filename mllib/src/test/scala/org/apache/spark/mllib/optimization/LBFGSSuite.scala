@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.optimization
 
-import java.util.Random
+import scala.util.Random
 
 import org.scalatest.{FunSuite, Matchers}
 
