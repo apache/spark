@@ -82,7 +82,7 @@ class RDDSampler(object):
             return (num_arrivals - 1)
     
     def shuffle(self, vals):
-        if self._random == None:
+        if self._random is None:
             self.initRandomGenerator(0)  # this should only ever called on the master so
             # the split does not matter
         

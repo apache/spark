@@ -30,7 +30,7 @@ u'My app'
 u'local'
 >>> sc.appName
 u'My app'
->>> sc.sparkHome == None
+>>> sc.sparkHome is None
 True
 
 >>> conf = SparkConf(loadDefaults=False)
@@ -116,7 +116,7 @@ class SparkConf(object):
 
     def setExecutorEnv(self, key=None, value=None, pairs=None):
         """Set an environment variable to be passed to executors."""
-        if (key != None and pairs != None) or (key == None and pairs == None):
+        if (key is not None and pairs is not None) or (key is None and pairs is None):
             raise Exception("Either pass one key-value pair or a list of pairs")
         elif key != None:
             self._jconf.setExecutorEnv(key, value)
