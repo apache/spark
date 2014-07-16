@@ -215,19 +215,19 @@ case class EndsWith(left: Expression, right: Expression)
 case class Substring(str: Expression, pos: Expression, len: Expression) extends Expression {
   
   type EvaluatedType = Any
-  
-  def nullable: Boolean = true
+
+  def nullable: Boolean = str.nullable || pos.nullable || len.nullable
   def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
     }
     if (str.dataType == BinaryType) str.dataType else StringType
   }
-  
+
   def references = children.flatMap(_.references).toSet
-  
+
   override def children = str :: pos :: len :: Nil
-  
+
   @inline
   def slice[T, C <: Any](str: C, startPos: Int, sliceLen: Int)
       (implicit ev: (C=>IndexedSeqOptimized[T,_])): Any = {
@@ -237,40 +237,40 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.
-    
+
     val start = startPos match {
       case pos if pos > 0 => pos - 1
       case neg if neg < 0 => len + neg
       case _ => 0
     }
-    
+
     val end = sliceLen match {
       case max if max == Integer.MAX_VALUE => max
       case x => start + x
     }
-      
+
     str.slice(start, end)    
   }
-  
+
   override def eval(input: Row): Any = {
     val string = str.eval(input)
 
     val po = pos.eval(input)
     val ln = len.eval(input)
-    
+
     if ((string == null) || (po == null) || (ln == null)) {
       null
     } else {
       val start = po.asInstanceOf[Int]
       val length = ln.asInstanceOf[Int] 
-      
+
       string match {
         case ba: Array[Byte] => slice(ba, start, length)
         case other => slice(other.toString, start, length)
       }
     }
   }
-  
+
   override def toString = len match {
     case max if max == Integer.MAX_VALUE => s"SUBSTR($str, $pos)"
     case _ => s"SUBSTR($str, $pos, $len)"

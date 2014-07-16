@@ -469,9 +469,9 @@ class ExpressionEvaluationSuite extends FunSuite {
   
   test("Substring") {
     val row = new GenericRow(Array[Any]("example", "example".toArray.map(_.toByte)))
-    
+
     val s = 'a.string.at(0)
-    
+
     // substring from zero position with less-than-full length
     checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)), "ex", row)
     checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(2, IntegerType)), "ex", row)
@@ -501,7 +501,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     // substring(null, _, _) -> null
     checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(4, IntegerType)), null, new GenericRow(Array[Any](null)))
-    
+
     // substring(_, null, _) -> null
     checkEvaluation(Substring(s, Literal(null, IntegerType), Literal(4, IntegerType)), null, row)
 
@@ -514,6 +514,12 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     // 2-arg substring from nonzero position
     checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "xample", row)
+
+    val s_notNull = 'a.string.notNull.at(0)
+
+    assert(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === true)
+    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === false)
+    assert(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable === true)
+    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable === true)
   }
 }
-
