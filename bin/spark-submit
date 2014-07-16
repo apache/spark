@@ -37,6 +37,16 @@ done
 
 DEPLOY_MODE=${DEPLOY_MODE:-"client"}
 
+
+# This is a hack to make DStream.pyprint work. 
+# This will be removed after pyprint is moved to PythonDStream.
+# Problem is that print function is in (Scala)DStream. 
+# Whenever python code is executed, we call PythonDStream which passes
+# pythonExec(which python Spark should execute).
+# Since pyprint is located in DStream, Spark does not know which python should use. 
+# In that case, get python path from PYSPARK_PYTHON, environmental variable. 
+# This fix is ongoing in print branch in my repo.
+
 # Figure out which Python executable to use
 if [[ -z "$PYSPARK_PYTHON" ]]; then
   PYSPARK_PYTHON="python"
