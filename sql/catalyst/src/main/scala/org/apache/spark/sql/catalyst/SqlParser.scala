@@ -120,7 +120,7 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val WHERE = Keyword("WHERE")
   protected val INTERSECT = Keyword("INTERSECT")
   protected val EXCEPT = Keyword("EXCEPT")
-
+  protected val SUBSTR = Keyword("SUBSTR")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -315,6 +315,12 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     LOWER ~> "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) } |
     IF ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case c ~ "," ~ t ~ "," ~ f => If(c,t,f)
+    } |
+    SUBSTR ~> "(" ~> expression ~ "," ~ expression <~ ")" ^^ {
+      case s ~ "," ~ p => Substring(s,p,Literal(Integer.MAX_VALUE))
+    } |
+    SUBSTR ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
+      case s ~ "," ~ p ~ "," ~ l => Substring(s,p,l)
     } |
     ident ~ "(" ~ repsep(expression, ",") <~ ")" ^^ {
       case udfName ~ _ ~ exprs => UnresolvedFunction(udfName, exprs)
