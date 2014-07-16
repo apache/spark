@@ -216,6 +216,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
   
   type EvaluatedType = Any
 
+  override def foldable = str.foldable && pos.foldable && len.foldable
+
   def nullable: Boolean = str.nullable || pos.nullable || len.nullable
   def dataType: DataType = {
     if (!resolved) {

@@ -89,8 +89,9 @@ case class ExceptionFailure(
     metrics: Option[TaskMetrics])
   extends TaskFailedReason {
   override def toErrorString: String = {
-    val stackTraceString = if (stackTrace == null) "null" else stackTrace.mkString("\n")
-    s"$className ($description}\n$stackTraceString"
+    val stackTraceString =
+      if (stackTrace == null) "null" else stackTrace.map("        " + _).mkString("\n")
+    s"$className ($description)\n$stackTraceString"
   }
 }
 
