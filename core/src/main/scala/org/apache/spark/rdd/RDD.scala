@@ -1195,20 +1195,25 @@ abstract class RDD[T: ClassTag](
   /**
    * Return whether this RDD has been checkpointed or not
    */
-  def isCheckpointed: Boolean = {
-    checkpointData.map(_.isCheckpointed).getOrElse(false)
-  }
+  def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
 
   /**
    * Gets the name of the file to which this RDD was checkpointed
    */
-  def getCheckpointFile: Option[String] = {
-    checkpointData.flatMap(_.getCheckpointFile)
-  }
+  def getCheckpointFile: Option[String] = checkpointData.flatMap(_.getCheckpointFile)
 
   // =======================================================================
   // Other internal methods and fields
   // =======================================================================
+
+  /**
+   * Broadcasted copy of this RDD, used to dispatch tasks to executors. Note that this is
+   * a lazy val so the broadcast is created only when tasks are scheduled on this RDD.
+   */
+  @transient private[spark] lazy val broadcasted = {
+    val ser = SparkEnv.get.closureSerializer.newInstance()
+    sc.broadcast(ser.serialize(this).array())
+  }
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
