@@ -1,6 +1,3 @@
-__author__ = 'ktakagiw'
-
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -41,7 +38,7 @@ from pyspark.streaming.dstream import DStream
 
 class StreamingContext(object):
     """
-    Main entry point for Spark functionality. A StreamingContext represents the
+    Main entry point for Spark Streaming functionality. A StreamingContext represents the
     connection to a Spark cluster, and can be used to create L{RDD}s and
     broadcast variables on that cluster.
     """
