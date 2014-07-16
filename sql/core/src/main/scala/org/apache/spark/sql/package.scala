@@ -51,6 +51,52 @@ package object sql {
    * Row(value1, value2, value3, ...)
    * }}}
    *
+   * A value of a row can be accessed through both generic access by ordinal,
+   * which will incur boxing overhead for primitives, as well as native primitive access.
+   * An example of generic access by ordinal:
+   * {{{
+   * import org.apache.spark.sql._
+   *
+   * val row = Row(1, true, "a string", null)
+   * // row: Row = [1,true,a string,null]
+   * val firstValue = row(0)
+   * // firstValue: Any = 1
+   * val fourthValue = row(3)
+   * // fourthValue: Any = null
+   * }}}
+   *
+   * For native primitive access, it is invalid to use the native primitive interface to retrieve
+   * a value that is null, instead a user must check `isNullAt` before attempting to retrieve a value
+   * that might be null.
+   * An example of native primitive access:
+   * {{{
+   * // using the row from the previous example.
+   * val firstValue = row.getInt(0)
+   * // firstValue: Int = 1
+   * val isNull = row.isNullAt(3)
+   * // isNull: Boolean = true
+   * }}}
+   *
+   * Interfaces related to native primitive access are:
+   *
+   * `isNullAt(i: Int): Boolean`
+   *
+   * `getInt(i: Int): Int`
+   *
+   * `getLong(i: Int): Long`
+   *
+   * `getDouble(i: Int): Double`
+   *
+   * `getFloat(i: Int): Float`
+   *
+   * `getBoolean(i: Int): Boolean`
+   *
+   * `getShort(i: Int): Short`
+   *
+   * `getByte(i: Int): Byte`
+   *
+   * `getString(i: Int): String`
+   *
    * Fields in a [[Row]] object can be extracted in a pattern match. Example:
    * {{{
    * import org.apache.spark.sql._
@@ -60,6 +106,7 @@ package object sql {
    *     key -> value
    * }
    * }}}
+   *
    * @group row
    */
   @DeveloperApi
