@@ -62,11 +62,3 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
   }
 
 }
-
-private class YarnClusterSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
-  with Logging {
-
-  override def applicationId(): Option[String] = sc.getConf.getOption("spark.yarn.app.id")
-
-}

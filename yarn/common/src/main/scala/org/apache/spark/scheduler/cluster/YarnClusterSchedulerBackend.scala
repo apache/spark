@@ -22,7 +22,7 @@ import org.apache.spark.deploy.yarn.ApplicationMasterArguments
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.IntParam
 
-private[spark] class YarnClusterSchedulerBackend(
+private class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem) {
@@ -37,4 +37,7 @@ private[spark] class YarnClusterSchedulerBackend(
     numExecutors = sc.getConf.getInt("spark.executor.instances", numExecutors)
     totalExpectedExecutors.set(numExecutors)
   }
+
+  override def applicationId(): Option[String] = sc.getConf.getOption("spark.yarn.app.id")
+
 }
