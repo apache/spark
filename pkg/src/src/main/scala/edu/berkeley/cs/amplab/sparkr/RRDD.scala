@@ -77,7 +77,7 @@ private class PairwiseRRDD[T: ClassTag](
       }
       var _nextObj = read()
 
-      def hasNext = {
+      def hasNext(): Boolean = {
         val hasMore = !(_nextObj._1 == 0 && _nextObj._2.length == 0)
         if (!hasMore) {
           // Delete the temporary file we created as we are done reading it
@@ -155,7 +155,7 @@ class RRDD[T: ClassTag](
       }
       var _nextObj = read()
 
-      def hasNext = {
+      def hasNext(): Boolean = {
         val hasMore = _nextObj.length != 0
         if (!hasMore) {
           // Delete the temporary file we created as we are done reading it
