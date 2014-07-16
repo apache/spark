@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.rdd
 
+import org.apache.spark.SharedSparkContext
 import org.scalatest.FunSuite
 
 object ZippedPartitionsSuite {
