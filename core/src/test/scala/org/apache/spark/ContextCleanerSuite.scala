@@ -22,6 +22,7 @@ import java.lang.ref.WeakReference
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.language.postfixOps
+import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -141,6 +142,33 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     postGCTester.assertCleanup()
   }
 
+  test("automatically cleanup broadcast only after all extant clones become unreachable") {
+    var broadcast = newBroadcast
+    
+    // clone this broadcast variable
+    var broadcastClone = cloneBySerializing(broadcast)
+    
+    val id = broadcast.id
+    
+    // eliminate all strong references to the original broadcast; keep the clone
+    broadcast = null
+    
+    // Test that GC does not cause broadcast cleanup since a strong reference to a 
+    // clone of the broadcast with the given id still exist
+    val preGCTester =  new CleanerTester(sc, broadcastIds = Seq(id))
+    runGC()
+    intercept[Exception] {
+      preGCTester.assertCleanup()(timeout(1000 millis))
+    }
+    
+    // Test that GC causes broadcast cleanup after dereferencing the clone
+    val postGCTester = new CleanerTester(sc, broadcastIds = Seq(id))
+    broadcastClone = null
+    runGC()
+    postGCTester.assertCleanup()
+  }
+
+
   test("automatically cleanup RDD + shuffle + broadcast") {
     val numRdds = 100
     val numBroadcasts = 4 // Broadcasts are more costly
@@ -242,7 +270,14 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
       Thread.sleep(200)
     }
   }
-
+  
+  def cloneBySerializing[T <: Any : ClassTag](ref: T): T = {
+    val serializer = SparkEnv.get.closureSerializer.newInstance()
+    ContextCleaner.withCurrentCleaner[T](sc.cleaner){
+      serializer.deserialize(serializer.serialize(ref))
+    }
+  }
+  
   def cleaner = sc.cleaner.get
 }
 

@@ -20,6 +20,8 @@ package org.apache.spark
 import java.lang.ref.{ReferenceQueue, WeakReference}
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.reflect.ClassTag
+import scala.util.DynamicVariable
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -63,6 +65,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     with SynchronizedBuffer[CleanerListener]
 
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
+  
+  private var broadcastRefCounts = Map(0L -> 0L)
 
   /**
    * Whether the cleaning thread will block on cleanup tasks.
@@ -102,9 +106,25 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Register a Broadcast for cleanup when it is garbage collected. */
   def registerBroadcastForCleanup[T](broadcast: Broadcast[T]) {
+    incBroadcastRefCount(broadcast.id)
     registerForCleanup(broadcast, CleanBroadcast(broadcast.id))
   }
 
+  private def incBroadcastRefCount[T](bid: Long) {
+    val newRefCount: Long = this.broadcastRefCounts.getOrElse(bid, 0L) + 1
+    this.broadcastRefCounts = this.broadcastRefCounts + Pair(bid, newRefCount)
+  }
+  
+  private def decBroadcastRefCount[T](bid: Long) = {
+    this.broadcastRefCounts.get(bid) match {
+      case Some(rc:Long) if rc > 0 => {
+        this.broadcastRefCounts = this.broadcastRefCounts + Pair(bid, rc - 1)
+        rc - 1
+      }
+      case _ => 0
+    }
+  }
+  
   /** Register an object for cleanup. */
   private def registerForCleanup(objectForCleanup: AnyRef, task: CleanupTask) {
     referenceBuffer += new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue)
@@ -161,14 +181,18 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Perform broadcast cleanup. */
   def doCleanupBroadcast(broadcastId: Long, blocking: Boolean) {
-    try {
-      logDebug("Cleaning broadcast " + broadcastId)
-      broadcastManager.unbroadcast(broadcastId, true, blocking)
-      listeners.foreach(_.broadcastCleaned(broadcastId))
-      logInfo("Cleaned broadcast " + broadcastId)
-    } catch {
-      case e: Exception => logError("Error cleaning broadcast " + broadcastId, e)
+    decBroadcastRefCount(broadcastId) match {
+      case x if x > 0 => {} 
+      case _ => try {
+        logDebug("Cleaning broadcast " + broadcastId)
+        broadcastManager.unbroadcast(broadcastId, true, blocking)
+        listeners.foreach(_.broadcastCleaned(broadcastId))
+        logInfo("Cleaned broadcast " + broadcastId)
+      } catch {
+        case e: Exception => logError("Error cleaning broadcast " + broadcastId, e)
+      }
     }
+    
   }
 
   private def blockManagerMaster = sc.env.blockManager.master
@@ -179,8 +203,19 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   // to ensure that more reliable testing.
 }
 
-private object ContextCleaner {
+private[spark] object ContextCleaner {
   private val REF_QUEUE_POLL_TIMEOUT = 100
+  val currentCleaner = new DynamicVariable[Option[ContextCleaner]](None)
+  
+  /**
+   * Runs the given thunk with a dynamically-scoped binding for the current ContextCleaner.
+   * This is necessary for blocks of code that serialize and deserialize broadcast variable
+   * objects, since all clones of a Broadcast object <tt>b</tt> need to be re-registered with the
+   * context cleaner that is tracking <tt>b</tt>.
+   */
+  def withCurrentCleaner[T <: Any : ClassTag](cc: Option[ContextCleaner])(thunk: => T) = {
+    currentCleaner.withValue(cc)(thunk)
+  }
 }
 
 /**

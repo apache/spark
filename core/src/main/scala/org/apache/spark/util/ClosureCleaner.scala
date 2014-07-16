@@ -22,10 +22,12 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 
+import scala.reflect.ClassTag
+
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
-import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.{Logging, SparkEnv, SparkException, SparkContext, ContextCleaner}
 
 private[spark] object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it
@@ -100,8 +102,8 @@ private[spark] object ClosureCleaner extends Logging {
       null
     }
   }
-
-  def clean(func: AnyRef, checkSerializable: Boolean = true) {
+  
+  def clean[F <: AnyRef : ClassTag](func: F, captureNow: Boolean = true, sc: SparkContext): F = {
     // TODO: cache outerClasses / innerClasses / accessedFields
     val outerClasses = getOuterClasses(func)
     val innerClasses = getInnerClasses(func)
@@ -154,14 +156,19 @@ private[spark] object ClosureCleaner extends Logging {
       field.set(func, outer)
     }
     
-    if (checkSerializable) {
-      ensureSerializable(func)
+    if (captureNow) {
+      ContextCleaner.withCurrentCleaner(sc.cleaner){
+        cloneViaSerializing(func)
+      }
+    } else {
+      func
     }
   }
 
-  private def ensureSerializable(func: AnyRef) {
+  private def cloneViaSerializing[T: ClassTag](func: T): T = {
     try {
-      SparkEnv.get.closureSerializer.newInstance().serialize(func)
+      val serializer = SparkEnv.get.closureSerializer.newInstance()
+      serializer.deserialize[T](serializer.serialize[T](func))
     } catch {
       case ex: Exception => throw new SparkException("Task not serializable", ex)
     }
