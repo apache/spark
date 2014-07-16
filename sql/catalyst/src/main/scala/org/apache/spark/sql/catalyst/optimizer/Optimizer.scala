@@ -171,6 +171,9 @@ object NullPropagation extends Rule[LogicalPlan] {
           case Literal(candidate, _) if candidate == v => true
           case _ => false
         })) => Literal(true, BooleanType)
+      case e @ Substring(Literal(null, _), _, _) => Literal(null, e.dataType)
+      case e @ Substring(_, Literal(null, _), _) => Literal(null, e.dataType)
+      case e @ Substring(_, _, Literal(null, _)) => Literal(null, e.dataType)
       // Put exceptional cases above if any
       case e: BinaryArithmetic => e.children match {
         case Literal(null, _) :: right :: Nil => Literal(null, e.dataType)
