@@ -80,7 +80,7 @@ private class PairwiseRRDD[T: ClassTag](
       def hasNext = {
         val hasMore = !(_nextObj._1 == 0 && _nextObj._2.length == 0)
         if (!hasMore) {
-          // Delete the temporary file we created as we are done reading it ?
+          // Delete the temporary file we created as we are done reading it
           dataStream.close()
           tempFile.delete()
         }
@@ -158,7 +158,7 @@ class RRDD[T: ClassTag](
       def hasNext = {
         val hasMore = _nextObj.length != 0
         if (!hasMore) {
-          // Delete the temporary file we created as we are done reading it ?
+          // Delete the temporary file we created as we are done reading it
           dataStream.close()
           tempFile.delete()
         }
