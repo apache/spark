@@ -57,6 +57,7 @@ private[spark] class Master(
   def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000
   val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
+  val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
   val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
   val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
@@ -741,6 +742,10 @@ private[spark] class Master(
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
         drivers -= driver
+        if (completedDrivers.size >= RETAINED_DRIVERS) {
+          val toRemove = math.max(RETAINED_DRIVERS / 10, 1)
+          completedDrivers.trimStart(toRemove)
+        }
         completedDrivers += driver
         persistenceEngine.removeDriver(driver)
         driver.state = finalState
