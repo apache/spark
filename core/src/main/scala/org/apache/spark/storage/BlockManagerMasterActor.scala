@@ -336,6 +336,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
         case None =>
           blockManagerIdByExecutor(id.executorId) = id
       }
+
+      logInfo("Registering block manager %s with %s RAM".format(
+        id.hostPort, Utils.bytesToString(maxMemSize)))
+
       blockManagerInfo(id) =
         new BlockManagerInfo(id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
@@ -431,9 +435,6 @@ private[spark] class BlockManagerInfo(
 
   // Mapping from block id to its status.
   private val _blocks = new JHashMap[BlockId, BlockStatus]
-
-  logInfo("Registering block manager %s with %s RAM".format(
-    blockManagerId.hostPort, Utils.bytesToString(maxMem)))
 
   def getStatus(blockId: BlockId) = Option(_blocks.get(blockId))
 
