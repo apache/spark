@@ -19,18 +19,21 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.Timestamp
 
-import scala.util.parsing.combinator.RegexParsers
-
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag, runtimeMirror}
+import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.util.Utils
 
 /**
- *
+ * A JVM-global lock that should be used to prevent thread safety issues when using things in
+ * scala.reflect.*.  Note that Scala Reflection API is made thread-safe in 2.11, but not yet for
+ * 2.10.* builds.  See SI-6240 for more details.
  */
-protected[sql] object DataType extends RegexParsers {
+protected[catalyst] object ScalaReflectionLock
+
+object DataType extends RegexParsers {
   protected lazy val primitiveType: Parser[DataType] =
     "StringType" ^^^ StringType |
     "FloatType" ^^^ FloatType |
@@ -126,7 +129,7 @@ abstract class NativeType extends DataType {
   @transient private[sql] val tag: TypeTag[JvmType]
   private[sql] val ordering: Ordering[JvmType]
 
-  @transient private[sql] val classTag = {
+  @transient private[sql] val classTag = ScalaReflectionLock.synchronized {
     val mirror = runtimeMirror(Utils.getSparkClassLoader)
     ClassTag[JvmType](mirror.runtimeClass(tag.tpe))
   }
@@ -134,7 +137,7 @@ abstract class NativeType extends DataType {
 
 case object StringType extends NativeType with PrimitiveType {
   private[sql] type JvmType = String
-  @transient private[sql] lazy val tag = typeTag[JvmType]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   def simpleString: String = "string"
 }
@@ -146,7 +149,7 @@ case object BinaryType extends DataType with PrimitiveType {
 
 case object BooleanType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Boolean
-  @transient private[sql] lazy val tag = typeTag[JvmType]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   def simpleString: String = "boolean"
 }
@@ -154,7 +157,7 @@ case object BooleanType extends NativeType with PrimitiveType {
 case object TimestampType extends NativeType {
   private[sql] type JvmType = Timestamp
 
-  @transient private[sql] lazy val tag = typeTag[JvmType]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
 
   private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
@@ -186,7 +189,7 @@ abstract class IntegralType extends NumericType {
 
 case object LongType extends IntegralType {
   private[sql] type JvmType = Long
-  @transient private[sql] lazy val tag = typeTag[JvmType]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Long]]
   private[sql] val integral = implicitly[Integral[Long]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
@@ -195,7 +198,7 @@ case object LongType extends IntegralType {
 
 case object IntegerType extends IntegralType {
   private[sql] type JvmType = Int
-  @transient private[sql] lazy val tag = typeTag[JvmType]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Int]]
   private[sql] val integral = implicitly[Integral[Int]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
@@ -204,7 +207,7 @@ case object IntegerType extends IntegralType {
 
 case object ShortType extends IntegralType {
   private[sql] type JvmType = Short
-  @transient private[sql] lazy val tag = typeTag[JvmType]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Short]]
   private[sql] val integral = implicitly[Integral[Short]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
@@ -213,7 +216,7 @@ case object ShortType extends IntegralType {
 
 case object ByteType extends IntegralType {
   private[sql] type JvmType = Byte
-  @transient private[sql] lazy val tag = typeTag[JvmType]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Byte]]
   private[sql] val integral = implicitly[Integral[Byte]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
@@ -233,7 +236,7 @@ abstract class FractionalType extends NumericType {
 
 case object DecimalType extends FractionalType {
   private[sql] type JvmType = BigDecimal
-  @transient private[sql] lazy val tag = typeTag[JvmType]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[BigDecimal]]
   private[sql] val fractional = implicitly[Fractional[BigDecimal]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
@@ -242,7 +245,7 @@ case object DecimalType extends FractionalType {
 
 case object DoubleType extends FractionalType {
   private[sql] type JvmType = Double
-  @transient private[sql] lazy val tag = typeTag[JvmType]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
@@ -251,7 +254,7 @@ case object DoubleType extends FractionalType {
 
 case object FloatType extends FractionalType {
   private[sql] type JvmType = Float
-  @transient private[sql] lazy val tag = typeTag[JvmType]
+  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Float]]
   private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]

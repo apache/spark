@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
-case class Data(a: Int, B: Int, n: Nested)
+case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
 case class Nested(a: Int, B: Int)
 
 /**
@@ -53,10 +53,16 @@ class HiveResolutionSuite extends HiveComparisonTest {
 
   test("case insensitivity with scala reflection") {
     // Test resolution with Scala Reflection
-    TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2)) :: Nil)
+    TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
       .registerAsTable("caseSensitivityTest")
 
     hql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
+  }
+
+  test("nested repeated resolution") {
+    TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
+      .registerAsTable("nestedRepeatedTest")
+    assert(hql("SELECT nestedArray[0].a FROM nestedRepeatedTest").collect().head(0) === 1)
   }
 
   /**
