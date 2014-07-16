@@ -379,7 +379,6 @@ class DStream(object):
         """
         Save this DStream as a text file, using string representations of elements.
         """
-
         def saveAsTextFile(rdd, time):
             path = rddToFileName(prefix, suffix, time)
             rdd.saveAsTextFile(path)
