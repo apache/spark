@@ -361,11 +361,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     // groupByKey shouldn't use map side combine because map side combine does not
     // reduce the amount of data shuffled and requires all map side data be inserted
     // into a hash table, leading to more objects in the old gen.
-    def createCombiner(v: V) = ArrayBuffer(v)
-    def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
-    def mergeCombiners(c1: ArrayBuffer[V], c2: ArrayBuffer[V]) = c1 ++ c2
+    val createCombiner = (v: V) => ArrayBuffer(v)
+    val mergeValue = (buf: ArrayBuffer[V], v: V) => buf += v
+    val mergeCombiners = (c1: ArrayBuffer[V], c2: ArrayBuffer[V]) => c1 ++ c2
     val bufs = combineByKey[ArrayBuffer[V]](
-      createCombiner _, mergeValue _, mergeCombiners _, partitioner, mapSideCombine=false)
+      createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine=false)
     bufs.mapValues(_.toIterable)
   }
 
