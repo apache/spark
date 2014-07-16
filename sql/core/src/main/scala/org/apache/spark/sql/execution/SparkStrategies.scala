@@ -58,7 +58,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * side in a [[execution.ShuffledHashJoin]].
    */
   object HashJoin extends Strategy with PredicateHelper {
-    private[this] def broadcastHashJoin(
+    private[this] def makeBroadcastHashJoin(
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
         left: LogicalPlan,
@@ -72,12 +72,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if right.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize =>
-          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
+        if sqlContext.autoConvertJoinSize > 0 &&
+          right.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize =>
+          makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if left.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize =>
-          broadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
+        if sqlContext.autoConvertJoinSize > 0 &&
+          left.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize =>
+          makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val buildSide =

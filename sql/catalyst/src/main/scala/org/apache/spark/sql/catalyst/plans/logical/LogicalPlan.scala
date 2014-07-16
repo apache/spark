@@ -28,9 +28,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
 
   // TODO: handle overflow?
   /**
-   * Estimates of various statistics.  The default estimation logic simply sums up the corresponding
-   * statistic produced by the children.  To override this behavior, override `statistics` and
-   * assign it a overriden version of `Statistics`.
+   * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
+   * corresponding statistic produced by the children.  To override this behavior, override
+   * `statistics` and assign it an overriden version of `Statistics`.
    *
    * '''NOTE''': concrete and/or overriden versions of statistics fields should pay attention to the
    * performance of the implementations.  The reason is that estimations might get triggered in
