@@ -201,7 +201,12 @@ class ConstantFoldingSuite extends PlanTest {
           Like(Literal(null, StringType), "abc") as 'c13,
           Like("abc", Literal(null, StringType)) as 'c14,
 
-          Upper(Literal(null, StringType)) as 'c15)
+          Upper(Literal(null, StringType)) as 'c15,
+
+          Substring(Literal(null, StringType), 0, 1) as 'c16,
+          Substring("abc", Literal(null, IntegerType), 1) as 'c17,
+          Substring("abc", 0, Literal(null, IntegerType)) as 'c18
+        )
 
     val optimized = Optimize(originalQuery.analyze)
 
@@ -228,8 +233,12 @@ class ConstantFoldingSuite extends PlanTest {
           Literal(null, BooleanType) as 'c13,
           Literal(null, BooleanType) as 'c14,
 
-          Literal(null, StringType) as 'c15)
-        .analyze
+          Literal(null, StringType) as 'c15,
+
+          Literal(null, StringType) as 'c16,
+          Literal(null, StringType) as 'c17,
+          Literal(null, StringType) as 'c18
+        ).analyze
 
     comparePlans(optimized, correctAnswer)
   }
