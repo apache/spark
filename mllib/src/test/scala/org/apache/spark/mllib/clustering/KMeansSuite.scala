@@ -95,7 +95,8 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1,
+      initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head === center)
   }
 
@@ -139,7 +140,8 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1,
+      initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head === center)
 
     data.unpersist()
