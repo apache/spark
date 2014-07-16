@@ -419,7 +419,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.broadcast.factory</code></td>
-  <td>org.apache.spark.broadcast.<br />HttpBroadcastFactory</td>
+  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
   <td>
     Which broadcast implementation to use.
   </td>
