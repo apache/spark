@@ -514,6 +514,13 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     // 2-arg substring from nonzero position
     checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "xample", row)
+
+    val s_notNull = 'a.string.notNull.at(0)
+
+    assert(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === true)
+    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === false)
+    assert(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable === true)
+    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable === true)
   }
 }
 

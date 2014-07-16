@@ -215,8 +215,8 @@ case class EndsWith(left: Expression, right: Expression)
 case class Substring(str: Expression, pos: Expression, len: Expression) extends Expression {
   
   type EvaluatedType = Any
-  
-  def nullable: Boolean = true
+
+  def nullable: Boolean = str.nullable || pos.nullable || len.nullable
   def dataType: DataType = {
     if (!resolved) {
       throw new UnresolvedException(this, s"Cannot resolve since $children are not resolved")
