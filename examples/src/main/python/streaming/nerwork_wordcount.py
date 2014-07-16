@@ -10,7 +10,7 @@ if __name__ == "__main__":
         exit(-1)
     ssc = StreamingContext(appName="PythonStreamingNetworkWordCount", duration=Seconds(1))
 
-    lines = ssc.socketTextStream(sys.argv[1], sys.argv[2])
+    lines = ssc.socketTextStream(sys.argv[1], int(sys.argv[2]))
     fm_lines = lines.flatMap(lambda x: x.split(" "))
     filtered_lines = fm_lines.filter(lambda line: "Spark" in line)
     mapped_lines = fm_lines.map(lambda x: (x, 1))
