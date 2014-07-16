@@ -55,50 +55,6 @@ class DStream(object):
         """
         self._jdstream.pyprint()
 
-    def cache(self):
-        """
-        """
-        raise NotImplementedError
-
-    def checkpoint(self):
-        """
-        """
-        raise NotImplementedError
-
-    def compute(self, time):
-        """
-        """
-        raise NotImplementedError
-
-    def context(self):
-        """
-        """
-        raise NotImplementedError
-
-    def count(self):
-        """
-        """
-        raise NotImplementedError
-
-    def countByValue(self, numPartitions=None):
-        """
-        """
-        raise NotImplementedError
-
-    def countByValueAndWindow(self, duration, slideDuration=None):
-        """
-        """
-        raise NotImplementedError
-
-    def countByWindow(self, duration, slideDuration=None):
-        """
-        """
-        raise NotImplementedError
-
-    def dstream(self):
-        """
-        """
-        raise NotImplementedError
 
     def filter(self, f):
         """
@@ -112,16 +68,6 @@ class DStream(object):
         def func(s, iterator): return chain.from_iterable(imap(f, iterator))
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
-    def foreachRDD(self, f, time):
-        """
-        """
-        raise NotImplementedError
-
-    def glom(self):
-        """
-        """
-        raise NotImplementedError
-
     def map(self, f, preservesPartitioning=False):
         """
         """
@@ -133,11 +79,6 @@ class DStream(object):
         """
         def func(s, iterator): return f(iterator)
         return self.mapPartitionsWithIndex(func)
-
-    def perist(self, storageLevel):
-        """
-        """
-        raise NotImplementedError
 
     def reduce(self, func, numPartitions=None):
         """
@@ -209,49 +150,6 @@ class DStream(object):
         # partitionFunc is a lambda:
         dstream._partitionFunc = partitionFunc
         return dstream
-
-
-    def reduceByWindow(self, reduceFunc, windowDuration, slideDuration, inReduceTunc):
-        """
-        """
-
-        raise NotImplementedError
-
-    def repartition(self, numPartitions):
-        """
-        """
-        raise NotImplementedError
-
-    def slice(self, fromTime, toTime):
-        """
-        """
-        raise NotImplementedError
-
-    def transform(self, transformFunc):
-        """
-        """
-        self._jdstream.transform(transformFunc)
-        raise NotImplementedError
-
-    def transformWith(self, other, transformFunc):
-        """
-        """
-        raise NotImplementedError
-
-    def union(self, that):
-        """
-        """
-        raise NotImplementedError
-
-    def window(self, windowDuration, slideDuration=None):
-        """
-        """
-        raise NotImplementedError
-
-    def wrapRDD(self, rdd):
-        """
-        """
-        raise NotImplementedError
 
     def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
         """
