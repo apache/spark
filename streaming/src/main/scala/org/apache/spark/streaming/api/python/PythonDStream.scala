@@ -58,3 +58,4 @@ class PythonDStream[T: ClassTag](
 
   val asJavaDStream  = JavaDStream.fromDStream(this)
 }
+
