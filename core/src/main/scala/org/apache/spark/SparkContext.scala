@@ -552,17 +552,10 @@ class SparkContext(config: SparkConf) extends Logging {
       valueClass: Class[V],
       minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
-    // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
-    val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
-    val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
-    new HadoopRDD(
-      this,
-      confBroadcast,
-      Some(setInputPathsFunc),
-      inputFormatClass,
-      keyClass,
-      valueClass,
-      minPartitions).setName(path)
+    val jobConf = new JobConf(hadoopConfiguration)
+    FileInputFormat.setInputPaths(jobConf, path)
+    hadoopRDD(jobConf, inputFormatClass, keyClass, valueClass, minPartitions)
+
   }
 
   /**

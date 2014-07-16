@@ -58,11 +58,9 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
 
   private val _broadcastedHiveConf =
     sc.sparkContext.broadcast(new SerializableWritable(sc.hiveconf))
-
-  def broadcastedHiveConf = _broadcastedHiveConf
-
-  def hiveConf = _broadcastedHiveConf.value.value
-
+  private val _broadcastedJobConf =
+    sc.sparkContext.broadcast(new SerializableWritable(new JobConf(sc.hiveconf.
+      asInstanceOf[Configuration])))
   override def makeRDDForTable(hiveTable: HiveTable): RDD[_] =
     makeRDDForTable(
       hiveTable,
@@ -212,10 +210,9 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
     inputFormatClass: Class[InputFormat[Writable, Writable]]): RDD[Writable] = {
 
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
-
     val rdd = new HadoopRDD(
       sc.sparkContext,
-      _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableWritable[Configuration]]],
+      _broadcastedJobConf.asInstanceOf[Broadcast[SerializableWritable[JobConf]]],
       Some(initializeJobConfFunc),
       inputFormatClass,
       classOf[Writable],
