@@ -115,10 +115,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     logDebug("Checking for logs. Time is now %d.".format(lastLogCheckTimeMs))
     try {
       val logStatus = fs.listStatus(new Path(logDir))
-      val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
-      val logInfos = logDirs.filter {
-        dir => fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))
-      }
+      val logInfos = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
 
       val currentApps = Map[String, ApplicationHistoryInfo](
         appList.map(app => (app.id -> app)):_*)
@@ -140,7 +137,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         }
       }
 
-      appList = newApps.sortBy { info => -info.endTime }
+      appList = newApps.sortBy { info => -info.startTime }
     } catch {
       case t: Throwable => logError("Exception in checking for event log updates", t)
     }
@@ -182,7 +179,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       appListener.startTime,
       appListener.endTime,
       getModificationTime(logDir),
-      appListener.sparkUser)
+      appListener.sparkUser,
+      !fs.isFile(new Path(logDir.getPath(), EventLoggingListener.APPLICATION_COMPLETE)))
 
     if (ui != null) {
       val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
