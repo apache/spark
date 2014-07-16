@@ -23,24 +23,8 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.parquet.{ParquetRelation, ParquetTestData}
-import org.apache.spark.util.Utils
 
 class StatisticsSuite extends QueryTest {
-
-  test("estimates the size of a test ParquetRelation") {
-    ParquetTestData.writeFile()
-    val testRDD = parquetFile(ParquetTestData.testDir.toString)
-
-    val sizes = testRDD.logicalPlan.collect { case j: ParquetRelation =>
-      (j.statistics.sizeInBytes, j.newInstance.statistics.sizeInBytes)
-    }
-    assert(sizes.size === 1)
-    assert(sizes(0)._1 == sizes(0)._2, "after .newInstance, estimates are different from before")
-    assert(sizes(0)._1 > 1, "1 is the default, indicating the absence of a meaningful estimate")
-
-    Utils.deleteRecursively(ParquetTestData.testDir)
-  }
 
   test("estimates the size of a test MetastoreRelation") {
     val rdd = hql("""SELECT * FROM src""")
@@ -48,7 +32,7 @@ class StatisticsSuite extends QueryTest {
       mr.statistics.sizeInBytes
     }
     assert(sizes.size === 1)
-    assert(sizes(0) > 1, "1 is the default, indicating the absence of a meaningful estimate")
+    assert(sizes(0) == 5812, s"expected exact size 5812 for test table 'src', got ${sizes(0)}")
   }
 
   test("auto converts to broadcast hash join, by size estimate of a relation") {
@@ -94,30 +78,6 @@ class StatisticsSuite extends QueryTest {
 
       after()
     }
-
-    /** Tests for ParquetRelation */
-    val parquetQuery =
-      """SELECT a.mystring, b.myint
-        |FROM psrc a
-        |JOIN psrc b
-        |ON a.mylong = 0 AND a.mylong = b.mylong""".stripMargin
-    val parquetAnswer = Seq(("abc", 5))
-    def parquetBefore(): Unit = {
-      ParquetTestData.writeFile()
-      val testRDD = parquetFile(ParquetTestData.testDir.toString)
-      testRDD.registerAsTable("psrc")
-    }
-    def parquetAfter() = {
-      Utils.deleteRecursively(ParquetTestData.testDir)
-      reset()
-    }
-    mkTest(
-      parquetBefore,
-      parquetAfter,
-      parquetQuery,
-      parquetAnswer,
-      implicitly[ClassTag[ParquetRelation]]
-    )
 
     /** Tests for MetastoreRelation */
     val metastoreQuery = """SELECT * FROM src a JOIN src b ON a.key = 238 AND a.key = b.key"""

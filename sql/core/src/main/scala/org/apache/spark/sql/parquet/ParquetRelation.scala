@@ -22,11 +22,9 @@ import java.io.IOException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
-import org.apache.hadoop.mapreduce.Job
 
 import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.metadata.CompressionCodecName
-import parquet.hadoop.util.ContextUtil
 import parquet.schema.MessageType
 
 import org.apache.spark.sql.SQLContext
@@ -52,15 +50,6 @@ private[sql] case class ParquetRelation(
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
-
-  @transient override lazy val statistics = Statistics(
-    // TODO: investigate getting encoded column statistics in the parquet file?
-    sizeInBytes = {
-      val hdfsPath = new Path(path)
-      val fs = hdfsPath.getFileSystem(conf.getOrElse(ContextUtil.getConfiguration(new Job())))
-      math.max(fs.getContentSummary(hdfsPath).getLength, 1L) // TODO: in bytes or system-dependent?
-    }
-  )
 
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =

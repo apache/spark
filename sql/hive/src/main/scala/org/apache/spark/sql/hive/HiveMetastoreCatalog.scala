@@ -269,18 +269,18 @@ private[hive] case class MetastoreRelation
     new Partition(hiveQlTable, p)
   }
 
-  // TODO: are there any stats in hiveQlTable.getSkewedInfo that we can use?
-  @transient override lazy val statistics = new Statistics {
+  @transient override lazy val statistics = Statistics(
     // TODO: check if this estimate is valid for tables after partition pruning.
-    // Size getters adapted from SizeBasedBigTableSelectorForAutoSMJ.java in Hive (version 0.13).
-    override val sizeInBytes: Long =
-      math.max(maybeGetSize(hiveConf, hiveQlTable.getProperty("totalSize"), path), 1L)
-
-    private[this] def maybeGetSize(conf: HiveConf, size: String, path: Path): Long = {
-      val res = try { Some(size.toLong) } catch { case _: Exception => None }
-      res.getOrElse { path.getFileSystem(conf).getContentSummary(path).getLength }
+    sizeInBytes = {
+      // NOTE: kind of hacky, but this should be relatively cheap if parameters for the table are
+      // populated into the metastore.  An alternative would be going through Hadoop's FileSystem
+      // API, which can be expensive if a lot of RPCs are involved.  Besides `totalSize`, there are
+      // also `numFiles`, `numRows`, `rawDataSize` keys we can look at in the future.
+      val sizeMaybeFromMetastore =
+        Option(hiveQlTable.getParameters.get("totalSize")).map(_.toLong).getOrElse(-1L)
+      math.max(sizeMaybeFromMetastore, 1L)
     }
-  }
+  )
 
   val tableDesc = new TableDesc(
     Class.forName(hiveQlTable.getSerializationLib).asInstanceOf[Class[Deserializer]],
