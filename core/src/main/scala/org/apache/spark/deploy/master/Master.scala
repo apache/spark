@@ -751,6 +751,7 @@ private[spark] class Master(
         driver.state = finalState
         driver.exception = exception
         driver.worker.foreach(w => w.removeDriver(driver))
+        schedule()
       case None =>
         logWarning(s"Asked to remove unknown driver: $driverId")
     }
