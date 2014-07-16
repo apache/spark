@@ -93,6 +93,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "partitions_json",
 
     // Timezone specific test answers.
+    "timestamp_udf",
     "udf_unix_timestamp",
     "udf_to_unix_timestamp",
 
@@ -659,10 +660,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_publisher_error_1",
     "subq2",
     "tablename_with_select",
+    "timestamp_1",
+    "timestamp_2",
     "timestamp_3",
     "timestamp_comparison",
+    "timestamp_lazy",
     "timestamp_null",
-    "timestamp_udf",
     "touch",
     "transform_ppr1",
     "transform_ppr2",

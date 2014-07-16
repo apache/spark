@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
+import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.catalyst.types._
 
@@ -41,6 +42,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   // UDFToString
   private[this] def castToString: Any => Any = child.dataType match {
     case BinaryType => buildCast[Array[Byte]](_, new String(_, "UTF-8"))
+    case TimestampType => buildCast[Timestamp](_, timestampToString)
     case _ => buildCast[Any](_, _.toString)
   }
 
@@ -124,6 +126,18 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   private[this] def timestampToDouble(ts: Timestamp) = {
     // First part is the seconds since the beginning of time, followed by nanosecs.
     ts.getTime / 1000 + ts.getNanos.toDouble / 1000000000
+  }
+
+  // Converts Timestamp to string according to Hive TimestampWritable convention
+  private[this] def timestampToString(ts: Timestamp): String = {
+    val timestampString = ts.toString
+    val formatted = Cast.simpleDateFormat.format(ts)
+
+    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
+      formatted + timestampString.substring(19)
+    } else {
+      formatted
+    }
   }
 
   private[this] def castToLong: Any => Any = child.dataType match {
@@ -248,4 +262,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     val evaluated = child.eval(input)
     if (evaluated == null) null else cast(evaluated)
   }
+}
+
+object Cast {
+  private[sql] val simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
 }
