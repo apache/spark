@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming.api.python
 
-<<<<<<< HEAD
 import java.io._
 import java.io.{ObjectInputStream, IOException}
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
@@ -37,7 +36,6 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.api.java._
 
 
-
 class PythonDStream[T: ClassTag](
     parent: DStream[T],
     command: Array[Byte],
@@ -48,46 +46,6 @@ class PythonDStream[T: ClassTag](
     broadcastVars: JList[Broadcast[Array[Byte]]],
     accumulator: Accumulator[JList[Array[Byte]]])
   extends DStream[Array[Byte]](parent.ssc) {
-=======
-import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
-
-import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark._
-import org.apache.spark.util.Utils
-import java.io._
-import scala.Some
-import org.apache.spark.streaming.Duration
-import scala.util.control.Breaks._
-import org.apache.spark.broadcast.Broadcast
-import scala.Some
-import org.apache.spark.streaming.Duration
-import org.apache.spark.rdd.RDD
-import org.apache.spark.api.python.PythonRDD
-
-
-import org.apache.spark.streaming.{Duration, Time}
-import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.api.java._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.api.python._
-import org.apache.spark.api.python.PairwiseRDD
-
-
-import scala.reflect.ClassTag
-
-
-class PythonDStream[T: ClassTag](
-                                  parent: DStream[T],
-                                  command: Array[Byte],
-                                  envVars: JMap[String, String],
-                                  pythonIncludes: JList[String],
-                                  preservePartitoning: Boolean,
-                                  pythonExec: String,
-                                  broadcastVars: JList[Broadcast[Array[Byte]]],
-                                  accumulator: Accumulator[JList[Array[Byte]]]
-                                  ) extends DStream[Array[Byte]](parent.ssc) {
->>>>>>> initial commit for pySparkStreaming
 
   override def dependencies = List(parent)
 
@@ -102,14 +60,11 @@ class PythonDStream[T: ClassTag](
       case None => None
     }
   }
-<<<<<<< HEAD
 
   def foreachRDD(foreachFunc: PythonRDDFunction) {
     new PythonForeachDStream(this, context.sparkContext.clean(foreachFunc, false)).register()
   }
 
-=======
->>>>>>> initial commit for pySparkStreaming
   val asJavaDStream  = JavaDStream.fromDStream(this)
 
   /**
@@ -132,11 +87,6 @@ class PythonDStream[T: ClassTag](
       tempFileStream.close()
 
       // This value has to be passed from python
-<<<<<<< HEAD
-      //val pythonExec = new ProcessBuilder().environment().get("PYSPARK_PYTHON")
-=======
-      val pythonExec = new ProcessBuilder().environment().get("PYSPARK_PYTHON")
->>>>>>> initial commit for pySparkStreaming
       val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
       //val pb = new ProcessBuilder(Seq(pythonExec, sparkHome + "/python/pyspark/streaming/pyprint.py", tempFile.getAbsolutePath())) // why this fails to compile???
       //absolute path to the python script is needed to change because we do not use pysparkstreaming
@@ -173,26 +123,6 @@ class PythonDStream[T: ClassTag](
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
   }
 }
-
-/*
-private class PairwiseDStream(prev:DStream[Array[Byte]]) extends
-DStream[(Long, Array[Byte])](prev.ssc){
-  override def dependencies = List(prev)
-
-  override def slideDuration: Duration = prev.slideDuration
-
-  override def compute(validTime:Time):Option[RDD[(Long, Array[Byte])]]={
-    prev.getOrCompute(validTime) match{
-      case Some(rdd)=>Some(rdd)
-        val pairwiseRDD = new PairwiseRDD(rdd)
-        Some(pairwiseRDD.asJavaPairRDD.rdd)
-      case None => None
-    }
-  }
-<<<<<<< HEAD
-  val asJavaPairDStream : JavaPairDStream[Long, Array[Byte]]  = JavaPairDStream.fromJavaDStream(this)
-}
-
 
 private class PythonPairwiseDStream(prev:DStream[Array[Byte]], partitioner: Partitioner) extends
 DStream[Array[Byte]](prev.ssc){
@@ -274,12 +204,3 @@ class PythonTransformedDStream(
   //val asJavaPairDStream : JavaPairDStream[Long, Array[Byte]]  = JavaPairDStream.fromJavaDStream(this)
 }
 */
-=======
-  val asJavaPairDStream : JavaPairDStream[Long, Array[Byte]] = JavaPairDStream(this)
-}
-*/
-
-
-
-
->>>>>>> initial commit for pySparkStreaming

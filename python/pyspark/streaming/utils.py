@@ -37,9 +37,6 @@ class RDDFunction():
     class Java:
         implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction']
 
-=======
-__author__ = 'ktakagiw'
->>>>>>> initial commit for pySparkStreaming
 
 def msDurationToString(ms):
     """
@@ -53,7 +50,6 @@ def msDurationToString(ms):
         return "%d ms" % ms
     elif ms < minute:
         return "%.1f s" % (float(ms) / second)
-<<<<<<< HEAD
     elif ms < hour:
         return "%.1f m" % (float(ms) / minute)
     else:
@@ -64,9 +60,3 @@ def rddToFileName(prefix, suffix, time):
         return prefix + "-" + str(time) + "." + suffix
     else:
         return prefix + "-" + str(time)
-=======
-    elif ms < hout:
-        return "%.1f m" % (float(ms) / minute)
-    else:
-        return "%.2f h" % (float(ms) / hour)
->>>>>>> initial commit for pySparkStreaming

@@ -48,7 +48,6 @@ export SPARK_SUBMIT_PROPERTIES_FILE=${SPARK_SUBMIT_PROPERTIES_FILE:-"$DEFAULT_PR
 # paths, library paths, java options and memory early on. Otherwise, it will
 # be too late by the time the driver JVM has started.
 
-<<<<<<< HEAD
 if [[ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" && -f "$SPARK_SUBMIT_PROPERTIES_FILE" ]]; then
   # Parse the properties file only if the special configs exist
   contains_special_configs=$(
@@ -58,16 +57,6 @@ if [[ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" && -f "$SPARK_SUBMIT_PROPERTIES_FI
   if [ -n "$contains_special_configs" ]; then
     export SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
   fi
-=======
-# Figure out which Python executable to use
-if [[ -z "$PYSPARK_PYTHON" ]]; then
-  PYSPARK_PYTHON="python"
-fi
-export PYSPARK_PYTHON
-
-if [ -n "$DRIVER_MEMORY" ] && [ $DEPLOY_MODE == "client" ]; then
-  export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
->>>>>>> initial commit for pySparkStreaming
 fi
 
 exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"

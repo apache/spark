@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-=======
-__author__ = 'ktakagiw'
-
-
->>>>>>> initial commit for pySparkStreaming
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -21,7 +15,6 @@ __author__ = 'ktakagiw'
 # limitations under the License.
 #
 
-<<<<<<< HEAD
 import sys
 from signal import signal, SIGTERM, SIGINT
 
@@ -36,43 +29,12 @@ class StreamingContext(object):
     """
     Main entry point for Spark Streaming functionality. A StreamingContext represents the
     connection to a Spark cluster, and can be used to create L{DStream}s and
-=======
-import os
-import shutil
-import sys
-from threading import Lock
-from tempfile import NamedTemporaryFile
-
-from pyspark import accumulators
-from pyspark.accumulators import Accumulator
-from pyspark.broadcast import Broadcast
-from pyspark.conf import SparkConf
-from pyspark.files import SparkFiles
-from pyspark.java_gateway import launch_gateway
-from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
-from pyspark.storagelevel import StorageLevel
-from pyspark.rdd import RDD
-from pyspark.context import SparkContext
-
-from py4j.java_collections import ListConverter
-
-from pyspark.streaming.dstream import DStream
-
-class StreamingContext(object):
-    """
-    Main entry point for Spark functionality. A StreamingContext represents the
-    connection to a Spark cluster, and can be used to create L{RDD}s and
->>>>>>> initial commit for pySparkStreaming
     broadcast variables on that cluster.
     """
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
         environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None,
-<<<<<<< HEAD
         gateway=None, sparkContext=None, duration=None):
-=======
-        gateway=None, duration=None):
->>>>>>> initial commit for pySparkStreaming
         """
         Create a new StreamingContext. At least the master and app name and duration
         should be set, either through the named parameters here or through C{conf}.
@@ -93,7 +55,6 @@ class StreamingContext(object):
         @param conf: A L{SparkConf} object setting Spark properties.
         @param gateway: Use an existing gateway and JVM, otherwise a new JVM
                will be instatiated.
-<<<<<<< HEAD
         @param sparkContext: L{SparkContext} object.
         @param duration: A L{Duration} object for SparkStreaming.
 
@@ -112,15 +73,6 @@ class StreamingContext(object):
         # is started in StreamingContext.
         SparkContext._gateway.restart_callback_server()
         self._clean_up_trigger()
-=======
-        @param duration: A L{Duration} Duration for SparkStreaming
-
-        """
-        # Create the Python Sparkcontext
-        self._sc = SparkContext(master=master, appName=appName, sparkHome=sparkHome,
-                        pyFiles=pyFiles, environment=environment, batchSize=batchSize,
-                        serializer=serializer, conf=conf, gateway=gateway)
->>>>>>> initial commit for pySparkStreaming
         self._jvm = self._sc._jvm
         self._jssc = self._initialize_context(self._sc._jsc, duration._jduration)
 
@@ -128,7 +80,6 @@ class StreamingContext(object):
     def _initialize_context(self, jspark_context, jduration):
         return self._jvm.JavaStreamingContext(jspark_context, jduration)
 
-<<<<<<< HEAD
     def _clean_up_trigger(self):
         """Kill py4j callback server properly using signal lib"""
 
@@ -205,53 +156,3 @@ class StreamingContext(object):
         jinput_stream = self._jvm.PythonTestInputStream(self._jssc, jtest_rdds).asJavaDStream()
 
         return DStream(jinput_stream, self, test_rdd_deserializers[0])
-=======
-    def actorStream(self, props, name, storageLevel, supervisorStrategy):
-        raise NotImplementedError
-
-    def addStreamingListener(self, streamingListener):
-        raise NotImplementedError
-
-    def awaitTermination(self, timeout=None):
-        if timeout:
-            self._jssc.awaitTermination(timeout)
-        else:
-            self._jssc.awaitTermination()
-
-    def checkpoint(self, directory):
-        raise NotImplementedError
-
-    def fileStream(self, directory, filter=None, newFilesOnly=None):
-        raise NotImplementedError
-
-    def networkStream(self, receiver):
-        raise NotImplementedError
-
-    def queueStream(self, queue, oneAtATime=True, defaultRDD=None):
-        raise NotImplementedError
-
-    def rawSocketStream(self, hostname, port, storagelevel):
-        raise NotImplementedError
-
-    def remember(self, duration):
-        raise NotImplementedError
-
-    def socketStream(hostname, port, converter,storageLevel):
-        raise NotImplementedError
-
-    def start(self):
-        self._jssc.start()
-
-    def stop(self, stopSparkContext=True):
-        raise NotImplementedError
-
-    def textFileStream(self, directory):
-        return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
-
-    def transform(self, seq):
-        raise NotImplementedError
-
-    def union(self, seq):
-        raise NotImplementedError
-
->>>>>>> initial commit for pySparkStreaming

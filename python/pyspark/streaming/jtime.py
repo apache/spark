@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -15,14 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-=======
-__author__ = 'ktakagiw'
->>>>>>> initial commit for pySparkStreaming
 
 from pyspark.streaming import utils
 from pyspark.streaming.duration import Duration
 
-<<<<<<< HEAD
 """
 The name of this file, time is not good naming for python
 because if we do import time when we want to use native python time package, it does
@@ -30,8 +25,6 @@ not import python time package.
 """
 
 
-=======
->>>>>>> initial commit for pySparkStreaming
 class Time(object):
     """
     Time for Spark Streaming application. Used to set Time
