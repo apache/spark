@@ -373,7 +373,8 @@ private[parquet] object ParquetTypesConverter extends Logging {
 
     // NOTE (lian): Parquet "_metadata" file can be very slow if the file consists of lots of row
     // groups. Since Parquet schema is replicated among all row groups, we only need to touch a
-    // single row group to read schema related metadata.
+    // single row group to read schema related metadata. Notice that we are making assumptions that
+    // all data in a single Parquet file have the same schema, which is normally true.
     children
       // Try any non-"_metadata" file first...
       .find(_.getPath.getName != ParquetFileWriter.PARQUET_METADATA_FILE)
