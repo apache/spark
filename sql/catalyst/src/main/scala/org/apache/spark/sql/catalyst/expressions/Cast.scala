@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.text.SimpleDateFormat
+import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.sql.catalyst.types._
 
@@ -131,7 +131,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   // Converts Timestamp to string according to Hive TimestampWritable convention
   private[this] def timestampToString(ts: Timestamp): String = {
     val timestampString = ts.toString
-    val formatted = Cast.simpleDateFormat.format(ts)
+    val formatted = Cast.threadLocalDateFormat.get.format(ts)
 
     if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
       formatted + timestampString.substring(19)
@@ -265,5 +265,10 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
 }
 
 object Cast {
-  private[sql] val simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+  // `SimpleDateFormat` is not thread-safe.
+  private[sql] val threadLocalDateFormat = new ThreadLocal[DateFormat] {
+    override def initialValue() = {
+      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    }
+  }
 }
