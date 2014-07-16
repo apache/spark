@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.api.java
 
+import java.util.{List => JList}
+
 import org.apache.spark.Partitioner
 import org.apache.spark.api.java.{JavaRDDLike, JavaRDD}
 import org.apache.spark.api.java.function.{Function => JFunction}
@@ -94,6 +96,20 @@ class JavaSchemaRDD(
   def setName(name: String): JavaSchemaRDD = {
     baseSchemaRDD.setName(name)
     this
+  }
+
+  // Overridden actions from JavaRDDLike.
+
+  override def collect(): JList[Row] = {
+    import scala.collection.JavaConversions._
+    val arr: java.util.Collection[Row] = baseSchemaRDD.collect().toSeq.map(new Row(_))
+    new java.util.ArrayList(arr)
+  }
+
+  override def take(num: Int): JList[Row] = {
+    import scala.collection.JavaConversions._
+    val arr: java.util.Collection[Row] = baseSchemaRDD.take(num).toSeq.map(new Row(_))
+    new java.util.ArrayList(arr)
   }
 
   // Transformations (return a new RDD)
