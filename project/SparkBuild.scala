@@ -469,11 +469,11 @@ object SparkBuild extends Build {
     previousArtifact := sparkPreviousArtifact("spark-mllib"),
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % jblasVersion,
-      "com.verizon" % "cvxoptimizer" % "0.0.1-SNAPSHOT",
+      "com.github" % "ecos" % "0.0.1-SNAPSHOT",
       "org.scalanlp" %% "breeze" % "0.7" excludeAll(excludeJUnit)
     )
   )
-
+  
   def catalystSettings = sharedSettings ++ Seq(
     name := "catalyst",
     // The mechanics of rewriting expression ids to compare trees in some test cases makes

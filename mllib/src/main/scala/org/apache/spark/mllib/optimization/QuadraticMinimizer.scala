@@ -18,9 +18,8 @@ import org.jblas.SimpleBlas
 import org.netlib.util.intW
 import org.jblas.exceptions.LapackArgumentException
 import scala.collection.JavaConversions._
-import org.jblas.Decompose.LUDecomposition
 import org.jblas.NativeBlas
-import com.verizon.cvxoptimizer.ecos.QpSolver
+import com.github.ecos.QpSolver
 
 /*
  * Available with BSD license due to use of Proximal functions from BSD licensed code
@@ -87,9 +86,9 @@ class QuadraticMinimizer(nGram: Int,
     DoubleMatrix.zeros(n, n)
   }
 
-  val MAX_ITER = 1000
+  val MAX_ITER = 5000
   val ABSTOL = 1e-8
-  val RELTOL = 1e-4
+  val RELTOL = 1e-6
   
   var z = DoubleMatrix.zeros(nGram, 1)
   var u = DoubleMatrix.zeros(nGram, 1)
@@ -304,10 +303,11 @@ class QuadraticMinimizer(nGram: Int,
       
       k += 1
     }
-    println("QuadraticMinimizer MAX ITER reached convergence failure call ECOS")
+    println("QuadraticMinimizer MAX ITER reached slow convergence")
+    iterations += MAX_ITER
     x
   }
-
+  
   def solve(H: DoubleMatrix, q: DoubleMatrix, beq: Option[DoubleMatrix] = None): DoubleMatrix = {
     for (i <- 0 until H.rows)
       for (j <- 0 until H.columns) {
@@ -579,6 +579,6 @@ object QuadraticMinimizer {
     directQpTest.setProximal(2)
     
     directQpTest.solve(h, q, Some(b))
-    println(s"Qp Test ${directQpTest.solveTime}ns ${directQpTest.solveTime/1e6} ms")
+    println(s"Qp Test ${directQpTest.solveTime}ns ${directQpTest.solveTime/1e6} ms iterations ${directQpTest.iterations}")
   }
 }

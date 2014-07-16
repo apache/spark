@@ -37,8 +37,7 @@ import org.apache.spark.mllib.optimization.QuadraticMinimizer
 import breeze.linalg.CSCMatrix
 import breeze.linalg.norm
 import breeze.linalg.DenseVector
-import com.verizon.cvxoptimizer.ecos.QpSolver
-
+import com.github.ecos.QpSolver
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
  * of the elements within this block, and the list of destination blocks that each user or
@@ -724,7 +723,8 @@ class ALS private (
         }
         result
       }
-      println("lsTime " + lsTime/1e6 + " qpTime " + qpSolver.solveTime/1e6 + " directQpTime " + quadraticMinimizer.solveTime/1e6 + " failed " + failed)
+      println(s"lsTime ${lsTime/1e6} qpTime ${qpSolver.solveTime/1e6} directQpTime ${quadraticMinimizer.solveTime/1e6} failed ${failed}")
+      if(ws!=null) println(s"lsIters ${ws.iterations} admmIters ${quadraticMinimizer.iterations}")
       factors
     }
 
