@@ -232,7 +232,7 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
   }
 }
 
-class LBFGSTaskSuite extends FunSuite with LocalClusterSparkContext {
+class LBFGSClusterSuite extends FunSuite with LocalClusterSparkContext {
 
   test("task size should be small") {
     val m = 10
@@ -247,6 +247,8 @@ class LBFGSTaskSuite extends FunSuite with LocalClusterSparkContext {
       .setMaxNumIterations(1)
       .setRegParam(1.0)
     val random = new Random(0)
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
     val weights = lbfgs.optimize(examples, Vectors.dense(Array.fill(n)(random.nextDouble)))
   }
 }

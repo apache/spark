@@ -21,9 +21,8 @@ import java.util.Random
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
 
 class KMeansSuite extends FunSuite with LocalSparkContext {
 
@@ -41,26 +40,26 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     // No matter how many runs or iterations we use, we should get one cluster,
     // centered at the mean of the points
 
-    var model = KMeans.train(data, k=1, maxIterations=1)
+    var model = KMeans.train(data, k = 1, maxIterations = 1)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=2)
+    model = KMeans.train(data, k = 1, maxIterations = 2)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=5)
+    model = KMeans.train(data, k = 1, maxIterations = 5)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=5)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=5)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=RANDOM)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
     assert(model.clusterCenters.head === center)
 
     model = KMeans.train(
-      data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
+      data, k = 1, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head === center)
   }
 
@@ -77,26 +76,26 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
 
     val center = Vectors.dense(1.0, 3.0, 4.0)
 
-    var model = KMeans.train(data, k=1, maxIterations=1)
+    var model = KMeans.train(data, k = 1, maxIterations = 1)
     assert(model.clusterCenters.size === 1)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=2)
+    model = KMeans.train(data, k = 1, maxIterations = 2)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=5)
+    model = KMeans.train(data, k = 1, maxIterations = 5)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=5)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=5)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=RANDOM)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head === center)
   }
 
@@ -122,25 +121,25 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
 
     val center = Vectors.sparse(n, Seq((0, 1.0), (1, 3.0), (2, 4.0)))
 
-    var model = KMeans.train(data, k=1, maxIterations=1)
+    var model = KMeans.train(data, k = 1, maxIterations = 1)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=2)
+    model = KMeans.train(data, k = 1, maxIterations = 2)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=5)
+    model = KMeans.train(data, k = 1, maxIterations = 5)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=5)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=5)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=RANDOM)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
     assert(model.clusterCenters.head === center)
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
+    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head === center)
 
     data.unpersist()
@@ -160,15 +159,15 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     // it will make at least five passes, and it will give non-zero probability to each
     // unselected point as long as it hasn't yet selected all of them
 
-    var model = KMeans.train(rdd, k=5, maxIterations=1)
+    var model = KMeans.train(rdd, k = 5, maxIterations = 1)
     assert(Set(model.clusterCenters: _*) === Set(points: _*))
 
     // Iterations of Lloyd's should not change the answer either
-    model = KMeans.train(rdd, k=5, maxIterations=10)
+    model = KMeans.train(rdd, k = 5, maxIterations = 10)
     assert(Set(model.clusterCenters: _*) === Set(points: _*))
 
     // Neither should more runs
-    model = KMeans.train(rdd, k=5, maxIterations=10, runs=5)
+    model = KMeans.train(rdd, k = 5, maxIterations = 10, runs = 5)
     assert(Set(model.clusterCenters: _*) === Set(points: _*))
   }
 
@@ -196,6 +195,9 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
       assert(predicts(0) != predicts(3))
     }
   }
+}
+
+class KMeansClusterSuite extends FunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction") {
     val m = 4
