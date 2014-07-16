@@ -42,8 +42,8 @@ public final class JavaALS {
     @Override
     public Rating call(String line) {
       String[] tok = COMMA.split(line);
-      int x = Integer.parseInt(tok[0]);
-      int y = Integer.parseInt(tok[1]);
+      long x = Long.parseLong(tok[0]);
+      long y = Long.parseLong(tok[1]);
       double rating = Double.parseDouble(tok[2]);
       return new Rating(x, y, rating);
     }

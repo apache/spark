@@ -145,13 +145,13 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     val correct = data._2
     val model = ALS.train(ratings, 5, 15)
 
-    val pairs = Array.tabulate(50, 50)((u, p) => (u - 25, p - 25)).flatten
-    val ans = model.predict(sc.parallelize(pairs)).collect()
+    val pairs = Array.tabulate(50, 50)((u, p) => (u - 25L, p - 25L)).flatten
+    val ans = model.predictRDD(sc.parallelize(pairs)).collect()
     ans.foreach { r =>
       val u = r.user + 25
       val p = r.product + 25
       val v = r.rating
-      val error = v - correct.get(u, p)
+      val error = v - correct.get(u.toInt, p.toInt)
       assert(math.abs(error) < 0.4)
     }
   }
@@ -170,7 +170,7 @@ class ALSSuite extends FunSuite with LocalSparkContext {
    * @param samplingRate what fraction of the user-product pairs are known
    * @param matchThreshold max difference allowed to consider a predicted rating correct
    * @param implicitPrefs flag to test implicit feedback
-   * @param bulkPredict flag to test bulk prediciton
+   * @param bulkPredict flag to test bulk prediction
    * @param negativeWeights whether the generated data can contain negative values
    * @param numUserBlocks number of user blocks to partition users into
    * @param numProductBlocks number of product blocks to partition products into
@@ -206,20 +206,21 @@ class ALSSuite extends FunSuite with LocalSparkContext {
 
     val predictedU = new DoubleMatrix(users, features)
     for ((u, vec) <- model.userFeatures.collect(); i <- 0 until features) {
-      predictedU.put(u, i, vec(i))
+      predictedU.put(u.toInt, i, vec(i))
     }
     val predictedP = new DoubleMatrix(products, features)
     for ((p, vec) <- model.productFeatures.collect(); i <- 0 until features) {
-      predictedP.put(p, i, vec(i))
+      predictedP.put(p.toInt, i, vec(i))
     }
     val predictedRatings = bulkPredict match {
       case false => predictedU.mmul(predictedP.transpose)
       case true =>
         val allRatings = new DoubleMatrix(users, products)
-        val usersProducts = for (u <- 0 until users; p <- 0 until products) yield (u, p)
+        val usersProducts =
+          for (u <- 0 until users; p <- 0 until products) yield (u.toLong, p.toLong)
         val userProductsRDD = sc.parallelize(usersProducts)
-        model.predict(userProductsRDD).collect().foreach { elem =>
-          allRatings.put(elem.user, elem.product, elem.rating)
+        model.predictRDD(userProductsRDD).collect().foreach { elem =>
+          allRatings.put(elem.user.toInt, elem.product.toInt, elem.rating)
         }
         allRatings
     }
@@ -248,8 +249,11 @@ class ALSSuite extends FunSuite with LocalSparkContext {
       }
       val rmse = math.sqrt(sqErr / denom)
       if (rmse > matchThreshold) {
-        fail("Model failed to predict RMSE: %f\ncorr: %s\npred: %s\nU: %s\n P: %s".format(
-          rmse, truePrefs, predictedRatings, predictedU, predictedP))
+        fail(s"""Model failed to predict RMSE: $rmse\n
+                 |corr: $truePrefs\n
+                 |pred: $predictedRatings\n
+                 |U: $predictedU\n
+                 |P: $predictedP""".stripMargin)
       }
     }
   }

@@ -21,7 +21,7 @@ import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
-import scala.util.hashing.byteswap32
+import scala.util.hashing._
 
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
 
@@ -39,7 +39,7 @@ import org.apache.spark.mllib.optimization.NNLS
  * of the elements within this block, and the list of destination blocks that each user or
  * product will need to send its feature vector to.
  */
-private[recommendation] case class OutLinkBlock(elementIds: Array[Int], shouldSend: Array[BitSet])
+private[recommendation] case class OutLinkBlock(elementIds: Array[Long], shouldSend: Array[BitSet])
 
 
 /**
@@ -53,15 +53,15 @@ private[recommendation] case class OutLinkBlock(elementIds: Array[Int], shouldSe
  * we get product block b's message to update the corresponding users.
  */
 private[recommendation] case class InLinkBlock(
-  elementIds: Array[Int], ratingsForBlock: Array[Array[(Array[Int], Array[Double])]])
+  elementIds: Array[Long], ratingsForBlock: Array[Array[(Array[Int], Array[Double])]])
 
 
 /**
  * :: Experimental ::
- * A more compact class to represent a rating than Tuple3[Int, Int, Double].
+ * A more compact class to represent a rating than Tuple3[Long, Long, Double].
  */
 @Experimental
-case class Rating(user: Int, product: Int, rating: Double)
+case class Rating(user: Long, product: Long, rating: Double)
 
 /**
  * Alternating Least Squares matrix factorization.
@@ -195,12 +195,12 @@ class ALS private (
     val sc = ratings.context
 
     val numUserBlocks = if (this.numUserBlocks == -1) {
-      math.max(sc.defaultParallelism, ratings.partitions.size / 2)
+      math.max(sc.defaultParallelism, ratings.partitions.length / 2)
     } else {
       this.numUserBlocks
     }
     val numProductBlocks = if (this.numProductBlocks == -1) {
-      math.max(sc.defaultParallelism, ratings.partitions.size / 2)
+      math.max(sc.defaultParallelism, ratings.partitions.length / 2)
     } else {
       this.numProductBlocks
     }
@@ -246,7 +246,7 @@ class ALS private (
     if (implicitPrefs) {
       for (iter <- 1 to iterations) {
         // perform ALS update
-        logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
+        logInfo(s"Re-computing I given U (Iteration $iter/$iterations)")
         // Persist users because it will be called twice.
         users.setName(s"users-$iter").persist()
         val YtY = Some(sc.broadcast(computeYtY(users)))
@@ -254,7 +254,7 @@ class ALS private (
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
           userPartitioner, rank, lambda, alpha, YtY)
         previousProducts.unpersist()
-        logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
+        logInfo(s"Re-computing U given I (Iteration $iter/$iterations)")
         products.setName(s"products-$iter").persist()
         val XtX = Some(sc.broadcast(computeYtY(products)))
         val previousUsers = users
@@ -265,11 +265,11 @@ class ALS private (
     } else {
       for (iter <- 1 to iterations) {
         // perform ALS update
-        logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
+        logInfo(s"Re-computing I given U (Iteration $iter/$iterations)")
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
           userPartitioner, rank, lambda, alpha, YtY = None)
         products.setName(s"products-$iter")
-        logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
+        logInfo(s"Re-computing U given I (Iteration $iter/$iterations)")
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
           productPartitioner, rank, lambda, alpha, YtY = None)
         users.setName(s"users-$iter")
@@ -304,7 +304,7 @@ class ALS private (
 
   /**
    * Computes the (`rank x rank`) matrix `YtY`, where `Y` is the (`nui x rank`) matrix of factors
-   * for each user (or product), in a distributed fashion.
+   * for each user (or product) block, in a distributed fashion.
    *
    * @param factors the (block-distributed) user or product factor vectors
    * @return YtY - whose value is only used in the implicit preference model
@@ -361,7 +361,7 @@ class ALS private (
    */
   private def unblockFactors(
       blockedFactors: RDD[(Int, Array[Array[Double]])],
-      outLinks: RDD[(Int, OutLinkBlock)]): RDD[(Int, Array[Double])] = {
+      outLinks: RDD[(Int, OutLinkBlock)]): RDD[(Long, Array[Double])] = {
     blockedFactors.join(outLinks).flatMap { case (b, (factors, outLinkBlock)) =>
       for (i <- 0 until factors.length) yield (outLinkBlock.elementIds(i), factors(i))
     }
@@ -401,11 +401,7 @@ class ALS private (
       // Create an array of (product, Seq(Rating)) ratings
       val groupedRatings = blockRatings(productBlock).groupBy(_.product).toArray
       // Sort them by product ID
-      val ordering = new Ordering[(Int, ArrayBuffer[Rating])] {
-        def compare(a: (Int, ArrayBuffer[Rating]), b: (Int, ArrayBuffer[Rating])): Int =
-            a._1 - b._1
-      }
-      Sorting.quickSort(groupedRatings)(ordering)
+      Sorting.quickSort(groupedRatings)(Ordering.by(_._1))
       // Translate the user IDs to indices based on userIdToPos
       ratingsForBlock(productBlock) = groupedRatings.map { case (p, rs) =>
         (rs.view.map(r => userIdToPos(r.user)).toArray, rs.view.map(_.rating).toArray)
@@ -608,8 +604,12 @@ class ALS private (
  * Partitioner for ALS.
  */
 private[recommendation] class ALSPartitioner(override val numPartitions: Int) extends Partitioner {
-  override def getPartition(key: Any): Int = {
-    Utils.nonNegativeMod(byteswap32(key.asInstanceOf[Int]), numPartitions)
+  override def getPartition(key: Any): Int = key match {
+    case i:Int => Utils.nonNegativeMod(byteswap32(i), numPartitions)
+    case l:Long => {
+      val hashLong = byteswap64(l)
+      Utils.nonNegativeMod(hashLong.toInt ^ (hashLong >> 32).toInt, numPartitions)
+    }
   }
 
   override def equals(obj: Any): Boolean = {
