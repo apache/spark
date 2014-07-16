@@ -29,6 +29,7 @@ from py4j.java_collections import ListConverter, MapConverter
 
 __all__ = ["DStream"]
 
+
 class DStream(object):
     def __init__(self, jdstream, ssc, jrdd_deserializer):
         self._jdstream = jdstream
@@ -149,7 +150,7 @@ class DStream(object):
         """
         """
         if numPartitions is None:
-            numPartitions = self.ctx._defaultParallelism()
+            numPartitions = self._defaultReducePartitions()
         def combineLocally(iterator):
             combiners = {}
             for x in iterator:
@@ -211,7 +212,6 @@ class DStream(object):
         return dstream
 
 
-
     def reduceByWindow(self, reduceFunc, windowDuration, slideDuration, inReduceTunc):
         """
         """
@@ -254,7 +254,30 @@ class DStream(object):
         raise NotImplementedError
 
     def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+        """
+
+        """
         return PipelinedDStream(self, f, preservesPartitioning)
+
+    def _defaultReducePartitions(self):
+        """
+
+        """
+        # hard code to avoid the error
+        return 2
+        if self.ctx._conf.contains("spark.default.parallelism"):
+            return self.ctx.defaultParallelism
+        else:
+            return self.getNumPartitions()
+
+    def getNumPartitions(self):
+      """
+      Returns the number of partitions in RDD
+      >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
+      >>> rdd.getNumPartitions()
+      2
+      """
+      return self._jdstream.partitions().size()
 
 
 class PipelinedDStream(DStream):
