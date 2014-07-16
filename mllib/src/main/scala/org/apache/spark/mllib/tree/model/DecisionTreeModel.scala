@@ -50,4 +50,12 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))
   }
+
+  /**
+   * Print tree.
+   */
+  def print() {
+    println(s"DecisionTreeModel")
+    topNode.print("  ")
+  }
 }

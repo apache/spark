@@ -91,4 +91,39 @@ class Node (
       }
     }
   }
+
+  /**
+   * Recursive print functions.
+   * @param prefix  Prefix for each printed line (for spacing).
+   */
+  def print(prefix: String = "") {
+
+    def splitToString(split: Split, left: Boolean) : String = {
+      split.featureType match {
+        case Continuous => {
+          if (left) {
+            s"(feature ${split.feature} <= ${split.threshold})"
+          } else {
+            s"(feature ${split.feature} > ${split.threshold})"
+          }
+        }
+        case Categorical => {
+          if (left) {
+            s"(feature ${split.feature} in ${split.categories})"
+          } else {
+            s"(feature ${split.feature} not in ${split.categories})"
+          }
+        }
+      }
+    }
+
+    if (isLeaf) {
+      println(prefix + s"Predict: $predict")
+    } else {
+      println(prefix + s"If ${splitToString(split.get, true)}")
+      leftNode.get.print(prefix + "  ")
+      println(prefix + s"Else ${splitToString(split.get, false)}")
+      tNode.get.print(prefix + "  ")
+    }
+  }
 }
