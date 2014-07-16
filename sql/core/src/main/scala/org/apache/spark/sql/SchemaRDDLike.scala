@@ -123,12 +123,21 @@ private[sql] trait SchemaRDDLike {
   def saveAsTable(tableName: String): Unit =
     sqlContext.executePlan(InsertIntoCreatedTable(None, tableName, logicalPlan)).toRdd
 
-  /** Returns the schema. */
+  /** Returns the schema of this SchemaRDD (represented by a [[StructType]]).
+   *
+   * @group schema
+   */
   def schema: StructType = queryExecution.analyzed.schema
 
-  /** Returns the output schema in the tree format. */
-  def schemaString: String = schema.schemaString
+  /** Returns the schema as a string in the tree format.
+   *
+   * @group schema
+   */
+  def schemaString: String = schema.structString
 
-  /** Prints out the schema in the tree format. */
+  /** Prints out the schema.
+   *
+   * @group schema
+   */
   def printSchema(): Unit = println(schemaString)
 }

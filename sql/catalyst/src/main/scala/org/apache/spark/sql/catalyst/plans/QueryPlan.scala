@@ -128,7 +128,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def schema: StructType = StructType.fromAttributes(output)
 
   /** Returns the output schema in the tree format. */
-  def schemaString: String = schema.schemaString
+  def schemaString: String = schema.structString
 
   /** Prints out the schema in the tree format */
   def printSchema(): Unit = println(schemaString)

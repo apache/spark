@@ -34,7 +34,7 @@ object Row {
   def unapplySeq(row: Row): Some[Seq[Any]] = Some(row)
 
   /**
-   * Construct a [[Row]] with the given values.
+   * This method can be used to construct a [[Row]] with the given values.
    */
   def apply(values: Any*): Row = new GenericRow(values.toArray)
 }

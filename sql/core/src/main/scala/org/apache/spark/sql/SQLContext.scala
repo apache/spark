@@ -99,7 +99,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * Creates a [[SchemaRDD]] from an [[RDD]] by applying a schema to this RDD and using a function
    * that will be applied to each partition of the RDD to convert RDD records to [[Row]]s.
-   *
+   * Similar to `RDD.mapPartitions``, this function can be used to improve performance where there
+   * is other setup work that can be amortized and used repeatedly for all of the
+   * elements in a partition.
    * @group userf
    */
   def applySchemaToPartitions[A](
@@ -128,7 +130,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0, None)
+  def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0)
 
   /**
    * Loads a JSON file (one object per line) and applies the given schema,
@@ -136,15 +138,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonFile(path: String, schema: StructType): SchemaRDD = jsonFile(path, 1.0, Option(schema))
+  def jsonFile(path: String, schema: StructType): SchemaRDD = {
+    val json = sparkContext.textFile(path)
+    jsonRDD(json, schema)
+  }
 
   /**
    * :: Experimental ::
    */
   @Experimental
-  def jsonFile(path: String, samplingRatio: Double, schema: Option[StructType]): SchemaRDD = {
+  def jsonFile(path: String, samplingRatio: Double): SchemaRDD = {
     val json = sparkContext.textFile(path)
-    jsonRDD(json, samplingRatio, schema)
+    jsonRDD(json, samplingRatio)
   }
 
   /**
@@ -154,7 +159,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonRDD(json: RDD[String]): SchemaRDD = jsonRDD(json, 1.0, None)
+  def jsonRDD(json: RDD[String]): SchemaRDD = jsonRDD(json, 1.0)
 
   /**
    * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
@@ -162,21 +167,29 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  def jsonRDD(json: RDD[String], schema: StructType): SchemaRDD = jsonRDD(json, 1.0, Option(schema))
-
-  /**
-   * :: Experimental ::
-   */
-  @Experimental
-  def jsonRDD(json: RDD[String], samplingRatio: Double, schema: Option[StructType]): SchemaRDD = {
+  def jsonRDD(json: RDD[String], schema: StructType): SchemaRDD = {
     val appliedSchema =
-      schema.getOrElse(JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio)))
+      Option(schema).getOrElse(JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, 1.0)))
 
     applySchemaToPartitions(
       json,
       appliedSchema,
       JsonRDD.jsonStringToRow(appliedSchema, _: Iterator[String]))
   }
+
+  /**
+   * :: Experimental ::
+   */
+  @Experimental
+  def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
+    val schema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
+
+    applySchemaToPartitions(
+      json,
+      schema,
+      JsonRDD.jsonStringToRow(schema, _: Iterator[String]))
+  }
+
 
   /**
    * :: Experimental ::

@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 /**
  *
  */
-object DataType extends RegexParsers {
+protected[sql] object DataType extends RegexParsers {
   protected lazy val primitiveType: Parser[DataType] =
     "StringType" ^^^ StringType |
     "FloatType" ^^^ FloatType |
@@ -83,6 +83,21 @@ object DataType extends RegexParsers {
   def apply(asString: String): DataType = parseAll(dataType, asString) match {
     case Success(result, _) => result
     case failure: NoSuccess => sys.error(s"Unsupported dataType: $asString, $failure")
+  }
+
+  protected[types] def buildFormattedString(
+      dataType: DataType,
+      prefix: String,
+      builder: StringBuilder): Unit = {
+    dataType match {
+      case array: ArrayType =>
+        array.buildFormattedString(prefix, builder)
+      case struct: StructType =>
+        struct.buildFormattedString(prefix, builder)
+      case map: MapType =>
+        map.buildFormattedString(prefix, builder)
+      case _ =>
+    }
   }
 }
 
@@ -244,6 +259,7 @@ case object FloatType extends FractionalType {
 }
 
 object ArrayType {
+  /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is false. */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, false)
 }
 
@@ -251,15 +267,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(
       s"${prefix}-- element: ${elementType.simpleString} (containsNull = ${containsNull})\n")
-    elementType match {
-      case array: ArrayType =>
-        array.buildFormattedString(s"$prefix    |", builder)
-      case struct: StructType =>
-        struct.buildFormattedString(s"$prefix    |", builder)
-      case map: MapType =>
-        map.buildFormattedString(s"$prefix    |", builder)
-      case _ =>
-    }
+    DataType.buildFormattedString(elementType, s"$prefix    |", builder)
   }
 
   def simpleString: String = "array"
@@ -269,48 +277,41 @@ case class StructField(name: String, dataType: DataType, nullable: Boolean) {
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"${prefix}-- ${name}: ${dataType.simpleString} (nullable = ${nullable})\n")
-    dataType match {
-      case array: ArrayType =>
-        array.buildFormattedString(s"$prefix    |", builder)
-      case struct: StructType =>
-        struct.buildFormattedString(s"$prefix    |", builder)
-      case map: MapType =>
-        map.buildFormattedString(s"$prefix    |", builder)
-      case _ =>
-    }
+    DataType.buildFormattedString(dataType, s"$prefix    |", builder)
   }
 }
 
 object StructType {
-  def fromAttributes(attributes: Seq[Attribute]): StructType =
+  protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable)))
 
   private def validateFields(fields: Seq[StructField]): Boolean =
     fields.map(field => field.name).distinct.size == fields.size
-
-  def apply[A <: String: ClassTag, B <: DataType: ClassTag](fields: (A, B)*): StructType =
-    StructType(fields.map(field => StructField(field._1, field._2, true)))
-
-  def apply[A <: String: ClassTag, B <: DataType: ClassTag, C <: Boolean: ClassTag](
-      fields: (A, B, C)*): StructType =
-    StructType(fields.map(field => StructField(field._1, field._2, field._3)))
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
   require(StructType.validateFields(fields), "Found fields with the same name.")
 
+  /**
+   * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
+   * have a name matching the given name, `null` will be returned.
+   */
   def apply(name: String): StructField = {
     fields.find(f => f.name == name).orNull
   }
 
-  def apply(names: String*): StructType = {
-    val nameSet = names.toSet
-    StructType(fields.filter(f => nameSet.contains(f.name)))
+  /**
+   * Returns a [[StructType]] containing [[StructField]]s of the given names.
+   * Those names which do not have matching fields will be ignored.
+   */
+  def apply(names: Set[String]): StructType = {
+    StructType(fields.filter(f => names.contains(f.name)))
   }
 
-  def toAttributes = fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
+  protected[sql] def toAttributes =
+    fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
 
-  def schemaString: String = {
+  def structString: String = {
     val builder = new StringBuilder
     builder.append("root\n")
     val prefix = " |"
@@ -319,7 +320,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
     builder.toString()
   }
 
-  def printSchema(): Unit = println(schemaString)
+  def printStruct(): Unit = println(structString)
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     fields.foreach(field => field.buildFormattedString(prefix, builder))
@@ -331,26 +332,8 @@ case class StructType(fields: Seq[StructField]) extends DataType {
 case class MapType(keyType: DataType, valueType: DataType) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"${prefix}-- key: ${keyType.simpleString}\n")
-    keyType match {
-      case array: ArrayType =>
-        array.buildFormattedString(s"$prefix    |", builder)
-      case struct: StructType =>
-        struct.buildFormattedString(s"$prefix    |", builder)
-      case map: MapType =>
-        map.buildFormattedString(s"$prefix    |", builder)
-      case _ =>
-    }
-
-    builder.append(s"${prefix}-- value: ${valueType.simpleString}\n")
-    valueType match {
-      case array: ArrayType =>
-        array.buildFormattedString(s"$prefix    |", builder)
-      case struct: StructType =>
-        struct.buildFormattedString(s"$prefix    |", builder)
-      case map: MapType =>
-        map.buildFormattedString(s"$prefix    |", builder)
-      case _ =>
-    }
+    DataType.buildFormattedString(keyType, s"$prefix    |", builder)
+    DataType.buildFormattedString(valueType, s"$prefix    |", builder)
   }
 
   def simpleString: String = "map"
