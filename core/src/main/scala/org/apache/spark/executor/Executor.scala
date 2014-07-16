@@ -341,4 +341,8 @@ private[spark] class Executor(
       }
     }
   }
+
+  def stop() {
+    this.env.stop()
+  }
 }
