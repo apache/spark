@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
@@ -280,6 +280,16 @@ private[hive] case class HiveGenericUdf(name: String, children: Seq[Expression])
 private[hive] trait HiveInspectors {
 
   def unwrapData(data: Any, oi: ObjectInspector): Any = oi match {
+    case hvoi: HiveVarcharObjectInspector => if (data == null) {
+      null
+    } else {
+      hvoi.getPrimitiveJavaObject(data).getValue
+    }
+    case hdoi: HiveDecimalObjectInspector => if (data == null) {
+      null
+    } else {
+      BigDecimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue())
+    }
     case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
     case li: ListObjectInspector =>
       Option(li.getList(data))
