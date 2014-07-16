@@ -19,7 +19,7 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
-from pyspark.storagelevel import StorageLevel
+from pyspark.storagelevel import *
 from pyspark.rdd import RDD
 from pyspark.context import SparkContext
 
@@ -83,26 +83,9 @@ class StreamingContext(object):
         else:
             self._jssc.awaitTermination()
 
-    def checkpoint(self, directory):
-        raise NotImplementedError
-
-    def fileStream(self, directory, filter=None, newFilesOnly=None):
-        raise NotImplementedError
-
-    def networkStream(self, receiver):
-        raise NotImplementedError
-
-    def queueStream(self, queue, oneAtATime=True, defaultRDD=None):
-        raise NotImplementedError
-
-    def rawSocketStream(self, hostname, port, storagelevel):
-        raise NotImplementedError
-
-    def remember(self, duration):
-        raise NotImplementedError
-
-    def socketStream(hostname, port, converter,storageLevel):
-        raise NotImplementedError
+    # start from simple one. storageLevel is not passed for now.
+    def socketTextStream(self, hostname, port):
+        return DStream(self._jssc.socketTextStream(hostname, port), self, UTF8Deserializer())
 
     def start(self):
         self._jssc.start()
