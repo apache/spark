@@ -76,7 +76,7 @@
            are necessary - first one for 'mvn package', second one for 'mvn compile'. Ideally,
            'mvn compile' should not compile test classes and therefore should not need this.
            However, an open Maven bug (http://jira.codehaus.org/browse/MNG-3559)
-           causes the compilation to fail if streaming test-jar is not generated. Hence, the
+           causes the compilation to fail if streaming test-jar is not generated. Hence, the 
            second execution profile for 'mvn compile'.
       -->
       <plugin>
