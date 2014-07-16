@@ -614,7 +614,6 @@
         <groupId>net.java.dev.jets3t</groupId>
         <artifactId>jets3t</artifactId>
         <version>${jets3t.version}</version>
-        <scope>runtime</scope>
         <exclusions>
           <exclusion>
             <groupId>commons-logging</groupId>
