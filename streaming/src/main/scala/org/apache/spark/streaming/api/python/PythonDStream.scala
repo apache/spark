@@ -55,6 +55,6 @@ class PythonDStream[T: ClassTag](
       case None => None
     }
   }
-  
+
   val asJavaDStream  = JavaDStream.fromDStream(this)
 }

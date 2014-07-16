@@ -1,28 +1,8 @@
-from base64 import standard_b64encode as b64enc
-import copy
 from collections import defaultdict
-from collections import namedtuple
 from itertools import chain, ifilter, imap
-import operator
-import os
-import sys
-import shlex
-import traceback
-from subprocess import Popen, PIPE
-from tempfile import NamedTemporaryFile
-from threading import Thread
-import warnings
-import heapq
-from random import Random
 
-from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
-    BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
-from pyspark.join import python_join, python_left_outer_join, \
-    python_right_outer_join, python_cogroup
-from pyspark.statcounter import StatCounter
-from pyspark.rddsampler import RDDSampler
-from pyspark.storagelevel import StorageLevel
-#from pyspark.resultiterable import ResultIterable
+from pyspark.serializers import NoOpSerializer,\
+    BatchedSerializer, CloudPickleSerializer, pack_long
 from pyspark.rdd import _JavaStackTrace
 
 from py4j.java_collections import ListConverter, MapConverter
@@ -47,14 +27,13 @@ class DStream(object):
     def print_(self):
         """
         """
-        # print is a resrved name of Python. We cannot give print to function name
+        # print is a reserved name of Python. We cannot give print to function name
         getattr(self._jdstream, "print")()
 
     def pyprint(self):
         """
         """
         self._jdstream.pyprint()
-
 
     def filter(self, f):
         """
@@ -140,7 +119,6 @@ class DStream(object):
         keyed._bypass_serializer = True
         with _JavaStackTrace(self.ctx) as st:
             #JavaDStream
-            #pairRDD = self.ctx._jvm.PairwiseDStream(keyed._jdstream.dstream()).asJavaPairRDD()
             pairDStream = self.ctx._jvm.PairwiseDStream(keyed._jdstream.dstream()).asJavaPairDStream()
             partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
                                                           id(partitionFunc))
