@@ -98,7 +98,6 @@ class SGDLocalOptimizer(val gradient: Gradient,
   }
 }
 
-
 class ADMM private[mllib] extends Optimizer with Logging {
 
   private var numIterations: Int = 100
