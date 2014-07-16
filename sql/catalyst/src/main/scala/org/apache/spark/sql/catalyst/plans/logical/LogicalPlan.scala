@@ -40,10 +40,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
    *                    defaults to the product of children's `sizeInBytes`.
    */
   case class Statistics(
-    sizeInBytes: Long = childrenStats.map(_.sizeInBytes).product
+    sizeInBytes: Long
   )
-  lazy val statistics: Statistics = new Statistics
-  lazy val childrenStats = children.map(_.statistics)
+  lazy val statistics: Statistics = Statistics(
+    sizeInBytes = children.map(_.statistics).map(_.sizeInBytes).product
+  )
 
   /**
    * Returns the set of attributes that are referenced by this node
