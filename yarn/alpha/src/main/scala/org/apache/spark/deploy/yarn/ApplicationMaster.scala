@@ -402,9 +402,6 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 }
 
 object ApplicationMaster extends Logging {
-  // Number of times to wait for the allocator loop to complete.
-  // Each loop iteration waits for 100ms, so maximum of 3 seconds.
-  // This is to ensure that we have reasonable number of containers before we start
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
   private val ALLOCATE_HEARTBEAT_INTERVAL = 100
