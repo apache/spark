@@ -91,7 +91,7 @@ class PythonDStream[T: ClassTag](
       tempFileStream.close()
 
       // This value has to be passed from python
-      val pythonExec = new ProcessBuilder().environment().get("PYSPARK_PYTHON")
+      //val pythonExec = new ProcessBuilder().environment().get("PYSPARK_PYTHON")
       val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
       //val pb = new ProcessBuilder(Seq(pythonExec, sparkHome + "/python/pyspark/streaming/pyprint.py", tempFile.getAbsolutePath())) // why this fails to compile???
       //absolute path to the python script is needed to change because we do not use pysparkstreaming
