@@ -240,7 +240,7 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     }
 
     assert(thrown.getClass === classOf[SparkException])
-    assert(thrown.getMessage.contains("NotSerializableException"))
+    assert(thrown.getMessage.toLowerCase.contains("serializable"))
   }
 }
 

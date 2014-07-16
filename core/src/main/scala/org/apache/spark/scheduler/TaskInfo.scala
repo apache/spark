@@ -84,6 +84,8 @@ class TaskInfo(
     }
   }
 
+  def id: String = s"$index.$attempt"
+
   def duration: Long = {
     if (!finished) {
       throw new UnsupportedOperationException("duration() called on unfinished task")
