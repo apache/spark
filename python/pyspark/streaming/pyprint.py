@@ -1,6 +1,6 @@
 import sys
 from itertools import chain
-from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
+from pyspark.serializers import PickleSerializer
 
 def collect(binary_file_path):
     dse = PickleSerializer()
