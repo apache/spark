@@ -45,7 +45,7 @@ DEPLOY_MODE=${DEPLOY_MODE:-"client"}
 # pythonExec(which python Spark should execute).
 # Since pyprint is located in DStream, Spark does not know which python should use. 
 # In that case, get python path from PYSPARK_PYTHON, environmental variable. 
-# This fix is ongoing in print branch in my repo.
+# This fix is ongoing in print branch in https://github.com/giwa/spark/tree/print.
 
 # Figure out which Python executable to use
 if [[ -z "$PYSPARK_PYTHON" ]]; then
