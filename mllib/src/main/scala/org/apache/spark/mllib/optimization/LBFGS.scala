@@ -199,17 +199,15 @@ object LBFGS extends Logging {
       val n = weights.length
       val bcWeights = data.context.broadcast(weights)
 
-      val (gradientSum, lossSum) = data.mapPartitions { iter =>
-        val cumGrad = Vectors.dense(new Array[Double](n))
-        val thisWeights = Vectors.fromBreeze(bcWeights.value)
-        var loss = 0.0
-        iter.foreach { case (label, features) =>
-          loss += localGradient.compute(features, label, thisWeights, cumGrad)
-        }
-        Iterator((cumGrad.toBreeze.asInstanceOf[BDV[Double]], loss))
-      }.reduce { case ((grad1, loss1), (grad2, loss2)) =>
-        (grad1 += grad2, loss1 + loss2)
-      }
+      val (gradientSum, lossSum) = data.aggregate((BDV.zeros[Double](n), 0.0))(
+          seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
+            val l = localGradient.compute(
+              features, label, Vectors.fromBreeze(bcWeights.value), Vectors.fromBreeze(grad))
+            (grad, loss + l)
+          },
+          combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
+            (grad1 += grad2, loss1 + loss2)
+          })
 
       /**
        * regVal is sum of weight squares if it's L2 updater;
