@@ -54,6 +54,7 @@ if [[ ! "$@" =~ --package-only ]]; then
     -Dmaven.javadoc.skip=true \
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl\
+    -Pspark-kinesis-asl\
     -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
     --batch-mode release:prepare
 
@@ -62,6 +63,7 @@ if [[ ! "$@" =~ --package-only ]]; then
     -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Dmaven.javadoc.skip=true \
     -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl\
+    -Pspark-kinesis-asl\
     release:perform
 
   cd ..

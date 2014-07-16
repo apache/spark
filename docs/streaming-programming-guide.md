@@ -9,7 +9,7 @@ title: Spark Streaming Programming Guide
 # Overview
 Spark Streaming is an extension of the core Spark API that allows enables high-throughput,
 fault-tolerant stream processing of live data streams. Data can be ingested from many sources
-like Kafka, Flume, Twitter, ZeroMQ or plain old TCP sockets and be processed using complex
+like Kafka, Flume, Twitter, ZeroMQ, Kinesis or plain old TCP sockets and be processed using complex
 algorithms expressed with high-level functions like `map`, `reduce`, `join` and `window`.
 Finally, processed data can be pushed out to filesystems, databases,
 and live dashboards. In fact, you can apply Spark's in-built
@@ -38,7 +38,7 @@ stream of results in batches.
 
 Spark Streaming provides a high-level abstraction called *discretized stream* or *DStream*,
 which represents a continuous stream of data. DStreams can be created either from input data
-stream from sources such as Kafka and Flume, or by applying high-level
+stream from sources such as Kafka, Flume, and Kinesis, or by applying high-level
 operations on other DStreams. Internally, a DStream is represented as a sequence of
 [RDDs](api/scala/index.html#org.apache.spark.rdd.RDD).
 
@@ -313,7 +313,7 @@ To write your own Spark Streaming program, you will have to add the following de
     artifactId = spark-streaming_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION}}
 
-For ingesting data from sources like Kafka and Flume that are not present in the Spark
+For ingesting data from sources like Kafka, Flume, and Kinesis that are not present in the Spark
 Streaming core
  API, you will have to add the corresponding
 artifact `spark-streaming-xyz_{{site.SCALA_BINARY_VERSION}}` to the dependencies. For example,
@@ -327,6 +327,7 @@ some of the common ones are as follows.
 <tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Kinesis<br/>(built separately)</td><td> spark-kinesis-asl_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> </td><td></td></tr>
 </table>
 
@@ -442,7 +443,7 @@ see the API documentations of the relevant functions in
 Scala and [JavaStreamingContext](api/scala/index.html#org.apache.spark.streaming.api.java.JavaStreamingContext)
  for Java.
 
-Additional functionality for creating DStreams from sources such as Kafka, Flume, and Twitter
+Additional functionality for creating DStreams from sources such as Kafka, Flume, Kinesis, and Twitter
 can be imported by adding the right dependencies as explained in an
 [earlier](#linking) section. To take the
 case of Kafka, after adding the artifact `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` to the
@@ -466,6 +467,62 @@ KafkaUtils.createStream(jssc, kafkaParams, ...);
 For more details on these additional sources, see the corresponding [API documentation](#where-to-go-from-here).
 Furthermore, you can also implement your own custom receiver for your sources. See the
 [Custom Receiver Guide](streaming-custom-receivers.html).
+
+### Kinesis
+Build notes:
+<li>Spark supports a Kinesis Streaming Receiver which is not included in the default build due to licensing restrictions.</li>
+<li>_**Note that by embedding this library you will include [ASL](https://aws.amazon.com/asl/)-licensed code in your Spark package**_.</li>
+<li>For sbt users, set the `SPARK_KINESIS_ASL` environment variable before building.</li>
+<li>For Maven users, enable the `-Pspark-kinesis-asl` profile.</li>
+<li>User applications will need to link to the `spark-kinesis-asl` artifact.</li>
+<li>The Spark Kinesis Streaming Receiver source code, examples, tests, and artifacts live in $SPARK_HOME/extras/spark-kinesis-asl.</li>
+
+Deployment and runtime notes:
+<li>Each shard of a stream is processed by one or more KinesisReceiver's managed by the Kinesis Client Library (KCL) Worker.</li>
+<li>Said differently, a single KinesisReceiver can process many shards of a stream.</li>
+<li>You never need more KinesisReceivers than the number of shards in your stream.</li>
+<li>The Kinesis assembly jar must also be present on all worker nodes, as they will need access to the Kinesis Client Library.</li>
+<li>/tmp/checkpoint is a valid and accessible directory on all workers (or locally if running in local mode)</li>
+<li>This code uses the DefaultAWSCredentialsProviderChain and searches for credentials in the following order of precedence:<br/>
+    1) Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_KEY<br/>
+    2) Java System Properties - aws.accessKeyId and aws.secretKey<br/>
+    3) Credential profiles file - default location (~/.aws/credentials) shared by all AWS SDKs<br/>
+    4) Instance profile credentials - delivered through the Amazon EC2 metadata service<br/>
+</li>
+<li>You need to setup a Kinesis stream with 1 or more shards per the following:<br/>
+ http://docs.aws.amazon.com/kinesis/latest/dev/step-one-create-stream.html</li>
+<li>When you first start up the KinesisReceiver, the Kinesis Client Library (KCL) needs ~30s to establish connectivity with the AWS Kinesis service,
+retrieve any checkpoint data, and negotiate with other KCL's reading from the same stream.</li>
+<li>During testing, I noticed varying degrees of delays while retrieving records from Kinesis depending on which coffee shop in San Francisco I was working.
+The input and output data eventually matched, but sometimes after an unusually long time.</li>
+<li>Be careful when changing the app name.  Kinesis maintains a mapping table in DynamoDB based on this app name (http://docs.aws.amazon.com/kinesis/latest/dev/kinesis-record-processor-implementation-app.html#kinesis-record-processor-initialization).  
+Changing the app name could lead to Kinesis errors as only 1 logical application can process a stream.</li>
+
+Failure recovery notes:
+<li>The combination of Spark Streaming and Kinesis creates 3 different checkpoints as follows:<br/>
+  1) RDD data checkpoint (Spark Streaming) - frequency is configurable with DStream.checkpoint(Duration)<br/>
+  2) RDD metadata checkpoint (Spark Streaming) - frequency is every DStream batch<br/>
+  3) Kinesis checkpointing (Kinesis) - frequency is controlled by the developer calling ICheckpointer.checkpoint() directly<br/>
+</li>
+<li>During testing, if you see the same data being read from the stream twice, it's likely due to the Kinesis checkpoints not being written.</li>
+<li>Checkpointing too freqently will cause excess load on the AWS checkpoint storage layer and may lead to AWS throttling</li>
+<li>Upon startup, a KinesisReceiver will begin processing records with sequence numbers greater than the last checkpoint sequence number recorded per shard.</li>
+<li>If no checkpoint info exists, the worker will start either from the oldest record available (InitialPositionInStream.TRIM_HORIZON)
+or from the tip/latest (InitialPostitionInStream.LATEST).  This is configurable.</li>
+<li>When pulling from the stream tip (InitialPositionInStream.LATEST), only new stream data will be picked up after the KinesisReceiver starts.</li>
+<li>InitialPositionInStream.LATEST could lead to missed records if data is added to the stream while no KinesisReceivers are running.</li>
+<li>In production, you'll want to switch to InitialPositionInStream.TRIM_HORIZON which will read up to 24 hours (Kinesis limit) of previous stream data
+depending on the checkpoint frequency.</li>
+<li>InitialPositionInStream.TRIM_HORIZON may lead to duplicate processing of records depending on the checkpoint frequency.</li>
+<li>Record processing should be idempotent when possible.</li>
+<li>Failed or latent KinesisReceivers will be detected and automatically shutdown/load-balanced by the KCL.</li>
+<li>If possible, explicitly shutdown the worker if a failure occurs.</li>
+
+Example KinesisWordCount (and JavaKiensisWordCount) notes:
+<li>These examples automatically determine the number of threads to run locally based on the number of shards for the stream.</li>
+<li>These examples automatically determine the number of KinesisReceivers/InputDStreams to create based on the number of shards for the stream.</li>
+<li>These examples use InitialPositionInStream.LATEST (tip of stream) vs. InitialPositionInStream.TRIM_HORIZON (back 24 hours) to simplify reasoning about the examples.</li>
+<li>The KinesisWordCountProducer will generate random data to put onto the Kinesis stream for testing.</li>
 
 ## Operations
 There are two kinds of DStream operations - _transformations_ and _output operations_. Similar to

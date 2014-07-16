@@ -958,6 +958,14 @@
       </modules>
     </profile>
 
+    <!-- Kinesis integration is not included by default due to ASL-licensed code -->
+    <profile>
+      <id>spark-kinesis-asl</id>
+      <modules>
+        <module>extras/spark-kinesis-asl</module>
+      </modules>
+    </profile>
+
     <profile>
       <id>java8-tests</id>
       <build>

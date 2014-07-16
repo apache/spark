@@ -88,7 +88,7 @@ object SparkBuild extends Build {
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
 
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
-    .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeHive: _*) dependsOn(maybeGanglia: _*)
+    .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeHive: _*) dependsOn(maybeGanglia: _*) dependsOn(maybeKinesis: _*)
 
   lazy val assembleDepsTask = TaskKey[Unit]("assemble-deps")
   lazy val assembleDeps = assembleDepsTask := {
@@ -135,6 +135,15 @@ object SparkBuild extends Build {
   val maybeGanglia: Seq[ClasspathDependency] = if (isGangliaEnabled) Seq(gangliaProj) else Seq()
   val maybeGangliaRef: Seq[ProjectReference] = if (isGangliaEnabled) Seq(gangliaProj) else Seq()
 
+  // Include Kinesis integration if the user has enabled Kinesis
+  // This is isolated from the normal build due to ASL-licensed code in the library
+  lazy val isKinesisEnabled = Properties.envOrNone("SPARK_KINESIS_ASL").isDefined
+  lazy val kinesisProj = Project("spark-kinesis-asl", file("extras/spark-kinesis-asl"), settings = kinesisSettings)
+    .dependsOn(streaming % "compile->compile;test->test")
+  val maybeKinesis: Seq[ClasspathDependency] = if (isKinesisEnabled) Seq(kinesisProj) else Seq()
+  val maybeKinesisRef: Seq[ProjectReference] = if (isKinesisEnabled) Seq(kinesisProj) else Seq()
+
+
   // Include the Java 8 project if the JVM version is 8+
   lazy val javaVersion = System.getProperty("java.specification.version")
   lazy val isJava8Enabled = javaVersion.toDouble >= "1.8".toDouble
@@ -171,7 +180,7 @@ object SparkBuild extends Build {
     .dependsOn(core, mllib, graphx, bagel, streaming, hive) dependsOn(allExternal: _*)
 
   // Everything except assembly, hive, tools, java8Tests and examples belong to packageProjects
-  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, catalyst, sql) ++ maybeYarnRef ++ maybeHiveRef ++ maybeGangliaRef
+  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, catalyst, sql) ++ maybeYarnRef ++ maybeHiveRef ++ maybeGangliaRef ++ maybeKinesisRef
 
   lazy val allProjects = packageProjects ++ allExternalRefs ++
     Seq[ProjectReference](examples, tools, assemblyProj) ++ maybeJava8Tests
@@ -586,6 +595,14 @@ object SparkBuild extends Build {
   def gangliaSettings = sharedSettings ++ Seq(
     name := "spark-ganglia-lgpl",
     libraryDependencies += "com.codahale.metrics" % "metrics-ganglia" % "3.0.0"
+  )
+
+  def kinesisSettings = streamingSettings ++ Seq(
+    name := "spark-kinesis-asl",
+    libraryDependencies ++= Seq(
+      "com.amazonaws" % "amazon-kinesis-client" % "1.1.0",
+      "com.amazonaws" % "aws-java-sdk" % "1.8.3"
+    ) 
   )
 
   def java8TestsSettings = sharedSettings ++ Seq(
