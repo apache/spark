@@ -92,7 +92,6 @@ class DStream(object):
             return combiners.iteritems()
         return shuffled.mapPartitions(_mergeCombiners) 
 
-
     def partitionBy(self, numPartitions, partitionFunc=None):
         """
         Return a copy of the DStream partitioned using the specified partitioner.
@@ -141,7 +140,6 @@ class DStream(object):
 
         """
         # hard code to avoid the error
-        return 2
         if self.ctx._conf.contains("spark.default.parallelism"):
             return self.ctx.defaultParallelism
         else:
