@@ -172,7 +172,7 @@ class DStream(object):
         return shuffled.mapPartitions(_mergeCombiners) 
 
 
-   def partitionBy(self, numPartitions, partitionFunc=None):
+    def partitionBy(self, numPartitions, partitionFunc=None):
         """
         Return a copy of the DStream partitioned using the specified partitioner.
 
