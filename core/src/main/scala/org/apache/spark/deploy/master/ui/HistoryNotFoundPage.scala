@@ -29,10 +29,12 @@ private[spark] class HistoryNotFoundPage(parent: MasterWebUI)
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =
       <div class="row-fluid">
-        <div class="span12" style="font-size:14px;font-weight:bold">
-          No event logs were found for this application. To enable event logging, please set
-          <a href="http://spark.apache.org/docs/latest/monitoring.html">spark.eventLog.enabled</a>
-          to true.
+        <div class="span12" style="font-size:14px">
+          No event logs were found for this application. To
+          <a href="http://spark.apache.org/docs/latest/monitoring.html">enable event logging</a>,
+          please set <span style="font-style:italic">spark.eventLog.enabled</span> to true and
+          <span style="font-style:italic">spark.eventLog.dir</span> to the directory to which your
+          event logs are written.
         </div>
       </div>
     UIUtils.basicSparkPage(content, "Application history not found")
