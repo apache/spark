@@ -423,12 +423,14 @@ private[spark] class TaskSetManager(
               s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
               s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
           }
-          val timeTaken = clock.getTime() - startTime
           addRunningTask(taskId)
 
-          val taskName = "task %s:%d.%d".format(taskSet.id, index, attemptNum)
-          logInfo("Starting %s (TID %d, %s, %s, %d bytes, %d ms)".format(
-            taskName, taskId, host, taskLocality, serializedTask.limit, timeTaken))
+          // We used to log the time it takes to serialize the task, but task size is already
+          // a good proxy to task serialization time.
+          // val timeTaken = clock.getTime() - startTime
+          val taskName = s"task ${info.id} in stage ${taskSet.id}"
+          logInfo("Starting %s (TID %d, %s, %s, %d bytes)".format(
+              taskName, taskId, host, taskLocality, serializedTask.limit))
 
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
@@ -491,15 +493,15 @@ private[spark] class TaskSetManager(
       tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo("Finished %s:%s (TID %d) in %d ms on %s (%d/%d)".format(
-        taskSet.id, info.id, info.taskId, info.duration, info.host, tasksSuccessful, numTasks))
+      logInfo("Finished task %s in stage %s (TID %d) in %d ms on %s (%d/%d)".format(
+        info.id, taskSet.id, info.taskId, info.duration, info.host, tasksSuccessful, numTasks))
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
     } else {
-      logInfo("Ignoring task-finished event for " + taskSet.id + ":" + info.id +
+      logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
     failedExecutors.remove(index)
@@ -521,7 +523,7 @@ private[spark] class TaskSetManager(
     copiesRunning(index) -= 1
     var taskMetrics : TaskMetrics = null
 
-    val failureReason = s"Lost task ${taskSet.id}:$index (TID $tid) on executor ${info.host}: " +
+    val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}): " +
       reason.asInstanceOf[TaskFailedReason].toErrorString
     reason match {
       case fetchFailed: FetchFailed =>
@@ -535,12 +537,12 @@ private[spark] class TaskSetManager(
 
       case ef: ExceptionFailure =>
         taskMetrics = ef.metrics.orNull
-        if (ef.className == classOf[NotSerializableException].getName()) {
+        if (ef.className == classOf[NotSerializableException].getName) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
-          logError("Task %s:%s (TID %d) had a not serializable result: %s; not retrying".format(
-            taskSet.id, index, tid, ef.description))
-          abort("Task %s:%s (TID %d) had a not serializable result: %s".format(
-            taskSet.id, index, tid, ef.description))
+          logError("Task %s in stage %s (TID %d) had a not serializable result: %s; not retrying"
+            .format(info.id, taskSet.id, tid, ef.description))
+          abort("Task %s in stage %s (TID %d) had a not serializable result: %s".format(
+            info.id, taskSet.id, tid, ef.description))
           return
         }
         val key = ef.description
@@ -563,7 +565,8 @@ private[spark] class TaskSetManager(
         if (printFull) {
           logWarning(failureReason)
         } else {
-          logInfo(s"Lost task ${taskSet.id}:$index (TID $tid) on executor ${info.host}: " +
+          logInfo(
+            s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid) on executor ${info.host}: " +
             s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
 
@@ -582,10 +585,10 @@ private[spark] class TaskSetManager(
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
-        logError("Task %s:%d failed %d times; aborting job".format(
-          taskSet.id, index, maxTaskFailures))
-        abort("Task %s:%d failed %d times, most recent failure: %s\nDriver stacktrace:".format(
-          taskSet.id, index, maxTaskFailures, failureReason))
+        logError("Task %d in stage %s failed %d times; aborting job".format(
+          index, taskSet.id, maxTaskFailures))
+        abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
+          .format(index, taskSet.id, maxTaskFailures, failureReason))
         return
       }
     }
@@ -698,8 +701,8 @@ private[spark] class TaskSetManager(
         if (!successful(index) && copiesRunning(index) == 1 && info.timeRunning(time) > threshold &&
           !speculatableTasks.contains(index)) {
           logInfo(
-            "Marking task %s:%d (on %s) as speculatable because it ran more than %.0f ms".format(
-              taskSet.id, index, info.host, threshold))
+            "Marking task %d in stage %s (on %s) as speculatable because it ran more than %.0f ms"
+              .format(index, taskSet.id, info.host, threshold))
           speculatableTasks += index
           foundTasks = true
         }
