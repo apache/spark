@@ -36,36 +36,6 @@ class JoinSuite extends QueryTest {
     assert(planned.size === 1)
   }
 
-  test("plans broadcast hash join, given hints") {
-
-    def mkTest(buildSide: BuildSide, leftTable: String, rightTable: String) = {
-      TestSQLContext.settings.synchronized {
-        TestSQLContext.set("spark.sql.join.broadcastTables",
-          s"${if (buildSide == BuildRight) rightTable else leftTable}")
-        val rdd = sql( s"""SELECT * FROM $leftTable JOIN $rightTable ON key = a""")
-        // Using `sparkPlan` because for relevant patterns in HashJoin to be
-        // matched, other strategies need to be applied.
-        val physical = rdd.queryExecution.sparkPlan
-        val bhj = physical.collect { case j: BroadcastHashJoin if j.buildSide == buildSide => j}
-
-        assert(bhj.size === 1, "planner does not pick up hint to generate broadcast hash join")
-        checkAnswer(
-          rdd,
-          Seq(
-            (1, "1", 1, 1),
-            (1, "1", 1, 2),
-            (2, "2", 2, 1),
-            (2, "2", 2, 2),
-            (3, "3", 3, 1),
-            (3, "3", 3, 2)
-          ))
-      }
-    }
-
-    mkTest(BuildRight, "testData", "testData2")
-    mkTest(BuildLeft, "testData", "testData2")
-  }
-
   test("multiple-key equi-join is hash-join") {
     val x = testData2.as('x)
     val y = testData2.as('y)

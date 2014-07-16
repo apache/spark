@@ -31,8 +31,8 @@ import com.typesafe.tools.mima.core._
  * MimaBuild.excludeSparkClass("graphx.util.collection.GraphXPrimitiveKeyOpenHashMap")
  */
 object MimaExcludes {
-    val excludes =
-      SparkBuild.SPARK_VERSION match {
+    def excludes(version: String) =
+      version match {
         case v if v.startsWith("1.1") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
@@ -64,6 +64,9 @@ object MimaExcludes {
               "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$"
                 + "createZero$1")
           ) ++
+          Seq(
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this")
+          ) ++
           Seq( // Ignore some private methods in ALS.
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateFeatures"),
@@ -72,6 +75,7 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$<init>$default$7")
           ) ++
+          MimaBuild.excludeSparkClass("mllib.linalg.distributed.ColumnStatisticsAggregator") ++
           MimaBuild.excludeSparkClass("rdd.ZippedRDD") ++
           MimaBuild.excludeSparkClass("rdd.ZippedPartition") ++
           MimaBuild.excludeSparkClass("util.SerializableHyperLogLog") ++

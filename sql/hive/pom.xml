@@ -31,6 +31,9 @@
   <packaging>jar</packaging>
   <name>Spark Project Hive</name>
   <url>http://spark.apache.org/</url>
+  <properties>
+     <sbt.project.name>hive</sbt.project.name>
+  </properties>
 
   <dependencies>
     <dependency>
@@ -47,6 +50,11 @@
       <groupId>org.spark-project.hive</groupId>
       <artifactId>hive-metastore</artifactId>
       <version>${hive.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>commons-httpclient</groupId>
+      <artifactId>commons-httpclient</artifactId>
+      <version>3.1</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project.hive</groupId>

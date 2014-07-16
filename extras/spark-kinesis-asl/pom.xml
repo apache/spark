@@ -30,6 +30,10 @@
   <packaging>jar</packaging>
   <name>Spark Kinesis Integration</name>
 
+  <properties>
+    <sbt.project.name>spark-kinesis-asl</sbt.project.name>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
