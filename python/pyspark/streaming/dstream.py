@@ -143,7 +143,7 @@ class DStream(object):
         if self.ctx._conf.contains("spark.default.parallelism"):
             return self.ctx.defaultParallelism
         else:
-            return self.getNumPartitions()
+            return 2
 
     def getNumPartitions(self):
       """
