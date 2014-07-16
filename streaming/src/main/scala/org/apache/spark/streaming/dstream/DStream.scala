@@ -561,9 +561,12 @@ abstract class DStream[T: ClassTag] (
     // because the DStream is reachable from the outer object here, and because 
     // DStreams can't be serialized with closures, we can't proactively check 
     // it for serializability and so we pass the optional false to SparkContext.clean
+
+    // serialized python
     val cleanedF = context.sparkContext.clean(transformFunc, false)
     val realTransformFunc =  (rdds: Seq[RDD[_]], time: Time) => {
       assert(rdds.length == 1)
+      // if transformfunc is fine, it is okay
       cleanedF(rdds.head.asInstanceOf[RDD[T]], time)
     }
     new TransformedDStream[U](Seq(this), realTransformFunc)
