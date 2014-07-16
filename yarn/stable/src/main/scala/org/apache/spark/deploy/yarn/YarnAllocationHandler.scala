@@ -98,15 +98,15 @@ private[yarn] class YarnAllocationHandler(
   // ApplicationMaster.
   private val numPendingAllocate = new AtomicInteger()
   private val numExecutorsRunning = new AtomicInteger()
+  private val numExecutorsFinished = new AtomicInteger()
   // Used to generate a unique id per executor
   private val executorIdCounter = new AtomicInteger()
   private val lastResponseId = new AtomicInteger()
   private val numExecutorsFailed = new AtomicInteger()
 
   def getNumPendingAllocate: Int = numPendingAllocate.intValue
-
+  def getNumExecutorsFinished: Int = numExecutorsFinished.intValue
   def getNumExecutorsRunning: Int = numExecutorsRunning.intValue
-
   def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
 
   def isResourceConstraintSatisfied(container: Container): Boolean = {
@@ -336,6 +336,9 @@ private[yarn] class YarnAllocationHandler(
           if (completedContainer.getExitStatus() != 0) {
             logInfo("Container marked as failed: " + containerId)
             numExecutorsFailed.incrementAndGet()
+          } else {
+            logInfo("Container marked as finised successfully: " + containerId)
+            numExecutorsFinished.incrementAndGet()
           }
         }
 

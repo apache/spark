@@ -269,7 +269,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
   private def allocateMissingExecutor() {
     val missingExecutorCount = args.numExecutors - yarnAllocator.getNumExecutorsRunning -
-      yarnAllocator.getNumPendingAllocate
+      yarnAllocator.getNumPendingAllocate - yarnAllocator.getNumExecutorsFinished
     if (missingExecutorCount > 0) {
       logInfo("Allocating %d containers to make up for (potentially) lost containers".
         format(missingExecutorCount))

@@ -22,7 +22,7 @@ import java.util.{Collections, Set => JSet}
 import java.util.concurrent.{CopyOnWriteArrayList, ConcurrentHashMap}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection
+import scala.{Int, collection}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
@@ -93,13 +93,14 @@ private[yarn] class YarnAllocationHandler(
     YarnAllocationHandler.MEMORY_OVERHEAD)
 
   private val numExecutorsRunning = new AtomicInteger()
+  private val numExecutorsFinished = new AtomicInteger()
   // Used to generate a unique id per executor
   private val executorIdCounter = new AtomicInteger()
   private val lastResponseId = new AtomicInteger()
   private val numExecutorsFailed = new AtomicInteger()
 
   def getNumExecutorsRunning: Int = numExecutorsRunning.intValue
-
+  def getNumExecutorsFinished: Int = numExecutorsFinished.intValue
   def getNumExecutorsFailed: Int = numExecutorsFailed.intValue
 
   def isResourceConstraintSatisfied(container: Container): Boolean = {
@@ -308,6 +309,9 @@ private[yarn] class YarnAllocationHandler(
           if (completedContainer.getExitStatus() != 0) {
             logInfo("Container marked as failed: " + containerId)
             numExecutorsFailed.incrementAndGet()
+          } else {
+            logInfo("Container marked as finised successfully: " + containerId)
+            numExecutorsFinished.incrementAndGet()
           }
         }
 

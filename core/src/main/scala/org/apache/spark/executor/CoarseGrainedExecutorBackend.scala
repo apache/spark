@@ -88,6 +88,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
+      executor.stop()
       context.stop(self)
       context.system.shutdown()
   }
