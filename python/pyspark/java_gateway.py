@@ -56,7 +56,7 @@ def launch_gateway():
             (stdout, _) = proc.communicate()
             exit_code = proc.poll()
             error_msg = "Launching GatewayServer failed"
-            error_msg += " with exit code %d!" % exit_code if exit_code else "! "
+            error_msg += " with exit code %d! " % exit_code if exit_code else "! "
             error_msg += "(Warning: unexpected output detected.)\n\n"
             error_msg += gateway_port + stdout
             raise Exception(error_msg)

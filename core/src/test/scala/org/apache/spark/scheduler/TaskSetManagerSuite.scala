@@ -54,6 +54,23 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   }
 }
 
+// Get the rack for a given host
+object FakeRackUtil {
+  private val hostToRack = new mutable.HashMap[String, String]()
+
+  def cleanUp() {
+    hostToRack.clear()
+  }
+
+  def assignHostToRack(host: String, rack: String) {
+    hostToRack(host) = rack
+  }
+
+  def getRackForHost(host: String) = {
+    hostToRack.get(host)
+  }
+}
+
 /**
  * A mock TaskSchedulerImpl implementation that just remembers information about tasks started and
  * feedback received from the TaskSetManagers. Note that it's important to initialize this with
@@ -69,6 +86,9 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   val taskSetsFailed = new ArrayBuffer[String]
 
   val executors = new mutable.HashMap[String, String] ++ liveExecutors
+  for ((execId, host) <- liveExecutors; rack <- getRackForHost(host)) {
+    hostsByRack.getOrElseUpdate(rack, new mutable.HashSet[String]()) += host
+  }
 
   dagScheduler = new FakeDAGScheduler(sc, this)
 
@@ -82,7 +102,12 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
   def addExecutor(execId: String, host: String) {
     executors.put(execId, host)
+    for (rack <- getRackForHost(host)) {
+      hostsByRack.getOrElseUpdate(rack, new mutable.HashSet[String]()) += host
+    }
   }
+
+  override def getRackForHost(value: String): Option[String] = FakeRackUtil.getRackForHost(value)
 }
 
 /**
@@ -419,6 +444,9 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
   }
 
   test("new executors get added") {
+    // Assign host2 to rack2
+    FakeRackUtil.cleanUp()
+    FakeRackUtil.assignHostToRack("host2", "rack2")
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc)
     val taskSet = FakeTask.createTaskSet(4,
@@ -444,8 +472,39 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     manager.executorAdded()
     // No-pref list now only contains task 3
     assert(manager.pendingTasksWithNoPrefs.size === 1)
-    // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL and ANY
-    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
+    // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL and ANY
+    assert(manager.myLocalityLevels.sameElements(
+      Array(PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY)))
+  }
+
+  test("test RACK_LOCAL tasks") {
+    FakeRackUtil.cleanUp()
+    // Assign host1 to rack1
+    FakeRackUtil.assignHostToRack("host1", "rack1")
+    // Assign host2 to rack1
+    FakeRackUtil.assignHostToRack("host2", "rack1")
+    // Assign host3 to rack2
+    FakeRackUtil.assignHostToRack("host3", "rack2")
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc,
+      ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
+    val taskSet = FakeTask.createTaskSet(2,
+      Seq(TaskLocation("host1", "execA")),
+      Seq(TaskLocation("host1", "execA")))
+    val clock = new FakeClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+
+    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY)))
+    // Set allowed locality to ANY
+    clock.advance(LOCALITY_WAIT * 3)
+    // Offer host3
+    // No task is scheduled if we restrict locality to RACK_LOCAL
+    assert(manager.resourceOffer("execC", "host3", RACK_LOCAL) === None)
+    // Task 0 can be scheduled with ANY
+    assert(manager.resourceOffer("execC", "host3", ANY).get.index === 0)
+    // Offer host2
+    // Task 1 can be scheduled with RACK_LOCAL
+    assert(manager.resourceOffer("execB", "host2", RACK_LOCAL).get.index === 1)
   }
 
   test("do not emit warning when serialized task is small") {

@@ -92,7 +92,7 @@ addJava () {
 enableProfile () {
   dlog "[enableProfile] arg = '$1'"
   maven_profiles=( "${maven_profiles[@]}" "$1" )
-  export MAVEN_PROFILES="${maven_profiles[@]}"
+  export SBT_MAVEN_PROFILES="${maven_profiles[@]}"
 }
 
 addSbt () {

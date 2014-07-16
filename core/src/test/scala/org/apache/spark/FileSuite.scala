@@ -177,6 +177,31 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(output.collect().toList === List((1, "a"), (2, "aa"), (3, "aaa")))
   }
 
+  test("object files of classes from a JAR") {
+    val original = Thread.currentThread().getContextClassLoader
+    val className = "FileSuiteObjectFileTest"
+    val jar = TestUtils.createJarWithClasses(Seq(className))
+    val loader = new java.net.URLClassLoader(Array(jar), Utils.getContextOrSparkClassLoader)
+    Thread.currentThread().setContextClassLoader(loader)
+    try {
+      sc = new SparkContext("local", "test")
+      val objs = sc.makeRDD(1 to 3).map { x =>
+        val loader = Thread.currentThread().getContextClassLoader
+        Class.forName(className, true, loader).newInstance()
+      }
+      val outputDir = new File(tempDir, "output").getAbsolutePath
+      objs.saveAsObjectFile(outputDir)
+      // Try reading the output back as an object file
+      val ct = reflect.ClassTag[Any](Class.forName(className, true, loader))
+      val output = sc.objectFile[Any](outputDir)
+      assert(output.collect().size === 3)
+      assert(output.collect().head.getClass.getName === className)
+    }
+    finally {
+      Thread.currentThread().setContextClassLoader(original)
+    }
+  }
+
   test("write SequenceFile using new Hadoop API") {
     import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
     sc = new SparkContext("local", "test")
