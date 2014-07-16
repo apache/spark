@@ -156,7 +156,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
         execution.BroadcastNestedLoopJoin(
-          planLater(left), planLater(right), joinType, condition) :: Nil
+          planLater(left), planLater(right), BuildRight, joinType, condition) :: Nil
       case _ => Nil
     }
   }
