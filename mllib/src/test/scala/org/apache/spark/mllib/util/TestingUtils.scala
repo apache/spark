@@ -15,27 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.mllib.util
 
-import org.scalatest.FunSuite
+import org.apache.spark.mllib.linalg.Vector
 
-object ZippedPartitionsSuite {
-  def procZippedData(i: Iterator[Int], s: Iterator[String], d: Iterator[Double]) : Iterator[Int] = {
-    Iterator(i.toArray.size, s.toArray.size, d.toArray.size)
+object TestingUtils {
+
+  implicit class DoubleWithAlmostEquals(val x: Double) {
+    // An improved version of AlmostEquals would always divide by the larger number.
+    // This will avoid the problem of diving by zero.
+    def almostEquals(y: Double, epsilon: Double = 1E-10): Boolean = {
+      if(x == y) {
+        true
+      } else if(math.abs(x) > math.abs(y)) {
+        math.abs(x - y) / math.abs(x) < epsilon
+      } else {
+        math.abs(x - y) / math.abs(y) < epsilon
+      }
+    }
   }
-}
 
-class ZippedPartitionsSuite extends FunSuite with SharedSparkContext {
-  test("print sizes") {
-    val data1 = sc.makeRDD(Array(1, 2, 3, 4), 2)
-    val data2 = sc.makeRDD(Array("1", "2", "3", "4", "5", "6"), 2)
-    val data3 = sc.makeRDD(Array(1.0, 2.0), 2)
-
-    val zippedRDD = data1.zipPartitions(data2, data3)(ZippedPartitionsSuite.procZippedData)
-
-    val obtainedSizes = zippedRDD.collect()
-    val expectedSizes = Array(2, 3, 1, 2, 3, 1)
-    assert(obtainedSizes.size == 6)
-    assert(obtainedSizes.zip(expectedSizes).forall(x => x._1 == x._2))
+  implicit class VectorWithAlmostEquals(val x: Vector) {
+    def almostEquals(y: Vector, epsilon: Double = 1E-10): Boolean = {
+      x.toArray.corresponds(y.toArray) {
+        _.almostEquals(_, epsilon)
+      }
+    }
   }
 }

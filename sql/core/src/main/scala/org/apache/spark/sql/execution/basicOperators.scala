@@ -27,7 +27,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{OrderedDistribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.util.MutablePair
 
 /**
@@ -248,6 +248,37 @@ object ExistingRdd {
 case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
   override def execute() = rdd
 }
+/**
+ * :: DeveloperApi ::
+ * Computes the set of distinct input rows using a HashSet.
+ * @param partial when true the distinct operation is performed partially, per partition, without
+ *                shuffling the data.
+ * @param child the input query plan.
+ */
+@DeveloperApi
+case class Distinct(partial: Boolean, child: SparkPlan) extends UnaryNode {
+  override def output = child.output
+
+  override def requiredChildDistribution =
+    if (partial) UnspecifiedDistribution :: Nil else ClusteredDistribution(child.output) :: Nil
+
+  override def execute() = {
+    child.execute().mapPartitions { iter =>
+      val hashSet = new scala.collection.mutable.HashSet[Row]()
+
+      var currentRow: Row = null
+      while (iter.hasNext) {
+        currentRow = iter.next()
+        if (!hashSet.contains(currentRow)) {
+          hashSet.add(currentRow.copy())
+        }
+      }
+
+      hashSet.iterator
+    }
+  }
+}
+
 
 /**
  * :: DeveloperApi ::
