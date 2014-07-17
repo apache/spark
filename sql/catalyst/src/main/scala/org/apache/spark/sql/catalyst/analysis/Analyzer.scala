@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.types._
 
 
 /**
@@ -55,6 +56,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       ResolveFunctions ::
       GlobalAggregates ::
       typeCoercionRules :_*),
+    Batch("UnresolvedFilterAttributes", fixedPoint,
+      UnresolvedHavingClauseAttributes),
     Batch("Check Analysis", Once,
       CheckResolution),
     Batch("AnalysisOperators", fixedPoint,
@@ -148,6 +151,30 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         case _ =>
       })
       false
+    }
+  }
+  
+  object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case pl@Filter(fexp, agg@Aggregate(_, ae, _)) if !fexp.childrenResolved => {
+        val alias = Alias(fexp, makeTmp)()
+        val aggExprs = Seq(alias) ++ ae
+	
+	val newCond = EqualTo(Cast(alias.toAttribute, BooleanType), 
+			      Literal(true, BooleanType))
+
+        val flt = ResolveReferences(pl.copy(condition=newCond,
+	  child=agg.copy(aggregateExpressions=aggExprs)))
+        
+        Project(pl.output, flt)
+      }
+    }
+
+    private val curId = new java.util.concurrent.atomic.AtomicLong()
+    
+    def makeTmp = {
+      val id = curId.getAndIncrement()
+      s"pushed_tmp_$id"
     }
   }
 
