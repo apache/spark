@@ -351,6 +351,20 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  // Test for SPARK-2412 -- ensure that the second pass of the algorithm does not throw an exception
+  test("coalesced RDDs with locality, fail first pass") {
+    val initialPartitions = 1000
+    val targetLen = 50
+    val couponCount = 2 * (math.log(targetLen)*targetLen + targetLen + 0.5).toInt // = 492
+
+    val blocks = (1 to initialPartitions).map { i =>
+      (i, List(if (i > couponCount) "m2" else "m1"))
+    }
+    val data = sc.makeRDD(blocks)
+    val coalesced = data.coalesce(targetLen)
+    assert(coalesced.partitions.length == targetLen)
+  }
+
   test("zipped RDDs") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val zipped = nums.zip(nums.map(_ + 1.0))

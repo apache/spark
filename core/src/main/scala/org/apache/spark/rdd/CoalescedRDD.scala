@@ -258,7 +258,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
         val pgroup = PartitionGroup(nxt_replica)
         groupArr += pgroup
         addPartToPGroup(nxt_part, pgroup)
-        groupHash += (nxt_replica -> (ArrayBuffer(pgroup))) // list in case we have multiple
+        groupHash.put(nxt_replica, ArrayBuffer(pgroup)) // list in case we have multiple
         numCreated += 1
       }
     }
@@ -267,7 +267,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
       var (nxt_replica, nxt_part) = rotIt.next()
       val pgroup = PartitionGroup(nxt_replica)
       groupArr += pgroup
-      groupHash.get(nxt_replica).get += pgroup
+      groupHash.getOrElseUpdate(nxt_replica, ArrayBuffer()) += pgroup
       var tries = 0
       while (!addPartToPGroup(nxt_part, pgroup) && tries < targetLen) { // ensure at least one part
         nxt_part = rotIt.next()._2
