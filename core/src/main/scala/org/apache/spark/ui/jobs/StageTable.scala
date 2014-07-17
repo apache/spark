@@ -23,7 +23,7 @@ import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.apache.spark.scheduler.{StageInfo, TaskInfo}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
@@ -43,9 +43,16 @@ private[ui] class StageTableBase(
     <th>Submitted</th>
     <th>Duration</th>
     <th>Tasks: Succeeded/Total</th>
-    <th>Input</th>
-    <th>Shuffle Read</th>
-    <th>Shuffle Write</th>
+    <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+    <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
+    <th>
+      <!-- Place the shuffle write tooltip on the left (rather than the default position
+        of on top) because the shuffle write column is the last column on the right side and
+        the tooltip is wider than the column, so it doesn't fit on top. -->
+      <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
+        Shuffle Write
+      </span>
+    </th>
   }
 
   def toNodeSeq: Seq[Node] = {
@@ -82,7 +89,8 @@ private[ui] class StageTableBase(
     // scalastyle:off
     val killLink = if (killEnabled) {
       <span class="kill-link">
-        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>kill</a>)
+        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}
+            onclick={"return window.confirm('Are you sure you want to kill stage %s ?');".format(s.stageId)}>kill</a>)
       </span>
     }
     // scalastyle:on
@@ -102,7 +110,7 @@ private[ui] class StageTableBase(
 
     listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink} {killLink}</div>)
-      .getOrElse(<div>{killLink} {nameLink} {details}</div>)
+      .getOrElse(<div>{nameLink} {killLink} {details}</div>)
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {

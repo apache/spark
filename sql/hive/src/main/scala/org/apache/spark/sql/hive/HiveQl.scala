@@ -860,6 +860,7 @@ private[hive] object HiveQl {
   val BETWEEN = "(?i)BETWEEN".r
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
+  val SUBSTR = "(?i)SUBSTR(?:ING)?".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -870,10 +871,7 @@ private[hive] object HiveQl {
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) =>
           UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr))
-        // The precidence for . seems to be wrong, so [] binds tighter an we need to go inside to
-        // find the underlying attribute references.
-        case GetItem(UnresolvedAttribute(qualifierName), ordinal) =>
-          GetItem(UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr)), ordinal)
+        case other => GetField(other, attr)
       }
 
     /* Stars (*) */
@@ -987,6 +985,10 @@ private[hive] object HiveQl {
 
     /* Other functions */
     case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand
+    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) => 
+      Substring(nodeToExpr(string), nodeToExpr(pos), Literal(Integer.MAX_VALUE, IntegerType))
+    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) => 
+      Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
 
     /* UDFs - Must be last otherwise will preempt built in functions */
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>
