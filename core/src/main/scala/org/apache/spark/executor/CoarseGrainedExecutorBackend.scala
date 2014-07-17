@@ -34,7 +34,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
     executorId: String,
     hostPort: String,
-    cores: Int)
+    cores: Int,
+    actorSystem: ActorSystem)
   extends Actor
   with ExecutorBackend
   with Logging {
@@ -93,6 +94,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
     driver ! StatusUpdate(executorId, taskId, state, data)
   }
+
+  override def akkaFrameSize() = actorSystem.settings.config.getBytes(
+    "akka.remote.netty.tcp.maximum-frame-size")
 }
 
 private[spark] object CoarseGrainedExecutorBackend {
@@ -110,7 +114,8 @@ private[spark] object CoarseGrainedExecutorBackend {
       // set it
       val sparkHostPort = hostname + ":" + boundPort
       actorSystem.actorOf(
-        Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId, sparkHostPort, cores),
+        Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId, sparkHostPort, cores,
+          actorSystem),
         name = "Executor")
       workerUrl.foreach {
         url =>
