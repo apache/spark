@@ -17,12 +17,11 @@
 
 package org.apache.spark.ui.jobs
 
-import java.util.Date
-
-import scala.collection.mutable.HashMap
 import scala.xml.Node
 
-import org.apache.spark.scheduler.{StageInfo, TaskInfo}
+import java.util.Date
+
+import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.util.Utils
 
@@ -108,14 +107,23 @@ private[ui] class StageTableBase(
       <pre class="stage-details collapsed">{s.details}</pre>
     }
 
-    listener.stageUIData(s.stageId).description match {
-      case Some(desc) => <div><em>{desc}</em></div><div>{nameLink} {killLink}</div>
-      case None => <div>{killLink} {nameLink} {details}</div>
+    val stageDataOption = listener.stageIdToData.get(s.stageId)
+    // Too many nested map/flatMaps with options are just annoying to read. Do this imperatively.
+    if (stageDataOption.isDefined && stageDataOption.get.description.isDefined) {
+      val desc = stageDataOption.get.description.isDefined
+      <div><em>{desc}</em></div><div>{nameLink} {killLink}</div>
+    } else {
+      <div>{killLink} {nameLink} {details}</div>
     }
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {
-    val stageData = listener.stageUIData(s.stageId)
+    val stageDataOption = listener.stageIdToData.get(s.stageId)
+    if (stageDataOption.isEmpty) {
+      return <td>{s.stageId}</td><td>No data available for this stage</td>
+    }
+
+    val stageData = stageDataOption.get
     val submissionTime = s.submissionTime match {
       case Some(t) => UIUtils.formatDate(new Date(t))
       case None => "Unknown"

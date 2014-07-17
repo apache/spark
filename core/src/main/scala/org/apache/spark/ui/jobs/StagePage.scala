@@ -35,9 +35,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
-      val stageData = listener.stageUIData(stageId)
+      val stageDataOption = listener.stageIdToData.get(stageId)
 
-      if (stageData.taskData.isEmpty) {
+      if (stageDataOption.isEmpty || stageDataOption.get.taskData.isEmpty) {
         val content =
           <div>
             <h4>Summary Metrics</h4> No tasks have started yet
@@ -47,6 +47,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           "Details for Stage %s".format(stageId), parent.headerTabs, parent)
       }
 
+      val stageData = stageDataOption.get
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
