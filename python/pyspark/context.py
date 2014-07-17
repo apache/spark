@@ -75,7 +75,7 @@ class SparkContext(object):
         @param serializer: The serializer for RDDs.
         @param conf: A L{SparkConf} object setting Spark properties.
         @param gateway: Use an existing gateway and JVM, otherwise a new JVM
-               will be instatiated.
+               will be instantiated.
 
 
         >>> from pyspark.context import SparkContext
@@ -108,8 +108,6 @@ class SparkContext(object):
             self._conf.setMaster(master)
         if appName:
             self._conf.setAppName(appName)
-        if sparkHome:
-            self._conf.setSparkHome(sparkHome)
         if environment:
             for key, value in environment.iteritems():
                 self._conf.setExecutorEnv(key, value)
@@ -124,7 +122,7 @@ class SparkContext(object):
         # the classpath or an external config file
         self.master = self._conf.get("spark.master")
         self.appName = self._conf.get("spark.app.name")
-        self.sparkHome = self._conf.get("spark.home", None)
+        self.sparkHome = os.environ.get("SPARK_HOME")
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
