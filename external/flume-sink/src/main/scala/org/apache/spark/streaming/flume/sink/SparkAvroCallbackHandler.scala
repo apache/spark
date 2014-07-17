@@ -14,17 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.flume.sink
+package org.apache.spark.streaming.flume.sink
 
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{ConcurrentHashMap, Executors}
+import java.util.concurrent.atomic.AtomicLong
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder
-
-import org.apache.commons.lang.RandomStringUtils
 import org.apache.flume.Channel
-import org.apache.spark.flume.{EventBatch, SparkFlumeProtocol}
-import org.slf4j.LoggerFactory
+import org.apache.commons.lang.RandomStringUtils
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 /**
  * Class that implements the SparkFlumeProtocol, that is used by the Avro Netty Server to process
@@ -34,7 +31,7 @@ import org.slf4j.LoggerFactory
  * @param transactionTimeout Timeout in millis after which the transaction if not acked by Spark
  *                           is rolled back.
  */
-private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
+private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
   val transactionTimeout: Int, val backOffInterval: Int) extends SparkFlumeProtocol with Logging {
   val transactionExecutorOpt = Option(Executors.newFixedThreadPool(threads,
     new ThreadFactoryBuilder().setDaemon(true)
@@ -109,7 +106,7 @@ private class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
    * @return The transaction processor for the corresponding batch. Note that this instance is no
    *         longer tracked and the caller is responsible for that txn processor.
    */
-  private[flume] def removeAndGetProcessor(sequenceNumber: CharSequence): TransactionProcessor = {
+  private[sink] def removeAndGetProcessor(sequenceNumber: CharSequence): TransactionProcessor = {
     processorMap.remove(sequenceNumber.toString) // The toString is required!
   }
 

@@ -14,18 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.flume.sink
+package org.apache.spark.streaming.flume.sink
 
 import java.nio.ByteBuffer
 import java.util
-import java.util.concurrent.{TimeUnit, CountDownLatch, Callable}
+import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 
 import scala.util.control.Breaks
 
 import org.apache.flume.{Transaction, Channel}
-import org.apache.spark.flume.{SparkSinkEvent, EventBatch}
-import org.slf4j.LoggerFactory
-
 
 // Flume forces transactions to be thread-local (horrible, I know!)
 // So the sink basically spawns a new thread to pull the events out within a transaction.

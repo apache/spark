@@ -14,12 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.flume.sink
+package org.apache.spark.streaming.flume.sink
+
 import org.apache.log4j.{LogManager, PropertyConfigurator}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
-trait Logging {
+/**
+ * Copy of the org.apache.spark.Logging for being used in the Spark Sink.
+ * The org.apache.spark.Logging is not used so that all of Spark is not brought
+ * in as a dependency.
+ */
+private[sink] trait Logging {
   // Make the log field transient so that objects with Logging can
   // be serialized and used on another machine
   @transient private var log_ : Logger = null
@@ -95,20 +101,6 @@ trait Logging {
   }
 
   private def initializeLogging() {
-    // If Log4j is being used, but is not initialized, load a default properties file
-    val binder = StaticLoggerBinder.getSingleton
-    val usingLog4j = binder.getLoggerFactoryClassStr.endsWith("Log4jLoggerFactory")
-    val log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
-    if (!log4jInitialized && usingLog4j) {
-      val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
-      Option(getClass.getClassLoader.getResource(defaultLogProps)) match {
-        case Some(url) =>
-          PropertyConfigurator.configure(url)
-          log.info(s"Using Spark's default log4j profile: $defaultLogProps")
-        case None =>
-          System.err.println(s"Spark was unable to load $defaultLogProps")
-      }
-    }
     Logging.initialized = true
 
     // Force a call into slf4j to initialize it. Avoids this happening from mutliple threads
@@ -117,7 +109,7 @@ trait Logging {
   }
 }
 
-private object Logging {
+private[sink] object Logging {
   @volatile private var initialized = false
   val initLock = new Object()
   try {

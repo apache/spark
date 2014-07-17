@@ -14,11 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.flume.sink
+package org.apache.spark.streaming.flume.sink
 
-import org.apache.spark.flume.EventBatch
-
-object SparkSinkUtils {
+private[flume] object SparkSinkUtils {
   /**
    * This method determines if this batch represents an error or not.
    * @param batch - The batch to check
