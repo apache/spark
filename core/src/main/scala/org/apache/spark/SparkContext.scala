@@ -1013,7 +1013,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * or the spark.home Java property, or the SPARK_HOME environment variable
    * (in that order of preference). If neither of these is set, return None.
    */
-  @deprecated("spark.home is deprecated; use spark.executor/driver.home and/or spark.driver.home instead", "1.1.0")
+  @deprecated("spark.home is deprecated; use spark.{driver/executor}.home instead", "1.1.0")
   private[spark] def getSparkHome(): Option[String] = {
     conf.getOption("spark.home").orElse(Option(System.getenv("SPARK_HOME")))
   }
