@@ -4,74 +4,75 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
-private[feature] trait FeatureSort extends java.io.Serializable {
-  /** methods for feature filtering based on statistics */
-  protected def top(featureClassValues: RDD[((Int, Double), Double)], n: Int): Set[Int] = {
-    println(featureClassValues.first())
-    val (featureIndexes, _) = featureClassValues.map {
-      case ((featureIndex, label), value) => (featureIndex, value)
-    }.reduceByKey(Math.max(_, _)).collect().sortBy(- _._2).unzip
-    featureIndexes.take(n).toSet
-  }
-}
+private[feature] trait ContingencyTableCalculator extends java.io.Serializable {
 
-private[feature] trait CombinationsCalculator extends java.io.Serializable {
-
-  protected def indexByLabelMap(labeledData: RDD[LabeledPoint]) = {
-    labeledData.map(labeledPoint =>
+  private def indexByLabelMap(discreteData: RDD[LabeledPoint]) = {
+    discreteData.map(labeledPoint =>
       labeledPoint.label).distinct.collect.sorted.zipWithIndex.toMap
   }
 
-  protected def featureLabelCombinations(labeledData: RDD[LabeledPoint]): RDD[(Int, Array[(Int, Int)])] = {
-    val indexByLabel = indexByLabelMap(labeledData)
-    labeledData.flatMap {
+  private def enumerateValues(discreteData: RDD[LabeledPoint]) = {
+    discreteData.flatMap(labeledPoint =>
+      (0 to labeledPoint.features.size).zip(labeledPoint.features.toArray))
+      .distinct()
+      .combineByKey[List[Double]](
+        createCombiner = (value: Double) => List(value),
+        mergeValue = (c: List[Double], value: Double) => value :: c,
+        mergeCombiners = (c1: List[Double], c2: List[Double]) => c1 ::: c2
+      ).collectAsMap()
+  }
+
+  def tables(discreteData: RDD[LabeledPoint]): RDD[(Int, Array[Array[Int]])] = {
+    val indexByLabel = indexByLabelMap(discreteData)
+    val classesCount = indexByLabel.size
+    val valuesByIndex = enumerateValues(discreteData)
+    discreteData.flatMap {
       labeledPoint =>
         labeledPoint.features.toArray.zipWithIndex.map {
           case (featureValue, featureIndex) =>
             /** array of feature presence/absence in a class */
-            val counts = Array.fill[(Int, Int)](indexByLabel.size)(0, 0)
-            val label = labeledPoint.label
-            counts(indexByLabel(label)) = if(featureValue != 0)  (1, 0) else (0, 1)
+            val featureValues = valuesByIndex(featureIndex)
+            val valuesCount = featureValues.size
+            val featureValueIndex = featureValues.indexOf(featureValue)
+            val labelIndex = indexByLabel(labeledPoint.label)
+            val counts = Array.ofDim[Int](valuesCount, classesCount)
+            counts(featureValueIndex)(labelIndex) = 1
             (featureIndex, counts)
         }
     }.reduceByKey {
       case (x, y) =>
-        x.zip(y).map { case ((a1, b1), (a2, b2)) =>
-          (a1 + a2, b1 + b2)}
+        x.zip(y).map { case(row1, row2) => row1.zip(row2).map{ case(a, b) => a + b} }
     }
   }
 }
 
-class ChiSquared(labeledData: RDD[LabeledPoint])
-  extends java.io.Serializable with CombinationsCalculator
-  with LabeledPointFeatureFilter with FeatureSort {
+private[feature] trait ChiSquared {
 
+  def compute(contingencyTable: Array[Array[Int]]): Double = {
+    /** probably use List instead of Array */
+    val columns = contingencyTable(0).size
+    val rowSums = contingencyTable.map( row => row.sum)
+    val columnSums = contingencyTable.fold(Array.ofDim[Int](columns)){ case (ri, rj) =>
+      ri.zip(rj).map { case (a1, b1)
+      => a1 + b1}}
+    val tableSum = rowSums.sum
+    val rowRatios = rowSums.map( _.toDouble / tableSum)
+    val expectedTable = rowRatios.map( a => columnSums.map(_ * a))
+    val chi2 = contingencyTable.zip(expectedTable).foldLeft(0.0){ case(sum, (obsRow, expRow)) =>
+      obsRow.zip(expRow).map{ case (oValue, eValue) =>
+        sqr(oValue - eValue) / eValue}.sum + sum}
+    chi2
+  }
+
+  private def sqr(x: Double): Double = x * x
+}
+
+class ChiSquaredFeatureSelection(labeledData: RDD[LabeledPoint], numTopFeatures: Int) extends java.io.Serializable
+with LabeledPointFeatureFilter with ContingencyTableCalculator with ChiSquared {
   override def data: RDD[LabeledPoint] = labeledData
+
   override def select: Set[Int] = {
-    top(chiSquaredValues, 1)
+    tables(data).map { case (featureIndex, contTable) =>
+      (featureIndex, compute(contTable))}.collect().sortBy(-_._2).take(numTopFeatures).unzip._1.toSet
   }
-
-  private val labelsByIndex = indexByLabelMap(labeledData).map(_.swap)
-  private val combinations = featureLabelCombinations(labeledData)
-
-  lazy val chiSquaredValues: RDD[((Int, Double), Double)] = combinations.flatMap {
-    case (featureIndex, counts) =>
-      val (featureClassCounts, notFeatureClassCounts) = counts.unzip
-      val featureCount = featureClassCounts.sum
-      val notFeatureCount = notFeatureClassCounts.sum
-      val notFeatureNotClassCounts = notFeatureClassCounts.map(notFeatureCount - _)
-      val featureNotClassCounts = featureClassCounts.map(featureCount - _)
-      val iCounts = counts.zipWithIndex
-      iCounts.map { case ((a, b), labelIndex) =>
-        val n11 = featureClassCounts(labelIndex)
-        val n10 = featureNotClassCounts(labelIndex)
-        val n01 = notFeatureClassCounts(labelIndex)
-        val n00 = notFeatureNotClassCounts(labelIndex)
-        val numerator = (n11 + n10 + n01 + n00) * sqr(n11 * n00 - n10 * n01)
-        val denominator = (n11 + n01) * (n11 + n10) * (n10 + n00) * (n01 + n00)
-        val chi2 = if (numerator == 0) 0 else numerator.toDouble / denominator
-        ((featureIndex, labelsByIndex(labelIndex)), chi2)}
-  }
-
-  private def sqr(x: Int): Int = x * x
 }
