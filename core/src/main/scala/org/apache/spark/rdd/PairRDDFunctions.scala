@@ -571,7 +571,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
-    cg.mapValues { seq  => seq.asInstanceOf[(Seq[V], Seq[W1], Seq[W2], Seq[W3])] }
+    cg.mapValues { case Seq(vs, w1s, w2s, w3s) =>
+       (vs.asInstanceOf[Seq[V]],
+         w1s.asInstanceOf[Seq[W1]],
+         w2s.asInstanceOf[Seq[W2]],
+         w3s.asInstanceOf[Seq[W3]])
+    }
   }
 
   /**
@@ -584,7 +589,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
-    cg.mapValues { pair => pair.asInstanceOf[(Seq[V], Seq[W])] }
+    cg.mapValues { case Seq(vs, w1s) =>
+      (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W]])
+    }
   }
 
   /**
@@ -597,7 +604,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
-    cg.mapValues { seq  => seq.asInstanceOf[(Seq[V], Seq[W1], Seq[W2])] }
+    cg.mapValues { case Seq(vs, w1s, w2s) =>
+      (vs.asInstanceOf[Seq[V]],
+        w1s.asInstanceOf[Seq[W1]],
+        w2s.asInstanceOf[Seq[W2]])
+    }
   }
 
   /**
