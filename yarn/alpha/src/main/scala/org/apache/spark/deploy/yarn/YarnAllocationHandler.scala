@@ -549,7 +549,7 @@ object YarnAllocationHandler {
   val PRIORITY = 1
 
   // Additional memory overhead
-  val MEMORY_OVERHEAD_FACTOR = 0.07
+  val MEMORY_OVERHEAD_FACTOR = 0.06
   val MEMORY_OVERHEAD_MIN = 384
 
   // Host to rack map - saved from allocation requests
