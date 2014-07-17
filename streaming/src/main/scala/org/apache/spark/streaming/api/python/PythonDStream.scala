@@ -59,3 +59,30 @@ class PythonDStream[T: ClassTag](
   val asJavaDStream  = JavaDStream.fromDStream(this)
 }
 
+
+private class PairwiseDStream(prev:DStream[Array[Byte]], partitioner: Partitioner) extends
+DStream[Array[Byte]](prev.ssc){
+  override def dependencies = List(prev)
+
+  override def slideDuration: Duration = prev.slideDuration
+
+  override def compute(validTime:Time):Option[RDD[Array[Byte]]]={
+    prev.getOrCompute(validTime) match{
+      case Some(rdd)=>Some(rdd)
+        val pairwiseRDD = new PairwiseRDD(rdd)
+        /*
+         * This is equivalent to following python code
+         * with _JavaStackTrace(self.context) as st:
+         *    pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
+         *    partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
+         *                                                  id(partitionFunc))
+         * jrdd = pairRDD.partitionBy(partitioner).values()
+         * rdd = RDD(jrdd, self.ctx, BatchedSerializer(outputSerializer))
+         */
+        Some(pairwiseRDD.asJavaPairRDD.partitionBy(partitioner).values().rdd)
+      case None => None
+    }
+  }
+  val asJavaDStream  = JavaDStream.fromDStream(this)
+  //val asJavaPairDStream : JavaPairDStream[Long, Array[Byte]]  = JavaPairDStream.fromJavaDStream(this)
+}
