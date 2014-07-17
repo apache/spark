@@ -861,8 +861,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           val (k, v) = iter.next()
           writer.write(k, v)
         }
-      }
-      finally {
+      } finally {
         writer.close(hadoopContext)
       }
       committer.commitTask(hadoopContext)
@@ -921,13 +920,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       writer.open()
       try {
         var count = 0
-        while(iter.hasNext) {
+        while (iter.hasNext) {
           val record = iter.next()
           count += 1
           writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
         }
-      }
-      finally {
+      } finally {
         writer.close()
       }
       writer.commit()
