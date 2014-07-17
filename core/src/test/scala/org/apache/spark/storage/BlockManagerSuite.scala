@@ -1017,7 +1017,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(!store.memoryStore.contains(rdd(1, 0)), "rdd_1_0 was in store")
   }
 
-  test("safely unfold blocks") {
+  test("safely unroll blocks") {
     conf.set("spark.storage.bufferFraction", "0.2")
     store = new BlockManager(
       "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)
@@ -1049,7 +1049,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(store.memoryStore.contains("a5"), "a5 was not in store")
   }
 
-  test("safely unfold blocks (disk)") {
+  test("safely unroll blocks (disk)") {
     conf.set("spark.storage.bufferFraction", "0.2")
     store = new BlockManager(
       "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)

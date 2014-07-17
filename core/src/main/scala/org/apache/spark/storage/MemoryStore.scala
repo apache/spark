@@ -45,7 +45,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   private val putLock = new Object()
 
   /**
-   * The amount of space ensured for unfolding values in memory, shared across all cores.
+   * The amount of space ensured for unrolling values in memory, shared across all cores.
    * This space is not reserved in advance, but allocated dynamically by dropping existing blocks.
    */
   private val globalBufferMemory = {
@@ -98,15 +98,15 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-    val unfoldedValues = unfoldSafely(blockId, values, droppedBlocks)
-    unfoldedValues match {
+    val unrolledValues = unrollSafely(blockId, values, droppedBlocks)
+    unrolledValues match {
       case Left(arrayValues) =>
-        // Values are fully unfolded in memory, so store them as an array
+        // Values are fully unrolled in memory, so store them as an array
         val result = putValues(blockId, arrayValues, level, returnValues)
         droppedBlocks ++= result.droppedBlocks
         PutResult(result.size, result.data, droppedBlocks)
       case Right(iteratorValues) =>
-        // Not enough space to unfold this block; drop to disk if applicable
+        // Not enough space to unroll this block; drop to disk if applicable
         logWarning(s"Not enough space to store $blockId in memory! Free memory is ${freeMemory}B.")
         if (level.useDisk) {
           logWarning(s"Persisting $blockId to disk instead.")
@@ -174,24 +174,25 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   /**
-   * Unfold the given block in memory safely.
+   * Unroll the given block in memory safely.
    *
    * The safety of this operation refers to avoiding potential OOM exceptions caused by
-   * unfolding the entirety of the block in memory at once. This is achieved by periodically
-   * checking whether the memory restrictions for unfolding blocks are still satisfied,
+   * unrolling the entirety of the block in memory at once. This is achieved by periodically
+   * checking whether the memory restrictions for unrolling blocks are still satisfied,
    * stopping immediately if not. This check is a safeguard against the scenario in which
    * there is not enough free memory to accommodate the entirety of a single block.
    *
-   * This method returns either a fully unfolded array or a partially unfolded iterator.
+   * This method returns either an array with the contents of the entire block or an iterator
+   * containing the values of the block (if the array would have exceeded available memory).
    */
-  def unfoldSafely(
+  def unrollSafely(
       blockId: BlockId,
       values: Iterator[Any],
       droppedBlocks: ArrayBuffer[(BlockId, BlockStatus)])
     : Either[Array[Any], Iterator[Any]] = {
 
-    var count = 0                   // The number of elements unfolded so far
-    var enoughMemory = true         // Whether there is enough memory to unfold this block
+    var count = 0                   // The number of elements unrolled so far
+    var enoughMemory = true         // Whether there is enough memory to unroll this block
     var previousSize = 0L           // Previous estimate of the size of our buffer
     val memoryRequestPeriod = 1000  // How frequently we request for more memory for our buffer
 
@@ -235,10 +236,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       }
 
       if (enoughMemory) {
-        // We successfully unfolded the entirety of this block
+        // We successfully unrolled the entirety of this block
         Left(buffer.array)
       } else {
-        // We ran out of space while unfolding the values for this block
+        // We ran out of space while unrolling the values for this block
         Right(buffer.iterator ++ values)
       }
 

@@ -132,7 +132,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
     if (!storageLevel.useMemory) {
       /*
        * This RDD is not to be cached in memory, so we can just pass the computed values
-       * as an iterator directly to the BlockManager, rather than first fully unfolding
+       * as an iterator directly to the BlockManager, rather than first fully unrolling
        * it in memory. The latter option potentially uses much more memory and risks OOM
        * exceptions that can be avoided.
        */
@@ -150,14 +150,14 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
        * we may end up dropping a partition from memory store before getting it back, e.g.
        * when the entirety of the RDD does not fit in memory.
        *
-       * In addition, we must be careful to not unfold the entire partition in memory at once.
+       * In addition, we must be careful to not unroll the entire partition in memory at once.
        * Otherwise, we may cause an OOM exception if the JVM does not have enough space for this
-       * single partition. Instead, we unfold the values cautiously, potentially aborting and
+       * single partition. Instead, we unroll the values cautiously, potentially aborting and
        * dropping the partition to disk if applicable.
        */
-      blockManager.memoryStore.unfoldSafely(key, values, updatedBlocks) match {
+      blockManager.memoryStore.unrollSafely(key, values, updatedBlocks) match {
         case Left(arrayValues) =>
-          // We have successfully unfolded the entire partition, so cache it in memory
+          // We have successfully unrolled the entire partition, so cache it in memory
           updatedBlocks ++= blockManager.put(key, arrayValues, storageLevel, tellMaster = true)
           arrayValues.iterator.asInstanceOf[Iterator[T]]
         case Right(iteratorValues) =>
