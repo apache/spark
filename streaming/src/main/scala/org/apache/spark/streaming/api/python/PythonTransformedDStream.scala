@@ -1,3 +1,5 @@
+/*
+
 package org.apache.spark.streaming.api.python
 
 import org.apache.spark.Accumulator
@@ -10,11 +12,8 @@ import org.apache.spark.streaming.dstream.DStream
 
 import scala.reflect.ClassTag
 
-/**
- * Created by ken on 7/15/14.
- */
 class PythonTransformedDStream[T: ClassTag](
-               parents: Seq[DStream[T]],
+               parent: DStream[T],
                command: Array[Byte],
                envVars: JMap[String, String],
                pythonIncludes: JList[String],
@@ -30,8 +29,14 @@ class PythonTransformedDStream[T: ClassTag](
 
   //pythonDStream compute
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
-    val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq
-    Some()
+
+//    val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq
+//    parents.map(_.getOrCompute(validTime).orNull).to
+//    parent = parents.head.asInstanceOf[RDD]
+//    Some()
   }
-  val asJavaDStream  = JavaDStream.fromDStream(this)
+
+  val asJavaDStream = JavaDStream.fromDStream(this)
 }
+
+*/
