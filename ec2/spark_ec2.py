@@ -70,7 +70,7 @@ def parse_args():
            "slaves across multiple (an additional $0.01/Gb for bandwidth" +
            "between zones applies)")
   parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
-  parser.add_option("-v", "--spark-version", default="0.9.1",
+  parser.add_option("-v", "--spark-version", default="0.9.2",
       help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
   parser.add_option("--spark-git-repo",
       default="https://github.com/apache/spark",
@@ -157,7 +157,8 @@ def is_active(instance):
 
 # Return correct versions of Spark and Shark, given the supplied Spark version
 def get_spark_shark_version(opts):
-  spark_shark_map = {"0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0", "0.9.1": "0.9.1"}
+  spark_shark_map = {"0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", \
+                     "0.9.0": "0.9.0", "0.9.1": "0.9.1", "0.9.2": "0.9.2"}
   version = opts.spark_version.replace("v", "")
   if version not in spark_shark_map:
     print >> stderr, "Don't know about Spark version: %s" % version
