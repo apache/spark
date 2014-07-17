@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>yarn-parent_2.10</artifactId>
-    <version>0.9.1</version>
+    <version>0.9.2</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
