@@ -55,6 +55,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
 
   private val selector = SelectorProvider.provider.openSelector()
 
+  private val connectionRetries = conf.getInt("spark.core.connection.retries", 10)
+
   // default to 30 second timeout waiting for authentication
   private val authTimeout = conf.getInt("spark.core.connection.auth.wait.timeout", 30)
 
@@ -198,7 +200,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     handleConnectExecutor.execute(new Runnable {
       override def run() {
 
-        var tries: Int = 10
+        var tries: Int = connectionRetries
         while (tries >= 0) {
           if (conn.finishConnect(false)) return
           // Sleep ?
