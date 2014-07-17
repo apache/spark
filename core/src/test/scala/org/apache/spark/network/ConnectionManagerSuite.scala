@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark
-
-import org.scalatest.FunSuite
+package org.apache.spark.network
 
 import java.nio._
 
-import org.apache.spark.network.{ConnectionManager, Message, ConnectionManagerId}
-import scala.concurrent.Await
-import scala.concurrent.TimeoutException
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.scalatest.FunSuite
+
+import scala.concurrent.{Await, TimeoutException}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 

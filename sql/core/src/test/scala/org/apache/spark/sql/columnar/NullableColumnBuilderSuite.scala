@@ -48,8 +48,8 @@ class NullableColumnBuilderSuite extends FunSuite {
       val columnBuilder = TestNullableColumnBuilder(columnType)
       val buffer = columnBuilder.build()
 
-      expectResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
-      expectResult(0, "Wrong null count")(buffer.getInt())
+      assertResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
+      assertResult(0, "Wrong null count")(buffer.getInt())
       assert(!buffer.hasRemaining)
     }
 
@@ -63,8 +63,8 @@ class NullableColumnBuilderSuite extends FunSuite {
 
       val buffer = columnBuilder.build()
 
-      expectResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
-      expectResult(0, "Wrong null count")(buffer.getInt())
+      assertResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
+      assertResult(0, "Wrong null count")(buffer.getInt())
     }
 
     test(s"$typeName column builder: null values") {
@@ -79,11 +79,11 @@ class NullableColumnBuilderSuite extends FunSuite {
 
       val buffer = columnBuilder.build()
 
-      expectResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
-      expectResult(4, "Wrong null count")(buffer.getInt())
+      assertResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
+      assertResult(4, "Wrong null count")(buffer.getInt())
 
       // For null positions
-      (1 to 7 by 2).foreach(expectResult(_, "Wrong null position")(buffer.getInt()))
+      (1 to 7 by 2).foreach(assertResult(_, "Wrong null position")(buffer.getInt()))
 
       // For non-null values
       (0 until 4).foreach { _ =>

@@ -210,6 +210,22 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
   }
 
+  createQueryTest("case sensitivity: Hive table",
+    "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
+
+  test("case sensitivity: registered table") {
+    val testData: SchemaRDD =
+      TestHive.sparkContext.parallelize(
+        TestData(1, "str1") ::
+        TestData(2, "str2") :: Nil)
+    testData.registerAsTable("REGisteredTABle")
+
+    assertResult(Array(Array(2, "str2"))) {
+      hql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
+        "WHERE TableAliaS.a > 1").collect()
+    }
+  }
+
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
     explanation.size > 1 && explanation.head.startsWith("Physical execution plan")
@@ -374,7 +390,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("CREATE TABLE m(value MAP<INT, STRING>)")
     hql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
     hql("SELECT * FROM m").collect().zip(hql("SELECT * FROM src LIMIT 10").collect()).map {
-      case (Row(map: Map[Int, String]), Row(key: Int, value: String)) =>
+      case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
         assert(map.size === 1)
         assert(map.head === (key, value))
     }

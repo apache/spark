@@ -33,14 +33,16 @@ case class BoundReference(ordinal: Int, baseReference: Attribute)
 
   type EvaluatedType = Any
 
-  def nullable = baseReference.nullable
-  def dataType = baseReference.dataType
-  def exprId = baseReference.exprId
-  def qualifiers = baseReference.qualifiers
-  def name = baseReference.name
+  override def nullable = baseReference.nullable
+  override def dataType = baseReference.dataType
+  override def exprId = baseReference.exprId
+  override def qualifiers = baseReference.qualifiers
+  override def name = baseReference.name
 
-  def newInstance = BoundReference(ordinal, baseReference.newInstance)
-  def withQualifiers(newQualifiers: Seq[String]) =
+  override def newInstance = BoundReference(ordinal, baseReference.newInstance)
+  override def withNullability(newNullability: Boolean) =
+    BoundReference(ordinal, baseReference.withNullability(newNullability))
+  override def withQualifiers(newQualifiers: Seq[String]) =
     BoundReference(ordinal, baseReference.withQualifiers(newQualifiers))
 
   override def toString = s"$baseReference:$ordinal"
