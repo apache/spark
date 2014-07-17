@@ -125,7 +125,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     zeroBuffer.get(zeroArray)
 
     lazy val cachedSerializer = SparkEnv.get.closureSerializer.newInstance()
-    def createZero() = cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
+    val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
 
     combineByKey[U]((v: V) => seqOp(createZero(), v), seqOp, combOp, partitioner)
   }
@@ -171,7 +171,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     // When deserializing, use a lazy val to create just one instance of the serializer per task
     lazy val cachedSerializer = SparkEnv.get.closureSerializer.newInstance()
-    def createZero() = cachedSerializer.deserialize[V](ByteBuffer.wrap(zeroArray))
+    val createZero = () => cachedSerializer.deserialize[V](ByteBuffer.wrap(zeroArray))
 
     combineByKey[V]((v: V) => func(createZero(), v), func, func, partitioner)
   }
@@ -214,7 +214,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("reduceByKeyLocally() does not support array keys")
     }
 
-    def reducePartition(iter: Iterator[(K, V)]): Iterator[JHashMap[K, V]] = {
+    val reducePartition = (iter: Iterator[(K, V)]) => {
       val map = new JHashMap[K, V]
       iter.foreach { case (k, v) =>
         val old = map.get(k)
@@ -223,7 +223,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       Iterator(map)
     }
 
-    def mergeMaps(m1: JHashMap[K, V], m2: JHashMap[K, V]): JHashMap[K, V] = {
+    val mergeMaps = (m1: JHashMap[K, V], m2: JHashMap[K, V]) => {
       m2.foreach { case (k, v) =>
         val old = m1.get(k)
         m1.put(k, if (old == null) v else func(old, v))
@@ -710,14 +710,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     self.partitioner match {
       case Some(p) =>
         val index = p.getPartition(key)
-        def process(it: Iterator[(K, V)]): Seq[V] = {
+        val process = (it: Iterator[(K, V)]) => {
           val buf = new ArrayBuffer[V]
           for ((k, v) <- it if k == key) {
             buf += v
           }
           buf
         }
-        val res = self.context.runJob(self, process _, Array(index), false)
+        val res = self.context.runJob(self, process, Array(index), false)
         res(0)
       case None =>
         self.filter(_._1 == key).map(_._2).collect()
@@ -840,7 +840,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       jobFormat.checkOutputSpecs(job)
     }
 
-    def writeShard(context: TaskContext, iter: Iterator[(K,V)]): Int = {
+    val writeShard = (context: TaskContext, iter: Iterator[(K,V)]) => {
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
@@ -866,14 +866,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         writer.close(hadoopContext)
       }
       committer.commitTask(hadoopContext)
-      return 1
-    }
+      1
+    } : Int
 
     val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
-    self.context.runJob(self, writeShard _)
+    self.context.runJob(self, writeShard)
     jobCommitter.commitJob(jobTaskContext)
   }
 
@@ -912,7 +912,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val writer = new SparkHadoopWriter(hadoopConf)
     writer.preSetup()
 
-    def writeToFile(context: TaskContext, iter: Iterator[(K, V)]) {
+    val writeToFile = (context: TaskContext, iter: Iterator[(K, V)]) => {
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
@@ -933,7 +933,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       writer.commit()
     }
 
-    self.context.runJob(self, writeToFile _)
+    self.context.runJob(self, writeToFile)
     writer.commitJob()
   }
 
