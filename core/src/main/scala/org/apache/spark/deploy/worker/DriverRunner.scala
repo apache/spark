@@ -36,6 +36,7 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
+ * This is currently only used by the standalone Worker in cluster deploy mode.
  */
 private[spark] class DriverRunner(
     val driverId: String,

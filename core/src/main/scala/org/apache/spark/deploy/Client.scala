@@ -69,13 +69,15 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         val javaOpts = sys.props.get(javaOptionsConf)
         val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
           driverArgs.driverOptions, env, classPathEntries, libraryPathEntries, javaOpts)
+        val driverSparkHome = conf.getOption("spark.driver.home")
 
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,
           driverArgs.memory,
           driverArgs.cores,
           driverArgs.supervise,
-          command)
+          command,
+          driverSparkHome)
 
         masterActor ! RequestSubmitDriver(driverDescription)
 

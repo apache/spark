@@ -22,8 +22,8 @@ private[spark] class ApplicationDescription(
     val maxCores: Option[Int],
     val memoryPerSlave: Int,
     val command: Command,
-    val sparkHome: Option[String],
     var appUiUrl: String,
+    val executorSparkHome: Option[String] = None,
     val eventLogDir: Option[String] = None)
   extends Serializable {
 
