@@ -101,7 +101,7 @@ trait ClientBase extends Logging {
     val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
     if (amMem > maxMem) {
       logError("Required AM memory (%d) is above the max threshold (%d) of this cluster".
-        format(args.amMemory, maxMem))
+        format(amMem, maxMem))
       System.exit(1)
     }
 
