@@ -25,7 +25,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
  * binary classification.
  */
 @Experimental
-object Entropy extends Impurity {
+private[mllib] object Entropy extends ClassificationImpurity {
 
   private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
 
@@ -52,14 +52,4 @@ object Entropy extends Impurity {
     impurity
   }
 
-  /**
-   * :: DeveloperApi ::
-   * variance calculation
-   * @param count number of instances
-   * @param sum sum of labels
-   * @param sumSquares summation of squares of the labels
-   */
-  @DeveloperApi
-  override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
-    throw new UnsupportedOperationException("Entropy.calculate")
 }

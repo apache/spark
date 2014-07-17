@@ -26,7 +26,9 @@ import org.apache.spark.mllib.linalg.Vector
  * :: DeveloperApi ::
  * Node in a decision tree
  * @param id integer node id
- * @param predict predicted value at the node
+ * @param predict Predicted value at the node.
+ *                For classification, this is a class label in 0,1,....
+ *                For regression, this is a real value.
  * @param isLeaf whether the leaf is a node
  * @param split split to calculate left and right nodes
  * @param leftNode  left child

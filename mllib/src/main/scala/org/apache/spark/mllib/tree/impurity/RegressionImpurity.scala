@@ -21,32 +21,19 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 
 /**
  * :: Experimental ::
- * Class for calculating variance during regression
+ * Trait for calculating information gain.
  */
 @Experimental
-private[mllib] object Variance extends Impurity {
+private[mllib] trait RegressionImpurity extends Serializable {
 
   /**
    * :: DeveloperApi ::
-   * information calculation for multiclass classification
-   * @param counts Array[Double] with counts for each label
-   * @param totalCount sum of counts for all labels
-   * @return information value
-   */
-  @DeveloperApi
-  override def calculate(counts: Array[Double], totalCount: Double): Double =
-     throw new UnsupportedOperationException("Variance.calculate")
-
-  /**
-   * :: DeveloperApi ::
-   * variance calculation
+   * information calculation for regression
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
+   * @return information value
    */
   @DeveloperApi
-  override def calculate(count: Double, sum: Double, sumSquares: Double): Double = {
-    val squaredLoss = sumSquares - (sum * sum) / count
-    squaredLoss / count
-  }
+  def calculate(count: Double, sum: Double, sumSquares: Double): Double
 }
