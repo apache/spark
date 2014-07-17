@@ -47,11 +47,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   val completedStages = ListBuffer[StageInfo]()
   val failedStages = ListBuffer[StageInfo]()
 
-  // Total metrics reflect metrics only for completed tasks
-  var totalTime = 0L
-  var totalShuffleRead = 0L
-  var totalShuffleWrite = 0L
-
   val stageUIData = new HashMap[Int, StageUIData]
 
   val poolToActiveStages = HashMap[String, HashMap[Int, StageInfo]]()
@@ -154,6 +149,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
         val metrics = taskEnd.taskMetrics
         if (metrics != null) {
+          metrics.inputMetrics.foreach { y.inputBytes += _.bytesRead }
           metrics.shuffleReadMetrics.foreach { y.shuffleRead += _.remoteBytesRead }
           metrics.shuffleWriteMetrics.foreach { y.shuffleWrite += _.shuffleBytesWritten }
           y.memoryBytesSpilled += metrics.memoryBytesSpilled
@@ -176,18 +172,18 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             (Some(e.toErrorString), None)
         }
 
+
       val taskRunTime = metrics.map(_.executorRunTime).getOrElse(0L)
       stageData.executorRunTime += taskRunTime
-      totalTime += taskRunTime
+      val inputBytes = metrics.flatMap(_.inputMetrics).map(_.bytesRead).getOrElse(0L)
+      stageData.inputBytes += inputBytes
 
       val shuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead).getOrElse(0L)
       stageData.shuffleReadBytes += shuffleRead
-      totalShuffleRead += shuffleRead
 
       val shuffleWrite =
         metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten).getOrElse(0L)
       stageData.shuffleWriteBytes += shuffleWrite
-      totalShuffleWrite += shuffleWrite
 
       val memoryBytesSpilled = metrics.map(_.memoryBytesSpilled).getOrElse(0L)
       stageData.memoryBytesSpilled += memoryBytesSpilled

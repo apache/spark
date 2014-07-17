@@ -1203,9 +1203,17 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
+   * If <tt>checkSerializable</tt> is set, <tt>clean</tt> will also proactively 
+   * check to see if <tt>f</tt> is serializable and throw a <tt>SparkException</tt> 
+   * if not.
+   * 
+   * @param f the closure to clean
+   * @param checkSerializable whether or not to immediately check <tt>f</tt> for serializability
+   * @throws <tt>SparkException<tt> if <tt>checkSerializable</tt> is set but <tt>f</tt> is not
+   *   serializable
    */
-  private[spark] def clean[F <: AnyRef](f: F): F = {
-    ClosureCleaner.clean(f)
+  private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
+    ClosureCleaner.clean(f, checkSerializable)
     f
   }
 
@@ -1523,7 +1531,16 @@ object SparkContext extends Logging {
             throw new SparkException("YARN mode not available ?", e)
           }
         }
-        val backend = new CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+        val backend = try {
+          val clazz =
+            Class.forName("org.apache.spark.scheduler.cluster.YarnClusterSchedulerBackend")
+          val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
+          cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
+        } catch {
+          case e: Exception => {
+            throw new SparkException("YARN mode not available ?", e)
+          }
+        }
         scheduler.initialize(backend)
         scheduler
 

@@ -83,8 +83,8 @@ case class Aggregate(
       case a: AggregateExpression =>
         ComputedAggregate(
           a,
-          BindReferences.bindReference(a, childOutput).asInstanceOf[AggregateExpression],
-          AttributeReference(s"aggResult:$a", a.dataType, nullable = true)())
+          BindReferences.bindReference(a, childOutput),
+          AttributeReference(s"aggResult:$a", a.dataType, a.nullable)())
     }
   }.toArray
 

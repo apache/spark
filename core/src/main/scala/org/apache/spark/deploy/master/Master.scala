@@ -41,7 +41,7 @@ import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 private[spark] class Master(
     host: String,
@@ -57,6 +57,7 @@ private[spark] class Master(
   def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000
   val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
+  val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
   val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
   val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
@@ -72,9 +73,7 @@ private[spark] class Master(
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
   var nextAppNumber = 0
-
   val appIdToUI = new HashMap[String, SparkUI]
-  val fileSystemsUsed = new HashSet[FileSystem]
 
   val drivers = new HashSet[DriverInfo]
   val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -159,7 +158,6 @@ private[spark] class Master(
       recoveryCompletionTask.cancel()
     }
     webUi.stop()
-    fileSystemsUsed.foreach(_.close())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
@@ -481,7 +479,7 @@ private[spark] class Master(
     // First schedule drivers, they take strict precedence over applications
     val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
     for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
-      for (driver <- waitingDrivers) {
+      for (driver <- List(waitingDrivers: _*)) { // iterate over a copy of waitingDrivers
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
@@ -744,23 +742,29 @@ private[spark] class Master(
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
         drivers -= driver
+        if (completedDrivers.size >= RETAINED_DRIVERS) {
+          val toRemove = math.max(RETAINED_DRIVERS / 10, 1)
+          completedDrivers.trimStart(toRemove)
+        }
         completedDrivers += driver
         persistenceEngine.removeDriver(driver)
         driver.state = finalState
         driver.exception = exception
         driver.worker.foreach(w => w.removeDriver(driver))
+        schedule()
       case None =>
         logWarning(s"Asked to remove unknown driver: $driverId")
     }
   }
 }
 
-private[spark] object Master {
+private[spark] object Master extends Logging {
   val systemName = "sparkMaster"
   private val actorName = "Master"
   val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
 
   def main(argStrings: Array[String]) {
+    SignalLogger.register(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
     val (actorSystem, _, _) = startSystemAndActor(args.host, args.port, args.webUiPort, conf)

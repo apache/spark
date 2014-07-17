@@ -23,7 +23,7 @@ import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.apache.spark.scheduler.{StageInfo, TaskInfo}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
@@ -43,8 +43,16 @@ private[ui] class StageTableBase(
     <th>Submitted</th>
     <th>Duration</th>
     <th>Tasks: Succeeded/Total</th>
-    <th>Shuffle Read</th>
-    <th>Shuffle Write</th>
+    <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+    <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
+    <th>
+      <!-- Place the shuffle write tooltip on the left (rather than the default position
+        of on top) because the shuffle write column is the last column on the right side and
+        the tooltip is wider than the column, so it doesn't fit on top. -->
+      <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
+        Shuffle Write
+      </span>
+    </th>
   }
 
   def toNodeSeq: Seq[Node] = {
@@ -81,7 +89,8 @@ private[ui] class StageTableBase(
     // scalastyle:off
     val killLink = if (killEnabled) {
       <span class="kill-link">
-        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>kill</a>)
+        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}
+            onclick={"return window.confirm('Are you sure you want to kill stage %s ?');".format(s.stageId)}>kill</a>)
       </span>
     }
     // scalastyle:on
@@ -117,10 +126,13 @@ private[ui] class StageTableBase(
     }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
 
+    val inputRead = stageData.inputBytes
+    val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
     val shuffleRead = stageData.shuffleReadBytes
     val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
     val shuffleWrite = stageData.shuffleWriteBytes
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
+
     <td>{s.stageId}</td> ++
     {if (isFairScheduler) {
       <td>
@@ -139,6 +151,7 @@ private[ui] class StageTableBase(
       {makeProgressBar(stageData.numActiveTasks, stageData.numCompleteTasks,
         stageData.numFailedTasks, s.numTasks)}
     </td>
+    <td sorttable_customekey={inputRead.toString}>{inputReadWithUnit}</td>
     <td sorttable_customekey={shuffleRead.toString}>{shuffleReadWithUnit}</td>
     <td sorttable_customekey={shuffleWrite.toString}>{shuffleWriteWithUnit}</td>
   }
