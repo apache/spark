@@ -117,11 +117,20 @@ object LocalALS {
       }
       case _ => {
         System.err.println("Usage: LocalALS <M> <U> <F> <iters>")
+        System.err.println(
+          """WARNING: THIS IS A NAIVE IMPLEMENTATION OF ALS AND IS GIVEN AS AN EXAMPLE!
+            |PLEASE USE THE ALS METHOD FOUND IN org.apache.spark.mllib.recommendation FOR
+            |MORE CONVENTIONAL USE
+          """.stripMargin)
         System.exit(1)
       }
     }
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
-
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF ALS AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE ALS METHOD FOUND IN org.apache.spark.mllib.recommendation FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
     val R = generateR()
 
     // Initialize m and u randomly
@@ -136,5 +145,10 @@ object LocalALS {
       println("RMSE = " + rmse(R, ms, us))
       println()
     }
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF ALS AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE ALS METHOD FOUND IN org.apache.spark.mllib.recommendation FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
   }
 }

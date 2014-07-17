@@ -51,9 +51,18 @@ object SparkHdfsLR {
   def main(args: Array[String]) {
     if (args.length < 2) {
       System.err.println("Usage: SparkHdfsLR <file> <iters>")
+      System.err.println(
+        """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
+          |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
+          |MORE CONVENTIONAL USE
+        """.stripMargin)
       System.exit(1)
     }
-
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
     val sparkConf = new SparkConf().setAppName("SparkHdfsLR")
     val inputPath = args(0)
     val conf = SparkHadoopUtil.get.newConfiguration()
@@ -78,6 +87,11 @@ object SparkHdfsLR {
     }
 
     println("Final w: " + w)
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
     sc.stop()
   }
 }

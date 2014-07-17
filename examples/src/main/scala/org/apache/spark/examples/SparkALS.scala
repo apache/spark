@@ -101,9 +101,19 @@ object SparkALS {
         slices = slices_.getOrElse("2").toInt
       case _ =>
         System.err.println("Usage: SparkALS [M] [U] [F] [iters] [slices]")
+        System.err.println(
+          """WARNING: THIS IS A NAIVE IMPLEMENTATION OF ALS AND IS GIVEN AS AN EXAMPLE!
+            |PLEASE USE THE ALS METHOD FOUND IN org.apache.spark.mllib.recommendation FOR
+            |MORE CONVENTIONAL USE
+          """.stripMargin)
         System.exit(1)
     }
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF ALS AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE ALS METHOD FOUND IN org.apache.spark.mllib.recommendation FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
     val sparkConf = new SparkConf().setAppName("SparkALS")
     val sc = new SparkContext(sparkConf)
 
@@ -130,7 +140,11 @@ object SparkALS {
       println("RMSE = " + rmse(R, ms, us))
       println()
     }
-
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF ALS AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE ALS METHOD FOUND IN org.apache.spark.mllib.recommendation FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
     sc.stop()
   }
 }

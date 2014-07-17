@@ -44,7 +44,11 @@ object LocalLR {
 
   def main(args: Array[String]) {
     val data = generateData
-
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
     // Initialize w to a random value
     var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
     println("Initial w: " + w)
@@ -60,5 +64,10 @@ object LocalLR {
     }
 
     println("Final w: " + w)
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
+      |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
+      |MORE CONVENTIONAL USE
+    """.stripMargin)
   }
 }

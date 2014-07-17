@@ -48,9 +48,19 @@ object SparkKMeans {
 
   def main(args: Array[String]) {
     if (args.length < 3) {
-      System.err.println("Usage: SparkKMeans <file> <k> <convergeDist>")
+      System.err.println("Usage: SparkKMeans <file> <k> <convergeDist>"
+        System.err.println(
+          """WARNING: THIS IS A NAIVE IMPLEMENTATION OF K-MEANS CLUSTERING AND IS GIVEN AS AN EXAMPLE!
+            |PLEASE USE THE KMeans METHOD FOUND IN org.apache.spark.mllib.clustering FOR
+            |MORE CONVENTIONAL USE
+          """.stripMargin)
       System.exit(1)
     }
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF K-MEANS CLUSTERING AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE KMeans METHOD FOUND IN org.apache.spark.mllib.clustering FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
     val sparkConf = new SparkConf().setAppName("SparkKMeans")
     val sc = new SparkContext(sparkConf)
     val lines = sc.textFile(args(0))
@@ -82,6 +92,11 @@ object SparkKMeans {
 
     println("Final centers:")
     kPoints.foreach(println)
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF K-MEANS CLUSTERING AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE KMeans METHOD FOUND IN org.apache.spark.mllib.clustering FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
     sc.stop()
   }
 }

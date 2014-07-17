@@ -52,7 +52,11 @@ object SparkLR {
     val sc = new SparkContext(sparkConf)
     val numSlices = if (args.length > 0) args(0).toInt else 2
     val points = sc.parallelize(generateData, numSlices).cache()
-
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
     // Initialize w to a random value
     var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
     println("Initial w: " + w)
@@ -66,6 +70,11 @@ object SparkLR {
     }
 
     println("Final w: " + w)
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
     sc.stop()
   }
 }
