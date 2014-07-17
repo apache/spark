@@ -180,7 +180,11 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     }
     val mergeCombiners: (CoGroupCombiner, CoGroupCombiner) => CoGroupCombiner =
       (combiner1, combiner2) => {
-        combiner1.zip(combiner2).map { case (v1, v2) => v1 ++ v2 }
+        var depNum = 0
+        while (depNum < numRdds) {
+          combiner1(depNum) ++= combiner2(depNum)
+          depNum += 1
+        }
       }
     new ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner](
       createCombiner, mergeValue, mergeCombiners)
