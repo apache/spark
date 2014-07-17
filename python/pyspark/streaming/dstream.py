@@ -118,11 +118,9 @@ class DStream(object):
         keyed = PipelinedDStream(self, add_shuffle_key)
         keyed._bypass_serializer = True
         with _JavaStackTrace(self.ctx) as st:
-            #JavaDStream
-            pairDStream = self.ctx._jvm.PairwiseDStream(keyed._jdstream.dstream()).asJavaPairDStream()
             partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
-                                                          id(partitionFunc))
-        jdstream = pairDStream.partitionBy(partitioner).values()
+                                                      id(partitionFunc))
+            jdstream = self.ctx._jvm.PairwiseDStream(keyed._jdstream.dstream(), partitioner).asJavaDStream()
         dstream = DStream(jdstream, self._ssc, BatchedSerializer(outputSerializer))
         # This is required so that id(partitionFunc) remains unique, even if
         # partitionFunc is a lambda:
