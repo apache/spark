@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark
 
 /**
  * These are exit codes that executors should use to provide the master with information about
@@ -26,7 +26,7 @@ package org.apache.spark.executor
  * OpenJDK JVM may use exit code 1 in some of its own "last chance" code.
  */
 private[spark]
-object ExecutorExitCode {
+object SparkInternalExitCode {
   /** The default uncaught exception handler was reached. */
   val UNCAUGHT_EXCEPTION = 50
 
