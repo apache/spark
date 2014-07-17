@@ -62,6 +62,12 @@ private[spark] class MesosSchedulerBackend(
 
   var classLoader: ClassLoader = null
 
+  private val sparkHome = sc.conf.getOption("spark.executor.home")
+    .orElse(sc.conf.getOption("spark.home")) // deprecated
+    .getOrElse {
+      throw new SparkException("Executor Spark home is not set; set it through spark.executor.home")
+    }
+
   override def start() {
     synchronized {
       classLoader = Thread.currentThread.getContextClassLoader
@@ -86,9 +92,6 @@ private[spark] class MesosSchedulerBackend(
   }
 
   def createExecutorInfo(execId: String): ExecutorInfo = {
-    val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
-      "Spark home is not set; set it through the spark.home system " +
-      "property, the SPARK_HOME environment variable or the SparkContext constructor"))
     val environment = Environment.newBuilder()
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()

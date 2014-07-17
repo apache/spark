@@ -121,7 +121,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * Set the location where Spark is installed on worker nodes.
    */
   def setSparkHome(home: String): SparkConf = {
-    set("spark.home", home)
+    set("spark.home", home) // deprecated
+    set("spark.driver.home", home)
+    set("spark.executor.home", home)
   }
 
   /** Set multiple parameters together */

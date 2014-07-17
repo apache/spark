@@ -85,10 +85,10 @@ class StreamingContext private[streaming] (
       master: String,
       appName: String,
       batchDuration: Duration,
-      sparkHome: String = null,
+      sparkHome: String = null, // Not used, but kept for backwards compatibility
       jars: Seq[String] = Nil,
       environment: Map[String, String] = Map()) = {
-    this(StreamingContext.createNewSparkContext(master, appName, sparkHome, jars, environment),
+    this(StreamingContext.createNewSparkContext(master, appName, jars, environment),
          null, batchDuration)
   }
 
@@ -552,12 +552,10 @@ object StreamingContext extends Logging {
   private[streaming] def createNewSparkContext(
       master: String,
       appName: String,
-      sparkHome: String,
       jars: Seq[String],
       environment: Map[String, String]
     ): SparkContext = {
-    val conf = SparkContext.updatedConf(
-      new SparkConf(), master, appName, sparkHome, jars, environment)
+    val conf = SparkContext.updatedConf(new SparkConf, master, appName, jars, environment)
     createNewSparkContext(conf)
   }
 
