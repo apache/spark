@@ -221,7 +221,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         map.put(k, if (old == null) v else func(old, v))
       }
       Iterator(map)
-    }
+    } : Iterator[JHashMap[K, V]]
 
     val mergeMaps = (m1: JHashMap[K, V], m2: JHashMap[K, V]) => {
       m2.foreach { case (k, v) =>
@@ -229,7 +229,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         m1.put(k, if (old == null) v else func(old, v))
       }
       m1
-    }
+    } : JHashMap[K, V]
 
     self.mapPartitions(reducePartition).reduce(mergeMaps)
   }
@@ -716,7 +716,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
             buf += v
           }
           buf
-        }
+        } : Seq[V]
         val res = self.context.runJob(self, process, Array(index), false)
         res(0)
       case None =>
