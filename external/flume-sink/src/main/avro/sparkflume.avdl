@@ -17,7 +17,7 @@
  * under the License.
  */
 
-@namespace("org.apache.spark.flume")
+@namespace("org.apache.spark.streaming.flume.sink")
 
 protocol SparkFlumeProtocol {
 
@@ -37,5 +37,4 @@ protocol SparkFlumeProtocol {
   void ack (string sequenceNumber);
 
   void nack (string sequenceNumber);
-
 }

@@ -22,8 +22,6 @@ import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit, Executors}
 
-import org.apache.spark.flume.sink.SparkSinkUtils
-
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
@@ -33,45 +31,44 @@ import org.apache.avro.ipc.specific.SpecificRequestor
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 
 import org.apache.spark.Logging
-import org.apache.spark.flume.{SparkSinkEvent, SparkFlumeProtocol}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.flume.sink._
+
 
 /**
  * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running
  * [[org.apache.spark.flume.sink.SparkSink]]s.
- * @param ssc_ Streaming context that will execute this input stream
+ * @param _ssc Streaming context that will execute this input stream
  * @param addresses List of addresses at which SparkSinks are listening
  * @param maxBatchSize Maximum size of a batch
  * @param parallelism Number of parallel connections to open
  * @param storageLevel The storage level to use.
  * @tparam T Class type of the object of this stream
  */
+private[streaming]
 class FlumePollingInputDStream[T: ClassTag](
-  @transient ssc_ : StreamingContext,
-  val addresses: Seq[InetSocketAddress],
-  val maxBatchSize: Int,
-  val parallelism: Int,
-  storageLevel: StorageLevel
-) extends ReceiverInputDStream[SparkFlumePollingEvent](ssc_) {
-  /**
-   * Gets the receiver object that will be sent to the worker nodes
-   * to receive data. This method needs to defined by any specific implementation
-   * of a NetworkInputDStream.
-   */
+    @transient _ssc: StreamingContext,
+    val addresses: Seq[InetSocketAddress],
+    val maxBatchSize: Int,
+    val parallelism: Int,
+    storageLevel: StorageLevel
+  ) extends ReceiverInputDStream[SparkFlumePollingEvent](_ssc) {
+
   override def getReceiver(): Receiver[SparkFlumePollingEvent] = {
     new FlumePollingReceiver(addresses, maxBatchSize, parallelism, storageLevel)
   }
 }
 
-private[streaming] class FlumePollingReceiver(
-  addresses: Seq[InetSocketAddress],
-  maxBatchSize: Int,
-  parallelism: Int,
-  storageLevel: StorageLevel
-) extends Receiver[SparkFlumePollingEvent](storageLevel) with Logging {
+private[streaming]
+class FlumePollingReceiver(
+    addresses: Seq[InetSocketAddress],
+    maxBatchSize: Int,
+    parallelism: Int,
+    storageLevel: StorageLevel
+  ) extends Receiver[SparkFlumePollingEvent](storageLevel) with Logging {
 
   lazy val channelFactoryExecutor =
     Executors.newCachedThreadPool(new ThreadFactoryBuilder().setDaemon(true).
@@ -150,14 +147,6 @@ private[streaming] class FlumePollingReceiver(
     }
   }
 
-  override def store(dataItem: SparkFlumePollingEvent) {
-    // Not entirely sure store is thread-safe for all storage levels - so wrap it in synchronized
-    // This takes a performance hit, since the parallelism is useful only for pulling data now.
-    this.synchronized {
-      super.store(dataItem)
-    }
-  }
-
   override def onStop(): Unit = {
     logInfo("Shutting down Flume Polling Receiver")
     receiverExecutor.shutdownNow()
@@ -176,6 +165,9 @@ private[streaming] class FlumePollingReceiver(
 private class FlumeConnection(val transceiver: NettyTransceiver,
   val client: SparkFlumeProtocol.Callback)
 
+/**
+ * Companion object of [[SparkFlumePollingEvent]]
+ */
 private[streaming] object SparkFlumePollingEvent {
   def fromSparkSinkEvent(in: SparkSinkEvent): SparkFlumePollingEvent = {
     val event = new SparkFlumePollingEvent()
@@ -189,7 +181,7 @@ private[streaming] object SparkFlumePollingEvent {
  * SparkSinkEvent is identical to AvroFlumeEvent, we need to create a new class and a wrapper
  * around that to make it externalizable.
  */
-class SparkFlumePollingEvent() extends Externalizable with Logging {
+class SparkFlumePollingEvent extends Externalizable with Logging {
   var event: SparkSinkEvent = new SparkSinkEvent()
 
   /* De-serialize from bytes. */

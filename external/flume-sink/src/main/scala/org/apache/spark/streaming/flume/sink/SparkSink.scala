@@ -14,20 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.flume.sink
+package org.apache.spark.streaming.flume.sink
 
 import java.net.InetSocketAddress
 import java.util.concurrent._
 
 import org.apache.avro.ipc.NettyServer
 import org.apache.avro.ipc.specific.SpecificResponder
+import org.apache.flume.Context
 import org.apache.flume.Sink.Status
 import org.apache.flume.conf.{Configurable, ConfigurationException}
 import org.apache.flume.sink.AbstractSink
-import org.apache.flume.Context
-import org.slf4j.LoggerFactory
-
-import org.apache.spark.flume.SparkFlumeProtocol
 
 /**
  * A sink that uses Avro RPC to run a server that can be polled by Spark's
@@ -48,6 +45,7 @@ import org.apache.spark.flume.SparkFlumeProtocol
 // until an ACK or NACK comes back or the transaction times out (after the specified timeout).
 // When the response comes, the TransactionProcessor is retrieved and then unblocked,
 // at which point the transaction is committed or rolled back.
+private[flume]
 class SparkSink extends AbstractSink with Logging with Configurable {
 
   // Size of the pool to use for holding transaction processors.
@@ -130,6 +128,7 @@ class SparkSink extends AbstractSink with Logging with Configurable {
 /**
  * Configuration parameters and their defaults.
  */
+private[flume]
 object SparkSinkConfig {
   val THREADS = "threads"
   val DEFAULT_THREADS = 10
