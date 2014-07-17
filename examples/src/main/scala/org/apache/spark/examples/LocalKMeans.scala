@@ -61,6 +61,14 @@ object LocalKMeans {
     bestIndex
   }
 
+  def showWarning() {
+    System.err.println(
+      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF K-MEANS CLUSTERING AND IS GIVEN AS AN EXAMPLE!
+        |PLEASE USE THE KMeans METHOD FOUND IN org.apache.spark.mllib.clustering FOR
+        |MORE CONVENTIONAL USE
+      """.stripMargin)
+  }
+
   def main(args: Array[String]) {
     val data = generateData
     var points = new HashSet[Vector[Double]]
@@ -70,12 +78,8 @@ object LocalKMeans {
     while (points.size < K) {
       points.add(data(rand.nextInt(N)))
     }
+    showWarning()
 
-    System.err.println(
-      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF K-MEANS CLUSTERING AND IS GIVEN AS AN EXAMPLE!
-        |PLEASE USE THE KMeans METHOD FOUND IN org.apache.spark.mllib.clustering FOR
-        |MORE CONVENTIONAL USE
-      """.stripMargin)
     val iter = points.iterator
     for (i <- 1 to points.size) {
       kPoints.put(i, iter.next())
@@ -108,10 +112,6 @@ object LocalKMeans {
     }
 
     println("Final centers: " + kPoints)
-    System.err.println(
-      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF K-MEANS CLUSTERING AND IS GIVEN AS AN EXAMPLE!
-        |PLEASE USE THE KMeans METHOD FOUND IN org.apache.spark.mllib.clustering FOR
-        |MORE CONVENTIONAL USE
-      """.stripMargin)
+    showWarning()
   }
 }

@@ -32,15 +32,19 @@ object LocalFileLR {
     DataPoint(new DenseVector(nums.slice(1, D + 1)), nums(0))
   }
 
-  def main(args: Array[String]) {
-    val lines = scala.io.Source.fromFile(args(0)).getLines().toArray
-    val points = lines.map(parsePoint _)
-    val ITERATIONS = args(1).toInt
+  def showWarning() {
     System.err.println(
       """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
         |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
         |MORE CONVENTIONAL USE
       """.stripMargin)
+  }
+
+  def main(args: Array[String]) {
+    val lines = scala.io.Source.fromFile(args(0)).getLines().toArray
+    val points = lines.map(parsePoint _)
+    val ITERATIONS = args(1).toInt
+    showWarning()
     // Initialize w to a random value
     var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
     println("Initial w: " + w)
@@ -56,10 +60,6 @@ object LocalFileLR {
     }
 
     println("Final w: " + w)
-    System.err.println(
-      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
-        |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
-        |MORE CONVENTIONAL USE
-      """.stripMargin)
+    showWarning()
   }
 }
