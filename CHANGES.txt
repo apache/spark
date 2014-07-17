@@ -1,6 +1,214 @@
 Spark Change Log
 ----------------
 
+Release 0.9.2
+
+  [branch-0.9] bump versions for v0.9.2 release candidate
+  Xiangrui Meng <meng@databricks.com>
+  2014-07-16 23:53:40 -0700
+  Commit: c9a22e8, github.com/apache/spark/pull/1458
+
+  [branch-0.9] Fix github links in docs
+  Xiangrui Meng <meng@databricks.com>
+  2014-07-16 23:39:02 -0700
+  Commit: 60f4b3b, github.com/apache/spark/pull/1456
+
+  [SPARK-1112, 2156] (0.9 edition) Use correct akka frame size and overhead amounts.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-07-16 21:30:50 -0700
+  Commit: 7edee34, github.com/apache/spark/pull/1455
+
+  [SPARK-2433][MLLIB] fix NaiveBayesModel.predict
+  Xiangrui Meng <meng@databricks.com>
+  2014-07-16 20:12:09 -0700
+  Commit: 0116dee, github.com/apache/spark/pull/1453
+
+  [SPARK-2362] Fix for newFilesOnly logic in file DStream
+  Gabriele Nizzoli <mail@nizzoli.net>
+  2014-07-08 14:23:38 -0700
+  Commit: 8e5604b, github.com/apache/spark/pull/1077
+
+  SPARK-2282: Reuse PySpark Accumulator sockets to avoid crashing Spark
+  Aaron Davidson <aaron@databricks.com>
+  2014-07-03 23:02:36 -0700
+  Commit: 57873ef, github.com/apache/spark/pull/1220
+
+  [SPARK-2350] Don't NPE while launching drivers
+  Aaron Davidson <aaron@databricks.com>
+  2014-07-03 22:31:41 -0700
+  Commit: c37e9ed, github.com/apache/spark/pull/1289
+
+  [SPARK-1516]Throw exception in yarn client instead of run system.exit
+  John Zhao <codeboyyong@gmail.com>
+  2014-07-03 15:17:51 -0700
+  Commit: 0d3d5ce, github.com/apache/spark/pull/1099
+
+  HOTFIX: Removing out dated python path in testing tool.
+  Patrick Wendell <pwendell@gmail.com>
+  2014-06-27 18:19:16 -0700
+  Commit: b3f4245
+
+  [SPARK-1912] fix compress memory issue during reduce
+  Wenchen Fan(Cloud) <cloud0fan@gmail.com>
+  2014-06-03 13:18:20 -0700
+  Commit: 9509819, github.com/apache/spark/pull/860
+
+  SPARK-2241: quote command line args in ec2 script
+  Ori Kremer <ori.kremer@gmail.com>
+  2014-06-22 20:21:23 -0700
+  Commit: ef8501d, github.com/apache/spark/pull/1169
+
+  HOTFIX: bug caused by #941
+  Patrick Wendell <pwendell@gmail.com>
+  2014-06-17 15:09:24 -0700
+  Commit: 2a2eace, github.com/apache/spark/pull/1108
+
+  SPARK-1990: added compatibility for python 2.6 for ssh_read command
+  Anant <anant.asty@gmail.com>
+  2014-06-16 23:42:27 -0700
+  Commit: 8e9f479, github.com/apache/spark/pull/941
+
+  [SPARK-1998] SparkFlumeEvent with body bigger than 1020 bytes are not re...
+  joyyoj <sunshch@gmail.com>
+  2014-06-10 17:26:17 -0700
+  Commit: 706e38f, github.com/apache/spark/pull/951
+
+  Spark 1384 - Fix spark-shell on yarn access to secure hdfs - branch-0.9 only
+  Thomas Graves <tgraves@apache.org>
+  2014-06-09 23:07:25 -0700
+  Commit: cc95d97, github.com/apache/spark/pull/287
+
+  [SPARK-1870] Made deployment with --jars work in yarn-standalone mode.
+  DB Tsai <dbtsai@dbtsai.com>
+  2014-06-09 22:56:24 -0700
+  Commit: 1d3aab9, github.com/apache/spark/pull/1013
+
+  SPARK-2043: ExternalAppendOnlyMap doesn't always find matching keys
+  Matei Zaharia <matei@databricks.com>
+  2014-06-05 23:01:48 -0700
+  Commit: 51f677e, github.com/apache/spark/pull/986
+
+  SPARK-1790: Update EC2 scripts to support r3 instance types
+  Varakhedi Sujeet <svarakhedi@gopivotal.com>
+  2014-06-04 16:01:56 -0700
+  Commit: 6634a34, github.com/apache/spark/pull/960
+
+  [SPARK-1468] Modify the partition function used by partitionBy.
+  Erik Selin <erik.selin@jadedpixel.com>
+  2014-06-03 13:31:16 -0700
+  Commit: 41e7853, github.com/apache/spark/pull/371
+
+  SPARK-1917: fix PySpark import of scipy.special functions
+  Uri Laserson <laserson@cloudera.com>
+  2014-05-31 14:59:09 -0700
+  Commit: e03af41, github.com/apache/spark/pull/866
+
+  SPARK-1935: Explicitly add commons-codec 1.5 as a dependency (for branch-0.9).
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-05-30 22:12:17 -0700
+  Commit: 563bfe1, github.com/apache/spark/pull/912
+
+  SPARK-1188: Do not re-use objects in the EdgePartition/EdgeTriplet iterators.
+  Daniel Darabos <darabos.daniel@gmail.com>
+  2014-04-02 12:27:37 -0700
+  Commit: a92900c, github.com/apache/spark/pull/276
+
+  [SPARK-1712]: TaskDescription instance is too big causes Spark to hang
+  witgo <witgo@qq.com>
+  2014-05-28 15:57:05 -0700
+  Commit: aef6390, github.com/apache/spark/pull/694
+
+  Spark 1916
+  David Lemieux <david.lemieux@radialpoint.com>
+  2014-05-28 15:50:35 -0700
+  Commit: 234a378, github.com/apache/spark/pull/865
+
+  SPARK-1145: Memory mapping with many small blocks can cause JVM allocation failures
+  Patrick Wendell <pwendell@gmail.com>
+  2014-04-27 17:40:56 -0700
+  Commit: 7633949, github.com/apache/spark/pull/43
+
+  Update version to 0.9.2-SNAPSHOT in sbt
+  Matei Zaharia <matei@databricks.com>
+  2014-05-11 16:54:54 -0700
+  Commit: c9f40d0
+
+  SPARK-1775: Unneeded lock in ShuffleMapTask.deserializeInfo
+  Sandeep <sandeep@techaddict.me>
+  2014-05-08 22:30:17 -0700
+  Commit: bea2be3, github.com/apache/spark/pull/707
+
+  [SPARK-1685] Cancel retryTimer on restart of Worker or AppClient
+  Mark Hamstra <markhamstra@gmail.com>
+  2014-05-06 12:53:39 -0700
+  Commit: 9e2c59e, github.com/apache/spark/pull/602
+
+  [WIP] SPARK-1676: Cache Hadoop UGIs by default to prevent FileSystem leak
+  Thomas Graves <tgraves@apache.org>
+  2014-05-03 10:59:05 -0700
+  Commit: 45561cd, github.com/apache/spark/pull/621
+
+  version number fix
+  Nan Zhu <CodingCat@users.noreply.github.com>
+  2014-04-21 23:42:47 -0700
+  Commit: 54c3b7e, github.com/apache/spark/pull/467
+
+  Small syntax error from previous backport
+  Patrick Wendell <pwendell@gmail.com>
+  2014-04-13 14:32:22 -0700
+  Commit: 9e89789
+
+  Update WindowedDStream.scala
+  baishuo(白硕) <vc_java@hotmail.com>
+  2014-04-11 20:33:42 -0700
+  Commit: 4a325e1, github.com/apache/spark/pull/390
+
+  Fixed typo on Spark quick-start docs.
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-04-07 18:27:46 -0700
+  Commit: 19cf2f7
+
+  SPARK-1432: Make sure that all metadata fields are properly cleaned
+  Davis Shepherd <davis@conviva.com>
+  2014-04-07 10:02:00 -0700
+  Commit: 69fc97d, github.com/apache/spark/pull/338
+
+  SPARK-1421. Make MLlib work on Python 2.6
+  Matei Zaharia <matei@databricks.com>
+  2014-04-05 20:52:05 -0700
+  Commit: 139fc1a, github.com/apache/spark/pull/335
+
+  Update documentation for work around for SPARK-1384
+  Thomas Graves <tgraves@apache.org>
+  2014-04-04 18:26:51 -0700
+  Commit: d4df076, github.com/apache/spark/pull/314
+
+  SPARK-1337: Application web UI garbage collects newest stages
+  Patrick Wendell <pwendell@gmail.com>
+  2014-04-03 22:13:56 -0700
+  Commit: 7f727cf, github.com/apache/spark/pull/320
+
+  [SPARK-1134] Fix and document passing of arguments to IPython
+  Diana Carroll <dcarroll@cloudera.com>
+  2014-04-03 15:48:42 -0700
+  Commit: d9c7a80, github.com/apache/spark/pull/294
+
+  Spark 1162 Implemented takeOrdered in pyspark.
+  Prashant Sharma <prashant.s@imaginea.com>
+  2014-04-03 15:42:17 -0700
+  Commit: 28e7643, github.com/apache/spark/pull/97
+
+  fix path for jar, make sed actually work on OSX
+  Nick Lanham <nick@afternight.org>
+  2014-03-28 13:33:35 -0700
+  Commit: a6c955a, github.com/apache/spark/pull/264
+
+  Make sed do -i '' on OSX
+  Nick Lanham <nick@afternight.org>
+  2014-03-27 22:45:00 -0700
+  Commit: 4afbd19, github.com/apache/spark/pull/258
+
+
 Release 0.9.1
 
   Revert "[maven-release-plugin] prepare release v0.9.1-rc2"
