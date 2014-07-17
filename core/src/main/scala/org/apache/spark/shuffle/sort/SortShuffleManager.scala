@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.hash
+package org.apache.spark.shuffle.sort
 
-import org.apache.spark._
 import org.apache.spark.shuffle._
+import org.apache.spark.{TaskContext, ShuffleDependency}
+import org.apache.spark.shuffle.hash.HashShuffleReader
 
-/**
- * A ShuffleManager using hashing, that creates one output file per reduce partition on each
- * mapper (possibly reusing these across waves of tasks).
- */
-private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager {
-  /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
+private[spark] class SortShuffleManager extends ShuffleManager {
+  /**
+   * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
+   */
   override def registerShuffle[K, V, C](
       shuffleId: Int,
       numMaps: Int,
@@ -42,6 +41,7 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
       startPartition: Int,
       endPartition: Int,
       context: TaskContext): ShuffleReader[K, C] = {
+    // We currently use the same block store shuffle fetcher as the hash-based shuffle.
     new HashShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
   }
@@ -49,7 +49,7 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Get a writer for a given partition. Called on executors by map tasks. */
   override def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext)
       : ShuffleWriter[K, V] = {
-    new HashShuffleWriter(handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, context)
+    new SortShuffleWriter(handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, context)
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */

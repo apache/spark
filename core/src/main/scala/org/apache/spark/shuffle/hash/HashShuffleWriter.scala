@@ -24,7 +24,7 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 
-class HashShuffleWriter[K, V](
+private[spark] class HashShuffleWriter[K, V](
     handle: BaseShuffleHandle[K, V, _],
     mapId: Int,
     context: TaskContext)

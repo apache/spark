@@ -292,6 +292,7 @@ object Unidoc {
         .map(_.filterNot(_.getCanonicalPath.contains("akka")))
         .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
         .map(_.filterNot(_.getCanonicalPath.contains("network")))
+        .map(_.filterNot(_.getCanonicalPath.contains("shuffle")))
         .map(_.filterNot(_.getCanonicalPath.contains("executor")))
         .map(_.filterNot(_.getCanonicalPath.contains("python")))
         .map(_.filterNot(_.getCanonicalPath.contains("collection")))
