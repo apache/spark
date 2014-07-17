@@ -59,12 +59,44 @@ class SparkContextSchedulerCreationSuite
     }
   }
 
+  test("local-conf-failures") {
+    val defaultLocalMaxFailures = System.getProperty("spark.local.maxFailures")
+    System.setProperty("spark.local.maxFailures", "10")
+    val sched = createTaskScheduler("local")
+    assert(sched.maxTaskFailures === 10)
+    sched.backend match {
+      case s: LocalBackend => assert(s.totalCores === 1)
+      case _ => fail()
+    }
+
+    Option(defaultLocalMaxFailures) match {
+      case Some(v) => System.setProperty("spark.local.maxFailures", v)
+      case _ => System.clearProperty("spark.local.maxFailures")
+    }
+  }
+
   test("local-n") {
     val sched = createTaskScheduler("local[5]")
     assert(sched.maxTaskFailures === 1)
     sched.backend match {
       case s: LocalBackend => assert(s.totalCores === 5)
       case _ => fail()
+    }
+  }
+
+  test("local-n-conf-failures") {
+    val defaultLocalMaxFailures = System.getProperty("spark.local.maxFailures")
+    System.setProperty("spark.local.maxFailures", "10")
+    val sched = createTaskScheduler("local[5]")
+    assert(sched.maxTaskFailures === 10)
+    sched.backend match {
+      case s: LocalBackend => assert(s.totalCores === 5)
+      case _ => fail()
+    }
+
+    Option(defaultLocalMaxFailures) match {
+      case Some(v) => System.setProperty("spark.local.maxFailures", v)
+      case _ => System.clearProperty("spark.local.maxFailures")
     }
   }
 

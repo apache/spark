@@ -1463,12 +1463,13 @@ object SparkContext extends Logging {
     // Regular expression for connection to Simr cluster
     val SIMR_REGEX = """simr://(.*)""".r
 
-    // When running locally, don't try to re-execute tasks on failure.
+    // When running locally, by default don't try to re-execute tasks on failure.
     val MAX_LOCAL_TASK_FAILURES = 1
 
     master match {
       case "local" =>
-        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
+        val localTaskFailures = sc.conf.getInt("spark.local.maxFailures", MAX_LOCAL_TASK_FAILURES)
+        val scheduler = new TaskSchedulerImpl(sc, localTaskFailures, isLocal = true)
         val backend = new LocalBackend(scheduler, 1)
         scheduler.initialize(backend)
         scheduler
@@ -1477,7 +1478,8 @@ object SparkContext extends Logging {
         def localCpuCount = Runtime.getRuntime.availableProcessors()
         // local[*] estimates the number of cores on the machine; local[N] uses exactly N threads.
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
-        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
+        val localTaskFailures = sc.conf.getInt("spark.local.maxFailures", MAX_LOCAL_TASK_FAILURES)
+        val scheduler = new TaskSchedulerImpl(sc, localTaskFailures, isLocal = true)
         val backend = new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
         scheduler

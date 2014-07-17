@@ -599,6 +599,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Number of individual task failures before giving up on the job.
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
+    Does not apply to running Spark locally.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.local.maxFailures</code></td>
+  <td>1</td>
+  <td>
+    Number of individual task failures before giving up on the job, when running Spark locally.
+    Should be greater than or equal to 1. No retries are allowed.
   </td>
 </tr>
 <tr>
