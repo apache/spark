@@ -263,18 +263,12 @@ class ExternalAppendOnlyMap[K, V, C](
       if (it.hasNext) {
         val kc = it.next()
         kcPairs += kc
-//<<<<<<< HEAD
-//        val minHash = getKeyHashCode(kc)
-//        while (it.hasNext && it.head._1.hashCode() == minHash) {
-//          kc = it.next()
-//          kcPairs += kc
-//=======
-        while (it.hasNext) {
+        while (it.hasNext && comparator.compare(kc, it.head) == 0) {
           var kc1 = it.next()
           kcPairs += kc1
-          if (comparator.compare(kc, kc1) != 0) {
-            return kcPairs
-          }
+          //if (comparator.compare(kc, it.head) != 0) {
+          //  return kcPairs
+          //}
         }
       }
       kcPairs
@@ -312,12 +306,6 @@ class ExternalAppendOnlyMap[K, V, C](
       }
       // Select a key from the StreamBuffer that holds the lowest key hash
       val minBuffer = mergeHeap.dequeue()
-//<<<<<<< HEAD
-//      val (minPairs, minHash) = (minBuffer.pairs, minBuffer.minKeyHash)
-//      val minPair = minPairs.remove(0)
-//      var (minKey, minCombiner) = minPair
-//      assert(getKeyHashCode(minPair) == minHash)
-//=======
       val minPairs = minBuffer.pairs
       val minPair = minPairs.remove(0)
       var (minKey, minCombiner) = minPair
