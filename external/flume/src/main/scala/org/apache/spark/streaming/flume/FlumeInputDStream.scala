@@ -153,15 +153,15 @@ class FlumeReceiver(
 
   private def initServer() = {
     if (enableDecompression) {
-      val channelFactory = new NioServerSocketChannelFactory
-        (Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
-      val channelPipelieFactory = new CompressionChannelPipelineFactory()
+      val channelFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(),
+                                                             Executors.newCachedThreadPool())
+      val channelPipelineFactory = new CompressionChannelPipelineFactory()
       
       new NettyServer(
         responder, 
         new InetSocketAddress(host, port),
-        channelFactory, 
-        channelPipelieFactory, 
+        channelFactory,
+        channelPipelineFactory,
         null)
     } else {
       new NettyServer(responder, new InetSocketAddress(host, port))
