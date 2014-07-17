@@ -1131,7 +1131,7 @@ class DAGScheduler(
    */
   private[spark]
   def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = synchronized {
-    getPreferredLocsInternal(rdd, partition, new HashMap)
+    getPreferredLocsInternal(rdd, partition, new HashSet)
   }
 
   /** Recursive implementation for getPreferredLocs. */
@@ -1139,12 +1139,12 @@ class DAGScheduler(
   def getPreferredLocsInternal(
       rdd: RDD[_],
       partition: Int,
-      visited: HashMap[RDD[_], HashSet[Int]])
+      visited: HashSet[(RDD[_],Int)])
     : Seq[TaskLocation] =
   {
     // If the partition has already been visited, no need to re-visit.
     // This avoids exponential path exploration.  SPARK-695
-    if (!visited.getOrElseUpdate(rdd, new HashSet).add(partition)) {
+    if (!visited.add((rdd,partition))) {
       // Nil has already been returned for previously visited partitions.
       return Nil
     }
