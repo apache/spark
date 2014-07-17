@@ -32,10 +32,12 @@ import warnings
 import heapq
 from random import Random
 from math import sqrt, log
+import platform
+import resource
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long
+    PickleSerializer, BatchedSerializer, AutoSerializer, pack_long
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -166,6 +168,123 @@ class MaxHeapQ(object):
         if(self.q[1] > value):
             self.q[1] = value
             self._sink(1)
+
+
+class Merger(object):
+    """
+    External merger will dump the aggregated data into disks when memory usage is above
+    the limit, then merge them together.
+
+    >>> combiner = lambda x, y:x+y
+    >>> merger = Merger(combiner, 10)
+    >>> N = 10000
+    >>> merger.merge(zip(xrange(N), xrange(N)) * 10)
+    >>> merger.spills
+    100
+    >>> sum(1 for k,v in merger.iteritems())
+    10000
+    """
+
+    PARTITIONS = 64
+    BATCH = 1000
+
+    def __init__(self, combiner, memory_limit=256, path="/tmp/pyspark", serializer=None):
+        self.combiner = combiner
+        self.path = os.path.join(path, str(os.getpid()))
+        self.memory_limit = memory_limit
+        self.serializer = serializer or BatchedSerializer(AutoSerializer(), 1024)
+        self.item_limit = None
+        self.data = {}
+        self.pdata = []
+        self.spills = 0
+
+    def used_memory(self):
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if platform.system() == 'Linux':
+            rss >>= 10
+        elif platform.system() == 'Darwin':
+            rss >>= 20
+        return rss
+
+    def merge(self, iterator):
+        iterator = iter(iterator)
+        d = self.data
+        comb = self.combiner
+        c = 0
+        for k, v in iterator:
+            if k in d:
+                d[k] = comb(d[k], v)
+            else:
+                d[k] = v
+
+            if self.item_limit is not None:
+                continue
+
+            c += 1
+            if c % self.BATCH == 0 and self.used_memory() > self.memory_limit:
+                self.item_limit = c
+                self._first_spill()
+                self._partitioned_merge(iterator)
+                return
+
+    def _partitioned_merge(self, iterator):
+        comb = self.combiner
+        c = 0
+        for k, v in iterator:
+            d = self.pdata[hash(k) % self.PARTITIONS]
+            if k in d:
+                d[k] = comb(d[k], v)
+            else:
+                d[k] = v
+            c += 1
+            if c >= self.item_limit:
+                self._spill()
+                c = 0
+
+    def _first_spill(self):
+        path = os.path.join(self.path, str(self.spills))
+        if not os.path.exists(path):
+            os.makedirs(path)
+        streams = [open(os.path.join(path, str(i)), 'w')
+                   for i in range(self.PARTITIONS)]
+        for k, v in self.data.iteritems():
+            h = hash(k) % self.PARTITIONS
+            self.serializer.dump_stream([(k, v)], streams[h])
+        for s in streams:
+            s.close()
+        self.data.clear()
+        self.pdata = [{} for i in range(self.PARTITIONS)]
+        self.spills += 1
+
+    def _spill(self):
+        path = os.path.join(self.path, str(self.spills))
+        if not os.path.exists(path):
+            os.makedirs(path)
+        for i in range(self.PARTITIONS):
+            p = os.path.join(path, str(i))
+            with open(p, 'w') as f:
+                self.serializer.dump_stream(self.pdata[i].iteritems(), f)
+            self.pdata[i].clear()
+        self.spills += 1
+
+    def iteritems(self):
+        if not self.pdata and not self.spills:
+            return self.data.iteritems()
+        return self._external_items()
+
+    def _external_items(self):
+        for i in range(self.PARTITIONS):
+            self.data = self.pdata[i]
+            for j in range(self.spills):
+                p = os.path.join(self.path, str(j), str(i))
+                self.merge(self.serializer.load_stream(open(p)))
+                os.remove(p)
+            for k,v in self.data.iteritems():
+                yield k,v
+            self.data.clear()
+        for i in range(self.spills):
+            os.rmdir(os.path.join(self.path, str(i)))
+        os.rmdir(self.path)
 
 
 class RDD(object):
@@ -1247,15 +1366,12 @@ class RDD(object):
             return combiners.iteritems()
         locally_combined = self.mapPartitions(combineLocally)
         shuffled = locally_combined.partitionBy(numPartitions)
-
+ 
+        executorMemory = self.ctx._jsc.sc().executorMemory()
         def _mergeCombiners(iterator):
-            combiners = {}
-            for (k, v) in iterator:
-                if k not in combiners:
-                    combiners[k] = v
-                else:
-                    combiners[k] = mergeCombiners(combiners[k], v)
-            return combiners.iteritems()
+            merger = Merger(mergeCombiners, executorMemory * 0.7)
+            merger.merge(iterator)
+            return merger.iteritems()
         return shuffled.mapPartitions(_mergeCombiners)
 
     def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):
@@ -1314,7 +1430,8 @@ class RDD(object):
             return xs
 
         def mergeCombiners(a, b):
-            return a + b
+            a.extend(b)
+            return a
 
         return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
                                  numPartitions).mapValues(lambda x: ResultIterable(x))

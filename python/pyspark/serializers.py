@@ -297,6 +297,33 @@ class MarshalSerializer(FramedSerializer):
     loads = marshal.loads
 
 
+class AutoSerializer(FramedSerializer):
+    """
+    Choose marshal or cPickle as serialization protocol autumatically
+    """
+    def __init__(self):
+        FramedSerializer.__init__(self)
+        self._type = None
+
+    def dumps(self, obj):
+        try:
+            if self._type is not None:
+                raise TypeError("fallback")
+            return 'M' + marshal.dumps(obj)
+        except Exception:
+            self._type = 'P'
+            return 'P' + cPickle.dumps(obj, -1)
+
+    def loads(self, stream):
+        _type = stream[0]
+        if _type == 'M':
+            return marshal.loads(stream[1:])
+        elif _type == 'P':
+            return cPickle.loads(stream[1:])
+        else:
+            raise ValueError("invalid sevialization type: %s" % _type)
+
+
 class UTF8Deserializer(Serializer):
     """
     Deserializes streams written by String.getBytes.
