@@ -161,7 +161,6 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
 
   test("remote fetch exceeds akka frame size") {
     val newConf = new SparkConf
-    newConf.set("spark.akka.frameSize", "1")
     newConf.set("spark.akka.askTimeout", "1") // Fail fast
 
     val masterTracker = new MapOutputTrackerMaster(conf)
@@ -170,14 +169,18 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
       new MapOutputTrackerMasterActor(masterTracker, newConf))(actorSystem)
     val masterActor = actorRef.underlyingActor
 
-    // Frame size should be ~1.1MB, and MapOutputTrackerMasterActor should throw exception.
-    // Note that the size is hand-selected here because map output statuses are compressed before
-    // being sent.
-    masterTracker.registerShuffle(20, 100)
-    (0 until 100).foreach { i =>
-      masterTracker.registerMapOutput(20, i, new MapStatus(
-        BlockManagerId("999", "mps", 1000, 0), Array.fill[Byte](4000000)(0)))
+    // Frame size should be 2 * the configured frame size, and MapOutputTrackerMasterActor should
+    // throw exception.
+    val shuffleId = 20
+    val numMaps = 2
+    val data = new Array[Byte](AkkaUtils.maxFrameSizeBytes(conf))
+    val random = new java.util.Random(0)
+    random.nextBytes(data) // Make it hard to compress.
+    masterTracker.registerShuffle(shuffleId, numMaps)
+    (0 until numMaps).foreach { i =>
+      masterTracker.registerMapOutput(shuffleId, i, new MapStatus(
+        BlockManagerId("999", "mps", 1000, 0), data))
     }
-    intercept[SparkException] { masterActor.receive(GetMapOutputStatuses(20)) }
+    intercept[SparkException] { masterActor.receive(GetMapOutputStatuses(shuffleId)) }
   }
 }
