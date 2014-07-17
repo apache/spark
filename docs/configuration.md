@@ -755,6 +755,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.core.connection.retries</code></td>
+  <td>10</td>
+  <td>
+    Number of connection attempts to make before timing out.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>
