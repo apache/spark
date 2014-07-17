@@ -160,14 +160,14 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td><code>spark.deploy.retainedApplications</code></td>
   <td>200</td>
   <td>
-    The number of completedApps to retain. If this cap is exceeded, then the oldest completedApps will be removed. <br/>
+    The maximum number of completed applications to display. Older applications will be dropped from the UI to maintain this limit.<br/>
   </td>
 </tr>
 <tr>
   <td><code>spark.deploy.retainedDrivers</code></td>
   <td>200</td>
   <td>
-    The number of completedDrivers to retain. If this cap is exceeded, then the oldest completedDrivers will be removed. <br/>
+   The maximum number of completed drivers to display. Older drivers will be dropped from the UI to maintain this limit.<br/>
   </td>
 </tr>
 <tr>
