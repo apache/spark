@@ -14,13 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
 import java.io.{ObjectInput, ObjectOutput, Externalizable}
+import java.io.FileInputStream;
 import java.nio.ByteBuffer
+import java.security.KeyStore;
+import java.security.Security;
 import java.util.concurrent.Executors
+
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -41,9 +47,10 @@ import org.jboss.netty.channel.ChannelPipelineFactory
 import org.jboss.netty.channel.Channels
 import org.jboss.netty.channel.ChannelPipeline
 import org.jboss.netty.channel.ChannelFactory
-import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
 import org.jboss.netty.handler.execution.ExecutionHandler
+import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
+import org.jboss.netty.handler.ssl.SslHandler;
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
@@ -51,11 +58,37 @@ class FlumeInputDStream[T: ClassTag](
   host: String,
   port: Int,
   storageLevel: StorageLevel,
-  enableDecompression: Boolean
+  enableDecompression: Boolean,
+  enableSsl: Boolean,
+  keystore: String,
+  keystorePassword: String, 
+  keystoreType: String
 ) extends ReceiverInputDStream[SparkFlumeEvent](ssc_) {
 
+  def this (ssc_ : StreamingContext,
+    host: String,
+    port: Int,
+    storageLevel: StorageLevel,
+    enableDecompression: Boolean) = this(ssc_,
+        host, 
+        port, 
+        storageLevel, 
+        enableDecompression, 
+        false, 
+        null, 
+        null, 
+        null)
+  
   override def getReceiver(): Receiver[SparkFlumeEvent] = {
-    new FlumeReceiver(host, port, storageLevel, enableDecompression)
+    new FlumeReceiver(
+        host, 
+        port, 
+        storageLevel, 
+        enableDecompression, 
+        enableSsl, 
+        keystore, 
+        keystorePassword, 
+        keystoreType)
   }
 }
 
@@ -144,7 +177,11 @@ class FlumeReceiver(
     host: String,
     port: Int,
     storageLevel: StorageLevel,
-    enableDecompression: Boolean
+    enableDecompression: Boolean,
+    enableSsl: Boolean,
+    keystore: String,
+    keystorePassword: String, 
+    keystoreType: String
   ) extends Receiver[SparkFlumeEvent](storageLevel) with Logging {
 
   lazy val responder = new SpecificResponder(
@@ -152,10 +189,15 @@ class FlumeReceiver(
   var server: NettyServer = null
 
   private def initServer() = {
-    if (enableDecompression) {
+    if (enableDecompression || enableSsl) {
       val channelFactory = new NioServerSocketChannelFactory
         (Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
-      val channelPipelieFactory = new CompressionChannelPipelineFactory()
+      val channelPipelieFactory = new SSLCompressionChannelPipelineFactory(
+          enableDecompression,
+          enableSsl,
+          keystore,
+          keystorePassword, 
+          keystoreType)
       
       new NettyServer(
         responder, 
@@ -200,14 +242,57 @@ class FlumeReceiver(
     * from the configured channel 
     */
   private[streaming]
-  class CompressionChannelPipelineFactory extends ChannelPipelineFactory {
+  class SSLCompressionChannelPipelineFactory (
+    enableDecompression: Boolean,
+    enableSsl: Boolean,
+    keystore: String,
+    keystorePassword: String, 
+    keystoreType: String) 
+    extends ChannelPipelineFactory {
 
+    def createServerSSLContext():SSLContext = {
+      try {
+        val ks = KeyStore.getInstance(keystoreType)
+        ks.load(new FileInputStream(keystore), keystorePassword.toCharArray())
+	
+        // Set up key manager factory to use our key store
+        val kmf = KeyManagerFactory.getInstance(getAlgorithm())
+        kmf.init(ks, keystorePassword.toCharArray())
+	
+        val serverContext = SSLContext.getInstance("TLS")
+        serverContext.init(kmf.getKeyManagers(), null, null)
+	      
+        serverContext
+      } catch {
+        case e: Exception => {
+          throw new RuntimeException(e);
+        }
+      }
+      
+    }
+    
+    def  getAlgorithm():String = {
+      var algorithm = Security.getProperty("ssl.KeyManagerFactory.algorithm")   
+      if (algorithm == null) {
+        algorithm = "SunX509"
+      }
+      algorithm
+    }
+    
     def getPipeline() = {
       val pipeline = Channels.pipeline()
-      val encoder = new ZlibEncoder(6)
-      pipeline.addFirst("deflater", encoder)
-      pipeline.addFirst("inflater", new ZlibDecoder())
+      if (enableDecompression) {
+        val encoder = new ZlibEncoder(6)
+        pipeline.addFirst("deflater", encoder)
+        pipeline.addFirst("inflater", new ZlibDecoder())
+        
+      } 
+      if (enableSsl) {
+        val sslEngine = createServerSSLContext().createSSLEngine();
+        sslEngine.setUseClientMode(false);
+        pipeline.addFirst("ssl", new SslHandler(sslEngine));
+      }
       pipeline
+    }
   }
-}
 }
