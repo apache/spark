@@ -23,21 +23,6 @@
 # The distribution contains fat (assembly) jars that include the Scala library,
 # so it is completely self contained.
 # It does not contain source or *.class files.
-#
-# Optional Arguments
-#      --tgz: Additionally creates spark-$VERSION-bin.tar.gz
-#      --hadoop VERSION: Builds against specified version of Hadoop.
-#      --with-yarn: Enables support for Hadoop YARN.
-#      --with-hive: Enable support for reading Hive tables.
-#      --name: A moniker for the release target. Defaults to the Hadoop verison.
-#
-# Recommended deploy/testing procedure (standalone mode):
-# 1) Rsync / deploy the dist/ dir to one host
-# 2) cd to deploy dir; ./sbin/start-master.sh
-# 3) Verify master is up by visiting web page, ie http://master-ip:8080.  Note the spark:// URL.
-# 4) ./sbin/start-slave.sh 1 <<spark:// URL>>
-# 5) ./bin/spark-shell --master spark://my-master-ip:7077
-#
 
 set -o pipefail
 set -e
@@ -46,26 +31,35 @@ set -e
 FWDIR="$(cd `dirname $0`; pwd)"
 DISTDIR="$FWDIR/dist"
 
-# Initialize defaults
-SPARK_HADOOP_VERSION=1.0.4
-SPARK_YARN=false
-SPARK_HIVE=false
 SPARK_TACHYON=false
 MAKE_TGZ=false
 NAME=none
+
+function exit_with_usage {
+  echo "make-distribution.sh - tool for making binary distributions of Spark"
+  echo ""
+  echo "usage:"
+  echo "./make-distribution.sh [--name] [--tgz] [--with-tachyon] <maven build options>"
+  echo "See Spark's \"Building with Maven\" doc for correct Maven options."
+  echo ""
+  exit 1
+}
 
 # Parse arguments
 while (( "$#" )); do
   case $1 in
     --hadoop)
-      SPARK_HADOOP_VERSION="$2"
-      shift
+      echo "Error: '--hadoop' is no longer supported:"
+      echo "Error: use Maven options -Phadoop.version and -Pyarn.version"
+      exit_with_usage
       ;;
     --with-yarn)
-      SPARK_YARN=true
+      echo "Error: '--with-yarn' is no longer supported, use Maven option -Pyarn"
+      exit_with_usage
       ;;
     --with-hive)
-      SPARK_HIVE=true
+      echo "Error: '--with-hive' is no longer supported, use Maven option -Pyarn"
+      exit_with_usage
       ;;
     --skip-java-test)
       SKIP_JAVA_TEST=true
@@ -79,6 +73,12 @@ while (( "$#" )); do
     --name)
       NAME="$2"
       shift
+      ;;
+    --help)
+      exit_with_usage
+      ;;
+    *)
+      break
       ;;
   esac
   shift
@@ -143,14 +143,6 @@ else
   echo "Making distribution for Spark $VERSION in $DISTDIR..."
 fi
 
-echo "Hadoop version set to $SPARK_HADOOP_VERSION"
-echo "Release name set to $NAME"
-if [ "$SPARK_YARN" == "true" ]; then
-  echo "YARN enabled"
-else
-  echo "YARN disabled"
-fi
-
 if [ "$SPARK_TACHYON" == "true" ]; then
   echo "Tachyon Enabled"
 else
@@ -162,33 +154,12 @@ cd $FWDIR
 
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
-BUILD_COMMAND="mvn clean package"
-
-# Use special profiles for hadoop versions 0.23.x, 2.2.x, 2.3.x, 2.4.x
-if [[ "$SPARK_HADOOP_VERSION" =~ ^0\.23\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-0.23"; fi
-if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.2\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.2"; fi
-if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.3\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.3"; fi
-if [[ "$SPARK_HADOOP_VERSION" =~ ^2\.4\. ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phadoop-2.4"; fi
-if [[ "$SPARK_HIVE" == "true" ]]; then BUILD_COMMAND="$BUILD_COMMAND -Phive"; fi
-if [[ "$SPARK_YARN" == "true" ]]; then
-  # For hadoop versions 0.23.x to 2.1.x, use the yarn-alpha profile
-  if [[ "$SPARK_HADOOP_VERSION" =~ ^0\.2[3-9]\. ]] ||
-     [[ "$SPARK_HADOOP_VERSION" =~ ^0\.[3-9][0-9]\. ]] ||
-     [[ "$SPARK_HADOOP_VERSION" =~ ^1\.[0-9]\. ]] ||
-     [[ "$SPARK_HADOOP_VERSION" =~ ^2\.[0-1]\. ]]; then
-    BUILD_COMMAND="$BUILD_COMMAND -Pyarn-alpha"
-  # For hadoop versions 2.2+, use the yarn profile
-  elif [[ "$SPARK_HADOOP_VERSION" =~ ^2.[2-9]. ]]; then
-    BUILD_COMMAND="$BUILD_COMMAND -Pyarn"
-  fi
-  BUILD_COMMAND="$BUILD_COMMAND -Dyarn.version=$SPARK_HADOOP_VERSION"
-fi
-BUILD_COMMAND="$BUILD_COMMAND -Dhadoop.version=$SPARK_HADOOP_VERSION"
-BUILD_COMMAND="$BUILD_COMMAND -DskipTests"
+BUILD_COMMAND="mvn clean package -DskipTests $@"
 
 # Actually build the jar
 echo -e "\nBuilding with..."
 echo -e "\$ $BUILD_COMMAND\n"
+
 ${BUILD_COMMAND}
 
 # Make directories
