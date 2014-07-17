@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Vector
 
@@ -26,10 +25,9 @@ import org.apache.spark.mllib.linalg.Vector
  * :: Experimental ::
  * Model to store the decision tree parameters
  * @param topNode root node
- * @param algo algorithm type -- classification or regression
  */
 @Experimental
-class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable {
+class DecisionTreeModel(val topNode: Node) extends Serializable {
 
   /**
    * Predict values for a single data point using the model trained.
@@ -50,4 +48,5 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))
   }
+
 }
