@@ -31,7 +31,7 @@ import org.apache.spark.rdd.{CoGroupedRDD, RDD}
  * Definition of Spearman's correlation can be found at
  * http://en.wikipedia.org/wiki/Spearman's_rank_correlation_coefficient
  */
-object SpearmansCorrelation extends Correlation with Logging {
+private[stat] object SpearmansCorrelation extends Correlation with Logging {
 
   /**
    * Compute Spearman's correlation for two datasets.
