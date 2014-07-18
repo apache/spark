@@ -63,7 +63,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
   }
 }
 
-object SortOrder extends Enumeration {
+private[spark] object SortOrder extends Enumeration {
   type SortOrder = Value
   val ASCENDING, DESCENDING = Value
 }
