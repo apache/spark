@@ -178,7 +178,7 @@ class ExternalAppendOnlyMap[K, V, C](
   /**
    * Sort the existing contents of the in-memory map and spill them to a temporary file on disk.
    */
-  private def spill(mapSize: Long) {
+  private def spill(mapSize: Long): Unit = {
     spillCount += 1
     logWarning("Thread %d spilling in-memory map of %d MB to disk (%d time%s so far)"
       .format(threadId, mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
