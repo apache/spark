@@ -518,7 +518,7 @@ class JsonProtocolSuite extends FunSuite {
       sr.localBlocksFetched = e
       sr.fetchWaitTime = a + d
       sr.remoteBlocksFetched = f
-      t.shuffleReadMetrics = Some(sr)
+      t.updateShuffleReadMetrics(sr)
     }
     sw.shuffleBytesWritten = a + b + c
     sw.shuffleWriteTime = b + c + d
