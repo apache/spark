@@ -47,6 +47,10 @@ def readPointBatch(iterator):
     return [matrix]
 
 if __name__ == "__main__":
+    
+    print """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
+        PLEASE REFER TO examples/src/main/python/mllib/logistic_regression.py TO SEE HOW MLlib's IMPLEMENTATION
+        IS USED"""
     if len(sys.argv) != 3:
         print >> sys.stderr, "Usage: logistic_regression <file> <iterations>"
         exit(-1)

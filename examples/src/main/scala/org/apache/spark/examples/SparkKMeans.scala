@@ -23,7 +23,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 
 /**
- * K-means clustering.
+ * K-means clustering. This is an example implementation for learning how to use Spark.
+ * For more conventional use, please refer to org.apache.spark.mllib.clustering.KMeans
  */
 object SparkKMeans {
 
@@ -55,9 +56,10 @@ object SparkKMeans {
   }
 
   def main(args: Array[String]) {
+
+    showWarning()
     if (args.length < 3) {
       System.err.println("Usage: SparkKMeans <file> <k> <convergeDist>")
-      showWarning()
       System.exit(1)
     }
 
@@ -92,7 +94,6 @@ object SparkKMeans {
 
     println("Final centers:")
     kPoints.foreach(println)
-    showWarning()
     sc.stop()
   }
 }

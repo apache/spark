@@ -29,7 +29,8 @@ import org.apache.spark.scheduler.InputFormatInfo
 
 
 /**
- * Logistic regression based classification.
+ * Logistic regression based classification. This is an example implementation for learning how to use Spark.
+ * For more conventional use, please refer to org.apache.spark.mllib.classification.LogisticRegression
  */
 object SparkHdfsLR {
   val D = 10   // Numer of dimensions
@@ -57,12 +58,14 @@ object SparkHdfsLR {
   }
 
   def main(args: Array[String]) {
+
+    showWarning()
+
     if (args.length < 2) {
       System.err.println("Usage: SparkHdfsLR <file> <iters>")
       showWarning()
       System.exit(1)
     }
-    showWarning()
     val sparkConf = new SparkConf().setAppName("SparkHdfsLR")
     val inputPath = args(0)
     val conf = SparkHadoopUtil.get.newConfiguration()
@@ -87,7 +90,6 @@ object SparkHdfsLR {
     }
 
     println("Final w: " + w)
-    showWarning()
     sc.stop()
   }
 }

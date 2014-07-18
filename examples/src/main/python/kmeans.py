@@ -45,6 +45,10 @@ def closestPoint(p, centers):
 
 
 if __name__ == "__main__":
+
+    print """WARNING: THIS IS A NAIVE IMPLEMENTATION OF K-MEANS CLUSTERING AND IS GIVEN AS AN EXAMPLE!
+      PLEASE REFER TO examples/src/main/python/mllib/kmeans.py FOR AN EXAMPLE ON HOW TO USE MLlib's KMEANS
+      IMPLEMENTATION."""
     if len(sys.argv) != 4:
         print >> sys.stderr, "Usage: kmeans <file> <k> <convergeDist>"
         exit(-1)

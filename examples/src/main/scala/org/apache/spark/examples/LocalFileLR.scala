@@ -21,6 +21,10 @@ import java.util.Random
 
 import breeze.linalg.{Vector, DenseVector}
 
+/**
+ * Logistic regression based classification. This is an example implementation for learning how to use Spark.
+ * For more conventional use, please refer to org.apache.spark.mllib.classification.LogisticRegression
+ */
 object LocalFileLR {
   val D = 10   // Numer of dimensions
   val rand = new Random(42)
@@ -41,10 +45,13 @@ object LocalFileLR {
   }
 
   def main(args: Array[String]) {
+
+    showWarning()
+
     val lines = scala.io.Source.fromFile(args(0)).getLines().toArray
     val points = lines.map(parsePoint _)
     val ITERATIONS = args(1).toInt
-    showWarning()
+
     // Initialize w to a random value
     var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
     println("Initial w: " + w)
@@ -60,6 +67,5 @@ object LocalFileLR {
     }
 
     println("Final w: " + w)
-    showWarning()
   }
 }

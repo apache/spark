@@ -26,7 +26,8 @@ import cern.jet.math._
 import org.apache.spark._
 
 /**
- * Alternating least squares matrix factorization.
+ * Alternating least squares matrix factorization. This is an example implementation for learning how to use Spark.
+ * For more conventional use, please refer to org.apache.spark.mllib.recommendation.ALS
  */
 object SparkALS {
   // Parameters set through command line arguments
@@ -96,6 +97,9 @@ object SparkALS {
   }
 
   def main(args: Array[String]) {
+
+    showWarning()
+
     var slices = 0
 
     val options = (0 to 4).map(i => if (i < args.length) Some(args(i)) else None)
@@ -109,11 +113,10 @@ object SparkALS {
         slices = slices_.getOrElse("2").toInt
       case _ =>
         System.err.println("Usage: SparkALS [M] [U] [F] [iters] [slices]")
-        showWarning()
         System.exit(1)
     }
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
-    showWarning()
+
     val sparkConf = new SparkConf().setAppName("SparkALS")
     val sc = new SparkContext(sparkConf)
 
@@ -140,7 +143,7 @@ object SparkALS {
       println("RMSE = " + rmse(R, ms, us))
       println()
     }
-    showWarning()
+
     sc.stop()
   }
 }

@@ -27,7 +27,8 @@ import breeze.linalg.{Vector, DenseVector, squaredDistance}
 import org.apache.spark.SparkContext._
 
 /**
- * K-means clustering.
+ * K-means clustering. This is an example implementation for learning how to use Spark.
+ * For more conventional use, please refer to org.apache.spark.mllib.clustering.KMeans
  */
 object LocalKMeans {
   val N = 1000
@@ -70,6 +71,9 @@ object LocalKMeans {
   }
 
   def main(args: Array[String]) {
+
+    showWarning()
+
     val data = generateData
     var points = new HashSet[Vector[Double]]
     var kPoints = new HashMap[Int, Vector[Double]]
@@ -78,7 +82,6 @@ object LocalKMeans {
     while (points.size < K) {
       points.add(data(rand.nextInt(N)))
     }
-    showWarning()
 
     val iter = points.iterator
     for (i <- 1 to points.size) {
@@ -112,6 +115,5 @@ object LocalKMeans {
     }
 
     println("Final centers: " + kPoints)
-    showWarning()
   }
 }
