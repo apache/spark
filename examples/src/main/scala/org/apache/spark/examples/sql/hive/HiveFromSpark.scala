@@ -42,7 +42,7 @@ object HiveFromSpark {
     hql("SELECT * FROM src").collect.foreach(println)
 
     // Aggregation queries are also supported.
-    val count = hql("SELECT COUNT(*) FROM src").collect().head.getInt(0)
+    val count = hql("SELECT COUNT(*) FROM src").collect().head.getLong(0)
     println(s"COUNT(*): $count")
 
     // The results of SQL queries are themselves RDDs and support all normal RDD functions.  The
