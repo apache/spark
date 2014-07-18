@@ -61,8 +61,13 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.storage.MemoryStore.Entry"),
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$"
-            + "createZero$1")
+          "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$createZero$1"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.storage.MemoryStore.putValues"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.storage.DiskStore.putValues"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.storage.TachyonStore.putValues")
       ) ++
       Seq(
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this")
