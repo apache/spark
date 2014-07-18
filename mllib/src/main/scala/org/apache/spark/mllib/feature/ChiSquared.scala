@@ -22,7 +22,7 @@ private[feature] trait ContingencyTableCalculator extends java.io.Serializable {
       ).collectAsMap()
   }
 
-  def tables(discreteData: RDD[LabeledPoint]): RDD[(Int, Array[Array[Int]])] = {
+  protected def tables(discreteData: RDD[LabeledPoint]): RDD[(Int, Array[Array[Int]])] = {
     val indexByLabel = indexByLabelMap(discreteData)
     val classesCount = indexByLabel.size
     val valuesByIndex = enumerateValues(discreteData)
@@ -30,7 +30,7 @@ private[feature] trait ContingencyTableCalculator extends java.io.Serializable {
       labeledPoint =>
         labeledPoint.features.toArray.zipWithIndex.map {
           case (featureValue, featureIndex) =>
-            /** array of feature presence/absence in a class */
+            /** array of feature value presence in a class */
             val featureValues = valuesByIndex(featureIndex)
             val valuesCount = featureValues.size
             val featureValueIndex = featureValues.indexOf(featureValue)
@@ -41,38 +41,45 @@ private[feature] trait ContingencyTableCalculator extends java.io.Serializable {
         }
     }.reduceByKey {
       case (x, y) =>
-        x.zip(y).map { case(row1, row2) => row1.zip(row2).map{ case(a, b) => a + b} }
+        x.zip(y).map { case (row1, row2) =>
+          row1.zip(row2).map { case (a, b) =>
+            a + b}}
     }
   }
 }
 
-private[feature] trait ChiSquared {
+private[feature] object ChiSquared {
 
-  def compute(contingencyTable: Array[Array[Int]]): Double = {
+  def apply(contingencyTable: Array[Array[Int]]): Double = {
     /** probably use List instead of Array */
     val columns = contingencyTable(0).size
-    val rowSums = contingencyTable.map( row => row.sum)
-    val columnSums = contingencyTable.fold(Array.ofDim[Int](columns)){ case (ri, rj) =>
-      ri.zip(rj).map { case (a1, b1)
-      => a1 + b1}}
+    val rowSums = contingencyTable.map(row =>
+      row.sum)
+    val columnSums = contingencyTable.fold(Array.ofDim[Int](columns)) { case (ri, rj) =>
+      ri.zip(rj).map { case (a1, b1) =>
+        a1 + b1
+      }
+    }
     val tableSum = rowSums.sum
-    val rowRatios = rowSums.map( _.toDouble / tableSum)
-    val expectedTable = rowRatios.map( a => columnSums.map(_ * a))
-    val chi2 = contingencyTable.zip(expectedTable).foldLeft(0.0){ case(sum, (obsRow, expRow)) =>
-      obsRow.zip(expRow).map{ case (oValue, eValue) =>
-        sqr(oValue - eValue) / eValue}.sum + sum}
-    chi2
+    val rowRatios = rowSums.map(_.toDouble / tableSum)
+    val expectedTable = rowRatios.map(a => columnSums.map(_ * a))
+    contingencyTable.zip(expectedTable).foldLeft(0.0) { case (sum, (obsRow, expRow)) =>
+      obsRow.zip(expRow).map { case (oValue, eValue) =>
+        sqr(oValue - eValue) / eValue
+      }.sum + sum
+    }
   }
 
   private def sqr(x: Double): Double = x * x
 }
 
 class ChiSquaredFeatureSelection(labeledData: RDD[LabeledPoint], numTopFeatures: Int) extends java.io.Serializable
-with LabeledPointFeatureFilter with ContingencyTableCalculator with ChiSquared {
+with LabeledPointFeatureFilter with ContingencyTableCalculator {
   override def data: RDD[LabeledPoint] = labeledData
 
   override def select: Set[Int] = {
     tables(data).map { case (featureIndex, contTable) =>
-      (featureIndex, compute(contTable))}.collect().sortBy(-_._2).take(numTopFeatures).unzip._1.toSet
+      (featureIndex, ChiSquared(contTable))
+    }.collect().sortBy(-_._2).take(numTopFeatures).unzip._1.toSet
   }
 }
