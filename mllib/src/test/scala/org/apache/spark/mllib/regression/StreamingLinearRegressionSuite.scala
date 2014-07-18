@@ -90,7 +90,7 @@ class StreamingLinearRegressionSuite extends FunSuite {
 
     val conf = new SparkConf().setMaster("local").setAppName("streaming test")
     val testDir = Files.createTempDir()
-    val ssc = new StreamingContext(conf, Seconds(1))
+    val ssc = new StreamingContext(conf, Seconds(2))
     val numBatches = 5
     val data = MLStreamingUtils.loadLabeledPointsFromText(ssc, testDir.toString)
     val model = StreamingLinearRegressionWithSGD.start(numFeatures=1, numIterations=50)
@@ -106,7 +106,7 @@ class StreamingLinearRegressionSuite extends FunSuite {
       val samples = LinearDataGenerator.generateLinearInput(0.0, Array(10.0), 100, 42 * (i + 1))
       val file = new File(testDir, i.toString)
       FileUtils.writeStringToFile(file, samples.map(x => x.toString).mkString("\n"))
-      Thread.sleep(Milliseconds(1000).milliseconds)
+      Thread.sleep(Milliseconds(6000).milliseconds)
       history.append(math.abs(model.latest().weights(0) - 10.0))
     }
     Thread.sleep(Milliseconds(5000).milliseconds)
@@ -116,8 +116,11 @@ class StreamingLinearRegressionSuite extends FunSuite {
     System.clearProperty("spark.driver.port")
     FileUtils.deleteDirectory(testDir)
 
-    // check that error is always getting smaller
-    assert(history.drop(1).zip(history.dropRight(1)).forall(x => (x._1 - x._2) < 0))
+    val deltas = history.drop(1).zip(history.dropRight(1))
+    // check error stability (it always either shrinks, or increases with small tol)
+    assert(deltas.forall(x => (x._1 - x._2) <= 0.1))
+    // check that error shrunk on at least 2 batches
+    assert(deltas.map(x => if ((x._1 - x._2) < 0) 1 else 0).sum > 1)
 
   }
 
