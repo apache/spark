@@ -25,6 +25,7 @@ import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.util.{Utils, CallSite}
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
@@ -45,6 +46,8 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
   /** This is an unique identifier for the network input stream. */
   val id = ssc.getNewReceiverStreamId()
 
+  setName("BlockRDD")
+
   /**
    * Gets the receiver object that will be sent to the worker nodes
    * to receive data. This method needs to defined by any specific implementation
@@ -59,6 +62,8 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
 
   /** Ask ReceiverInputTracker for received data blocks and generates RDDs with them. */
   override def compute(validTime: Time): Option[RDD[T]] = {
+    setCallSite
+    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
     // If this is called for any time before the start time of the context,
     // then this returns an empty RDD. This may happen when recovering from a
     // master failure
@@ -70,6 +75,7 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
     } else {
       Some(new BlockRDD[T](ssc.sc, Array[BlockId]()))
     }
+
   }
 
   /** Get information on received blocks. */

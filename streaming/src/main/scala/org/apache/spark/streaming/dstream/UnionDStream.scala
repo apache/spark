@@ -40,11 +40,15 @@ class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
     throw new IllegalArgumentException("Array of parents have different slide times")
   }
 
+  setName("UnionRDD")
+
   override def dependencies = parents.toList
 
   override def slideDuration: Duration = parents.head.slideDuration
 
   override def compute(validTime: Time): Option[RDD[T]] = {
+    setCallSite
+    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
     val rdds = new ArrayBuffer[RDD[T]]()
     parents.map(_.getOrCompute(validTime)).foreach(_ match {
       case Some(rdd) => rdds += rdd

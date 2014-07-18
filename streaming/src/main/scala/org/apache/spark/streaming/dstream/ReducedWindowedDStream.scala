@@ -52,6 +52,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
+  setName("MappedValuesRDD")
   // Reduce each batch of data using reduceByKey which will be further reduced by window
   // by ReducedWindowedDStream
   val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
@@ -83,6 +84,8 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
   }
 
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
+    setCallSite
+    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
     val reduceF = reduceFunc
     val invReduceF = invReduceFunc
 

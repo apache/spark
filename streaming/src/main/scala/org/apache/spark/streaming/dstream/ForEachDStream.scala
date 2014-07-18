@@ -34,12 +34,11 @@ class ForEachDStream[T: ClassTag] (
 
   override def compute(validTime: Time): Option[RDD[Unit]] = None
 
-  //TODO: where to clear up the threadlocal values?
   override def generateJob(time: Time): Option[Job] = {
     parent.getOrCompute(time) match {
       case Some(rdd) =>
-        parent.ssc.sc.setLocalProperty("spark.job.callSiteShort", rdd.creationSite.short)
-        parent.ssc.sc.setLocalProperty("spark.job.callSiteLong", rdd.creationSite.long)
+        //parent.ssc.sc.setLocalProperty("spark.job.callSiteShort", rdd.creationSite.short)
+        //parent.ssc.sc.setLocalProperty("spark.job.callSiteLong", rdd.creationSite.long)
         val jobFunc = () => {
           foreachFunc(rdd, time)
         }

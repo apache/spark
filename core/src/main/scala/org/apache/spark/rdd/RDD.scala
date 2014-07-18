@@ -40,7 +40,7 @@ import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BoundedPriorityQueue, CallSite, Utils}
+import org.apache.spark.util.{Utils, BoundedPriorityQueue, CallSite}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
 
@@ -124,7 +124,7 @@ abstract class RDD[T: ClassTag](
   val id: Int = sc.newRddId()
 
   /** A friendly name for this RDD */
-  @transient var name: String = null
+  @transient var name: String = sc.getLocalProperty("rddName")
 
   /** Assign a name to this RDD */
   def setName(_name: String): this.type = {
@@ -1214,14 +1214,11 @@ abstract class RDD[T: ClassTag](
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
   @transient private[spark] val creationSite = {
-    val short: String = sc.getLocalProperty("spark.job.callSiteShort")
+    val short: String = sc.getLocalProperty(name + Utils.CALL_SITE_SHORT)
     if (short != null) {
-      CallSite(short, sc.getLocalProperty("spark.job.callSiteLong"))
+      CallSite(short, sc.getLocalProperty(name + Utils.CALL_SITE_LONG))
     } else {
-      val callSite: CallSite = Utils.getCallSite
-      //sc.setLocalProperty("spark.job.callSiteShort", callSite.short)
-      //sc.setLocalProperty("spark.job.callSiteLong", callSite.long)
-      callSite
+      Utils.getCallSite
     }
   }
   private[spark] def getCreationSite: String = Option(creationSite).map(_.short).getOrElse("")

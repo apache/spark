@@ -32,11 +32,15 @@ class QueueInputDStream[T: ClassTag](
     defaultRDD: RDD[T]
   ) extends InputDStream[T](ssc) {
 
+  setName("UnionRDD")
+
   override def start() { }
 
   override def stop() { }
 
   override def compute(validTime: Time): Option[RDD[T]] = {
+    setCallSite
+    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
     val buffer = new ArrayBuffer[RDD[T]]()
     if (oneAtATime && queue.size > 0) {
       buffer += queue.dequeue()

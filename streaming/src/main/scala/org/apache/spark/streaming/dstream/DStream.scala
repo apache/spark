@@ -30,7 +30,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.util.{Utils, MetadataCleaner}
+import org.apache.spark.util.{CallSite, Utils, MetadataCleaner}
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -105,6 +105,24 @@ abstract class DStream[T: ClassTag] (
 
   /** Return the StreamingContext associated with this DStream */
   def context = ssc
+
+  private[streaming] val RDD_NAME: String = "rddName";
+
+  @transient var name: String = null
+
+  /** Assign a name to this DStream */
+  def setName(_name: String) = {
+    name = _name
+  }
+
+  /* Find the creation callSite */
+  val creationSite = Utils.getCallSite
+
+  /* Store the creation callSite in threadlocal */
+  private[streaming] def setCallSite = {
+    ssc.sparkContext.setLocalProperty(name + Utils.CALL_SITE_SHORT, creationSite.short)
+    ssc.sparkContext.setLocalProperty(name + Utils.CALL_SITE_LONG, creationSite.long)
+  }
 
   /** Persist the RDDs of this DStream with the given storage level */
   def persist(level: StorageLevel): DStream[T] = {

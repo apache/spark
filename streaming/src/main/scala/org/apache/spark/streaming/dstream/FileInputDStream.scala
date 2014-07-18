@@ -57,6 +57,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   override def start() { }
 
   override def stop() { }
+  setName("UnionRDD")
 
   /**
    * Finds the files that were modified since the last time this method was called and makes
@@ -71,6 +72,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     assert(validTime.milliseconds >= ignoreTime,
       "Trying to get new files for a really old time [" + validTime + " < " + ignoreTime + "]")
 
+    setCallSite
+    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
     // Find new files
     val (newFiles, minNewFileModTime) = findNewFiles(validTime.milliseconds)
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))

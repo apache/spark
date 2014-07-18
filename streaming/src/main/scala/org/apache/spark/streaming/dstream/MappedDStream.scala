@@ -27,12 +27,17 @@ class MappedDStream[T: ClassTag, U: ClassTag] (
     mapFunc: T => U
   ) extends DStream[U](parent.ssc) {
 
+  setName("MappedRDD")
+
   override def dependencies = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
-    parent.getOrCompute(validTime).map(_.map[U](mapFunc))
+    setCallSite
+    val rdd: Option[RDD[U]] = parent.getOrCompute(validTime).map(_.map[U](mapFunc))
+    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
+    return rdd
   }
 }
 

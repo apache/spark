@@ -26,7 +26,7 @@ import org.apache.spark.util.{CallSite, Utils}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
-private[scheduler] case class GenerateJobs(time: Time, callSite: CallSite) extends JobGeneratorEvent
+private[scheduler] case class GenerateJobs(time: Time) extends JobGeneratorEvent
 private[scheduler] case class ClearMetadata(time: Time) extends JobGeneratorEvent
 private[scheduler] case class DoCheckpoint(time: Time) extends JobGeneratorEvent
 private[scheduler] case class ClearCheckpointData(time: Time) extends JobGeneratorEvent
@@ -48,10 +48,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     Class.forName(clockClass).newInstance().asInstanceOf[Clock]
   }
 
-  val callSite: CallSite = Utils.getCallSite
-
   private val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
-    longTime => eventActor ! GenerateJobs(new Time(longTime), callSite), "JobGenerator")
+    longTime => eventActor ! GenerateJobs(new Time(longTime)), "JobGenerator")
 
   // This is marked lazy so that this is initialized after checkpoint duration has been set
   // in the context and the generator has been started.
@@ -165,7 +163,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private def processEvent(event: JobGeneratorEvent) {
     logDebug("Got event " + event)
     event match {
-      case GenerateJobs(time, callSite) => generateJobs(time, callSite)
+      case GenerateJobs(time) => generateJobs(time)
       case ClearMetadata(time) => clearMetadata(time)
       case DoCheckpoint(time) => doCheckpoint(time)
       case ClearCheckpointData(time) => clearCheckpointData(time)
@@ -219,9 +217,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /** Generate jobs and perform checkpoint for the given `time`.  */
-  private def generateJobs(time: Time, callSite: CallSite) {
-    ssc.sc.setLocalProperty("spark.job.callSiteShort", callSite.short)
-    ssc.sc.setLocalProperty("spark.job.callSiteLong", callSite.long)
+  private def generateJobs(time: Time) {
     SparkEnv.set(ssc.env)
     Try(graph.generateJobs(time)) match {
       case Success(jobs) =>

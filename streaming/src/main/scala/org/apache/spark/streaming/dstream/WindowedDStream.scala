@@ -44,6 +44,8 @@ class WindowedDStream[T: ClassTag](
   // Persist parent level by default, as those RDDs are going to be obviously reused.
   parent.persist(StorageLevel.MEMORY_ONLY_SER)
 
+  setName("PartitionerAwareUnionRDD")
+
   def windowDuration: Duration =  _windowDuration
 
   override def dependencies = List(parent)
@@ -61,6 +63,8 @@ class WindowedDStream[T: ClassTag](
   }
 
   override def compute(validTime: Time): Option[RDD[T]] = {
+    setCallSite
+    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
     val currentWindow = new Interval(validTime - windowDuration + parent.slideDuration, validTime)
     val rddsInWindow = parent.slice(currentWindow)
     val windowRDD = if (rddsInWindow.flatMap(_.partitioner).distinct.length == 1) {

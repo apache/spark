@@ -34,7 +34,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
   ) extends DStream[(K, S)](parent.ssc) {
 
   super.persist(StorageLevel.MEMORY_ONLY_SER)
-
+  setName("MapPartitionsRDD")
   override def dependencies = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
@@ -42,6 +42,8 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
   override val mustCheckpoint = true
 
   override def compute(validTime: Time): Option[RDD[(K, S)]] = {
+    setCallSite
+    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
 
     // Try to get the previous state RDD
     getOrCompute(validTime - slideDuration) match {

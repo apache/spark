@@ -52,6 +52,9 @@ private[spark] case class CallSite(val short: String, val long: String)
 private[spark] object Utils extends Logging {
   val random = new Random()
 
+  private[spark] val CALL_SITE_SHORT: String = ".callSite.short"
+  private[spark] val CALL_SITE_LONG: String = ".callSite.long"
+
   def sparkBin(sparkHome: String, which: String): File = {
     val suffix = if (isWindows) ".cmd" else ""
     new File(sparkHome + File.separator + "bin", which + suffix)
@@ -800,7 +803,7 @@ private[spark] object Utils extends Logging {
    * A regular expression to match classes of the "core" Spark API that we want to skip when
    * finding the call site of a method.
    */
-  private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.streaming)?(\.streaming\.dstream)?(\.streaming\.scheduler)?\.[A-Z]""".r
+  private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?(\.streaming)?(\.streaming\.dstream)?(\.streaming\.scheduler)?(\.streaming\.twitter)?(\.streaming\.kafka)?(\.streaming\.flume)?(\.streaming\.mqtt)?(\.streaming\.zeromq)?\.[A-Z]""".r
   private val SCALA_CLASS_REGEX = """^scala(\.util)?(\.collection)?(\.collection\.mutable)?(\.collection\.immutable)?(\.concurrent\.forkjoin)?\.[A-Z]""".r
   private val AKKA_CLASS_REGEX = """^akka(\.actor)?(\.dispatch)?\.[A-Z]""".r
   private val JAVA_CLASS_REGEX = """^java(\.util\.concurrent)?(\.lang)?\.[A-Z]""".r

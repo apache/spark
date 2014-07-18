@@ -28,11 +28,16 @@ class FlatMapValuedDStream[K: ClassTag, V: ClassTag, U: ClassTag](
     flatMapValueFunc: V => TraversableOnce[U]
   ) extends DStream[(K, U)](parent.ssc) {
 
+  setName("FlatMappedValuesRDD")
+
   override def dependencies = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[(K, U)]] = {
-    parent.getOrCompute(validTime).map(_.flatMapValues[U](flatMapValueFunc))
+    setCallSite
+    val rdd: Option[RDD[(K, U)]] = parent.getOrCompute(validTime).map(_.flatMapValues[U](flatMapValueFunc))
+    ssc.sparkContext.setLocalProperty(RDD_NAME, name)
+    return rdd
   }
 }
