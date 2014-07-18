@@ -1215,10 +1215,14 @@ abstract class RDD[T: ClassTag](
    * where the JobConf/Configuration object is not thread-safe.
    */
   @transient private[spark] lazy val broadcasted: Broadcast[Array[Byte]] = {
-    // TODO: Warn users about very large RDDs.
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val bytes = ser.serialize(this).array()
-    logDebug(s"Broadcasting RDD $id using ${bytes.length} bytes")
+    val size = Utils.bytesToString(bytes.length)
+    if (bytes.length > (1L << 20)) {
+      logWarning(s"Broadcasting RDD $id ($size), which contains large objects")
+    } else {
+      logDebug(s"Broadcasting RDD $id ($size)")
+    }
     sc.broadcast(bytes)
   }
 
