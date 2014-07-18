@@ -30,7 +30,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.util.MetadataCleaner
+import org.apache.spark.util.{Utils, MetadataCleaner}
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -322,6 +322,7 @@ abstract class DStream[T: ClassTag] (
   private[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
       case Some(rdd) => {
+        //ssc.sc.setJobGroup("g","d")
         val jobFunc = () => {
           val emptyFunc = { (iterator: Iterator[T]) => {} }
           context.sparkContext.runJob(rdd, emptyFunc)

@@ -1296,6 +1296,9 @@ object SparkContext extends Logging {
 
   private[spark] val SPARK_UNKNOWN_USER = "<unknown>"
 
+  private[spark] val SPARK_JOB_CALL_SITE_SHORT = "spark.job.callSiteShort"
+  private[spark] val SPARK_JOB_CALL_SITE_LONG = "spark.job.callSiteLong"
+
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0

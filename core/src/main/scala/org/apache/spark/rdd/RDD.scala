@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.util.Random
+import java.util.{Properties, Random}
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
@@ -1213,7 +1213,17 @@ abstract class RDD[T: ClassTag](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
-  @transient private[spark] val creationSite = Utils.getCallSite
+  @transient private[spark] val creationSite = {
+    val short: String = sc.getLocalProperty("spark.job.callSiteShort")
+    if (short != null) {
+      CallSite(short, sc.getLocalProperty("spark.job.callSiteLong"))
+    } else {
+      val callSite: CallSite = Utils.getCallSite
+      //sc.setLocalProperty("spark.job.callSiteShort", callSite.short)
+      //sc.setLocalProperty("spark.job.callSiteLong", callSite.long)
+      callSite
+    }
+  }
   private[spark] def getCreationSite: String = Option(creationSite).map(_.short).getOrElse("")
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
