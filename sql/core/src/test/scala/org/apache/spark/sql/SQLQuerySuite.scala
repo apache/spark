@@ -43,6 +43,12 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT substr(tableName, 3) FROM tableName"),
       "st")
+    checkAnswer(
+      sql("SELECT substring(tableName, 1, 2) FROM tableName"),
+      "te")
+    checkAnswer(
+      sql("SELECT substring(tableName, 3) FROM tableName"),
+      "st")
   }
 
   test("index into array") {
