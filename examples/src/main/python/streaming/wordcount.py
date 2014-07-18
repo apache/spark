@@ -13,6 +13,7 @@ if __name__ == "__main__":
     conf.setAppName("PythonStreamingWordCount")
     conf.set("spark.default.parallelism", 1)
 
+# still has a bug
 #    ssc = StreamingContext(appName="PythonStreamingWordCount", duration=Seconds(1))
     ssc = StreamingContext(conf=conf, duration=Seconds(1))
 
