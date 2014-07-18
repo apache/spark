@@ -22,13 +22,13 @@ import scala.reflect.ClassTag
 private[spark] object SamplingUtils {
 
   /**
-   * Reservoir Sampling implementation.
+   * Reservoir sampling implementation that also returns the input size.
    *
    * @param input input size
    * @param k reservoir size
    * @return (samples, input size)
    */
-  def reservoirSample[T: ClassTag](input: Iterator[T], k: Int): (Array[T], Int) = {
+  def reservoirSampleAndCount[T: ClassTag](input: Iterator[T], k: Int): (Array[T], Int) = {
     val reservoir = new Array[T](k)
     // Put the first k elements in the reservoir.
     var i = 0

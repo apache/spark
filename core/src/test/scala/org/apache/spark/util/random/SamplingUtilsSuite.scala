@@ -24,21 +24,21 @@ import org.scalatest.FunSuite
 
 class SamplingUtilsSuite extends FunSuite {
 
-  test("reservoirSample") {
+  test("reservoirSampleAndCount") {
     val input = Seq.fill(100)(Random.nextInt())
 
     // input size < k
-    val (sample1, count1) = SamplingUtils.reservoirSample(input.iterator, 150)
+    val (sample1, count1) = SamplingUtils.reservoirSampleAndCount(input.iterator, 150)
     assert(count1 === 100)
     assert(input === sample1.toSeq)
 
     // input size == k
-    val (sample2, count2) = SamplingUtils.reservoirSample(input.iterator, 100)
+    val (sample2, count2) = SamplingUtils.reservoirSampleAndCount(input.iterator, 100)
     assert(count2 === 100)
     assert(input === sample2.toSeq)
 
     // input size > k
-    val (sample3, count3) = SamplingUtils.reservoirSample(input.iterator, 10)
+    val (sample3, count3) = SamplingUtils.reservoirSampleAndCount(input.iterator, 10)
     assert(count3 === 100)
     assert(sample3.length === 10)
   }
