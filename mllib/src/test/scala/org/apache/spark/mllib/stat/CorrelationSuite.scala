@@ -22,7 +22,8 @@ import org.scalatest.FunSuite
 import breeze.linalg.{DenseMatrix => BDM, Matrix => BM}
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.stat.correlation.{Correlations, PearsonCorrelation, SpearmanCorrelation}
+import org.apache.spark.mllib.stat.correlation.{Correlations, PearsonCorrelation,
+  SpearmanCorrelation}
 import org.apache.spark.mllib.util.LocalSparkContext
 
 class CorrelationSuite extends FunSuite with LocalSparkContext {

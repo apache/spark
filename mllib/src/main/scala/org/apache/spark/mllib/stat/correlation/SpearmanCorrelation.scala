@@ -61,8 +61,6 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
     // to avoid race condition caused by closure serialization
     for (k <- 0 until numCols) {
       val column = indexed.map { case (vector, index) => (vector(k), index) }
-      println("k = " + k)
-      getRanks(column).foreach(println)
       ranks(k) = getRanks(column)
     }
 
@@ -92,17 +90,17 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
       // add an extra element to signify the end of the list so that flatMap can flush the last
       // batch of duplicates
       val padded = iter ++
-        Iterator[((Double, Long), Long)](((Double.NaN, Long.MinValue), Long.MinValue))
+        Iterator[((Double, Long), Long)](((Double.NaN, -1L), -1L))
       var lastVal = 0.0
       var firstRank = 0.0
       val idBuffer = new ArrayBuffer[Long]()
-      padded.flatMap { item =>
-        val rank = item._2
-        if (item._1._1  == lastVal && item._2 != Long.MinValue) {
-          idBuffer += item._1._2
+      padded.flatMap { case ((v, id), rank) =>
+        if (v  == lastVal && id != Long.MinValue) {
+          idBuffer += id
           Iterator.empty
         } else {
           val entries = if (idBuffer.size == 0) {
+            // edge case for the first value matching the initial value of lastVal
             Iterator.empty
           } else if (idBuffer.size == 1) {
             Iterator((idBuffer(0), firstRank))
@@ -110,10 +108,10 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
             val averageRank = firstRank + (idBuffer.size - 1.0) / 2.0
             idBuffer.map(id => (id, averageRank))
           }
-          lastVal = item._1._1
+          lastVal = v
           firstRank = rank
           idBuffer.clear()
-          idBuffer += item._1._2
+          idBuffer += id
           entries
         }
       }
