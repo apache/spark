@@ -42,9 +42,7 @@ private[stat] trait Correlation {
    * input vectors.
    */
   def computeCorrelationWithMatrixImpl(x: RDD[Double], y: RDD[Double]): Double = {
-    val mat: RDD[Vector] = x.zip(y).mapPartitions { iter =>
-      iter.map { case (xi, yi) => new DenseVector(Array(xi, yi)) }
-    }
+    val mat: RDD[Vector] = x.zip(y).map { case (xi, yi) => new DenseVector(Array(xi, yi)) }
     computeCorrelationMatrix(mat)(0, 1)
   }
 
@@ -62,7 +60,7 @@ private[stat] trait Correlation {
 private[stat] object Correlations {
 
   // Note: after new types of correlations are implemented, please update this map
-  val nameToObjectMap = Map(("pearson", PearsonCorrelation), ("spearman", SpearmansCorrelation))
+  val nameToObjectMap = Map(("pearson", PearsonCorrelation), ("spearman", SpearmanCorrelation))
   val defaultCorrName: String = "pearson"
   val defaultCorr: Correlation = nameToObjectMap(defaultCorrName)
 
@@ -77,29 +75,17 @@ private[stat] object Correlations {
   }
 
   /**
-   * Perform simple string processing to match the input correlation name with a known name
+   * Match input correlation name with a known name via simple string matching
    *
-   * private to mllib for ease of unit testing
+   * private to stat for ease of unit testing
    */
-  private[mllib] def getCorrelationFromName(method: String): Correlation = {
-    if (method.equals(defaultCorrName)) {
-      defaultCorr
-    } else {
-      var correlation: Correlation = defaultCorr
-      var matched = false
-      nameToObjectMap.foreach { case (name, corr) =>
-        if (!matched && method.equals(name)) {
-          correlation = corr
-          matched = true
-        }
-      }
-
-      if (matched) {
-        correlation
-      } else {
-        throw new IllegalArgumentException("Correlation name not recognized." +
-          " Supported correlations: " + nameToObjectMap.keys.mkString(", "))
-      }
+  private[stat] def getCorrelationFromName(method: String): Correlation = {
+    try {
+      nameToObjectMap(method)
+    } catch {
+      case nse: NoSuchElementException =>
+        throw new IllegalArgumentException("Unrecognized method name. Supported correlations: "
+          + nameToObjectMap.keys.mkString(", "))
     }
   }
 }

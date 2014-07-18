@@ -39,15 +39,16 @@ object Statistics {
 
   /**
    * Compute the correlation matrix for the input RDD of Vectors using the specified method.
-   * Methods currently supported: pearson (default), spearman
+   * Methods currently supported: `pearson` (default), `spearman`
    *
    * Note that for Spearman, a rank correlation, we need to create an RDD[Double] for each column
    * and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
    * which is fairly costly. Cache the input RDD before calling corr with `method = "spearman"` to
-   * avoid recomputing the common lineage
+   * avoid recomputing the common lineage.
    *
    * @param X an RDD[Vector] for which the correlation matrix is to be computed.
-   * @param method String specifying the method to use for computing correlation
+   * @param method String specifying the method to use for computing correlation.
+   *               Supported: `pearson` (default), `spearman`
    * @return Correlation matrix comparing columns in X.
    */
   def corr(X: RDD[Vector], method: String): Matrix = Correlations.corrMatrix(X, method)
@@ -68,8 +69,9 @@ object Statistics {
    *
    * @param x RDD[Double] of the same cardinality as y
    * @param y RDD[Double] of the same cardinality as x
-   * @param method String specifying the method to use for computing correlation
-   * @return A Double containing the correlation between the two input RDD[Double]s using the
+   * @param method String specifying the method to use for computing correlation.
+   *               Supported: `pearson` (default), `spearman`
+   *@return A Double containing the correlation between the two input RDD[Double]s using the
    *         specified method.
    */
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
