@@ -1211,11 +1211,15 @@ abstract class RDD[T: ClassTag](
    * Broadcasted copy of this RDD, used to dispatch tasks to executors. Note that we broadcast
    * the serialized copy of the RDD and for each task we will deserialize it, which means each
    * task gets a different copy of the RDD. This provides stronger isolation between tasks that
-   * might modify state of objects referenced in their closures.
+   * might modify state of objects referenced in their closures. This is necessary in Hadoop
+   * where the JobConf/Configuration object is not thread-safe.
    */
   @transient private[spark] lazy val broadcasted: Broadcast[Array[Byte]] = {
+    // TODO: Warn users about very large RDDs.
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    sc.broadcast(ser.serialize(this).array())
+    val bytes = ser.serialize(this).array()
+    logDebug(s"Broadcasting RDD $id using ${bytes.length} bytes")
+    sc.broadcast(bytes)
   }
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
