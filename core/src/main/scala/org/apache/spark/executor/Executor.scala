@@ -268,9 +268,9 @@ private[spark] class Executor(
       } finally {
         val threadId = Thread.currentThread().getId
         val shuffleMemoryMap = env.shuffleMemoryMap
-        val cacheMemoryMap = env.cacheMemoryMap
+        val unrollMemoryMap = env.unrollMemoryMap
         shuffleMemoryMap.synchronized { shuffleMemoryMap.remove(threadId) }
-        cacheMemoryMap.synchronized { cacheMemoryMap.remove(threadId) }
+        unrollMemoryMap.synchronized { unrollMemoryMap.remove(threadId) }
         runningTasks.remove(taskId)
       }
     }

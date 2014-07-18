@@ -67,13 +67,13 @@ class SparkEnv (
     val metricsSystem: MetricsSystem,
     val conf: SparkConf) extends Logging {
 
-  // A mapping of thread ID to amount of memory, in bytes, used for shuffle
+  // A mapping of thread ID to amount of memory, in bytes, used for shuffle aggregations
   // All accesses should be manually synchronized
   val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 
-  // A mapping of thread ID to amount of memory, in bytes, used for unrolling an RDD partition
+  // A mapping of thread ID to amount of memory, in bytes, used for unrolling a block
   // All accesses should be manually synchronized
-  val cacheMemoryMap = mutable.HashMap[Long, Long]()
+  val unrollMemoryMap = mutable.HashMap[Long, Long]()
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 

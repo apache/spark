@@ -20,10 +20,8 @@ package org.apache.spark
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.executor.InputMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
-import org.apache.spark.util.collection.SizeTrackingAppendOnlyBuffer
 
 /**
  * Spark class responsible for passing RDDs partition contents to the BlockManager and making

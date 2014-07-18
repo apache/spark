@@ -197,7 +197,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     val memoryRequestPeriod = 1000  // How frequently we request for more memory for our buffer
 
     val threadId = Thread.currentThread().getId
-    val cacheMemoryMap = SparkEnv.get.cacheMemoryMap
+    val unrollMemoryMap = SparkEnv.get.unrollMemoryMap
     var buffer = new SizeTrackingAppendOnlyBuffer[Any]
 
     try {
@@ -212,15 +212,15 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           previousSize = currentSize
 
           // Atomically check whether there is sufficient memory in the global pool to continue
-          cacheMemoryMap.synchronized {
-            val previouslyOccupiedMemory = cacheMemoryMap.get(threadId).getOrElse(0L)
-            val otherThreadsMemory = cacheMemoryMap.values.sum - previouslyOccupiedMemory
+          unrollMemoryMap.synchronized {
+            val previouslyOccupiedMemory = unrollMemoryMap.get(threadId).getOrElse(0L)
+            val otherThreadsMemory = unrollMemoryMap.values.sum - previouslyOccupiedMemory
 
             // Request for memory for the local buffer, and return whether request is granted
             def requestForMemory(): Boolean = {
               val availableMemory = freeMemory - otherThreadsMemory
               val granted = availableMemory > memoryToRequest
-              if (granted) { cacheMemoryMap(threadId) = memoryToRequest }
+              if (granted) { unrollMemoryMap(threadId) = memoryToRequest }
               granted
             }
 
@@ -247,8 +247,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       // Unless we return an iterator that depends on the buffer, free up space for other threads
       if (enoughMemory) {
         buffer = null
-        cacheMemoryMap.synchronized {
-          cacheMemoryMap(threadId) = 0
+        unrollMemoryMap.synchronized {
+          unrollMemoryMap(threadId) = 0
         }
       }
     }
