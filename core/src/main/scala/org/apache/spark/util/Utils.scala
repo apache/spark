@@ -852,7 +852,7 @@ private[spark] object Utils extends Logging {
         callStack += el.toString
       }
     }
-    val callStackDepth = System.getProperty("spark.callstack.depth", "10").toInt
+    val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
     CallSite(
       short = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
       long = callStack.take(callStackDepth).mkString("\n"))
