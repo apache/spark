@@ -135,7 +135,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     val k = key.asInstanceOf[K]
     var partition = 0
     if (rangeBounds.length < 1000) {
-      // If we have less than 100 partitions naive search
+      // If we have less than 1000 partitions naive search
       while (partition < rangeBounds.length && ordering.gt(k, rangeBounds(partition))) {
         partition += 1
       }
