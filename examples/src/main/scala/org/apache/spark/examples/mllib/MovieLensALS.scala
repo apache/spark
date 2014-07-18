@@ -26,6 +26,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.recommendation.{ALS, MatrixFactorizationModel, Rating}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.{KryoSerializer, KryoRegistrator}
+import org.apache.spark.Logging
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
@@ -49,7 +50,7 @@ object MovieLensALS {
       kryo: Boolean = false,
       numIterations: Int = 20,
       lambda: Double = 1.0,
-      lambdaL1: Double = 0.0,
+      lambdaL1: Double = 1.0,
       rank: Int = 10,
       implicitPrefs: Boolean = false,
       qpProblem: Int = 1)
@@ -188,9 +189,9 @@ object MovieLensALS {
     val model = als.run(training)
       
     val rmse = computeRmse(model, test, params.implicitPrefs)
-
+    
     println(s"Test RMSE = $rmse.")
-
+    
     sc.stop()
   }
 

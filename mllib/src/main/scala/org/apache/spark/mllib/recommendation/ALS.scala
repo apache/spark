@@ -37,7 +37,7 @@ import org.apache.spark.mllib.optimization.QuadraticMinimizer
 import breeze.linalg.CSCMatrix
 import breeze.linalg.norm
 import breeze.linalg.DenseVector
-import com.github.ecos.QpSolver
+
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
  * of the elements within this block, and the list of destination blocks that each user or
@@ -482,16 +482,17 @@ class ALS private (
     }
 
   private def diagnose(H: DoubleMatrix, f: DoubleMatrix,
-    qpResult: DenseVector[Double], directQpResult: DenseVector[Double], lsResult: DenseVector[Double]) {
+    qpResult: DenseVector[Double], lsResult: DenseVector[Double]) {
     println("H")
     println(H)
     println("f")
     println(f)
-    println("lsResult " + lsResult)
-    println("qpResult " + qpResult)
-    println("directQpResult " + directQpResult)
+    println("qpResult")
+    println(qpResult)
+    println("lsResult")
+    println(lsResult)
   }
-
+  
   /**
    * Compute the new feature vectors for a block of the users matrix given the list of factors
    * it received from each product and its InLinkBlock.
@@ -549,8 +550,7 @@ class ALS private (
           p += 1
         }
       }
-
-      var qpTime: Long = 0
+      
       var lsTime: Long = 0
       var directQpTime: Long = 0
       var failed: Long = 0
@@ -560,69 +560,8 @@ class ALS private (
 
       if (nonnegative) qpProblem = 2
 
-      val qpSolver = qpProblem match {
-        case 1 => new QpSolver(rank)
-        case 2 => new QpSolver(rank, 0, false, None, None, true)
-        case 3 => {
-          val qpSolver = new QpSolver(rank, 0, false, None, None, true, true)
-          qpSolver.updateUb(Array.fill[Double](rank)(1.0))
-          qpSolver
-        }
-        case 4 => {
-          //Qp with linear equality and bounds
-          //smoothness constraint is given by x1 + x2 + ... + xr = 1
-          //Bound constraint is 0 <= x <= 1
-          val equalityBuilder = new CSCMatrix.Builder[Double](1, rank)
-          for (i <- 0 until rank) equalityBuilder.add(0, i, 1)
-          val qpSolver = new QpSolver(rank, 0, false, Some(equalityBuilder.result), None, true, true)
-          qpSolver.updateUb(Array.fill[Double](rank)(1.0))
-          qpSolver.updateEquality(Array[Double](1.0))
-          qpSolver
-        }
-        case 5 => {
-          //prepare the linear inequality
-          //-u <= x <= u
-          //-x -u <= 0, x - u <= 0
-          //Each variable transforms to 2 inequalities
-          //In objective function we add regularization parameter alpha*(u1 + u2 + ... + ur)          
-          //Qp with L1 constraint
-          val inequalityBuilder = new CSCMatrix.Builder[Double](2 * rank, 2 * rank)
-          for (i <- 0 until rank) {
-            inequalityBuilder.add(2 * i, i, -1)
-            inequalityBuilder.add(2 * i, rank + i, -1)
-            inequalityBuilder.add(2 * i + 1, i, 1)
-            inequalityBuilder.add(2 * i + 1, rank + i, -1)
-          }
-          val qpSolver = new QpSolver(rank, rank, false, None, Some(inequalityBuilder.result))
-          qpSolver
-        }
-      }
-
-      val quadraticMinimizer = qpProblem match {
-        case 1 => new QuadraticMinimizer(rank)
-        case 2 => new QuadraticMinimizer(rank, None, None, None).setProximal(1)
-        case 3 => {
-          //Direct QP with bounds
-          val lb = DoubleMatrix.zeros(rank, 1)
-          val ub = DoubleMatrix.zeros(rank, 1).addi(1.0)
-          new QuadraticMinimizer(rank, Some(lb), Some(ub), None).setProximal(2)
-        }
-        case 4 => {
-          //Direct QP with equality constraint
-          val Aeq = DoubleMatrix.ones(1, rank)
-          val lbeq = DoubleMatrix.zeros(rank, 1)
-          val ubeq = DoubleMatrix.ones(rank, 1)
-          val directQpMl = new QuadraticMinimizer(rank, Some(lbeq), Some(ubeq), Some(Aeq), true).setProximal(2)
-          directQpMl
-        }
-        case 5 => {
-          //Direct QP with L1
-          val qpSolverL1 = new QuadraticMinimizer(rank, None, None, None).setProximal(4)
-          qpSolverL1.setLambda(lambdaL1)
-          qpSolverL1
-        }
-      }
-
+      val quadraticMinimizer = QuadraticMinimizer(rank, qpProblem, lambdaL1)
+      
       // Solve the least-squares problem for each user and return the new feature vectors
       val factors = Array.range(0, numUsers).map { index =>
         // Compute the full XtX matrix from the lower-triangular part we got above
@@ -639,91 +578,56 @@ class ALS private (
           val H = fullXtX.add(YtY.get.value)
           val f = userXy(index).mul(-1)
           
-          val falpha = if (qpProblem == 5) {
-            f.data ++ Array.fill[Double](rank)(lambdaL1)
-          } else {
-            f.data
-          }
-          val qpResult = DenseVector(qpSolver.solve(H, falpha)._2)
+          val (qmResult, converged) = quadraticMinimizer.solve(H,f)
+          val qpResult = DenseVector(qmResult.data)
           
-          val directQpResult = if(qpProblem == 4) {
-            val beq = DoubleMatrix.ones(1,1)
-            DenseVector(quadraticMinimizer.solve(H, f, Some(beq)).data)
-          } else {
-            DenseVector(quadraticMinimizer.solve(H, f).data)
-          }
-
           val lsStart = System.nanoTime()
           val result = DenseVector(solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws))
-          lsTime = lsTime + (System.nanoTime - lsStart)
+          lsTime += System.nanoTime - lsStart
           
-          var qpFail = 0
           if(qpProblem == 1 || qpProblem == 2) {
-        	  if (norm(qpResult - result, 2) > 1E-2) {
-        	    println("ECOS QP failed")
-        	    failed = failed + 1
-        	    qpFail = 1
+        	  if(norm(qpResult - result, 2) > 1E-2) {
+        		  println("ADMM QP failed converged " + converged)
+        		  diagnose(H, f, qpResult, result)
+        		  failed += 1
         	  }
-              if (norm(directQpResult - result, 2) > 1E-2) {
-                println("ADMM QP failed")
-                failed = failed + 1
-                qpFail = 2
-              }
+          } else {
+        	  if(!converged) {
+        		  println("ADMM QP did not converge")
+        		  diagnose(H, f, qpResult, result)
+        		  failed += 1
+        	  }
           }
-          if (qpFail > 0) diagnose(H, f, qpResult, directQpResult, result)
-          else if(norm(qpResult - directQpResult, 2) > 1E-2) {
-            println("Mismatch on qpProblem " + qpProblem)
-            diagnose(H, f, qpResult, directQpResult, result)
-            failed = failed + 1
-          }
-          directQpResult.data
+          qpResult.data
         } else {
           val H = fullXtX
           val f = userXy(index).mul(-1)
 
-          val falpha = if (qpProblem == 5) {
-            f.data ++ Array.fill[Double](rank)(lambdaL1)
-          } else {
-            f.data
-          }
-          
-          val qpResult = DenseVector(qpSolver.solve(H, falpha)._2)
-
-          val directQpResult = if(qpProblem == 4) {
-            val beq = DoubleMatrix.ones(1,1)
-            DenseVector(quadraticMinimizer.solve(H, f, Some(beq)).data)
-          } else {
-            DenseVector(quadraticMinimizer.solve(H, f).data)
-          }
+          val (qmResult, converged) = quadraticMinimizer.solve(H,f)
+          val qpResult = DenseVector(qmResult.data)
           
           val lsStart = System.nanoTime()
           val result = DenseVector(solveLeastSquares(fullXtX, userXy(index), ws))
-          lsTime = lsTime + (System.nanoTime() - lsStart)
+          lsTime += System.nanoTime() - lsStart
 
-          var qpFail = 0
           if (qpProblem == 1 || qpProblem == 2) {
         	  if (norm(qpResult - result, 2) > 1E-2) {
-        	    println("ECOS QP failed")
-        	    qpFail = 1
-        	    failed = failed + 1
+        	    println("ADMM QP failed converged " + converged)
+        	    diagnose(H, f, qpResult, result)
+        	    failed += 1
         	  }
-        	  if (norm(directQpResult - result, 2) > 1E-2) {
-        	    println("ADMM QP failed")
-        	    qpFail = 2
-        	    failed = failed + 1
-        	  }
+          } else {
+            if(!converged) {
+              println("ADMM QP did not converge")
+              diagnose(H, f, qpResult, result)
+              failed += 1
+            }
           }
-          if (qpFail > 0) diagnose(H, f, qpResult, directQpResult,result)
-          else if(norm(qpResult - directQpResult, 2) > 1E-2) {
-            println("Mismatch on qpProblem " + qpProblem)
-            diagnose(H, f, qpResult, directQpResult, result)
-            failed = failed + 1
-          }
-          directQpResult.data
+          qpResult.data
         }
         result
       }
-      println(s"lsTime ${lsTime/1e6} qpTime ${qpSolver.solveTime/1e6} directQpTime ${quadraticMinimizer.solveTime/1e6} failed ${failed}")
+      println(s"lsTime ${lsTime/1e6} qpTime ${quadraticMinimizer.solveTime/1e6} failed ${failed}")
       if(ws!=null) println(s"lsIters ${ws.iterations} admmIters ${quadraticMinimizer.iterations}")
       factors
     }

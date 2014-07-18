@@ -141,7 +141,7 @@ private[mllib] object NNLS {
         ws.iterations += iterno
         return x.data.clone
       }
-
+      
       // don't run through the walls
       i = 0
       while (i < n) {
