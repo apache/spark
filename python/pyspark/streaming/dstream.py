@@ -143,6 +143,24 @@ class DStream(object):
         else:
             return self.getNumPartitions()
 
+      return self._jdstream.partitions().size()
+
+    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+        """
+
+        """
+        return PipelinedDStream(self, f, preservesPartitioning)
+
+    def _defaultReducePartitions(self):
+        """
+
+        """
+        # hard code to avoid the error
+        if self.ctx._conf.contains("spark.default.parallelism"):
+            return self.ctx.defaultParallelism
+        else:
+            return self.getNumPartitions()
+
     def getNumPartitions(self):
       """
       Returns the number of partitions in RDD

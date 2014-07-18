@@ -1,5 +1,8 @@
+<<<<<<< HEAD
 /*
 
+=======
+>>>>>>> 69e9cd33a58b880f96cc9c3e5e62eaa415c49843
 package org.apache.spark.streaming.api.python
 
 import org.apache.spark.Accumulator
@@ -12,8 +15,16 @@ import org.apache.spark.streaming.dstream.DStream
 
 import scala.reflect.ClassTag
 
+<<<<<<< HEAD
 class PythonTransformedDStream[T: ClassTag](
                parent: DStream[T],
+=======
+/**
+ * Created by ken on 7/15/14.
+ */
+class PythonTransformedDStream[T: ClassTag](
+               parents: Seq[DStream[T]],
+>>>>>>> 69e9cd33a58b880f96cc9c3e5e62eaa415c49843
                command: Array[Byte],
                envVars: JMap[String, String],
                pythonIncludes: JList[String],
@@ -29,6 +40,7 @@ class PythonTransformedDStream[T: ClassTag](
 
   //pythonDStream compute
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
+<<<<<<< HEAD
 
 //    val parentRDDs = parents.map(_.getOrCompute(validTime).orNull).toSeq
 //    parents.map(_.getOrCompute(validTime).orNull).to
