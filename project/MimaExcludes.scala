@@ -84,8 +84,8 @@ object MimaExcludes {
       MimaBuild.excludeSparkClass("storage.Entry") ++
       MimaBuild.excludeSparkClass("storage.MemoryStore$Entry") ++
       Seq(
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.impurity.Gini.calculate")
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.impurity.Entropy.calculate")      
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.impurity.Gini.calculate"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.impurity.Entropy.calculate"),      
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.impurity.Variance.calculate")
       )
     case v if v.startsWith("1.0") =>
