@@ -463,15 +463,13 @@ private[spark] class BlockManager(
               val values = dataDeserialize(blockId, bytes)
               if (level.deserialized) {
                 // Cache the values before returning them
-                val putResult = memoryStore.putValues(blockId, values, level, returnValues = true)
+                val putResult = memoryStore.putValues(
+                  blockId, values, level, returnValues = true, allowPersistToDisk = false)
                 putResult.data match {
                   case Left(it) =>
                     return Some(new BlockResult(it, DataReadMethod.Disk, info.size))
-                  case Right(b) =>
-                    return Some(new BlockResult(
-                      dataDeserialize(blockId, b),
-                      DataReadMethod.Disk,
-                      info.size))
+                  case _ =>
+                    throw new SparkException("Memory store did not return an iterator!")
                 }
               } else {
                 return Some(new BlockResult(values, DataReadMethod.Disk, info.size))

@@ -97,6 +97,27 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
+    putValues(blockId, values, level, returnValues, allowPersistToDisk = true)
+  }
+
+  /**
+   * Attempt to put the given block in memory store.
+   *
+   * There may not be enough space to fully unroll the iterator in memory, in which case we
+   * optionally drop the values to disk if
+   *   (1) the block's storage level specifies useDisk, and
+   *   (2) `allowPersistToDisk` is true.
+   *
+   * One scenario in which `allowPersistToDisk` is false is when the BlockManager reads a block
+   * back from disk and attempts to cache it in memory. In this case, we should not persist the
+   * block back on disk again, as it is already in disk store.
+   */
+  private[storage] def putValues(
+      blockId: BlockId,
+      values: Iterator[Any],
+      level: StorageLevel,
+      returnValues: Boolean,
+      allowPersistToDisk: Boolean): PutResult = {
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
     val unrolledValues = unrollSafely(blockId, values, droppedBlocks)
     unrolledValues match {
@@ -108,7 +129,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       case Right(iteratorValues) =>
         // Not enough space to unroll this block; drop to disk if applicable
         logWarning(s"Not enough space to store $blockId in memory! Free memory is ${freeMemory}B.")
-        if (level.useDisk) {
+        if (level.useDisk && allowPersistToDisk) {
           logWarning(s"Persisting $blockId to disk instead.")
           val newLevel = StorageLevel(
             useDisk = true,
