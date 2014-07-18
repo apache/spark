@@ -35,12 +35,13 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BoundedPriorityQueue, CallSite, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, SamplingUtils}
 
@@ -1212,7 +1213,7 @@ abstract class RDD[T: ClassTag](
    * task gets a different copy of the RDD. This provides stronger isolation between tasks that
    * might modify state of objects referenced in their closures.
    */
-  @transient private[spark] lazy val broadcasted = {
+  @transient private[spark] lazy val broadcasted: Broadcast[Array[Byte]] = {
     val ser = SparkEnv.get.closureSerializer.newInstance()
     sc.broadcast(ser.serialize(this).array())
   }
