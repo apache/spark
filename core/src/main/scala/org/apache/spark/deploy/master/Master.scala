@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.master
 
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -30,7 +31,6 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
-import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
@@ -642,10 +642,7 @@ private[spark] class Master(
       waitingApps -= app
 
       // If application events are logged, use them to rebuild the UI
-      if (!rebuildSparkUI(app)) {
-        // Avoid broken links if the UI is not reconstructed
-        app.desc.appUiUrl = ""
-      }
+      rebuildSparkUI(app)
 
       for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)
@@ -667,29 +664,47 @@ private[spark] class Master(
    */
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
-    val eventLogDir = app.desc.eventLogDir.getOrElse { return false }
+    val eventLogDir = app.desc.eventLogDir.getOrElse {
+      // Event logging is not enabled for this application
+      app.desc.appUiUrl = "/history/not-found"
+      return false
+    }
     val fileSystem = Utils.getHadoopFileSystem(eventLogDir)
     val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
     val eventLogPaths = eventLogInfo.logPaths
     val compressionCodec = eventLogInfo.compressionCodec
-    if (!eventLogPaths.isEmpty) {
-      try {
-        val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
-        val ui = new SparkUI(
-          new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
-        replayBus.replay()
-        app.desc.appUiUrl = ui.basePath
-        appIdToUI(app.id) = ui
-        webUi.attachSparkUI(ui)
-        return true
-      } catch {
-        case e: Exception =>
-          logError("Exception in replaying log for application %s (%s)".format(appName, app.id), e)
-      }
-    } else {
-      logWarning("Application %s (%s) has no valid logs: %s".format(appName, app.id, eventLogDir))
+
+    if (eventLogPaths.isEmpty) {
+      // Event logging is enabled for this application, but no event logs are found
+      val title = s"Application history not found (${app.id})"
+      var msg = s"No event logs found for application $appName in $eventLogDir."
+      logWarning(msg)
+      msg += " Did you specify the correct logging directory?"
+      msg = URLEncoder.encode(msg, "UTF-8")
+      app.desc.appUiUrl = s"/history/not-found?msg=$msg&title=$title"
+      return false
     }
-    false
+
+    try {
+      val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
+      val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
+      replayBus.replay()
+      appIdToUI(app.id) = ui
+      webUi.attachSparkUI(ui)
+      // Application UI is successfully rebuilt, so link the Master UI to it
+      app.desc.appUiUrl = ui.basePath
+      true
+    } catch {
+      case e: Exception =>
+        // Relay exception message to application UI page
+        val title = s"Application history load error (${app.id})"
+        val exception = URLEncoder.encode(Utils.exceptionString(e), "UTF-8")
+        var msg = s"Exception in replaying log for application $appName!"
+        logError(msg, e)
+        msg = URLEncoder.encode(msg, "UTF-8")
+        app.desc.appUiUrl = s"/history/not-found?msg=$msg&exception=$exception&title=$title"
+        false
+    }
   }
 
   /** Generate a new app ID given a app's submission date */
