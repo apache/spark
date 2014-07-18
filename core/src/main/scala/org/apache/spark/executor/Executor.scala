@@ -101,8 +101,9 @@ private[spark] class Executor(
   // to send the result back.
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
+  private val nThreads = env.conf.getInt("spark.worker.threads.max", Runtime.getRuntime.availableProcessors())
   // Start worker thread pool
-  val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
+  val threadPool = Utils.newDaemonFixedThreadPool(nThreads, "Executor task launch worker")
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
