@@ -30,6 +30,7 @@ object Statistics {
 
   /**
    * Compute the Pearson correlation matrix for the input RDD of Vectors.
+   * Returns NaN if either vector has 0 variance.
    *
    * @param X an RDD[Vector] for which the correlation matrix is to be computed.
    * @return Pearson correlation matrix comparing columns in X.
@@ -41,7 +42,9 @@ object Statistics {
    * Methods currently supported: pearson (default), spearman
    *
    * Note that for Spearman, a rank correlation, we need to create an RDD[Double] for each column
-   * in order to retrieve the ranks.
+   * and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
+   * which is fairly costly. Cache the input RDD before calling corr with `method = "spearman"` to
+   * avoid recomputing the common lineage
    *
    * @param X an RDD[Vector] for which the correlation matrix is to be computed.
    * @param method String specifying the method to use for computing correlation
@@ -51,6 +54,7 @@ object Statistics {
 
   /**
    * Compute the Pearson correlation for the input RDDs.
+   * Columns with 0 covariance produce NaN entries in the correlation matrix.
    *
    * @param x RDD[Double] of the same cardinality as y
    * @param y RDD[Double] of the same cardinality as x

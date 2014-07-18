@@ -32,18 +32,19 @@ private[stat] trait Correlation {
 
   /**
    * Compute the correlation matrix S, for the input matrix, where S(i, j) is the correlation
-   * between column i and j.
+   * between column i and j. S(i, j) can be NaN if the correlation is undefined for column i and j.
    */
   def computeCorrelationMatrix(X: RDD[Vector]): Matrix
 
   /**
    * Combine the two input RDD[Double]s into an RDD[Vector] and compute the correlation using the
-   * correlation implementation for RDD[Vector]
+   * correlation implementation for RDD[Vector]. Can be NaN if correlation is undefined for the
+   * input vectors.
    */
   def computeCorrelationWithMatrixImpl(x: RDD[Double], y: RDD[Double]): Double = {
-    val mat: RDD[Vector] = x.zip(y).mapPartitions({ iter =>
+    val mat: RDD[Vector] = x.zip(y).mapPartitions { iter =>
       iter.map { case (xi, yi) => new DenseVector(Array(xi, yi)) }
-    }, preservesPartitioning = true)
+    }
     computeCorrelationMatrix(mat)(0, 1)
   }
 
