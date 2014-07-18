@@ -18,6 +18,7 @@
 package org.apache.spark.util.random
 
 import scala.reflect.ClassTag
+import scala.util.Random
 
 private[spark] object SamplingUtils {
 
@@ -26,9 +27,14 @@ private[spark] object SamplingUtils {
    *
    * @param input input size
    * @param k reservoir size
+   * @param seed random seed
    * @return (samples, input size)
    */
-  def reservoirSampleAndCount[T: ClassTag](input: Iterator[T], k: Int): (Array[T], Int) = {
+  def reservoirSampleAndCount[T: ClassTag](
+      input: Iterator[T],
+      k: Int,
+      seed: Long = Random.nextLong())
+    : (Array[T], Int) = {
     val reservoir = new Array[T](k)
     // Put the first k elements in the reservoir.
     var i = 0
@@ -46,7 +52,7 @@ private[spark] object SamplingUtils {
       (trimReservoir, i)
     } else {
       // If input size > k, continue the sampling process.
-      val rand = new XORShiftRandom
+      val rand = new XORShiftRandom(seed)
       while (input.hasNext) {
         val item = input.next()
         val replacementIndex = rand.nextInt(i)
