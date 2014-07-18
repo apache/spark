@@ -96,19 +96,9 @@ case class HiveTableScan(
           .getOrElse(sys.error(s"Can't find attribute $a"))
         val fieldObjectInspector = ref.getFieldObjectInspector
 
-        val unwrapHiveData = fieldObjectInspector match {
-          case _: HiveVarcharObjectInspector =>
-            (value: Any) => value.asInstanceOf[HiveVarchar].getValue
-          case _: HiveDecimalObjectInspector =>
-            (value: Any) => BigDecimal(value.asInstanceOf[HiveDecimal].bigDecimalValue())
-          case _ =>
-            identity[Any] _
-        }
-
         (row: Any, _: Array[String]) => {
           val data = objectInspector.getStructFieldData(row, ref)
-          val hiveData = unwrapData(data, fieldObjectInspector)
-          if (hiveData != null) unwrapHiveData(hiveData) else null
+          unwrapData(data, fieldObjectInspector)
         }
       }
     }
