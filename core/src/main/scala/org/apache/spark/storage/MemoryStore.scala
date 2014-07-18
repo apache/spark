@@ -123,23 +123,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     unrolledValues match {
       case Left(arrayValues) =>
         // Values are fully unrolled in memory, so store them as an array
-        val result = putValues(blockId, arrayValues, level, returnValues)
-        droppedBlocks ++= result.droppedBlocks
-        PutResult(result.size, result.data, droppedBlocks)
+        val res = putValues(blockId, arrayValues, level, returnValues)
+        droppedBlocks ++= res.droppedBlocks
+        PutResult(res.size, res.data, droppedBlocks)
       case Right(iteratorValues) =>
         // Not enough space to unroll this block; drop to disk if applicable
         logWarning(s"Not enough space to store $blockId in memory! Free memory is ${freeMemory}B.")
         if (level.useDisk && allowPersistToDisk) {
           logWarning(s"Persisting $blockId to disk instead.")
-          val newLevel = StorageLevel(
-            useDisk = true,
-            useMemory = false,
-            useOffHeap = false,
-            deserialized = false,
-            level.replication)
-          val result = blockManager.diskStore.putValues(
-            blockId, iteratorValues, newLevel, returnValues)
-          PutResult(result.size, result.data, droppedBlocks)
+          val res = blockManager.diskStore.putValues(blockId, iteratorValues, level, returnValues)
+          PutResult(res.size, res.data, droppedBlocks)
         } else {
           PutResult(0, Left(iteratorValues), droppedBlocks)
         }

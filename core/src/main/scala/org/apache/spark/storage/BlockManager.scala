@@ -242,6 +242,18 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Update the storage level of an existing block. This is currently only used for forcing
+   * MEMORY_AND_DISK blocks to disk, and restoring the original storage level afterwards.
+   */
+  def updateStorageLevel(blockId: BlockId, level: StorageLevel) = {
+    if (blockInfo.contains(blockId)) {
+      blockInfo(blockId).updateStorageLevel(level)
+    } else {
+      logWarning(s"Block $blockId not found when attempting to update its storage level!")
+    }
+  }
+
+  /**
    * Get the ids of existing blocks that match the given filter. Note that this will
    * query the blocks stored in the disk block manager (that the block manager
    * may not know of).

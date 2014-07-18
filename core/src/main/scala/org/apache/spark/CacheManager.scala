@@ -165,13 +165,11 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           var returnValues = iteratorValues.asInstanceOf[Iterator[T]]
           if (storageLevel.useDisk) {
             logWarning(s"Persisting $key to disk instead.")
-            val newLevel = StorageLevel(
-              useDisk = true,
-              useMemory = false,
-              useOffHeap = false,
-              deserialized = false,
-              storageLevel.replication)
+            val newLevel = StorageLevel(useDisk = true, useMemory = false,
+              useOffHeap = false, deserialized = false, storageLevel.replication) // DISK_ONLY
             returnValues = putInBlockManager[T](key, returnValues, newLevel, updatedBlocks)
+            // Restore original storage level
+            blockManager.updateStorageLevel(key, storageLevel)
           }
           returnValues
       }
