@@ -423,10 +423,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("correct BlockResult returned from get() calls") {
-    store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf, securityMgr,
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 12000, conf, securityMgr,
       mapOutputTracker)
-    val list1 = List(new Array[Byte](200), new Array[Byte](200))
-    val list2 = List(new Array[Byte](50), new Array[Byte](100), new Array[Byte](150))
+    val list1 = List(new Array[Byte](2000), new Array[Byte](2000))
+    val list2 = List(new Array[Byte](500), new Array[Byte](1000), new Array[Byte](1500))
     val list1SizeEstimate = SizeEstimator.estimate(list1.iterator.toArray)
     val list2SizeEstimate = SizeEstimator.estimate(list2.iterator.toArray)
     store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
@@ -919,11 +919,14 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     }
     assert(store.get("list4").isDefined, "list4 was not in store")
 
-    // No updated blocks - nothing is kicked out of memory because list5 is too big to be added
+    // 1 updated block - list5 is too big to fit in store, but list3 is kicked out in the process
     val updatedBlocks5 =
       store.put("list5", bigList.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    assert(updatedBlocks5.size === 0)
+    assert(updatedBlocks5.size === 1)
+    assert(updatedBlocks5.head._1 === TestBlockId("list3"))
+    assert(updatedBlocks5.head._2.storageLevel === StorageLevel.NONE)
     assert(store.get("list2").isDefined, "list2 was not in store")
+    assert(!store.get("list3").isDefined, "list3 was in store")
     assert(store.get("list4").isDefined, "list4 was not in store")
     assert(!store.get("list5").isDefined, "list5 was in store")
   }
