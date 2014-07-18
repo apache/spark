@@ -19,7 +19,7 @@ package org.apache.spark.mllib.stat.correlation
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.HashPartitioner
+import org.apache.spark.{Logging, HashPartitioner}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{DenseVector, Matrix, Vector}
 import org.apache.spark.rdd.{CoGroupedRDD, RDD}
@@ -31,7 +31,7 @@ import org.apache.spark.rdd.{CoGroupedRDD, RDD}
  * Definition of Spearman's correlation can be found at
  * http://en.wikipedia.org/wiki/Spearman's_rank_correlation_coefficient
  */
-object SpearmansCorrelation extends Correlation {
+object SpearmansCorrelation extends Correlation with Logging {
 
   /**
    * Compute Spearman's correlation for two datasets.
@@ -51,15 +51,16 @@ object SpearmansCorrelation extends Correlation {
     val indexed = X.zipWithUniqueId()
 
     val numCols = X.first.size
-    // TODO add warning for too many columns
+    if (numCols > 50) {
+      logWarning("Computing the Spearman correlation matrix can be slow for large RDDs with more"
+        + " than 50 columns.")
+    }
     val ranks = new Array[RDD[(Long, Double)]](numCols)
 
     // Note: we use a for loop here instead of a while loop with a single index variable
     // to avoid race condition caused by closure serialization
     for (k <- 0 until numCols) {
-      val column = indexed.mapPartitions[(Double, Long)] { iter =>
-        iter.map { case (vector, index) => (vector(k), index) }
-      }
+      val column = indexed.map { case (vector, index) => (vector(k), index) }
       ranks(k) = getRanks(column)
     }
 
@@ -72,7 +73,10 @@ object SpearmansCorrelation extends Correlation {
    *
    * With the average method, elements with the same value receive the same rank that's computed
    * by taking the average of their positions in the sorted list.
-   * e.g. ranks([2, 1, 0, 2]) = [3.5, 2.0, 1.0, 3.5]
+   * e.g. ranks([2, 1, 0, 2]) = [2.5, 1.0, 0.0, 2.5]
+   * Note that positions here are 0-indexed, instead of the 1-indexed as in the definition for
+   * ranks in the standard definition for Spearman's correlation. This does not affect the final
+   * results and is slightly more performant.
    *
    * @param indexed RDD[(Double, Long)] containing pairs of the format (originalValue, uniqueId)
    * @return RDD[(Long, Double)] containing pairs of the format (uniqueId, rank), where uniqueId is
@@ -88,24 +92,25 @@ object SpearmansCorrelation extends Correlation {
       val padded = iter ++
         Iterator[((Double, Long), Long)](((Double.NaN, Long.MinValue), Long.MinValue))
       var lastVal = 0.0
-      var rankSum = 0.0
+      var firstRank = 0.0
       val IDBuffer = new ArrayBuffer[Long]()
       padded.flatMap { item =>
-        val rank = item._2 + 1 // zipWithIndex is 0-indexed but ranks are 1-indexed
+        val rank = item._2
         if (item._1._1  == lastVal && item._2 != Long.MinValue) {
-          rankSum += rank
           IDBuffer += item._1._2
           Iterator.empty
         } else {
           val entries = if (IDBuffer.size == 0) {
             Iterator.empty
           } else if (IDBuffer.size == 1) {
-            Iterator((IDBuffer(0), rankSum))
+            Iterator((IDBuffer(0), firstRank))
           } else {
-            IDBuffer.map(id => (id, rankSum / IDBuffer.size))
+            // averageRank = ((firstRank + IDBuffer.size) / 2.0) / IDBuffer.size
+            val averageRank = firstRank / (2 * IDBuffer.size) + 0.5
+            IDBuffer.map(id => (id, averageRank))
           }
           lastVal = item._1._1
-          rankSum = rank
+          firstRank = rank
           IDBuffer.clear()
           IDBuffer += item._1._2
           entries
@@ -118,8 +123,6 @@ object SpearmansCorrelation extends Correlation {
   private def makeRankMatrix(ranks: Array[RDD[(Long, Double)]], input: RDD[Vector]): RDD[Vector] = {
     val partitioner = new HashPartitioner(input.partitions.size)
     val cogrouped = new CoGroupedRDD[Long](ranks, partitioner)
-    cogrouped.mapPartitions { iter =>
-      iter.map { case (index, values: Seq[Seq[Double]]) => new DenseVector(values.flatten.toArray)}
-    }
+    cogrouped.map { case (_, values: Seq[Seq[Double]]) => new DenseVector(values.flatten.toArray) }
   }
 }

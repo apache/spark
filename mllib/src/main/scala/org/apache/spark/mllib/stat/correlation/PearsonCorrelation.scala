@@ -61,7 +61,7 @@ private[stat] object PearsonCorrelation extends Correlation with Logging {
     // Compute the standard deviation on the diagonals first
     var i = 0
     while (i < n) {
-      // TODO remove once covariance issue resolved.
+      // TODO remove once covariance numerical issue resolved.
       cov(i, i) = if (closeToZero(cov(i, i))) 0.0 else math.sqrt(cov(i, i))
       i +=1
     }
@@ -74,7 +74,7 @@ private[stat] object PearsonCorrelation extends Correlation with Logging {
       sigma = cov(j, j)
       i = 0
       while (i < j) {
-        val corr = if (closeToZero(sigma * cov(i, i))){
+        val corr = if (sigma == 0.0 || cov(i, i) == 0.0) {
           containNaN = true
           Double.NaN
         } else {
