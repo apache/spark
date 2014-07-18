@@ -19,10 +19,8 @@ package org.apache.spark.graphx.impl
 
 import scala.reflect.{classTag, ClassTag}
 
-import org.apache.spark.rdd.IndexedRDDPartition
-import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
-
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 
 /**
  * A collection of edges stored in columnar format, along with any vertex attributes referenced. The
@@ -47,8 +45,8 @@ class EdgePartition[
     val srcIds: Array[VertexId] = null,
     val dstIds: Array[VertexId] = null,
     val data: Array[ED] = null,
-    val index: PrimitiveKeyOpenHashMap[VertexId, Int] = null,
-    val vertices: IndexedRDDPartition[VD] = null,
+    val index: GraphXPrimitiveKeyOpenHashMap[VertexId, Int] = null,
+    val vertices: VertexPartition[VD] = null,
     val activeSet: Option[VertexSet] = None
   ) extends Serializable {
 
@@ -59,7 +57,7 @@ class EdgePartition[
 
   /** Return a new `EdgePartition` with the specified vertex partition. */
   def withVertices[VD2: ClassTag](
-      vertices_ : IndexedRDDPartition[VD2]): EdgePartition[ED, VD2] = {
+      vertices_ : VertexPartition[VD2]): EdgePartition[ED, VD2] = {
     new EdgePartition(srcIds, dstIds, data, index, vertices_, activeSet)
   }
 

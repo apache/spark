@@ -20,14 +20,10 @@ package org.apache.spark.graphx.impl
 import scala.reflect.ClassTag
 import scala.util.Sorting
 
-import org.apache.spark.rdd.IndexedRDDPartition
-import org.apache.spark.util.collection.ImmutableLongOpenHashSet
-import org.apache.spark.util.collection.ImmutableVector
-import org.apache.spark.util.collection.OpenHashSet
-import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
-import org.apache.spark.util.collection.PrimitiveVector
+import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveVector}
 
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 
 private[graphx]
 class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: ClassTag](
@@ -45,7 +41,7 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
     val srcIds = new Array[VertexId](edgeArray.size)
     val dstIds = new Array[VertexId](edgeArray.size)
     val data = new Array[ED](edgeArray.size)
-    val index = new PrimitiveKeyOpenHashMap[VertexId, Int]
+    val index = new GraphXPrimitiveKeyOpenHashMap[VertexId, Int]
     // Copy edges into columnar structures, tracking the beginnings of source vertex id clusters and
     // adding them to the index
     if (edgeArray.length > 0) {
@@ -64,14 +60,12 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
       }
     }
 
-    // Create and populate an IndexedRDDPartition with vids from the edges, but no attributes
+    // Create and populate a VertexPartition with vids from the edges, but no attributes
     val vidsIter = srcIds.iterator ++ dstIds.iterator
     val vertexIds = new OpenHashSet[VertexId]
     vidsIter.foreach(vid => vertexIds.add(vid))
-    val vertices = new IndexedRDDPartition(
-      ImmutableLongOpenHashSet.fromLongOpenHashSet(vertexIds),
-      ImmutableVector.fromArray(Array.fill[VD](vertexIds.capacity)(null.asInstanceOf[VD])),
-      vertexIds.getBitSet.toImmutableBitSet)
+    val vertices = new VertexPartition(
+      vertexIds, new Array[VD](vertexIds.capacity), vertexIds.getBitSet)
 
     new EdgePartition(srcIds, dstIds, data, index, vertices)
   }

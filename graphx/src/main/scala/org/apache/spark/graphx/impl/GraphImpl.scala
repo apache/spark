@@ -111,14 +111,14 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     if (eq != null) {
       vertices.cache()
       // The map preserves type, so we can use incremental replication
-      val newVerts = vertices.mapValues(f).cache()
-      val changedVerts = newVerts.diff(vertices.asInstanceOf[VertexRDD[VD2]])
+      val newVerts = vertices.mapVertexPartitions(_.map(f)).cache()
+      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newReplicatedVertexView = replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2, ED]]
         .updateVertices(changedVerts)
       new GraphImpl(newVerts, newReplicatedVertexView)
     } else {
       // The map does not preserve type, so we must re-replicate all vertices
-      GraphImpl(vertices.mapValues(f), replicatedVertexView.edges)
+      GraphImpl(vertices.mapVertexPartitions(_.map(f)), replicatedVertexView.edges)
     }
   }
 
@@ -146,7 +146,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       vpred: (VertexId, VD) => Boolean = (a, b) => true): Graph[VD, ED] = {
     vertices.cache()
     // Filter the vertices, reusing the partitioner and the index from this graph
-    val newVerts = vertices.filter(vpred.tupled)
+    val newVerts = vertices.mapVertexPartitions(_.filter(vpred))
     // Filter the triplets. We must always upgrade the triplet view fully because vpred always runs
     // on both src and dst vertices
     replicatedVertexView.upgrade(vertices, true, true)
@@ -233,14 +233,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     vertices.aggregateUsingIndex(preAgg, reduceFunc)
   } // end of mapReduceTriplets
 
-  def joinVertices[U: ClassTag](other: RDD[(VertexId, U)])(mergeF: (VertexId, VD, U) => VD)
-    : Graph[VD, ED] = {
-    val newVerts = vertices.join(other)(mergeF).cache()
-    val changedVerts = newVerts.diff(vertices)
-    val newReplicatedVertexView = replicatedVertexView.updateVertices(changedVerts)
-    new GraphImpl(newVerts, newReplicatedVertexView)
-  }
-
   override def outerJoinVertices[U: ClassTag, VD2: ClassTag]
       (other: RDD[(VertexId, U)])
       (updateF: (VertexId, VD, Option[U]) => VD2)
@@ -251,7 +243,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       vertices.cache()
       // updateF preserves type, so we can use incremental replication
       val newVerts = vertices.leftJoin(other)(updateF).cache()
-      val changedVerts = newVerts.diff(vertices.asInstanceOf[VertexRDD[VD2]])
+      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newReplicatedVertexView = replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2, ED]]
         .updateVertices(changedVerts)
       new GraphImpl(newVerts, newReplicatedVertexView)
@@ -318,7 +310,7 @@ object GraphImpl {
       edges: EdgeRDD[ED, _]): GraphImpl[VD, ED] = {
     // Convert the vertex partitions in edges to the correct type
     val newEdges = edges.mapEdgePartitions(
-      (pid, part) => part.withVertices(part.vertices.mapValues(
+      (pid, part) => part.withVertices(part.vertices.map(
         (vid, attr) => null.asInstanceOf[VD])))
     GraphImpl.fromExistingRDDs(vertices, newEdges)
   }
