@@ -194,7 +194,7 @@ class BatchedSerializer(Serializer):
         return chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def _load_stream_without_unbatching(self, stream):
-            return self.serializer.load_stream(stream)
+        return self.serializer.load_stream(stream)
 
     def __eq__(self, other):
         return isinstance(other, BatchedSerializer) and \
@@ -306,20 +306,20 @@ class AutoSerializer(FramedSerializer):
         self._type = None
 
     def dumps(self, obj):
+        if self._type is not None:
+            return 'P' + cPickle.dumps(obj, -1)
         try:
-            if self._type is not None:
-                raise TypeError("fallback")
             return 'M' + marshal.dumps(obj)
         except Exception:
             self._type = 'P'
             return 'P' + cPickle.dumps(obj, -1)
 
-    def loads(self, stream):
-        _type = stream[0]
+    def loads(self, obj):
+        _type = obj[0]
         if _type == 'M':
-            return marshal.loads(stream[1:])
+            return marshal.loads(obj[1:])
         elif _type == 'P':
-            return cPickle.loads(stream[1:])
+            return cPickle.loads(obj[1:])
         else:
             raise ValueError("invalid sevialization type: %s" % _type)
 
