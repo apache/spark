@@ -90,6 +90,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo("Driver commanded a shutdown")
       context.stop(self)
       context.system.shutdown()
+      SparkEnv.get.blockManager.diskBlockManager.stop()
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
