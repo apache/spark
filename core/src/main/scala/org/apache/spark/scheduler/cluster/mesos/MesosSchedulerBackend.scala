@@ -200,6 +200,11 @@ private[spark] class MesosSchedulerBackend(
     }
   }
 
+  def toWorkerOffer(offer: Offer) = new WorkerOffer(
+    offer.getSlaveId.getValue,
+    offer.getHostname,
+    getResource(offer.getResourcesList, "cpus").toInt)
+
   override def disconnected(d: SchedulerDriver) {}
 
   override def reregistered(d: SchedulerDriver, masterInfo: MasterInfo) {}
@@ -212,62 +217,39 @@ private[spark] class MesosSchedulerBackend(
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     val oldClassLoader = setClassLoader()
     try {
-      synchronized {
-        // Build a big list of the offerable workers, and remember their indices so that we can
-        // figure out which Offer to reply to for each worker
-        val offerableWorkers = new ArrayBuffer[WorkerOffer]
-        val offerableIndices = new HashMap[String, Int]
+      val (acceptedOffers, declinedOffers) = offers.partition(o => {
+        val mem = getResource(o.getResourcesList, "mem")
+        val slaveId = o.getSlaveId.getValue
+        mem >= sc.executorMemory || slaveIdsWithExecutors.contains(slaveId)
+      })
 
-        def sufficientOffer(o: Offer) = {
-          val mem = getResource(o.getResourcesList, "mem")
-          val cpus = getResource(o.getResourcesList, "cpus")
-          val slaveId = o.getSlaveId.getValue
-          (mem >= MemoryUtils.calculateTotalMemory(sc) &&
-            // need at least 1 for executor, 1 for task
-            cpus >= 2 * scheduler.CPUS_PER_TASK) ||
-            (slaveIdsWithExecutors.contains(slaveId) &&
-              cpus >= scheduler.CPUS_PER_TASK)
-        }
+      val offerableWorkers = acceptedOffers.map(toWorkerOffer)
 
-        for ((offer, index) <- offers.zipWithIndex if sufficientOffer(offer)) {
-          val slaveId = offer.getSlaveId.getValue
-          offerableIndices.put(slaveId, index)
-          val cpus = if (slaveIdsWithExecutors.contains(slaveId)) {
-            getResource(offer.getResourcesList, "cpus").toInt
-          } else {
-            // If the executor doesn't exist yet, subtract CPU for executor
-            getResource(offer.getResourcesList, "cpus").toInt -
-              scheduler.CPUS_PER_TASK
-          }
-          offerableWorkers += new WorkerOffer(
-            offer.getSlaveId.getValue,
-            offer.getHostname,
-            cpus)
-        }
+      val slaveIdToOffer = acceptedOffers.map(o => o.getSlaveId.getValue -> o).toMap
 
-        // Call into the TaskSchedulerImpl
-        val taskLists = scheduler.resourceOffers(offerableWorkers)
+      val mesosTasks = new HashMap[String, JArrayList[MesosTaskInfo]]
 
-        // Build a list of Mesos tasks for each slave
-        val mesosTasks = offers.map(o => new JArrayList[MesosTaskInfo]())
-        for ((taskList, index) <- taskLists.zipWithIndex) {
-          if (!taskList.isEmpty) {
-            for (taskDesc <- taskList) {
-              val slaveId = taskDesc.executorId
-              val offerNum = offerableIndices(slaveId)
-              slaveIdsWithExecutors += slaveId
-              taskIdToSlaveId(taskDesc.taskId) = slaveId
-              mesosTasks(offerNum).add(createMesosTask(taskDesc, slaveId))
-            }
-          }
-        }
+      // Call into the TaskSchedulerImpl
+      scheduler.resourceOffers(offerableWorkers)
+        .filter(!_.isEmpty)
+        .foreach(_.foreach(taskDesc => {
+          val slaveId = taskDesc.executorId
+          slaveIdsWithExecutors += slaveId
+          taskIdToSlaveId(taskDesc.taskId) = slaveId
+          mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
+            .add(createMesosTask(taskDesc, slaveId))
+      }))
 
-        // Reply to the offers
-        val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
-        for (i <- 0 until offers.size) {
-          d.launchTasks(Collections.singleton(offers(i).getId), mesosTasks(i), filters)
+      // Reply to the offers
+      val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
+
+      mesosTasks.foreach {
+        case (slaveId, tasks) => {
+          d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
         }
       }
+
+      declinedOffers.foreach(o => d.declineOffer(o.getId))
     } finally {
       restoreClassLoader(oldClassLoader)
     }
