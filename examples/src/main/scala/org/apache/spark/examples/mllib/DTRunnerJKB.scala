@@ -33,11 +33,11 @@ import org.apache.spark.rdd.RDD
 /**
  * An example runner for decision tree. Run with
  * {{{
- * ./bin/spark-example org.apache.spark.examples.mllib.DecisionTreeRunner [options]
+ * ./bin/spark-example org.apache.spark.examples.mllib.DTRunnerJKB [options]
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
-object DecisionTreeRunner {
+object DTRunnerJKB {
 
   object ImpurityType extends Enumeration {
     type ImpurityType = Value
@@ -47,23 +47,25 @@ object DecisionTreeRunner {
   import ImpurityType._
 
   case class Params(
-      input: String = null,
-      algo: Algo = Classification,
-      maxDepth: Int = 5,
-      impurity: ImpurityType = Gini,
-      maxBins: Int = 100)
+                     input: String = null,
+                     dataFormat: String = null,
+                     algo: Algo = Classification,
+                     maxDepth: Int = 5,
+                     impurity: ImpurityType = Gini,
+                     maxBins: Int = 100,
+                     fracTest: Double = 0.2)
 
   def main(args: Array[String]) {
     val defaultParams = Params()
 
-    val parser = new OptionParser[Params]("DecisionTreeRunner") {
-      head("DecisionTreeRunner: an example decision tree app.")
+    val parser = new OptionParser[Params]("DTRunnerJKB") {
+      head("DTRunnerJKB: an example decision tree app.")
       opt[String]("algo")
         .text(s"algorithm (${Algo.values.mkString(",")}), default: ${defaultParams.algo}")
         .action((x, c) => c.copy(algo = Algo.withName(x)))
       opt[String]("impurity")
         .text(s"impurity type (${ImpurityType.values.mkString(",")}), " +
-          s"default: ${defaultParams.impurity}")
+        s"default: ${defaultParams.impurity}")
         .action((x, c) => c.copy(impurity = ImpurityType.withName(x)))
       opt[Int]("maxDepth")
         .text(s"max depth of the tree, default: ${defaultParams.maxDepth}")
@@ -71,19 +73,28 @@ object DecisionTreeRunner {
       opt[Int]("maxBins")
         .text(s"max number of bins, default: ${defaultParams.maxBins}")
         .action((x, c) => c.copy(maxBins = x))
+      opt[Double]("fracTest")
+        .text(s"fraction of data to hold out for testing, default: ${defaultParams.fracTest}")
+        .action((x, c) => c.copy(fracTest = x))
       arg[String]("<input>")
-        .text("input paths to labeled examples in dense format (label,f0 f1 f2 ...)")
+        .text("input paths to labeled examples")
         .required()
         .action((x, c) => c.copy(input = x))
+      arg[String]("<dataFormat>")
+        .text("data format: dense/libsvm")
+        .required()
+        .action((x, c) => c.copy(dataFormat = x))
       checkConfig { params =>
-        if (params.algo == Classification &&
-            (params.impurity == Gini || params.impurity == Entropy)) {
-          success
-        } else if (params.algo == Regression && params.impurity == Variance) {
-          success
-        } else {
+        if (
+          (params.algo == Classification &&
+            !(params.impurity == Gini || params.impurity == Entropy)) ||
+          (params.algo == Regression && !(params.impurity == Variance))) {
           failure(s"Algo ${params.algo} is not compatible with impurity ${params.impurity}.")
         }
+        if (params.fracTest < 0 || params.fracTest > 1) {
+          failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1].")
+        }
+        success
       }
     }
 
@@ -95,16 +106,53 @@ object DecisionTreeRunner {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName("DecisionTreeRunner")
+    val conf = new SparkConf().setAppName("DTRunnerJKB")
     val sc = new SparkContext(conf)
 
     // Load training data and cache it.
-    val examples = MLUtils.loadLabeledPoints(sc, params.input).cache()
+    val origExamples = params.dataFormat match {
+      case "dense" => MLUtils.loadLabeledData(sc, params.input).cache()
+      case "libsvm" => MLUtils.loadLibSVMFile(sc, params.input, multiclass = true).cache()
+    }
+    val (examples, numClasses) = params.algo match {
+      case Classification => {
+        // classCounts: class --> # examples in class
+        val classCounts = origExamples.map(_.label).countByValue
+        val numClasses = classCounts.size
+        // Re-index classes if needed.
+        //  classIndex: class --> index in 0,...,numClasses-1
+        val classIndex = {
+          if (classCounts.keySet != Set[Double](0.0, 1.0)) {
+            classCounts.keys.toList.sorted.zipWithIndex.toMap
+          } else {
+            Map[Double, Int]()
+          }
+        }
+        val examples = {
+          if (classIndex.isEmpty) {
+            origExamples
+          } else {
+            origExamples.map(lp => LabeledPoint(classIndex(lp.label), lp.features))
+          }
+        }
+        println(s"numClasses = $numClasses.")
+        println(s"Per-class example fractions, counts:")
+        println(s"Class\tFrac\tCount")
+        classCounts.keys.toList.sorted.foreach(c => {
+          val frac = classCounts(c) / (0.0 + examples.count())
+          println(s"$c\t$frac\t${classCounts(c)}")
+        })
+        (examples, numClasses)
+      }
+      case Regression => {
+        (origExamples, 2)
+      }
+    }
 
+    // Split into training, test.
     val splits = examples.randomSplit(Array(0.8, 0.2))
     val training = splits(0).cache()
     val test = splits(1).cache()
-
     val numTraining = training.count()
     val numTest = test.count()
 
@@ -118,18 +166,15 @@ object DecisionTreeRunner {
       case Variance => impurity.Variance
     }
 
-<<<<<<< HEAD
-    val strategy = new Strategy(params.algo, impurityCalculator, params.maxDepth, params.maxBins)
-=======
     val strategy
-      = new DTParams(
-          algo = params.algo,
-          impurity = impurityCalculator,
-          maxDepth = params.maxDepth,
-          maxBins = params.maxBins,
-          numClassesForClassification = params.numClassesForClassification)
->>>>>>> 8725f7b... updating DT API, but not done yet
+    = new DTParams(
+      algo = params.algo,
+      impurity = impurityCalculator,
+      maxDepth = params.maxDepth,
+      maxBins = params.maxBins,
+      numClassesForClassification = numClasses)
     val model = DecisionTree.train(training, strategy)
+    model.print()
 
     if (params.algo == Classification) {
       val accuracy = accuracyScore(model, test)
@@ -148,13 +193,9 @@ object DecisionTreeRunner {
    * Calculates the classifier accuracy.
    */
   private def accuracyScore(
-      model: DecisionTreeModel,
-      data: RDD[LabeledPoint],
-      threshold: Double = 0.5): Double = {
-    def predictedValue(features: Vector): Double = {
-      if (model.predict(features) < threshold) 0.0 else 1.0
-    }
-    val correctCount = data.filter(y => predictedValue(y.features) == y.label).count()
+                             model: DecisionTreeModel,
+                             data: RDD[LabeledPoint]): Double = {
+    val correctCount = data.filter(y => model.predict(y.features) == y.label).count()
     val count = data.count()
     correctCount.toDouble / count
   }

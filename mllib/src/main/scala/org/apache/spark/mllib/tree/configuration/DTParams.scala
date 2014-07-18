@@ -15,38 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.model
+package org.apache.spark.mllib.tree.configuration
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.tree.impurity.Impurity
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 
 /**
  * :: Experimental ::
- * Model to store the decision tree parameters
- * @param topNode root node
+ * Stores configuration options for DecisionTree construction.
+ * @param maxDepth maximum depth of the tree
+ * @param maxBins maximum number of bins used for splitting features
+ * @param quantileStrategy algorithm for calculating quantiles
+ * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
+ *                      128 MB.
  */
 @Experimental
-class DecisionTreeModel(val topNode: Node) extends Serializable {
-
-  /**
-   * Predict values for a single data point using the model trained.
-   *
-   * @param features array representing a single data point
-   * @return Double prediction from the trained model
-   */
-  def predict(features: Vector): Double = {
-    topNode.predictIfLeaf(features)
-  }
-
-  /**
-   * Predict values for the given data set using the model trained.
-   *
-   * @param features RDD representing data points to be predicted
-   * @return RDD[Int] where each entry contains the corresponding prediction
-   */
-  def predict(features: RDD[Vector]): RDD[Double] = {
-    features.map(x => predict(x))
-  }
+class DTParams (
+    val maxDepth: Int,
+    val maxBins: Int,
+    val quantileStrategy: String,
+    val maxMemoryInMB: Int) extends Serializable {
 
 }

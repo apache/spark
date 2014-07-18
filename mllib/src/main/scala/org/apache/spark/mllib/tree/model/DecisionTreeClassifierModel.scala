@@ -15,35 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.impurity
+package org.apache.spark.mllib.tree.model
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.Experimental
+//import org.apache.spark.mllib.tree.model.DecisionTreeModel
+//import org.apache.spark.mllib.tree.model.Node
+
 
 /**
  * :: Experimental ::
- * Trait for calculating information gain.
+ * Decision tree model for classification.
+ * This model stores learned parameters.
+ * @param topNode root node
  */
 @Experimental
-private[mllib] trait Impurity extends Serializable {
+class DecisionTreeClassifierModel(topNode: Node) extends DecisionTreeModel(topNode) {
 
   /**
-   * :: DeveloperApi ::
-   * information calculation for multiclass classification
-   * @param counts Array[Double] with counts for each label
-   * @param totalCount sum of counts for all labels
-   * @return information value
+   * Print tree.
    */
-  @DeveloperApi
-  def calculate(counts: Array[Double], totalCount: Double): Double
+  def print() {
+    println(s"DecisionTreeClassifierModel")
+    topNode.print("  ")
+  }
 
-  /**
-   * :: DeveloperApi ::
-   * information calculation for regression
-   * @param count number of instances
-   * @param sum sum of labels
-   * @param sumSquares summation of squares of the labels
-   * @return information value
-   */
-  @DeveloperApi
-  def calculate(count: Double, sum: Double, sumSquares: Double): Double
 }
