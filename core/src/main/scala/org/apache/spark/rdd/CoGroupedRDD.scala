@@ -185,6 +185,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
           combiner1(depNum) ++= combiner2(depNum)
           depNum += 1
         }
+        combiner1
       }
     new ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner](
       createCombiner, mergeValue, mergeCombiners)
