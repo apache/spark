@@ -17,12 +17,15 @@
 
 package org.apache.spark.util.collection
 
-import org.apache.spark.{SparkEnv, Aggregator, Logging, Partitioner}
-import org.apache.spark.serializer.Serializer
+import java.io._
 
 import scala.collection.mutable.ArrayBuffer
+
+import com.google.common.io.ByteStreams
+
+import org.apache.spark.{Aggregator, SparkEnv, Logging, Partitioner}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.BlockId
-import java.io.File
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -49,6 +52,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val blockManager = SparkEnv.get.blockManager
   private val diskBlockManager = blockManager.diskBlockManager
   private val ser = Serializer.getSerializer(serializer.getOrElse(null))
+  private val serInstance = ser.newInstance()
 
   private val conf = SparkEnv.get.conf
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
@@ -232,7 +236,7 @@ private[spark] class ExternalSorter[K, V, C](
     // TODO: merge intermediate results if they are sorted by the comparator
     val readers = spills.map(new SpillReader(_))
     (0 until numPartitions).iterator.map { p =>
-      (p, readers.iterator.flatMap(_.readPartition(p)))
+      (p, readers.iterator.flatMap(_.readNextPartition()))
     }
   }
 
@@ -241,7 +245,92 @@ private[spark] class ExternalSorter[K, V, C](
    * partitions to be requested in order.
    */
   private class SpillReader(spill: SpilledFile) {
-    def readPartition(id: Int): Iterator[Product2[K, C]] = ???
+    val fileStream = new FileInputStream(spill.file)
+    val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
+
+    // An intermediate stream that reads from exactly one batch
+    // This guards against pre-fetching and other arbitrary behavior of higher level streams
+    var batchStream = nextBatchStream()
+    var compressedStream = blockManager.wrapForCompression(spill.blockId, batchStream)
+    var deserStream = serInstance.deserializeStream(compressedStream)
+    var nextItem: (K, C) = null
+    var finished = false
+
+    // Track which partition and which batch stream we're in
+    var partitionId = 0
+    var indexInPartition = -1L  // Just to make sure we start at index 0
+    var batchStreamsRead = 0
+    var indexInBatch = -1
+
+    /** Construct a stream that only reads from the next batch */
+    def nextBatchStream(): InputStream = {
+      if (batchStreamsRead < spill.serializerBatchSizes.length) {
+        batchStreamsRead += 1
+        ByteStreams.limit(bufferedStream, spill.serializerBatchSizes(batchStreamsRead - 1))
+      } else {
+        // No more batches left
+        bufferedStream
+      }
+    }
+
+    /**
+     * Return the next (K, C) pair from the deserialization stream and update partitionId,
+     * indexInPartition, indexInBatch and such to match its location.
+     *
+     * If the current batch is drained, construct a stream for the next batch and read from it.
+     * If no more pairs are left, return null.
+     */
+    private def readNextItem(): (K, C) = {
+      try {
+        if (finished) {
+          return null
+        }
+        // Start reading the next batch if we're done with this one
+        indexInBatch += 1
+        if (indexInBatch == serializerBatchSize) {
+          batchStream = nextBatchStream()
+          compressedStream = blockManager.wrapForCompression(spill.blockId, batchStream)
+          deserStream = serInstance.deserializeStream(compressedStream)
+          indexInBatch = 0
+        }
+        // Update the partition location of the element we're reading
+        indexInPartition += 1
+        while (indexInPartition == spill.elementsPerPartition(partitionId)) {
+          partitionId += 1
+          indexInPartition = 0
+        }
+        val k = deserStream.readObject().asInstanceOf[K]
+        val c = deserStream.readObject().asInstanceOf[C]
+        (k, c)
+      } catch {
+        case e: EOFException =>
+          finished = true
+          deserStream.close()
+          null
+      }
+    }
+
+    var nextPartitionToRead = 0
+
+    def readNextPartition(): Iterator[Product2[K, C]] = new Iterator[Product2[K, C]] {
+      val myPartition = nextPartitionToRead
+      nextPartitionToRead += 1
+
+      override def hasNext: Boolean = {
+        if (nextItem == null) {
+          nextItem = readNextItem()
+        }
+        // Check that we're still in the right partition; will be numPartitions at EOF
+        partitionId == myPartition
+      }
+
+      override def next(): Product2[K, C] = {
+        if (!hasNext) {
+          throw new NoSuchElementException
+        }
+        nextItem
+      }
+    }
   }
 
   /**

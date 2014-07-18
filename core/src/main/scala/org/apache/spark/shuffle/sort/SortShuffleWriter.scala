@@ -21,9 +21,10 @@ import org.apache.spark.shuffle.{ShuffleWriter, BaseShuffleHandle}
 import org.apache.spark.{SparkEnv, Logging, TaskContext}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.util.collection.ExternalSorter
 
-private[spark] class SortShuffleWriter[K, V](
-    handle: BaseShuffleHandle[K, V, _],
+private[spark] class SortShuffleWriter[K, V, C](
+    handle: BaseShuffleHandle[K, V, C],
     mapId: Int,
     context: TaskContext)
   extends ShuffleWriter[K, V] with Logging {
@@ -38,19 +39,27 @@ private[spark] class SortShuffleWriter[K, V](
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
-    val iter = if (dep.aggregator.isDefined) {
+    var sorter: ExternalSorter[K, V, _] = null
+
+    val partitions: Iterator[(Int, Iterator[Product2[K, _]])] = {
       if (dep.mapSideCombine) {
-        // TODO: This does an external merge-sort if the data is highly combinable, and then we
-        // do another one later to sort them by output partition. We can improve this by doing
-        // the merging as part of the SortedFileWriter.
-        dep.aggregator.get.combineValuesByKey(records, context)
+        if (!dep.aggregator.isDefined) {
+          throw new IllegalStateException("Aggregator is empty for map-side combine")
+        }
+        sorter = new ExternalSorter[K, V, C](
+          dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+        sorter.write(records)
+        sorter.partitionedIterator
       } else {
-        records
+        sorter = new ExternalSorter[K, V, V](
+          None, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+        sorter.write(records)
+        sorter.partitionedIterator
       }
-    } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
-      throw new IllegalStateException("Aggregator is empty for map-side combine")
-    } else {
-      records
+    }
+
+    for ((id, elements) <- partitions) {
+
     }
 
     ???

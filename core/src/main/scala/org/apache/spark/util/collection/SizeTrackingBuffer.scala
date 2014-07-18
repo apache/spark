@@ -20,7 +20,6 @@ package org.apache.spark.util.collection
 import java.util.Arrays
 import java.util.Comparator
 
-import scala.reflect.ClassTag
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.util.SizeEstimator
@@ -32,13 +31,15 @@ import org.apache.spark.util.SizeEstimator
  *
  * The tracking code is copied from SizeTrackingAppendOnlyMap -- we'll factor that out soon.
  */
-private[spark] class SizeTrackingBuffer[T: ClassTag](initialCapacity: Int = 64)
+private[spark] class SizeTrackingBuffer[T <: AnyRef](initialCapacity: Int = 64)
   extends SizeTrackingCollection[T]
 {
-  // Basic growable array data structure
+  // Basic growable array data structure. NOTE: We use an Array of AnyRef because Arrays.sort()
+  // is not easy to call on an Array[T], and Scala doesn't provide a great way to sort a generic
+  // array using a Comparator.
   private var capacity = initialCapacity
   private var curSize = 0
-  private var data = new Array[T](initialCapacity)
+  private var data = new Array[AnyRef](initialCapacity)
 
   // Size-tracking variables: we maintain a sequence of samples since the size of the collection
   // depends on both the array and how many of its elements are filled. We reset this each time
@@ -91,7 +92,7 @@ private[spark] class SizeTrackingBuffer[T: ClassTag](initialCapacity: Int = 64)
     override def next(): T = {
       val elem = data(pos)
       pos += 1
-      elem
+      elem.asInstanceOf[T]
     }
   }
 
@@ -112,7 +113,7 @@ private[spark] class SizeTrackingBuffer[T: ClassTag](initialCapacity: Int = 64)
       throw new Exception("Can't grow buffer beyond 2^30 elements")
     }
     val newCapacity = capacity * 2
-    val newArray = new Array[T](newCapacity)
+    val newArray = new Array[AnyRef](newCapacity)
     System.arraycopy(data, 0, newArray, 0, capacity)
     data = newArray
     capacity = newCapacity
@@ -143,7 +144,7 @@ private[spark] class SizeTrackingBuffer[T: ClassTag](initialCapacity: Int = 64)
 
   /** Iterate through the data in a given order. For this class this is not really destructive. */
   override def destructiveSortedIterator(cmp: Comparator[T]): Iterator[T] = {
-    Arrays.sort(data, 0, curSize, cmp)
+    Arrays.sort(data, 0, curSize, cmp.asInstanceOf[Comparator[AnyRef]])
     iterator
   }
 }
