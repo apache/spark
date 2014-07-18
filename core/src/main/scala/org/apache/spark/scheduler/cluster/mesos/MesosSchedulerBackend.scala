@@ -205,6 +205,15 @@ private[spark] class MesosSchedulerBackend(
     offer.getHostname,
     getResource(offer.getResourcesList, "cpus").toInt)
 
+  private def inClassLoader()(fun: => Unit) = {
+    val oldClassLoader = setClassLoader()
+    try {
+      fun
+    } finally {
+      restoreClassLoader(oldClassLoader)
+    }
+  }
+
   override def disconnected(d: SchedulerDriver) {}
 
   override def reregistered(d: SchedulerDriver, masterInfo: MasterInfo) {}
@@ -215,8 +224,7 @@ private[spark] class MesosSchedulerBackend(
    * tasks are balanced across the cluster.
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
-    val oldClassLoader = setClassLoader()
-    try {
+    inClassLoader() {
       val (acceptedOffers, declinedOffers) = offers.partition(o => {
         val mem = getResource(o.getResourcesList, "mem")
         val slaveId = o.getSlaveId.getValue
@@ -233,11 +241,11 @@ private[spark] class MesosSchedulerBackend(
       scheduler.resourceOffers(offerableWorkers)
         .filter(!_.isEmpty)
         .foreach(_.foreach(taskDesc => {
-          val slaveId = taskDesc.executorId
-          slaveIdsWithExecutors += slaveId
-          taskIdToSlaveId(taskDesc.taskId) = slaveId
-          mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
-            .add(createMesosTask(taskDesc, slaveId))
+        val slaveId = taskDesc.executorId
+        slaveIdsWithExecutors += slaveId
+        taskIdToSlaveId(taskDesc.taskId) = slaveId
+        mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
+          .add(createMesosTask(taskDesc, slaveId))
       }))
 
       // Reply to the offers
@@ -250,8 +258,6 @@ private[spark] class MesosSchedulerBackend(
       }
 
       declinedOffers.foreach(o => d.declineOffer(o.getId))
-    } finally {
-      restoreClassLoader(oldClassLoader)
     }
   }
 
@@ -290,8 +296,7 @@ private[spark] class MesosSchedulerBackend(
   }
 
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
-    val oldClassLoader = setClassLoader()
-    try {
+    inClassLoader() {
       val tid = status.getTaskId.getValue.toLong
       val state = TaskState.fromMesos(status.getState)
       synchronized {
@@ -304,18 +309,13 @@ private[spark] class MesosSchedulerBackend(
         }
       }
       scheduler.statusUpdate(tid, state, status.getData.asReadOnlyByteBuffer)
-    } finally {
-      restoreClassLoader(oldClassLoader)
     }
   }
 
   override def error(d: SchedulerDriver, message: String) {
-    val oldClassLoader = setClassLoader()
-    try {
+    inClassLoader() {
       logError("Mesos error: " + message)
       scheduler.error(message)
-    } finally {
-      restoreClassLoader(oldClassLoader)
     }
   }
 
@@ -332,15 +332,12 @@ private[spark] class MesosSchedulerBackend(
   override def frameworkMessage(d: SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
 
   private def recordSlaveLost(d: SchedulerDriver, slaveId: SlaveID, reason: ExecutorLossReason) {
-    val oldClassLoader = setClassLoader()
-    try {
+    inClassLoader() {
       logInfo("Mesos slave lost: " + slaveId.getValue)
       synchronized {
         slaveIdsWithExecutors -= slaveId.getValue
       }
       scheduler.executorLost(slaveId.getValue, reason)
-    } finally {
-      restoreClassLoader(oldClassLoader)
     }
   }
 
