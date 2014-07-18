@@ -466,7 +466,28 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 === c2, false, row)
     checkEvaluation(c1 !== c2, true, row)
   }
-  
+
+  test("StringComparison") {
+    val row = new GenericRow(Array[Any]("abc", null))
+    val c1 = 'a.string.at(0)
+    val c2 = 'a.string.at(1)
+
+    checkEvaluation(Contains(c1, "b"), true, row)
+    checkEvaluation(Contains(c1, "x"), false, row)
+    checkEvaluation(Contains(c2, "b"), null, row)
+    checkEvaluation(Contains(c1, Literal(null, StringType)), null, row)
+
+    checkEvaluation(StartsWith(c1, "a"), true, row)
+    checkEvaluation(StartsWith(c1, "b"), false, row)
+    checkEvaluation(StartsWith(c2, "a"), null, row)
+    checkEvaluation(StartsWith(c1, Literal(null, StringType)), null, row)
+
+    checkEvaluation(EndsWith(c1, "c"), true, row)
+    checkEvaluation(EndsWith(c1, "b"), false, row)
+    checkEvaluation(EndsWith(c2, "b"), null, row)
+    checkEvaluation(EndsWith(c1, Literal(null, StringType)), null, row)
+  }
+
   test("Substring") {
     val row = new GenericRow(Array[Any]("example", "example".toArray.map(_.toByte)))
 
