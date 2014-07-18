@@ -80,7 +80,7 @@ private[spark] trait SizeTracker {
     if (samples.size > 2) {
       samples.remove(0)
     }
-    val bytesDelta = samples.toSeq.reverse match {
+    val bytesDelta = samples.toList.reverse match {
       case latest :: previous :: tail =>
         (latest.size - previous.size).toDouble / (latest.numUpdates - previous.numUpdates)
       // If fewer than 2 samples, assume no change
