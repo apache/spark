@@ -1,5 +1,8 @@
 from collections import defaultdict
 from itertools import chain, ifilter, imap
+import operator
+
+import logging
 
 from pyspark.serializers import NoOpSerializer,\
     BatchedSerializer, CloudPickleSerializer, pack_long
@@ -23,6 +26,18 @@ class DStream(object):
          @transient
         """
         pass
+
+    def count(self):
+        """
+
+        """
+        #TODO make sure count implementation, thiis different from what pyspark does
+        return self.mapPartitions(lambda i: [sum(1 for _ in i)]).sum().map(lambda x: x[1])
+
+    def sum(self):
+        """
+        """
+        return self.mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
 
     def print_(self):
         """
@@ -63,9 +78,9 @@ class DStream(object):
         """
 
         """
-        return self._combineByKey(lambda x:x, func, func, numPartitions)
+        return self.combineByKey(lambda x:x, func, func, numPartitions)
 
-    def _combineByKey(self, createCombiner, mergeValue, mergeCombiners,
+    def combineByKey(self, createCombiner, mergeValue, mergeCombiners,
                       numPartitions = None):
         """
         """
@@ -74,6 +89,12 @@ class DStream(object):
         def combineLocally(iterator):
             combiners = {}
             for x in iterator:
+
+                #TODO for count operation make sure count implementation
+                # This is different from what pyspark does
+                if isinstance(x, int):
+                    x = ("", x)
+
                 (k, v) = x
                 if k not in combiners:
                     combiners[k] = createCombiner(v)
