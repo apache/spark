@@ -466,5 +466,81 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 === c2, false, row)
     checkEvaluation(c1 !== c2, true, row)
   }
-}
 
+  test("StringComparison") {
+    val row = new GenericRow(Array[Any]("abc", null))
+    val c1 = 'a.string.at(0)
+    val c2 = 'a.string.at(1)
+
+    checkEvaluation(Contains(c1, "b"), true, row)
+    checkEvaluation(Contains(c1, "x"), false, row)
+    checkEvaluation(Contains(c2, "b"), null, row)
+    checkEvaluation(Contains(c1, Literal(null, StringType)), null, row)
+
+    checkEvaluation(StartsWith(c1, "a"), true, row)
+    checkEvaluation(StartsWith(c1, "b"), false, row)
+    checkEvaluation(StartsWith(c2, "a"), null, row)
+    checkEvaluation(StartsWith(c1, Literal(null, StringType)), null, row)
+
+    checkEvaluation(EndsWith(c1, "c"), true, row)
+    checkEvaluation(EndsWith(c1, "b"), false, row)
+    checkEvaluation(EndsWith(c2, "b"), null, row)
+    checkEvaluation(EndsWith(c1, Literal(null, StringType)), null, row)
+  }
+
+  test("Substring") {
+    val row = new GenericRow(Array[Any]("example", "example".toArray.map(_.toByte)))
+
+    val s = 'a.string.at(0)
+
+    // substring from zero position with less-than-full length
+    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)), "ex", row)
+    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(2, IntegerType)), "ex", row)
+
+    // substring from zero position with full length
+    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(7, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(7, IntegerType)), "example", row)
+
+    // substring from zero position with greater-than-full length
+    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(100, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(100, IntegerType)), "example", row)
+
+    // substring from nonzero position with less-than-full length
+    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(2, IntegerType)), "xa", row)
+
+    // substring from nonzero position with full length
+    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(6, IntegerType)), "xample", row)
+
+    // substring from nonzero position with greater-than-full length
+    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(100, IntegerType)), "xample", row)
+
+    // zero-length substring (within string bounds)
+    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(0, IntegerType)), "", row)
+
+    // zero-length substring (beyond string bounds)
+    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(4, IntegerType)), "", row)
+
+    // substring(null, _, _) -> null
+    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(4, IntegerType)), null, new GenericRow(Array[Any](null)))
+
+    // substring(_, null, _) -> null
+    checkEvaluation(Substring(s, Literal(null, IntegerType), Literal(4, IntegerType)), null, row)
+
+    // substring(_, _, null) -> null
+    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(null, IntegerType)), null, row)
+
+    // 2-arg substring from zero position
+    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "example", row)
+    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "example", row)
+
+    // 2-arg substring from nonzero position
+    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "xample", row)
+
+    val s_notNull = 'a.string.notNull.at(0)
+
+    assert(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === true)
+    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === false)
+    assert(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable === true)
+    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable === true)
+  }
+}

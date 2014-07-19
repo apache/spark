@@ -28,138 +28,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
-import org.apache.spark.mllib.stat.MultivariateStatisticalSummary
-
-/**
- * Column statistics aggregator implementing
- * [[org.apache.spark.mllib.stat.MultivariateStatisticalSummary]]
- * together with add() and merge() function.
- * A numerically stable algorithm is implemented to compute sample mean and variance:
- * [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance variance-wiki]].
- * Zero elements (including explicit zero values) are skipped when calling add() and merge(),
- * to have time complexity O(nnz) instead of O(n) for each column.
- */
-private class ColumnStatisticsAggregator(private val n: Int)
-    extends MultivariateStatisticalSummary with Serializable {
-
-  private val currMean: BDV[Double] = BDV.zeros[Double](n)
-  private val currM2n: BDV[Double] = BDV.zeros[Double](n)
-  private var totalCnt = 0.0
-  private val nnz: BDV[Double] = BDV.zeros[Double](n)
-  private val currMax: BDV[Double] = BDV.fill(n)(Double.MinValue)
-  private val currMin: BDV[Double] = BDV.fill(n)(Double.MaxValue)
-
-  override def mean: Vector = {
-    val realMean = BDV.zeros[Double](n)
-    var i = 0
-    while (i < n) {
-      realMean(i) = currMean(i) * nnz(i) / totalCnt
-      i += 1
-    }
-    Vectors.fromBreeze(realMean)
-  }
-
-  override def variance: Vector = {
-    val realVariance = BDV.zeros[Double](n)
-
-    val denominator = totalCnt - 1.0
-
-    // Sample variance is computed, if the denominator is less than 0, the variance is just 0.
-    if (denominator > 0.0) {
-      val deltaMean = currMean
-      var i = 0
-      while (i < currM2n.size) {
-        realVariance(i) =
-          currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * (totalCnt - nnz(i)) / totalCnt
-        realVariance(i) /= denominator
-        i += 1
-      }
-    }
-
-    Vectors.fromBreeze(realVariance)
-  }
-
-  override def count: Long = totalCnt.toLong
-
-  override def numNonzeros: Vector = Vectors.fromBreeze(nnz)
-
-  override def max: Vector = {
-    var i = 0
-    while (i < n) {
-      if ((nnz(i) < totalCnt) && (currMax(i) < 0.0)) currMax(i) = 0.0
-      i += 1
-    }
-    Vectors.fromBreeze(currMax)
-  }
-
-  override def min: Vector = {
-    var i = 0
-    while (i < n) {
-      if ((nnz(i) < totalCnt) && (currMin(i) > 0.0)) currMin(i) = 0.0
-      i += 1
-    }
-    Vectors.fromBreeze(currMin)
-  }
-
-  /**
-   * Aggregates a row.
-   */
-  def add(currData: BV[Double]): this.type = {
-    currData.activeIterator.foreach {
-      case (_, 0.0) => // Skip explicit zero elements.
-      case (i, value) =>
-        if (currMax(i) < value) {
-          currMax(i) = value
-        }
-        if (currMin(i) > value) {
-          currMin(i) = value
-        }
-
-        val tmpPrevMean = currMean(i)
-        currMean(i) = (currMean(i) * nnz(i) + value) / (nnz(i) + 1.0)
-        currM2n(i) += (value - currMean(i)) * (value - tmpPrevMean)
-
-        nnz(i) += 1.0
-    }
-
-    totalCnt += 1.0
-    this
-  }
-
-  /**
-   * Merges another aggregator.
-   */
-  def merge(other: ColumnStatisticsAggregator): this.type = {
-    require(n == other.n, s"Dimensions mismatch. Expecting $n but got ${other.n}.")
-
-    totalCnt += other.totalCnt
-    val deltaMean = currMean - other.currMean
-
-    var i = 0
-    while (i < n) {
-      // merge mean together
-      if (other.currMean(i) != 0.0) {
-        currMean(i) = (currMean(i) * nnz(i) + other.currMean(i) * other.nnz(i)) /
-          (nnz(i) + other.nnz(i))
-      }
-      // merge m2n together
-      if (nnz(i) + other.nnz(i) != 0.0) {
-        currM2n(i) += other.currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * other.nnz(i) /
-          (nnz(i) + other.nnz(i))
-      }
-      if (currMax(i) < other.currMax(i)) {
-        currMax(i) = other.currMax(i)
-      }
-      if (currMin(i) > other.currMin(i)) {
-        currMin(i) = other.currMin(i)
-      }
-      i += 1
-    }
-
-    nnz += other.nnz
-    this
-  }
-}
+import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 
 /**
  * :: Experimental ::
@@ -214,7 +83,13 @@ class RowMatrix(
       seqOp = (U, r) => {
         val rBrz = r.toBreeze
         val a = rBrz.dot(vbr.value)
-        brzAxpy(a, rBrz, U.asInstanceOf[BV[Double]])
+        rBrz match {
+          // use specialized axpy for better performance
+          case _: BDV[_] => brzAxpy(a, rBrz.asInstanceOf[BDV[Double]], U)
+          case _: BSV[_] => brzAxpy(a, rBrz.asInstanceOf[BSV[Double]], U)
+          case _ => throw new UnsupportedOperationException(
+            s"Do not support vector operation from type ${rBrz.getClass.getName}.")
+        }
         U
       },
       combOp = (U1, U2) => U1 += U2
@@ -478,8 +353,7 @@ class RowMatrix(
    * Computes column-wise summary statistics.
    */
   def computeColumnSummaryStatistics(): MultivariateStatisticalSummary = {
-    val zeroValue = new ColumnStatisticsAggregator(numCols().toInt)
-    val summary = rows.map(_.toBreeze).aggregate[ColumnStatisticsAggregator](zeroValue)(
+    val summary = rows.aggregate[MultivariateOnlineSummarizer](new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
     )

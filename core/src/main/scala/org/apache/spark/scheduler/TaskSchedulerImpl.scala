@@ -88,6 +88,8 @@ private[spark] class TaskSchedulerImpl(
   // in turn is used to decide when we can attain data locality on a given host
   private val executorsByHost = new HashMap[String, HashSet[String]]
 
+  protected val hostsByRack = new HashMap[String, HashSet[String]]
+
   private val executorIdToHost = new HashMap[String, String]
 
   // Listener object to pass upcalls into
@@ -143,6 +145,10 @@ private[spark] class TaskSchedulerImpl(
         Utils.tryOrExit { checkSpeculatableTasks() }
       }
     }
+  }
+
+  override def postStartHook() {
+    waitBackendReady()
   }
 
   override def submitTasks(taskSet: TaskSet) {
@@ -218,6 +224,9 @@ private[spark] class TaskSchedulerImpl(
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
         newExecAvail = true
+      }
+      for (rack <- getRackForHost(o.host)) {
+        hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
       }
     }
 
@@ -414,6 +423,12 @@ private[spark] class TaskSchedulerImpl(
     execs -= executorId
     if (execs.isEmpty) {
       executorsByHost -= host
+      for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
+        hosts -= host
+        if (hosts.isEmpty) {
+          hostsByRack -= rack
+        }
+      }
     }
     executorIdToHost -= executorId
     rootPool.executorLost(executorId, host)
@@ -431,12 +446,27 @@ private[spark] class TaskSchedulerImpl(
     executorsByHost.contains(host)
   }
 
+  def hasHostAliveOnRack(rack: String): Boolean = synchronized {
+    hostsByRack.contains(rack)
+  }
+
   def isExecutorAlive(execId: String): Boolean = synchronized {
     activeExecutorIds.contains(execId)
   }
 
   // By default, rack is unknown
   def getRackForHost(value: String): Option[String] = None
+
+  private def waitBackendReady(): Unit = {
+    if (backend.isReady) {
+      return
+    }
+    while (!backend.isReady) {
+      synchronized {
+        this.wait(100)
+      }
+    }
+  }
 }
 
 
