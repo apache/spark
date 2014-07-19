@@ -172,7 +172,7 @@ object DTRunnerJKB {
       impurity = impurityCalculator,
       maxDepth = params.maxDepth,
       maxBins = params.maxBins,
-      numClassesForClassification = numClasses)
+      numClasses = numClasses)
     val model = DecisionTree.train(training, strategy)
     model.print()
 

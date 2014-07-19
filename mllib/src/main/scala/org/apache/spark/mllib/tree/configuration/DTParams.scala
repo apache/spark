@@ -18,8 +18,7 @@
 package org.apache.spark.mllib.tree.configuration
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.tree.impurity.Impurity
-import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy
 
 /**
  * :: Experimental ::
@@ -34,7 +33,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 class DTParams (
     val maxDepth: Int,
     val maxBins: Int,
-    val quantileStrategy: String,
+    val quantileStrategy: QuantileStrategy.QuantileStrategy,
     val maxMemoryInMB: Int) extends Serializable {
 
 }

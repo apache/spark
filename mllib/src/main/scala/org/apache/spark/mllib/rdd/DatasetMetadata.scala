@@ -28,15 +28,30 @@ package org.apache.spark.mllib.rdd
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
  */
-class DatasetMetadata (val numClasses: Int,
-                       val numFeatures: Int,
-                       val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int]())
+class DatasetMetadata (
+    val numClasses: Int,
+    val numFeatures: Int,
+    val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int]())
   extends Serializable {
+
+  /**
+   * Indicates if this dataset's label is real-valued (numClasses < 2).
+   */
+  def isRegression: Boolean = {
+    numClasses < 2
+  }
+
+  /**
+   * Indicates if this dataset's label is categorical (numClasses >= 2).
+   */
+  def isClassification: Boolean = {
+    numClasses >= 2
+  }
 
   /**
    * Indicates if this dataset's label is categorical with >2 categories.
    */
-  def isMulticlass(): Boolean = {
+  def isMulticlass: Boolean = {
     numClasses > 2
   }
 
@@ -44,8 +59,8 @@ class DatasetMetadata (val numClasses: Int,
    * Indicates if this dataset's label is categorical with >2 categories,
    * and there is at least one categorical feature.
    */
-  def isMulticlassWithCategoricalFeatures(): Boolean = {
-    isMulticlass() && categoricalFeaturesInfo.nonEmpty
+  def isMulticlassWithCategoricalFeatures: Boolean = {
+    isMulticlass && categoricalFeaturesInfo.nonEmpty
   }
 
 }

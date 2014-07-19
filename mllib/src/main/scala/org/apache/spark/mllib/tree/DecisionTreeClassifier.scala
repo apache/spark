@@ -41,39 +41,22 @@ import org.apache.spark.util.random.XORShiftRandom
 class DecisionTreeClassifier (params: DTClassifierParams)
   extends DecisionTree[DecisionTreeClassifierModel](params) {
 
-  private val impurityFunctor : ClassificationImpurity = params.impurity match {
-    case "gini" => Gini
-    case "entropy" => Entropy
-    case _ => throw new IllegalArgumentException(s"Bad impurity parameter for classification: ${params.impurity}")
-  }
+  private val impurityFunctor = params.impurity
 
   /**
    * Method to train a decision tree model over an RDD
    * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   * @param numClasses number of classes for classification.
-   *                   Default value is 2, for binary classification.
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
-   *                                number of discrete values they take. For example, an entry (n ->
-   *                                k) implies the feature n is categorical with k categories 0,
-   *                                1, 2, ... , k-1. It's important to note that features are
-   *                                zero-indexed.
+   * @param dsMeta  Dataset metadata specifying number of classes, features, etc.
    * @return a DecisionTreeClassifierModel that can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],
-      numClasses: Int = 2,
-      categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int]()): DecisionTreeClassifierModel = {
+      dsMeta: DatasetMetadata): DecisionTreeClassifierModel = {
 
+    require(dsMeta.isClassification)
     logDebug("algo = Classification")
 
-    val numClasses: Int = 2
-    require(numClasses >= 2)
-    val isMulticlassClassification = numClasses > 2
-    val isMulticlassWithCategoricalFeatures =
-      isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
-
-    val topNode = super.trainSub(input, numClasses, categoricalFeaturesInfo)
-
+    val topNode = super.trainSub(input, dsMeta)
     new DecisionTreeClassifierModel(topNode)
   }
 
@@ -85,7 +68,7 @@ class DecisionTreeClassifier (params: DTClassifierParams)
       featureIndex: Int,
       sampledInput: Array[LabeledPoint],
       dsMeta: DatasetMetadata): Map[Double,Double] = {
-    if (dsMeta.isMulticlass()) {
+    if (dsMeta.isMulticlass) {
       // For categorical variables in multiclass classification,
       // each bin is a category. The bins are sorted and they
       // are ordered by calculating the impurity of their corresponding labels.
@@ -183,7 +166,7 @@ class DecisionTreeClassifier (params: DTClassifierParams)
       Array.ofDim[Double](dsMeta.numFeatures, numBins - 1, dsMeta.numClasses)
     var featureIndex = 0
     while (featureIndex < dsMeta.numFeatures) {
-      if (dsMeta.isMulticlassWithCategoricalFeatures()){
+      if (dsMeta.isMulticlassWithCategoricalFeatures){
         val isFeatureContinuous = dsMeta.categoricalFeaturesInfo.get(featureIndex).isEmpty
         if (isFeatureContinuous) {
           findAggForOrderedFeatureClassification(leftNodeAgg, rightNodeAgg, featureIndex)
@@ -209,7 +192,7 @@ class DecisionTreeClassifier (params: DTClassifierParams)
   protected def getElementsPerNode(
       dsMeta: DatasetMetadata,
       numBins: Int): Int = {
-    if (dsMeta.isMulticlassWithCategoricalFeatures()) {
+    if (dsMeta.isMulticlassWithCategoricalFeatures) {
       2 * dsMeta.numClasses * numBins * dsMeta.numFeatures
     } else {
       dsMeta.numClasses * numBins * dsMeta.numFeatures
@@ -235,7 +218,7 @@ class DecisionTreeClassifier (params: DTClassifierParams)
       numNodes: Int,
       bins: Array[Array[Bin]]): Array[Double] = {
     val numBins = bins(0).length
-    if(dsMeta.isMulticlassWithCategoricalFeatures()) {
+    if(dsMeta.isMulticlassWithCategoricalFeatures) {
       unorderedClassificationBinSeqOp(arr, agg, dsMeta, numNodes, bins)
     } else {
       orderedClassificationBinSeqOp(arr, agg, dsMeta, numNodes, numBins)
@@ -343,7 +326,7 @@ class DecisionTreeClassifier (params: DTClassifierParams)
       dsMeta: DatasetMetadata,
       numNodes: Int,
       numBins: Int): Array[Double] = {
-    if (dsMeta.isMulticlassWithCategoricalFeatures()) {
+    if (dsMeta.isMulticlassWithCategoricalFeatures) {
       val shift = dsMeta.numClasses * node * numBins * dsMeta.numFeatures
       val rightChildShift = dsMeta.numClasses * numBins * dsMeta.numFeatures * numNodes
       val binsForNode = {
@@ -500,103 +483,97 @@ class DecisionTreeClassifier (params: DTClassifierParams)
 object DecisionTreeClassifier extends Serializable with Logging {
 
   /**
-   * Method to train a decision tree model where the instances are represented as an RDD of
-   * (label, features) pairs. The method supports binary classification and regression. For the
-   * binary classification, the label for each instance should either be 0 or 1 to denote the two
-   * classes. The parameters for the algorithm are specified using the params parameter.
+   * Train a decision tree model for binary or multiclass classification.
    *
-   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   *              for DecisionTree
-   * @param params The configuration parameters for the tree algorithm which specify the type
-   *                 of algorithm (classification, regression, etc.), feature type (continuous,
-   *                 categorical), depth of the tree, quantile calculation strategy, etc.
-   * @return a DecisionTreeClassifierModel that can be used for prediction
+   * @param input  Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *               Labels should take values {0, 1, ..., numClasses-1}.
+   * @param dsMeta Dataset metadata (number of features, number of classes, etc.)
+   * @param params The configuration parameters for the tree learning algorithm
+   *               (tree depth, quantile calculation strategy, etc.)
+   * @return DecisionTreeClassifierModel which can be used for prediction
    */
-  def train(input: RDD[LabeledPoint], params: DTParams): DecisionTreeClassifierModel = {
-    new DecisionTree(params).train(input)
+  def train(
+      input: RDD[LabeledPoint],
+      dsMeta: DatasetMetadata,
+      params: DTClassifierParams = new DTClassifierParams()): DecisionTreeClassifierModel = {
+    require(dsMeta.numClasses >= 2)
+    new DecisionTreeClassifier(params).train(input, dsMeta)
   }
 
   /**
-   * Method to train a decision tree model where the instances are represented as an RDD of
-   * (label, features) pairs. The method supports binary classification and regression. For the
-   * binary classification, the label for each instance should either be 0 or 1 to denote the two
-   * classes.
+   * Train a decision tree model for binary or multiclass classification.
    *
-   * @param input input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as
-   *              training data
-   * @param algo algorithm, classification or regression
-   * @param impurity impurity criterion used for information gain calculation
-   * @param maxDepth maxDepth maximum depth of the tree
-   * @return a DecisionTreeClassifierModel that can be used for prediction
+   * @param input  Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *               Labels should take values {0, 1, ..., numClasses-1}.
+   * @param numClasses Number of classes (label types) for classification.
+   *                   Default = 2 (binary classification).
+   * @param categoricalFeaturesInfo A map from each categorical variable to the
+   *                                number of discrete values it takes. For example, an entry (n ->
+   *                                k) implies the feature n is categorical with k categories 0,
+   *                                1, 2, ... , k-1. It is important to note that features are
+   *                                zero-indexed.
+   *                                Default = treat all features as continuous.
+   * @param params The configuration parameters for the tree learning algorithm
+   *               (tree depth, quantile calculation strategy, etc.)
+   * @return DecisionTreeClassifierModel which can be used for prediction
    */
   def train(
-             input: RDD[LabeledPoint],
-             algo: Algo,
-             impurity: Impurity,
-             maxDepth: Int): DecisionTreeClassifierModel = {
-    val params = new DTParams(algo, impurity, maxDepth)
-    new DecisionTree(params).train(input)
+      input: RDD[LabeledPoint],
+      numClasses: Int = 2,
+      categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
+      params: DTClassifierParams = new DTClassifierParams()): DecisionTreeClassifierModel = {
+
+    // Find the number of features by looking at the first sample.
+    val numFeatures = input.first().features.size
+    val dsMeta = new DatasetMetadata(numClasses, numFeatures, categoricalFeaturesInfo)
+
+    train(input, dsMeta, params)
   }
+
+  // TODO: Move elsewhere!
+  protected def getImpurity(impurityName: String): ClassificationImpurity = {
+    impurityName match {
+      case "gini" => Gini
+      case "entropy" => Entropy
+      case _ => throw new IllegalArgumentException(
+          s"Bad impurity parameter for classification: $impurityName")
+    }
+  }
+
+  // TODO: Add various versions of train() function below.
 
   /**
-   * Method to train a decision tree model where the instances are represented as an RDD of
-   * (label, features) pairs. The method supports binary classification and regression. For the
-   * binary classification, the label for each instance should either be 0 or 1 to denote the two
-   * classes.
+   * Train a decision tree model for binary or multiclass classification.
    *
-   * @param input input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as
-   *              training data
-   * @param algo algorithm, classification or regression
-   * @param impurity impurity criterion used for information gain calculation
-   * @param maxDepth maxDepth maximum depth of the tree
-   * @param numClasses number of classes for classification. Default value of 2.
-   * @return a DecisionTreeClassifierModel that can be used for prediction
+   * @param input  Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *               Labels should take values {0, 1, ..., numClasses-1}.
+   * @param numClasses Number of classes (label types) for classification.
+   * @param categoricalFeaturesInfo A map from each categorical variable to the
+   *                                number of discrete values it takes. For example, an entry (n ->
+   *                                k) implies the feature n is categorical with k categories 0,
+   *                                1, 2, ... , k-1. It is important to note that features are
+   *                                zero-indexed.
+   * @param impurityName Criterion used for information gain calculation
+   * @param maxDepth  Maximum depth of the tree
+   * @param maxBins  Maximum number of bins used for splitting features
+   * @param quantileStrategyName  Algorithm for calculating quantiles
+   * @return DecisionTreeClassifierModel which can be used for prediction
    */
   def train(
-             input: RDD[LabeledPoint],
-             algo: Algo,
-             impurity: Impurity,
-             maxDepth: Int,
-             numClasses: Int): DecisionTreeClassifierModel = {
-    val params = new DTParams(algo, impurity, maxDepth, numClasses)
-    new DecisionTree(params).train(input)
-  }
+      input: RDD[LabeledPoint],
+      numClasses: Int,
+      categoricalFeaturesInfo: Map[Int, Int],
+      impurityName: String,
+      maxDepth: Int,
+      maxBins: Int,
+      quantileStrategyName: String,
+      maxMemoryInMB: Int): DecisionTreeClassifierModel = {
 
-  /**
-   * Method to train a decision tree model where the instances are represented as an RDD of
-   * (label, features) pairs. The decision tree method supports binary classification and
-   * regression. For the binary classification, the label for each instance should either be 0 or
-   * 1 to denote the two classes. The method also supports categorical features inputs where the
-   * number of categories can specified using the categoricalFeaturesInfo option.
-   *
-   * @param input input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as
-   *              training data for DecisionTree
-   * @param algo classification or regression
-   * @param impurity criterion used for information gain calculation
-   * @param maxDepth  maximum depth of the tree
-   * @param numClasses number of classes for classification. Default value of 2.
-   * @param maxBins maximum number of bins used for splitting features
-   * @param quantileStrategy  algorithm for calculating quantiles
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
-   *                                the number of discrete values they take. For example,
-   *                                an entry (n -> k) implies the feature n is categorical with k
-   *                                categories 0, 1, 2, ... , k-1. It's important to note that
-   *                                features are zero-indexed.
-   * @return a DecisionTreeClassifierModel that can be used for prediction
-   */
-  def train(
-             input: RDD[LabeledPoint],
-             algo: Algo,
-             impurity: Impurity,
-             maxDepth: Int,
-             numClasses: Int,
-             maxBins: Int,
-             quantileStrategy: QuantileStrategy,
-             categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeClassifierModel = {
-    val params = new DTParams(algo, impurity, maxDepth, numClasses, maxBins,
-      quantileStrategy, categoricalFeaturesInfo)
-    new DecisionTree(params).train(input)
+    val impurity = getImpurity(impurityName)
+    val quantileStrategy = getQuantileStrategy(quantileStrategyName)
+    val params =
+      new DTClassifierParams(impurity, maxDepth, maxBins, quantileStrategy, maxMemoryInMB)
+    train(input, numClasses, categoricalFeaturesInfo, params)
   }
-
 
 }

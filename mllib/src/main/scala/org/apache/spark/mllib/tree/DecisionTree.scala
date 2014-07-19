@@ -24,7 +24,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.DTParams
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
-import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
@@ -47,26 +47,15 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
   /**
    * Method to train a decision tree model over an RDD
    * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   * @param numClasses number of classes for classification.
-   *                   Default value is 2, for binary classification.
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
-   *                                number of discrete values they take. For example, an entry (n ->
-   *                                k) implies the feature n is categorical with k categories 0,
-   *                                1, 2, ... , k-1. It's important to note that features are
-   *                                zero-indexed.
+   * @param dsMeta  Dataset metadata.
    * @return top node of a DecisionTreeModel
    */
   protected def trainSub(
       input: RDD[LabeledPoint],
-      numClasses: Int = 2,
-      categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int]()): Node = {
+      dsMeta: DatasetMetadata): Node = {
 
     // Cache input RDD for speedup during multiple passes.
     input.cache()
-
-    // Collect input metadata.
-    val numFeatures = input.take(1)(0).features.size
-    val dsMeta = new DatasetMetadata(numClasses, numFeatures, categoricalFeaturesInfo)
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
@@ -384,16 +373,14 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     // common calculations for multiple nested methods
     val numNodes = math.pow(2, level).toInt / numGroups
     logDebug("numNodes = " + numNodes)
-    // Find the number of features by looking at the first sample.
-    //val numFeatures = input.first().features.size
     //logDebug("numFeatures = " + numFeatures)
     val numBins = bins(0).length
     logDebug("numBins = " + numBins)
     //val numClasses = dsMeta.numClasses
     //logDebug("numClasses = " + numClasses)
-    val isMulticlass = dsMeta.isMulticlass()
+    val isMulticlass = dsMeta.isMulticlass
     logDebug("isMulticlass = " + isMulticlass)
-    val isMulticlassWithCategoricalFeatures = dsMeta.isMulticlassWithCategoricalFeatures()
+    val isMulticlassWithCategoricalFeatures = dsMeta.isMulticlassWithCategoricalFeatures
     logDebug("isMultiClassWithCategoricalFeatures = " + isMulticlassWithCategoricalFeatures)
 
     // shift when more than one group is used at deep tree level
@@ -732,7 +719,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     val maxBins = params.maxBins
     val numBins = if (maxBins <= count) maxBins else count.toInt
     logDebug("numBins = " + numBins)
-    val isMulticlass = dsMeta.isMulticlass()
+    val isMulticlass = dsMeta.isMulticlass
     logDebug("isMulticlass = " + isMulticlass)
 
 
@@ -755,14 +742,15 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     logDebug("fraction of data used for calculating quantiles = " + fraction)
 
     // sampled input for RDD calculation
-    val sampledInput = input.sample(false, fraction, new XORShiftRandom().nextInt()).collect()
+    val sampledInput =
+      input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
     val numSamples = sampledInput.length
 
     val stride: Double = numSamples.toDouble / numBins
     logDebug("stride = " + stride)
 
     params.quantileStrategy match {
-      case Sort =>
+      case QuantileStrategy.Sort =>
         val splits = Array.ofDim[Split](numFeatures, numBins - 1)
         val bins = Array.ofDim[Bin](numFeatures, numBins)
 
@@ -875,9 +863,9 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
           featureIndex += 1
         }
         (splits,bins)
-      case MinMax =>
+      case QuantileStrategy.MinMax =>
         throw new UnsupportedOperationException("minmax not supported yet.")
-      case ApproxHist =>
+      case QuantileStrategy.ApproxHist =>
         throw new UnsupportedOperationException("approximate histogram not supported yet.")
     }
   }

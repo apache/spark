@@ -19,6 +19,8 @@ package org.apache.spark.mllib.tree.configuration
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.configuration.DTParams
+import org.apache.spark.mllib.tree.impurity.{RegressionImpurity, Variance}
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy
 
 /**
  * :: Experimental ::
@@ -28,15 +30,15 @@ import org.apache.spark.mllib.tree.configuration.DTParams
  * @param quantileStrategy algorithm for calculating quantiles
  * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
  *                      128 MB.
- * @param impurity criterion used for information gain calculation (e.g., "variance")
+ * @param impurity criterion used for information gain calculation (e.g., Variance)
  */
 @Experimental
 class DTRegressorParams (
+    val impurity: RegressionImpurity = Variance,
     maxDepth: Int = 5,
     maxBins: Int = 100,
-    quantileStrategy: String = "sort",
-    maxMemoryInMB: Int = 128,
-    val impurity: String = "variance")
+    quantileStrategy: QuantileStrategy.QuantileStrategy = QuantileStrategy.Sort,
+    maxMemoryInMB: Int = 128)
   extends DTParams(maxDepth, maxBins, quantileStrategy, maxMemoryInMB) {
 
   /*

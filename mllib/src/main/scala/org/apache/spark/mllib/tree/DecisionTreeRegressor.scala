@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.tree
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.Logging
 import org.apache.spark.mllib.rdd.DatasetMetadata
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.DTRegressorParams
@@ -36,10 +37,13 @@ import org.apache.spark.rdd.RDD
 class DecisionTreeRegressor (params: DTRegressorParams)
   extends DecisionTree[DecisionTreeRegressorModel](params) {
 
+  private val impurityFunctor = params.impurity
+  /*
   private val impurityFunctor = params.impurity match {
     case "variance" => Variance
     case _ => throw new IllegalArgumentException(s"Bad impurity parameter for regression: ${params.impurity}")
   }
+  */
 
   /**
    * Method to train a decision tree model over an RDD
@@ -273,6 +277,103 @@ class DecisionTreeRegressor (params: DTRegressorParams)
    * Performs a sequential aggregation over a partition for regression.
    */
   def regressionBinSeqOp(arr: Array[Double], agg: Array[Double]) = {
+  }
+
+}
+
+
+object DecisionTreeRegressor extends Serializable with Logging {
+
+  /**
+   * Train a decision tree model for regression.
+   *
+   * @param input  Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *               Labels should take values {0, 1, ..., numClasses-1}.
+   * @param dsMeta Dataset metadata (number of features, number of classes, etc.)
+   * @param params The configuration parameters for the tree learning algorithm
+   *               (tree depth, quantile calculation strategy, etc.)
+   * @return DecisionTreeRegressorModel which can be used for prediction
+   */
+  def train(
+             input: RDD[LabeledPoint],
+             dsMeta: DatasetMetadata,
+             params: DTRegressorParams = new DTRegressorParams()): DecisionTreeRegressorModel = {
+    require(dsMeta.numClasses >= 2)
+    new DecisionTreeRegressor(params).train(input, dsMeta)
+  }
+
+  /**
+   * Train a decision tree model for binary or multiclass regression.
+   *
+   * @param input  Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *               Labels should take values {0, 1, ..., numClasses-1}.
+   * @param numClasses Number of classes (label types) for regression.
+   *                   Default = 2 (binary regression).
+   * @param categoricalFeaturesInfo A map from each categorical variable to the
+   *                                number of discrete values it takes. For example, an entry (n ->
+   *                                k) implies the feature n is categorical with k categories 0,
+   *                                1, 2, ... , k-1. It is important to note that features are
+   *                                zero-indexed.
+   *                                Default = treat all features as continuous.
+   * @param params The configuration parameters for the tree learning algorithm
+   *               (tree depth, quantile calculation strategy, etc.)
+   * @return DecisionTreeRegressorModel which can be used for prediction
+   */
+  def train(
+             input: RDD[LabeledPoint],
+             numClasses: Int = 2,
+             categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
+             params: DTRegressorParams = new DTRegressorParams()): DecisionTreeRegressorModel = {
+
+    // Find the number of features by looking at the first sample.
+    val numFeatures = input.first().features.size
+    val dsMeta = new DatasetMetadata(numClasses, numFeatures, categoricalFeaturesInfo)
+
+    train(input, dsMeta, params)
+  }
+
+  // TODO: Move elsewhere!
+  protected def getImpurity(impurityName: String): RegressionImpurity = {
+    impurityName match {
+      case "gini" => Gini
+      case "entropy" => Entropy
+      case _ => throw new IllegalArgumentException(
+        s"Bad impurity parameter for regression: $impurityName")
+    }
+  }
+
+  /**
+   * Train a decision tree model for binary or multiclass regression.
+   *
+   * @param input  Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *               Labels should take values {0, 1, ..., numClasses-1}.
+   * @param numClasses Number of classes (label types) for regression.
+   * @param categoricalFeaturesInfo A map from each categorical variable to the
+   *                                number of discrete values it takes. For example, an entry (n ->
+   *                                k) implies the feature n is categorical with k categories 0,
+   *                                1, 2, ... , k-1. It is important to note that features are
+   *                                zero-indexed.
+   * @param impurityName Criterion used for information gain calculation
+   * @param maxDepth  Maximum depth of the tree
+   * @param maxBins  Maximum number of bins used for splitting features
+   * @param quantileStrategyName  Algorithm for calculating quantiles
+   * @return DecisionTreeRegressorModel which can be used for prediction
+   */
+  def train(
+             input: RDD[LabeledPoint],
+             numClasses: Int,
+             categoricalFeaturesInfo: Map[Int, Int],
+             impurityName: String,
+             maxDepth: Int,
+             maxBins: Int,
+             quantileStrategyName: String,
+             maxMemoryInMB: Int): DecisionTreeRegressorModel = {
+
+    val impurity = getImpurity(impurityName)
+    val quantileStrategy = getQuantileStrategy(quantileStrategyName)
+    val params =
+      new DTRegressorParams(impurity, maxDepth, maxBins, quantileStrategy, maxMemoryInMB)
+    train(input, numClasses, categoricalFeaturesInfo, params)
   }
 
 }

@@ -19,24 +19,26 @@ package org.apache.spark.mllib.tree.configuration
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.configuration.DTParams
+import org.apache.spark.mllib.tree.impurity.{ClassificationImpurity, Gini}
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy
 
 /**
  * :: Experimental ::
  * Stores all the configuration options for DecisionTreeClassifier construction
+ * @param impurity criterion used for information gain calculation (e.g., Gini or Entropy)
  * @param maxDepth maximum depth of the tree
  * @param maxBins maximum number of bins used for splitting features
  * @param quantileStrategy algorithm for calculating quantiles
  * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
  *                      128 MB.
- * @param impurity criterion used for information gain calculation (e.g., "gini" or "entropy")
  */
 @Experimental
 class DTClassifierParams (
+    val impurity: ClassificationImpurity = Gini,
     maxDepth: Int = 5,
     maxBins: Int = 100,
-    quantileStrategy: String = "sort",
-    maxMemoryInMB: Int = 128,
-    val impurity: String = "gini")
+    quantileStrategy: QuantileStrategy.QuantileStrategy = QuantileStrategy.Sort,
+    maxMemoryInMB: Int = 128)
   extends DTParams(maxDepth, maxBins, quantileStrategy, maxMemoryInMB) {
 
   /*
