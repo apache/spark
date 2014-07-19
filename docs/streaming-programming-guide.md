@@ -518,7 +518,7 @@ depending on the checkpoint frequency.</li>
 <li>Failed or latent KinesisReceivers will be detected and automatically shutdown/load-balanced by the KCL.</li>
 <li>If possible, explicitly shutdown the worker if a failure occurs.</li>
 
-Example KinesisWordCount (and JavaKiensisWordCount) notes:
+Example KinesisWordCount (and JavaKinesisWordCount) notes:
 <li>These examples automatically determine the number of threads to run locally based on the number of shards for the stream.</li>
 <li>These examples automatically determine the number of KinesisReceivers/InputDStreams to create based on the number of shards for the stream.</li>
 <li>These examples use InitialPositionInStream.LATEST (tip of stream) vs. InitialPositionInStream.TRIM_HORIZON (back 24 hours) to simplify reasoning about the examples.</li>

@@ -65,7 +65,7 @@ object SparkBuild extends PomBuild {
     }
     if (Properties.envOrNone("SPARK_KINESIS_ASL").isDefined) {
       println("NOTE: SPARK_KINESIS_ASL is deprecated, please use -Pspark-kinesis-asl flag.")
-      profiles ++= Seq("spark-ganglia-lgpl")
+      profiles ++= Seq("spark-kinesis-asl")
     }
     if (Properties.envOrNone("SPARK_HIVE").isDefined) {
       println("NOTE: SPARK_HIVE is deprecated, please use -Phive flag.")

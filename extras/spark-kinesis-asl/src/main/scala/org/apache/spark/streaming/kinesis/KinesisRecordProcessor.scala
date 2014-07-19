@@ -36,8 +36,7 @@ import org.apache.spark.streaming.util.Clock
  *
  * @param Kinesis receiver
  * @param workerId for logging purposes
- * @param checkpoint utils
- * @param Kinesis checkpoint interval (millis)
+ * @param checkpoint state
  */
 private[streaming] class KinesisRecordProcessor(
   receiver: KinesisReceiver,
