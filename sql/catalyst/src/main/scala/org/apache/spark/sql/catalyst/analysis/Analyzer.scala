@@ -153,18 +153,25 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       false
     }
   }
-  
+
+  /**
+   * This rule finds expressions in HAVING clause filters that depend on
+   * unresolved attributes.  It pushes these expressions down to the underlying
+   * aggregates and then projects them away above the filter.
+   *
+   * For SPARK-2226
+   */
   object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case pl@Filter(fexp, agg@Aggregate(_, ae, _)) if !fexp.childrenResolved => {
         val alias = Alias(fexp, makeTmp)()
         val aggExprs = Seq(alias) ++ ae
-	
-	val newCond = EqualTo(Cast(alias.toAttribute, BooleanType), 
-			      Literal(true, BooleanType))
+        
+        val newCond = EqualTo(Cast(alias.toAttribute, BooleanType), 
+          Literal(true, BooleanType))
 
         val flt = ResolveReferences(pl.copy(condition=newCond,
-	  child=agg.copy(aggregateExpressions=aggExprs)))
+          child=agg.copy(aggregateExpressions=aggExprs)))
         
         Project(pl.output, flt)
       }
@@ -174,7 +181,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     
     def makeTmp = {
       val id = curId.getAndIncrement()
-      s"pushed_tmp_$id"
+      s"tmp_cond_$id"
     }
   }
 
