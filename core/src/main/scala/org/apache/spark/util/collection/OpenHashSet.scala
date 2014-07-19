@@ -258,7 +258,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   /**
    * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
    */
-  private def hashcode(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
+  private def hashcode(h: Int): Int = Hashing.murmur3_32().hashLong(h).asInt()
 
   private def nextPowerOf2(n: Int): Int = {
     val highBit = Integer.highestOneBit(n)

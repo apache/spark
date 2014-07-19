@@ -202,7 +202,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   /**
    * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
    */
-  private def rehash(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
+  private def rehash(h: Int): Int = Hashing.murmur3_32().hashLong(h).asInt()
 
   /** Double the table's size and re-hash everything */
   protected def growTable() {

@@ -24,7 +24,7 @@ import scala.collection.BufferedIterator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.ByteStreams
+import com.google.common.io.LimitInputStream
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
@@ -396,7 +396,7 @@ class ExternalAppendOnlyMap[K, V, C](
      */
     private def nextBatchStream(): InputStream = {
       if (batchSizes.length > 0) {
-        ByteStreams.limit(bufferedStream, batchSizes.remove(0))
+        new LimitInputStream(bufferedStream, batchSizes.remove(0))
       } else {
         // No more batches left
         bufferedStream
