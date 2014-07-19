@@ -243,7 +243,7 @@ private[spark] class BlockManager(
 
   /**
    * Update the storage level of an existing block. This is currently only used for forcing
-   * MEMORY_AND_DISK blocks to disk, and restoring the original storage level afterwards.
+   * MEMORY_AND_DISK blocks to disk and restoring the original storage level afterwards.
    */
   def updateStorageLevel(blockId: BlockId, level: StorageLevel) = {
     if (blockInfo.contains(blockId)) {
@@ -481,6 +481,7 @@ private[spark] class BlockManager(
                   case Left(it) =>
                     return Some(new BlockResult(it, DataReadMethod.Disk, info.size))
                   case _ =>
+                    // This only happens if we dropped the values back to disk (which is never)
                     throw new SparkException("Memory store did not return an iterator!")
                 }
               } else {

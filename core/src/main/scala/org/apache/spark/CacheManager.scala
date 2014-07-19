@@ -145,8 +145,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       /*
        * This RDD is to be cached in memory. In this case we cannot pass the computed values
        * to the BlockManager as an iterator and expect to read it back later. This is because
-       * we may end up dropping a partition from memory store before getting it back, e.g.
-       * when the entirety of the RDD does not fit in memory.
+       * we may end up dropping a partition from memory store before getting it back.
        *
        * In addition, we must be careful to not unroll the entire partition in memory at once.
        * Otherwise, we may cause an OOM exception if the JVM does not have enough space for this

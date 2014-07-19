@@ -62,6 +62,7 @@ object MimaExcludes {
           "org.apache.spark.storage.MemoryStore.Entry"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$createZero$1"),
+        // BlockManager now uses Arrays instead of ArrayBuffers
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "org.apache.spark.storage.MemoryStore.putValues"),
         ProblemFilters.exclude[IncompatibleMethTypeProblem](

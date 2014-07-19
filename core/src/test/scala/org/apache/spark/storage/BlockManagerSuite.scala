@@ -1038,9 +1038,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(store.memoryStore.contains("a2"), "a2 was not in store")
     assert(!store.memoryStore.contains("a3"), "a3 was in store")
     /*
-     * After a4 is cached, and there is less than 2000 bytes of free space left. Now we try
-     * to cache a5, which is the same size as a3. Ensuring free space of 2400 bytes now drops
-     * the LRU block (i.e. a1) from memory to accommodate a5.
+     * After a4 is cached, there is less than 2000 bytes of free space left. Now we try to cache
+     * a5, which is the same size as a3. Ensuring free space of 2400 bytes now drops the LRU block
+     * (i.e. a1) from memory to accommodate a5 (because 2000 < 2400).
      */
     store.putSingle("a4", new Array[Byte](2000), StorageLevel.MEMORY_ONLY)
     store.putSingle("a5", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
