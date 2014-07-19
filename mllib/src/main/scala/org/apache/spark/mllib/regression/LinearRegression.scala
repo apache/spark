@@ -56,8 +56,8 @@ class LinearRegressionWithSGD private (
   extends GeneralizedLinearAlgorithm[LinearRegressionModel] with Serializable {
 
   private val gradient = new LeastSquaresGradient()
-  private val updater = new SimpleUpdater()
-  override val optimizer = new GradientDescent(gradient, updater)
+  private val regularizer = new SimpleRegularizer()
+  override val optimizer = new GradientDescent(gradient, regularizer)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setMiniBatchFraction(miniBatchFraction)
