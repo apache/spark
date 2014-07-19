@@ -103,13 +103,18 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
     getBlockLocation(blockId).file.exists()
   }
 
-  /** List all the blocks currently stored on disk by the disk manager. */
-  def getAllBlocks(): Seq[BlockId] = {
+  /** List all the files currently stored on disk by the disk manager. */
+  def getAllFiles(): Seq[File] = {
     // Get all the files inside the array of array of directories
     subDirs.flatten.filter(_ != null).flatMap { dir =>
-      val files = dir.list()
+      val files = dir.listFiles()
       if (files != null) files else Seq.empty
-    }.map(BlockId.apply)
+    }
+  }
+
+  /** List all the blocks currently stored on disk by the disk manager. */
+  def getAllBlocks(): Seq[BlockId] = {
+    getAllFiles().map(f => BlockId(f.getName))
   }
 
   /** Produces a unique block id and File suitable for intermediate results. */

@@ -19,13 +19,12 @@ package org.apache.spark.util.collection
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.{SparkContext, SparkConf, LocalSparkContext}
+import org.apache.spark._
 import org.apache.spark.SparkContext._
-import scala.collection.mutable.ArrayBuffer
+import scala.Some
 
 class ExternalSorterSuite extends FunSuite with LocalSparkContext {
-
-  test("spilling in local cluster") {
+  ignore("spilling in local cluster") {
     val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
@@ -76,5 +75,84 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
         case _ =>
       }
     }
+  }
+
+  test("cleanup of intermediate files in sorter") {
+    val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+
+    val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
+    sorter.write((0 until 100000).iterator.map(i => (i, i)))
+    assert(diskBlockManager.getAllFiles().length > 0)
+    sorter.stop()
+    assert(diskBlockManager.getAllBlocks().length === 0)
+
+    val sorter2 = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
+    sorter2.write((0 until 100000).iterator.map(i => (i, i)))
+    assert(diskBlockManager.getAllFiles().length > 0)
+    assert(sorter2.iterator.toSet === (0 until 100000).map(i => (i, i)).toSet)
+    sorter2.stop()
+    assert(diskBlockManager.getAllBlocks().length === 0)
+  }
+
+  test("cleanup of intermediate files in sorter if there are errors") {
+    val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+
+    val sorter = new ExternalSorter[Int, Int, Int](None, Some(new HashPartitioner(3)), None, None)
+    intercept[SparkException] {
+      sorter.write((0 until 100000).iterator.map(i => {
+        if (i == 99990) {
+          throw new SparkException("Intentional failure")
+        }
+        (i, i)
+      }))
+    }
+    assert(diskBlockManager.getAllFiles().length > 0)
+    sorter.stop()
+    assert(diskBlockManager.getAllBlocks().length === 0)
+  }
+
+  test("cleanup of intermediate files in shuffle") {
+    val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+
+    val data = sc.parallelize(0 until 100000, 2).map(i => (i, i))
+    assert(data.reduceByKey(_ + _).count() === 100000)
+
+    // After the shuffle, there should be only 4 files on disk: our two map output files and
+    // their index files. All other intermediate files should've been deleted.
+    assert(diskBlockManager.getAllFiles().length === 4)
+  }
+
+  test("cleanup of intermediate files in shuffle with errors") {
+    val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+    val diskBlockManager = SparkEnv.get.blockManager.diskBlockManager
+
+    val data = sc.parallelize(0 until 100000, 2).map(i => {
+      if (i == 99990) {
+        throw new Exception("Intentional failure")
+      }
+      (i, i)
+    })
+    intercept[SparkException] {
+      data.reduceByKey(_ + _).count()
+    }
+
+    // After the shuffle, there should be only 2 files on disk: the output of task 1 and its index.
+    // All other files (map 2's output and intermediate merge files) should've been deleted.
+    assert(diskBlockManager.getAllFiles().length === 2)
   }
 }

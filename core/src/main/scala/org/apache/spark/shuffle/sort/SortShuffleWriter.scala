@@ -17,15 +17,15 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.io.{BufferedOutputStream, File, FileOutputStream, DataOutputStream}
+
 import org.apache.spark.shuffle.{ShuffleWriter, BaseShuffleHandle}
 import org.apache.spark.{MapOutputTracker, SparkEnv, Logging, TaskContext}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.storage.ShuffleBlockId
-import java.util.concurrent.atomic.AtomicInteger
 import org.apache.spark.executor.ShuffleWriteMetrics
-import java.io.{BufferedOutputStream, FileOutputStream, DataOutputStream}
 
 private[spark] class SortShuffleWriter[K, V, C](
     handle: BaseShuffleHandle[K, V, C],
@@ -35,17 +35,15 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private val dep = handle.dependency
   private val numPartitions = dep.partitioner.numPartitions
-  private val metrics = context.taskMetrics
 
   private val blockManager = SparkEnv.get.blockManager
-  private val shuffleBlockManager = blockManager.shuffleBlockManager
-  private val diskBlockManager = blockManager.diskBlockManager
   private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))
 
   private val conf = SparkEnv.get.conf
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
 
   private var sorter: ExternalSorter[K, V, _] = null
+  private var outputFile: File = null
 
   private var stopping = false
   private var mapStatus: MapStatus = null
@@ -72,7 +70,7 @@ private[spark] class SortShuffleWriter[K, V, C](
     // Create a single shuffle file with reduce ID 0 that we'll write all results to. We'll later
     // serve different ranges of this file using an index file that we create at the end.
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, 0)
-    val shuffleFile = blockManager.diskBlockManager.getFile(blockId)
+    outputFile = blockManager.diskBlockManager.getFile(blockId)
 
     // Track location of each range in the output file
     val offsets = new Array[Long](numPartitions + 1)
@@ -84,7 +82,7 @@ private[spark] class SortShuffleWriter[K, V, C](
 
     for ((id, elements) <- partitions) {
       if (elements.hasNext) {
-        val writer = blockManager.getDiskWriter(blockId, shuffleFile, ser, fileBufferSize)
+        val writer = blockManager.getDiskWriter(blockId, outputFile, ser, fileBufferSize)
         for (elem <- elements) {
           writer.write(elem)
         }
@@ -125,8 +123,6 @@ private[spark] class SortShuffleWriter[K, V, C](
 
     mapStatus = new MapStatus(blockManager.blockManagerId,
       lengths.map(MapOutputTracker.compressSize))
-
-    // TODO: keep track of our file in a way that can be cleaned up later
   }
 
   /** Close this writer, passing along whether the map completed */
@@ -139,11 +135,17 @@ private[spark] class SortShuffleWriter[K, V, C](
       if (success) {
         return Option(mapStatus)
       } else {
-        // TODO: clean up our file
+        // The map task failed, so delete our output file if we created one
+        if (outputFile != null) {
+          outputFile.delete()
+        }
         return None
       }
     } finally {
-      // TODO: sorter.stop()
+      // Clean up our sorter, which may have its own intermediate files
+      if (sorter != null) {
+        sorter.stop()
+      }
     }
   }
 }

@@ -66,7 +66,6 @@ private[spark] class ExternalSorter[K, V, C](
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
   // store them in an array buffer.
-  // TODO: Would prefer to have an ArrayBuffer[Any] that we sort pairs of adjacent elements in.
   var map = new SizeTrackingAppendOnlyMap[(Int, K), C]
   var buffer = new SizeTrackingBuffer[((Int, K), C)]
 
@@ -187,7 +186,7 @@ private[spark] class ExternalSorter[K, V, C](
     val batchSizes = new ArrayBuffer[Long]
 
     // How many elements we have in each partition
-    // TODO: this should become a sparser data structure
+    // TODO: this could become a sparser data structure
     val elementsPerPartition = new Array[Long](numPartitions)
 
     // Flush the disk writer's contents to disk, and update relevant variables
@@ -220,9 +219,11 @@ private[spark] class ExternalSorter[K, V, C](
       if (objectsWritten > 0) {
         flush()
       }
-    } finally {
-      // Partial failures cannot be tolerated; do not revert partial writes
       writer.close()
+    } catch {
+      case e: Exception =>
+        writer.close()
+        file.delete()
     }
 
     if (usingMap) {
@@ -267,6 +268,12 @@ private[spark] class ExternalSorter[K, V, C](
     val fileStream = new FileInputStream(spill.file)
     val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
 
+    // Track which partition and which batch stream we're in
+    var partitionId = 0
+    var indexInPartition = -1L  // Just to make sure we start at index 0
+    var batchStreamsRead = 0
+    var indexInBatch = 0
+
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
     var batchStream = nextBatchStream()
@@ -275,21 +282,10 @@ private[spark] class ExternalSorter[K, V, C](
     var nextItem: (K, C) = null
     var finished = false
 
-    // Track which partition and which batch stream we're in
-    var partitionId = 0
-    var indexInPartition = -1L  // Just to make sure we start at index 0
-    var batchStreamsRead = 0
-    var indexInBatch = -1
-
     /** Construct a stream that only reads from the next batch */
     def nextBatchStream(): InputStream = {
-      if (batchStreamsRead < spill.serializerBatchSizes.length) {
-        batchStreamsRead += 1
-        ByteStreams.limit(bufferedStream, spill.serializerBatchSizes(batchStreamsRead - 1))
-      } else {
-        // No more batches left
-        bufferedStream
-      }
+      batchStreamsRead += 1
+      ByteStreams.limit(bufferedStream, spill.serializerBatchSizes(batchStreamsRead - 1))
     }
 
     /**
@@ -304,6 +300,8 @@ private[spark] class ExternalSorter[K, V, C](
         if (finished) {
           return null
         }
+        val k = deserStream.readObject().asInstanceOf[K]
+        val c = deserStream.readObject().asInstanceOf[C]
         // Start reading the next batch if we're done with this one
         indexInBatch += 1
         if (indexInBatch == serializerBatchSize) {
@@ -318,10 +316,9 @@ private[spark] class ExternalSorter[K, V, C](
           partitionId += 1
           indexInPartition = 0
         }
-        val k = deserStream.readObject().asInstanceOf[K]
-        val c = deserStream.readObject().asInstanceOf[C]
         if (partitionId == numPartitions - 1 &&
             indexInPartition == spill.elementsPerPartition(partitionId) - 1) {
+          // This is the last element, remember that we're done
           finished = true
           deserStream.close()
         }
@@ -382,7 +379,10 @@ private[spark] class ExternalSorter[K, V, C](
    */
   def iterator: Iterator[Product2[K, C]] = partitionedIterator.flatMap(pair => pair._2)
 
-  def stop(): Unit = ???
+  def stop(): Unit = {
+    spills.foreach(s => s.file.delete())
+    spills.clear()
+  }
 
   def memoryBytesSpilled: Long = _memoryBytesSpilled
 
