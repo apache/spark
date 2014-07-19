@@ -180,9 +180,9 @@ object BlockFetcherIterator {
             if (curRequestSize >= targetRequestSize) {
               // Add this FetchRequest
               remoteRequests += new FetchRequest(address, curBlocks)
-              curRequestSize = 0
               curBlocks = new ArrayBuffer[(BlockId, Long)]
               logDebug(s"Creating fetch request of $curRequestSize at $address")
+              curRequestSize = 0
             }
           }
           // Add in the final request
