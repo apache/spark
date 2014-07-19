@@ -17,29 +17,28 @@
 
 package org.apache.spark.mllib.rdd
 
-import org.apache.spark.mllib.stat.Distribution
+import org.apache.spark.mllib.random.DistributionGenerator
 import org.apache.spark.util.Utils
 import org.apache.spark.{TaskContext, Partition, SparkContext}
 import org.apache.spark.rdd.RDD
 
 private[mllib] class RandomRDDPartition(val idx: Int,
     val size: Long,
-    val distribution: Distribution,
-    val seed: Long)
-  extends Partition with Serializable {
+    val distribution: DistributionGenerator,
+    val seed: Long) extends Partition {
 
   override val index: Int = idx
 
   // The RNG has to be reset every time the iterator is requested to guarantee same data
   // every time the content of the RDD is examined.
   def getIterator = {
-    val newRng = distribution.copy()
+    val newRng: DistributionGenerator = distribution.clone()
     newRng.setSeed(seed + idx)
     new FixedSizeIterator(size, newRng)
   }
 }
 
-private[mllib] class FixedSizeIterator(override val size: Long, val rng: Distribution)
+private[mllib] class FixedSizeIterator(override val size: Long, val rng: DistributionGenerator)
   extends Iterator[Double] {
 
   private var currentSize = 0
@@ -48,14 +47,14 @@ private[mllib] class FixedSizeIterator(override val size: Long, val rng: Distrib
 
   override def next(): Double = {
     currentSize += 1
-    rng.nextDouble()
+    rng.nextValue()
   }
 }
 
 private[mllib] class RandomRDD(@transient private var sc: SparkContext,
     numSlices: Int,
     size: Long,
-    @transient distribution: Distribution,
+    @transient distribution: DistributionGenerator,
     @transient seed: Long = Utils.random.nextLong) extends RDD[Double](sc, Nil) {
 
   override def compute(splitIn: Partition, context: TaskContext): Iterator[Double] = {
