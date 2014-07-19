@@ -150,7 +150,8 @@ object GroupedGradientDescent extends Logging {
       weights._2, Vectors.dense(new Array[Double](weights._2.size)), 0, 1, regParam)._2 ))
 
     val dataWithKey = data.map( x => (x._1, (x._1, x._2._1, x._2._2)))
-    var gradient_b = data.context.broadcast(gradient)
+    val gradient_b = data.context.broadcast(gradient)
+    val updater_b = data.context.broadcast(updater)
     for (i <- 1 to numIterations) {
       val weightSet_b = data.context.broadcast(weightSet)
       val gradientOut = dataWithKey.sample(false, miniBatchFraction, 42 + i)
@@ -186,7 +187,7 @@ object GroupedGradientDescent extends Logging {
 
       val update = gradientOut.map( x => {
         val a : BDV[Double] = BDV(x._2._1.toArray) / miniBatchSize(x._1)
-        val supdate = updater.compute(
+        val supdate = updater_b.value.compute(
           weightSet_b.value(x._1), Vectors.dense(a.toArray), stepSize, i, regParam)
         (x._1, supdate)
       })
