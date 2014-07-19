@@ -19,14 +19,12 @@ package org.apache.spark.storage
 
 import java.util.concurrent.ConcurrentHashMap
 
-private[storage] class BlockInfo(private var _level: StorageLevel, val tellMaster: Boolean) {
+private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
   // To save space, 'pending' and 'failed' are encoded as special sizes:
   @volatile var size: Long = BlockInfo.BLOCK_PENDING
   private def pending: Boolean = size == BlockInfo.BLOCK_PENDING
   private def failed: Boolean = size == BlockInfo.BLOCK_FAILED
   private def initThread: Thread = BlockInfo.blockInfoInitThreads.get(this)
-
-  def level: StorageLevel = _level
 
   setInitThread()
 
@@ -72,18 +70,6 @@ private[storage] class BlockInfo(private var _level: StorageLevel, val tellMaste
       this.notifyAll()
     }
   }
-
-  /**
-   * Update the storage level.
-   *
-   * This is currently only used for forcing blocks with storage level MEMORY_AND_DISK to disk.
-   * BlockManager does not provide an interface to do this, and so we workaround this by passing
-   * in a mock DISK_ONLY level and manually restoring the original level afterwards.
-   */
-  def updateStorageLevel(newLevel: StorageLevel) = {
-    _level = newLevel
-  }
-
 }
 
 private object BlockInfo {

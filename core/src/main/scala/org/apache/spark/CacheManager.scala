@@ -124,17 +124,20 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
   private def putInBlockManager[T](
       key: BlockId,
       values: Iterator[T],
-      storageLevel: StorageLevel,
-      updatedBlocks: ArrayBuffer[(BlockId, BlockStatus)]): Iterator[T] = {
+      level: StorageLevel,
+      updatedBlocks: ArrayBuffer[(BlockId, BlockStatus)],
+      effectiveStorageLevel: Option[StorageLevel] = None): Iterator[T] = {
 
-    if (!storageLevel.useMemory) {
+    val putLevel = effectiveStorageLevel.getOrElse(level)
+    if (!putLevel.useMemory) {
       /*
        * This RDD is not to be cached in memory, so we can just pass the computed values
        * as an iterator directly to the BlockManager, rather than first fully unrolling
        * it in memory. The latter option potentially uses much more memory and risks OOM
        * exceptions that can be avoided.
        */
-      updatedBlocks ++= blockManager.put(key, values, storageLevel, tellMaster = true)
+      updatedBlocks ++=
+        blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
       blockManager.get(key) match {
         case Some(v) => v.data.asInstanceOf[Iterator[T]]
         case None =>
@@ -153,22 +156,22 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
        * dropping the partition to disk if applicable.
        */
       blockManager.memoryStore.unrollSafely(key, values, updatedBlocks) match {
-        case Left(arrayValues) =>
+        case Left(arr) =>
           // We have successfully unrolled the entire partition, so cache it in memory
-          updatedBlocks ++= blockManager.put(key, arrayValues, storageLevel, tellMaster = true)
-          arrayValues.iterator.asInstanceOf[Iterator[T]]
-        case Right(iteratorValues) =>
+          updatedBlocks ++=
+            blockManager.putArray(key, arr, level, tellMaster = true, effectiveStorageLevel)
+          arr.iterator.asInstanceOf[Iterator[T]]
+        case Right(it) =>
           // There is not enough space to cache this partition in memory
           logWarning(s"Not enough space to cache $key in memory! " +
-            s"Free memory is ${blockManager.memoryStore.freeMemory}B.")
-          var returnValues = iteratorValues.asInstanceOf[Iterator[T]]
-          if (storageLevel.useDisk) {
+            s"Free memory is ${blockManager.memoryStore.freeMemory} bytes.")
+          var returnValues = it.asInstanceOf[Iterator[T]]
+          if (putLevel.useDisk) {
             logWarning(s"Persisting $key to disk instead.")
-            val newLevel = StorageLevel(useDisk = true, useMemory = false,
-              useOffHeap = false, deserialized = false, storageLevel.replication) // DISK_ONLY
-            returnValues = putInBlockManager[T](key, returnValues, newLevel, updatedBlocks)
-            // Restore original storage level
-            blockManager.updateStorageLevel(key, storageLevel)
+            val diskOnlyLevel = StorageLevel(useDisk = true, useMemory = false,
+              useOffHeap = false, deserialized = false, putLevel.replication)
+            returnValues =
+              putInBlockManager[T](key, returnValues, level, updatedBlocks, Some(diskOnlyLevel))
           }
           returnValues
       }

@@ -395,7 +395,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
       master.removeExecutor(store.blockManagerId.executorId)
       val t1 = new Thread {
         override def run() {
-          store.put("a2", a2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+          store.putIterator("a2", a2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
         }
       }
       val t2 = new Thread {
@@ -429,9 +429,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list2 = List(new Array[Byte](500), new Array[Byte](1000), new Array[Byte](1500))
     val list1SizeEstimate = SizeEstimator.estimate(list1.iterator.toArray)
     val list2SizeEstimate = SizeEstimator.estimate(list2.iterator.toArray)
-    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.put("list2memory", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.put("list2disk", list2.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
+    store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIterator("list2memory", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIterator("list2disk", list2.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
     val list1Get = store.get("list1")
     assert(list1Get.isDefined, "list1 expected to be in store")
     assert(list1Get.get.data.size === 2)
@@ -662,9 +662,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list1 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list2 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list3 = List(new Array[Byte](2000), new Array[Byte](2000))
-    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.put("list3", list3.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIterator("list2", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIterator("list3", list3.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.get("list2").isDefined, "list2 was not in store")
     assert(store.get("list2").get.data.size === 2)
     assert(store.get("list3").isDefined, "list3 was not in store")
@@ -673,7 +673,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(store.get("list2").isDefined, "list2 was not in store")
     assert(store.get("list2").get.data.size === 2)
     // At this point list2 was gotten last, so LRU will getSingle rid of list3
-    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.get("list1").isDefined, "list1 was not in store")
     assert(store.get("list1").get.data.size === 2)
     assert(store.get("list2").isDefined, "list2 was not in store")
@@ -689,9 +689,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list3 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list4 = List(new Array[Byte](2000), new Array[Byte](2000))
     // First store list1 and list2, both in memory, and list3, on disk only
-    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
-    store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
-    store.put("list3", list3.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
+    store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
+    store.putIterator("list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
+    store.putIterator("list3", list3.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
     val listForSizeEstimate = new ArrayBuffer[Any]
     listForSizeEstimate ++= list1.iterator
     val listSize = SizeEstimator.estimate(listForSizeEstimate)
@@ -709,7 +709,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(store.get("list3").isDefined, "list3 was not in store")
     assert(store.get("list3").get.data.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
-    store.put("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
+    store.putIterator("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
     assert(store.get("list1") === None, "list1 was in store")
     assert(store.get("list2").isDefined, "list2 was not in store")
     assert(store.get("list2").get.data.size === 2)
@@ -881,21 +881,21 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
     // 1 updated block (i.e. list1)
     val updatedBlocks1 =
-      store.put("list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store.putIterator("list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(updatedBlocks1.size === 1)
     assert(updatedBlocks1.head._1 === TestBlockId("list1"))
     assert(updatedBlocks1.head._2.storageLevel === StorageLevel.MEMORY_ONLY)
 
     // 1 updated block (i.e. list2)
     val updatedBlocks2 =
-      store.put("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+      store.putIterator("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
     assert(updatedBlocks2.size === 1)
     assert(updatedBlocks2.head._1 === TestBlockId("list2"))
     assert(updatedBlocks2.head._2.storageLevel === StorageLevel.MEMORY_ONLY)
 
     // 2 updated blocks - list1 is kicked out of memory while list3 is added
     val updatedBlocks3 =
-      store.put("list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store.putIterator("list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(updatedBlocks3.size === 2)
     updatedBlocks3.foreach { case (id, status) =>
       id match {
@@ -908,7 +908,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
     // 2 updated blocks - list2 is kicked out of memory (but put on disk) while list4 is added
     val updatedBlocks4 =
-      store.put("list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store.putIterator("list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(updatedBlocks4.size === 2)
     updatedBlocks4.foreach { case (id, status) =>
       id match {
@@ -921,7 +921,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
     // 1 updated block - list5 is too big to fit in store, but list3 is kicked out in the process
     val updatedBlocks5 =
-      store.put("list5", bigList.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store.putIterator("list5", bigList.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(updatedBlocks5.size === 1)
     assert(updatedBlocks5.head._1 === TestBlockId("list3"))
     assert(updatedBlocks5.head._2.storageLevel === StorageLevel.NONE)
@@ -937,9 +937,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list = List.fill(2)(new Array[Byte](2000))
 
     // Tell master. By LRU, only list2 and list3 remains.
-    store.put("list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.put("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
-    store.put("list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIterator("list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIterator("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.putIterator("list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
 
     // getLocations and getBlockStatus should yield the same locations
     assert(store.master.getLocations("list1").size === 0)
@@ -953,9 +953,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(store.master.getBlockStatus("list3", askSlaves = true).size === 1)
 
     // This time don't tell master and see what happens. By LRU, only list5 and list6 remains.
-    store.put("list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
-    store.put("list5", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
-    store.put("list6", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
+    store.putIterator("list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
+    store.putIterator("list5", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+    store.putIterator("list6", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
 
     // getLocations should return nothing because the master is not informed
     // getBlockStatus without asking slaves should have the same result
@@ -977,18 +977,18 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list = List.fill(2)(new Array[Byte](100))
 
     // insert some blocks
-    store.put("list1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
-    store.put("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
-    store.put("list3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.putIterator("list1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.putIterator("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.putIterator("list3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
 
     // getLocations and getBlockStatus should yield the same locations
     assert(store.master.getMatchingBlockIds(_.toString.contains("list"), askSlaves = false).size === 3)
     assert(store.master.getMatchingBlockIds(_.toString.contains("list1"), askSlaves = false).size === 1)
 
     // insert some more blocks
-    store.put("newlist1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
-    store.put("newlist2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
-    store.put("newlist3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+    store.putIterator("newlist1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.putIterator("newlist2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+    store.putIterator("newlist3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
 
     // getLocations and getBlockStatus should yield the same locations
     assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askSlaves = false).size === 1)
@@ -996,7 +996,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
     val blockIds = Seq(RDDBlockId(1, 0), RDDBlockId(1, 1), RDDBlockId(2, 0))
     blockIds.foreach { blockId =>
-      store.put(blockId, list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store.putIterator(blockId, list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     }
     val matchedBlockIds = store.master.getMatchingBlockIds(_ match {
       case RDDBlockId(1, _) => true
