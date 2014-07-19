@@ -36,6 +36,21 @@ class SQLQuerySuite extends QueryTest {
       "test")
   }
 
+  test("SPARK-2407 Added Parser of SQL SUBSTR()") {
+    checkAnswer(
+      sql("SELECT substr(tableName, 1, 2) FROM tableName"),
+      "te")
+    checkAnswer(
+      sql("SELECT substr(tableName, 3) FROM tableName"),
+      "st")
+    checkAnswer(
+      sql("SELECT substring(tableName, 1, 2) FROM tableName"),
+      "te")
+    checkAnswer(
+      sql("SELECT substring(tableName, 3) FROM tableName"),
+      "st")
+  }
+
   test("index into array") {
     checkAnswer(
       sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
