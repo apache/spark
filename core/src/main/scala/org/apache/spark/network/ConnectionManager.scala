@@ -674,7 +674,6 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
               ackMessage.get.asInstanceOf[BufferMessage].ackId = bufferMessage.id
             }
           }
-
           sendMessage(connectionManagerId, ackMessage.getOrElse {
             Message.createBufferMessage(bufferMessage.id)
           })

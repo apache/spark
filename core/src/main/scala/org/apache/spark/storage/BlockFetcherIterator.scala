@@ -122,18 +122,25 @@ object BlockFetcherIterator {
       future.onSuccess {
         case Some(message) => {
           val bufferMessage = message.asInstanceOf[BufferMessage]
-          val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
-          for (blockMessage <- blockMessageArray) {
-            if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
-              throw new SparkException(
-                "Unexpected message " + blockMessage.getType + " received from " + cmId)
+          if (bufferMessage.hasError) {
+            logError("Could not get block(s) from " + cmId)
+            for ((blockId, size) <- req.blocks) {
+              results.put(new FetchResult(blockId, -1, null))
             }
-            val blockId = blockMessage.getId
-            val networkSize = blockMessage.getData.limit()
-            results.put(new FetchResult(blockId, sizeMap(blockId),
-              () => dataDeserialize(blockId, blockMessage.getData, serializer)))
-            _remoteBytesRead += networkSize
-            logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+          } else {
+            val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
+            for (blockMessage <- blockMessageArray) {
+              if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
+                throw new SparkException(
+                  "Unexpected message " + blockMessage.getType + " received from " + cmId)
+              }
+              val blockId = blockMessage.getId
+              val networkSize = blockMessage.getData.limit()
+              results.put(new FetchResult(blockId, sizeMap(blockId),
+                () => dataDeserialize(blockId, blockMessage.getData, serializer)))
+              _remoteBytesRead += networkSize
+              logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+            }
           }
         }
         case None => {
