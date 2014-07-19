@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection
 
 import java.io._
+import java.util.Comparator
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -86,6 +87,13 @@ private[spark] class ExternalSorter[K, V, C](
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.3)
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+  }
+
+  // For now, just compare them by partition; later we can compare by key as well
+  private val comparator = new Comparator[((Int, K), C)] {
+    override def compare(a: ((Int, K), C), b: ((Int, K), C)): Int = {
+      a._1._1 - b._1._1
+    }
   }
 
   // Information about a spilled file. Includes sizes in bytes of "batches" written by the
@@ -192,7 +200,7 @@ private[spark] class ExternalSorter[K, V, C](
     }
 
     try {
-      val it = collection.iterator // TODO: destructiveSortedIterator(comparator)
+      val it = collection.destructiveSortedIterator(comparator)
       while (it.hasNext) {
         val elem = it.next()
         val partitionId = elem._1._1
@@ -232,11 +240,22 @@ private[spark] class ExternalSorter[K, V, C](
    * inside each partition. This can be used to either write out a new file or return data to
    * the user.
    */
-  def merge(spills: Seq[SpilledFile]): Iterator[(Int, Iterator[Product2[K, C]])] = {
+  def merge(spills: Seq[SpilledFile], inMemory: Iterator[((Int, K), C)])
+      : Iterator[(Int, Iterator[Product2[K, C]])] = {
     // TODO: merge intermediate results if they are sorted by the comparator
     val readers = spills.map(new SpillReader(_))
+    val inMemBuffered = inMemory.buffered
     (0 until numPartitions).iterator.map { p =>
-      (p, readers.iterator.flatMap(_.readNextPartition()))
+      val inMemIterator = new Iterator[(K, C)] {
+        override def hasNext: Boolean = {
+          inMemBuffered.hasNext && inMemBuffered.head._1._1 == p
+        }
+        override def next(): (K, C) = {
+          val elem = inMemBuffered.next()
+          (elem._1._2, elem._2)
+        }
+      }
+      (p, readers.iterator.flatMap(_.readNextPartition()) ++ inMemIterator)
     }
   }
 
@@ -301,6 +320,11 @@ private[spark] class ExternalSorter[K, V, C](
         }
         val k = deserStream.readObject().asInstanceOf[K]
         val c = deserStream.readObject().asInstanceOf[C]
+        if (partitionId == numPartitions - 1 &&
+            indexInPartition == spill.elementsPerPartition(partitionId) - 1) {
+          finished = true
+          deserStream.close()
+        }
         (k, c)
       } catch {
         case e: EOFException =>
@@ -319,6 +343,9 @@ private[spark] class ExternalSorter[K, V, C](
       override def hasNext: Boolean = {
         if (nextItem == null) {
           nextItem = readNextItem()
+          if (nextItem == null) {
+            return false
+          }
         }
         // Check that we're still in the right partition; will be numPartitions at EOF
         partitionId == myPartition
@@ -328,7 +355,9 @@ private[spark] class ExternalSorter[K, V, C](
         if (!hasNext) {
           throw new NoSuchElementException
         }
-        nextItem
+        val item = nextItem
+        nextItem = null
+        item
       }
     }
   }
@@ -337,11 +366,16 @@ private[spark] class ExternalSorter[K, V, C](
    * Return an iterator over all the data written to this object, grouped by partition. For each
    * partition we then have an iterator over its contents, and these are expected to be accessed
    * in order (you can't "skip ahead" to one partition without reading the previous one).
+   * Guaranteed to return a key-value pair for each partition, in order of partition ID.
    *
    * For now, we just merge all the spilled files in once pass, but this can be modified to
    * support hierarchical merging.
    */
-  def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = merge(spills)
+  def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
+    val usingMap = aggregator.isDefined
+    val collection: SizeTrackingCollection[((Int, K), C)] = if (usingMap) map else buffer
+    merge(spills, collection.destructiveSortedIterator(comparator))
+  }
 
   /**
    * Return an iterator over all the data written to this object.

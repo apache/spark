@@ -17,9 +17,12 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.io.{DataInputStream, FileInputStream}
+
 import org.apache.spark.shuffle._
 import org.apache.spark.{TaskContext, ShuffleDependency}
 import org.apache.spark.shuffle.hash.HashShuffleReader
+import org.apache.spark.storage.{DiskBlockManager, FileSegment, ShuffleBlockId}
 
 private[spark] class SortShuffleManager extends ShuffleManager {
   /**
@@ -57,4 +60,21 @@ private[spark] class SortShuffleManager extends ShuffleManager {
 
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {}
+
+  /** Get the location of a block in a map output file. Uses the index file we create for it. */
+  def getBlockLocation(blockId: ShuffleBlockId, diskManager: DiskBlockManager): FileSegment = {
+    // The block is actually going to be a range of a single map output file for this map,
+    // so
+    val realId = ShuffleBlockId(blockId.shuffleId, blockId.mapId, 0)
+    val indexFile = diskManager.getFile(realId.name + ".index")
+    val in = new DataInputStream(new FileInputStream(indexFile))
+    try {
+      in.skip(blockId.reduceId * 8)
+      val offset = in.readLong()
+      val nextOffset = in.readLong()
+      new FileSegment(diskManager.getFile(realId), offset, nextOffset - offset)
+    } finally {
+      in.close()
+    }
+  }
 }

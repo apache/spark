@@ -369,10 +369,3 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
   }
 
 }
-
-/**
- * A dummy class that always returns the same hash code, to easily test hash collisions
- */
-case class FixedHashObject(v: Int, h: Int) extends Serializable {
-  override def hashCode(): Int = h
-}

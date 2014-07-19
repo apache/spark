@@ -21,10 +21,11 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Date, Random, UUID}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
 import org.apache.spark.util.Utils
+import org.apache.spark.shuffle.sort.SortShuffleManager
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -54,12 +55,15 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   addShutdownHook()
 
   /**
-   * Returns the physical file segment in which the given BlockId is located.
-   * If the BlockId has been mapped to a specific FileSegment, that will be returned.
-   * Otherwise, we assume the Block is mapped to a whole file identified by the BlockId directly.
+   * Returns the physical file segment in which the given BlockId is located. If the BlockId has
+   * been mapped to a specific FileSegment by the shuffle layer, that will be returned.
+   * Otherwise, we assume the Block is mapped to the whole file identified by the BlockId.
    */
   def getBlockLocation(blockId: BlockId): FileSegment = {
-    if (blockId.isShuffle && shuffleManager.consolidateShuffleFiles) {
+    if (blockId.isShuffle && SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]) {
+      val sortShuffleManager = SparkEnv.get.shuffleManager.asInstanceOf[SortShuffleManager]
+      sortShuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId], this)
+    } else if (blockId.isShuffle && shuffleManager.consolidateShuffleFiles) {
       shuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId])
     } else {
       val file = getFile(blockId.name)
