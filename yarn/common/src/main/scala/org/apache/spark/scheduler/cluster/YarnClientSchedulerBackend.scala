@@ -30,6 +30,11 @@ private[spark] class YarnClientSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
   with Logging {
 
+  if (conf.getOption("spark.scheduler.minRegisteredExecutorsRatio").isEmpty) {
+    minRegisteredRatio = 0.8
+    ready = false
+  }
+
   var client: Client = null
   var appId: ApplicationId = null
 
