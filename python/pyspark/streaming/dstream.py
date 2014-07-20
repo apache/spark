@@ -56,7 +56,7 @@ class DStream(object):
         """
         Add up the elements in this DStream.
         """
-        return self.mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
+        return self._mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
 
     def print_(self, label=None):
         """
@@ -65,6 +65,7 @@ class DStream(object):
         deserialized pickled python object. Please use DStream.pyprint() to print results.
 
         Call DStream.print() and this function will print byte array in the DStream
+
         """
         # a hack to call print function in DStream
         getattr(self._jdstream, "print")(label)
@@ -74,7 +75,7 @@ class DStream(object):
         Return a new DStream containing only the elements that satisfy predicate.
         """
         def func(iterator): return ifilter(f, iterator)
-        return self.mapPartitions(func)
+        return self._mapPartitions(func)
 
     def flatMap(self, f, preservesPartitioning=False):
         """
@@ -85,7 +86,7 @@ class DStream(object):
             return chain.from_iterable(imap(f, iterator))
         return self._mapPartitionsWithIndex(func, preservesPartitioning)
 
-    def map(self, f, preservesPartitioning=False):
+    def map(self, f):
         """
         Return a new DStream by applying a function to each element of DStream.
         """
@@ -217,13 +218,11 @@ class DStream(object):
             return 2
 
     def getNumPartitions(self):
-      """
-      Returns the number of partitions in RDD
-      >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
-      >>> rdd.getNumPartitions()
-      2
-      """
-      return self._jdstream.partitions().size()
+        """
+        Return the number of partitions in RDD
+        """
+        # TODO: remove hardcoding. RDD has NumPartitions but DStream does not have.
+        return 2
 
     def foreachRDD(self, func):
         """
