@@ -155,19 +155,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       override def getPartitions: Array[Partition] = Array(onlySplit)
       override val getDependencies = List[Dependency[_]]()
       override def compute(split: Partition, context: TaskContext): Iterator[Int] = {
-        if (shouldFail) {
-          throw new Exception("injected failure")
-        } else {
-          Array(1, 2, 3, 4).iterator
-        }
+        throw new Exception("injected failure")
       }
     }.cache()
     val thrown = intercept[Exception]{
       rdd.collect()
     }
     assert(thrown.getMessage.contains("injected failure"))
-    shouldFail = false
-    assert(rdd.collect().toList === List(1, 2, 3, 4))
   }
 
   test("empty RDD") {
