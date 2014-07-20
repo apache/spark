@@ -60,7 +60,8 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
    * Otherwise, we assume the Block is mapped to the whole file identified by the BlockId.
    */
   def getBlockLocation(blockId: BlockId): FileSegment = {
-    if (blockId.isShuffle && SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]) {
+    val env = SparkEnv.get
+    if (blockId.isShuffle && env != null && env.shuffleManager.isInstanceOf[SortShuffleManager]) {
       val sortShuffleManager = SparkEnv.get.shuffleManager.asInstanceOf[SortShuffleManager]
       sortShuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId], this)
     } else if (blockId.isShuffle && shuffleManager.consolidateShuffleFiles) {
