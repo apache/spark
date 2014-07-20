@@ -77,15 +77,17 @@ bins if the condition is not satisfied.
 
 **Categorical features**
 
-For `$M$` categorical features, one could come up with `$2^M-1$` split candidates. However, for
-binary classification, the number of split candidates can be reduced to `$M-1$` by ordering the
+For `$M$` categorical feature values, one could come up with `$2^(M-1)-1$` split candidates. For
+binary classification, we can reduce the number of split candidates to `$M-1$` by ordering the
 categorical feature values by the proportion of labels falling in one of the two classes (see
 Section 9.2.4 in
 [Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
 details). For example, for a binary classification problem with one categorical feature with three
 categories A, B and C with corresponding proportion of label 1 as 0.2, 0.6 and 0.4, the categorical
 features are ordered as A followed by C followed B or A, B, C. The two split candidates are A \| C, B
-and A , B \| C where \| denotes the split.
+and A , B \| C where \| denotes the split. A similar heuristic is used for multiclass classification
+when `$2^(M-1)-1$` is greater than the number of bins -- the impurity for each categorical feature value
+is used for ordering.
 
 ### Stopping rule
 
@@ -122,7 +124,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impurity.Gini
 
 // Load and parse the data file
-val data = sc.textFile("mllib/data/sample_tree_data.csv")
+val data = sc.textFile("data/mllib/sample_tree_data.csv")
 val parsedData = data.map { line =>
   val parts = line.split(',').map(_.toDouble)
   LabeledPoint(parts(0), Vectors.dense(parts.tail))
@@ -161,7 +163,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impurity.Variance
 
 // Load and parse the data file
-val data = sc.textFile("mllib/data/sample_tree_data.csv")
+val data = sc.textFile("data/mllib/sample_tree_data.csv")
 val parsedData = data.map { line =>
   val parts = line.split(',').map(_.toDouble)
   LabeledPoint(parts(0), Vectors.dense(parts.tail))

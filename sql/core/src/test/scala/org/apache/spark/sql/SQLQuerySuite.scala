@@ -36,6 +36,21 @@ class SQLQuerySuite extends QueryTest {
       "test")
   }
 
+  test("SPARK-2407 Added Parser of SQL SUBSTR()") {
+    checkAnswer(
+      sql("SELECT substr(tableName, 1, 2) FROM tableName"),
+      "te")
+    checkAnswer(
+      sql("SELECT substr(tableName, 3) FROM tableName"),
+      "st")
+    checkAnswer(
+      sql("SELECT substring(tableName, 1, 2) FROM tableName"),
+      "te")
+    checkAnswer(
+      sql("SELECT substring(tableName, 3) FROM tableName"),
+      "st")
+  }
+
   test("index into array") {
     checkAnswer(
       sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
@@ -397,40 +412,38 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("SET commands semantics using sql()") {
-    TestSQLContext.settings.synchronized {
-      clear()
-      val testKey = "test.key.0"
-      val testVal = "test.val.0"
-      val nonexistentKey = "nonexistent"
+    clear()
+    val testKey = "test.key.0"
+    val testVal = "test.val.0"
+    val nonexistentKey = "nonexistent"
 
-      // "set" itself returns all config variables currently specified in SQLConf.
-      assert(sql("SET").collect().size == 0)
+    // "set" itself returns all config variables currently specified in SQLConf.
+    assert(sql("SET").collect().size == 0)
 
-      // "set key=val"
-      sql(s"SET $testKey=$testVal")
-      checkAnswer(
-        sql("SET"),
-        Seq(Seq(testKey, testVal))
-      )
+    // "set key=val"
+    sql(s"SET $testKey=$testVal")
+    checkAnswer(
+      sql("SET"),
+      Seq(Seq(testKey, testVal))
+    )
 
-      sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-      checkAnswer(
-        sql("set"),
-        Seq(
-          Seq(testKey, testVal),
-          Seq(testKey + testKey, testVal + testVal))
-      )
+    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    checkAnswer(
+      sql("set"),
+      Seq(
+        Seq(testKey, testVal),
+        Seq(testKey + testKey, testVal + testVal))
+    )
 
-      // "set key"
-      checkAnswer(
-        sql(s"SET $testKey"),
-        Seq(Seq(testKey, testVal))
-      )
-      checkAnswer(
-        sql(s"SET $nonexistentKey"),
-        Seq(Seq(nonexistentKey, "<undefined>"))
-      )
-      clear()
-    }
+    // "set key"
+    checkAnswer(
+      sql(s"SET $testKey"),
+      Seq(Seq(testKey, testVal))
+    )
+    checkAnswer(
+      sql(s"SET $nonexistentKey"),
+      Seq(Seq(nonexistentKey, "<undefined>"))
+    )
+    clear()
   }
 }

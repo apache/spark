@@ -113,11 +113,12 @@ trait OverrideCatalog extends Catalog {
     alias: Option[String] = None): LogicalPlan = {
     val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
     val overriddenTable = overrides.get((dbName, tblName))
+    val tableWithQualifers = overriddenTable.map(r => Subquery(tblName, r))
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
     val withAlias =
-      overriddenTable.map(r => alias.map(a => Subquery(a, r)).getOrElse(r))
+      tableWithQualifers.map(r => alias.map(a => Subquery(a, r)).getOrElse(r))
 
     withAlias.getOrElse(super.lookupRelation(dbName, tblName, alias))
   }
