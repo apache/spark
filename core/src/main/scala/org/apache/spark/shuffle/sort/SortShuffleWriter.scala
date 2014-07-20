@@ -103,6 +103,8 @@ private[spark] class SortShuffleWriter[K, V, C](
     shuffleMetrics.shuffleBytesWritten = totalBytes
     shuffleMetrics.shuffleWriteTime = totalTime
     context.taskMetrics.shuffleWriteMetrics = Some(shuffleMetrics)
+    context.taskMetrics.memoryBytesSpilled = sorter.memoryBytesSpilled
+    context.taskMetrics.diskBytesSpilled = sorter.diskBytesSpilled
 
     // Write an index file with the offsets of each block, plus a final offset at the end for the
     // end of the output file. This will be used by SortShuffleManager.getBlockLocation to figure
