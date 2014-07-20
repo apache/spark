@@ -42,13 +42,7 @@ private[spark] class MessageChunkHeader(
       putInt(totalSize).
       putInt(chunkSize).
       putInt(other).
-      put{
-        if (hasError) {
-          1.asInstanceOf[Byte]
-        } else {
-          0.asInstanceOf[Byte]
-        }
-      }.
+      put(if (hasError) 1.asInstanceOf[Byte] else 0.asInstanceOf[Byte]).
       putInt(securityNeg).
       putInt(ip.size).
       put(ip).
@@ -75,13 +69,7 @@ private[spark] object MessageChunkHeader {
     val totalSize = buffer.getInt()
     val chunkSize = buffer.getInt()
     val other = buffer.getInt()
-    val hasError = {
-      if (buffer.get() == 0) {
-        false
-      } else {
-        true
-      }
-    }
+    val hasError = buffer.get() != 0
     val securityNeg = buffer.getInt()
     val ipSize = buffer.getInt()
     val ipBytes = new Array[Byte](ipSize)

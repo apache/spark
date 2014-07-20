@@ -54,7 +54,9 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
       }
       case otherMessage: Any => {
         logError("Unknown type message received: " + otherMessage)
-        None
+        val errorMessage = Message.createBufferMessage(msg.id)
+        errorMessage.hasError = true
+        Some(errorMessage)
       }
     }
   }
