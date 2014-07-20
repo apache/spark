@@ -30,9 +30,6 @@ esac
 # Enter posix mode for bash
 set -o posix
 
-## Global script variables
-FWDIR="$(cd `dirname $0`/..; pwd)"
-
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   echo "Usage: ./sbin/start-thriftserver [options]"
   $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2

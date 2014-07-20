@@ -30,6 +30,12 @@ set -o posix
 # Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+  echo "Usage: ./sbin/spark-sql [options]"
+  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  exit 0
+fi
+
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
 
 if [ -n "$JAVA_HOME" ]; then
