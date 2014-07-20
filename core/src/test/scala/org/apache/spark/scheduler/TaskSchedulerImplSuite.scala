@@ -80,7 +80,9 @@ class FakeTaskSetManager(
   override def resourceOffer(
       execId: String,
       host: String,
-      preferredLocality: TaskLocality.TaskLocality)
+      preferredLocality: TaskLocality.TaskLocality,
+      bottomLocality: TaskLocality.TaskLocality,
+      allowedAdjustPrefLocality: Boolean)
     : Option[TaskDescription] =
   {
     if (tasksSuccessful + numRunningTasks < numTasks) {
@@ -124,7 +126,8 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
          manager.parent.name, manager.parent.runningTasks, manager.name, manager.runningTasks))
     }
     for (taskSet <- taskSetQueue) {
-      taskSet.resourceOffer("execId_1", "hostname_1", TaskLocality.ANY) match {
+      taskSet.resourceOffer("execId_1", "hostname_1", TaskLocality.ANY,
+        TaskLocality.PROCESS_LOCAL) match {
         case Some(task) =>
           return taskSet.stageId
         case None => {}

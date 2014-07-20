@@ -89,11 +89,11 @@ private[spark] class TaskSchedulerImpl(
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
-  private val executorsByHost = new HashMap[String, HashSet[String]]
+  protected val executorsByHost = new HashMap[String, HashSet[String]]
 
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
-  private val executorIdToHost = new HashMap[String, String]
+  protected val executorIdToHost = new HashMap[String, String]
 
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
@@ -257,7 +257,8 @@ private[spark] class TaskSchedulerImpl(
           val execId = shuffledOffers(i).executorId
           val host = shuffledOffers(i).host
           if (availableCpus(i) >= CPUS_PER_TASK) {
-            for (task <- taskSet.resourceOffer(execId, host, preferredLocality)) {
+            for (task <- taskSet.resourceOffer(execId, host, preferredLocality,
+              TaskLocality.PROCESS_LOCAL, true)) {
               tasks(i) += task
               val tid = task.taskId
               taskIdToTaskSetId(tid) = taskSet.taskSet.id
@@ -265,7 +266,7 @@ private[spark] class TaskSchedulerImpl(
               activeExecutorIds += execId
               executorsByHost(host) += execId
               availableCpus(i) -= CPUS_PER_TASK
-              assert (availableCpus(i) >= 0)
+              assert(availableCpus(i) >= 0)
               launchedTask = true
             }
           }
