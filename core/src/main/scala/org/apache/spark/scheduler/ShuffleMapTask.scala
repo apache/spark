@@ -56,6 +56,11 @@ private[spark] class ShuffleMapTask(
     this(stageId, rdd.broadcasted, dep, rdd.partitions(partitionId), locs)
   }
 
+  /** A constructor used only in test suites. This does not require passing in an RDD. */
+  def this(partitionId: Int) {
+    this(0, null, null, new Partition { override def index = 0 }, null)
+  }
+
   @transient private val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.toSet.toSeq
   }
