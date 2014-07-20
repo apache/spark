@@ -36,7 +36,11 @@ GITHUB_API_BASE = os.environ.get("GITHUB_API_BASE", "https://api.github.com/repo
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "apachespark")
 JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "XXX")
+# Maximum number of updates to perform in one run
 MAX_UPDATES = int(os.environ.get("MAX_UPDATES", "100000"))
+# Cut-off for oldest PR on which to comment. Useful for avoiding
+# "notification overload" when running for the first time.
+MIN_COMMENT_PR = int(os.environ.get("MIN_COMMENT_PR", "1496"))
 
 # File used as an opitimization to store maximum previously seen PR
 # Used mostly because accessing ASF JIRA is slow, so we want to avoid checking
@@ -100,7 +104,7 @@ jira_prs = get_jira_prs()
 #  'html_url': "https://github.com/apache/spark/pull/1309"}}
 
 previous_max = get_max_pr()
-print "Retrieved %s open PR's from Github" % len(jira_prs)
+print "Retrieved %s JIRA PR's from Github" % len(jira_prs)
 jira_prs = dict((k, v) for k, v in jira_prs.iteritems() if int(v['number']) > previous_max)
 print "%s PR's remain after excluding visted ones" % len(jira_prs)
 
@@ -109,9 +113,10 @@ considered = []
 for issue, pr in sorted(jira_prs.items(), key=lambda (k, v): int(v['number'])):
     if num_updates >= MAX_UPDATES:
       break
+    pr_num = int(pr['number'])
 
     print "Checking issue %s" % issue
-    considered = considered + [int(pr['number'])]
+    considered = considered + [pr_num]
 
     url = pr['html_url']
     title = "[Github] Pull Request #%s (%s)" % (pr['number'], pr['user']['login']) 
@@ -129,8 +134,10 @@ for issue, pr in sorted(jira_prs.items(), key=lambda (k, v): int(v['number'])):
     jira_client.add_remote_link(issue, destination)
     
     comment = "User '%s' has created a pull request for this issue:" % pr['user']['login']
-    comment = comment + "\n[%s|%s]" % (pr['html_url'], pr['html_url'])
-    jira_client.add_comment(issue, comment)
+    comment = comment + ("\n%s" % pr['html_url'])
+    if pr_num >= MIN_COMMENT_PR:
+        jira_client.add_comment(issue, comment)
+    
     print "Added link %s <-> PR #%s" % (issue, pr['number'])
     num_updates = num_updates + 1
 
