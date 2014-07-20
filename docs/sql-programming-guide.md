@@ -136,7 +136,7 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 import sqlContext.createSchemaRDD
 
 // Define the schema using a case class.
-// Note: Case classes in Scala 2.10 can support only up to 22 fields. To work around this limit, 
+// Note: Case classes in Scala 2.10 can support only up to 22 fields. To work around this limit,
 // you can use custom classes that implement the Product interface.
 case class Person(name: String, age: Int)
 
@@ -600,6 +600,134 @@ your machine and a blank password. For secure mode, please follow the instructio
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 You may also use the beeline script comes with Hive.
+
+### Migration Guide for Shark Users
+
+#### Reducer number
+
+In Shark, default reducer number is 1, and can be tuned by property `mapred.reduce.tasks`. In Spark SQL, reducer number is default to 200, and can be customized by the `spark.sql.shuffle.partitions` property:
+
+```
+SET spark.sql.shuffle.partitions=10;
+SELECT page, count(*) c FROM logs_last_month_cached
+GROUP BY page ORDER BY c DESC LIMIT 10;
+```
+
+You may also put this property in `hive-site.xml` to override the default value.
+
+#### Caching
+
+The `shark.cache` table property no longer exists, and tables whose name end with `_cached` are no longer automcatically cached. Instead, we provide `CACHE TABLE` and `UNCACHE TABLE` statements to let user control table caching explicitly:
+
+```
+CACHE TABLE logs_last_month;
+UNCACHE TABLE logs_last_month;
+```
+
+**NOTE** `CACHE TABLE tbl` is lazy, it only marks table `tbl` as "need to by cached if necessary", but doesn't actually cache it until a query that touches `tbl` is executed. To force the table to be cached, you may simply count the table immediately after executing `CACHE TABLE`:
+
+```
+CACHE TABLE logs_last_month;
+SELECT COUNT(1) FROM logs_last_month;
+```
+
+Several caching related features are not supported yet:
+
+* User defined partition level cache eviction policy
+* RDD reloading
+* In-memory cache write through policy
+
+### Compatibility with Apache Hive
+
+#### Deploying in Exising Hive Warehouses
+
+Spark SQL Thrift JDBC server is designed to be "out of the box" compatible with existing Hive
+installations. You do not need to modify your existing Hive Metastore or change the data placement
+or partitioning of your tables.
+
+#### Supported Hive Features
+
+Spark SQL supports the vast majority of Hive features, such as:
+
+* Hive query statements, including:
+ * `SELECT`
+ * `GROUP BY
+ * `ORDER BY`
+ * `CLUSTER BY`
+ * `SORT BY`
+* All Hive operators, including:
+ * Relational operators (`=`, `⇔`, `==`, `<>`, `<`, `>`, `>=`, `<=`, etc)
+ * Arthimatic operators (`+`, `-`, `*`, `/`, `%`, etc)
+ * Logical operators (`AND`, `&&`, `OR`, `||`, etc)
+ * Complex type constructors
+ * Mathemtatical functions (`sign`, `ln`, `cos`, etc)
+ * String functions (`instr`, `length`, `printf`, etc)
+* User defined functions (UDF)
+* User defined aggregation functions (UDAF)
+* User defined serialization formats (SerDe's)
+* Joins
+ * `JOIN`
+ * `{LEFT|RIGHT|FULL} OUTER JOIN`
+ * `LEFT SEMI JOIN`
+ * `CROSS JOIN`
+* Unions
+* Sub queries
+ * `SELECT col FROM ( SELECT a + b AS col from t1) t2`
+* Sampling
+* Explain
+* Partitioned tables
+* All Hive DDL Functions, including:
+ * `CREATE TABLE`
+ * `CREATE TABLE AS SELECT`
+ * `ALTER TABLE`
+* Most Hive Data types, including:
+ * `TINYINT`
+ * `SMALLINT`
+ * `INT`
+ * `BIGINT`
+ * `BOOLEAN`
+ * `FLOAT`
+ * `DOUBLE`
+ * `STRING`
+ * `BINARY`
+ * `TIMESTAMP`
+ * `ARRAY<>`
+ * `MAP<>`
+ * `STRUCT<>`
+
+#### Unsupported Hive Functionality
+
+Below is a list of Hive features that we don't support yet. Most of these features are rarely  used in Hive deployments.
+
+**Major Hive Features**
+
+* Tables with buckets: bucket is the hash partitioning within a Hive table partition. Spark SQL doesn't support buckets yet.
+
+**Esoteric Hive Features**
+
+* Tables with partitions using different input formats: In Spark SQL, all table partitions need to have the same input format.
+* Non-equi outer join: For the uncommon use case of using outer joins with non-equi join conditions (e.g. condition "`key < 10`"), Spark SQL will output wrong result for the `NULL` tuple.
+* `UNIONTYPE`
+* Unique join
+* Single query multi insert
+* Column statistics collecting: Spark SQL does not piggyback scans to collect column statistics at the moment.
+
+**Hive Input/Output Formats**
+
+* File format for CLI: For results showing back to the CLI, Spark SQL only supports TextOutputFormat.
+* Hadoop archive
+
+**Hive Optimizations**
+
+A handful of Hive optimizations are not yet included in Spark. Some of these (such as indexes) are not necessary due to Spark SQL's in-memory computational model. Others are slotted for future releases of Spark SQL.
+
+* Block level bitmap indexes and virtual columns (used to build indexes)
+* Automatically convert a join to map join: For joining a large table with multiple small tables, Hive automatically converts the join into a map join. We are adding this auto conversion in the next release.
+* Automatically determine the number of reducers for joins and groupbys: Currently in Spark SQL, you need to control the degree of parallelism post-shuffle using "set mapred.reduce.tasks=[num_tasks];". We are going to add auto-setting of parallelism in the next release.
+* Meta-data only query: For queries that can be answered by using only meta data, Spark SQL still launches tasks to compute the result.
+* Skew data flag: Spark SQL does not follow the skew data flags in Hive.
+* `STREAMTABLE` hint in join: Spark SQL does not follow the `STREAMTABLE` hint.
+* Merge multiple small files for query results: if the result output contains multiple small files, Hive can optionally merge the small files into fewer large files to avoid overflowing the HDFS metadata. Spark SQL does not support that.
 
 ## Running the Spark SQL CLI
 
