@@ -21,16 +21,22 @@ from itertools import chain
 
 from pyspark.serializers import PickleSerializer
 
+
 def collect(binary_file_path):
+    """
+    Read pickled file written by SparkStreaming
+    """
     dse = PickleSerializer()
     with open(binary_file_path, 'rb') as tempFile:
         for item in dse.load_stream(tempFile):
             yield item
+
+
 def main():
     try:
         binary_file_path = sys.argv[1]
     except:
-        print "Missed FilePath in argement"
+        print "Missed FilePath in argements"
 
     if not binary_file_path:
         return 
@@ -42,6 +48,7 @@ def main():
         if counter >= 10:
             print "..."
             break
+
 
 if __name__ =="__main__":
     exit(main())

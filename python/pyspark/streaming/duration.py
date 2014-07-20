@@ -17,6 +17,7 @@
 
 from pyspark.streaming import utils
 
+
 class Duration(object):
     """
     Duration for Spark Streaming application. Used to set duration
