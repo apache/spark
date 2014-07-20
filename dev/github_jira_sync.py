@@ -101,7 +101,7 @@ jira_prs = get_jira_prs()
 
 previous_max = get_max_pr()
 print "Retrieved %s JIRA PR's from Github" % len(jira_prs)
-jira_prs = dict((k, v) for k, v in jira_prs.iteritems() if int(v['number']) > previous_max)
+jira_prs = [(k, v) for k, v in jira_prs if int(v['number']) > previous_max]
 print "%s PR's remain after excluding visted ones" % len(jira_prs)
 
 num_updates = 0
