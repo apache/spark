@@ -99,7 +99,6 @@ class TaskMetrics extends Serializable {
         existingMetrics.fetchWaitTime += newMetrics.fetchWaitTime
         existingMetrics.localBlocksFetched += newMetrics.localBlocksFetched
         existingMetrics.remoteBlocksFetched += newMetrics.remoteBlocksFetched
-        existingMetrics.totalBlocksFetched += newMetrics.totalBlocksFetched
         existingMetrics.remoteBytesRead += newMetrics.remoteBytesRead
       case None =>
         _shuffleReadMetrics = Some(newMetrics)
