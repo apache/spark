@@ -142,8 +142,8 @@ class DStream(object):
 
                 #TODO for count operation make sure count implementation
                 # This is different from what pyspark does
-                if isinstance(x, int):
-                    x = ("", x)
+                #if isinstance(x, int):
+                #    x = ("", x)
 
                 (k, v) = x
                 if k not in combiners:
