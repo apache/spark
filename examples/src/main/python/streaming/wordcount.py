@@ -21,7 +21,7 @@ if __name__ == "__main__":
     fm_lines = lines.flatMap(lambda x: x.split(" "))
     filtered_lines = fm_lines.filter(lambda line: "Spark" in line)
     mapped_lines = fm_lines.map(lambda x: (x, 1))
-    reduced_lines = mapped_lines.reduce(add)
+    reduced_lines = mapped_lines.reduceByKey(add)
     
     fm_lines.pyprint()
     filtered_lines.pyprint()
