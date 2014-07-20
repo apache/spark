@@ -22,13 +22,15 @@ class DStream(object):
         """
 
         """
-        #TODO make sure count implementation, thiis different from what pyspark does
-        return self._mapPartitions(lambda i: [sum(1 for _ in i)]).map(lambda x: (None, 1))
+        pass
+        #TODO: make sure count implementation, thiis different from what pyspark does
+        #return self._mapPartitions(lambda i: [sum(1 for _ in i)]).map(lambda x: (None, 1))
 
     def _sum(self):
         """
         """
-        return self._mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
+        pass
+        #return self._mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
 
     def print_(self):
         """
@@ -85,7 +87,6 @@ class DStream(object):
         """
         return PipelinedDStream(self, f, preservesPartitioning)
 
-
     def reduceByKey(self, func, numPartitions=None):
         """
         Merge the value for each key using an associative reduce function.
@@ -121,7 +122,7 @@ class DStream(object):
                 else:
                     combiners[k] = mergeValue(combiners[k], v)
             return combiners.iteritems()
-        locally_combined = self.mapPartitions(combineLocally)
+        locally_combined = self._mapPartitions(combineLocally)
         shuffled = locally_combined.partitionBy(numPartitions)
         def _mergeCombiners(iterator):
             combiners = {}
@@ -131,12 +132,11 @@ class DStream(object):
                 else:
                     combiners[k] = mergeCombiners(combiners[k], v)
             return combiners.iteritems()
-        return shuffled.mapPartitions(_mergeCombiners) 
+        return shuffled._mapPartitions(_mergeCombiners)
 
     def partitionBy(self, numPartitions, partitionFunc=None):
         """
         Return a copy of the DStream partitioned using the specified partitioner.
-
         """
         if numPartitions is None:
             numPartitions = self.ctx._defaultReducePartitions()
