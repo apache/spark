@@ -99,7 +99,6 @@ class TaskMetrics extends Serializable {
         existingMetrics.fetchWaitTime += newMetrics.fetchWaitTime
         existingMetrics.localBlocksFetched += newMetrics.localBlocksFetched
         existingMetrics.remoteBlocksFetched += newMetrics.remoteBlocksFetched
-        existingMetrics.totalBlocksFetched += newMetrics.totalBlocksFetched
         existingMetrics.remoteBytesRead += newMetrics.remoteBytesRead
       case None =>
         _shuffleReadMetrics = Some(newMetrics)
@@ -149,7 +148,7 @@ class ShuffleReadMetrics extends Serializable {
   /**
    * Number of blocks fetched in this shuffle by this task (remote or local)
    */
-  var totalBlocksFetched: Int = _
+  def totalBlocksFetched: Int = remoteBlocksFetched + localBlocksFetched
 
   /**
    * Number of remote blocks fetched in this shuffle by this task
