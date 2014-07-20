@@ -19,10 +19,12 @@ if __name__ == "__main__":
     filtered_lines = fm_lines.filter(lambda line: "Spark" in line)
     mapped_lines = fm_lines.map(lambda x: (x, 1))
     reduced_lines = mapped_lines.reduce(add)
+    counted_lines = reduced_lines.count()
     
     fm_lines.pyprint()
     filtered_lines.pyprint()
     mapped_lines.pyprint()
     reduced_lines.pyprint()
+    counted_lines.pyprint()
     ssc.start()
     ssc.awaitTermination()
