@@ -56,7 +56,8 @@ class DStream(object):
         """
         Add up the elements in this DStream.
         """
-        return self._mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
+        pass
+        #return self._mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
 
     def print_(self, label=None):
         """
@@ -152,7 +153,7 @@ class DStream(object):
                 else:
                     combiners[k] = mergeValue(combiners[k], v)
             return combiners.iteritems()
-        locally_combined = self.mapPartitions(combineLocally)
+        locally_combined = self._mapPartitions(combineLocally)
         shuffled = locally_combined.partitionBy(numPartitions)
 
         def _mergeCombiners(iterator):
