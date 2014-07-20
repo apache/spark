@@ -34,17 +34,8 @@ object SparkSQLEnv extends Logging {
 
   def init() {
     if (hiveContext == null) {
-      val jobName: String = "SparkSQL::" + java.net.InetAddress.getLocalHost.getHostName
-      val master: String = System.getenv("MASTER")
-
-      sparkContext = {
-        val sparkConf = new SparkConf()
-          .setMaster(Option(master).getOrElse("local"))
-          .setAppName(jobName)
-
-        Option(System.getenv("SPARK_HOME")).foreach(sparkConf.setSparkHome)
-        new SparkContext(sparkConf, Map[String, Set[SplitInfo]]())
-      }
+      sparkContext = new SparkContext(new SparkConf()
+        .setAppName(s"SparkSQL::${java.net.InetAddress.getLocalHost.getHostName}"))
 
       sparkContext.addSparkListener(new StatsReportListener())
 
