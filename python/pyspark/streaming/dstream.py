@@ -20,21 +20,14 @@ class DStream(object):
         self.ctx = ssc._sc
         self._jrdd_deserializer = jrdd_deserializer
 
-    def generatedRDDs(self):
-        """
-         // RDDs generated, marked as private[streaming] so that testsuites can access it
-         @transient
-        """
-        pass
-
     def count(self):
         """
 
         """
         #TODO make sure count implementation, thiis different from what pyspark does
-        return self.mapPartitions(lambda i: [sum(1 for _ in i)]).sum().map(lambda x: x[1])
+        return self.mapPartitions(lambda i: [sum(1 for _ in i)]).map(lambda x: (None, 1))
 
-    def sum(self):
+    def _sum(self):
         """
         """
         return self.mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
@@ -65,14 +58,21 @@ class DStream(object):
     def map(self, f, preservesPartitioning=False):
         """
         """
-        def func(split, iterator): return imap(f, iterator)
-        return PipelinedDStream(self, func, preservesPartitioning)
+        def func(iterator): return imap(f, iterator)
+        return self.mapPartitions(func)
+        #return PipelinedDStream(self, func, preservesPartitioning)
 
     def mapPartitions(self, f):
         """
         """
         def func(s, iterator): return f(iterator)
         return self.mapPartitionsWithIndex(func)
+
+    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+        """
+
+        """
+        return PipelinedDStream(self, f, preservesPartitioning)
 
     def reduce(self, func, numPartitions=None):
         """
@@ -92,8 +92,8 @@ class DStream(object):
 
                 #TODO for count operation make sure count implementation
                 # This is different from what pyspark does
-                if isinstance(x, int):
-                    x = ("", x)
+                #if isinstance(x, int):
+                #    x = ("", x)
 
                 (k, v) = x
                 if k not in combiners:
