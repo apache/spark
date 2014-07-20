@@ -57,10 +57,10 @@ def get_url(url):
 def get_json(urllib_response):
     return json.load(urllib_response)
 
-# Return a map of JIRA id's to pull request JSON structs:
-# e.g. {'SPARK-1234': {.. json ..}, 'SPARK-5687': {.. json ..}}
+# Return a list of (JIRA id, JSON dict) tuples:
+# e.g. [('SPARK-1234', {.. json ..}), ('SPARK-5687', {.. json ..})}
 def get_jira_prs():
-    result = {}
+    result = []
     has_next_page = True
     page_num = 0
     while has_next_page:
@@ -70,7 +70,7 @@ def get_jira_prs():
 	for pull in page_json:
 	    jiras = re.findall("SPARK-[0-9]{4,5}", pull['title'])
 	    for jira in jiras:
-		result[jira] = pull
+		result = result + [(jira,  pull)]
 
 	# Check if there is another page
 	link_header = filter(lambda k: k.startswith("Link"), page.info().headers)[0]
@@ -98,10 +98,6 @@ jira_client = jira.client.JIRA({'server': JIRA_API_BASE},
                                 basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
 
 jira_prs = get_jira_prs()
-#jira_prs = {"SPARK-2380": {
-#  'number': 1309,
-# 'user': {'login': 'pwendell'},
-#  'html_url': "https://github.com/apache/spark/pull/1309"}}
 
 previous_max = get_max_pr()
 print "Retrieved %s JIRA PR's from Github" % len(jira_prs)
@@ -110,7 +106,7 @@ print "%s PR's remain after excluding visted ones" % len(jira_prs)
 
 num_updates = 0
 considered = []
-for issue, pr in sorted(jira_prs.items(), key=lambda (k, v): int(v['number'])):
+for issue, pr in sorted(jira_prs, key=lambda (k, v): int(v['number'])):
     if num_updates >= MAX_UPDATES:
       break
     pr_num = int(pr['number'])
