@@ -116,8 +116,13 @@ for issue, pr in sorted(jira_prs, key=lambda (k, v): int(v['number'])):
 
     url = pr['html_url']
     title = "[Github] Pull Request #%s (%s)" % (pr['number'], pr['user']['login']) 
-  
-    existing_links = map(lambda l: l.raw['object']['url'], jira_client.remote_links(issue))
+    try:
+      existing_links = map(lambda l: l.raw['object']['url'], jira_client.remote_links(issue))
+    except:
+      print "Failure reading JIRA %s (does it exist?)" % issue
+      print sys.exc_info()[0]
+      continue
+
     if url in existing_links:
         continue
 
