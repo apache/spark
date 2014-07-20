@@ -623,7 +623,7 @@ abstract class DStream[T: ClassTag] (
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
   }
 
-//TODO move pyprint to PythonDStream and executed by py4j call back function
+//TODO: move pyprint to PythonDStream and executed by py4j call back function
   /**
    * Print the first ten elements of each PythonRDD generated in this PythonDStream. This is an output
    * operator, so this PythonDStream will be registered as an output stream and there materialized.
@@ -647,6 +647,7 @@ abstract class DStream[T: ClassTag] (
 
       // pythonExec should be passed from python. Move pyprint to PythonDStream
       val pythonExec = new ProcessBuilder().environment().get("PYSPARK_PYTHON")
+
       val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
       // Call python script to deserialize and print result in stdout
       val pb = new ProcessBuilder(pythonExec, sparkHome + "/python/pyspark/streaming/pyprint.py", tempFile.getAbsolutePath)

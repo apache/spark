@@ -42,16 +42,16 @@ DEPLOY_MODE=${DEPLOY_MODE:-"client"}
 # This will be removed after pyprint is moved to PythonDStream.
 # Problem is that print function is in (Scala)DStream. 
 # Whenever python code is executed, we call PythonDStream which passes
-# pythonExec(which python Spark should execute).
+# pythonExec(which python Spark should execute). pythonExec is used to call python.
 # Since pyprint is located in DStream, Spark does not know which python should use. 
 # In that case, get python path from PYSPARK_PYTHON, environmental variable. 
-# This fix is ongoing in print branch in https://github.com/giwa/spark/tree/print.
 
 # Figure out which Python executable to use
 if [[ -z "$PYSPARK_PYTHON" ]]; then
   PYSPARK_PYTHON="python"
 fi
 export PYSPARK_PYTHON
+
 
 if [ -n "$DRIVER_MEMORY" ] && [ $DEPLOY_MODE == "client" ]; then
   export SPARK_DRIVER_MEMORY=$DRIVER_MEMORY
