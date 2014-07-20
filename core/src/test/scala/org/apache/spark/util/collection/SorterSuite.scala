@@ -74,7 +74,7 @@ class SorterSuite extends FunSuite {
    * Note that the Java implementation varies tremendously between Java 6 and Java 7, when
    * the Java sort changed from merge sort to Timsort.
    */
-  test("Sorter benchmark") {
+  ignore("Sorter benchmark") {
 
     /** Runs an experiment several times. */
     def runExperiment(name: String)(f: => Unit): Unit = {

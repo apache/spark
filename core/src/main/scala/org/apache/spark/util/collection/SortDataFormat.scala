@@ -33,7 +33,7 @@ import scala.reflect.ClassTag
  * @tparam Buffer Internal data structure used by a particular format (e.g., Array[Int]).
  */
 // TODO: Making Buffer a real trait would be a better abstraction, but adds some complexity.
-trait SortDataFormat[K, Buffer] extends Any {
+private[spark] trait SortDataFormat[K, Buffer] extends Any {
   /** Return the sort key for the element at the given index. */
   protected def getKey(data: Buffer, pos: Int): K
 
@@ -61,6 +61,7 @@ trait SortDataFormat[K, Buffer] extends Any {
  * @tparam T Type of the Array we're sorting. Typically this must extend AnyRef, to support cases
  *           when the keys and values are not the same type.
  */
+private[spark]
 class KVArraySortDataFormat[K, T <: AnyRef : ClassTag] extends SortDataFormat[K, Array[T]] {
 
   override protected def getKey(data: Array[T], pos: Int): K = data(2 * pos).asInstanceOf[K]
