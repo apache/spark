@@ -71,7 +71,9 @@ DStream[Array[Byte]](prev.ssc){
       case Some(rdd)=>Some(rdd)
         val pairwiseRDD = new PairwiseRDD(rdd)
         /*
-         * This is equivalent to following python code
+         * Since python operation is executed by Scala after StreamingContext.start.
+         * What PairwiseDStream does is equivalent to following python code in pySpark.
+         *
          * with _JavaStackTrace(self.context) as st:
          *    pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
          *    partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,

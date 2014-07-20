@@ -623,37 +623,36 @@ abstract class DStream[T: ClassTag] (
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
   }
 
-//TODO move pyprint to PythonDStream
+//TODO move pyprint to PythonDStream and executed by py4j call back function
   /**
    * Print the first ten elements of each PythonRDD generated in this PythonDStream. This is an output
    * operator, so this PythonDStream will be registered as an output stream and there materialized.
    * Since serialized Python object is readable by Python, pyprint writes out binary data to
    * temporary file and run python script to deserialized and print the first ten elements
+   *
+   * Currently call python script directly. We should avoid this
    */
   private[streaming] def pyprint() {
     def foreachFunc = (rdd: RDD[T], time: Time) => {
       val iter = rdd.take(11).iterator
 
-      // make a temporary file
+      // Generate a temporary file
       val prefix = "spark"
       val suffix = ".tmp"
       val tempFile = File.createTempFile(prefix, suffix)
       val tempFileStream = new DataOutputStream(new FileOutputStream(tempFile.getAbsolutePath))
-      //write out serialized python object
+      // Write out serialized python object to temporary file
       PythonRDD.writeIteratorToStream(iter, tempFileStream)
       tempFileStream.close()
 
-      // This value has to be passed from python
-      // Python currently does not do cluster deployment. But what happened
+      // pythonExec should be passed from python. Move pyprint to PythonDStream
       val pythonExec = new ProcessBuilder().environment().get("PYSPARK_PYTHON")
       val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
-      //val pb = new ProcessBuilder(Seq(pythonExec, sparkHome + "/python/pyspark/streaming/pyprint.py", tempFile.getAbsolutePath())) // why this fails to compile???
-      //absolute path to the python script is needed to change because we do not use pysparkstreaming
+      // Call python script to deserialize and print result in stdout
       val pb = new ProcessBuilder(pythonExec, sparkHome + "/python/pyspark/streaming/pyprint.py", tempFile.getAbsolutePath)
       val workerEnv = pb.environment()
 
-      //envVars also need to be pass
-      //workerEnv.putAll(envVars)
+      // envVars also should be pass from python
       val pythonPath = sparkHome + "/python/" + File.pathSeparator + workerEnv.get("PYTHONPATH")
       workerEnv.put("PYTHONPATH", pythonPath)
       val worker = pb.start()
@@ -665,7 +664,7 @@ abstract class DStream[T: ClassTag] (
       println ("Time: " + time)
       println ("-------------------------------------------")
 
-      //print value from python std out
+      // Print values which is from python std out
       var line = ""
       breakable {
         while (true) {
@@ -674,7 +673,7 @@ abstract class DStream[T: ClassTag] (
           println(line)
         }
       }
-      //delete temporary file
+      // Delete temporary file
       tempFile.delete()
       println()
 
