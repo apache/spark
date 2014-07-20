@@ -2,8 +2,6 @@ from collections import defaultdict
 from itertools import chain, ifilter, imap
 import operator
 
-import logging
-
 from pyspark.serializers import NoOpSerializer,\
     BatchedSerializer, CloudPickleSerializer, pack_long
 from pyspark.rdd import _JavaStackTrace
@@ -25,64 +23,86 @@ class DStream(object):
 
         """
         #TODO make sure count implementation, thiis different from what pyspark does
-        return self.mapPartitions(lambda i: [sum(1 for _ in i)]).map(lambda x: (None, 1))
+        return self._mapPartitions(lambda i: [sum(1 for _ in i)]).map(lambda x: (None, 1))
 
     def _sum(self):
         """
         """
-        return self.mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
+        return self._mapPartitions(lambda x: [sum(x)]).reduce(operator.add)
 
     def print_(self):
         """
+        Since print is reserved name for python, we cannot make a print method function.
+        This function prints serialized data in RDD in DStream because Scala and Java cannot
+        deserialized pickled python object. Please use DStream.pyprint() instead to print result.
+
+        Call DStream.print().
         """
-        # print is a reserved name of Python. We cannot give print to function name
+        #hack to call print function in DStream
         getattr(self._jdstream, "print")()
 
     def pyprint(self):
         """
+        Print the first ten elements of each RDD generated in this DStream. This is an output
+        operator, so this DStream will be registered as an output stream and there materialized.
+
         """
         self._jdstream.pyprint()
 
     def filter(self, f):
         """
+        Return DStream containing only the elements that satisfy predicate.
         """
         def func(iterator): return ifilter(f, iterator)
-        return self.mapPartitions(func)
+        return self._mapPartitions(func)
 
     def flatMap(self, f, preservesPartitioning=False):
         """
+        Pass each value in the key-value pair DStream through flatMap function
+        without changing the keys: this also retains the original RDD's partition.
         """
         def func(s, iterator): return chain.from_iterable(imap(f, iterator))
-        return self.mapPartitionsWithIndex(func, preservesPartitioning)
+        return self._mapPartitionsWithIndex(func, preservesPartitioning)
 
-    def map(self, f, preservesPartitioning=False):
+    def map(self, f):
         """
+        Return DStream by applying a function to each element of DStream.
         """
         def func(iterator): return imap(f, iterator)
-        return self.mapPartitions(func)
-        #return PipelinedDStream(self, func, preservesPartitioning)
+        return self._mapPartitions(func)
 
-    def mapPartitions(self, f):
+    def _mapPartitions(self, f):
         """
+        Return a new DStream by applying a function to each partition of this DStream.
         """
         def func(s, iterator): return f(iterator)
-        return self.mapPartitionsWithIndex(func)
+        return self._mapPartitionsWithIndex(func)
 
-    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+    def _mapPartitionsWithIndex(self, f, preservesPartitioning=False):
         """
-
+        Return a new DStream by applying a function to each partition of this DStream,
+        While tracking the index of the original partition.
         """
         return PipelinedDStream(self, f, preservesPartitioning)
 
-    def reduce(self, func, numPartitions=None):
-        """
 
+    def reduceByKey(self, func, numPartitions=None):
+        """
+        Merge the value for each key using an associative reduce function.
+
+        This will also perform the merging locally on each mapper before
+        sending resuls to reducer, similarly to a "combiner" in MapReduce.
+
+        Output will be hash-partitioned with C{numPartitions} partitions, or
+        the default parallelism level if C{numPartitions} is not specified.
         """
         return self.combineByKey(lambda x:x, func, func, numPartitions)
 
     def combineByKey(self, createCombiner, mergeValue, mergeCombiners,
                       numPartitions = None):
         """
+        Count the number of elements for each key, and return the result to the
+        master as a dictionary
         """
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
@@ -148,20 +168,20 @@ class DStream(object):
         dstream._partitionFunc = partitionFunc
         return dstream
 
-    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
-        """
-
-        """
-        return PipelinedDStream(self, f, preservesPartitioning)
-
     def _defaultReducePartitions(self):
         """
+        Returns the default number of partitions to use during reduce tasks (e.g., groupBy).
+        If spark.default.parallelism is set, then we'll use the value from SparkContext
+        defaultParallelism, otherwise we'll use the number of partitions in this RDD.
 
+        This mirrors the behavior of the Scala Partitioner#defaultPartitioner, intended to reduce
+        the likelihood of OOMs. Once PySpark adopts Partitioner-based APIs, this behavior will
+        be inherent.
         """
-        # hard code to avoid the error
         if self.ctx._conf.contains("spark.default.parallelism"):
             return self.ctx.defaultParallelism
         else:
+<<<<<<< HEAD
             return 2
 
     def getNumPartitions(self):
@@ -172,6 +192,16 @@ class DStream(object):
       2
       """
       return self._jdstream.partitions().size()
+=======
+            return self.getNumPartitions()
+
+    def getNumPartitions(self):
+        """
+        Return the number of partitions in RDD
+        """
+        # TODO: remove hardcoding. RDD has NumPartitions but DStream does not have.
+        return 2
+>>>>>>> clean up code
 
 
 class PipelinedDStream(DStream):

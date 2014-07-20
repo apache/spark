@@ -22,15 +22,15 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
 from pyspark.storagelevel import *
 from pyspark.rdd import RDD
 from pyspark.context import SparkContext
+from pyspark.streaming.dstream import DStream
 
 from py4j.java_collections import ListConverter
 
-from pyspark.streaming.dstream import DStream
 
 class StreamingContext(object):
     """
     Main entry point for Spark Streaming functionality. A StreamingContext represents the
-    connection to a Spark cluster, and can be used to create L{RDD}s and
+    connection to a Spark cluster, and can be used to create L{DStream}s and
     broadcast variables on that cluster.
     """
 
@@ -71,13 +71,16 @@ class StreamingContext(object):
     def _initialize_context(self, jspark_context, jduration):
         return self._jvm.JavaStreamingContext(jspark_context, jduration)
 
-    def actorStream(self, props, name, storageLevel, supervisorStrategy):
-        raise NotImplementedError
-
-    def addStreamingListener(self, streamingListener):
-        raise NotImplementedError
+    def start(self):
+        """
+        Start the execution of the streams.
+        """
+        self._jssc.start()
 
     def awaitTermination(self, timeout=None):
+        """
+        Wait for the execution to stop.
+        """
         if timeout:
             self._jssc.awaitTermination(timeout)
         else:
@@ -85,20 +88,18 @@ class StreamingContext(object):
 
     # start from simple one. storageLevel is not passed for now.
     def socketTextStream(self, hostname, port):
+        """
+        Create an input from TCP source hostname:port. Data is received using
+        a TCP socket and receive byte is interpreted as UTF8 encoded '\n' delimited
+        lines.
+        """
         return DStream(self._jssc.socketTextStream(hostname, port), self, UTF8Deserializer())
 
-    def start(self):
-        self._jssc.start()
-
-    def stop(self, stopSparkContext=True):
-        raise NotImplementedError
-
     def textFileStream(self, directory):
+        """
+        Create an input stream that monitors a Hadoop-compatible file system
+        for new files and reads them as text files. Files must be wrriten to the
+        monitored directory by "moving" them from another location within the same
+        file system. FIle names starting with . are ignored.
+        """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
-
-    def transform(self, seq):
-        raise NotImplementedError
-
-    def union(self, seq):
-        raise NotImplementedError
-
