@@ -58,7 +58,8 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
     // hard to clean up Hive resources entirely, so we just start a new process and kill
     // that process for cleanup.
     val defaultArgs = Seq(
-      "../../sbin/start-thriftserver.sh",
+      "../../bin/spark-class",
+      "-Dspark.master=local",
       HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$"),
       "--hiveconf",
       "hive.root.logger=INFO,console",
