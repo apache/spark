@@ -53,7 +53,7 @@ private[spark] class ExternalSorter[K, V, C](
 
   private val blockManager = SparkEnv.get.blockManager
   private val diskBlockManager = blockManager.diskBlockManager
-  private val ser = Serializer.getSerializer(serializer.getOrElse(null))
+  private val ser = Serializer.getSerializer(serializer)
   private val serInstance = ser.newInstance()
 
   private val conf = SparkEnv.get.conf
