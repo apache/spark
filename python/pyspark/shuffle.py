@@ -25,11 +25,13 @@ from pyspark.serializers import BatchedSerializer, AutoSerializer
 
 try:
     import psutil
+
     def get_used_memory():
         self = psutil.Process(os.getpid())
         return self.memory_info().rss >> 20
 
 except ImportError:
+
     def get_used_memory():
         if platform.system() == 'Linux':
             for line in open('/proc/self/status'):
@@ -48,6 +50,7 @@ class Merger(object):
     """
     merge shuffled data together by combinator
     """
+
     def merge(self, iterator):
         raise NotImplementedError
 
@@ -59,13 +62,14 @@ class MapMerger(Merger):
     """
     In memory merger based on map
     """
+
     def __init__(self, combiner):
         self.combiner = combiner
         self.data = {}
 
     def merge(self, iterator):
         d, comb = self.data, self.combiner
-        for k,v in iter(iterator):
+        for k, v in iter(iterator):
             d[k] = comb(d[k], v) if k in d else v
 
     def iteritems(self):
@@ -75,7 +79,7 @@ class MapMerger(Merger):
 class ExternalHashMapMerger(Merger):
 
     """
-    External merger will dump the aggregated data into disks when memory usage 
+    External merger will dump the aggregated data into disks when memory usage
     is above the limit, then merge them together.
 
     >>> combiner = lambda x, y:x+y
@@ -85,7 +89,6 @@ class ExternalHashMapMerger(Merger):
     >>> assert merger.spills > 0
     >>> sum(v for k,v in merger.iteritems())
     499950000
-    >>> 
     """
 
     PARTITIONS = 64
@@ -95,7 +98,8 @@ class ExternalHashMapMerger(Merger):
             localdirs=None, scale=1):
         self.combiner = combiner
         self.memory_limit = memory_limit
-        self.serializer = serializer or BatchedSerializer(AutoSerializer(), 1024)
+        self.serializer = serializer or\
+                BatchedSerializer(AutoSerializer(), 1024)
         self.localdirs = localdirs or self._get_dirs()
         self.scale = scale
         self.data = {}
@@ -182,7 +186,7 @@ class ExternalHashMapMerger(Merger):
             os.makedirs(path)
         for i in range(self.PARTITIONS):
             p = os.path.join(path, str(i))
-            with open(p, 'w') as f:
+            with open(p, "w") as f:
                 self.serializer.dump_stream(self.pdata[i].iteritems(), f)
             self.pdata[i].clear()
         self.spills += 1
@@ -205,9 +209,9 @@ class ExternalHashMapMerger(Merger):
                 for j in range(self.spills):
                     path = self._get_spill_dir(j)
                     p = os.path.join(path, str(i))
-                    self.merge(self.serializer.load_stream(open(p)), check=False)
+                    self.merge(self.serializer.load_stream(open(p)), False)
 
-                    if j > 0 and self.used_memory > hard_limit and j < self.spills - 1:
+                    if self.used_memory > hard_limit and j < self.spills - 1:
                         self.data.clear() # will read from disk again
                         for v in self._recursive_merged_items(i):
                             yield v
@@ -230,9 +234,10 @@ class ExternalHashMapMerger(Merger):
             self._spill()
 
         for i in range(start, self.PARTITIONS):
-            subdirs = [os.path.join(d, 'merge', str(i)) for d in self.localdirs]
+            subdirs = [os.path.join(d, "merge", str(i))
+                            for d in self.localdirs]
             m = ExternalHashMapMerger(self.combiner, self.memory_limit,
-                    self.serializer, subdirs, self.scale * self.PARTITIONS) 
+                    self.serializer, subdirs, self.scale * self.PARTITIONS)
             m.pdata = [{} for _ in range(self.PARTITIONS)]
             limit = self.next_limit
 
@@ -248,6 +253,6 @@ class ExternalHashMapMerger(Merger):
                 yield v
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
     doctest.testmod()
