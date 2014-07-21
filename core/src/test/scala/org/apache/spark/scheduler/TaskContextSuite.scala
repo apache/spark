@@ -29,12 +29,12 @@ import org.apache.spark.rdd.RDD
 class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
   test("Calls executeOnCompleteCallbacks after failure") {
-    var completed = false
+    TaskContextSuite.completed = false
     sc = new SparkContext("local", "test")
     val rdd = new RDD[String](sc, List()) {
       override def getPartitions = Array[Partition](StubPartition(0))
       override def compute(split: Partition, context: TaskContext) = {
-        context.addOnCompleteCallback(() => completed = true)
+        context.addOnCompleteCallback(() => TaskContextSuite.completed = true)
         sys.error("failed")
       }
     }
@@ -44,8 +44,12 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     intercept[RuntimeException] {
       task.run(0)
     }
-    assert(completed === true)
+    assert(TaskContextSuite.completed === true)
   }
-
-  case class StubPartition(index: Int) extends Partition
 }
+
+private object TaskContextSuite {
+  @volatile var completed = false
+}
+
+private case class StubPartition(index: Int) extends Partition
