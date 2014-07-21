@@ -153,14 +153,22 @@ object GroupedGradientDescent extends Logging {
     val gradient_b = data.context.broadcast(gradient)
     val updater_b = data.context.broadcast(updater)
     for (i <- 1 to numIterations) {
+      // Local copies of all the variables used in the loop. If you try
+      // to access variables outside the for loop in the closure then
+      // scala will all an $outer to the closer and pull in all the variables
+      // which will cause some memory issues
+      val gradient_b_local = gradient_b
+      val updater_b_local = updater_b
       val weightSet_b = data.context.broadcast(weightSet)
+      val miniBatchSize_local = miniBatchSize
+
       val gradientOut = dataWithKey.sample(false, miniBatchFraction, 42 + i)
         .combineByKey[(BDV[Double], Double)](
           createCombiner = (x : (K, Double, Vector)) => {
             val key = x._1
             val label = x._2
             val features = x._3
-            val (new_gradient, new_loss) = gradient_b.value.compute(
+            val (new_gradient, new_loss) = gradient_b_local.value.compute(
               features, label, weightSet_b.value(key)
             )
             (BDV(new_gradient.toArray), new_loss)
@@ -171,7 +179,7 @@ object GroupedGradientDescent extends Logging {
             val key = y._1
             val label = y._2
             val features = Vectors.dense(y._3.toArray)
-            val (new_gradient, new_loss) = gradient_b.value.compute(
+            val (new_gradient, new_loss) = gradient_b_local.value.compute(
               features, label, weightSet_b.value(key)
             )
             (in_gradient + BDV(new_gradient.toArray), loss + new_loss)
@@ -184,10 +192,9 @@ object GroupedGradientDescent extends Logging {
       stochasticLossHistory.foreach( x => {
         x._2.append(lossSums(x._1) / miniBatchSize(x._1) + regVal(x._1))
       } )
-
       val update = gradientOut.map( x => {
-        val a : BDV[Double] = BDV(x._2._1.toArray) / miniBatchSize(x._1)
-        val supdate = updater_b.value.compute(
+        val a : BDV[Double] = BDV(x._2._1.toArray) / miniBatchSize_local(x._1)
+        val supdate = updater_b_local.value.compute(
           weightSet_b.value(x._1), Vectors.dense(a.toArray), stepSize, i, regParam)
         (x._1, supdate)
       })
