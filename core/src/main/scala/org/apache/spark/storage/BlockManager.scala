@@ -465,6 +465,8 @@ private[spark] class BlockManager(
                 // Cache the values before returning them
                 val putResult = memoryStore.putValues(
                   blockId, values, level, returnValues = true, allowPersistToDisk = false)
+                // The put may or may not have succeeded, depending on whether there was enough
+                // space to unroll the block. Either way, putValues should return an iterator.
                 putResult.data match {
                   case Left(it) =>
                     return Some(new BlockResult(it, DataReadMethod.Disk, info.size))
