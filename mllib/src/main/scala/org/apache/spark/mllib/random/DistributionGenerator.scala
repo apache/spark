@@ -34,11 +34,7 @@ trait DistributionGenerator extends Pseudorandom with Cloneable {
    */
   def nextValue(): Double
 
-  /**
-   * @return A copy of the current DistributionGenerator object
-   */
-  def clone(): DistributionGenerator
-
+  override def clone(): DistributionGenerator = super.clone().asInstanceOf[DistributionGenerator]
 }
 
 class NormalGenerator(val mean: Double = 0.0, val stddev: Double = 1.0)
@@ -47,11 +43,18 @@ class NormalGenerator(val mean: Double = 0.0, val stddev: Double = 1.0)
   require(stddev >= 0.0, "Standard deviation cannot be negative.")
 
   private val random = new Random()
+  private val standard = mean == 0.0 && stddev == 1.0
 
   /**
    * @return An i.i.d sample as a Double from the Normal distribution
    */
-  override def nextValue(): Double = random.nextGaussian()
+  override def nextValue(): Double = {
+    if (standard) {
+      random.nextGaussian()
+    } else {
+      mean + stddev * random.nextGaussian()
+    }
+  }
 
   /** Set random seed. */
   override def setSeed(seed: Long) = random.setSeed(seed)
