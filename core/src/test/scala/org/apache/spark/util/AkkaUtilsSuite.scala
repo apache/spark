@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark
-
-import org.scalatest.FunSuite
+package org.apache.spark.util
 
 import akka.actor._
+import org.apache.spark._
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.AkkaUtils
+import org.scalatest.FunSuite
+
 import scala.concurrent.Await
 
 /**

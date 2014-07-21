@@ -383,7 +383,10 @@ class TestActor(port: Int) extends Actor with ActorHelper {
 
   def bytesToString(byteString: ByteString) = byteString.utf8String
 
-  override def preStart = IOManager(context.system).connect(new InetSocketAddress(port))
+  override def preStart(): Unit = {
+    @deprecated("suppress compile time deprecation warning", "1.0.0")
+    val unit = IOManager(context.system).connect(new InetSocketAddress(port))
+  }
 
   def receive = {
     case IO.Read(socket, bytes) =>

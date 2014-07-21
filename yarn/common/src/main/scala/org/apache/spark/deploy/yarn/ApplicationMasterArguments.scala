@@ -26,7 +26,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var userArgs: Seq[String] = Seq[String]()
   var executorMemory = 1024
   var executorCores = 1
-  var numExecutors = 2
+  var numExecutors = ApplicationMasterArguments.DEFAULT_NUMBER_EXECUTORS
 
   parseArgs(args.toList)
   
@@ -92,4 +92,8 @@ class ApplicationMasterArguments(val args: Array[String]) {
       "  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)\n")
     System.exit(exitCode)
   }
+}
+
+object ApplicationMasterArguments {
+  val DEFAULT_NUMBER_EXECUTORS = 2
 }

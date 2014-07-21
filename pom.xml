@@ -298,6 +298,11 @@
         <version>1.0.5</version>
       </dependency>
       <dependency>
+        <groupId>net.jpountz.lz4</groupId>
+        <artifactId>lz4</artifactId>
+        <version>1.2.0</version>
+      </dependency>
+      <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
         <version>2.7.0</version>
@@ -609,7 +614,6 @@
         <groupId>net.java.dev.jets3t</groupId>
         <artifactId>jets3t</artifactId>
         <version>${jets3t.version}</version>
-        <scope>runtime</scope>
         <exclusions>
           <exclusion>
             <groupId>commons-logging</groupId>
