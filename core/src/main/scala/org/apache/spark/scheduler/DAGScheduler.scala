@@ -753,10 +753,6 @@ class DAGScheduler(
       null
     }
 
-    // must be run listener before possible NotSerializableException
-    // should be "StageSubmitted" first and then "JobEnded"
-    listenerBus.post(SparkListenerStageSubmitted(stageToInfos(stage), properties))
-
     if (tasks.size > 0) {
       // Preemptively serialize a task to make sure it can be serialized. We are catching this
       // exception here because it would be fairly hard to catch the non-serializable exception
@@ -774,6 +770,10 @@ class DAGScheduler(
           runningStages -= stage
           return
       }
+
+      // must be run listener before possible NotSerializableException
+      // should be "StageSubmitted" first and then "JobEnded"
+      listenerBus.post(SparkListenerStageSubmitted(stageToInfos(stage), properties))
 
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       myPending ++= tasks
