@@ -43,6 +43,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     .setMaster("local[2]")
     .setAppName("ContextCleanerSuite")
     .set("spark.cleaner.referenceTracking.blocking", "true")
+    .set("spark.shuffle.manager", "org.apache.spark.shuffle.hash.HashShuffleManager")
 
   before {
     sc = new SparkContext(conf)
@@ -180,6 +181,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
       .setMaster("local-cluster[2, 1, 512]")
       .setAppName("ContextCleanerSuite")
       .set("spark.cleaner.referenceTracking.blocking", "true")
+      .set("spark.shuffle.manager", "org.apache.spark.shuffle.hash.HashShuffleManager")
     sc = new SparkContext(conf2)
 
     val numRdds = 10
