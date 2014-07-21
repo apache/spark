@@ -74,7 +74,7 @@ class SorterSuite extends FunSuite {
    * Note that the Java implementation varies tremendously between Java 6 and Java 7, when
    * the Java sort changed from merge sort to Timsort.
    */
-  ignore("Sorter benchmark") {
+  test("Sorter benchmark") {
 
     /** Runs an experiment several times. */
     def runExperiment(name: String)(f: => Unit): Unit = {
@@ -93,7 +93,7 @@ class SorterSuite extends FunSuite {
       println(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
     }
 
-    val numElements = 25000000 // 10 mil
+    val numElements = 25000000 // 25 mil
     val rand = new XORShiftRandom(123)
 
     // Test primitive sort on float array
@@ -127,6 +127,7 @@ class SorterSuite extends FunSuite {
     val keyValueArray = Array.tabulate[AnyRef](numElements * 2) { i =>
       if (i % 2 == 0) keys(i / 2) else new Integer(i / 2)
     }
+
     val sorter = new Sorter(new KVArraySortDataFormat[JFloat, AnyRef])
     runExperiment("KV-sort using Sorter") {
       sorter.sort(keyValueArray, 0, keys.length, new Comparator[JFloat] {

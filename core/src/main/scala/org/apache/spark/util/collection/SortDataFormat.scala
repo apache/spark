@@ -43,7 +43,10 @@ private[spark] trait SortDataFormat[K, Buffer] extends Any {
   /** Copy a single element from src(srcPos) to dst(dstPos). */
   protected def copyElement(src: Buffer, srcPos: Int, dst: Buffer, dstPos: Int): Unit
 
-  /** Copy a range of elements starting at src(srcPos) to dst, starting at dstPos. */
+  /**
+   * Copy a range of elements starting at src(srcPos) to dst, starting at dstPos.
+   * Overlapping ranges are allowed.
+   */
   protected def copyRange(src: Buffer, srcPos: Int, dst: Buffer, dstPos: Int, length: Int): Unit
 
   /**
