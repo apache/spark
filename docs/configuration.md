@@ -336,13 +336,12 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
-  <td>org.apache.spark.io.<br />LZFCompressionCodec</td>
+  <td>org.apache.spark.io.<br />SnappyCompressionCodec</td>
   <td>
     The codec used to compress internal data such as RDD partitions and shuffle outputs.
-    By default, Spark provides two codecs: <code>org.apache.spark.io.LZFCompressionCodec</code>
-    and <code>org.apache.spark.io.SnappyCompressionCodec</code>. Of these two choices,
-    Snappy offers faster compression and decompression, while LZF offers a better compression
-    ratio.
+    By default, Spark provides three codecs:  <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    <code>org.apache.spark.io.LZFCompressionCodec</code>,
+    and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
 </tr>
 <tr>
@@ -350,7 +349,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>32768</td>
   <td>
     Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec
-    is used.
+    is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.lz4.block.size</code></td>
+  <td>32768</td>
+  <td>
+    Block size (in bytes) used in LZ4 compression, in the case when LZ4 compression codec
+    is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
   </td>
 </tr>
 <tr>
@@ -412,7 +419,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.broadcast.factory</code></td>
-  <td>org.apache.spark.broadcast.<br />HttpBroadcastFactory</td>
+  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
   <td>
     Which broadcast implementation to use.
   </td>

@@ -380,32 +380,32 @@ class SchemaRDD(
       val fields = structType.fields.map(field => (field.name, field.dataType))
       val map: JMap[String, Any] = new java.util.HashMap
       row.zip(fields).foreach {
-        case (obj, (name, dataType)) =>
+        case (obj, (attrName, dataType)) =>
           dataType match {
-            case struct: StructType => map.put(name, rowToMap(obj.asInstanceOf[Row], struct))
+            case struct: StructType => map.put(attrName, rowToMap(obj.asInstanceOf[Row], struct))
             case array @ ArrayType(struct: StructType) =>
               val arrayValues = obj match {
                 case seq: Seq[Any] =>
                   seq.map(element => rowToMap(element.asInstanceOf[Row], struct)).asJava
-                case list: JList[Any] =>
+                case list: JList[_] =>
                   list.map(element => rowToMap(element.asInstanceOf[Row], struct))
-                case set: JSet[Any] =>
+                case set: JSet[_] =>
                   set.map(element => rowToMap(element.asInstanceOf[Row], struct))
-                case array if array != null && array.getClass.isArray =>
-                  array.asInstanceOf[Array[Any]].map {
+                case arr if arr != null && arr.getClass.isArray =>
+                  arr.asInstanceOf[Array[Any]].map {
                     element => rowToMap(element.asInstanceOf[Row], struct)
                   }
                 case other => other
               }
-              map.put(name, arrayValues)
+              map.put(attrName, arrayValues)
             case array: ArrayType => {
               val arrayValues = obj match {
                 case seq: Seq[Any] => seq.asJava
                 case other => other
               }
-              map.put(name, arrayValues)
+              map.put(attrName, arrayValues)
             }
-            case other => map.put(name, obj)
+            case other => map.put(attrName, obj)
           }
       }
 

@@ -26,8 +26,7 @@ import scala.collection.mutable.HashSet
 import scala.math.max
 import scala.math.min
 
-import org.apache.spark.{ExceptionFailure, ExecutorLostFailure, FetchFailed, Logging, Resubmitted,
-  SparkEnv, Success, TaskEndReason, TaskKilled, TaskResultLost, TaskState}
+import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.{Clock, SystemClock}
@@ -52,8 +51,8 @@ private[spark] class TaskSetManager(
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
     clock: Clock = SystemClock)
-  extends Schedulable with Logging
-{
+  extends Schedulable with Logging {
+
   val conf = sched.sc.conf
 
   /*
@@ -191,7 +190,9 @@ private[spark] class TaskSetManager(
       addTo(pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer))
       for (rack <- sched.getRackForHost(loc.host)) {
         addTo(pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer))
-        hadAliveLocations = true
+        if(sched.hasHostAliveOnRack(rack)){
+          hadAliveLocations = true
+        }
       }
     }
 
@@ -401,14 +402,11 @@ private[spark] class TaskSetManager(
           // Found a task; do some bookkeeping and return a task description
           val task = tasks(index)
           val taskId = sched.newTaskId()
-          // Figure out whether this should count as a preferred launch
-          logInfo("Starting task %s:%d as TID %s on executor %s: %s (%s)".format(
-            taskSet.id, index, taskId, execId, host, taskLocality))
           // Do various bookkeeping
           copiesRunning(index) += 1
           val attemptNum = taskAttempts(index).size
-          val info = new TaskInfo(
-            taskId, index, attemptNum + 1, curTime, execId, host, taskLocality, speculative)
+          val info = new TaskInfo(taskId, index, attemptNum, curTime,
+            execId, host, taskLocality, speculative)
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
           // Update our locality level for delay scheduling
@@ -427,11 +425,15 @@ private[spark] class TaskSetManager(
               s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
               s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
           }
-          val timeTaken = clock.getTime() - startTime
           addRunningTask(taskId)
-          logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
-            taskSet.id, index, serializedTask.limit, timeTaken))
-          val taskName = "task %s:%d".format(taskSet.id, index)
+
+          // We used to log the time it takes to serialize the task, but task size is already
+          // a good proxy to task serialization time.
+          // val timeTaken = clock.getTime() - startTime
+          val taskName = s"task ${info.id} in stage ${taskSet.id}"
+          logInfo("Starting %s (TID %d, %s, %s, %d bytes)".format(
+              taskName, taskId, host, taskLocality, serializedTask.limit))
+
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
         }
@@ -490,19 +492,19 @@ private[spark] class TaskSetManager(
     info.markSuccessful()
     removeRunningTask(tid)
     sched.dagScheduler.taskEnded(
-      tasks(index), Success, result.value, result.accumUpdates, info, result.metrics)
+      tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo("Finished TID %s in %d ms on %s (progress: %d/%d)".format(
-        tid, info.duration, info.host, tasksSuccessful, numTasks))
+      logInfo("Finished task %s in stage %s (TID %d) in %d ms on %s (%d/%d)".format(
+        info.id, taskSet.id, info.taskId, info.duration, info.host, tasksSuccessful, numTasks))
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
     } else {
-      logInfo("Ignorning task-finished event for TID " + tid + " because task " +
-        index + " has already completed successfully")
+      logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
+        " because task " + index + " has already completed successfully")
     }
     failedExecutors.remove(index)
     maybeFinishTaskSet()
@@ -521,14 +523,13 @@ private[spark] class TaskSetManager(
     info.markFailed()
     val index = info.index
     copiesRunning(index) -= 1
-    if (!isZombie) {
-      logWarning("Lost TID %s (task %s:%d)".format(tid, taskSet.id, index))
-    }
     var taskMetrics : TaskMetrics = null
-    var failureReason: String = null
+
+    val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}): " +
+      reason.asInstanceOf[TaskFailedReason].toErrorString
     reason match {
       case fetchFailed: FetchFailed =>
-        logWarning("Loss was due to fetch failure from " + fetchFailed.bmAddress)
+        logWarning(failureReason)
         if (!successful(index)) {
           successful(index) = true
           tasksSuccessful += 1
@@ -536,23 +537,17 @@ private[spark] class TaskSetManager(
         // Not adding to failed executors for FetchFailed.
         isZombie = true
 
-      case TaskKilled =>
-        // Not adding to failed executors for TaskKilled.
-        logWarning("Task %d was killed.".format(tid))
-
       case ef: ExceptionFailure =>
-        taskMetrics = ef.metrics.getOrElse(null)
-        if (ef.className == classOf[NotSerializableException].getName()) {
+        taskMetrics = ef.metrics.orNull
+        if (ef.className == classOf[NotSerializableException].getName) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
-          logError("Task %s:%s had a not serializable result: %s; not retrying".format(
-            taskSet.id, index, ef.description))
-          abort("Task %s:%s had a not serializable result: %s".format(
-            taskSet.id, index, ef.description))
+          logError("Task %s in stage %s (TID %d) had a not serializable result: %s; not retrying"
+            .format(info.id, taskSet.id, tid, ef.description))
+          abort("Task %s in stage %s (TID %d) had a not serializable result: %s".format(
+            info.id, taskSet.id, tid, ef.description))
           return
         }
         val key = ef.description
-        failureReason = "Exception failure in TID %s on host %s: %s\n%s".format(
-          tid, info.host, ef.description, ef.stackTrace.map("        " + _).mkString("\n"))
         val now = clock.getTime()
         val (printFull, dupCount) = {
           if (recentExceptions.contains(key)) {
@@ -570,19 +565,18 @@ private[spark] class TaskSetManager(
           }
         }
         if (printFull) {
-          val locs = ef.stackTrace.map(loc => "\tat %s".format(loc.toString))
-          logWarning("Loss was due to %s\n%s\n%s".format(
-            ef.className, ef.description, locs.mkString("\n")))
+          logWarning(failureReason)
         } else {
-          logInfo("Loss was due to %s [duplicate %d]".format(ef.description, dupCount))
+          logInfo(
+            s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid) on executor ${info.host}: " +
+            s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
 
-      case TaskResultLost =>
-        failureReason = "Lost result for TID %s on host %s".format(tid, info.host)
+      case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
 
-      case _ =>
-        failureReason = "TID %s on host %s failed for unknown reason".format(tid, info.host)
+      case e: TaskEndReason =>
+        logError("Unknown TaskEndReason: " + e)
     }
     // always add to failed executors
     failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
@@ -593,10 +587,10 @@ private[spark] class TaskSetManager(
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
-        logError("Task %s:%d failed %d times; aborting job".format(
-          taskSet.id, index, maxTaskFailures))
-        abort("Task %s:%d failed %d times, most recent failure: %s\nDriver stacktrace:".format(
-          taskSet.id, index, maxTaskFailures, failureReason))
+        logError("Task %d in stage %s failed %d times; aborting job".format(
+          index, taskSet.id, maxTaskFailures))
+        abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
+          .format(index, taskSet.id, maxTaskFailures, failureReason))
         return
       }
     }
@@ -709,8 +703,8 @@ private[spark] class TaskSetManager(
         if (!successful(index) && copiesRunning(index) == 1 && info.timeRunning(time) > threshold &&
           !speculatableTasks.contains(index)) {
           logInfo(
-            "Marking task %s:%d (on %s) as speculatable because it ran more than %.0f ms".format(
-              taskSet.id, index, info.host, threshold))
+            "Marking task %d in stage %s (on %s) as speculatable because it ran more than %.0f ms"
+              .format(index, taskSet.id, info.host, threshold))
           speculatableTasks += index
           foundTasks = true
         }
@@ -748,7 +742,8 @@ private[spark] class TaskSetManager(
         pendingTasksForHost.keySet.exists(sched.hasExecutorsAliveOnHost(_))) {
       levels += NODE_LOCAL
     }
-    if (!pendingTasksForRack.isEmpty && getLocalityWait(RACK_LOCAL) != 0) {
+    if (!pendingTasksForRack.isEmpty && getLocalityWait(RACK_LOCAL) != 0 &&
+        pendingTasksForRack.keySet.exists(sched.hasHostAliveOnRack(_))) {
       levels += RACK_LOCAL
     }
     levels += ANY
@@ -761,7 +756,8 @@ private[spark] class TaskSetManager(
     def newLocAvail(index: Int): Boolean = {
       for (loc <- tasks(index).preferredLocations) {
         if (sched.hasExecutorsAliveOnHost(loc.host) ||
-            sched.getRackForHost(loc.host).isDefined) {
+           (sched.getRackForHost(loc.host).isDefined &&
+           sched.hasHostAliveOnRack(sched.getRackForHost(loc.host).get))) {
           return true
         }
       }

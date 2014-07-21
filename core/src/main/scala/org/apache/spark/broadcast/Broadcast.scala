@@ -106,23 +106,23 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable {
    * Actually get the broadcasted value. Concrete implementations of Broadcast class must
    * define their own way to get the value.
    */
-  private[spark] def getValue(): T
+  protected def getValue(): T
 
   /**
    * Actually unpersist the broadcasted value on the executors. Concrete implementations of
    * Broadcast class must define their own logic to unpersist their own data.
    */
-  private[spark] def doUnpersist(blocking: Boolean)
+  protected def doUnpersist(blocking: Boolean)
 
   /**
    * Actually destroy all data and metadata related to this broadcast variable.
    * Implementation of Broadcast class must define their own logic to destroy their own
    * state.
    */
-  private[spark] def doDestroy(blocking: Boolean)
+  protected def doDestroy(blocking: Boolean)
 
   /** Check if this broadcast is valid. If not valid, exception is thrown. */
-  private[spark] def assertValid() {
+  protected def assertValid() {
     if (!_isValid) {
       throw new SparkException("Attempted to use %s after it has been destroyed!".format(toString))
     }
