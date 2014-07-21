@@ -40,9 +40,9 @@ import org.apache.spark.deploy.worker.CommandUtils
  * from multiple apps can run on different cores) and in time (a core can switch ownership).
  */
 private[spark] class MesosSchedulerBackend(
-                                            scheduler: TaskSchedulerImpl,
-                                            sc: SparkContext,
-                                            master: String)
+    scheduler: TaskSchedulerImpl,
+    sc: SparkContext,
+    master: String)
   extends SchedulerBackend
   with MScheduler
   with Logging {
@@ -345,7 +345,7 @@ private[spark] class MesosSchedulerBackend(
   override def executorLost(d: SchedulerDriver, executorId: ExecutorID,
                             slaveId: SlaveID, status: Int) {
     logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
-      slaveId.getValue))
+                                                                         slaveId.getValue))
     recordSlaveLost(d, slaveId, ExecutorExited(status))
   }
 

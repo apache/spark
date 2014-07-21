@@ -44,9 +44,9 @@ import org.apache.spark.deploy.worker.CommandUtils
  * remove this.
  */
 private[spark] class CoarseMesosSchedulerBackend(
-                                                  scheduler: TaskSchedulerImpl,
-                                                  sc: SparkContext,
-                                                  master: String)
+    scheduler: TaskSchedulerImpl,
+    sc: SparkContext,
+    master: String)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
   with MScheduler
   with Logging {
