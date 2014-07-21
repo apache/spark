@@ -67,7 +67,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     this.actorSystem = actorSystem
     conf.set("spark.driver.port", boundPort.toString)
 
-    master = new BlockManagerMaster(
+    master = new StandaloneBlockManagerMaster(
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
       conf)
 

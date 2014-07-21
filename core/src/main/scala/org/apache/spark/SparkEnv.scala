@@ -215,9 +215,15 @@ object SparkEnv extends Logging {
       "MapOutputTracker",
       new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
-    val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
-      "BlockManagerMaster",
-      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
+    val blockManagerMasterType = conf.get("spark.blockmanager.type", "standalone")
+    var blockManagerMaster: BlockManagerMaster = null
+    blockManagerMasterType match {
+      case _ => { // Since currently only one option exists, this is what is to be done in any case.
+        blockManagerMaster = new StandaloneBlockManagerMaster(registerOrLookup(
+          "BlockManagerMaster", new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
+      }
+    }
+
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
       serializer, conf, securityManager, mapOutputTracker)

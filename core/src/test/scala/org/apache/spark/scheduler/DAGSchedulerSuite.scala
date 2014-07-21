@@ -27,7 +27,7 @@ import org.scalatest.{BeforeAndAfter, FunSuiteLike}
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
+import org.apache.spark.storage.{BlockId, BlockManagerId, StandaloneBlockManagerMaster}
 import org.apache.spark.util.CallSite
 
 class BuggyDAGEventProcessActor extends Actor {
@@ -92,7 +92,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
    */
   val cacheLocations = new HashMap[(Int, Int), Seq[BlockManagerId]]
   // stub out BlockManagerMaster.getLocations to use our cacheLocations
-  val blockManagerMaster = new BlockManagerMaster(null, conf) {
+  val blockManagerMaster = new StandaloneBlockManagerMaster(null, conf) {
       override def getLocations(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
         blockIds.map {
           _.asRDDId.map(id => (id.rddId -> id.splitIndex)).flatMap(key => cacheLocations.get(key)).
