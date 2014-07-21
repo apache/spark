@@ -37,10 +37,9 @@ import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.flume.sink._
 
-
 /**
  * A [[ReceiverInputDStream]] that can be used to read data from several Flume agents running
- * [[org.apache.spark.flume.sink.SparkSink]]s.
+ * [[org.apache.spark.streaming.flume.sink.SparkSink]]s.
  * @param _ssc Streaming context that will execute this input stream
  * @param addresses List of addresses at which SparkSinks are listening
  * @param maxBatchSize Maximum size of a batch
@@ -48,8 +47,7 @@ import org.apache.spark.streaming.flume.sink._
  * @param storageLevel The storage level to use.
  * @tparam T Class type of the object of this stream
  */
-private[streaming]
-class FlumePollingInputDStream[T: ClassTag](
+private[streaming] class FlumePollingInputDStream[T: ClassTag](
     @transient _ssc: StreamingContext,
     val addresses: Seq[InetSocketAddress],
     val maxBatchSize: Int,
@@ -62,8 +60,7 @@ class FlumePollingInputDStream[T: ClassTag](
   }
 }
 
-private[streaming]
-class FlumePollingReceiver(
+private[streaming] class FlumePollingReceiver(
     addresses: Seq[InetSocketAddress],
     maxBatchSize: Int,
     parallelism: Int,

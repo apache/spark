@@ -28,7 +28,7 @@ import org.apache.spark.Logging
  * A simple object that provides the implementation of readExternal and writeExternal for both
  * the wrapper classes for Flume-style Events.
  */
-object EventTransformer extends Logging {
+private[streaming] object EventTransformer extends Logging {
   def readExternal(in: ObjectInput): (java.util.HashMap[CharSequence, CharSequence],
     Array[Byte]) = {
     val bodyLength = in.readInt()
