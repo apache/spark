@@ -20,6 +20,8 @@ package org.apache.spark.sql.columnar
 import scala.collection.immutable.HashSet
 import scala.util.Random
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types.{DataType, NativeType}
@@ -39,15 +41,19 @@ object ColumnarTestUtils {
     }
 
     (columnType match {
-      case BYTE    => (Random.nextInt(Byte.MaxValue * 2) - Byte.MaxValue).toByte
-      case SHORT   => (Random.nextInt(Short.MaxValue * 2) - Short.MaxValue).toShort
-      case INT     => Random.nextInt()
-      case LONG    => Random.nextLong()
-      case FLOAT   => Random.nextFloat()
-      case DOUBLE  => Random.nextDouble()
-      case STRING  => Random.nextString(Random.nextInt(32))
-      case BOOLEAN => Random.nextBoolean()
-      case BINARY  => randomBytes(Random.nextInt(32))
+      case BYTE      => (Random.nextInt(Byte.MaxValue * 2) - Byte.MaxValue).toByte
+      case SHORT     => (Random.nextInt(Short.MaxValue * 2) - Short.MaxValue).toShort
+      case INT       => Random.nextInt()
+      case LONG      => Random.nextLong()
+      case FLOAT     => Random.nextFloat()
+      case DOUBLE    => Random.nextDouble()
+      case STRING    => Random.nextString(Random.nextInt(32))
+      case BOOLEAN   => Random.nextBoolean()
+      case BINARY    => randomBytes(Random.nextInt(32))
+      case TIMESTAMP =>
+        val timestamp = new Timestamp(Random.nextLong())
+        timestamp.setNanos(Random.nextInt(999999999))
+        timestamp
       case _ =>
         // Using a random one-element map instead of an arbitrary object
         Map(Random.nextInt() -> Random.nextString(Random.nextInt(32)))
@@ -96,5 +102,4 @@ object ColumnarTestUtils {
 
     (values, rows)
   }
-
 }

@@ -109,6 +109,9 @@ private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColum
 
 private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
+private[sql] class TimestampColumnBuilder
+  extends NativeColumnBuilder(new TimestampColumnStats, TIMESTAMP)
+
 private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(BINARY)
 
 // TODO (lian) Add support for array, struct and map

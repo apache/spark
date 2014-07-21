@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.util.TimeZone
 
 import org.scalatest.BeforeAndAfter
 
@@ -31,14 +32,20 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   lazy val hiveQueryDir = TestHive.getHiveFile("ql" + File.separator + "src" +
     File.separator + "test" + File.separator + "queries" + File.separator + "clientpositive")
 
+  var originalTimeZone: TimeZone = _
+
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   override def beforeAll() {
     TestHive.cacheTables = true
+    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+    originalTimeZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
   }
 
   override def afterAll() {
     TestHive.cacheTables = false
+    TimeZone.setDefault(originalTimeZone)
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
@@ -92,8 +99,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "create_view_translate",
     "partitions_json",
 
-    // Timezone specific test answers.
-    "udf_unix_timestamp",
+    // This test is totally fine except that it includes wrong queries and expects errors, but error
+    // message format in Hive and Spark SQL differ. Should workaround this later.
     "udf_to_unix_timestamp",
 
     // Cant run without local map/reduce.
@@ -659,8 +666,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_publisher_error_1",
     "subq2",
     "tablename_with_select",
+    "timestamp_1",
+    "timestamp_2",
     "timestamp_3",
     "timestamp_comparison",
+    "timestamp_lazy",
     "timestamp_null",
     "timestamp_udf",
     "touch",
@@ -802,6 +812,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_translate",
     "udf_trim",
     "udf_ucase",
+    "udf_unix_timestamp",
     "udf_upper",
     "udf_var_pop",
     "udf_var_samp",

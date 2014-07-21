@@ -21,6 +21,8 @@ import java.nio.ByteBuffer
 
 import scala.reflect.runtime.universe.TypeTag
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.catalyst.types._
@@ -221,6 +223,26 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   override def getField(row: Row, ordinal: Int) = row.getString(ordinal)
 }
 
+private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 8, 12) {
+  override def extract(buffer: ByteBuffer) = {
+    val timestamp = new Timestamp(buffer.getLong())
+    timestamp.setNanos(buffer.getInt())
+    timestamp
+  }
+
+  override def append(v: Timestamp, buffer: ByteBuffer) {
+    buffer.putLong(v.getTime).putInt(v.getNanos)
+  }
+
+  override def getField(row: Row, ordinal: Int) = {
+    row(ordinal).asInstanceOf[Timestamp]
+  }
+
+  override def setField(row: MutableRow, ordinal: Int, value: Timestamp) {
+    row(ordinal) = value
+  }
+}
+
 private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
     typeId: Int,
     defaultSize: Int)
@@ -240,7 +262,7 @@ private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
   }
 }
 
-private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](8, 16) {
+private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](9, 16) {
   override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]) {
     row(ordinal) = value
   }
@@ -251,7 +273,7 @@ private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](8, 16) {
 // Used to process generic objects (all types other than those listed above). Objects should be
 // serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
 // byte array.
-private[sql] object GENERIC extends ByteArrayColumnType[DataType](9, 16) {
+private[sql] object GENERIC extends ByteArrayColumnType[DataType](10, 16) {
   override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]) {
     row(ordinal) = SparkSqlSerializer.deserialize[Any](value)
   }
@@ -262,16 +284,17 @@ private[sql] object GENERIC extends ByteArrayColumnType[DataType](9, 16) {
 private[sql] object ColumnType {
   def apply(dataType: DataType): ColumnType[_, _] = {
     dataType match {
-      case IntegerType => INT
-      case LongType    => LONG
-      case FloatType   => FLOAT
-      case DoubleType  => DOUBLE
-      case BooleanType => BOOLEAN
-      case ByteType    => BYTE
-      case ShortType   => SHORT
-      case StringType  => STRING
-      case BinaryType  => BINARY
-      case _           => GENERIC
+      case IntegerType   => INT
+      case LongType      => LONG
+      case FloatType     => FLOAT
+      case DoubleType    => DOUBLE
+      case BooleanType   => BOOLEAN
+      case ByteType      => BYTE
+      case ShortType     => SHORT
+      case StringType    => STRING
+      case BinaryType    => BINARY
+      case TimestampType => TIMESTAMP
+      case _             => GENERIC
     }
   }
 }
