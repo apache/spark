@@ -210,12 +210,12 @@ private[sql] object JsonRDD extends Logging {
           case (k, dataType) => (s"$key.$k", dataType)
         } ++ Set((key, StructType(Nil)))
       }
-      case (key: String, array: List[_]) => {
+      case (key: String, array: Seq[_]) => {
         // The value associated with the key is an array.
         typeOfArray(array) match {
           case ArrayType(StructType(Nil)) => {
             // The elements of this arrays are structs.
-            array.asInstanceOf[List[Map[String, Any]]].flatMap {
+            array.asInstanceOf[Seq[Map[String, Any]]].flatMap {
               element => allKeysWithValueTypes(element)
             }.map {
               case (k, dataType) => (s"$key.$k", dataType)
@@ -229,7 +229,7 @@ private[sql] object JsonRDD extends Logging {
   }
 
   /**
-   * Converts a Java Map/List to a Scala Map/List.
+   * Converts a Java Map/List to a Scala Map/Seq.
    * We do not use Jackson's scala module at here because
    * DefaultScalaModule in jackson-module-scala will make
    * the parsing very slow.
