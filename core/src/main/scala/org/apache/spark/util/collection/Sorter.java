@@ -1,6 +1,4 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
- *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
