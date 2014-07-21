@@ -46,7 +46,6 @@ import org.apache.spark.util.Utils
 private[storage]
 trait BlockFetcherIterator extends Iterator[(BlockId, Option[Iterator[Any]])] with Logging {
   def initialize()
-  def totalBlocks: Int
   def numLocalBlocks: Int
   def numRemoteBlocks: Int
   def fetchWaitTime: Long
@@ -192,7 +191,7 @@ object BlockFetcherIterator {
         }
       }
       logInfo("Getting " + _numBlocksToFetch + " non-empty blocks out of " +
-        totalBlocks + " blocks")
+        (numLocal + numRemote) + " blocks")
       remoteRequests
     }
 
@@ -235,7 +234,6 @@ object BlockFetcherIterator {
       logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
     }
 
-    override def totalBlocks: Int = numLocal + numRemote
     override def numLocalBlocks: Int = numLocal
     override def numRemoteBlocks: Int = numRemote
     override def fetchWaitTime: Long = _fetchWaitTime

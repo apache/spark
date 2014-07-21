@@ -376,6 +376,9 @@ class DAGScheduler(
               stageIdToStage -= stageId
               stageIdToJobIds -= stageId
 
+              ShuffleMapTask.removeStage(stageId)
+              ResultTask.removeStage(stageId)
+
               logDebug("After removal of stage %d, remaining stages = %d"
                 .format(stageId, stageIdToStage.size))
             }
@@ -719,6 +722,7 @@ class DAGScheduler(
       abortStage(stage, "No active job for stage " + stage.id)
     }
   }
+
 
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int) {
