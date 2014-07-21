@@ -292,11 +292,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         parse(tail)
 
       case ("--conf") :: value :: tail =>
-        val equalsIndex = value.indexOf('=')
-        if (equalsIndex == -1) {
-          SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")
+        value.split("=", 2).toSeq match {
+          case Seq(k, v) => sparkProperties(k) = v
+          case _ => SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")
         }
-        sparkProperties(value.substring(0, equalsIndex)) = value.substring(equalsIndex+1)
         parse(tail)
 
       case ("--help" | "-h") :: tail =>
@@ -358,6 +357,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor.
+        |
+        |  --conf PROP=VALUE           Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
         |
@@ -372,7 +373,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |
         |  --help, -h                  Show this help message and exit
         |  --verbose, -v               Print additional debug output
-        |  --conf PROP=VALUE           Arbitrary Spark configuration property.
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
