@@ -19,11 +19,11 @@ package org.apache.spark.util
 
 import java.util
 
-import scala.Array
-import scala.reflect._
+import scala.reflect.{classTag, ClassTag}
 
 private[spark] object CollectionsUtils {
   def makeBinarySearch[K : Ordering : ClassTag] : (Array[K], K) => Int = {
+    // For primitive keys, we can use the natural ordering. Otherwise, use the Ordering comparator.
     classTag[K] match {
       case ClassTag.Float =>
         (l, x) => util.Arrays.binarySearch(l.asInstanceOf[Array[Float]], x.asInstanceOf[Float])
@@ -40,7 +40,8 @@ private[spark] object CollectionsUtils {
       case ClassTag.Long =>
         (l, x) => util.Arrays.binarySearch(l.asInstanceOf[Array[Long]], x.asInstanceOf[Long])
       case _ =>
-        (l, x) => util.Arrays.binarySearch(l.asInstanceOf[Array[AnyRef]], x)
+        val comparator = implicitly[Ordering[K]].asInstanceOf[java.util.Comparator[Any]]
+        (l, x) => util.Arrays.binarySearch(l.asInstanceOf[Array[AnyRef]], x, comparator)
     }
   }
 }
