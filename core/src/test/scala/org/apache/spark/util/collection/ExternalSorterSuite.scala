@@ -55,6 +55,44 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     assert(sorter4.iterator.toSeq === Seq())
   }
 
+  test("few elements per partition") {
+    val conf = new SparkConf(false)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+
+    val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
+    val ord = implicitly[Ordering[Int]]
+    val elements = Set((1, 1), (2, 2), (5, 5))
+    val expected = Set(
+      (0, Set()), (1, Set((1, 1))), (2, Set((2, 2))), (3, Set()), (4, Set()),
+      (5, Set((5, 5))), (6, Set()))
+
+    // Both aggregator and ordering
+    val sorter = new ExternalSorter[Int, Int, Int](
+      Some(agg), Some(new HashPartitioner(7)), Some(ord), None)
+    sorter.write(elements.iterator)
+    assert(sorter.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+
+    // Only aggregator
+    val sorter2 = new ExternalSorter[Int, Int, Int](
+      Some(agg), Some(new HashPartitioner(7)), None, None)
+    sorter2.write(elements.iterator)
+    assert(sorter2.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+
+    // Only ordering
+    val sorter3 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(7)), Some(ord), None)
+    sorter3.write(elements.iterator)
+    assert(sorter3.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+
+    // Neither aggregator nor ordering
+    val sorter4 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(7)), None, None)
+    sorter4.write(elements.iterator)
+    assert(sorter4.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+  }
+
   test("spilling in local cluster") {
     val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
