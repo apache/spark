@@ -191,8 +191,8 @@ class SparkContext(object):
                 SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
 
             if instance:
-                if SparkContext._active_spark_context and
-                SparkContext._active_spark_context != instance:
+                if (SparkContext._active_spark_context and
+                   SparkContext._active_spark_context != instance):
                     currentMaster = SparkContext._active_spark_context.master
                     currentAppName = SparkContext._active_spark_context.appName
                     callsite = SparkContext._active_spark_context._callsite
