@@ -25,7 +25,7 @@ import java.util.Comparator
  * (so it will require much more memory than it did previously), and obtaining a sorted iterator
  *
  */
-trait SizeTrackingCollection[T] extends Iterable[T] {
+private[spark] trait SizeTrackingCollection[T] extends Iterable[T] {
   /**
    * Will the collection grow its underlying storage capacity the next time we do an insert?
    * Collections implementing this usually double in capacity so this is a big jump in memory use.
