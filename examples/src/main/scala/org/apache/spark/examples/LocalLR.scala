@@ -49,7 +49,7 @@ object LocalLR {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use the LogisticRegression method found in org.apache.spark.mllib.classification
-        |for more conventional use
+        |for more conventional use.
       """.stripMargin)
   }
 

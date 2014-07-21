@@ -53,7 +53,7 @@ object SparkKMeans {
     System.err.println(
       """WARN: This is a naive implementation of KMeans Clustering and is given as an example!
         |Please use the KMeans method found in org.apache.spark.mllib.clustering
-        |for more conventional use
+        |for more conventional use.
       """.stripMargin)
   }
 
