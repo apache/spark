@@ -134,7 +134,7 @@ private[spark] class ExternalSorter[K, V, C](
   private[this] case class SpilledFile(
     file: File,
     blockId: BlockId,
-    serializerBatchSizes: ArrayBuffer[Long],
+    serializerBatchSizes: Array[Long],
     elementsPerPartition: Array[Long])
   private val spills = new ArrayBuffer[SpilledFile]
 
@@ -264,7 +264,7 @@ private[spark] class ExternalSorter[K, V, C](
       buffer = new SizeTrackingBuffer[((Int, K), C)]
     }
 
-    spills.append(SpilledFile(file, blockId, batchSizes, elementsPerPartition))
+    spills.append(SpilledFile(file, blockId, batchSizes.toArray, elementsPerPartition))
     _memoryBytesSpilled += memorySize
   }
 
