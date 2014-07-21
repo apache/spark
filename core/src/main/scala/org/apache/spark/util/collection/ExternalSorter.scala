@@ -289,6 +289,9 @@ private[spark] class ExternalSorter[K, V, C](
           inMemBuffered.hasNext && inMemBuffered.head._1._1 == p
         }
         override def next(): Product2[K, C] = {
+          if (!hasNext) {
+            throw new NoSuchElementException
+          }
           val elem = inMemBuffered.next()
           (elem._1._2, elem._2)
         }
@@ -314,7 +317,7 @@ private[spark] class ExternalSorter[K, V, C](
   private def mergeSort(iterators: Seq[Iterator[Product2[K, C]]], comparator: Comparator[K])
     : Iterator[Product2[K, C]] =
   {
-    val bufferedIters = iterators.map(_.buffered)
+    val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
     type Iter = BufferedIterator[Product2[K, C]]
     val heap = new mutable.PriorityQueue[Iter]()(new Ordering[Iter] {
       override def compare(x: Iter, y: Iter): Int = -comparator.compare(x.head._1, y.head._1)
@@ -404,7 +407,7 @@ private[spark] class ExternalSorter[K, V, C](
       // from the iterators, without buffering all the ones that are "equal" to a given key.
       // We do so with code similar to mergeSort, except our Iterator.next combines together all
       // the elements with the given key.
-      val bufferedIters = iterators.map(_.buffered)
+      val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
       type Iter = BufferedIterator[Product2[K, C]]
       val heap = new mutable.PriorityQueue[Iter]()(new Ordering[Iter] {
         override def compare(x: Iter, y: Iter): Int = -comparator.compare(x.head._1, y.head._1)

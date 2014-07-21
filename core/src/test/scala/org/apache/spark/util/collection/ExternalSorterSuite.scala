@@ -25,6 +25,36 @@ import org.apache.spark._
 import org.apache.spark.SparkContext._
 
 class ExternalSorterSuite extends FunSuite with LocalSparkContext {
+  test("empty data stream") {
+    val conf = new SparkConf(false)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+
+    val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
+    val ord = implicitly[Ordering[Int]]
+
+    // Both aggregator and ordering
+    val sorter = new ExternalSorter[Int, Int, Int](
+      Some(agg), Some(new HashPartitioner(3)), Some(ord), None)
+    assert(sorter.iterator.toSeq === Seq())
+
+    // Only aggregator
+    val sorter2 = new ExternalSorter[Int, Int, Int](
+      Some(agg), Some(new HashPartitioner(3)), None, None)
+    assert(sorter2.iterator.toSeq === Seq())
+
+    // Only ordering
+    val sorter3 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(3)), Some(ord), None)
+    assert(sorter3.iterator.toSeq === Seq())
+
+    // Neither aggregator nor ordering
+    val sorter4 = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(3)), None, None)
+    assert(sorter4.iterator.toSeq === Seq())
+  }
+
   test("spilling in local cluster") {
     val conf = new SparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
