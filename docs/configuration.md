@@ -207,7 +207,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executorEnv.<Environment Variable Name></code></td>
+  <td><code>spark.executorEnv.<EnvironmentVariableName></code></td>
   <td>(none)</td>
   <td>
     Add the environment variable specified by <Environment Variable Name> to the Executor 
