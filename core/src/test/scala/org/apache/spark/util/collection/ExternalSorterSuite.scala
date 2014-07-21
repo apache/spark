@@ -235,7 +235,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     assert(diskBlockManager.getAllFiles().length === 2)
   }
 
-  test("no partial aggregation") {
+  test("no partial aggregation or sorting") {
     val conf = new SparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
@@ -266,7 +266,23 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     assert(results === expected)
   }
 
-  test("partial aggregation with spill") {
+  test("partial aggregation with spill, no ordering") {
+    val conf = new SparkConf(false)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+
+    val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
+    val sorter = new ExternalSorter(Some(agg), Some(new HashPartitioner(3)), None, None)
+    sorter.write((0 until 100000).iterator.map(i => (i / 2, i)))
+    val results = sorter.partitionedIterator.map{case (p, vs) => (p, vs.toSet)}.toSet
+    val expected = (0 until 3).map(p => {
+      (p, (0 until 50000).map(i => (i, i * 4 + 1)).filter(_._1 % 3 == p).toSet)
+    }).toSet
+    assert(results === expected)
+  }
+
+  test("partial aggregation with spill, with ordering") {
     val conf = new SparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")

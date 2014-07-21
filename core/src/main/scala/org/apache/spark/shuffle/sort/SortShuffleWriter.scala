@@ -60,8 +60,11 @@ private[spark] class SortShuffleWriter[K, V, C](
         sorter.write(records)
         sorter.partitionedIterator
       } else {
+        // In this case we pass neither an aggregator nor an ordering to the sorter, because we
+        // don't care whether the keys get sorted in each partition; that will be done on the
+        // reduce side if the operation being run is sortByKey.
         sorter = new ExternalSorter[K, V, V](
-          None, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+          None, Some(dep.partitioner), None, dep.serializer)
         sorter.write(records)
         sorter.partitionedIterator
       }
