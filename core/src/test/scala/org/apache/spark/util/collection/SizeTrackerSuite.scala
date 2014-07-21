@@ -30,20 +30,20 @@ class SizeTrackerSuite extends FunSuite {
 
   import SizeTrackerSuite._
 
-  test("buffer fixed size insertions") {
-    testBuffer[Long](10000, i => i.toLong)
-    testBuffer[(Long, Long)](10000, i => (i.toLong, i.toLong))
-    testBuffer[LargeDummyClass](10000, i => new LargeDummyClass)
+  test("vector fixed size insertions") {
+    testVector[Long](10000, i => i.toLong)
+    testVector[(Long, Long)](10000, i => (i.toLong, i.toLong))
+    testVector[LargeDummyClass](10000, i => new LargeDummyClass)
   }
 
-  test("buffer variable size insertions") {
+  test("vector variable size insertions") {
     val rand = new Random(123456789)
     def randString(minLen: Int, maxLen: Int): String = {
       "a" * (rand.nextInt(maxLen - minLen) + minLen)
     }
-    testBuffer[String](10000, i => randString(0, 10))
-    testBuffer[String](10000, i => randString(0, 100))
-    testBuffer[String](10000, i => randString(90, 100))
+    testVector[String](10000, i => randString(0, 10))
+    testVector[String](10000, i => randString(0, 100))
+    testVector[String](10000, i => randString(90, 100))
   }
 
   test("map fixed size insertions") {
@@ -70,12 +70,12 @@ class SizeTrackerSuite extends FunSuite {
     testMap[String, Int](10000, i => (randString(0, 10000), i))
   }
 
-  def testBuffer[T: ClassTag](numElements: Int, makeElement: Int => T) {
-    val buffer = new SizeTrackingAppendOnlyBuffer[T]
+  def testVector[T: ClassTag](numElements: Int, makeElement: Int => T) {
+    val vector = new SizeTrackingVector[T]
     for (i <- 0 until numElements) {
       val item = makeElement(i)
-      buffer += item
-      expectWithinError(buffer, buffer.estimateSize(), if (i < 32) HIGH_ERROR else NORMAL_ERROR)
+      vector += item
+      expectWithinError(vector, vector.estimateSize(), if (i < 32) HIGH_ERROR else NORMAL_ERROR)
     }
   }
 
@@ -108,40 +108,40 @@ private object SizeTrackerSuite {
       System.exit(1)
     }
     val numElements = args(0).toInt
-    bufferSpeedTest(numElements)
+    vectorSpeedTest(numElements)
     mapSpeedTest(numElements)
   }
 
   /**
-   * Speed test for SizeTrackingAppendOnlyBuffer.
+   * Speed test for SizeTrackingVector.
    *
    * Results for 100000 elements (possibly non-deterministic):
    *   PrimitiveVector  15 ms
    *   SizeTracker      51 ms
    *   SizeEstimator    2000 ms
    */
-  def bufferSpeedTest(numElements: Int): Unit = {
+  def vectorSpeedTest(numElements: Int): Unit = {
     val baseTimes = for (i <- 0 until 10) yield time {
-      val buffer = new PrimitiveVector[LargeDummyClass]
+      val vector = new PrimitiveVector[LargeDummyClass]
       for (i <- 0 until numElements) {
-        buffer += new LargeDummyClass
+        vector += new LargeDummyClass
       }
     }
     val sampledTimes = for (i <- 0 until 10) yield time {
-      val buffer = new SizeTrackingAppendOnlyBuffer[LargeDummyClass]
+      val vector = new SizeTrackingVector[LargeDummyClass]
       for (i <- 0 until numElements) {
-        buffer += new LargeDummyClass
-        buffer.estimateSize()
+        vector += new LargeDummyClass
+        vector.estimateSize()
       }
     }
     val unsampledTimes = for (i <- 0 until 3) yield time {
-      val buffer = new PrimitiveVector[LargeDummyClass]
+      val vector = new PrimitiveVector[LargeDummyClass]
       for (i <- 0 until numElements) {
-        buffer += new LargeDummyClass
-        SizeEstimator.estimate(buffer)
+        vector += new LargeDummyClass
+        SizeEstimator.estimate(vector)
       }
     }
-    printSpeedTestResult("SizeTrackingAppendOnlyBuffer", baseTimes, sampledTimes, unsampledTimes)
+    printSpeedTestResult("SizeTrackingVector", baseTimes, sampledTimes, unsampledTimes)
   }
 
   /**

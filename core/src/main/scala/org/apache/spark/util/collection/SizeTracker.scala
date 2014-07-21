@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 import org.apache.spark.util.SizeEstimator
 
@@ -37,7 +37,7 @@ private[spark] trait SizeTracker {
   private val SAMPLE_GROWTH_RATE = 1.1
 
   /** Samples taken since last resetSamples(). Only the last two are kept for extrapolation. */
-  private val samples = new ArrayBuffer[Sample]
+  private val samples = new mutable.Queue[Sample]
 
   /** The average number of bytes per update between our last two samples. */
   private var bytesPerUpdate: Double = _
@@ -75,10 +75,10 @@ private[spark] trait SizeTracker {
    * Take a new sample of the current collection's size.
    */
   private def takeSample(): Unit = {
-    samples += Sample(SizeEstimator.estimate(this), numUpdates)
+    samples.enqueue(Sample(SizeEstimator.estimate(this), numUpdates))
     // Only use the last two samples to extrapolate
     if (samples.size > 2) {
-      samples.remove(0)
+      samples.dequeue()
     }
     val bytesDelta = samples.toList.reverse match {
       case latest :: previous :: tail =>

@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 /**
  * An append-only buffer that keeps track of its estimated size in bytes.
  */
-private[spark] class SizeTrackingAppendOnlyBuffer[T: ClassTag]
+private[spark] class SizeTrackingVector[T: ClassTag]
   extends PrimitiveVector[T]
   with SizeTracker {
 
@@ -37,7 +37,10 @@ private[spark] class SizeTrackingAppendOnlyBuffer[T: ClassTag]
     this
   }
 
-  override def array: Array[T] = {
+  /**
+   * Return a trimmed version of the underlying array.
+   */
+  def toArray: Array[T] = {
     super.iterator.toArray
   }
 }

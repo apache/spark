@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.util.{SizeEstimator, Utils}
-import org.apache.spark.util.collection.SizeTrackingAppendOnlyBuffer
+import org.apache.spark.util.collection.SizeTrackingVector
 
 private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
 
@@ -213,7 +213,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
     val threadId = Thread.currentThread().getId
     val unrollMemoryMap = SparkEnv.get.unrollMemoryMap
-    var buffer = new SizeTrackingAppendOnlyBuffer[Any]
+    var buffer = new SizeTrackingVector[Any]
 
     try {
       while (values.hasNext && !atMemoryLimit) {
