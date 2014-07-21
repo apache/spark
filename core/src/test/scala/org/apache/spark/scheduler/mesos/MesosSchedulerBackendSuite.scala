@@ -29,6 +29,7 @@ import org.easymock.{Capture, EasyMock}
 import java.nio.ByteBuffer
 import java.util.Collections
 import java.util
+import scala.collection.mutable
 
 class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with EasyMockSugar {
   test("mesos resource offer is launching tasks") {
@@ -52,10 +53,12 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
     offers.add(createOffer(1, 101, 1))
     offers.add(createOffer(1, 99, 1))
 
-    val conf = new SparkConf
-    conf.set("spark.executor.memory", "100m")
-    conf.set("spark.home", "/path")
-    val sc = new SparkContext("local-cluster[2 , 1 , 512]", "test", conf)
+    val sc = EasyMock.createMock(classOf[SparkContext])
+    EasyMock.expect(sc.executorMemory).andReturn(100).anyTimes()
+    EasyMock.expect(sc.getSparkHome()).andReturn(Option("/path")).anyTimes()
+    EasyMock.expect(sc.executorEnvs).andReturn(new mutable.HashMap).anyTimes()
+    EasyMock.expect(sc.conf).andReturn(new SparkConf).anyTimes()
+    EasyMock.replay(sc)
     val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
     val workerOffers = Seq(backend.toWorkerOffer(offers.get(0)))
     val taskDesc = new TaskDescription(1L, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
