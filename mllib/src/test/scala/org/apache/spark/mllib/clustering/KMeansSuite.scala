@@ -61,6 +61,32 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     assert(model.clusterCenters.head === center)
   }
 
+  test("no distinct points") {
+    val data = sc.parallelize(
+      Array(
+        Vectors.dense(1.0, 2.0, 3.0),
+        Vectors.dense(1.0, 2.0, 3.0),
+        Vectors.dense(1.0, 2.0, 3.0)),
+      2)
+    val center = Vectors.dense(1.0, 2.0, 3.0)
+
+    // Make sure code runs.
+    var model = KMeans.train(data, k=2, maxIterations=1)
+    assert(model.clusterCenters.size === 2)
+  }
+
+  test("more clusters than points") {
+    val data = sc.parallelize(
+      Array(
+        Vectors.dense(1.0, 2.0, 3.0),
+        Vectors.dense(1.0, 3.0, 4.0)),
+      2)
+
+    // Make sure code runs.
+    var model = KMeans.train(data, k=3, maxIterations=1)
+    assert(model.clusterCenters.size === 3)
+  }
+
   test("single cluster with big dataset") {
     val smallData = Array(
       Vectors.dense(1.0, 2.0, 6.0),

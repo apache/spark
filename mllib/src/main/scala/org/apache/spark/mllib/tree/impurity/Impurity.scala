@@ -28,13 +28,13 @@ trait Impurity extends Serializable {
 
   /**
    * :: DeveloperApi ::
-   * information calculation for binary classification
-   * @param c0 count of instances with label 0
-   * @param c1 count of instances with label 1
+   * information calculation for multiclass classification
+   * @param counts Array[Double] with counts for each label
+   * @param totalCount sum of counts for all labels
    * @return information value
    */
   @DeveloperApi
-  def calculate(c0 : Double, c1 : Double): Double
+  def calculate(counts: Array[Double], totalCount: Double): Double
 
   /**
    * :: DeveloperApi ::
