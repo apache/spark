@@ -40,7 +40,7 @@ import org.apache.spark.storage.BlockId
  * @param aggregator optional Aggregator with combine functions to use for merging data
  * @param partitioner optional partitioner; if given, sort by partition ID and then key
  * @param ordering optional ordering to sort keys within each partition
- * @param serializer serializer to use
+ * @param serializer serializer to use when spilling to disk
  */
 private[spark] class ExternalSorter[K, V, C](
     aggregator: Option[Aggregator[K, V, C]] = None,
@@ -95,7 +95,11 @@ private[spark] class ExternalSorter[K, V, C](
   // non-equal keys also have this, so we need to do a later pass to find truly equal keys).
   // Note that we ignore this if no aggregator is given.
   private val keyComparator: Comparator[K] = ordering.getOrElse(new Comparator[K] {
-    override def compare(a: K, b: K): Int = a.hashCode() - b.hashCode()
+    override def compare(a: K, b: K): Int = {
+      val h1 = if (a == null) 0 else a.hashCode()
+      val h2 = if (b == null) 0 else b.hashCode()
+      h1 - h2
+    }
   })
 
   private val sortWithinPartitions = ordering.isDefined || aggregator.isDefined
@@ -215,7 +219,6 @@ private[spark] class ExternalSorter[K, V, C](
     val batchSizes = new ArrayBuffer[Long]
 
     // How many elements we have in each partition
-    // TODO: this could become a sparser data structure
     val elementsPerPartition = new Array[Long](numPartitions)
 
     // Flush the disk writer's contents to disk, and update relevant variables
