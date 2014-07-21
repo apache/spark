@@ -125,5 +125,5 @@ class StatCounter(object):
         return math.sqrt(self.sampleVariance())
 
     def __repr__(self):
-        return "(count: %s, mean: %s, stdev: %s, max: %s, min: %s)" %
-        (self.count(), self.mean(), self.stdev(), self.max(), self.min())
+        return ("(count: %s, mean: %s, stdev: %s, max: %s, min: %s)" %
+                (self.count(), self.mean(), self.stdev(), self.max(), self.min()))
