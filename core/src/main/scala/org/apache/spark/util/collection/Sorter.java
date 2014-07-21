@@ -909,6 +909,7 @@ class Sorter<K, Buffer> {
           newSize = Math.min(newSize, aLength >>> 1);
 
         tmp = s.allocate(newSize);
+        tmpLength = newSize;
       }
       return tmp;
     }
