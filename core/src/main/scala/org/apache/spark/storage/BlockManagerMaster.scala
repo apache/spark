@@ -60,7 +60,7 @@ trait BlockManagerMaster {
    * Check if block manager master has a block. Note that this can be used to check for only
    * those blocks that are reported to block manager master.
    */
-  def contains(blockId: BlockId)
+  def contains(blockId: BlockId): Boolean
 
   /** Get ids of other nodes in the cluster from the driver */
   def getPeers(blockManagerId: BlockManagerId, numPeers: Int): Seq[BlockManagerId]

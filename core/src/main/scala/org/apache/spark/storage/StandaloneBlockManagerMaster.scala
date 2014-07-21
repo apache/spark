@@ -38,7 +38,7 @@ with BlockManagerMaster {
   val timeout = AkkaUtils.askTimeout(conf)
 
   /** Remove a dead executor from the driver actor. This is only called on the driver side. */
-  def removeExecutor(execId: String) {
+  override def removeExecutor(execId: String) {
     tell(RemoveExecutor(execId))
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
@@ -48,18 +48,19 @@ with BlockManagerMaster {
    * false if the driver does not know about the given block manager, which means the block
    * manager should re-register.
    */
-  def sendHeartBeat(blockManagerId: BlockManagerId): Boolean = {
+  override def sendHeartBeat(blockManagerId: BlockManagerId): Boolean = {
     askDriverWithReply[Boolean](HeartBeat(blockManagerId))
   }
 
   /** Register the BlockManager's id with the driver. */
-  def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+  override def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long,
+    slaveActor: ActorRef) {
     logInfo("Trying to register BlockManager")
     tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
     logInfo("Registered BlockManager")
   }
 
-  def updateBlockInfo(
+  override def updateBlockInfo(
       blockManagerId: BlockManagerId,
       blockId: BlockId,
       storageLevel: StorageLevel,
@@ -73,12 +74,12 @@ with BlockManagerMaster {
   }
 
   /** Get locations of the blockId from the driver */
-  def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
+  override def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     askDriverWithReply[Seq[BlockManagerId]](GetLocations(blockId))
   }
 
   /** Get locations of multiple blockIds from the driver */
-  def getLocations(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
+  override def getLocations(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
     askDriverWithReply[Seq[Seq[BlockManagerId]]](GetLocationsMultipleBlockIds(blockIds))
   }
 
@@ -86,12 +87,12 @@ with BlockManagerMaster {
    * Check if block manager master has a block. Note that this can be used to check for only
    * those blocks that are reported to block manager master.
    */
-  def contains(blockId: BlockId) = {
+  override def contains(blockId: BlockId) = {
     !getLocations(blockId).isEmpty
   }
 
   /** Get ids of other nodes in the cluster from the driver */
-  def getPeers(blockManagerId: BlockManagerId, numPeers: Int): Seq[BlockManagerId] = {
+  override def getPeers(blockManagerId: BlockManagerId, numPeers: Int): Seq[BlockManagerId] = {
     val result = askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId, numPeers))
     if (result.length != numPeers) {
       throw new SparkException(
@@ -104,12 +105,12 @@ with BlockManagerMaster {
    * Remove a block from the slaves that have it. This can only be used to remove
    * blocks that the driver knows about.
    */
-  def removeBlock(blockId: BlockId) {
+  override def removeBlock(blockId: BlockId) {
     askDriverWithReply(RemoveBlock(blockId))
   }
 
   /** Remove all blocks belonging to the given RDD. */
-  def removeRdd(rddId: Int, blocking: Boolean) {
+  override def removeRdd(rddId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
     future.onFailure {
       case e: Throwable => logError("Failed to remove RDD " + rddId, e)
@@ -120,7 +121,7 @@ with BlockManagerMaster {
   }
 
   /** Remove all blocks belonging to the given shuffle. */
-  def removeShuffle(shuffleId: Int, blocking: Boolean) {
+  override def removeShuffle(shuffleId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
     future.onFailure {
       case e: Throwable => logError("Failed to remove shuffle " + shuffleId, e)
@@ -131,7 +132,7 @@ with BlockManagerMaster {
   }
 
   /** Remove all blocks belonging to the given broadcast. */
-  def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean) {
+  override def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Int]]](
       RemoveBroadcast(broadcastId, removeFromMaster))
     future.onFailure {
@@ -150,11 +151,11 @@ with BlockManagerMaster {
    * amount of memory allocated for the block manager, while the second is the
    * amount of remaining memory.
    */
-  def getMemoryStatus: Map[BlockManagerId, (Long, Long)] = {
+  override def getMemoryStatus: Map[BlockManagerId, (Long, Long)] = {
     askDriverWithReply[Map[BlockManagerId, (Long, Long)]](GetMemoryStatus)
   }
 
-  def getStorageStatus: Array[StorageStatus] = {
+  override def getStorageStatus: Array[StorageStatus] = {
     askDriverWithReply[Array[StorageStatus]](GetStorageStatus)
   }
 
@@ -166,7 +167,7 @@ with BlockManagerMaster {
    * updated block statuses. This is useful when the master is not informed of the given block
    * by all block managers.
    */
-  def getBlockStatus(
+  override def getBlockStatus(
       blockId: BlockId,
       askSlaves: Boolean = true): Map[BlockManagerId, BlockStatus] = {
     val msg = GetBlockStatus(blockId, askSlaves)
@@ -195,7 +196,7 @@ with BlockManagerMaster {
    * updated block statuses. This is useful when the master is not informed of the given block
    * by all block managers.
    */
-  def getMatchingBlockIds(
+  override def getMatchingBlockIds(
       filter: BlockId => Boolean,
       askSlaves: Boolean): Seq[BlockId] = {
     val msg = GetMatchingBlockIds(filter, askSlaves)
@@ -204,7 +205,7 @@ with BlockManagerMaster {
   }
 
   /** Stop the driver actor, called only on the Spark driver node */
-  def stop() {
+  override def stop() {
     if (driverActor != null) {
       tell(StopBlockManagerMaster)
       driverActor = null
