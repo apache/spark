@@ -115,7 +115,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.appMasterEnv.<Environment Variable Name></code></td>
+  <td><code>spark.yarn.appMasterEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
      Add the environment variable specified by <Environment Variable Name> to the 
