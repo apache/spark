@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.io.File
 import java.util.{List => JList}
 import java.util.Collections
 
@@ -31,6 +30,8 @@ import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTas
 import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.deploy.Command
+import org.apache.spark.deploy.worker.CommandUtils
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -43,9 +44,9 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
  * remove this.
  */
 private[spark] class CoarseMesosSchedulerBackend(
-    scheduler: TaskSchedulerImpl,
-    sc: SparkContext,
-    master: String)
+                                                  scheduler: TaskSchedulerImpl,
+                                                  sc: SparkContext,
+                                                  master: String)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
   with MScheduler
   with Logging {
@@ -73,7 +74,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
     "Spark home is not set; set it through the spark.home system " +
-    "property, the SPARK_HOME environment variable or the SparkContext constructor"))
+      "property, the SPARK_HOME environment variable or the SparkContext constructor"))
 
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
 
@@ -111,49 +112,40 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
     val environment = Environment.newBuilder()
-    val extraClassPath = conf.getOption("spark.executor.extraClassPath")
-    extraClassPath.foreach { cp =>
-      environment.addVariables(
-        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
-    }
-    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
-
-    val libraryPathOption = "spark.executor.extraLibraryPath"
-    val extraLibraryPath = conf.getOption(libraryPathOption).map(p => s"-Djava.library.path=$p")
-    val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
-
-    sc.executorEnvs.foreach { case (key, value) =>
-      environment.addVariables(Environment.Variable.newBuilder()
-        .setName(key)
-        .setValue(value)
-        .build())
-    }
-    val command = CommandInfo.newBuilder()
+    val mesosCommand = CommandInfo.newBuilder()
       .setEnvironment(environment)
+
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
-      conf.get("spark.driver.host"),
-      conf.get("spark.driver.port"),
+      conf.get("spark.driver.host"), conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
+    val args = Seq(driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores.toString)
+    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
+    val classPathEntries = conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
+      cp.split(java.io.File.pathSeparator)
+    }
+    val libraryPathEntries =
+      conf.getOption("spark.executor.extraLibraryPath").toSeq.flatMap { cp =>
+        cp.split(java.io.File.pathSeparator)
+      }
+
+    val command = Command(
+      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
+      classPathEntries, libraryPathEntries, extraJavaOpts)
 
     val uri = conf.get("spark.executor.uri", null)
-    if (uri == null) {
-      val runScript = new File(sparkHome, "./bin/spark-class").getCanonicalPath
-      command.setValue(
-        "\"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %s %d".format(
-          runScript, extraOpts, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
+    if ( uri == null ) {
+      mesosCommand.setValue(CommandUtils.buildCommandSeq(command, sc.executorMemory,
+        sparkHome).mkString("\"", "\" \"", "\""))
     } else {
-      // Grab everything to the first '.'. We'll use that and '*' to
-      // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
-      command.setValue(
-        ("cd %s*; " +
-          "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend %s %s %s %s %d")
-          .format(basename, extraOpts, driverUrl, offer.getSlaveId.getValue,
-            offer.getHostname, numCores))
-      command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
+      mesosCommand.setValue(CommandUtils.buildCommandSeq(command, sc.executorMemory,
+        basename).mkString("\"", "\" \"", "\""))
+      mesosCommand.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
-    command.build()
+    mesosCommand.build()
   }
+
+
 
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
 
@@ -190,8 +182,8 @@ private[spark] class CoarseMesosSchedulerBackend(
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
         if (totalCoresAcquired < maxCores && mem >= sc.executorMemory && cpus >= 1 &&
-            failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
-            !slaveIdsWithExecutors.contains(slaveId)) {
+          failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
+          !slaveIdsWithExecutors.contains(slaveId)) {
           // Launch an executor on the slave
           val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
           totalCoresAcquired += cpusToUse
@@ -263,7 +255,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           failuresBySlaveId(slaveId) = failuresBySlaveId.getOrElse(slaveId, 0) + 1
           if (failuresBySlaveId(slaveId) >= MAX_SLAVE_FAILURES) {
             logInfo("Blacklisting Mesos slave " + slaveId + " due to too many failures; " +
-                "is Spark installed on it?")
+              "is Spark installed on it?")
           }
         }
         driver.reviveOffers() // In case we'd rejected everything before but have now lost a node

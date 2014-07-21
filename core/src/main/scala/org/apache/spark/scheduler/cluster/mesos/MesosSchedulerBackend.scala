@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.io.File
 import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 
@@ -32,6 +31,8 @@ import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTas
 import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.util.Utils
+import org.apache.spark.deploy.Command
+import org.apache.spark.deploy.worker.CommandUtils
 
 /**
  * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a
@@ -39,9 +40,9 @@ import org.apache.spark.util.Utils
  * from multiple apps can run on different cores) and in time (a core can switch ownership).
  */
 private[spark] class MesosSchedulerBackend(
-    scheduler: TaskSchedulerImpl,
-    sc: SparkContext,
-    master: String)
+                                            scheduler: TaskSchedulerImpl,
+                                            sc: SparkContext,
+                                            master: String)
   extends SchedulerBackend
   with MScheduler
   with Logging {
@@ -56,6 +57,7 @@ private[spark] class MesosSchedulerBackend(
   // Which slave IDs we have executors on
   val slaveIdsWithExecutors = new HashSet[String]
   val taskIdToSlaveId = new HashMap[Long, String]
+  val conf = sc.conf
 
   // An ExecutorInfo for our tasks
   var execArgs: Array[Byte] = null
@@ -88,7 +90,7 @@ private[spark] class MesosSchedulerBackend(
   def createExecutorInfo(execId: String): ExecutorInfo = {
     val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
       "Spark home is not set; set it through the spark.home system " +
-      "property, the SPARK_HOME environment variable or the SparkContext constructor"))
+        "property, the SPARK_HOME environment variable or the SparkContext constructor"))
     val environment = Environment.newBuilder()
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
@@ -96,18 +98,33 @@ private[spark] class MesosSchedulerBackend(
         .setValue(value)
         .build())
     }
-    val command = CommandInfo.newBuilder()
+    val mesosCommand = CommandInfo.newBuilder()
       .setEnvironment(environment)
-    val uri = sc.conf.get("spark.executor.uri", null)
-    if (uri == null) {
-      command.setValue(new File(sparkHome, "/sbin/spark-executor").getCanonicalPath)
-    } else {
-      // Grab everything to the first '.'. We'll use that and '*' to
-      // glob the directory "correctly".
-      val basename = uri.split('/').last.split('.').head
-      command.setValue("cd %s*; ./sbin/spark-executor".format(basename))
-      command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
+
+    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
+    val classPathEntries = conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
+      cp.split(java.io.File.pathSeparator)
     }
+    val libraryPathEntries =
+      conf.getOption("spark.executor.extraLibraryPath").toSeq.flatMap { cp =>
+        cp.split(java.io.File.pathSeparator)
+      }
+
+    val command = Command(
+      "org.apache.spark.executor.MesosExecutorBackend", Nil, sc.executorEnvs,
+      classPathEntries, libraryPathEntries, extraJavaOpts)
+
+    val uri = conf.get("spark.executor.uri", null)
+    if ( uri == null ) {
+      mesosCommand.setValue(CommandUtils.buildCommandSeq(command, sc.executorMemory,
+        sparkHome).mkString("\"", "\" \"", "\""))
+    } else {
+      val basename = uri.split('/').last.split('.').head
+      mesosCommand.setValue(CommandUtils.buildCommandSeq(command, sc.executorMemory,
+        basename).mkString("\"", "\" \"", "\""))
+      mesosCommand.addUris(CommandInfo.URI.newBuilder().setValue(uri))
+    }
+
     val memory = Resource.newBuilder()
       .setName("mem")
       .setType(Value.Type.SCALAR)
@@ -115,10 +132,11 @@ private[spark] class MesosSchedulerBackend(
       .build()
     ExecutorInfo.newBuilder()
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
-      .setCommand(command)
+      .setCommand(mesosCommand)
       .setData(ByteString.copyFrom(createExecArg()))
       .addResources(memory)
       .build()
+
   }
 
   /**
@@ -327,7 +345,7 @@ private[spark] class MesosSchedulerBackend(
   override def executorLost(d: SchedulerDriver, executorId: ExecutorID,
                             slaveId: SlaveID, status: Int) {
     logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
-                                                                 slaveId.getValue))
+      slaveId.getValue))
     recordSlaveLost(d, slaveId, ExecutorExited(status))
   }
 
