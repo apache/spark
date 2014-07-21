@@ -45,13 +45,41 @@ except ImportError:
 
 
 class Merger(object):
+    """
+    merge shuffled data together by combinator
+    """
+    def merge(self, iterator):
+        raise NotImplementedError
+
+    def iteritems(self):
+        raise NotImplementedError
+
+
+class MapMerger(Merger):
+    """
+    In memory merger based on map
+    """
+    def __init__(self, combiner):
+        self.combiner = combiner
+        self.data = {}
+
+    def merge(self, iterator):
+        d, comb = self.data, self.combiner
+        for k,v in iter(iterator):
+            d[k] = comb(d[k], v) if k in d else v
+
+    def iteritems(self):
+        return self.data.iteritems()
+
+
+class ExternalHashMapMerger(Merger):
 
     """
     External merger will dump the aggregated data into disks when memory usage 
     is above the limit, then merge them together.
 
     >>> combiner = lambda x, y:x+y
-    >>> merger = Merger(combiner, 10)
+    >>> merger = ExternalHashMapMerger(combiner, 10)
     >>> N = 10000
     >>> merger.merge(zip(xrange(N), xrange(N)) * 10)
     >>> assert merger.spills > 0
@@ -63,16 +91,16 @@ class Merger(object):
     PARTITIONS = 64
     BATCH = 10000
 
-    def __init__(self, combiner, memory_limit=512, path="/tmp/pysparki/merge",
-            serializer=None, batch_size=1024, scale=1):
+    def __init__(self, combiner, memory_limit=512, path="/tmp/pyspark/merge",
+            serializer=None, scale=1):
         self.combiner = combiner
-        self.path = os.path.join(path, str(os.getpid()))
         self.memory_limit = memory_limit
-        self.serializer = serializer or BatchedSerializer(AutoSerializer(), batch_size)
+        self.path = os.path.join(path, str(os.getpid()))
+        self.serializer = serializer or BatchedSerializer(AutoSerializer(), 1024)
+        self.scale = scale
         self.data = {}
         self.pdata = []
         self.spills = 0
-        self.scale = scale
 
     @property
     def used_memory(self):
@@ -94,7 +122,7 @@ class Merger(object):
                 continue
 
             c += 1
-            if c % self.BATCH == 0 and self.used_memory > self.memory_limit:
+            if c % batch == 0 and self.used_memory > self.memory_limit:
                 self._first_spill()
                 self._partitioned_merge(iterator, self.next_limit)
                 break
@@ -158,7 +186,7 @@ class Merger(object):
             for j in range(self.spills):
                 p = os.path.join(self.path, str(j), str(i))
                 self.merge(self.serializer.load_stream(open(p)), check=False)
-                
+
                 if j > 0 and self.used_memory > hard_limit and j < self.spills - 1:
                     self.data.clear() # will read from disk again
                     for v in self._recursive_merged_items(i):
@@ -178,12 +206,12 @@ class Merger(object):
             self._spill()
 
         for i in range(start, self.PARTITIONS):
-            m = Merger(self.combiner, self.memory_limit,
+            m = ExternalHashMapMerger(self.combiner, self.memory_limit,
                     os.path.join(self.path, 'merge', str(i)),
                     self.serializer, scale=self.scale * self.PARTITIONS) 
-            m.pdata = [{} for x in range(self.PARTITIONS)]
+            m.pdata = [{} for _ in range(self.PARTITIONS)]
             limit = self.next_limit
-        
+
             for j in range(self.spills):
                 p = os.path.join(self.path, str(j), str(i))
                 m._partitioned_merge(self.serializer.load_stream(open(p)), 0)
@@ -193,7 +221,7 @@ class Merger(object):
 
             for v in m._external_items():
                 yield v
-            
+
         shutil.rmtree(self.path, True)
 
 

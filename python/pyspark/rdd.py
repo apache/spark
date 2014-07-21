@@ -42,7 +42,7 @@ from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
-from pyspark.shuffle import Merger
+from pyspark.shuffle import MapMerger, ExternalHashMapMerger
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -168,6 +168,18 @@ class MaxHeapQ(object):
             self.q[1] = value
             self._sink(1)
 
+
+def _parse_memory(s):
+    """
+    >>> _parse_memory("256m")
+    256
+    >>> _parse_memory("2g")
+    2048
+    """
+    units = {'g': 1024, 'm': 1, 't': 1<<20, 'k':1.0/1024}
+    if s[-1] not in units:
+        raise ValueError("invalid format: " + s)
+    return int(float(s[:-1]) * units[s[-1].lower()])
 
 class RDD(object):
 
@@ -1249,10 +1261,14 @@ class RDD(object):
         locally_combined = self.mapPartitions(combineLocally)
         shuffled = locally_combined.partitionBy(numPartitions)
  
-        executorMemory = self.ctx._jsc.sc().executorMemory()
+        serializer = self.ctx.serializer
+        spill = ((self.ctx._conf.get("spark.shuffle.spill") or 'True').lower()
+                in ('true', '1', 'yes'))
+        memory = _parse_memory(self.ctx._conf.get("spark.python.worker.memory") or "512m")
         def _mergeCombiners(iterator):
-            # TODO: workdir and serializer
-            merger = Merger(mergeCombiners, executorMemory)
+            # TODO: workdir
+            merger = ExternalHashMapMerger(mergeCombiners, memory, serializer=serializer)\
+                         if spill else MapMerger(mergeCombiners)
             merger.merge(iterator)
             return merger.iteritems()
         return shuffled.mapPartitions(_mergeCombiners)

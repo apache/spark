@@ -34,7 +34,7 @@ import zipfile
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int
-from pyspark.shuffle import Merger
+from pyspark.shuffle import MapMerger, ExternalHashMapMerger
 
 _have_scipy = False
 try:
@@ -54,23 +54,28 @@ class TestMerger(unittest.TestCase):
         self.N = 1<<18
         self.l = [i for i in xrange(self.N)]
         self.data = zip(self.l, self.l)
-        Merger.PARTITIONS = 8
-        Merger.BATCH = 1<<14
+        ExternalHashMapMerger.PARTITIONS = 8
+        ExternalHashMapMerger.BATCH = 1<<14
+
+    def test_in_memory(self):
+        m = MapMerger(lambda x,y: x+y)
+        m.merge(self.data)
+        self.assertEqual(sum(v for k,v in m.iteritems()), sum(xrange(self.N)))
 
     def test_small_dataset(self):
-        m = Merger(lambda x,y: x+y, 1000)
+        m = ExternalHashMapMerger(lambda x,y: x+y, 1000)
         m.merge(self.data)
         self.assertEqual(m.spills, 0)
         self.assertEqual(sum(v for k,v in m.iteritems()), sum(xrange(self.N)))
 
     def test_medium_dataset(self):
-        m = Merger(lambda x,y: x+y, 10)
+        m = ExternalHashMapMerger(lambda x,y: x+y, 10)
         m.merge(self.data * 3)
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(v for k,v in m.iteritems()), sum(xrange(self.N)) * 3)
 
     def test_huge_dataset(self):
-        m = Merger(lambda x,y: x + y, 10)
+        m = ExternalHashMapMerger(lambda x,y: x + y, 10)
         m.merge(map(lambda (k,v): (k, [str(v)]), self.data) * 10)
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(len(v) for k,v in m._recursive_merged_items(0)), self.N * 10)
