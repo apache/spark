@@ -79,6 +79,7 @@ class TestMerger(unittest.TestCase):
         m.merge(map(lambda (k,v): (k, [str(v)]), self.data) * 10)
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(len(v) for k,v in m._recursive_merged_items(0)), self.N * 10)
+        m._cleanup()
 
 
 class PySparkTestCase(unittest.TestCase):

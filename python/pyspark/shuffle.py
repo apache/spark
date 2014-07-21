@@ -91,16 +91,34 @@ class ExternalHashMapMerger(Merger):
     PARTITIONS = 64
     BATCH = 10000
 
-    def __init__(self, combiner, memory_limit=512, path="/tmp/pyspark/merge",
-            serializer=None, scale=1):
+    def __init__(self, combiner, memory_limit=512, serializer=None,
+            localdirs=None, scale=1):
         self.combiner = combiner
         self.memory_limit = memory_limit
-        self.path = os.path.join(path, str(os.getpid()))
         self.serializer = serializer or BatchedSerializer(AutoSerializer(), 1024)
+        self.localdirs = localdirs or self._get_dirs()
         self.scale = scale
         self.data = {}
         self.pdata = []
         self.spills = 0
+
+    def _get_dirs(self):
+        path = os.environ.get("SPARK_LOCAL_DIR", "/tmp/spark")
+        dirs = path.split(",")
+        localdirs = []
+        for d in dirs:
+            d = os.path.join(d, "merge", str(os.getpid()))
+            try:
+                os.makedirs(d)
+                localdirs.append(d)
+            except IOError:
+                pass
+        if not localdirs:
+            raise IOError("no writable directories: " + path)
+        return localdirs
+
+    def _get_spill_dir(self, n):
+        return os.path.join(self.localdirs[n % len(self.localdirs)], str(n))
 
     @property
     def used_memory(self):
@@ -144,7 +162,7 @@ class ExternalHashMapMerger(Merger):
                 limit = self.next_limit
 
     def _first_spill(self):
-        path = os.path.join(self.path, str(self.spills))
+        path = self._get_spill_dir(self.spills)
         if not os.path.exists(path):
             os.makedirs(path)
         streams = [open(os.path.join(path, str(i)), 'w')
@@ -159,7 +177,7 @@ class ExternalHashMapMerger(Merger):
         self.spills += 1
 
     def _spill(self):
-        path = os.path.join(self.path, str(self.spills))
+        path = self._get_spill_dir(self.spills)
         if not os.path.exists(path):
             os.makedirs(path)
         for i in range(self.PARTITIONS):
@@ -181,23 +199,29 @@ class ExternalHashMapMerger(Merger):
             self._spill()
         hard_limit = self.next_limit
 
-        for i in range(self.PARTITIONS):
-            self.data = {}
-            for j in range(self.spills):
-                p = os.path.join(self.path, str(j), str(i))
-                self.merge(self.serializer.load_stream(open(p)), check=False)
+        try:
+            for i in range(self.PARTITIONS):
+                self.data = {}
+                for j in range(self.spills):
+                    path = self._get_spill_dir(j)
+                    p = os.path.join(path, str(i))
+                    self.merge(self.serializer.load_stream(open(p)), check=False)
 
-                if j > 0 and self.used_memory > hard_limit and j < self.spills - 1:
-                    self.data.clear() # will read from disk again
-                    for v in self._recursive_merged_items(i):
-                        yield v
-                    return
+                    if j > 0 and self.used_memory > hard_limit and j < self.spills - 1:
+                        self.data.clear() # will read from disk again
+                        for v in self._recursive_merged_items(i):
+                            yield v
+                        return
 
-            for v in self.data.iteritems():
-                yield v
-            self.data.clear()
+                for v in self.data.iteritems():
+                    yield v
+                self.data.clear()
+        finally:
+            self._cleanup()
 
-        shutil.rmtree(self.path, True)
+    def _cleanup(self):
+        for d in self.localdirs:
+            shutil.rmtree(d, True)
 
     def _recursive_merged_items(self, start):
         assert not self.data
@@ -206,14 +230,15 @@ class ExternalHashMapMerger(Merger):
             self._spill()
 
         for i in range(start, self.PARTITIONS):
+            subdirs = [os.path.join(d, 'merge', str(i)) for d in self.localdirs]
             m = ExternalHashMapMerger(self.combiner, self.memory_limit,
-                    os.path.join(self.path, 'merge', str(i)),
-                    self.serializer, scale=self.scale * self.PARTITIONS) 
+                    self.serializer, subdirs, self.scale * self.PARTITIONS) 
             m.pdata = [{} for _ in range(self.PARTITIONS)]
             limit = self.next_limit
 
             for j in range(self.spills):
-                p = os.path.join(self.path, str(j), str(i))
+                path = self._get_spill_dir(j)
+                p = os.path.join(path, str(i))
                 m._partitioned_merge(self.serializer.load_stream(open(p)), 0)
                 if m.used_memory > limit:
                     m._spill()
@@ -221,8 +246,6 @@ class ExternalHashMapMerger(Merger):
 
             for v in m._external_items():
                 yield v
-
-        shutil.rmtree(self.path, True)
 
 
 if __name__ == '__main__':

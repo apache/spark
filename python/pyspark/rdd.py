@@ -1268,8 +1268,7 @@ class RDD(object):
                 in ('true', '1', 'yes'))
         memory = _parse_memory(self.ctx._conf.get("spark.python.worker.memory") or "512m")
         def _mergeCombiners(iterator):
-            # TODO: workdir
-            merger = ExternalHashMapMerger(mergeCombiners, memory, serializer=serializer)\
+            merger = ExternalHashMapMerger(mergeCombiners, memory, serializer)\
                          if spill else MapMerger(mergeCombiners)
             merger.merge(iterator)
             return merger.iteritems()

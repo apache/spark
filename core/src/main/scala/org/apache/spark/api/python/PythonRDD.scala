@@ -57,7 +57,9 @@ private[spark] class PythonRDD[T: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
+    val localdir = env.conf.get("spark.local.dir", System.getProperty("java.io.tmpdir"))
+    val worker: Socket = env.createPythonWorker(pythonExec,
+      envVars.toMap + ("SPARK_LOCAL_DIR" -> localdir))
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
