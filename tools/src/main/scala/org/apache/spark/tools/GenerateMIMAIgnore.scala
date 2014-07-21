@@ -68,11 +68,11 @@ object GenerateMIMAIgnore {
     for (className <- classes) {
       try {
         val classSymbol = mirror.classSymbol(Class.forName(className, false, classLoader))
-        val moduleSymbol = mirror.staticModule(className) // TODO: see if it is necessary.
+        val moduleSymbol = mirror.staticModule(className)
         val directlyPrivateSpark =
           isPackagePrivate(classSymbol) || isPackagePrivateModule(moduleSymbol)
-        val developerApi = isDeveloperApi(classSymbol)
-        val experimental = isExperimental(classSymbol)
+        val developerApi = isDeveloperApi(classSymbol) || isDeveloperApi(moduleSymbol)
+        val experimental = isExperimental(classSymbol) || isExperimental(moduleSymbol)
         /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
         lazy val indirectlyPrivateSpark = {
