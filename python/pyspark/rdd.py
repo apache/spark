@@ -171,6 +171,8 @@ class MaxHeapQ(object):
 
 def _parse_memory(s):
     """
+    It returns a number in MB
+
     >>> _parse_memory("256m")
     256
     >>> _parse_memory("2g")
