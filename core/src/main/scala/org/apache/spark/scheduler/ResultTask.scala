@@ -50,16 +50,6 @@ private[spark] class ResultTask[T, U](
   // TODO: Should we also broadcast func? For that we would need a place to
   // keep a reference to it (perhaps in DAGScheduler's job object).
 
-  def this(
-      stageId: Int,
-      rdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      partitionId: Int,
-      locs: Seq[TaskLocation],
-      outputId: Int) = {
-    this(stageId, rdd.broadcasted, func, rdd.partitions(partitionId), locs, outputId)
-  }
-
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.toSet.toSeq
   }

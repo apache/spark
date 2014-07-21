@@ -38,13 +38,14 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
         sys.error("failed")
       }
     }
-    val func = (c: TaskContext, i: Iterator[String]) => i.next
-    val task = new ResultTask[String, String](0, rdd, func, 0, Seq(), 0)
+    val func = (c: TaskContext, i: Iterator[String]) => i.next()
+    val task = new ResultTask[String, String](
+      0, rdd.createBroadcastBinary(), func, rdd.partitions(0), Seq(), 0)
     intercept[RuntimeException] {
       task.run(0)
     }
     assert(completed === true)
   }
 
-  case class StubPartition(val index: Int) extends Partition
+  case class StubPartition(index: Int) extends Partition
 }

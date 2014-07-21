@@ -1225,7 +1225,7 @@ abstract class RDD[T: ClassTag](
    * might modify state of objects referenced in their closures. This is necessary in Hadoop
    * where the JobConf/Configuration object is not thread-safe.
    */
-  @transient private[spark] lazy val broadcasted: Broadcast[Array[Byte]] = {
+  @transient private[spark] def createBroadcastBinary(): Broadcast[Array[Byte]] = synchronized {
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val bytes = ser.serialize(this).array()
     val size = Utils.bytesToString(bytes.length)

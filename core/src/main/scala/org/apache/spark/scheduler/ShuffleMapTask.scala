@@ -47,15 +47,6 @@ private[spark] class ShuffleMapTask(
   // TODO: Should we also broadcast the ShuffleDependency? For that we would need a place to
   // keep a reference to it (perhaps in Stage).
 
-  def this(
-      stageId: Int,
-      rdd: RDD[_],
-      dep: ShuffleDependency[_, _, _],
-      partitionId: Int,
-      locs: Seq[TaskLocation]) = {
-    this(stageId, rdd.broadcasted, dep, rdd.partitions(partitionId), locs)
-  }
-
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) {
     this(0, null, null, new Partition { override def index = 0 }, null)

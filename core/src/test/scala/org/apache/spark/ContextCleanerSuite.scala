@@ -146,7 +146,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
 
     // Test that GC causes broadcast task data cleanup after dereferencing the RDD.
     val postGCTester = new CleanerTester(sc,
-      broadcastIds = Seq(rdd.broadcasted.id, rdd.firstParent.broadcasted.id))
+      broadcastIds = Seq(rdd.createBroadcastBinary.id, rdd.firstParent.createBroadcastBinary.id))
     rdd = null
     runGC()
     postGCTester.assertCleanup()
