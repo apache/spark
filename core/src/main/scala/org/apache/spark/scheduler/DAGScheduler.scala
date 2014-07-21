@@ -694,18 +694,21 @@ class DAGScheduler(
     // Get our pending tasks and remember them in our pendingTasks entry
     stage.pendingTasks.clear()
     var tasks = ArrayBuffer[Task[_]]()
+    val broadcastRddBinary = stage.rdd.createBroadcastBinary()
     if (stage.isShuffleMap) {
       for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
         val locs = getPreferredLocs(stage.rdd, p)
-        tasks += new ShuffleMapTask(stage.id, stage.rdd, stage.shuffleDep.get, p, locs)
+        val part = stage.rdd.partitions(p)
+        tasks += new ShuffleMapTask(stage.id, broadcastRddBinary, stage.shuffleDep.get, part, locs)
       }
     } else {
       // This is a final stage; figure out its job's missing partitions
       val job = stage.resultOfJob.get
       for (id <- 0 until job.numPartitions if !job.finished(id)) {
-        val partition = job.partitions(id)
-        val locs = getPreferredLocs(stage.rdd, partition)
-        tasks += new ResultTask(stage.id, stage.rdd, job.func, partition, locs, id)
+        val p: Int = job.partitions(id)
+        val part = stage.rdd.partitions(p)
+        val locs = getPreferredLocs(stage.rdd, p)
+        tasks += new ResultTask(stage.id, broadcastRddBinary, job.func, part, locs, id)
       }
     }
 
