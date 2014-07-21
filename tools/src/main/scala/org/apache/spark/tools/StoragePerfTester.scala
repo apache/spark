@@ -63,7 +63,7 @@ object StoragePerfTester {
       }
       writers.map {w =>
         w.commit()
-        total.addAndGet(w.fileSegment().length)
+        total.addAndGet(w.objectSegment().length)
         w.close()
       }
 

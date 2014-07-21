@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
+import org.apache.spark.serializer.Serializer
 
 /**
  * Abstract class to store blocks.
@@ -68,4 +69,5 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
   def contains(blockId: BlockId): Boolean
 
   def clear() { }
+
 }

@@ -72,7 +72,7 @@ private[spark] class BlockManager(
   // Actual storage of where blocks are kept
   private var tachyonInitialized = false
   private[storage] val memoryStore = new MemoryStore(this, maxMemory)
-  private[storage] val diskStore = new DiskStore(this, diskBlockManager)
+  private[spark] val diskStore = new DiskStore(this, diskBlockManager)
   private[storage] lazy val tachyonStore: TachyonStore = {
     val storeDir = conf.get("spark.tachyonStore.baseDir", "/tmp_spark_tachyon")
     val appFolderName = conf.get("spark.tachyonStore.folderName")
@@ -88,7 +88,7 @@ private[spark] class BlockManager(
   private val nettyPort: Int = {
     val useNetty = conf.getBoolean("spark.shuffle.use.netty", false)
     val nettyPortConfig = conf.getInt("spark.shuffle.sender.port", 0)
-    if (useNetty) diskBlockManager.startShuffleBlockSender(nettyPortConfig) else 0
+    if (useNetty) diskStore.startShuffleBlockSender(nettyPortConfig) else 0
   }
 
   val blockManagerId = BlockManagerId(
@@ -577,12 +577,10 @@ private[spark] class BlockManager(
    */
   def getDiskWriter(
       blockId: BlockId,
-      file: File,
+      objectId: ObjectId,
       serializer: Serializer,
       bufferSize: Int): BlockObjectWriter = {
-    val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
-    val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
-    new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream, syncWrites)
+    diskStore.getBlockObjectWriter(blockId, objectId, serializer, bufferSize)
   }
 
   /**
@@ -1050,6 +1048,7 @@ private[spark] class BlockManager(
     }
     connectionManager.stop()
     shuffleBlockManager.stop()
+    diskStore.stop()
     diskBlockManager.stop()
     actorSystem.stop(slaveActor)
     blockInfo.clear()

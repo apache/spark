@@ -98,7 +98,7 @@ class HashShuffleWriter[K, V](
     val compressedSizes = shuffle.writers.map { writer: BlockObjectWriter =>
       writer.commit()
       writer.close()
-      val size = writer.fileSegment().length
+      val size = writer.objectSegment().length
       totalBytes += size
       totalTime += writer.timeWriting()
       MapOutputTracker.compressSize(size)
