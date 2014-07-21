@@ -118,7 +118,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
       val logInfos = logDirs.filter {
         dir => fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))
-      }
+      }.takeRight(conf.getInt("spark.history.retainedApplications", 50))
 
       val currentApps = Map[String, ApplicationHistoryInfo](
         appList.map(app => (app.id -> app)):_*)
