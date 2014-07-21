@@ -309,18 +309,7 @@ private[spark] class ExternalSorter[K, V, C](
     val readers = spills.map(new SpillReader(_))
     val inMemBuffered = inMemory.buffered
     (0 until numPartitions).iterator.map { p =>
-      val inMemIterator = new Iterator[Product2[K, C]] {
-        override def hasNext: Boolean = {
-          inMemBuffered.hasNext && inMemBuffered.head._1._1 == p
-        }
-        override def next(): Product2[K, C] = {
-          if (!hasNext) {
-            throw new NoSuchElementException
-          }
-          val elem = inMemBuffered.next()
-          (elem._1._2, elem._2)
-        }
-      }
+      val inMemIterator = new IteratorForPartition(p, inMemBuffered)
       val iterators = readers.map(_.readNextPartition()) ++ Seq(inMemIterator)
       if (aggregator.isDefined) {
         // Perform partial aggregation across partitions
@@ -575,7 +564,25 @@ private[spark] class ExternalSorter[K, V, C](
   def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
     val usingMap = aggregator.isDefined
     val collection: SizeTrackingCollection[((Int, K), C)] = if (usingMap) map else buffer
-    merge(spills, collection.destructiveSortedIterator(partitionKeyComparator))
+    if (spills.isEmpty) {
+      // Special case: if we have only in-memory data, we don't need to merge streams, and perhaps
+      // we don't even need to sort by anything other than partition ID
+      if (!ordering.isDefined) {
+        // The user isn't requested sorted keys, so only sort by partition ID, not key
+        val partitionComparator = new Comparator[((Int, K), C)] {
+          override def compare(a: ((Int, K), C), b: ((Int, K), C)): Int = {
+            a._1._1 - b._1._1
+          }
+        }
+        groupByPartition(collection.destructiveSortedIterator(partitionComparator))
+      } else {
+        // We do need to sort by both partition ID and key
+        groupByPartition(collection.destructiveSortedIterator(partitionKeyComparator))
+      }
+    } else {
+      // General case: merge spilled and in-memory data
+      merge(spills, collection.destructiveSortedIterator(partitionKeyComparator))
+    }
   }
 
   /**
@@ -591,4 +598,36 @@ private[spark] class ExternalSorter[K, V, C](
   def memoryBytesSpilled: Long = _memoryBytesSpilled
 
   def diskBytesSpilled: Long = _diskBytesSpilled
+
+  /**
+   * Given a stream of ((partition, key), combiner) pairs *assumed to be sorted by partition ID*,
+   * group together the pairs for each for each partition into a sub-iterator.
+   *
+   * @param data an iterator of elements, assumed to already be sorted by partition ID
+   */
+  private def groupByPartition(data: Iterator[((Int, K), C)])
+      : Iterator[(Int, Iterator[Product2[K, C]])] =
+  {
+    val buffered = data.buffered
+    (0 until numPartitions).iterator.map(p => (p, new IteratorForPartition(p, buffered)))
+  }
+
+  /**
+   * An iterator that reads only the elements for a given partition ID from an underlying buffered
+   * stream, assuming this partition is the next one to be read. Used to make it easier to return
+   * partitioned iterators from our in-memory collection.
+   */
+  private[this] class IteratorForPartition(partitionId: Int, data: BufferedIterator[((Int, K), C)])
+    extends Iterator[Product2[K, C]]
+  {
+    override def hasNext: Boolean = data.hasNext && data.head._1._1 == partitionId
+
+    override def next(): Product2[K, C] = {
+      if (!hasNext) {
+        throw new NoSuchElementException
+      }
+      val elem = data.next()
+      (elem._1._2, elem._2)
+    }
+  }
 }
