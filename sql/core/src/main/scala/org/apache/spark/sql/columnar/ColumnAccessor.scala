@@ -90,6 +90,9 @@ private[sql] class FloatColumnAccessor(buffer: ByteBuffer)
 private[sql] class StringColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, STRING)
 
+private[sql] class TimestampColumnAccessor(buffer: ByteBuffer)
+  extends NativeColumnAccessor(buffer, TIMESTAMP)
+
 private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[BinaryType.type, Array[Byte]](buffer, BINARY)
   with NullableColumnAccessor
@@ -105,16 +108,17 @@ private[sql] object ColumnAccessor {
     val columnTypeId = dup.getInt()
 
     columnTypeId match {
-      case INT.typeId     => new IntColumnAccessor(dup)
-      case LONG.typeId    => new LongColumnAccessor(dup)
-      case FLOAT.typeId   => new FloatColumnAccessor(dup)
-      case DOUBLE.typeId  => new DoubleColumnAccessor(dup)
-      case BOOLEAN.typeId => new BooleanColumnAccessor(dup)
-      case BYTE.typeId    => new ByteColumnAccessor(dup)
-      case SHORT.typeId   => new ShortColumnAccessor(dup)
-      case STRING.typeId  => new StringColumnAccessor(dup)
-      case BINARY.typeId  => new BinaryColumnAccessor(dup)
-      case GENERIC.typeId => new GenericColumnAccessor(dup)
+      case INT.typeId       => new IntColumnAccessor(dup)
+      case LONG.typeId      => new LongColumnAccessor(dup)
+      case FLOAT.typeId     => new FloatColumnAccessor(dup)
+      case DOUBLE.typeId    => new DoubleColumnAccessor(dup)
+      case BOOLEAN.typeId   => new BooleanColumnAccessor(dup)
+      case BYTE.typeId      => new ByteColumnAccessor(dup)
+      case SHORT.typeId     => new ShortColumnAccessor(dup)
+      case STRING.typeId    => new StringColumnAccessor(dup)
+      case TIMESTAMP.typeId => new TimestampColumnAccessor(dup)
+      case BINARY.typeId    => new BinaryColumnAccessor(dup)
+      case GENERIC.typeId   => new GenericColumnAccessor(dup)
     }
   }
 }
