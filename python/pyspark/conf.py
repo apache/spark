@@ -50,7 +50,7 @@ spark.executorEnv.VAR3=value3
 spark.executorEnv.VAR4=value4
 spark.home=/path
 >>> sorted(conf.getAll(), key=lambda p: p[0])
-[(u'spark.executorEnv.VAR1', u'value1'), (u'spark.executorEnv.VAR3', u'value3'),\
+[(u'spark.executorEnv.VAR1', u'value1'), (u'spark.executorEnv.VAR3', u'value3'), \
 (u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
 """
 
