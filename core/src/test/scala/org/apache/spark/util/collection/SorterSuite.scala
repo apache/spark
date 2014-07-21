@@ -74,7 +74,7 @@ class SorterSuite extends FunSuite {
    * Note that the Java implementation varies tremendously between Java 6 and Java 7, when
    * the Java sort changed from merge sort to Timsort.
    */
-  test("Sorter benchmark") {
+  ignore("Sorter benchmark") {
 
     /** Runs an experiment several times. */
     def runExperiment(name: String)(f: => Unit): Unit = {
@@ -96,20 +96,8 @@ class SorterSuite extends FunSuite {
     val numElements = 25000000 // 25 mil
     val rand = new XORShiftRandom(123)
 
-    // Test primitive sort on float array
-    val primitiveKeys = Array.tabulate[Float](numElements) { i => rand.nextFloat() }
-    runExperiment("Java Arrays.sort() on primitive keys") {
-      Arrays.sort(primitiveKeys)
-    }
-
-    // Test non-primitive sort on float array
     val keys = Array.tabulate[JFloat](numElements) { i =>
       new JFloat(rand.nextFloat())
-    }
-    runExperiment("Java Arrays.sort()") {
-      Arrays.sort(keys, new Comparator[JFloat] {
-        override def compare(x: JFloat, y: JFloat): Int = Ordering.Float.compare(x, y)
-      })
     }
 
     // Test our key-value pairs where each element is a Tuple2[Float, Integer)
@@ -123,16 +111,28 @@ class SorterSuite extends FunSuite {
       })
     }
 
-    // Test our Sorter where each element alternates between Float and Integer, non-primitive.
+    // Test our Sorter where each element alternates between Float and Integer, non-primitive
     val keyValueArray = Array.tabulate[AnyRef](numElements * 2) { i =>
       if (i % 2 == 0) keys(i / 2) else new Integer(i / 2)
     }
-
     val sorter = new Sorter(new KVArraySortDataFormat[JFloat, AnyRef])
     runExperiment("KV-sort using Sorter") {
       sorter.sort(keyValueArray, 0, keys.length, new Comparator[JFloat] {
         override def compare(x: JFloat, y: JFloat): Int = Ordering.Float.compare(x, y)
       })
+    }
+
+    // Test non-primitive sort on float array
+    runExperiment("Java Arrays.sort()") {
+      Arrays.sort(keys, new Comparator[JFloat] {
+        override def compare(x: JFloat, y: JFloat): Int = Ordering.Float.compare(x, y)
+      })
+    }
+
+    // Test primitive sort on float array
+    val primitiveKeys = Array.tabulate[Float](numElements) { i => rand.nextFloat() }
+    runExperiment("Java Arrays.sort() on primitive keys") {
+      Arrays.sort(primitiveKeys)
     }
   }
 }

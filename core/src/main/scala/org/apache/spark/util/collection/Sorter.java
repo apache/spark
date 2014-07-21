@@ -22,9 +22,11 @@ package org.apache.spark.util.collection;
 import java.util.Comparator;
 
 /**
- * A port of the OpenJDK 6 Arrays.sort(Object[]) function, which utilizes a simple merge sort.
- * This has been kept in Java with the original style in order to match very closely with the JDK
- * source code, and thus be easy to verify correctness.
+ * A port of the Android Timsort class, which utilizes a "stable, adaptive, iterative mergesort."
+ * See the method comment on sort() for more details.
+ *
+ * This has been kept in Java with the original style in order to match very closely with the
+ * Anroid source code, and thus be easy to verify correctness.
  *
  * The purpose of the port is to generalize the interface to the sort to accept input data formats
  * besides simple arrays where every element is sorted individually. For instance, the AppendOnlyMap
@@ -58,6 +60,39 @@ class Sorter<K, Buffer> {
     this.s = sortDataFormat;
   }
 
+  /**
+   * A stable, adaptive, iterative mergesort that requires far fewer than
+   * n lg(n) comparisons when running on partially sorted arrays, while
+   * offering performance comparable to a traditional mergesort when run
+   * on random arrays.  Like all proper mergesorts, this sort is stable and
+   * runs O(n log n) time (worst case).  In the worst case, this sort requires
+   * temporary storage space for n/2 object references; in the best case,
+   * it requires only a small constant amount of space.
+   *
+   * This implementation was adapted from Tim Peters's list sort for
+   * Python, which is described in detail here:
+   *
+   *   http://svn.python.org/projects/python/trunk/Objects/listsort.txt
+   *
+   * Tim's C code may be found here:
+   *
+   *   http://svn.python.org/projects/python/trunk/Objects/listobject.c
+   *
+   * The underlying techniques are described in this paper (and may have
+   * even earlier origins):
+   *
+   *  "Optimistic Sorting and Information Theoretic Complexity"
+   *  Peter McIlroy
+   *  SODA (Fourth Annual ACM-SIAM Symposium on Discrete Algorithms),
+   *  pp 467-474, Austin, Texas, 25-27 January 1993.
+   *
+   * While the API to this class consists solely of static methods, it is
+   * (privately) instantiable; a TimSort instance holds the state of an ongoing
+   * sort, assuming the input array is large enough to warrant the full-blown
+   * TimSort. Small arrays are sorted in place, using a binary insertion sort.
+   *
+   * @author Josh Bloch
+   */
   void sort(Buffer a, int lo, int hi, Comparator<? super K> c) {
     assert c != null;
 
