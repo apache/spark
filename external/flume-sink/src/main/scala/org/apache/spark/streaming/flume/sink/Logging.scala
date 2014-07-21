@@ -16,9 +16,7 @@
  */
 package org.apache.spark.streaming.flume.sink
 
-import org.apache.log4j.{LogManager, PropertyConfigurator}
 import org.slf4j.{Logger, LoggerFactory}
-import org.slf4j.impl.StaticLoggerBinder
 
 /**
  * Copy of the org.apache.spark.Logging for being used in the Spark Sink.
