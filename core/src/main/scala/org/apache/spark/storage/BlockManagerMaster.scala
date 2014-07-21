@@ -27,7 +27,7 @@ import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.AkkaUtils
 
 private[spark]
-trait BlockManagerMaster extends Logging {
+trait BlockManagerMaster {
 
   /** Remove a dead executor from the driver actor. This is only called on the driver side. */
   def removeExecutor(execId: String)

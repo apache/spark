@@ -218,10 +218,10 @@ object SparkEnv extends Logging {
     val blockManagerMasterType = conf.get("spark.blockmanager.type", "standalone")
     var blockManagerMaster: BlockManagerMaster = null
     blockManagerMasterType match {
-      case _ => { // Since currently only one option exists, this is what is to be done in any case.
+      case _ =>
+        // Since currently only one option exists, this is what is to be done in any case.
         blockManagerMaster = new StandaloneBlockManagerMaster(registerOrLookup(
           "BlockManagerMaster", new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
-      }
     }
 
 
