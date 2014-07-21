@@ -266,6 +266,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     assert(output.asInstanceOf[ArrayBuffer[Int]].sum === limit * (limit + 1))
     ssc.stop()
   }
+  
   test("queue input stream - oneAtATime=true") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
