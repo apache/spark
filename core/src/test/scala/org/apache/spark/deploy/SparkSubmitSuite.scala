@@ -120,7 +120,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--archives", "archive1.txt,archive2.txt",
       "--num-executors", "6",
       "--name", "beauty",
-      "--spark.shuffle.spill", "false",
+      "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -158,7 +158,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--archives", "archive1.txt,archive2.txt",
       "--num-executors", "6",
       "--name", "trill",
-      "--spark.shuffle.spill", "false",
+      "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -190,7 +190,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--supervise",
       "--driver-memory", "4g",
       "--driver-cores", "5",
-      "--spark.shuffle.spill", "false",
+      "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -214,7 +214,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--total-executor-cores", "5",
       "--class", "org.SomeClass",
       "--driver-memory", "4g",
-      "--spark.shuffle.spill", "false",
+      "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -236,7 +236,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--total-executor-cores", "5",
       "--class", "org.SomeClass",
       "--driver-memory", "4g",
-      "--spark.shuffle.spill", "false",
+      "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)

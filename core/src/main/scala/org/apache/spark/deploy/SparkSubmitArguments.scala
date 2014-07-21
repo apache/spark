@@ -291,6 +291,14 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         jars = Utils.resolveURIs(value)
         parse(tail)
 
+      case ("--conf") :: value :: tail =>
+        val equalsIndex = value.indexOf('=')
+        if (equalsIndex == -1) {
+          SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")
+        }
+        sparkProperties(value.substring(0, equalsIndex)) = value.substring(equalsIndex+1)
+        parse(tail)
+
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
 
@@ -305,14 +313,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
             case v if v.startsWith("--") && v.contains("=") && v.split("=").size == 2 =>
               val parts = v.split("=")
               parse(Seq(parts(0), parts(1)) ++ tail)
-            // spark config property
-            case v if v.startsWith("--spark.") =>
-              if (tail.isEmpty) {
-                val errMessage = s"Spark config without value: $v"
-                SparkSubmit.printErrorAndExit(errMessage)
-              }
-              sparkProperties(v.substring(2)) = tail.head
-              parse(tail.tail)
             case v if v.startsWith("-") =>
               val errMessage = s"Unrecognized option '$value'."
               SparkSubmit.printErrorAndExit(errMessage)
@@ -372,6 +372,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         |
         |  --help, -h                  Show this help message and exit
         |  --verbose, -v               Print additional debug output
+        |  --conf PROP=VALUE           Arbitrary Spark configuration property.
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
