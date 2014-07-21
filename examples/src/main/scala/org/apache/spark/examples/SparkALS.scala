@@ -26,8 +26,10 @@ import cern.jet.math._
 import org.apache.spark._
 
 /**
- * Alternating least squares matrix factorization. This is an example implementation for learning how to use Spark.
- * For more conventional use, please refer to org.apache.spark.mllib.recommendation.ALS
+ * Alternating least squares matrix factorization.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.recommendation.ALS
  */
 object SparkALS {
   // Parameters set through command line arguments
@@ -90,15 +92,13 @@ object SparkALS {
 
   def showWarning() {
     System.err.println(
-      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF ALS AND IS GIVEN AS AN EXAMPLE!
-        |PLEASE USE THE ALS METHOD FOUND IN org.apache.spark.mllib.recommendation FOR
-        |MORE CONVENTIONAL USE
+      """WARN: This is a naive implementation of ALS and is given as an example!
+        |Please use the ALS method found in org.apache.spark.mllib.recommendation
+        |for more conventional use
       """.stripMargin)
   }
 
   def main(args: Array[String]) {
-
-    showWarning()
 
     var slices = 0
 
@@ -115,6 +115,9 @@ object SparkALS {
         System.err.println("Usage: SparkALS [M] [U] [F] [iters] [slices]")
         System.exit(1)
     }
+
+    showWarning()
+
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
 
     val sparkConf = new SparkConf().setAppName("SparkALS")

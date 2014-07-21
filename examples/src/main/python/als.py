@@ -16,9 +16,10 @@
 #
 
 """
-This example requires numpy (http://www.numpy.org/)
 This is an example implementation of ALS for learning how to use Spark. Please refer to
 ALS in pyspark.mllib.recommendation for more conventional use.
+
+This example requires numpy (http://www.numpy.org/)
 """
 from os.path import realpath
 import sys
@@ -51,12 +52,15 @@ def update(i, vec, mat, ratings):
 
 
 if __name__ == "__main__":
-    
-    print """WARNING: THIS IS A NAIVE IMPLEMENTATION OF ALS AND IS GIVEN AS AN EXAMPLE!
-      PLEASE USE THE ALS METHOD FOUND IN pyspark.mllib.recommendation FOR MORE CONVENTIONAL USE"""
+
     """
     Usage: als [M] [U] [F] [iterations] [slices]"
     """
+
+    print >> sys.stderr, """WARN: This is a naive implementation of ALS and is given as an
+      example. Please use the ALS method found in pyspark.mllib.recommendation for more
+      conventional use."""
+
     sc = SparkContext(appName="PythonALS")
     M = int(sys.argv[1]) if len(sys.argv) > 1 else 100
     U = int(sys.argv[2]) if len(sys.argv) > 2 else 500

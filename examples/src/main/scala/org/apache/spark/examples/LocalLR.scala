@@ -22,8 +22,10 @@ import java.util.Random
 import breeze.linalg.{Vector, DenseVector}
 
 /**
- * Logistic regression based classification. This is an example implementation for learning how to use Spark.
- * For more conventional use, please refer to org.apache.spark.mllib.classification.LogisticRegression
+ * Logistic regression based classification.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.classification.LogisticRegression
  */
 object LocalLR {
   val N = 10000  // Number of data points
@@ -45,9 +47,9 @@ object LocalLR {
 
   def showWarning() {
     System.err.println(
-      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
-        |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
-        |MORE CONVENTIONAL USE
+      """WARN: This is a naive implementation of Logistic Regression and is given as an example!
+        |Please use the LogisticRegression method found in org.apache.spark.mllib.classification
+        |for more conventional use
       """.stripMargin)
   }
 

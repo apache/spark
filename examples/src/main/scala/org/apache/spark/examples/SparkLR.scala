@@ -27,8 +27,10 @@ import org.apache.spark._
 
 /**
  * Logistic regression based classification.
- * Usage: SparkLR [slices] This is an example implementation for learning how to use Spark.
- * For more conventional use, please refer to org.apache.spark.mllib.classification.LogisticRegression
+ * Usage: SparkLR [slices]
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.classification.LogisticRegression
  */
 object SparkLR {
   val N = 10000  // Number of data points
@@ -50,20 +52,20 @@ object SparkLR {
 
   def showWarning() {
     System.err.println(
-      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF LOGISTIC REGRESSION AND IS GIVEN AS AN EXAMPLE!
-        |PLEASE USE THE LogisticRegression METHOD FOUND IN org.apache.spark.mllib.classification FOR
-        |MORE CONVENTIONAL USE
+      """WARN: This is a naive implementation of Logistic Regression and is given as an example!
+        |Please use the LogisticRegression method found in org.apache.spark.mllib.classification
+        |for more conventional use
       """.stripMargin)
   }
 
   def main(args: Array[String]) {
+
     showWarning()
 
     val sparkConf = new SparkConf().setAppName("SparkLR")
     val sc = new SparkContext(sparkConf)
     val numSlices = if (args.length > 0) args(0).toInt else 2
     val points = sc.parallelize(generateData, numSlices).cache()
-
 
     // Initialize w to a random value
     var w = DenseVector.fill(D){2 * rand.nextDouble - 1}

@@ -46,12 +46,14 @@ def closestPoint(p, centers):
 
 if __name__ == "__main__":
 
-    print """WARNING: THIS IS A NAIVE IMPLEMENTATION OF K-MEANS CLUSTERING AND IS GIVEN AS AN EXAMPLE!
-      PLEASE REFER TO examples/src/main/python/mllib/kmeans.py FOR AN EXAMPLE ON HOW TO USE MLlib's KMEANS
-      IMPLEMENTATION."""
     if len(sys.argv) != 4:
         print >> sys.stderr, "Usage: kmeans <file> <k> <convergeDist>"
         exit(-1)
+
+    print >> sys.stderr, """WARN: This is a naive implementation of KMeans Clustering and is given
+       as an example! Please refer to examples/src/main/python/mllib/kmeans.py for an example on
+       how to use MLlib's KMeans implementation."""
+
     sc = SparkContext(appName="PythonKMeans")
     lines = sc.textFile(sys.argv[1])
     data = lines.map(parseVector).cache()

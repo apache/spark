@@ -24,8 +24,10 @@ import cern.colt.matrix.linalg._
 import cern.jet.math._
 
 /**
- * Alternating least squares matrix factorization. This is an example implementation for learning how to use Spark.
- * For more conventional use, please refer to org.apache.spark.mllib.recommendation.ALS
+ * Alternating least squares matrix factorization.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.recommendation.ALS
  */
 object LocalALS {
   // Parameters set through command line arguments
@@ -110,16 +112,14 @@ object LocalALS {
 
   def showWarning() {
     System.err.println(
-      """WARNING: THIS IS A NAIVE IMPLEMENTATION OF ALS AND IS GIVEN AS AN EXAMPLE!
-        |PLEASE USE THE ALS METHOD FOUND IN org.apache.spark.mllib.recommendation FOR
-        |MORE CONVENTIONAL USE
+      """WARN: This is a naive implementation of ALS and is given as an example!
+        |Please use the ALS method found in org.apache.spark.mllib.recommendation
+        |for more conventional use
       """.stripMargin)
-    System.exit(1)
   }
 
   def main(args: Array[String]) {
 
-    showWarning()
     args match {
       case Array(m, u, f, iters) => {
         M = m.toInt
@@ -129,9 +129,12 @@ object LocalALS {
       }
       case _ => {
         System.err.println("Usage: LocalALS <M> <U> <F> <iters>")
-
+        System.exit(1)
       }
     }
+
+    showWarning()
+
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
 
     val R = generateR()
