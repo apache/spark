@@ -1468,8 +1468,8 @@ object SparkContext extends Logging {
 
     master match {
       case "local" =>
-        val localTaskFailures = sc.conf.getInt("spark.local.maxFailures", MAX_LOCAL_TASK_FAILURES)
-        val scheduler = new TaskSchedulerImpl(sc, localTaskFailures, isLocal = true)
+        val maxTaskFailures = sc.conf.getInt("spark.local.maxFailures", MAX_LOCAL_TASK_FAILURES)
+        val scheduler = new TaskSchedulerImpl(sc, maxTaskFailures, isLocal = true)
         val backend = new LocalBackend(scheduler, 1)
         scheduler.initialize(backend)
         scheduler
@@ -1478,8 +1478,8 @@ object SparkContext extends Logging {
         def localCpuCount = Runtime.getRuntime.availableProcessors()
         // local[*] estimates the number of cores on the machine; local[N] uses exactly N threads.
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
-        val localTaskFailures = sc.conf.getInt("spark.local.maxFailures", MAX_LOCAL_TASK_FAILURES)
-        val scheduler = new TaskSchedulerImpl(sc, localTaskFailures, isLocal = true)
+        val maxTaskFailures = sc.conf.getInt("spark.local.maxFailures", MAX_LOCAL_TASK_FAILURES)
+        val scheduler = new TaskSchedulerImpl(sc, maxTaskFailures, isLocal = true)
         val backend = new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
         scheduler
