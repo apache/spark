@@ -28,6 +28,10 @@ import org.apache.spark.{Logging, SparkContext, SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 
 import scala.collection.JavaConversions._
+import org.apache.hadoop.fs.{FileSystem, Path}
+
+import org.apache.spark.util.Utils
+import org.apache.hadoop.fs.FileSystem.Statistics
 
 /**
  * :: DeveloperApi ::
@@ -121,6 +125,30 @@ class SparkHadoopUtil extends Logging {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
 
+  /**
+   * Returns a function that can be called to find the number of Hadoop FileSystem bytes read by
+   * this thread so far. Reflection is required because thread-level FileSystem statistics are only
+   * available as of Hadoop 2.5 (see HADOOP-10688). Returns None if the required method can't be
+   * found.
+   */
+  def getInputBytesReadCallback(path: Path, conf: Configuration): Option[() => Long] = {
+    val qualifiedPath = path.getFileSystem(conf).makeQualified(path)
+    val scheme = qualifiedPath.toUri().getScheme()
+    val stats = FileSystem.getAllStatistics().filter(_.getScheme().equals(scheme))
+    try {
+      val threadStats = stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
+      val statisticsDataClass =
+        Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
+      val getBytesReadMethod = statisticsDataClass.getDeclaredMethod("getBytesRead")
+      val f = () => threadStats.map(getBytesReadMethod.invoke(_).asInstanceOf[Long]).sum
+      val start = f()
+      Some(() => f() - start)
+    } catch {
+      case e: Exception =>
+        logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
+        None
+    }
+  }
 }
 
 object SparkHadoopUtil {

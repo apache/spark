@@ -36,6 +36,8 @@ import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.util.Utils
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
 
 private[spark] class NewHadoopPartition(
     rddId: Int,
@@ -118,15 +120,13 @@ class NewHadoopRDD[K, V](
       reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
 
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      try {
-        /* bytesRead may not exactly equal the bytes read by a task: split boundaries aren't
-         * always at record boundaries, so tasks may need to read into other splits to complete
-         * a record. */
-        inputMetrics.bytesRead = split.serializableHadoopSplit.value.getLength()
-      } catch {
-        case e: Exception =>
-          logWarning("Unable to get input split size in order to set task input bytes", e)
+      val bytesReadCallback = if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit]) {
+        SparkHadoopUtil.get.getInputBytesReadCallback(
+          split.serializableHadoopSplit.value.asInstanceOf[FileSplit].getPath, conf)
+      } else {
+        None
       }
+      bytesReadCallback.foreach(inputMetrics.registerUpdateBytesReadCallback(_))
       context.taskMetrics.inputMetrics = Some(inputMetrics)
 
       // Register an on-task-completion callback to close the input stream.
