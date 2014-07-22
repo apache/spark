@@ -1269,9 +1269,18 @@ abstract class RDD[T: ClassTag](
 
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString: String = {
+    import Utils.bytesToString
     def debugString(rdd: RDD[_], prefix: String = ""): Seq[String] = {
-      Seq(prefix + rdd + " (" + rdd.partitions.size + " partitions)") ++
-        rdd.dependencies.flatMap(d => debugString(d.rdd, prefix + "  "))
+      val size = rdd.partitions.size
+      val persistence = storageLevel.description
+      val dependencies = rdd.dependencies.flatMap(d => debugString(d.rdd, prefix + "  "))
+      val rddDesc = prefix + rdd + " (" + size + " partitions, persistence="+persistence+")"
+      val storageInfo = rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>
+        "%s    CachedPartitions: %d; MemorySize: %s; TachyonSize: %s; DiskSize: %s".format(
+        prefix, info.numCachedPartitions, bytesToString(info.memSize), 
+        bytesToString(info.tachyonSize), bytesToString(info.diskSize)))
+
+      (rddDesc +: storageInfo) ++ dependencies
     }
     debugString(this).mkString("\n")
   }
