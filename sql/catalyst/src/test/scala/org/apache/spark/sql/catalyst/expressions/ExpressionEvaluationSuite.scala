@@ -158,7 +158,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
-    
+
     checkEvaluation(Literal(null, StringType) like regEx, null, new GenericRow(Array[Any]("bc%")))
   }
 
@@ -203,7 +203,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("data type casting") {
 
-    val sts = "1970-01-01 00:00:01.0"
+    val sts = "1970-01-01 00:00:01.1"
     val ts = Timestamp.valueOf(sts)
 
     checkEvaluation("abdef" cast StringType, "abdef")
@@ -293,7 +293,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     // A test for higher precision than millis
     checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
   }
-  
+
   test("null checking") {
     val row = new GenericRow(Array[Any]("^Ba*n", null, true, null))
     val c1 = 'a.string.at(0)
@@ -312,7 +312,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     checkEvaluation(IsNull(Literal(null, ShortType)), true)
     checkEvaluation(IsNotNull(Literal(null, ShortType)), false)
-    
+
     checkEvaluation(Coalesce(c1 :: c2 :: Nil), "^Ba*n", row)
     checkEvaluation(Coalesce(Literal(null, StringType) :: Nil), null, row)
     checkEvaluation(Coalesce(Literal(null, StringType) :: c1 :: c2 :: Nil), "^Ba*n", row)
@@ -323,11 +323,11 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(If(Literal(null, BooleanType), c2, c1), "^Ba*n", row)
     checkEvaluation(If(Literal(true, BooleanType), c1, c2), "^Ba*n", row)
     checkEvaluation(If(Literal(false, BooleanType), c2, c1), "^Ba*n", row)
-    checkEvaluation(If(Literal(false, BooleanType), 
+    checkEvaluation(If(Literal(false, BooleanType),
       Literal("a", StringType), Literal("b", StringType)), "b", row)
 
     checkEvaluation(In(c1, c1 :: c2 :: Nil), true, row)
-    checkEvaluation(In(Literal("^Ba*n", StringType), 
+    checkEvaluation(In(Literal("^Ba*n", StringType),
       Literal("^Ba*n", StringType) :: Nil), true, row)
     checkEvaluation(In(Literal("^Ba*n", StringType),
       Literal("^Ba*n", StringType) :: c2 :: Nil), true, row)
@@ -378,7 +378,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("complex type") {
     val row = new GenericRow(Array[Any](
-      "^Ba*n",                                  // 0 
+      "^Ba*n",                                  // 0
       null.asInstanceOf[String],                // 1
       new GenericRow(Array[Any]("aa", "bb")),   // 2
       Map("aa"->"bb"),                          // 3
@@ -391,18 +391,18 @@ class ExpressionEvaluationSuite extends FunSuite {
     val typeMap = MapType(StringType, StringType)
     val typeArray = ArrayType(StringType)
 
-    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()), 
+    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()),
       Literal("aa")), "bb", row)
     checkEvaluation(GetItem(Literal(null, typeMap), Literal("aa")), null, row)
     checkEvaluation(GetItem(Literal(null, typeMap), Literal(null, StringType)), null, row)
-    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()), 
+    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()),
       Literal(null, StringType)), null, row)
 
-    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()), 
+    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()),
       Literal(1)), "bb", row)
     checkEvaluation(GetItem(Literal(null, typeArray), Literal(1)), null, row)
     checkEvaluation(GetItem(Literal(null, typeArray), Literal(null, IntegerType)), null, row)
-    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()), 
+    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()),
       Literal(null, IntegerType)), null, row)
 
     checkEvaluation(GetField(BoundReference(2, AttributeReference("c", typeS)()), "a"), "aa", row)
