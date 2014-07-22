@@ -816,7 +816,6 @@ class DAGScheduler(
     }
     event.reason match {
       case Success =>
-        logInfo("Completed " + task)
         if (event.accumUpdates != null) {
           // TODO: fail the stage if the accumulator update fails...
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted

@@ -59,6 +59,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     false
   }
 
+  /** Overridden make copy also propogates sqlContext to copied plan. */
+  override def makeCopy(newArgs: Array[AnyRef]): this.type = {
+    SparkPlan.currentContext.set(sqlContext)
+    super.makeCopy(newArgs)
+  }
+
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!

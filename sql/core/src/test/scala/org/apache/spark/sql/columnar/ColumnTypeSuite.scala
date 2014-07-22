@@ -18,6 +18,7 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
+import java.sql.Timestamp
 
 import org.scalatest.FunSuite
 
@@ -32,7 +33,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
   test("defaultSize") {
     val checks = Map(
       INT -> 4, SHORT -> 2, LONG -> 8, BYTE -> 1, DOUBLE -> 8, FLOAT -> 4,
-      BOOLEAN -> 1, STRING -> 8, BINARY -> 16, GENERIC -> 16)
+      BOOLEAN -> 1, STRING -> 8, TIMESTAMP -> 12, BINARY -> 16, GENERIC -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
       assertResult(expectedSize, s"Wrong defaultSize for $columnType") {
@@ -52,14 +53,15 @@ class ColumnTypeSuite extends FunSuite with Logging {
       }
     }
 
-    checkActualSize(INT,     Int.MaxValue,    4)
-    checkActualSize(SHORT,   Short.MaxValue,  2)
-    checkActualSize(LONG,    Long.MaxValue,   8)
-    checkActualSize(BYTE,    Byte.MaxValue,   1)
-    checkActualSize(DOUBLE,  Double.MaxValue, 8)
-    checkActualSize(FLOAT,   Float.MaxValue,  4)
-    checkActualSize(BOOLEAN, true,            1)
-    checkActualSize(STRING,  "hello",         4 + "hello".getBytes("utf-8").length)
+    checkActualSize(INT,       Int.MaxValue,      4)
+    checkActualSize(SHORT,     Short.MaxValue,    2)
+    checkActualSize(LONG,      Long.MaxValue,     8)
+    checkActualSize(BYTE,      Byte.MaxValue,     1)
+    checkActualSize(DOUBLE,    Double.MaxValue,   8)
+    checkActualSize(FLOAT,     Float.MaxValue,    4)
+    checkActualSize(BOOLEAN,   true,              1)
+    checkActualSize(STRING,    "hello",           4 + "hello".getBytes("utf-8").length)
+    checkActualSize(TIMESTAMP, new Timestamp(0L), 12)
 
     val binary = Array.fill[Byte](4)(0: Byte)
     checkActualSize(BINARY,  binary, 4 + 4)
@@ -188,17 +190,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
   }
 
   private def hexDump(value: Any): String = {
-    if (value.isInstanceOf[String]) {
-      val sb = new StringBuilder()
-      for (ch <- value.asInstanceOf[String].toCharArray) {
-        sb.append(Integer.toHexString(ch & 0xffff)).append(' ')
-      }
-      if (! sb.isEmpty) sb.setLength(sb.length - 1)
-      sb.toString()
-    } else {
-      // for now ..
-      hexDump(value.toString)
-    }
+    value.toString.map(ch => Integer.toHexString(ch & 0xffff)).mkString(" ")
   }
 
   private def dumpBuffer(buff: ByteBuffer): Any = {
@@ -207,7 +199,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
       val b = buff.get()
       sb.append(Integer.toHexString(b & 0xff)).append(' ')
     }
-    if (! sb.isEmpty) sb.setLength(sb.length - 1)
+    if (sb.nonEmpty) sb.setLength(sb.length - 1)
     sb.toString()
   }
 }

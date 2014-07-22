@@ -1,6 +1,13 @@
 # Apache Spark
 
-Lightning-Fast Cluster Computing - <http://spark.apache.org/>
+Spark is a fast and general cluster computing system for Big Data. It provides
+high-level APIs in Scala, Java, and Python, and an optimized engine that
+supports general computation graphs for data analysis. It also supports a
+rich set of higher-level tools including Spark SQL for SQL and structured
+data processing, MLLib for machine learning, GraphX for graph processing,
+and Spark Streaming.
+
+<http://spark.apache.org/>
 
 
 ## Online Documentation
@@ -81,7 +88,7 @@ versions without YARN, use:
     $ sbt/sbt -Dhadoop.version=2.0.0-mr1-cdh4.2.0 assembly
 
 For Apache Hadoop 2.2.X, 2.1.X, 2.0.X, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
-with YARN, also set `SPARK_YARN=true`:
+with YARN, also set `-Pyarn`:
 
     # Apache Hadoop 2.0.5-alpha
     $ sbt/sbt -Dhadoop.version=2.0.5-alpha -Pyarn assembly
