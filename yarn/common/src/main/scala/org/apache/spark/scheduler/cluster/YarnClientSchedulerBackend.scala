@@ -30,9 +30,8 @@ private[spark] class YarnClientSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
   with Logging {
 
-  if (conf.getOption("spark.scheduler.minRegisteredExecutorsRatio").isEmpty) {
+  if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
     minRegisteredRatio = 0.8
-    ready = false
   }
 
   var client: Client = null
@@ -84,7 +83,7 @@ private[spark] class YarnClientSchedulerBackend(
 
     logDebug("ClientArguments called with: " + argsArrayBuf)
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
-    totalExpectedExecutors.set(args.numExecutors)
+    totalExpectedResources.set(args.numExecutors)
     client = new Client(args, conf)
     appId = client.runApp()
     waitForApp()
@@ -150,4 +149,7 @@ private[spark] class YarnClientSchedulerBackend(
     logInfo("Stopped")
   }
 
+  override def checkRegisteredResources(): Boolean = {
+    totalExecutors.get() >= totalExpectedResources.get() * minRegisteredRatio
+  }
 }
