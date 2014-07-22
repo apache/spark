@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, DeveloperApi}
 
 /**
  * :: DeveloperApi ::
@@ -129,6 +129,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * called when the data is safely stored. This callback can be used to commit transactions
    * with systems from which data is being sent etc.
    */
+  @Experimental
   def storeReliably(dataBuffer: ArrayBuffer[T], callback: Option[() => Unit]) {
     executor.pushArrayBuffer(dataBuffer, None, None, callback)
   }
@@ -149,6 +150,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * called when the data is safely stored. This callback can be used to commit transactions
    * with systems from which data is being sent etc.
    */
+  @Experimental
   def storeReliably(dataBuffer: ArrayBuffer[T], metadata: Any, callback: Option[() => Unit]) {
     executor.pushArrayBuffer(dataBuffer, Some(metadata), None, callback)
   }
@@ -163,6 +165,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * called when the data is safely stored. This callback can be used to commit transactions
    * with systems from which data is being sent etc.
    */
+  @Experimental
   def storeReliably(dataIterator: Iterator[T], callback: Option[() => Unit]) {
     executor.pushIterator(dataIterator, None, None, callback)
   }
@@ -183,6 +186,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * called when the data is safely stored. This callback can be used to commit transactions
    * with systems from which data is being sent etc.
    */
+  @Experimental
   def storeReliably(dataIterator: java.util.Iterator[T], metadata: Any,
     callback: Option[() => Unit]) {
     executor.pushIterator(dataIterator, Some(metadata), None, callback)
@@ -197,6 +201,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * Store an iterator of received data as a data block into Spark's memory. The callback is
    * called when the data is safely stored. This callback can be used to commit transactions
    * with systems from which data is being sent etc. */
+  @Experimental
   def storeReliably(dataIterator: java.util.Iterator[T], callback: Option[() => Unit]) {
     executor.pushIterator(dataIterator, None, None, callback)
   }
@@ -217,6 +222,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * called when the data is safely stored. This callback can be used to commit transactions
    * with systems from which data is being sent etc.
    */
+  @Experimental
   def storeReliably(dataIterator: Iterator[T], metadata: Any, callback: Option[() => Unit]) {
     executor.pushIterator(dataIterator, Some(metadata), None, callback)
   }
@@ -237,6 +243,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * called when the data is safely stored. This callback can be used to commit transactions
    * with systems from which data is being sent etc.
    */
+  @Experimental
   def storeReliably(bytes: ByteBuffer, callback: Option[() => Unit]) {
     executor.pushBytes(bytes, None, None, callback)
   }
@@ -257,6 +264,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * called when the data is safely stored. This callback can be used to commit transactions
    * with systems from which data is being sent etc.
    */
+  @Experimental
   def storeReliably(bytes: ByteBuffer, metadata: Any, callback: Option[() => Unit]) {
     executor.pushBytes(bytes, Some(metadata), None, callback)
   }
