@@ -51,7 +51,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         //       truncate filesystem paths similar to what YARN does. For now, we just require
         //       people call `addJar` assuming the jar is in the same directory.
         val env = Map[String, String]()
-        System.getenv().foreach{case (k, v) => env(k) = v}
+        System.getenv().foreach { case (k, v) => env(k) = v }
 
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
 

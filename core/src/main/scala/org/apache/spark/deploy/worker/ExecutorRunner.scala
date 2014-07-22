@@ -72,7 +72,7 @@ private[spark] class ExecutorRunner(
   }
 
   /**
-   * kill executor process, wait for exit and notify worker to update resource status
+   * Kill executor process, wait for exit and notify worker to update resource status.
    *
    * @param message the exception message which caused the executor's death 
    */
@@ -114,9 +114,12 @@ private[spark] class ExecutorRunner(
   }
 
   def getCommandSeq = {
-    val command = Command(appDesc.command.mainClass,
-      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId), appDesc.command.environment,
-      appDesc.command.classPathEntries, appDesc.command.libraryPathEntries,
+    val command = Command(
+      appDesc.command.mainClass,
+      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId),
+      appDesc.command.environment,
+      appDesc.command.classPathEntries,
+      appDesc.command.libraryPathEntries,
       appDesc.command.extraJavaOptions)
     CommandUtils.buildCommandSeq(command, memory, sparkHome.getAbsolutePath)
   }

@@ -62,7 +62,7 @@ object CommandUtils extends Logging {
         val joined = command.libraryPathEntries.mkString(File.pathSeparator)
         Seq(s"-Djava.library.path=$joined")
       } else {
-         Seq()
+        Seq()
       }
 
     val permGenOpt = Seq("-XX:MaxPermSize=128m")
@@ -71,7 +71,7 @@ object CommandUtils extends Logging {
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
       Seq(sparkHome + "/bin/compute-classpath" + ext),
-      extraEnvironment=command.environment)
+      extraEnvironment = command.environment)
     val userClassPath = command.classPathEntries ++ Seq(classPath)
 
     Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
