@@ -39,6 +39,8 @@
     <deb.pkg.name>spark</deb.pkg.name>
     <deb.install.path>/usr/share/spark</deb.install.path>
     <deb.user>root</deb.user>
+    <spark.examples.jar.basename>spark-examples-${project.version}-hadoop${hadoop.version}.jar</spark.examples.jar.basename>
+    <spark.examples.jar>${basedir}/../examples/target/${spark.jar.dir}/${spark.examples.jar.basename}</spark.examples.jar>
   </properties>
 
   <dependencies>
@@ -239,6 +241,16 @@
                   <dataSet>
                     <data>
                       <src>${spark.jar}</src>
+                      <type>file</type>
+                      <mapper>
+                        <type>perm</type>
+                        <user>${deb.user}</user>
+                        <group>${deb.user}</group>
+                        <prefix>${deb.install.path}/jars</prefix>
+                      </mapper>
+                    </data>
+                    <data>
+                      <src>${spark.examples.jar}</src>
                       <type>file</type>
                       <mapper>
                         <type>perm</type>
