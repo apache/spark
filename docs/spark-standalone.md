@@ -157,6 +157,20 @@ SPARK_MASTER_OPTS supports the following system properties:
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.deploy.retainedApplications</code></td>
+  <td>200</td>
+  <td>
+    The maximum number of completed applications to display. Older applications will be dropped from the UI to maintain this limit.<br/>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.deploy.retainedDrivers</code></td>
+  <td>200</td>
+  <td>
+   The maximum number of completed drivers to display. Older drivers will be dropped from the UI to maintain this limit.<br/>
+  </td>
+</tr>
+<tr>
   <td><code>spark.deploy.spreadOut</code></td>
   <td>true</td>
   <td>

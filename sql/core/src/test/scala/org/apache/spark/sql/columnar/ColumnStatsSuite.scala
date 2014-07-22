@@ -22,14 +22,15 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.types._
 
 class ColumnStatsSuite extends FunSuite {
-  testColumnStats(classOf[BooleanColumnStats], BOOLEAN)
-  testColumnStats(classOf[ByteColumnStats],    BYTE)
-  testColumnStats(classOf[ShortColumnStats],   SHORT)
-  testColumnStats(classOf[IntColumnStats],     INT)
-  testColumnStats(classOf[LongColumnStats],    LONG)
-  testColumnStats(classOf[FloatColumnStats],   FLOAT)
-  testColumnStats(classOf[DoubleColumnStats],  DOUBLE)
-  testColumnStats(classOf[StringColumnStats],  STRING)
+  testColumnStats(classOf[BooleanColumnStats],   BOOLEAN)
+  testColumnStats(classOf[ByteColumnStats],      BYTE)
+  testColumnStats(classOf[ShortColumnStats],     SHORT)
+  testColumnStats(classOf[IntColumnStats],       INT)
+  testColumnStats(classOf[LongColumnStats],      LONG)
+  testColumnStats(classOf[FloatColumnStats],     FLOAT)
+  testColumnStats(classOf[DoubleColumnStats],    DOUBLE)
+  testColumnStats(classOf[StringColumnStats],    STRING)
+  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP)
 
   def testColumnStats[T <: NativeType, U <: NativeColumnStats[T]](
       columnStatsClass: Class[U],
