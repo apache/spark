@@ -55,9 +55,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
+      UnresolvedHavingClauseAttributes :: 
       typeCoercionRules :_*),
-    Batch("UnresolvedFilterAttributes", fixedPoint,
-      UnresolvedHavingClauseAttributes),
     Batch("Check Analysis", Once,
       CheckResolution),
     Batch("AnalysisOperators", fixedPoint,
@@ -160,26 +159,26 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    * aggregates and then projects them away above the filter.
    */
   object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case pl @ Filter(fexp, agg @ Aggregate(_, ae, _)) if !fexp.childrenResolved => {
-        val alias = Alias(fexp, makeTmp())()
-        val aggExprs = Seq(alias) ++ ae
-        
-        val newCond = EqualTo(Cast(alias.toAttribute, BooleanType), Literal(true, BooleanType))
-
-        val newFilter = ResolveReferences(pl.copy(condition = newCond,
-          child = agg.copy(aggregateExpressions = aggExprs)))
-        
-        Project(pl.output, newFilter)
-      }
-    }
-
-    private val curId = new java.util.concurrent.atomic.AtomicLong()
+    val condName = "havingCondition"
+    val trueLit = Literal(true, BooleanType)
     
-    private def makeTmp() = {
-      val id = curId.getAndIncrement()
-      s"tmp_cond_$id"
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _)) 
+          if !filter.resolved && aggregate.resolved && containsAggregate(havingCondition) => {
+        val evaluatedCondition = Alias(havingCondition,  "havingCondition")()
+        val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
+        
+        Project(aggregate.output,
+          Filter(evaluatedCondition.toAttribute,
+            aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+      }
+      
     }
+    
+    protected def containsAggregate(condition: Expression): Boolean =
+      condition
+        .collect { case ae: AggregateExpression => ae }
+        .nonEmpty
   }
 
   /**
