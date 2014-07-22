@@ -252,7 +252,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
       if (!atMemoryLimit) {
         // We successfully unrolled the entirety of this block
-        Left(buffer.array)
+        Left(buffer.toArray)
       } else {
         // We ran out of space while unrolling the values for this block
         Right(buffer.iterator ++ values)
