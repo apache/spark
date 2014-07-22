@@ -164,7 +164,7 @@ def _deserialize_double_vector(ba, offset=0):
     nb = len(ba) - offset
     if nb < 5:
         raise TypeError("_deserialize_double_vector called on a %d-byte array, "
-                "which is too short" % nb)
+                        "which is too short" % nb)
     if ba[offset] == DENSE_VECTOR_MAGIC:
         return _deserialize_dense_vector(ba, offset)
     elif ba[offset] == SPARSE_VECTOR_MAGIC:
@@ -272,6 +272,7 @@ def _serialize_labeled_point(p):
     header_float[0] = p.label
     return header + serialized_features
 
+
 def _deserialize_labeled_point(ba, offset=0):
     """Deserialize a LabeledPoint from a mutually understood format."""
     from pyspark.mllib.regression import LabeledPoint
@@ -282,6 +283,7 @@ def _deserialize_labeled_point(ba, offset=0):
     label = ndarray(shape=[1], buffer=ba, offset=offset + 1, dtype=float64)[0]
     features = _deserialize_double_vector(ba, offset + 9)
     return LabeledPoint(label, features)
+
 
 def _copyto(array, buffer, offset, shape, dtype):
     """

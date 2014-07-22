@@ -252,14 +252,14 @@ class ALS private (
         val YtY = Some(sc.broadcast(computeYtY(users)))
         val previousProducts = products
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
-          userPartitioner, rank, lambda, alpha, YtY)
+          rank, lambda, alpha, YtY)
         previousProducts.unpersist()
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         products.setName(s"products-$iter").persist()
         val XtX = Some(sc.broadcast(computeYtY(products)))
         val previousUsers = users
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
-          productPartitioner, rank, lambda, alpha, XtX)
+          rank, lambda, alpha, XtX)
         previousUsers.unpersist()
       }
     } else {
@@ -267,11 +267,11 @@ class ALS private (
         // perform ALS update
         logInfo("Re-computing I given U (Iteration %d/%d)".format(iter, iterations))
         products = updateFeatures(numProductBlocks, users, userOutLinks, productInLinks,
-          userPartitioner, rank, lambda, alpha, YtY = None)
+          rank, lambda, alpha, YtY = None)
         products.setName(s"products-$iter")
         logInfo("Re-computing U given I (Iteration %d/%d)".format(iter, iterations))
         users = updateFeatures(numUserBlocks, products, productOutLinks, userInLinks,
-          productPartitioner, rank, lambda, alpha, YtY = None)
+          rank, lambda, alpha, YtY = None)
         users.setName(s"users-$iter")
       }
     }
@@ -464,7 +464,6 @@ class ALS private (
       products: RDD[(Int, Array[Array[Double]])],
       productOutLinks: RDD[(Int, OutLinkBlock)],
       userInLinks: RDD[(Int, InLinkBlock)],
-      productPartitioner: Partitioner,
       rank: Int,
       lambda: Double,
       alpha: Double,
@@ -477,7 +476,7 @@ class ALS private (
           }
         }
         toSend.zipWithIndex.map{ case (buf, idx) => (idx, (bid, buf.toArray)) }
-    }.groupByKey(productPartitioner)
+    }.groupByKey(new HashPartitioner(numUserBlocks))
      .join(userInLinks)
      .mapValues{ case (messages, inLinkBlock) =>
         updateBlock(messages, inLinkBlock, rank, lambda, alpha, YtY)
