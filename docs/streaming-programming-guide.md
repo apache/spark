@@ -472,10 +472,10 @@ Furthermore, you can also implement your own custom receiver for your sources. S
 Build notes:
 <li>Spark supports a Kinesis Streaming Receiver which is not included in the default build due to licensing restrictions.</li>
 <li>_**Note that by embedding this library you will include [ASL](https://aws.amazon.com/asl/)-licensed code in your Spark package**_.</li>
-<li>For sbt users, set the `SPARK_KINESIS_ASL` environment variable before building.</li>
-<li>For Maven users, enable the `-Pspark-kinesis-asl` profile.</li>
-<li>User applications will need to link to the `spark-kinesis-asl` artifact.</li>
 <li>The Spark Kinesis Streaming Receiver source code, examples, tests, and artifacts live in $SPARK_HOME/extras/spark-kinesis-asl.</li>
+<li>sbt and maven builds:  must enable the `-Pspark-kinesis-asl` profile.</li>
+<li>To build the examples JAR, you must run the maven build with the `-Pspark-kinesis-asl` profile.</li>
+<li>Applications will need to link to the `spark-kinesis-asl` artifact.</li>
 
 Deployment and runtime notes:
 <li>Each shard of a stream is processed by one or more KinesisReceiver's managed by the Kinesis Client Library (KCL) Worker.</li>
