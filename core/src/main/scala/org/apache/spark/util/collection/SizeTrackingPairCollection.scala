@@ -20,13 +20,14 @@ package org.apache.spark.util.collection
 import java.util.Comparator
 
 /**
- * A common interface for our size-tracking collections, which are used in external operations.
- * These all support estimating the size and obtaining a memory-efficient sorted iterator.
+ * A common interface for our size-tracking collections of key-value pairs, which are used in
+ * external operations. These all support estimating the size and obtaining a memory-efficient
+ * sorted iterator.
  */
-private[spark] trait SizeTrackingCollection[T] extends Iterable[T] {
+private[spark] trait SizeTrackingPairCollection[K, V] extends Iterable[(K, V)] {
   /** Estimate the collection's current memory usage in bytes. */
   def estimateSize(): Long
 
-  /** Iterate through the data in a given order. This may destroy the underlying collection. */
-  def destructiveSortedIterator(cmp: Comparator[T]): Iterator[T]
+  /** Iterate through the data in a given key order. This may destroy the underlying collection. */
+  def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)]
 }

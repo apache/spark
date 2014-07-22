@@ -25,21 +25,23 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.util.SizeEstimator
 
 /**
- * Append-only buffer that keeps track of its estimated size in bytes.
+ * Append-only buffer of key-value pairs that keeps track of its estimated size in bytes.
  * We sample with a slow exponential back-off using the SizeEstimator to amortize the time,
  * as each call to SizeEstimator can take a sizable amount of time (order of a few milliseconds).
  *
  * The tracking code is copied from SizeTrackingAppendOnlyMap -- we'll factor that out soon.
  */
-private[spark] class SizeTrackingBuffer[T <: AnyRef](initialCapacity: Int = 64)
-  extends SizeTrackingCollection[T]
+private[spark] class SizeTrackingPairBuffer[K, V](initialCapacity: Int = 64)
+  extends SizeTrackingPairCollection[K, V]
 {
-  // Basic growable array data structure. NOTE: We use an Array of AnyRef because Arrays.sort()
-  // is not easy to call on an Array[T], and Scala doesn't provide a great way to sort a generic
-  // array using a Comparator.
+  require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
+  require(initialCapacity >= 1, "Invalid initial capacity")
+
+  // Basic growable array data structure. We use a single array of AnyRef to hold both the keys
+  // and the values, so that we can sort them efficiently with KVArraySortDataFormat.
   private var capacity = initialCapacity
   private var curSize = 0
-  private var data = new Array[AnyRef](initialCapacity)
+  private var data = new Array[AnyRef](2 * initialCapacity)
 
   // Size-tracking variables: we maintain a sequence of samples since the size of the collection
   // depends on both the array and how many of its elements are filled. We reset this each time
@@ -68,11 +70,12 @@ private[spark] class SizeTrackingBuffer[T <: AnyRef](initialCapacity: Int = 64)
   resetSamples()
 
   /** Add an element into the buffer */
-  def += (element: T): Unit = {
+  def insert(key: K, value: V): Unit = {
     if (curSize == capacity) {
       growArray()
     }
-    data(curSize) = element
+    data(2 * curSize) = key.asInstanceOf[AnyRef]
+    data(2 * curSize + 1) = value.asInstanceOf[AnyRef]
     curSize += 1
     numUpdates += 1
     if (nextSampleNum == numUpdates) {
@@ -84,23 +87,23 @@ private[spark] class SizeTrackingBuffer[T <: AnyRef](initialCapacity: Int = 64)
   override def size: Int = curSize
 
   /** Iterate over the elements of the buffer */
-  override def iterator: Iterator[T] = new Iterator[T] {
+  override def iterator: Iterator[(K, V)] = new Iterator[(K, V)] {
     var pos = 0
 
     override def hasNext: Boolean = pos < curSize
 
-    override def next(): T = {
-      val elem = data(pos)
+    override def next(): (K, V) = {
+      if (!hasNext) {
+        throw new NoSuchElementException
+      }
+      val pair = (data(2 * pos).asInstanceOf[K], data(2 * pos + 1).asInstanceOf[V])
       pos += 1
-      elem.asInstanceOf[T]
+      pair
     }
   }
 
-  /** Whether the next insert will cause the underlying array to grow */
-  def atGrowThreshold: Boolean = curSize == capacity
-
   /** Estimate the current size of the buffer in bytes. O(1) time. */
-  def estimateSize(): Long = {
+  override def estimateSize(): Long = {
     assert(samples.nonEmpty)
     val extrapolatedDelta = bytesPerUpdate * (numUpdates - samples.last.numUpdates)
     (samples.last.bytes + extrapolatedDelta).toLong
@@ -108,13 +111,13 @@ private[spark] class SizeTrackingBuffer[T <: AnyRef](initialCapacity: Int = 64)
 
   /** Double the size of the array because we've reached capacity */
   private def growArray(): Unit = {
-    if (capacity == (1 << 30)) {
+    if (capacity == (1 << 29)) {
       // Doubling the capacity would create an array bigger than Int.MaxValue, so don't
-      throw new Exception("Can't grow buffer beyond 2^30 elements")
+      throw new Exception("Can't grow buffer beyond 2^29 elements")
     }
     val newCapacity = capacity * 2
-    val newArray = new Array[AnyRef](newCapacity)
-    System.arraycopy(data, 0, newArray, 0, capacity)
+    val newArray = new Array[AnyRef](2 * newCapacity)
+    System.arraycopy(data, 0, newArray, 0, 2 * capacity)
     data = newArray
     capacity = newCapacity
     resetSamples()
@@ -143,8 +146,8 @@ private[spark] class SizeTrackingBuffer[T <: AnyRef](initialCapacity: Int = 64)
   }
 
   /** Iterate through the data in a given order. For this class this is not really destructive. */
-  override def destructiveSortedIterator(cmp: Comparator[T]): Iterator[T] = {
-    Arrays.sort(data, 0, curSize, cmp.asInstanceOf[Comparator[AnyRef]])
+  override def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)] = {
+    new Sorter(new KVArraySortDataFormat[K, AnyRef]).sort(data, 0, curSize, keyComparator)
     iterator
   }
 }

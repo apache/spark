@@ -93,7 +93,7 @@ private[spark] class ExternalSorter[K, V, C](
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
   // store them in an array buffer.
   var map = new SizeTrackingAppendOnlyMap[(Int, K), C]
-  var buffer = new SizeTrackingBuffer[((Int, K), C)]
+  var buffer = new SizeTrackingPairBuffer[(Int, K), C]
 
   // Number of pairs read from input since last spill; note that we count them even if a value is
   // merged with a previous key in case we're doing something like groupBy where the result grows
@@ -130,25 +130,25 @@ private[spark] class ExternalSorter[K, V, C](
     }
   })
 
-  // A comparator for ((Int, K), C) elements that orders them by partition and then possibly by key
-  private val partitionKeyComparator: Comparator[((Int, K), C)] = {
+  // A comparator for (Int, K) elements that orders them by partition and then possibly by key
+  private val partitionKeyComparator: Comparator[(Int, K)] = {
     if (ordering.isDefined || aggregator.isDefined) {
       // Sort by partition ID then key comparator
-      new Comparator[((Int, K), C)] {
-        override def compare(a: ((Int, K), C), b: ((Int, K), C)): Int = {
-          val partitionDiff = a._1._1 - b._1._1
+      new Comparator[(Int, K)] {
+        override def compare(a: (Int, K), b: (Int, K)): Int = {
+          val partitionDiff = a._1 - b._1
           if (partitionDiff != 0) {
             partitionDiff
           } else {
-            keyComparator.compare(a._1._2, b._1._2)
+            keyComparator.compare(a._2, b._2)
           }
         }
       }
     } else {
       // Just sort it by partition ID
-      new Comparator[((Int, K), C)] {
-        override def compare(a: ((Int, K), C), b: ((Int, K), C)): Int = {
-          a._1._1 - b._1._1
+      new Comparator[(Int, K)] {
+        override def compare(a: (Int, K), b: (Int, K)): Int = {
+          a._1 - b._1
         }
       }
     }
@@ -187,14 +187,14 @@ private[spark] class ExternalSorter[K, V, C](
       while (records.hasNext) {
         elementsRead += 1
         val kv = records.next()
-        buffer += (((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C]))
+        buffer.insert((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C])
         maybeSpill(usingMap = false)
       }
     }
   }
 
   private def maybeSpill(usingMap: Boolean): Unit = {
-    val collection: SizeTrackingCollection[((Int, K), C)] = if (usingMap) map else buffer
+    val collection: SizeTrackingPairCollection[(Int, K), C] = if (usingMap) map else buffer
 
     if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
         collection.estimateSize() >= myMemoryThreshold)
@@ -234,7 +234,7 @@ private[spark] class ExternalSorter[K, V, C](
    * @param usingMap whether we're using a map or buffer as our current in-memory collection
    */
   private def spill(memorySize: Long, usingMap: Boolean): Unit = {
-    val collection: SizeTrackingCollection[((Int, K), C)] = if (usingMap) map else buffer
+    val collection: SizeTrackingPairCollection[(Int, K), C] = if (usingMap) map else buffer
     val memorySize = collection.estimateSize()
 
     spillCount += 1
@@ -291,7 +291,7 @@ private[spark] class ExternalSorter[K, V, C](
     if (usingMap) {
       map = new SizeTrackingAppendOnlyMap[(Int, K), C]
     } else {
-      buffer = new SizeTrackingBuffer[((Int, K), C)]
+      buffer = new SizeTrackingPairBuffer[(Int, K), C]
     }
 
     // Reset the amount of shuffle memory used by this map in the global pool
@@ -574,15 +574,15 @@ private[spark] class ExternalSorter[K, V, C](
    */
   def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
     val usingMap = aggregator.isDefined
-    val collection: SizeTrackingCollection[((Int, K), C)] = if (usingMap) map else buffer
+    val collection: SizeTrackingPairCollection[(Int, K), C] = if (usingMap) map else buffer
     if (spills.isEmpty) {
       // Special case: if we have only in-memory data, we don't need to merge streams, and perhaps
       // we don't even need to sort by anything other than partition ID
       if (!ordering.isDefined) {
         // The user isn't requested sorted keys, so only sort by partition ID, not key
-        val partitionComparator = new Comparator[((Int, K), C)] {
-          override def compare(a: ((Int, K), C), b: ((Int, K), C)): Int = {
-            a._1._1 - b._1._1
+        val partitionComparator = new Comparator[(Int, K)] {
+          override def compare(a: (Int, K), b: (Int, K)): Int = {
+            a._1 - b._1
           }
         }
         groupByPartition(collection.destructiveSortedIterator(partitionComparator))
