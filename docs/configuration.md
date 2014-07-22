@@ -385,10 +385,11 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.kryo.registrationRequired</code></td>
   <td>false</td>
   <td>
-    Whether to require registration with Kryo. By default false, that is if Kryo doesn't know
-    about a class on each access it will write out the class name with the object. This makes the
-    output larger, but provides the most convenience. For maximum performance, set to true and add
-    required registrations.
+    Whether to require registration with Kryo. If set to 'true', Kryo will throw an exception
+    if an unregistered class is serialized. If set to false (the default), Kryo will write
+    unregistered class names along with each object. Writing class names can cause
+    significant performance overhead, so enabling this option can enforce strictly that a
+    user has not omitted classes from registration.
   </td>
 </tr>
 <tr>
