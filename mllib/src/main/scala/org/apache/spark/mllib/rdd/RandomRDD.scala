@@ -32,6 +32,7 @@ private[mllib] class RandomRDDPartition(val idx: Int,
 
 }
 
+// These two classes are necessary since Range objects in Scala cannot have size > Int.MaxValue
 private[mllib] class RandomRDD(@transient private var sc: SparkContext,
     size: Long,
     numSlices: Int,
@@ -106,9 +107,9 @@ private[mllib] object RandomRDD {
       numSlices: Int,
       rng: DistributionGenerator,
       seed: Long): Array[Partition] = {
-    // TODO fix rounding issue
-    val firstPartitionSize = if (size % numSlices == 0) size / numSlices else size % numSlices
-    val otherPartitionSize = math.ceil((size - firstPartitionSize) / (numSlices - 1)).toInt
+
+    val firstPartitionSize = size / numSlices + size % numSlices
+    val otherPartitionSize = size / numSlices
 
     val partitions = new Array[RandomRDDPartition](numSlices)
     var i = 0

@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.random
 
-import scala.util.Random
-
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
@@ -46,6 +44,7 @@ trait DistributionGenerator extends Pseudorandom with Serializable {
  * Generates i.i.d. samples from U[0.0, 1.0]
  */
 class UniformGenerator() extends DistributionGenerator {
+
   // XORShiftRandom for better performance. Thread safety isn't necessary here.
   private val random = new XORShiftRandom()
 
@@ -66,6 +65,7 @@ class UniformGenerator() extends DistributionGenerator {
  * Generates i.i.d. samples from the Standard Normal Distribution.
  */
 class StandardNormalGenerator() extends DistributionGenerator {
+
   // XORShiftRandom for better performance. Thread safety isn't necessary here.
   private val random = new XORShiftRandom()
 

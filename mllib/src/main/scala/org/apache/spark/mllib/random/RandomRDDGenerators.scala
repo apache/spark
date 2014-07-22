@@ -24,6 +24,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 // TODO add Scaladocs once API fully approved
+// Alternatively, we can use the generator pattern to set numPartitions, seed, etc instead to bring
+// down the number of methods here.
 object RandomRDDGenerators {
 
   def uniformRDD(sc: SparkContext, size: Long, numPartitions: Int, seed: Long): RDD[Double] = {
