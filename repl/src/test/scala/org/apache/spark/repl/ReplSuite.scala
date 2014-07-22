@@ -235,7 +235,7 @@ class ReplSuite extends FunSuite {
     assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
   }
 
-  test("SPARK-1199-simple-reproduce") {
+  test("SPARK-1199 two instances of same class don't type check.") {
     val output = runInterpreter("local-cluster[1,1,512]",
       """
         |case class Sum(exp: String, exp2: String)
@@ -247,6 +247,15 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("Exception", output)
   }
 
+  test("SPARK-2452 compound statements.") {
+    val output = runInterpreter("local",
+      """
+        |val x = 4 ; def f() = x
+        |f()
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
   if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {
     test("running on Mesos") {
       val output = runInterpreter("localquiet",
