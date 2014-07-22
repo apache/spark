@@ -79,11 +79,15 @@ class ExternalAppendOnlyMap[K, V, C](
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
 
-  // Number of pairs in the in-memory map
-  private var numPairsInMemory = 0L
+  // Number of pairs inserted since last spill; note that we count them even if a value is merged
+  // with a previous key in case we're doing something like groupBy where the result grows
+  private var elementsRead = 0L
 
   // Number of in-memory pairs inserted before tracking the map's shuffle memory usage
   private val trackMemoryThreshold = 1000
+
+  // How much of the shared memory pool this collection has claimed
+  private var myMemoryThreshold = 0L
 
   /**
    * Size of object batches when reading/writing from serializers.
@@ -134,8 +138,10 @@ class ExternalAppendOnlyMap[K, V, C](
 
     while (entries.hasNext) {
       curEntry = entries.next()
-      if (numPairsInMemory > trackMemoryThreshold && currentMap.atGrowThreshold) {
-        val mapSize = currentMap.estimateSize()
+      if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
+          currentMap.estimateSize() >= myMemoryThreshold)
+      {
+        val currentSize = currentMap.estimateSize()
         var shouldSpill = false
         val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
 
@@ -146,10 +152,11 @@ class ExternalAppendOnlyMap[K, V, C](
           val availableMemory = maxMemoryThreshold -
             (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
 
-          // Assume map growth factor is 2x
-          shouldSpill = availableMemory < mapSize * 2
+          // Try to allocate at least 2x more memory, otherwise spill
+          shouldSpill = availableMemory < currentSize * 2
           if (!shouldSpill) {
-            shuffleMemoryMap(threadId) = mapSize * 2
+            shuffleMemoryMap(threadId) = currentSize * 2
+            myMemoryThreshold = currentSize * 2
           }
         }
         // Do not synchronize spills
@@ -158,7 +165,7 @@ class ExternalAppendOnlyMap[K, V, C](
         }
       }
       currentMap.changeValue(curEntry._1, update)
-      numPairsInMemory += 1
+      elementsRead += 1
     }
   }
 
@@ -227,7 +234,9 @@ class ExternalAppendOnlyMap[K, V, C](
     shuffleMemoryMap.synchronized {
       shuffleMemoryMap(Thread.currentThread().getId) = 0
     }
-    numPairsInMemory = 0
+    myMemoryThreshold = 0
+
+    elementsRead = 0
     _memoryBytesSpilled += mapSize
   }
 

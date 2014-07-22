@@ -95,11 +95,11 @@ private[spark] class ExternalSorter[K, V, C](
   var map = new SizeTrackingAppendOnlyMap[(Int, K), C]
   var buffer = new SizeTrackingBuffer[((Int, K), C)]
 
-  // Track how many elements we've read before we try to estimate memory. Ideally we'd use
-  // map.size or buffer.size for this, but because users' Aggregators can potentially increase
-  // the size of a merged element when we add values with the same key, it's safer to track
-  // elements read from the input iterator.
+  // Number of pairs read from input since last spill; note that we count them even if a value is
+  // merged with a previous key in case we're doing something like groupBy where the result grows
   private var elementsRead = 0L
+
+  // What threshold of elementsRead we start estimating map size at.
   private val trackMemoryThreshold = 1000
 
   // Spilling statistics
@@ -114,6 +114,9 @@ private[spark] class ExternalSorter[K, V, C](
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
 
+  // How much of the shared memory pool this collection has claimed
+  private var myMemoryThreshold = 0L
+
   // A comparator for keys K that orders them within a partition to allow partial aggregation.
   // Can be a partial ordering by hash code if a total ordering is not provided through by the
   // user. (A partial ordering means that equal keys have comparator.compare(k, k) = 0, but some
@@ -127,11 +130,9 @@ private[spark] class ExternalSorter[K, V, C](
     }
   })
 
-  private val sortWithinPartitions = ordering.isDefined || aggregator.isDefined
-
   // A comparator for ((Int, K), C) elements that orders them by partition and then possibly by key
   private val partitionKeyComparator: Comparator[((Int, K), C)] = {
-    if (sortWithinPartitions) {
+    if (ordering.isDefined || aggregator.isDefined) {
       // Sort by partition ID then key comparator
       new Comparator[((Int, K), C)] {
         override def compare(a: ((Int, K), C), b: ((Int, K), C)): Int = {
@@ -195,29 +196,32 @@ private[spark] class ExternalSorter[K, V, C](
   private def maybeSpill(usingMap: Boolean): Unit = {
     val collection: SizeTrackingCollection[((Int, K), C)] = if (usingMap) map else buffer
 
-    if (elementsRead > trackMemoryThreshold && collection.atGrowThreshold) {
-      // TODO: This is code from ExternalAppendOnlyMap that doesn't work if there are two external
-      // collections being used in the same task. However we'll just copy it for now.
+    if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
+        collection.estimateSize() >= myMemoryThreshold)
+    {
+      // TODO: This logic doesn't work if there are two external collections being used in the same
+      // task (e.g. to read shuffle output and write it out into another shuffle).
 
       val currentSize = collection.estimateSize()
       var shouldSpill = false
       val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
 
       // Atomically check whether there is sufficient memory in the global pool for
-      // this map to grow and, if possible, allocate the required amount
+      // us to double our threshold
       shuffleMemoryMap.synchronized {
         val threadId = Thread.currentThread().getId
-        val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId)
+        val previouslyClaimedMemory = shuffleMemoryMap.get(threadId)
         val availableMemory = maxMemoryThreshold -
-          (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
+          (shuffleMemoryMap.values.sum - previouslyClaimedMemory.getOrElse(0L))
 
-        // Assume map growth factor is 2x
+        // Try to allocate at least 2x more memory, otherwise spill
         shouldSpill = availableMemory < currentSize * 2
         if (!shouldSpill) {
           shuffleMemoryMap(threadId) = currentSize * 2
+          myMemoryThreshold = currentSize * 2
         }
       }
-      // Do not synchronize spills
+      // Do not hold lock during spills
       if (shouldSpill) {
         spill(currentSize, usingMap)
       }
@@ -289,6 +293,13 @@ private[spark] class ExternalSorter[K, V, C](
     } else {
       buffer = new SizeTrackingBuffer[((Int, K), C)]
     }
+
+    // Reset the amount of shuffle memory used by this map in the global pool
+    val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
+    shuffleMemoryMap.synchronized {
+      shuffleMemoryMap(Thread.currentThread().getId) = 0
+    }
+    myMemoryThreshold = 0
 
     spills.append(SpilledFile(file, blockId, batchSizes.toArray, elementsPerPartition))
     _memoryBytesSpilled += memorySize

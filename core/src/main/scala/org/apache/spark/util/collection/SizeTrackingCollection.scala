@@ -21,17 +21,9 @@ import java.util.Comparator
 
 /**
  * A common interface for our size-tracking collections, which are used in external operations.
- * These all support estimating the size, checking when the collection is at a grow threshold
- * (so it will require much more memory than it did previously), and obtaining a sorted iterator
- *
+ * These all support estimating the size and obtaining a memory-efficient sorted iterator.
  */
 private[spark] trait SizeTrackingCollection[T] extends Iterable[T] {
-  /**
-   * Will the collection grow its underlying storage capacity the next time we do an insert?
-   * Collections implementing this usually double in capacity so this is a big jump in memory use.
-   */
-  def atGrowThreshold: Boolean
-
   /** Estimate the collection's current memory usage in bytes. */
   def estimateSize(): Long
 

@@ -19,13 +19,13 @@ package org.apache.spark.shuffle.sort
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, DataOutputStream}
 
-import org.apache.spark.shuffle.{ShuffleWriter, BaseShuffleHandle}
 import org.apache.spark.{MapOutputTracker, SparkEnv, Logging, TaskContext}
+import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.collection.ExternalSorter
+import org.apache.spark.shuffle.{ShuffleWriter, BaseShuffleHandle}
 import org.apache.spark.storage.ShuffleBlockId
-import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
     handle: BaseShuffleHandle[K, V, C],
