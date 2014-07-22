@@ -57,7 +57,7 @@ class Aggregator(object):
 class Merger(object):
 
     """
-    merge shuffled data together by combinator
+    merge shuffled data together by aggregator
     """
 
     def __init__(self, aggregator):
@@ -77,8 +77,9 @@ class Merger(object):
 
 
 class InMemoryMerger(Merger):
+
     """
-    In memory merger based on map
+    In memory merger based on in-memory dict.
     """
 
     def __init__(self, aggregator):
@@ -107,8 +108,30 @@ class InMemoryMerger(Merger):
 class ExternalMerger(Merger):
 
     """
-    External merger will dump the aggregated data into disks when memory usage
-    is above the limit, then merge them together.
+    External merger will dump the aggregated data into disks when
+    memory usage goes above the limit, then merge them together.
+
+    This class works as follows:
+
+    - It repeatedly combine the items and save them in one dict in 
+      memory.
+
+    - When the used memory goes above memory limit, it will split
+      the combined data into partitions by hash code, dump them
+      into disk, one file per partition.
+
+    - Then it goes through the rest of the iterator, combine items
+      into different dict by hash. Until the used memory goes over
+      memory limit, it dump all the dicts into disks, one file per
+      dict. Repeat this again until combine all the items.
+
+    - Before return any items, it will load each partition and
+      combine them seperately. Yield them before loading next
+      partition.
+
+    - During loading a partition, if the memory goes over limit,
+      it will partition the loaded data and dump them into disks
+      and load them partition by partition again.
 
     >>> agg = Aggregator(lambda x: x, lambda x, y: x + y)
     >>> merger = ExternalMerger(agg, 10)
