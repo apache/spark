@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.collection
 
-import java.util.Arrays
 import java.util.Comparator
 
 import scala.collection.mutable.ArrayBuffer

@@ -82,6 +82,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val serInstance = ser.newInstance()
 
   private val conf = SparkEnv.get.conf
+  private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
   private val serializerBatchSize = conf.getLong("spark.shuffle.spill.batchSize", 10000)
 
@@ -194,6 +195,10 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   private def maybeSpill(usingMap: Boolean): Unit = {
+    if (!spillingEnabled) {
+      return
+    }
+
     val collection: SizeTrackingPairCollection[(Int, K), C] = if (usingMap) map else buffer
 
     if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&

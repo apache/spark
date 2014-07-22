@@ -24,6 +24,7 @@ import java.util.Comparator
  * external operations. These all support estimating the size and obtaining a memory-efficient
  * sorted iterator.
  */
+// TODO: should extend Iterable[Product2[K, V]] instead of (K, V)
 private[spark] trait SizeTrackingPairCollection[K, V] extends Iterable[(K, V)] {
   /** Estimate the collection's current memory usage in bytes. */
   def estimateSize(): Long
