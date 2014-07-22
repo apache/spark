@@ -20,20 +20,18 @@ package org.apache.spark.streaming.receiver
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer}
 import scala.concurrent.Await
 
 import akka.actor.{Actor, Props}
 import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.scheduler.DeregisterReceiver
 import org.apache.spark.streaming.scheduler.AddBlock
-import scala.Some
 import org.apache.spark.streaming.scheduler.RegisterReceiver
 import com.google.common.base.Throwables
 
@@ -102,29 +100,30 @@ private[streaming] class ReceiverSupervisorImpl(
     blockGenerator += (data)
   }
 
-  /**
-   * Reliably store this data and call the callback function when the data is stored reliably.
-   *
-   * @param callback - Function to call when the block containing this data is pushed
-   * @param data - The data to push.
-   *
-   */
-  def pushSingle(data: Any, callback: () => Unit) {
-    blockGenerator.store(data, callback)
-  }
-
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
       arrayBuffer: ArrayBuffer[_],
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
     ) {
+    pushArrayBuffer(arrayBuffer, optionalMetadata, optionalBlockId, None)
+  }
+
+
+  /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
+  override def pushArrayBuffer(
+      arrayBuffer: ArrayBuffer[_],
+      optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId],
+      optionalCallback: Option[() => Unit]
+    ) {
     val blockId = optionalBlockId.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
-    blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]],
-      storageLevel, tellMaster = true)
+    blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]], storageLevel,
+      tellMaster = true)
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
     reportPushedBlock(blockId, arrayBuffer.size, optionalMetadata)
+    callback(optionalCallback)
   }
 
   /** Store a iterator of received data as a data block into Spark's memory. */
@@ -133,11 +132,21 @@ private[streaming] class ReceiverSupervisorImpl(
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
     ) {
+    pushIterator(iterator, optionalMetadata, optionalBlockId, None)
+  }
+
+  /** Store a iterator of received data as a data block into Spark's memory. */
+  override def pushIterator(
+      iterator: Iterator[_],
+      optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId],
+      optionalCallback: Option[() => Unit]) {
     val blockId = optionalBlockId.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
     blockManager.put(blockId, iterator, storageLevel, tellMaster = true)
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
     reportPushedBlock(blockId, -1, optionalMetadata)
+    callback(optionalCallback)
   }
 
   /** Store the bytes of received data as a data block into Spark's memory. */
@@ -146,12 +155,23 @@ private[streaming] class ReceiverSupervisorImpl(
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
     ) {
+    pushBytes(bytes, optionalMetadata, optionalBlockId, None)
+  }
+
+
+  override def pushBytes(
+      bytes: ByteBuffer,
+      optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId],
+      optionalCallback: Option[() => Unit]) {
     val blockId = optionalBlockId.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
     blockManager.putBytes(blockId, bytes, storageLevel, tellMaster = true)
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
     reportPushedBlock(blockId, -1, optionalMetadata)
+    callback(optionalCallback)
   }
+
 
   /** Report pushed block */
   def reportPushedBlock(blockId: StreamBlockId, numRecords: Long, optionalMetadata: Option[Any]) {
@@ -192,6 +212,18 @@ private[streaming] class ReceiverSupervisorImpl(
     logInfo("Stopped receiver " + streamId)
   }
 
+  private def callback(optionalCallback: Option[() => Unit]) {
+    optionalCallback match {
+      case Some(callback) =>
+        // Right now this simply calls the callback directly, but once we have BlockManagerMaster
+        // HA, this block must wait until the block metadata is fully replicated and recoverable
+        // before the callback is called.
+        callback()
+      case None =>
+    }
+  }
+
   /** Generate new block ID */
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
+
 }

@@ -119,21 +119,18 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
     executor.pushSingle(dataItem)
   }
 
-  /**
-   * Store a single item of received data to Spark's memory. When the data is successfully stored
-   * in Spark's memory, the callback function is called with arg passed in as its argument.
-   *
-   * @param dataItem - The data item to store
-   * @param callback - The function to call when the dataItem has been stored successfully
-   *
-   */
-  def store(dataItem: T, callback: () => Unit) {
-    executor.pushSingle(dataItem, callback)
-  }
-
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def store(dataBuffer: ArrayBuffer[T]) {
     executor.pushArrayBuffer(dataBuffer, None, None)
+  }
+
+  /**
+   * Store an ArrayBuffer of received data as a data block into Spark's memory. The callback is
+   * called when the data is safely stored. This callback can be used to commit transactions
+   * with systems from which data is being sent etc.
+   */
+  def storeReliably(dataBuffer: ArrayBuffer[T], callback: Option[() => Unit]) {
+    executor.pushArrayBuffer(dataBuffer, None, None, callback)
   }
 
   /**
@@ -145,9 +142,29 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
     executor.pushArrayBuffer(dataBuffer, Some(metadata), None)
   }
 
+  /**
+   * Store an ArrayBuffer of received data as a data block into Spark's memory.
+   * The metadata will be associated with this block of data
+   * for being used in the corresponding InputDStream. The callback is
+   * called when the data is safely stored. This callback can be used to commit transactions
+   * with systems from which data is being sent etc.
+   */
+  def storeReliably(dataBuffer: ArrayBuffer[T], metadata: Any, callback: Option[() => Unit]) {
+    executor.pushArrayBuffer(dataBuffer, Some(metadata), None, callback)
+  }
+
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: Iterator[T]) {
     executor.pushIterator(dataIterator, None, None)
+  }
+
+  /**
+   * Store an iterator of received data as a data block into Spark's memory. The callback is
+   * called when the data is safely stored. This callback can be used to commit transactions
+   * with systems from which data is being sent etc.
+   */
+  def storeReliably(dataIterator: Iterator[T], callback: Option[() => Unit]) {
+    executor.pushIterator(dataIterator, None, None, callback)
   }
 
   /**
@@ -159,9 +176,29 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
     executor.pushIterator(dataIterator, Some(metadata), None)
   }
 
+  /**
+   * Store an iterator of received data as a data block into Spark's memory.
+   * The metadata will be associated with this block of data
+   * for being used in the corresponding InputDStream. The callback is
+   * called when the data is safely stored. This callback can be used to commit transactions
+   * with systems from which data is being sent etc.
+   */
+  def storeReliably(dataIterator: java.util.Iterator[T], metadata: Any,
+    callback: Option[() => Unit]) {
+    executor.pushIterator(dataIterator, Some(metadata), None, callback)
+  }
+
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: java.util.Iterator[T]) {
     executor.pushIterator(dataIterator, None, None)
+  }
+
+  /**
+   * Store an iterator of received data as a data block into Spark's memory. The callback is
+   * called when the data is safely stored. This callback can be used to commit transactions
+   * with systems from which data is being sent etc. */
+  def storeReliably(dataIterator: java.util.Iterator[T], callback: Option[() => Unit]) {
+    executor.pushIterator(dataIterator, None, None, callback)
   }
 
   /**
@@ -174,6 +211,17 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   }
 
   /**
+   * Store an iterator of received data as a data block into Spark's memory.
+   * The metadata will be associated with this block of data
+   * for being used in the corresponding InputDStream. The callback is
+   * called when the data is safely stored. This callback can be used to commit transactions
+   * with systems from which data is being sent etc.
+   */
+  def storeReliably(dataIterator: Iterator[T], metadata: Any, callback: Option[() => Unit]) {
+    executor.pushIterator(dataIterator, Some(metadata), None, callback)
+  }
+
+  /**
    * Store the bytes of received data as a data block into Spark's memory. Note
    * that the data in the ByteBuffer must be serialized using the same serializer
    * that Spark is configured to use.
@@ -183,12 +231,34 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   }
 
   /**
+   * Store the bytes of received data as a data block into Spark's memory. Note
+   * that the data in the ByteBuffer must be serialized using the same serializer
+   * that Spark is configured to use. The callback is
+   * called when the data is safely stored. This callback can be used to commit transactions
+   * with systems from which data is being sent etc.
+   */
+  def storeReliably(bytes: ByteBuffer, callback: Option[() => Unit]) {
+    executor.pushBytes(bytes, None, None, callback)
+  }
+
+  /**
    * Store the bytes of received data as a data block into Spark's memory.
    * The metadata will be associated with this block of data
    * for being used in the corresponding InputDStream.
    */
   def store(bytes: ByteBuffer, metadata: Any) {
     executor.pushBytes(bytes, Some(metadata), None)
+  }
+
+  /**
+   * Store the bytes of received data as a data block into Spark's memory.
+   * The metadata will be associated with this block of data
+   * for being used in the corresponding InputDStream. The callback is
+   * called when the data is safely stored. This callback can be used to commit transactions
+   * with systems from which data is being sent etc.
+   */
+  def storeReliably(bytes: ByteBuffer, metadata: Any, callback: Option[() => Unit]) {
+    executor.pushBytes(bytes, Some(metadata), None, callback)
   }
 
   /** Report exceptions in receiving data. */

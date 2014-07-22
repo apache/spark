@@ -244,8 +244,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val testReceiver = new CallbackReceiver(limit)
     // set up the network stream using the test receiver
     val ssc = new StreamingContext(conf, batchDuration)
-    val networkStream = ssc.receiverStream[AnyVal](testReceiver)
-    val outputBuffer = new ArrayBuffer[Seq[AnyVal]]
+    val networkStream = ssc.receiverStream[Int](testReceiver)
+    val outputBuffer = new ArrayBuffer[Seq[Int]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     def output = outputBuffer.flatten
     outputStream.register()
@@ -254,16 +254,15 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     // Let the data from the receiver be received
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val startTime = System.currentTimeMillis()
-    while((output.size < limit * 2) &&
+    while((output.size < limit + 1) &&
       System.currentTimeMillis() - startTime < 5000) {
       Thread.sleep(50)
       clock.addToTime(batchDuration.milliseconds)
     }
-    Thread.sleep(1000)
     logInfo("Stopping context")
-    assert(output.size === limit * 2)
+    assert(output.size === limit + 1)
     // Sum would be (sum(1..limit)) * 2 since each number appears twice.
-    assert(output.asInstanceOf[ArrayBuffer[Int]].sum === limit * (limit + 1))
+    assert(output.sum === limit * (limit + 1))
     ssc.stop()
   }
   
@@ -457,18 +456,17 @@ object MultiThreadTestReceiver {
 }
 
 class CallbackReceiver(val limit: Int)
-  extends Receiver[AnyVal](StorageLevel.MEMORY_ONLY_SER) with Logging {
+  extends Receiver[Int](StorageLevel.MEMORY_ONLY_SER) with Logging {
 
   lazy val executor = Executors.newSingleThreadExecutor()
 
   override def onStart(): Unit = {
     executor.submit(new Runnable {
       override def run(): Unit = {
-        (1 to limit).map(i => {
-          store(i, () => {
-            store(i) // Store again
-          })
-        })
+        val arrayBuffer = ArrayBuffer.range(1, limit + 1)
+        storeReliably(arrayBuffer, Option(() => {
+          store(arrayBuffer.sum)
+        }))
       }
     })
   }

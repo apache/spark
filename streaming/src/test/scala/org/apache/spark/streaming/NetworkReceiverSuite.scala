@@ -269,7 +269,20 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
       errors += throwable
     }
 
-    override def pushSingle(data: Any, f: () => Unit): Unit = {
+    override def pushBytes(bytes: ByteBuffer, optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId], optionalCallback: Option[() => Unit]): Unit = {
+
+    }
+
+    /** Store a iterator of received data as a data block into Spark's memory. */
+    override def pushIterator(iterator: Iterator[_], optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId], optionalCallback: Option[() => Unit]): Unit = {
+
+    }
+
+    /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
+    override def pushArrayBuffer(arrayBuffer: ArrayBuffer[_], optionalMetadata: Option[Any],
+      optionalBlockId: Option[StreamBlockId], optionalCallback: Option[() => Unit]): Unit = {
     }
   }
 
