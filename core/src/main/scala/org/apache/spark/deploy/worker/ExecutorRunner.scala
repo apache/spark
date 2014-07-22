@@ -118,6 +118,7 @@ private[spark] class ExecutorRunner(
       appDesc.command.mainClass,
       appDesc.command.arguments.map(substituteVariables) ++ Seq(appId),
       appDesc.command.environment,
+      appDesc.command.sparkProps,
       appDesc.command.classPathEntries,
       appDesc.command.libraryPathEntries,
       appDesc.command.extraJavaOptions)

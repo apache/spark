@@ -79,6 +79,7 @@ private[spark] class DriverRunner(
             driverDesc.command.mainClass,
             driverDesc.command.arguments.map(substituteVariables),
             driverDesc.command.environment,
+            driverDesc.command.sparkProps,
             classPath,
             driverDesc.command.libraryPathEntries,
             driverDesc.command.extraJavaOptions)

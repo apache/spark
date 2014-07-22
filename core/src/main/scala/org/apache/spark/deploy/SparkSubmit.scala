@@ -132,8 +132,6 @@ object SparkSubmit {
     (clusterManager, deployMode) match {
       case (MESOS, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
-      case (STANDALONE, CLUSTER) =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for Standalone clusters.")
       case (_, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
       case (_, CLUSTER) if isShell(args.primaryResource) =>

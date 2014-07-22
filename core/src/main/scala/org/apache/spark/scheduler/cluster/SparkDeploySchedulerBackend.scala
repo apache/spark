@@ -54,9 +54,8 @@ private[spark] class SparkDeploySchedulerBackend(
         cp.split(java.io.File.pathSeparator)
       }
 
-    val command = Command(
-      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
-      classPathEntries, libraryPathEntries, extraJavaOpts)
+    val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
+      args, sc.executorEnvs, conf.getAll.toMap, classPathEntries, libraryPathEntries, extraJavaOpts)
     val sparkHome = sc.getSparkHome()
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       sparkHome, sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))
