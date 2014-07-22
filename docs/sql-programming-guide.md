@@ -605,7 +605,7 @@ You may also use the beeline script comes with Hive.
 
 #### Reducer number
 
-In Shark, default reducer number is 1, and can be tuned by property `mapred.reduce.tasks`. In Spark SQL, reducer number is default to 200, and can be customized by the `spark.sql.shuffle.partitions` property:
+In Shark, default reducer number is 1 and is controlled by the property `mapred.reduce.tasks`. Spark SQL deprecates this property by a new property `spark.sql.shuffle.partitions`, whose default value is 200. Users may customize this property via `SET`:
 
 ```
 SET spark.sql.shuffle.partitions=10;
@@ -614,6 +614,8 @@ GROUP BY page ORDER BY c DESC LIMIT 10;
 ```
 
 You may also put this property in `hive-site.xml` to override the default value.
+
+For now, the `mapred.reduce.tasks` property is still recognized, and is converted to `spark.sql.shuffle.partitions` automatically.
 
 #### Caching
 
@@ -697,7 +699,7 @@ Spark SQL supports the vast majority of Hive features, such as:
 
 #### Unsupported Hive Functionality
 
-Below is a list of Hive features that we don't support yet. Most of these features are rarely  used in Hive deployments.
+Below is a list of Hive features that we don't support yet. Most of these features are rarely used in Hive deployments.
 
 **Major Hive Features**
 
@@ -723,7 +725,7 @@ A handful of Hive optimizations are not yet included in Spark. Some of these (su
 
 * Block level bitmap indexes and virtual columns (used to build indexes)
 * Automatically convert a join to map join: For joining a large table with multiple small tables, Hive automatically converts the join into a map join. We are adding this auto conversion in the next release.
-* Automatically determine the number of reducers for joins and groupbys: Currently in Spark SQL, you need to control the degree of parallelism post-shuffle using "set mapred.reduce.tasks=[num_tasks];". We are going to add auto-setting of parallelism in the next release.
+* Automatically determine the number of reducers for joins and groupbys: Currently in Spark SQL, you need to control the degree of parallelism post-shuffle using "SET spark.sql.shuffle.partitions=[num_tasks];". We are going to add auto-setting of parallelism in the next release.
 * Meta-data only query: For queries that can be answered by using only meta data, Spark SQL still launches tasks to compute the result.
 * Skew data flag: Spark SQL does not follow the skew data flags in Hive.
 * `STREAMTABLE` hint in join: Spark SQL does not follow the `STREAMTABLE` hint.

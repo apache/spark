@@ -30,7 +30,7 @@ import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
  * `HiveThriftServer2` thrift server.
  */
-object HiveThriftServer2 extends Logging {
+private[hive] object HiveThriftServer2 extends Logging {
   var LOG = LogFactory.getLog(classOf[HiveServer2])
 
   def main(args: Array[String]) {
@@ -73,7 +73,7 @@ object HiveThriftServer2 extends Logging {
   }
 }
 
-class HiveThriftServer2(hiveContext: HiveContext)
+private[hive] class HiveThriftServer2(hiveContext: HiveContext)
   extends HiveServer2
   with ReflectedCompositeService {
 

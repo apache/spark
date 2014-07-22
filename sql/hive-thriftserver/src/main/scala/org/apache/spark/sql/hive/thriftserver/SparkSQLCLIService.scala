@@ -34,7 +34,7 @@ import org.apache.hive.service.{AbstractService, Service, ServiceException}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
-class SparkSQLCLIService(hiveContext: HiveContext)
+private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
   extends CLIService
   with ReflectedCompositeService {
 

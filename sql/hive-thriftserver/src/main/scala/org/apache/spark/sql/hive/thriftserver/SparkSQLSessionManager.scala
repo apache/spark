@@ -28,7 +28,7 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
-class SparkSQLSessionManager(hiveContext: HiveContext)
+private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
   extends SessionManager
   with ReflectedCompositeService {
 

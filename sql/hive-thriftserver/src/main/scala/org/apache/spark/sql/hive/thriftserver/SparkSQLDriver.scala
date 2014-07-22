@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 import org.apache.spark.sql.Logging
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 
-class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveContext)
+private[hive] class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveContext)
   extends Driver with Logging {
 
   private var tableSchema: Schema = _

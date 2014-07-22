@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRow}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SQLConf, SQLContext}
 
 trait Command {
   /**
@@ -44,13 +45,20 @@ trait Command {
 case class SetCommand(
     key: Option[String], value: Option[String], output: Seq[Attribute])(
     @transient context: SQLContext)
-  extends LeafNode with Command {
+  extends LeafNode with Command with Logging {
 
   override protected[sql] lazy val sideEffectResult: Seq[String] = (key, value) match {
     // Set value for key k.
     case (Some(k), Some(v)) =>
-      context.set(k, v)
-      Array(s"$k=$v")
+      if (k == SQLConf.Deprecated.MAPRED_REDUCE_TASKS) {
+        logWarning(s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+          s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
+        context.set(SQLConf.SHUFFLE_PARTITIONS, v)
+        Array(s"${SQLConf.SHUFFLE_PARTITIONS}=$v")
+      } else {
+        context.set(k, v)
+        Array(s"$k=$v")
+      }
 
     // Query the value bound to key k.
     case (Some(k), _) =>

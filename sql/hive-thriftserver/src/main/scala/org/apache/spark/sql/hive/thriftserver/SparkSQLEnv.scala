@@ -25,7 +25,7 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
 
 /** A singleton object for the master program. The slaves should not access this. */
-object SparkSQLEnv extends Logging {
+private[hive] object SparkSQLEnv extends Logging {
   logger.debug("Initializing SparkSQLEnv")
 
   var hiveContext: HiveContext = _

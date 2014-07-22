@@ -39,7 +39,7 @@ import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.sql.Logging
 
-object SparkSQLCLIDriver {
+private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"
   private var continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport:TSocket = _
@@ -240,8 +240,7 @@ object SparkSQLCLIDriver {
   }
 }
 
-
-class SparkSQLCLIDriver extends CliDriver with Logging {
+private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val sessionState = SessionState.get().asInstanceOf[CliSessionState]
 
   private val LOG = LogFactory.getLog("CliDriver")

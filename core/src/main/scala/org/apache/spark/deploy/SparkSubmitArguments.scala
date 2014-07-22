@@ -318,7 +318,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               SparkSubmit.printErrorAndExit(errMessage)
             case v =>
               primaryResource =
-                if (!SparkSubmit.isShell(v)) {
+                if (!SparkSubmit.isShell(v) && !SparkSubmit.isInternal(v)) {
                   Utils.resolveURI(v).toString
                 } else {
                   v
