@@ -1227,23 +1227,39 @@ class RDD(object):
 
         # Transferring O(n) objects to Java is too expensive.  Instead, we'll
         # form the hash buckets in Python, transferring O(numPartitions) objects
-        # to Java.  Each object is a (splitNumber, [objects]) pair.
+        # to Java. Each object is a (splitNumber, [objects]) pair.
+        # In order to void too huge objects, the objects are grouped into chunks.
         outputSerializer = self.ctx._unbatched_serializer
 
-        limit = _parse_memory(self.ctx._conf.get("spark.python.worker.memory")
-                or "512m")
+        limit = (_parse_memory(self.ctx._conf.get("spark.python.worker.memory")
+                               or "512m") / 2)
         def add_shuffle_key(split, iterator):
 
             buckets = defaultdict(list)
-            c, batch = 0, 1000
+            c, batch = 0, min(10 * numPartitions, 1000)
+
             for (k, v) in iterator:
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
                 c += 1
-                if c % batch == 0 and get_used_memory() > limit:
+
+                # check used memory and avg size of chunk of objects
+                if (c % 1000 == 0 and get_used_memory() > limit
+                        or c > batch):
+                    n, size = len(buckets), 0
                     for split in buckets.keys():
                         yield pack_long(split)
-                        yield outputSerializer.dumps(buckets[split])
+                        d = outputSerializer.dumps(buckets[split])
                         del buckets[split]
+                        yield d
+                        size += len(d)
+
+                    avg = (size / n) >> 20
+                    # let 1M < avg < 10M
+                    if avg < 1:
+                        batch *= 1.5
+                    elif avg > 10:
+                        batch = max(batch / 1.5, 1)
+                    c = 0
 
             for (split, items) in buckets.iteritems():
                 yield pack_long(split)

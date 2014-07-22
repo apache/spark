@@ -149,7 +149,7 @@ class ExternalMerger(Merger):
         """ get all the directories """
         path = os.environ.get("SPARK_LOCAL_DIR", "/tmp/spark")
         dirs = path.split(",")
-        return [os.path.join(d, "python", str(os.getpid()))
+        return [os.path.join(d, "python", str(os.getpid()), str(id(self)))
                 for d in dirs]
 
     def _get_spill_dir(self, n):
