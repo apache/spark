@@ -477,7 +477,7 @@ class ALS private (
           }
         }
         toSend.zipWithIndex.map{ case (buf, idx) => (idx, (bid, buf.toArray)) }
-    }.groupByKey(productPartitioner)
+    }.groupByKey(new HashPartitioner(numUserBlocks))
      .join(userInLinks)
      .mapValues{ case (messages, inLinkBlock) =>
         updateBlock(messages, inLinkBlock, rank, lambda, alpha, YtY)
