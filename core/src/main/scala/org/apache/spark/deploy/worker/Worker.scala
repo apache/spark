@@ -381,7 +381,8 @@ private[spark] object Worker extends Logging {
       cores: Int,
       memory: Int,
       masterUrls: Array[String],
-      workDir: String, workerNumber: Option[Int] = None): (ActorSystem, Int) = {
+      workDir: String,
+      workerNumber: Option[Int] = None): (ActorSystem, Int) = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
     val conf = new SparkConf
@@ -391,7 +392,7 @@ private[spark] object Worker extends Logging {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
       conf = conf, securityManager = securityMgr)
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
+      masterUrls, systemName, actorName, workDir, conf, securityMgr), name = actorName)
     (actorSystem, boundPort)
   }
 
