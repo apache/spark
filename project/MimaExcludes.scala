@@ -62,6 +62,14 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.storage.MemoryStore.Entry"),
         ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.rdd.RDD.org$apache$spark$rdd$RDD$$debugChildren$1"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.rdd.RDD.org$apache$spark$rdd$RDD$$firstDebugString$1"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.rdd.RDD.org$apache$spark$rdd$RDD$$shuffleDebugString$1"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.rdd.RDD.org$apache$spark$rdd$RDD$$debugString$1"),
+        ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$"
             + "createZero$1")
       ) ++
