@@ -50,7 +50,8 @@ spark.executorEnv.VAR3=value3
 spark.executorEnv.VAR4=value4
 spark.home=/path
 >>> sorted(conf.getAll(), key=lambda p: p[0])
-[(u'spark.executorEnv.VAR1', u'value1'), (u'spark.executorEnv.VAR3', u'value3'), (u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
+[(u'spark.executorEnv.VAR1', u'value1'), (u'spark.executorEnv.VAR3', u'value3'), \
+(u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
 """
 
 
@@ -118,9 +119,9 @@ class SparkConf(object):
         """Set an environment variable to be passed to executors."""
         if (key is not None and pairs is not None) or (key is None and pairs is None):
             raise Exception("Either pass one key-value pair or a list of pairs")
-        elif key != None:
+        elif key is not None:
             self._jconf.setExecutorEnv(key, value)
-        elif pairs != None:
+        elif pairs is not None:
             for (k, v) in pairs:
                 self._jconf.setExecutorEnv(k, v)
         return self
@@ -137,7 +138,7 @@ class SparkConf(object):
 
     def get(self, key, defaultValue=None):
         """Get the configured value for some key, or return a default otherwise."""
-        if defaultValue == None:   # Py4J doesn't call the right get() if we pass None
+        if defaultValue is None:   # Py4J doesn't call the right get() if we pass None
             if not self._jconf.contains(key):
                 return None
             return self._jconf.get(key)

@@ -42,12 +42,12 @@ def should_exit():
 
 
 def compute_real_exit_code(exit_code):
-  # SystemExit's code can be integer or string, but os._exit only accepts integers
-  import numbers
-  if isinstance(exit_code, numbers.Integral):
-    return exit_code
-  else:
-    return 1
+    # SystemExit's code can be integer or string, but os._exit only accepts integers
+    import numbers
+    if isinstance(exit_code, numbers.Integral):
+        return exit_code
+    else:
+        return 1
 
 
 def worker(listen_sock):

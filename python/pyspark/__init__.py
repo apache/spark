@@ -59,4 +59,5 @@ from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
 
 
-__all__ = ["SparkConf", "SparkContext", "SQLContext", "RDD", "SchemaRDD", "SparkFiles", "StorageLevel", "Row"]
+__all__ = ["SparkConf", "SparkContext", "SQLContext", "RDD", "SchemaRDD",
+           "SparkFiles", "StorageLevel", "Row"]
