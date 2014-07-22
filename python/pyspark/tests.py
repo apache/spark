@@ -34,7 +34,7 @@ import zipfile
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int
-from pyspark.shuffle import MapMerger, ExternalHashMapMerger
+from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger
 
 _have_scipy = False
 try:
@@ -51,34 +51,58 @@ SPARK_HOME = os.environ["SPARK_HOME"]
 class TestMerger(unittest.TestCase):
 
     def setUp(self):
-        self.N = 1<<18
+        self.N = 1 << 16
         self.l = [i for i in xrange(self.N)]
         self.data = zip(self.l, self.l)
-        ExternalHashMapMerger.PARTITIONS = 8
-        ExternalHashMapMerger.BATCH = 1<<14
+        self.agg = Aggregator(lambda x: [x], 
+                lambda x, y: x.append(y) or x,
+                lambda x, y: x.extend(y) or x)
+        ExternalMerger.PARTITIONS = 8
+        ExternalMerger.BATCH = 1 << 14
 
     def test_in_memory(self):
-        m = MapMerger(lambda x,y: x+y)
-        m.merge(self.data)
-        self.assertEqual(sum(v for k,v in m.iteritems()), sum(xrange(self.N)))
+        m = InMemoryMerger(self.agg)
+        m.combine(self.data)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+        m = InMemoryMerger(self.agg)
+        m.merge(map(lambda (x, y): (x, [y]), self.data))
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
 
     def test_small_dataset(self):
-        m = ExternalHashMapMerger(lambda x,y: x+y, 1000)
-        m.merge(self.data)
+        m = ExternalMerger(self.agg, 1000)
+        m.combine(self.data)
         self.assertEqual(m.spills, 0)
-        self.assertEqual(sum(v for k,v in m.iteritems()), sum(xrange(self.N)))
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+        m = ExternalMerger(self.agg, 1000)
+        m.merge(map(lambda (x, y): (x, [y]), self.data))
+        self.assertEqual(m.spills, 0)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
 
     def test_medium_dataset(self):
-        m = ExternalHashMapMerger(lambda x,y: x+y, 10)
-        m.merge(self.data * 3)
+        m = ExternalMerger(self.agg, 10)
+        m.combine(self.data)
         self.assertTrue(m.spills >= 1)
-        self.assertEqual(sum(v for k,v in m.iteritems()), sum(xrange(self.N)) * 3)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)))
+
+        m = ExternalMerger(self.agg, 10)
+        m.merge(map(lambda (x, y): (x, [y]), self.data * 3))
+        self.assertTrue(m.spills >= 1)
+        self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
+                sum(xrange(self.N)) * 3)
 
     def test_huge_dataset(self):
-        m = ExternalHashMapMerger(lambda x,y: x + y, 10)
-        m.merge(map(lambda (k,v): (k, [str(v)]), self.data) * 10)
+        m = ExternalMerger(self.agg, 10)
+        m.merge(map(lambda (k, v): (k, [str(v)]), self.data * 10))
         self.assertTrue(m.spills >= 1)
-        self.assertEqual(sum(len(v) for k,v in m._recursive_merged_items(0)), self.N * 10)
+        self.assertEqual(sum(len(v) for k, v in m._recursive_merged_items(0)),
+                self.N * 10)
         m._cleanup()
 
 

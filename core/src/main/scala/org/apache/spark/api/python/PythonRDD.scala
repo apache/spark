@@ -57,7 +57,8 @@ private[spark] class PythonRDD[T: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
-    val localdir = env.conf.get("spark.local.dir", System.getProperty("java.io.tmpdir"))
+    val localdir = env.blockManager.diskBlockManager.localDirs.map(
+      f => f.getPath()).mkString(",")
     val worker: Socket = env.createPythonWorker(pythonExec,
       envVars.toMap + ("SPARK_LOCAL_DIR" -> localdir))
 

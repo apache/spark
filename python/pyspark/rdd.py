@@ -42,7 +42,8 @@ from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
-from pyspark.shuffle import MapMerger, ExternalHashMapMerger
+from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
+    get_used_memory
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -171,17 +172,19 @@ class MaxHeapQ(object):
 
 def _parse_memory(s):
     """
-    It returns a number in MB
+    Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
+    return the value in MB
 
     >>> _parse_memory("256m")
     256
     >>> _parse_memory("2g")
     2048
     """
-    units = {'g': 1024, 'm': 1, 't': 1<<20, 'k':1.0/1024}
+    units = {'g': 1024, 'm': 1, 't': 1 << 20, 'k': 1.0 / 1024}
     if s[-1] not in units:
         raise ValueError("invalid format: " + s)
     return int(float(s[:-1]) * units[s[-1].lower()])
+
 
 class RDD(object):
 
@@ -1198,15 +1201,25 @@ class RDD(object):
         # to Java.  Each object is a (splitNumber, [objects]) pair.
         outputSerializer = self.ctx._unbatched_serializer
 
+        limit = _parse_memory(self.ctx._conf.get("spark.python.worker.memory")
+                or "512m")
         def add_shuffle_key(split, iterator):
 
             buckets = defaultdict(list)
-
+            c, batch = 0, 1000
             for (k, v) in iterator:
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
+                c += 1
+                if c % batch == 0 and get_used_memory() > limit:
+                    for split in buckets.keys():
+                        yield pack_long(split)
+                        yield outputSerializer.dumps(buckets[split])
+                        del buckets[split]
+
             for (split, items) in buckets.iteritems():
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
+
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
         with _JavaStackTrace(self.context) as st:
@@ -1251,27 +1264,26 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
+        serializer = self.ctx.serializer
+        spill = (self.ctx._conf.get("spark.shuffle.spill") or 'True').lower() == 'true'
+        memory = _parse_memory(self.ctx._conf.get("spark.python.worker.memory") or "512m")
+        agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
+
         def combineLocally(iterator):
-            combiners = {}
-            for x in iterator:
-                (k, v) = x
-                if k not in combiners:
-                    combiners[k] = createCombiner(v)
-                else:
-                    combiners[k] = mergeValue(combiners[k], v)
-            return combiners.iteritems()
+            merger = ExternalMerger(agg, memory, serializer) \
+                         if spill else InMemoryMerger(agg)
+            merger.combine(iterator)
+            return merger.iteritems()
+
         locally_combined = self.mapPartitions(combineLocally)
         shuffled = locally_combined.partitionBy(numPartitions)
  
-        serializer = self.ctx.serializer
-        spill = ((self.ctx._conf.get("spark.shuffle.spill") or 'True').lower()
-                in ('true', '1', 'yes'))
-        memory = _parse_memory(self.ctx._conf.get("spark.python.worker.memory") or "512m")
         def _mergeCombiners(iterator):
-            merger = ExternalHashMapMerger(mergeCombiners, memory, serializer)\
-                         if spill else MapMerger(mergeCombiners)
+            merger = ExternalMerger(agg, memory, serializer) \
+                         if spill else InMemoryMerger(agg)
             merger.merge(iterator)
             return merger.iteritems()
+
         return shuffled.mapPartitions(_mergeCombiners)
 
     def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):

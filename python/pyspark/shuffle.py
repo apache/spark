@@ -21,7 +21,7 @@ import platform
 import shutil
 import warnings
 
-from pyspark.serializers import BatchedSerializer, AutoSerializer
+from pyspark.serializers import BatchedSerializer, PickleSerializer
 
 try:
     import psutil
@@ -46,97 +46,166 @@ except ImportError:
         return 0
 
 
+class Aggregator(object):
+
+    def __init__(self, creator, combiner, mergeCombiner=None):
+        self.creator = creator
+        self.combiner = combiner
+        self.mergeCombiner = mergeCombiner or combiner
+
+
 class Merger(object):
+
     """
     merge shuffled data together by combinator
     """
 
+    def __init__(self, aggregator):
+        self.agg = aggregator
+
+    def combine(self, iterator):
+        """ combine the items by creator and combiner """
+        raise NotImplementedError
+
     def merge(self, iterator):
+        """ merge the combined items by mergeCombiner """
         raise NotImplementedError
 
     def iteritems(self):
+        """ return the merged items ad iterator """
         raise NotImplementedError
 
 
-class MapMerger(Merger):
+class InMemoryMerger(Merger):
     """
     In memory merger based on map
     """
 
-    def __init__(self, combiner):
-        self.combiner = combiner
+    def __init__(self, aggregator):
+        Merger.__init__(self, aggregator)
         self.data = {}
 
+    def combine(self, iterator):
+        """ combine the items by creator and combiner """
+        # speed up attributes lookup
+        d, creator, comb = self.data, self.agg.creator, self.agg.combiner
+        for k, v in iterator:
+            d[k] = comb(d[k], v) if k in d else creator(v)
+
     def merge(self, iterator):
-        d, comb = self.data, self.combiner
-        for k, v in iter(iterator):
+        """ merge the combined items by mergeCombiner """
+        # speed up attributes lookup
+        d, comb = self.data, self.agg.mergeCombiner
+        for k, v in iterator:
             d[k] = comb(d[k], v) if k in d else v
 
     def iteritems(self):
+        """ return the merged items ad iterator """
         return self.data.iteritems()
 
 
-class ExternalHashMapMerger(Merger):
+class ExternalMerger(Merger):
 
     """
     External merger will dump the aggregated data into disks when memory usage
     is above the limit, then merge them together.
 
-    >>> combiner = lambda x, y:x+y
-    >>> merger = ExternalHashMapMerger(combiner, 10)
+    >>> agg = Aggregator(lambda x: x, lambda x, y: x + y)
+    >>> merger = ExternalMerger(agg, 10)
     >>> N = 10000
+    >>> merger.combine(zip(xrange(N), xrange(N)) * 10)
+    >>> assert merger.spills > 0
+    >>> sum(v for k,v in merger.iteritems())
+    499950000
+
+    >>> merger = ExternalMerger(agg, 10)
     >>> merger.merge(zip(xrange(N), xrange(N)) * 10)
     >>> assert merger.spills > 0
     >>> sum(v for k,v in merger.iteritems())
     499950000
     """
 
-    PARTITIONS = 64
-    BATCH = 10000
+    PARTITIONS = 64  # number of partitions when spill data into disks
+    BATCH = 10000  # check the memory after # of items merged
 
-    def __init__(self, combiner, memory_limit=512, serializer=None,
+    def __init__(self, aggregator, memory_limit=512, serializer=None,
             localdirs=None, scale=1):
-        self.combiner = combiner
+        Merger.__init__(self, aggregator)
         self.memory_limit = memory_limit
-        self.serializer = serializer or\
-                BatchedSerializer(AutoSerializer(), 1024)
+        # default serializer is only used for tests
+        self.serializer = serializer or \
+                BatchedSerializer(PickleSerializer(), 1024)
         self.localdirs = localdirs or self._get_dirs()
+        # scale is used to scale down the hash of key for recursive hash map,
         self.scale = scale
+        # unpartitioned merged data
         self.data = {}
+        # partitioned merged data
         self.pdata = []
+        # number of chunks dumped into disks
         self.spills = 0
 
     def _get_dirs(self):
+        """ get all the directories """
         path = os.environ.get("SPARK_LOCAL_DIR", "/tmp/spark")
         dirs = path.split(",")
-        localdirs = []
-        for d in dirs:
-            d = os.path.join(d, "merge", str(os.getpid()))
-            try:
-                os.makedirs(d)
-                localdirs.append(d)
-            except IOError:
-                pass
-        if not localdirs:
-            raise IOError("no writable directories: " + path)
-        return localdirs
+        return [os.path.join(d, "python", str(os.getpid()))
+                for d in dirs]
 
     def _get_spill_dir(self, n):
+        """ choose one directory for spill by number n """
         return os.path.join(self.localdirs[n % len(self.localdirs)], str(n))
 
-    @property
-    def used_memory(self):
-        return get_used_memory()
-
-    @property
     def next_limit(self):
-        return max(self.memory_limit, self.used_memory * 1.05)
+        """
+        return the next memory limit. If the memory is not released
+        after spilling, it will dump the data only when the used memory
+        starts to increase.
+        """
+        return max(self.memory_limit, get_used_memory() * 1.05)
 
-    def merge(self, iterator, check=True):
-        """ merge (K,V) pair by combiner """
+    def combine(self, iterator):
+        """ combine the items by creator and combiner """
         iterator = iter(iterator)
         # speedup attribute lookup
-        d, comb, batch = self.data, self.combiner, self.BATCH
+        d, creator, comb = self.data, self.agg.creator, self.agg.combiner
+        c, batch = 0, self.BATCH
+
+        for k, v in iterator:
+            d[k] = comb(d[k], v) if k in d else creator(v)
+
+            c += 1
+            if c % batch == 0 and get_used_memory() > self.memory_limit:
+                self._first_spill()
+                self._partitioned_combine(iterator, self.next_limit())
+                break
+
+    def _partition(self, key):
+        """ return the partition for key """
+        return (hash(key) / self.scale) % self.PARTITIONS
+
+    def _partitioned_combine(self, iterator, limit=0):
+        """ partition the items by key, then combine them """
+        # speedup attribute lookup
+        creator, comb, pdata = self.agg.creator, self.agg.combiner, self.pdata
+        c, hfun, batch = 0, self._partition, self.BATCH
+
+        for k, v in iterator:
+            d = pdata[hfun(k)]
+            d[k] = comb(d[k], v) if k in d else creator(v)
+            if not limit:
+                continue
+
+            c += 1
+            if c % batch == 0 and get_used_memory() > limit:
+                self._spill()
+                limit = self.next_limit()
+
+    def merge(self, iterator, check=True):
+        """ merge (K,V) pair by mergeCombiner """
+        iterator = iter(iterator)
+        # speedup attribute lookup
+        d, comb, batch = self.data, self.agg.mergeCombiner, self.BATCH
         c = 0
         for k, v in iterator:
             d[k] = comb(d[k], v) if k in d else v
@@ -144,35 +213,45 @@ class ExternalHashMapMerger(Merger):
                 continue
 
             c += 1
-            if c % batch == 0 and self.used_memory > self.memory_limit:
+            if c % batch == 0 and get_used_memory() > self.memory_limit:
                 self._first_spill()
-                self._partitioned_merge(iterator, self.next_limit)
+                self._partitioned_merge(iterator, self.next_limit())
                 break
 
-    def _hash(self, key):
-        return (hash(key) / self.scale) % self.PARTITIONS
-
-    def _partitioned_merge(self, iterator, limit):
-        comb, pdata, hfun = self.combiner, self.pdata, self._hash
+    def _partitioned_merge(self, iterator, limit=0):
+        """ partition the items by key, then merge them """
+        comb, pdata, hfun = self.agg.mergeCombiner, self.pdata, self._partition
         c = 0
         for k, v in iterator:
             d = pdata[hfun(k)]
             d[k] = comb(d[k], v) if k in d else v
             if not limit:
                 continue
+
             c += 1
-            if c % self.BATCH == 0 and self.used_memory > limit:
+            if c % self.BATCH == 0 and get_used_memory() > limit:
                 self._spill()
-                limit = self.next_limit
+                limit = self.next_limit()
 
     def _first_spill(self):
+        """
+        dump all the data into disks partition by partition.
+
+        The data has not been partitioned, it will iterator the dataset once,
+        write them into different files, has no additional memory. It only
+        called when the memory goes above limit at the first time.
+        """
         path = self._get_spill_dir(self.spills)
         if not os.path.exists(path):
             os.makedirs(path)
+        # open all the files for writing
         streams = [open(os.path.join(path, str(i)), 'w')
                    for i in range(self.PARTITIONS)]
+
         for k, v in self.data.iteritems():
-            h = self._hash(k)
+            h = self._partition(k)
+            # put one item in batch, make it compatitable with load_stream
+            # it will increase the memory if dump them in batch
             self.serializer.dump_stream([(k, v)], streams[h])
         for s in streams:
             s.close()
@@ -181,27 +260,35 @@ class ExternalHashMapMerger(Merger):
         self.spills += 1
 
     def _spill(self):
+        """
+        dump already partitioned data into disks.
+
+        It will dump the data in batch for better performance.
+        """
         path = self._get_spill_dir(self.spills)
         if not os.path.exists(path):
             os.makedirs(path)
+
         for i in range(self.PARTITIONS):
             p = os.path.join(path, str(i))
             with open(p, "w") as f:
+                # dump items in batch
                 self.serializer.dump_stream(self.pdata[i].iteritems(), f)
             self.pdata[i].clear()
         self.spills += 1
 
     def iteritems(self):
-        """ iterator of all merged (K,V) pairs """
+        """ return all merged items as iterator """
         if not self.pdata and not self.spills:
             return self.data.iteritems()
         return self._external_items()
 
     def _external_items(self):
+        """ return all partitioned items as iterator """
         assert not self.data
         if any(self.pdata):
             self._spill()
-        hard_limit = self.next_limit
+        hard_limit = self.next_limit()
 
         try:
             for i in range(self.PARTITIONS):
@@ -209,9 +296,10 @@ class ExternalHashMapMerger(Merger):
                 for j in range(self.spills):
                     path = self._get_spill_dir(j)
                     p = os.path.join(path, str(i))
+                    # do not check memory during merging
                     self.merge(self.serializer.load_stream(open(p)), False)
 
-                    if self.used_memory > hard_limit and j < self.spills - 1:
+                    if get_used_memory() > hard_limit and j < self.spills - 1:
                         self.data.clear() # will read from disk again
                         for v in self._recursive_merged_items(i):
                             yield v
@@ -224,30 +312,39 @@ class ExternalHashMapMerger(Merger):
             self._cleanup()
 
     def _cleanup(self):
+        """ clean up all the files in disks """
         for d in self.localdirs:
             shutil.rmtree(d, True)
 
     def _recursive_merged_items(self, start):
+        """
+        merge the partitioned items and return the as iterator
+
+        If one partition can not be fit in memory, then them will be
+        partitioned and merged recursively.
+        """
+        # make sure all the data are dumps into disks.
         assert not self.data
-        assert self.spills > 0
         if any(self.pdata):
             self._spill()
+        assert self.spills > 0
 
         for i in range(start, self.PARTITIONS):
-            subdirs = [os.path.join(d, "merge", str(i))
+            subdirs = [os.path.join(d, "parts", str(i))
                             for d in self.localdirs]
-            m = ExternalHashMapMerger(self.combiner, self.memory_limit,
-                    self.serializer, subdirs, self.scale * self.PARTITIONS)
+            m = ExternalMerger(self.agg, self.memory_limit, self.serializer,
+                    subdirs, self.scale * self.PARTITIONS)
             m.pdata = [{} for _ in range(self.PARTITIONS)]
-            limit = self.next_limit
+            limit = self.next_limit()
 
             for j in range(self.spills):
                 path = self._get_spill_dir(j)
                 p = os.path.join(path, str(i))
-                m._partitioned_merge(self.serializer.load_stream(open(p)), 0)
-                if m.used_memory > limit:
+                m._partitioned_merge(self.serializer.load_stream(open(p)))
+
+                if get_used_memory() > limit:
                     m._spill()
-                    limit = self.next_limit
+                    limit = self.next_limit()
 
             for v in m._external_items():
                 yield v

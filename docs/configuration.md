@@ -201,7 +201,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Amount of memory to use per python worker process during aggregation, in the same
     format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>). If the memory
-    used during aggregation go above this amount, it will spill the data into disks.
+    used during aggregation goes above this amount, it will spill the data into disks.
   </td>
 </tr>
 </table>
