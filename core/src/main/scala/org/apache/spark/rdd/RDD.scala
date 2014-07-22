@@ -1279,7 +1279,7 @@ abstract class RDD[T: ClassTag](
           info.numCachedPartitions, bytesToString(info.memSize),
           bytesToString(info.tachyonSize), bytesToString(info.diskSize)))
 
-      (rdd.toString+persistence) +: storageInfo
+      (rdd.toString+" ["+persistence+"]") +: storageInfo
     }
 
     // Apply a different rule to the last child
