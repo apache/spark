@@ -142,8 +142,12 @@ private[spark] object AkkaUtils extends Logging {
    * Send a message to the given actor and get its result within a default timeout, or
    * throw a SparkException if this fails.
    */
-  def askWithReply[T](message: Any, actor: ActorRef, retryAttempts: Int,
-                      retryInterval: Int, timeout: FiniteDuration): T = {
+  def askWithReply[T](
+      message: Any,
+      actor: ActorRef,
+      retryAttempts: Int,
+      retryInterval: Int,
+      timeout: FiniteDuration): T = {
     // TODO: Consider removing multiple attempts
     if (actor == null) {
       throw new SparkException("Error sending message as driverActor is null " +

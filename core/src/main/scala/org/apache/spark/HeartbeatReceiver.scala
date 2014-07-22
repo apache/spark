@@ -22,7 +22,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.TaskScheduler
 
-case class Heartbeat(
+private[spark] case class Heartbeat(
     executorId: String,
     taskMetrics: Array[(Long, TaskMetrics)],
     blockManagerId: BlockManagerId)
@@ -31,7 +31,7 @@ case class Heartbeat(
 /**
  * Lives in the driver to receive heartbeats from executors..
  */
-class HeartbeatReceiver(scheduler: TaskScheduler) extends Actor {
+private[spark] class HeartbeatReceiver(scheduler: TaskScheduler) extends Actor {
   override def receive = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       sender ! scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId)

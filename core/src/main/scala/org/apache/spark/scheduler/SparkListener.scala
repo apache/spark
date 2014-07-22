@@ -75,8 +75,11 @@ case class SparkListenerBlockManagerRemoved(blockManagerId: BlockManagerId)
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
-case class SparkListenerExecutorMetricsUpdate(execId: String,
-  taskMetrics: Seq[(Long, Int, TaskMetrics)]) extends SparkListenerEvent
+@DeveloperApi
+case class SparkListenerExecutorMetricsUpdate(
+    execId: String,
+    taskMetrics: Seq[(Long, Int, TaskMetrics)])
+  extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerApplicationStart(appName: String, time: Long, sparkUser: String)

@@ -55,7 +55,7 @@ private[jobs] object UIData {
     var executorSummary = new HashMap[String, ExecutorSummary]
   }
 
-  case class TaskUIData(
+  class TaskUIData(
       var taskInfo: TaskInfo,
       var taskMetrics: Option[TaskMetrics] = None,
       var errorMessage: Option[String] = None)

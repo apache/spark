@@ -328,9 +328,11 @@ private[spark] class TaskSchedulerImpl(
    * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
    * indicating that the block manager should re-register.
    */
-  override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
+  override def executorHeartbeatReceived(
+      execId: String,
+      taskMetrics: Array[(Long, TaskMetrics)],
       blockManagerId: BlockManagerId): Boolean = {
-    val metricsWithStageIds = taskMetrics.flatMap{
+    val metricsWithStageIds = taskMetrics.flatMap {
       case (id, metrics) => {
         taskIdToTaskSetId.get(id)
           .flatMap(activeTaskSets.get)

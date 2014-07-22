@@ -160,7 +160,9 @@ class DAGScheduler(
    * alive. Return true if the driver knows about the given block manager. Otherwise, return false,
    * indicating that the block manager should re-register.
    */
-  def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, Int, TaskMetrics)],
+  def executorHeartbeatReceived(
+      execId: String,
+      taskMetrics: Array[(Long, Int, TaskMetrics)],
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
     implicit val timeout = Timeout(30 seconds)
