@@ -46,12 +46,11 @@ private[spark] class FIFOSchedulingAlgorithm extends SchedulingAlgorithm {
         false
       }
     }
-    if (res < 0) {
+    if (res > 0) {
       true
     } else {
       false
     }
-
   }
 }
 
