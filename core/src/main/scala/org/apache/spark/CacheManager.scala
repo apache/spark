@@ -118,8 +118,13 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
   }
 
   /**
-   * Cache the values of a partition, keeping track of any updates in the storage statuses
-   * of other blocks along the way.
+   * Cache the values of a partition, keeping track of any updates in the storage statuses of
+   * other blocks along the way.
+   *
+   * The effective storage level refers to the level that actually specifies BlockManager put
+   * behavior, not the level originally specified by the user. This is mainly for forcing a
+   * MEMORY_AND_DISK partition to disk if there is not enough room to unroll the partition,
+   * while preserving the the original semantics of the RDD as specified by the application.
    */
   private def putInBlockManager[T](
       key: BlockId,
@@ -131,10 +136,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
     val putLevel = effectiveStorageLevel.getOrElse(level)
     if (!putLevel.useMemory) {
       /*
-       * This RDD is not to be cached in memory, so we can just pass the computed values
-       * as an iterator directly to the BlockManager, rather than first fully unrolling
-       * it in memory. The latter option potentially uses much more memory and risks OOM
-       * exceptions that can be avoided.
+       * This RDD is not to be cached in memory, so we can just pass the computed values as an
+       * iterator directly to the BlockManager rather than first fully unrolling it in memory.
        */
       updatedBlocks ++=
         blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
@@ -165,15 +168,15 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           // There is not enough space to cache this partition in memory
           logWarning(s"Not enough space to cache $key in memory! " +
             s"Free memory is ${blockManager.memoryStore.freeMemory} bytes.")
-          var returnValues = it.asInstanceOf[Iterator[T]]
+          val returnValues = it.asInstanceOf[Iterator[T]]
           if (putLevel.useDisk) {
             logWarning(s"Persisting $key to disk instead.")
             val diskOnlyLevel = StorageLevel(useDisk = true, useMemory = false,
               useOffHeap = false, deserialized = false, putLevel.replication)
-            returnValues =
-              putInBlockManager[T](key, returnValues, level, updatedBlocks, Some(diskOnlyLevel))
+            putInBlockManager[T](key, returnValues, level, updatedBlocks, Some(diskOnlyLevel))
+          } else {
+            returnValues
           }
-          returnValues
       }
     }
   }
