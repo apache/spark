@@ -55,7 +55,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
-  var sparkProperties: HashMap[String, String] = new HashMap[String, String]()
+  val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
 
   parseOpts(args.toList)
   loadDefaults()
@@ -178,6 +178,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
     |  executorCores           $executorCores
     |  totalExecutorCores      $totalExecutorCores
     |  propertiesFile          $propertiesFile
+    |  extraSparkProperties    $sparkProperties
     |  driverMemory            $driverMemory
     |  driverCores             $driverCores
     |  driverExtraClassPath    $driverExtraClassPath
@@ -291,7 +292,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         jars = Utils.resolveURIs(value)
         parse(tail)
 
-      case ("--conf") :: value :: tail =>
+      case ("--conf" | "-c") :: value :: tail =>
         value.split("=", 2).toSeq match {
           case Seq(k, v) => sparkProperties(k) = v
           case _ => SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")

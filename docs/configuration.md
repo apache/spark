@@ -42,7 +42,8 @@ val sc = new SparkContext(new SparkConf())
 
 Then, you can supply configuration values at runtime:
 {% highlight bash %}
-./bin/spark-submit --name "My app" --master local[4] myApp.jar --conf spark.shuffle.spill=false
+./bin/spark-submit --name "My app" --master local[4] --conf spark.shuffle.spill=false 
+  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -Xmn5g" myApp.jar 
 {% endhighlight %}
 
 The Spark shell and [`spark-submit`](cluster-overview.html#launching-applications-with-spark-submit)
