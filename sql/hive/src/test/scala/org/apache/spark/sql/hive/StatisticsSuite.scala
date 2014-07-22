@@ -32,7 +32,8 @@ class StatisticsSuite extends QueryTest {
       mr.statistics.sizeInBytes
     }
     assert(sizes.size === 1)
-    assert(sizes(0) == 5812, s"expected exact size 5812 for test table 'src', got ${sizes(0)}")
+    assert(sizes(0).equals(BigInt(5812)),
+      s"expected exact size 5812 for test table 'src', got: ${sizes(0)}")
   }
 
   test("auto converts to broadcast hash join, by size estimate of a relation") {

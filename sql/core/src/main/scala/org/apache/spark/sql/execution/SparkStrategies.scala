@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.util.Try
+
 import org.apache.spark.sql.{SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -72,19 +74,22 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.autoConvertJoinSize > 0 &&
-          right.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize =>
-          makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
+        if Try(sqlContext.autoConvertJoinSize > 0 &&
+          right.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize).getOrElse(false) =>
+        makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildRight)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.autoConvertJoinSize > 0 &&
-          left.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize =>
+        if Try(sqlContext.autoConvertJoinSize > 0 &&
+          left.statistics.sizeInBytes <= sqlContext.autoConvertJoinSize).getOrElse(false) =>
           makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
         val buildSide =
-          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) BuildRight
-          else BuildLeft
+          if (Try(right.statistics.sizeInBytes <= left.statistics.sizeInBytes).getOrElse(false)) {
+            BuildRight
+          } else {
+            BuildLeft
+          }
         val hashJoin =
           execution.ShuffledHashJoin(
             leftKeys, rightKeys, buildSide, planLater(left), planLater(right))

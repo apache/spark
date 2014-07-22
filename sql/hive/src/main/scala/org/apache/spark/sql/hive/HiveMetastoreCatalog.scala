@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.Logging
+import org.apache.spark.sql.{SQLContext, Logging}
 import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, Catalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
@@ -66,8 +66,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     // Since HiveQL is case insensitive for table names we make them all lowercase.
     MetastoreRelation(
       databaseName, tblName, alias)(
-      table.getTTable, partitions.map(part => part.getTPartition))(
-      hive.hiveconf, table.getPath)
+      table.getTTable, partitions.map(part => part.getTPartition))(hive)
   }
 
   def createTable(
@@ -252,7 +251,7 @@ object HiveMetastoreTypes extends RegexParsers {
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: TTable, val partitions: Seq[TPartition])
-    (@transient hiveConf: HiveConf, @transient path: Path)
+    (@transient sqlContext: SQLContext)
   extends LeafNode {
 
   self: Product =>
@@ -270,15 +269,17 @@ private[hive] case class MetastoreRelation
   }
 
   @transient override lazy val statistics = Statistics(
-    // TODO: check if this estimate is valid for tables after partition pruning.
     sizeInBytes = {
-      // NOTE: kind of hacky, but this should be relatively cheap if parameters for the table are
-      // populated into the metastore.  An alternative would be going through Hadoop's FileSystem
-      // API, which can be expensive if a lot of RPCs are involved.  Besides `totalSize`, there are
-      // also `numFiles`, `numRows`, `rawDataSize` keys we can look at in the future.
-      val sizeMaybeFromMetastore =
-        Option(hiveQlTable.getParameters.get("totalSize")).map(_.toLong).getOrElse(-1L)
-      math.max(sizeMaybeFromMetastore, 1L)
+      // TODO: check if this estimate is valid for tables after partition pruning.
+      // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
+      // relatively cheap if parameters for the table are populated into the metastore.  An
+      // alternative would be going through Hadoop's FileSystem API, which can be expensive if a lot
+      // of RPCs are involved.  Besides `totalSize`, there are also `numFiles`, `numRows`,
+      // `rawDataSize` keys that we can look at in the future.
+      BigInt(
+        Option(hiveQlTable.getParameters.get("totalSize"))
+          .map(_.toLong)
+          .getOrElse(sqlContext.statsDefaultSizeInBytes))
     }
   )
 

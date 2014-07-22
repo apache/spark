@@ -22,15 +22,13 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 /**
- * A trait that enables the setting and getting of mutable config parameters/hints. The central
- * location for storing them is uniquely located in the same-name private companion object.
- * Therefore, all classes that mix in this trait share all the hints.
+ * A trait that enables the setting and getting of mutable config parameters/hints.
  *
- * In the presence of a SQLContext, these can be set and queried either by passing SET commands
- * into Spark SQL's DSL functions (sql(), hql(), etc.). Otherwise, users of this trait can
+ * In the presence of a SQLContext, these can be set and queried by passing SET commands
+ * into Spark SQL's query functions (sql(), hql(), etc.). Otherwise, users of this trait can
  * modify the hints by programmatically calling the setters and getters of this trait.
  *
- * SQLConf is thread-safe (internally synchronized so safe to be used in multiple threads).
+ * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
 trait SQLConf {
   import SQLConf._
