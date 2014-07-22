@@ -22,54 +22,84 @@ import scala.util.Random
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
-import org.apache.spark.util.random.Pseudorandom
+import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
 
 /**
- * Trait for random number generators that generate i.i.d values from a distribution
+ * Trait for random number generators that generate i.i.d values from a distribution.
  */
-trait DistributionGenerator extends Pseudorandom with Cloneable {
+trait DistributionGenerator extends Pseudorandom with Serializable {
 
   /**
-   * @return An i.i.d sample as a Double from an underlying distribution
+   * @return An i.i.d sample as a Double from an underlying distribution.
    */
   def nextValue(): Double
 
-  override def clone(): DistributionGenerator = super.clone().asInstanceOf[DistributionGenerator]
+  /**
+   * @return A copy of the DistributionGenerator with a new instance of the rng object used in the
+   *         class when applicable. Each partition has a unique seed and therefore requires its
+   *         own instance of the DistributionGenerator.
+   */
+  def newInstance(): DistributionGenerator
 }
 
-class NormalGenerator(val mean: Double = 0.0, val stddev: Double = 1.0)
-  extends DistributionGenerator {
-
-  require(stddev >= 0.0, "Standard deviation cannot be negative.")
-
-  private val random = new Random()
-  private val standard = mean == 0.0 && stddev == 1.0
+/**
+ * Generates i.i.d. samples from U[0.0, 1.0]
+ */
+class UniformGenerator() extends DistributionGenerator {
+  // XORShiftRandom for better performance. Thread safety isn't necessary here.
+  private val random = new XORShiftRandom()
 
   /**
-   * @return An i.i.d sample as a Double from the Normal distribution
+   * @return An i.i.d sample as a Double from U[0.0, 1.0].
    */
   override def nextValue(): Double = {
-    if (standard) {
-      random.nextGaussian()
-    } else {
-      mean + stddev * random.nextGaussian()
-    }
+    random.nextDouble()
   }
 
   /** Set random seed. */
   override def setSeed(seed: Long) = random.setSeed(seed)
+
+  override def newInstance(): UniformGenerator = new UniformGenerator()
 }
 
-class PoissonGenerator(val lambda: Double = 0.0) extends DistributionGenerator {
+/**
+ * Generates i.i.d. samples from the Standard Normal Distribution.
+ */
+class StandardNormalGenerator() extends DistributionGenerator {
+  // XORShiftRandom for better performance. Thread safety isn't necessary here.
+  private val random = new XORShiftRandom()
 
-  private var rng = new Poisson(lambda, new DRand)
   /**
-   * @return An i.i.d sample as a Double from the Poisson distribution
+   * @return An i.i.d sample as a Double from the Normal distribution.
+   */
+  override def nextValue(): Double = {
+      random.nextGaussian()
+  }
+
+  /** Set random seed. */
+  override def setSeed(seed: Long) = random.setSeed(seed)
+
+  override def newInstance(): StandardNormalGenerator = new StandardNormalGenerator()
+}
+
+/**
+ * Generates i.i.d. samples from the Poisson distribution with the given mean.
+ *
+ * @param mean mean for the Poisson distribution.
+ */
+class PoissonGenerator(val mean: Double) extends DistributionGenerator {
+
+  private var rng = new Poisson(mean, new DRand)
+
+  /**
+   * @return An i.i.d sample as a Double from the Poisson distribution.
    */
   override def nextValue(): Double = rng.nextDouble()
 
   /** Set random seed. */
   override def setSeed(seed: Long) {
-    rng = new Poisson(lambda, new DRand(seed.toInt))
+    rng = new Poisson(mean, new DRand(seed.toInt))
   }
+
+  override def newInstance(): PoissonGenerator = new PoissonGenerator(mean)
 }
