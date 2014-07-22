@@ -739,7 +739,7 @@ def doStuff(self, rdd):
 
 While most Spark operations work on RDDs containing any type of objects, a few special operations are
 only available on RDDs of key-value pairs.
-The most common ones are distibuted "shuffle" operations, such as grouping or aggregating the elements
+The most common ones are distributed "shuffle" operations, such as grouping or aggregating the elements
 by a key.
 
 In Scala, these operations are automatically available on RDDs containing
@@ -773,7 +773,7 @@ documentation](http://docs.oracle.com/javase/7/docs/api/java/lang/Object.html#ha
 
 While most Spark operations work on RDDs containing any type of objects, a few special operations are
 only available on RDDs of key-value pairs.
-The most common ones are distibuted "shuffle" operations, such as grouping or aggregating the elements
+The most common ones are distributed "shuffle" operations, such as grouping or aggregating the elements
 by a key.
 
 In Java, key-value pairs are represented using the 
@@ -810,7 +810,7 @@ documentation](http://docs.oracle.com/javase/7/docs/api/java/lang/Object.html#ha
 
 While most Spark operations work on RDDs containing any type of objects, a few special operations are
 only available on RDDs of key-value pairs.
-The most common ones are distibuted "shuffle" operations, such as grouping or aggregating the elements
+The most common ones are distributed "shuffle" operations, such as grouping or aggregating the elements
 by a key.
 
 In Python, these operations work on RDDs containing built-in Python tuples such as `(1, 2)`.
@@ -975,8 +975,8 @@ for details.
   <td> Return an array with the first <i>n</i> elements of the dataset. Note that this is currently not executed in parallel. Instead, the driver program computes all the elements. </td>
 </tr>
 <tr>
-  <td> <b>takeSample</b>(<i>withReplacement</i>, <i>num</i>, <i>seed</i>) </td>
-  <td> Return an array with a random sample of <i>num</i> elements of the dataset, with or without replacement, using the given random number generator seed. </td>
+  <td> <b>takeSample</b>(<i>withReplacement</i>, <i>num</i>, [<i>seed</i>]) </td>
+  <td> Return an array with a random sample of <i>num</i> elements of the dataset, with or without replacement, optionally pre-specifying a random number generator seed.</td>
 </tr>
 <tr>
   <td> <b>takeOrdered</b>(<i>n</i>, <i>[ordering]</i>) </td>
