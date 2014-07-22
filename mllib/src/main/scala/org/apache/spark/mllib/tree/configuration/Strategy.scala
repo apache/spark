@@ -47,4 +47,5 @@ class Strategy (
     val maxBins: Int = 100,
     val quantileCalculationStrategy: QuantileStrategy = Sort,
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-    val maxMemoryInMB: Int = 128) extends Serializable
+    val maxMemoryInMB: Int = 128,
+    val randomSubspace: Boolean = false) extends Serializable

@@ -29,6 +29,8 @@ import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
+import scala.util.Random
+
 /**
  * :: Experimental ::
  * A class that implements a decision tree algorithm for classification and regression. It
@@ -880,11 +882,17 @@ object DecisionTree extends Serializable with Logging {
         rightNodeAgg: Array[Array[Double]],
         nodeImpurity: Double): Array[Array[InformationGainStats]] = {
       val gains = Array.ofDim[InformationGainStats](numFeatures, numBins - 1)
-
+      val indices = Random.shuffle(0 to numFeatures).take(math.sqrt(numFeatures).round.toInt).toSet
       for (featureIndex <- 0 until numFeatures) {
-        for (splitIndex <- 0 until numBins - 1) {
-          gains(featureIndex)(splitIndex) = calculateGainForSplit(leftNodeAgg, featureIndex,
-            splitIndex, rightNodeAgg, nodeImpurity)
+        if (!strategy.randomSubspace || indices.contains(featureIndex)) {
+          for (splitIndex <- 0 until numBins - 1) {
+            gains(featureIndex)(splitIndex) = calculateGainForSplit(leftNodeAgg, featureIndex,
+              splitIndex, rightNodeAgg, nodeImpurity)
+          }
+        }else{
+          for (splitIndex <- 0 until numBins - 1) {
+            gains(featureIndex)(splitIndex) = new InformationGainStats(Double.MinValue, -1.0, -1.0, -1.0, -1.0)
+          }
         }
       }
       gains
