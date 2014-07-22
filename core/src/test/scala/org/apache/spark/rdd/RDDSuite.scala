@@ -526,9 +526,9 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("sample preserves partitioner") {
     val partitioner = new HashPartitioner(2)
     val rdd = sc.parallelize(Seq((0, 1), (2, 3))).partitionBy(partitioner)
-    for (withReplacement <- Seq((true, false))) {
+    for (withReplacement <- Seq(true, false)) {
       val sampled = rdd.sample(withReplacement, 1.0)
-      assert(sampled.partitioner.get === partitiner)
+      assert(sampled.partitioner === rdd.partitioner)
     }
   }
 
