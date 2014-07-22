@@ -48,8 +48,7 @@ case class ParquetTableScan(
     // https://issues.apache.org/jira/browse/SPARK-1367
     output: Seq[Attribute],
     relation: ParquetRelation,
-    columnPruningPred: Seq[Expression])(
-    @transient val sqlContext: SQLContext)
+    columnPruningPred: Seq[Expression])
   extends LeafNode {
 
   override def execute(): RDD[Row] = {
@@ -94,8 +93,6 @@ case class ParquetTableScan(
       .filter(_ != null) // Parquet's record filters may produce null values
   }
 
-  override def otherCopyArgs = sqlContext :: Nil
-
   /**
    * Applies a (candidate) projection.
    *
@@ -105,7 +102,7 @@ case class ParquetTableScan(
   def pruneColumns(prunedAttributes: Seq[Attribute]): ParquetTableScan = {
     val success = validateProjection(prunedAttributes)
     if (success) {
-      ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sqlContext)
+      ParquetTableScan(prunedAttributes, relation, columnPruningPred)
     } else {
       sys.error("Warning: Could not validate Parquet schema projection in pruneColumns")
       this
@@ -152,8 +149,7 @@ case class ParquetTableScan(
 case class InsertIntoParquetTable(
     relation: ParquetRelation,
     child: SparkPlan,
-    overwrite: Boolean = false)(
-    @transient val sqlContext: SQLContext)
+    overwrite: Boolean = false)
   extends UnaryNode with SparkHadoopMapReduceUtil {
 
   /**
@@ -204,8 +200,6 @@ case class InsertIntoParquetTable(
   }
 
   override def output = child.output
-
-  override def otherCopyArgs = sqlContext :: Nil
 
   /**
    * Stores the given Row RDD as a Hadoop file.

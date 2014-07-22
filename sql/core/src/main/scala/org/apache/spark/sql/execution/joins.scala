@@ -219,9 +219,8 @@ case class BroadcastHashJoin(
      rightKeys: Seq[Expression],
      buildSide: BuildSide,
      left: SparkPlan,
-     right: SparkPlan)(@transient sqlContext: SQLContext) extends BinaryNode with HashJoin {
+     right: SparkPlan) extends BinaryNode with HashJoin {
 
-  override def otherCopyArgs = sqlContext :: Nil
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
@@ -230,7 +229,7 @@ case class BroadcastHashJoin(
 
   @transient
   lazy val broadcastFuture = future {
-    sqlContext.sparkContext.broadcast(buildPlan.executeCollect())
+    sparkContext.broadcast(buildPlan.executeCollect())
   }
 
   def execute() = {
@@ -250,13 +249,10 @@ case class BroadcastHashJoin(
 @DeveloperApi
 case class LeftSemiJoinBNL(
     streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression])
-    (@transient sqlContext: SQLContext)
   extends BinaryNode {
   // TODO: Override requiredChildDistribution.
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
-
-  override def otherCopyArgs = sqlContext :: Nil
 
   def output = left.output
 
@@ -273,7 +269,7 @@ case class LeftSemiJoinBNL(
 
   def execute() = {
     val broadcastedRelation =
-      sqlContext.sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+      sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
 
     streamed.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow
@@ -321,13 +317,10 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
 @DeveloperApi
 case class BroadcastNestedLoopJoin(
     streamed: SparkPlan, broadcast: SparkPlan, joinType: JoinType, condition: Option[Expression])
-    (@transient sqlContext: SQLContext)
   extends BinaryNode {
   // TODO: Override requiredChildDistribution.
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
-
-  override def otherCopyArgs = sqlContext :: Nil
 
   override def output = {
     joinType match {
@@ -355,7 +348,7 @@ case class BroadcastNestedLoopJoin(
 
   def execute() = {
     val broadcastedRelation =
-      sqlContext.sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
+      sparkContext.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
 
     val streamedPlusMatches = streamed.execute().mapPartitions { streamedIter =>
       val matchedRows = new ArrayBuffer[Row]
@@ -407,7 +400,7 @@ case class BroadcastNestedLoopJoin(
       }
 
     // TODO: Breaks lineage.
-    sqlContext.sparkContext.union(
-      streamedPlusMatches.flatMap(_._1), sqlContext.sparkContext.makeRDD(rightOuterMatches))
+    sparkContext.union(
+      streamedPlusMatches.flatMap(_._1), sparkContext.makeRDD(rightOuterMatches))
   }
 }

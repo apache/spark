@@ -42,7 +42,7 @@ case class Aggregate(
     partial: Boolean,
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    child: SparkPlan)(@transient sqlContext: SQLContext)
+    child: SparkPlan)
   extends UnaryNode {
 
   override def requiredChildDistribution =
@@ -55,8 +55,6 @@ case class Aggregate(
         ClusteredDistribution(groupingExpressions) :: Nil
       }
     }
-
-  override def otherCopyArgs = sqlContext :: Nil
 
   // HACK: Generators don't correctly preserve their output through serializations so we grab
   // out child's output attributes statically here.

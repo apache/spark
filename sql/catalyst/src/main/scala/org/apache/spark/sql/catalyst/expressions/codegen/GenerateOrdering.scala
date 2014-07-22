@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import com.typesafe.scalalogging.slf4j.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.{StringType, NumericType}
 
 /**
  * Generates bytecode for an [[Ordering]] of [[Row Rows]] for a given set of
  * [[Expression Expressions]].
  */
-object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] {
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] with Logging {
   import scala.reflect.runtime.{universe => ru}
   import scala.reflect.runtime.universe._
 
@@ -40,6 +42,22 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] {
       val evalA = expressionEvaluator(order.child)
       val evalB = expressionEvaluator(order.child)
 
+      val compare = order.child.dataType match {
+        case _: NumericType =>
+          q"""
+          val comp = ${evalA.primitiveTerm} - ${evalB.primitiveTerm}
+          if(comp != 0) {
+            return ${if (order.direction == Ascending) q"comp.toInt" else q"-comp.toInt"}
+          }
+          """
+        case StringType =>
+          if (order.direction == Ascending) {
+            q"""return ${evalA.primitiveTerm}.compare(${evalB.primitiveTerm})"""
+          } else {
+            q"""return ${evalB.primitiveTerm}.compare(${evalA.primitiveTerm})"""
+          }
+      }
+
       q"""
         i = $a
         ..${evalA.code}
@@ -52,9 +70,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] {
         } else if (${evalB.nullTerm}) {
           return ${if (order.direction == Ascending) q"1" else q"-1"}
         } else {
-          i = a
-          val comp = ${evalA.primitiveTerm} - ${evalB.primitiveTerm}
-          if(comp != 0) return comp.toInt
+          $compare
         }
       """
     }
@@ -76,6 +92,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[Row]] {
       }
       new $orderingName()
       """
+    logger.debug(s"Generated Ordering: $code")
     toolBox.eval(code).asInstanceOf[Ordering[Row]]
   }
 }

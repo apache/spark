@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, Logging, Row}
+import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
@@ -28,17 +29,35 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
 import org.apache.spark.sql.catalyst.plans.physical._
 
+
+object SparkPlan {
+  protected[sql] val currentContext = new ThreadLocal[SQLContext]()
+}
+
 /**
  * :: DeveloperApi ::
  */
 @DeveloperApi
-abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
+abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
   self: Product =>
 
-  def codegenEnabled = _codegenEnabled
+  /**
+   * A handle to the SQL Context that was used to create this plan.   Since many operators need
+   * access to the sqlContext for RDD operations or configuration this field is automatically
+   * populated by the query planning infrastructure.
+   */
+  @transient
+  protected val sqlContext = SparkPlan.currentContext.get()
 
-  /** Will be set to true during planning if code generation should be used for this operator. */
-  private[sql] var _codegenEnabled = false
+  protected def sparkContext = sqlContext.sparkContext
+
+  def logger = log
+
+  val codegenEnabled: Boolean = if(sqlContext != null) {
+    sqlContext.codegenEnabled
+  } else {
+    false
+  }
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
@@ -57,16 +76,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
    */
   def executeCollect(): Array[Row] = execute().map(_.copy()).collect()
 
-  def newProjection(expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection =
+  protected def newProjection(
+      expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
+    log.debug(
+      s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if (codegenEnabled) {
       GenerateProjection(expressions, inputSchema)
     } else {
       new InterpretedProjection(expressions, inputSchema)
     }
+  }
 
-  def newMutableProjection(
+  protected def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute]): () => MutableProjection = {
+    log.debug(
+      s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
     if(codegenEnabled) {
       GenerateMutableProjection(expressions, inputSchema)
     } else {
@@ -75,7 +100,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   }
 
 
-  def newPredicate(expression: Expression, inputSchema: Seq[Attribute]): (Row) => Boolean = {
+  protected def newPredicate(
+      expression: Expression, inputSchema: Seq[Attribute]): (Row) => Boolean = {
     if (codegenEnabled) {
       GeneratePredicate(expression, inputSchema)
     } else {
@@ -83,7 +109,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
     }
   }
 
-  def newOrdering(order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[Row] = {
+  protected def newOrdering(order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[Row] = {
     if (codegenEnabled) {
       GenerateOrdering(order, inputSchema)
     } else {

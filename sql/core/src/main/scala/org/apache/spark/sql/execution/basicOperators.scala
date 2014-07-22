@@ -76,12 +76,10 @@ case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child:
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class Union(children: Seq[SparkPlan])(@transient sqlContext: SQLContext) extends SparkPlan {
+case class Union(children: Seq[SparkPlan]) extends SparkPlan {
   // TODO: attributes output by union should be distinct for nullability purposes
   override def output = children.head.output
-  override def execute() = sqlContext.sparkContext.union(children.map(_.execute()))
-
-  override def otherCopyArgs = sqlContext :: Nil
+  override def execute() = sparkContext.union(children.map(_.execute()))
 }
 
 /**
@@ -93,12 +91,10 @@ case class Union(children: Seq[SparkPlan])(@transient sqlContext: SQLContext) ex
  * repartition all the data to a single partition to compute the global limit.
  */
 @DeveloperApi
-case class Limit(limit: Int, child: SparkPlan)(@transient sqlContext: SQLContext)
+case class Limit(limit: Int, child: SparkPlan)
   extends UnaryNode {
   // TODO: Implement a partition local limit, and use a strategy to generate the proper limit plan:
   // partition local limit -> exchange into one partition -> partition local limit again
-
-  override def otherCopyArgs = sqlContext :: Nil
 
   override def output = child.output
 
@@ -165,21 +161,18 @@ case class Limit(limit: Int, child: SparkPlan)(@transient sqlContext: SQLContext
  * Spark's top operator does the opposite in ordering so we name it TakeOrdered to avoid confusion.
  */
 @DeveloperApi
-case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
-                      (@transient sqlContext: SQLContext) extends UnaryNode {
-  override def otherCopyArgs = sqlContext :: Nil
+case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) extends UnaryNode {
 
   override def output = child.output
 
-  @transient
-  lazy val ordering = new RowOrdering(sortOrder)
+  val ordering = new RowOrdering(sortOrder, child.output)
 
   // TODO: Is this copying for no reason?
   override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ordering)
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
-  override def execute() = sqlContext.sparkContext.makeRDD(executeCollect(), 1)
+  override def execute() = sparkContext.makeRDD(executeCollect(), 1)
 }
 
 /**

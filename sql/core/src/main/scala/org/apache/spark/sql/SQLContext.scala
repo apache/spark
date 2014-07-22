@@ -304,18 +304,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
-      Batch("Add exchange", Once, AddExchange(self)) ::
-      Batch("CodeGen", Once, TurnOnCodeGen) :: Nil
-  }
-
-  protected object TurnOnCodeGen extends Rule[SparkPlan] {
-    def apply(plan: SparkPlan): SparkPlan = {
-      if (self.codegenEnabled) {
-        plan.foreach(p => println(p.simpleString))
-        plan.foreach(_._codegenEnabled = true)
-      }
-      plan
-    }
+      Batch("Add exchange", Once, AddExchange(self)) :: Nil
   }
 
   /**
@@ -330,7 +319,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
     lazy val analyzed = analyzer(logical)
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
-    lazy val sparkPlan = planner(optimizedPlan).next()
+    lazy val sparkPlan = {
+      SparkPlan.currentContext.set(self)
+      planner(optimizedPlan).next()
+    }
     // executedPlan should not be used to initialize any SparkPlan. It should be
     // only used for execution.
     lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)

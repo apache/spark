@@ -51,9 +51,11 @@ case class Generate(
     if (join) child.output ++ generatorOutput else generatorOutput
 
   /** Codegenned rows are not serializable... */
-  override def codegenEnabled = false
+  override val codegenEnabled = false
 
   override def execute() = {
+    val boundGenerator = BindReferences.bindReference(generator, child.output)
+
     if (join) {
       child.execute().mapPartitions { iter =>
         val nullValues = Seq.fill(generator.output.size)(Literal(null))
@@ -66,7 +68,7 @@ case class Generate(
         val joinedRow = new JoinedRow
 
         iter.flatMap {row =>
-          val outputRows = generator.eval(row)
+          val outputRows = boundGenerator.eval(row)
           if (outer && outputRows.isEmpty) {
             outerProjection(row) :: Nil
           } else {
@@ -75,7 +77,7 @@ case class Generate(
         }
       }
     } else {
-      child.execute().mapPartitions(iter => iter.flatMap(row => generator.eval(row)))
+      child.execute().mapPartitions(iter => iter.flatMap(row => boundGenerator.eval(row)))
     }
   }
 }
