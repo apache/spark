@@ -37,6 +37,6 @@ object FakeTask {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(i, if (prefLocs.size != 0) prefLocs(i) else Nil)
     }
-    new TaskSet(tasks, 0, 0, 0, null)
+    new TaskSet(tasks, 0, 0, 0, 0, null)
   }
 }

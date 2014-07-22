@@ -37,6 +37,7 @@ private[spark] trait Schedulable {
   def runningTasks: Int
   def priority: Int
   def stageId: Int
+  def jobId: Int
   def name: String
 
   def addSchedulable(schedulable: Schedulable): Unit

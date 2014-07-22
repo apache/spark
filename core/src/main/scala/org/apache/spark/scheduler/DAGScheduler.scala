@@ -778,8 +778,9 @@ class DAGScheduler(
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       myPending ++= tasks
       logDebug("New pending tasks: " + myPending)
+      val priority:String = properties.getProperty("spark.scheduler.priority", "0")
       taskScheduler.submitTasks(
-        new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
+        new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, priority.toInt, properties))
       stageToInfos(stage).submissionTime = Some(clock.getTime())
     } else {
       logDebug("Stage " + stage + " is actually done; %b %d %d".format(
