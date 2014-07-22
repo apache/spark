@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+
 package org.apache.spark.examples.pythonconverters
 
 import org.apache.spark.api.python.Converter
@@ -27,6 +28,15 @@ import org.apache.avro.Schema.Field
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type._
 
+/* 
+  Example usage in pyspark:  
+
+    avroRdd = sc.newAPIHadoopFile("/tmp/data.avro", 
+      "org.apache.avro.mapreduce.AvroKeyInputFormat", 
+      "org.apache.avro.mapred.AvroKey", 
+      "org.apache.hadoop.io.NullWritable",
+      keyConverter="org.apache.spark.examples.pythonconverters.AvroGenericConverter")
+*/
 class AvroGenericConverter extends Converter[AvroKey[GenericRecord], java.util.Map[String, Any]] {
   override def convert(obj: AvroKey[GenericRecord]): java.util.Map[String, Any] = {
 
