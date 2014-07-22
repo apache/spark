@@ -136,7 +136,16 @@ private[spark] object UIUtils extends Logging {
   }
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
-  val uiRoot : String = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("")
+  def uiRoot: String = {
+    if (System.getenv("APPLICATION_WEB_PROXY_BASE") != null) {
+      System.getenv("APPLICATION_WEB_PROXY_BASE")
+    } else if (System.getProperty("spark.ui.proxyBase") != null) {
+      System.getProperty("spark.ui.proxyBase")
+    }
+    else {
+      ""
+    }
+  }
 
   def prependBaseUri(basePath: String = "", resource: String = "") = uiRoot + basePath + resource
 
