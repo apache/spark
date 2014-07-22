@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class SVMModel private[mllib] (
+class SVMModel (
     override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {

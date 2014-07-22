@@ -62,7 +62,7 @@ trait Vector extends Serializable {
    * Gets the value of the ith element.
    * @param i index
    */
-  private[mllib] def apply(i: Int): Double = toBreeze(i)
+  def apply(i: Int): Double = toBreeze(i)
 }
 
 /**

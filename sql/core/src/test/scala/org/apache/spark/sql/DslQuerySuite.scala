@@ -33,6 +33,12 @@ class DslQuerySuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("repartition") {
+    checkAnswer(
+      testData.select('key).repartition(10).select('key),
+      testData.select('key).collect().toSeq)
+  }
+
   test("agg") {
     checkAnswer(
       testData2.groupBy('a)('a, Sum('b)),
@@ -167,5 +173,26 @@ class DslQuerySuite extends QueryTest {
 
   test("zero count") {
     assert(emptyTableData.count() === 0)
+  }
+
+  test("except") {
+    checkAnswer(
+      lowerCaseData.except(upperCaseData),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
+    checkAnswer(lowerCaseData.except(lowerCaseData), Nil)
+    checkAnswer(upperCaseData.except(upperCaseData), Nil)
+  }
+
+  test("intersect") {
+    checkAnswer(
+      lowerCaseData.intersect(lowerCaseData),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
+    checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
   }
 }

@@ -107,8 +107,9 @@ private[spark] class Executor(
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
-  def launchTask(context: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer) {
-    val tr = new TaskRunner(context, taskId, serializedTask)
+  def launchTask(
+      context: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer) {
+    val tr = new TaskRunner(context, taskId, taskName, serializedTask)
     runningTasks.put(taskId, tr)
     threadPool.execute(tr)
   }
@@ -135,14 +136,15 @@ private[spark] class Executor(
     localDirs
   }
 
-  class TaskRunner(execBackend: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer)
+  class TaskRunner(
+      execBackend: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer)
     extends Runnable {
 
     @volatile private var killed = false
     @volatile private var task: Task[Any] = _
 
     def kill(interruptThread: Boolean) {
-      logInfo("Executor is trying to kill task " + taskId)
+      logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
       killed = true
       if (task != null) {
         task.kill(interruptThread)
@@ -154,7 +156,7 @@ private[spark] class Executor(
       SparkEnv.set(env)
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
-      logInfo("Running task ID " + taskId)
+      logInfo(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var attemptedTask: Option[Task[Any]] = None
       var taskStart: Long = 0
@@ -207,25 +209,30 @@ private[spark] class Executor(
 
         val accumUpdates = Accumulators.values
 
-        val directResult = new DirectTaskResult(valueBytes, accumUpdates,
-          task.metrics.getOrElse(null))
+        val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.orNull)
         val serializedDirectResult = ser.serialize(directResult)
-        logInfo("Serialized size of result for " + taskId + " is " + serializedDirectResult.limit)
-        val serializedResult = {
-          if (serializedDirectResult.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
-            logInfo("Storing result for " + taskId + " in local BlockManager")
+        val resultSize = serializedDirectResult.limit
+
+        // directSend = sending directly back to the driver
+        val (serializedResult, directSend) = {
+          if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
               blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
-            ser.serialize(new IndirectTaskResult[Any](blockId))
+            (ser.serialize(new IndirectTaskResult[Any](blockId)), false)
           } else {
-            logInfo("Sending result for " + taskId + " directly to driver")
-            serializedDirectResult
+            (serializedDirectResult, true)
           }
         }
 
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
-        logInfo("Finished task ID " + taskId)
+
+        if (directSend) {
+          logInfo(s"Finished $taskName (TID $taskId). $resultSize bytes result sent to driver")
+        } else {
+          logInfo(
+            s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
+        }
       } catch {
         case ffe: FetchFailedException => {
           val reason = ffe.toTaskEndReason
@@ -233,7 +240,7 @@ private[spark] class Executor(
         }
 
         case _: TaskKilledException | _: InterruptedException if task.killed => {
-          logInfo("Executor killed task " + taskId)
+          logInfo(s"Executor killed $taskName (TID $taskId)")
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
         }
 
@@ -241,7 +248,7 @@ private[spark] class Executor(
           // Attempt to exit cleanly by informing the driver of our failure.
           // If anything goes wrong (or this was a fatal exception), we will delegate to
           // the default uncaught exception handler, which will terminate the Executor.
-          logError("Exception in task ID " + taskId, t)
+          logError(s"Exception in $taskName (TID $taskId)", t)
 
           val serviceTime = System.currentTimeMillis() - taskStart
           val metrics = attemptedTask.flatMap(t => t.metrics)
@@ -249,7 +256,7 @@ private[spark] class Executor(
             m.executorRunTime = serviceTime
             m.jvmGCTime = gcTime - startGCTime
           }
-          val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
+          val reason = ExceptionFailure(t.getClass.getName, t.getMessage, t.getStackTrace, metrics)
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
