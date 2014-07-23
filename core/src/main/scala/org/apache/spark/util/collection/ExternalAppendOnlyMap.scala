@@ -30,6 +30,7 @@ import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManager}
+import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
 
 /**
  * :: DeveloperApi ::
@@ -65,8 +66,6 @@ class ExternalAppendOnlyMap[K, V, C](
     serializer: Serializer = SparkEnv.get.serializer,
     blockManager: BlockManager = SparkEnv.get.blockManager)
   extends Iterable[(K, C)] with Serializable with Logging {
-
-  import ExternalAppendOnlyMap._
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
@@ -105,7 +104,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private var _diskBytesSpilled = 0L
 
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
-  private val comparator = new KCComparator[K, C]
+  private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
 
   /**
@@ -173,7 +172,7 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     try {
-      val it = currentMap.destructiveSortedIterator(comparator)
+      val it = currentMap.destructiveSortedIterator(keyComparator)
       while (it.hasNext) {
         val kv = it.next()
         writer.write(kv)
@@ -231,7 +230,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    private val sortedMap = currentMap.destructiveSortedIterator(comparator)
+    private val sortedMap = currentMap.destructiveSortedIterator(keyComparator)
     private val inputStreams = (Seq(sortedMap) ++ spilledMaps).map(it => it.buffered)
 
     inputStreams.foreach { it =>
@@ -252,7 +251,7 @@ class ExternalAppendOnlyMap[K, V, C](
       if (it.hasNext) {
         var kc = it.next()
         kcPairs += kc
-        val minHash = getKeyHashCode(kc)
+        val minHash = hashKey(kc)
         while (it.hasNext && it.head._1.hashCode() == minHash) {
           kc = it.next()
           kcPairs += kc
@@ -298,7 +297,7 @@ class ExternalAppendOnlyMap[K, V, C](
       val minPair = minPairs.remove(0)
       val minKey = minPair._1
       var minCombiner = minPair._2
-      assert(getKeyHashCode(minPair) == minHash)
+      assert(hashKey(minPair) == minHash)
 
       // For all other streams that may have this key (i.e. have the same minimum key hash),
       // merge in the corresponding value (if any) from that stream
@@ -339,7 +338,7 @@ class ExternalAppendOnlyMap[K, V, C](
       // Invalid if there are no more pairs in this stream
       def minKeyHash: Int = {
         assert(pairs.length > 0)
-        getKeyHashCode(pairs.head)
+        hashKey(pairs.head)
       }
 
       override def compareTo(other: StreamBuffer): Int = {
@@ -423,25 +422,27 @@ class ExternalAppendOnlyMap[K, V, C](
       file.delete()
     }
   }
+
+  /** Convenience function to hash the given (K, C) pair by the key. */
+  private def hashKey(kc: (K, C)): Int = ExternalAppendOnlyMap.hash(kc._1)
 }
 
 private[spark] object ExternalAppendOnlyMap {
 
   /**
-   * Return the key hash code of the given (key, combiner) pair.
-   * If the key is null, return a special hash code.
+   * Return the hash code of the given object. If the object is null, return a special hash code.
    */
-  private def getKeyHashCode[K, C](kc: (K, C)): Int = {
-    if (kc._1 == null) 0 else kc._1.hashCode()
+  private def hash[T](obj: T): Int = {
+    if (obj == null) 0 else obj.hashCode()
   }
 
   /**
-   * A comparator for (key, combiner) pairs based on their key hash codes.
+   * A comparator which sorts arbitrary keys based on their hash codes.
    */
-  private class KCComparator[K, C] extends Comparator[(K, C)] {
-    def compare(kc1: (K, C), kc2: (K, C)): Int = {
-      val hash1 = getKeyHashCode(kc1)
-      val hash2 = getKeyHashCode(kc2)
+  private class HashComparator[K] extends Comparator[K] {
+    def compare(key1: K, key2: K): Int = {
+      val hash1 = hash(key1)
+      val hash2 = hash(key2)
       if (hash1 < hash2) -1 else if (hash1 == hash2) 0 else 1
     }
   }
