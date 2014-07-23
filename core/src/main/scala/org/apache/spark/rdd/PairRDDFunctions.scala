@@ -573,10 +573,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
     cg.mapValues { case Seq(vs, w1s, w2s, w3s) =>
-       (vs.asInstanceOf[Seq[V]],
-         w1s.asInstanceOf[Seq[W1]],
-         w2s.asInstanceOf[Seq[W2]],
-         w3s.asInstanceOf[Seq[W3]])
+       (vs.asInstanceOf[Iterable[V]],
+         w1s.asInstanceOf[Iterable[W1]],
+         w2s.asInstanceOf[Iterable[W2]],
+         w3s.asInstanceOf[Iterable[W3]])
     }
   }
 
@@ -591,7 +591,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     }
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
     cg.mapValues { case Seq(vs, w1s) =>
-      (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W]])
+      (vs.asInstanceOf[Iterable[V]], w1s.asInstanceOf[Iterable[W]])
     }
   }
 
@@ -606,9 +606,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
     cg.mapValues { case Seq(vs, w1s, w2s) =>
-      (vs.asInstanceOf[Seq[V]],
-        w1s.asInstanceOf[Seq[W1]],
-        w2s.asInstanceOf[Seq[W2]])
+      (vs.asInstanceOf[Iterable[V]],
+        w1s.asInstanceOf[Iterable[W1]],
+        w2s.asInstanceOf[Iterable[W2]])
     }
   }
 
