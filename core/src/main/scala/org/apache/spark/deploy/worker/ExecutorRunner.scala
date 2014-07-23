@@ -30,6 +30,7 @@ import org.apache.spark.util.logging.FileAppender
 
 /**
  * Manages the execution of one executor process.
+ * This is currently only used in standalone mode.
  */
 private[spark] class ExecutorRunner(
     val appId: String,
