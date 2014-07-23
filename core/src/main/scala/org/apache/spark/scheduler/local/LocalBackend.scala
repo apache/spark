@@ -69,7 +69,7 @@ private[spark] class LocalActor(
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
     for (task <- scheduler.resourceOffers(offers).flatten) {
       freeCores -= 1
-      executor.launchTask(executorBackend, task.taskId, task.serializedTask)
+      executor.launchTask(executorBackend, task.taskId, task.name, task.serializedTask)
     }
   }
 }

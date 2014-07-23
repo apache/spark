@@ -151,10 +151,10 @@ L(\wv;\x,y) :=  \log(1+\exp( -y \wv^T \x)).
 Logistic regression algorithm outputs a logistic regression model, which makes predictions by
 applying the logistic function
 `\[
-\mathrm{logit}(z) = \frac{1}{1 + e^{-z}}
+\mathrm{f}(z) = \frac{1}{1 + e^{-z}}
 \]`
-$\wv^T \x$.
-By default, if $\mathrm{logit}(\wv^T x) > 0.5$, the outcome is positive, or negative otherwise.
+where $z = \wv^T \x$.
+By default, if $\mathrm{f}(\wv^T x) > 0.5$, the outcome is positive, or negative otherwise.
 For the same reason mentioned above, quite often in practice, this default threshold is not a good choice.
 The threshold should be determined via model evaluation.
 
@@ -187,7 +187,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLUtils
 
 // Load training data in LIBSVM format.
-val data = MLUtils.loadLibSVMFile(sc, "mllib/data/sample_libsvm_data.txt")
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
 // Split data into training (60%) and test (40%).
 val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
@@ -242,7 +242,86 @@ Similarly, you can use replace `SVMWithSGD` by
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object.
+calling `.rdd()` on your `JavaRDD` object. A standalone application example
+that is equivalent to the provided example in Scala is given bellow:
+
+{% highlight java %}
+import java.util.Random;
+
+import scala.Tuple2;
+
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.classification.*;
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+
+public class SVMClassifier {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("SVM Classifier Example");
+    SparkContext sc = new SparkContext(conf);
+    String path = "data/mllib/sample_libsvm_data.txt";
+    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
+
+    // Split initial RDD into two... [60% training data, 40% testing data].
+    JavaRDD<LabeledPoint> training = data.sample(false, 0.6, 11L);
+    training.cache();
+    JavaRDD<LabeledPoint> test = data.subtract(training);
+    
+    // Run training algorithm to build the model.
+    int numIterations = 100;
+    final SVMModel model = SVMWithSGD.train(training.rdd(), numIterations);
+    
+    // Clear the default threshold.
+    model.clearThreshold();
+
+    // Compute raw scores on the test set.
+    JavaRDD<Tuple2<Object, Object>> scoreAndLabels = test.map(
+      new Function<LabeledPoint, Tuple2<Object, Object>>() {
+        public Tuple2<Object, Object> call(LabeledPoint p) {
+          Double score = model.predict(p.features());
+          return new Tuple2<Object, Object>(score, p.label());
+        }
+      }
+    );
+    
+    // Get evaluation metrics.
+    BinaryClassificationMetrics metrics = 
+      new BinaryClassificationMetrics(JavaRDD.toRDD(scoreAndLabels));
+    double auROC = metrics.areaUnderROC();
+    
+    System.out.println("Area under ROC = " + auROC);
+  }
+}
+{% endhighlight %}
+
+The `SVMWithSGD.train()` method by default performs L2 regularization with the
+regularization parameter set to 1.0. If we want to configure this algorithm, we
+can customize `SVMWithSGD` further by creating a new object directly and
+calling setter methods. All other MLlib algorithms support customization in
+this way as well. For example, the following code produces an L1 regularized
+variant of SVMs with regularization parameter set to 0.1, and runs the training
+algorithm for 200 iterations.
+
+{% highlight java %}
+import org.apache.spark.mllib.optimization.L1Updater;
+
+SVMWithSGD svmAlg = new SVMWithSGD();
+svmAlg.optimizer()
+  .setNumIterations(200)
+  .setRegParam(0.1)
+  .setUpdater(new L1Updater());
+final SVMModel modelL1 = svmAlg.run(training.rdd());
+{% endhighlight %}
+
+In order to run the above standalone application using Spark framework make
+sure that you follow the instructions provided at section [Standalone
+Applications](quick-start.html) of the quick-start guide. What is more, you
+should include to your build file *spark-mllib* as a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
@@ -259,7 +338,7 @@ def parsePoint(line):
     values = [float(x) for x in line.split(' ')]
     return LabeledPoint(values[0], values[1:])
 
-data = sc.textFile("mllib/data/sample_svm_data.txt")
+data = sc.textFile("data/mllib/sample_svm_data.txt")
 parsedData = data.map(parsePoint)
 
 # Build the model
@@ -309,7 +388,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
-val data = sc.textFile("mllib/data/ridge-data/lpsa.data")
+val data = sc.textFile("data/mllib/ridge-data/lpsa.data")
 val parsedData = data.map { line =>
   val parts = line.split(',')
   LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
@@ -338,7 +417,72 @@ and [`LassoWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.Lass
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object.
+calling `.rdd()` on your `JavaRDD` object. The corresponding Java example to
+the Scala snippet provided, is presented bellow:
+
+{% highlight java %}
+import scala.Tuple2;
+
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.regression.LinearRegressionModel;
+import org.apache.spark.mllib.regression.LinearRegressionWithSGD;
+import org.apache.spark.SparkConf;
+
+public class LinearRegression {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("Linear Regression Example");
+    JavaSparkContext sc = new JavaSparkContext(conf);
+    
+    // Load and parse the data
+    String path = "data/mllib/ridge-data/lpsa.data";
+    JavaRDD<String> data = sc.textFile(path);
+    JavaRDD<LabeledPoint> parsedData = data.map(
+      new Function<String, LabeledPoint>() {
+        public LabeledPoint call(String line) {
+          String[] parts = line.split(",");
+          String[] features = parts[1].split(" ");
+          double[] v = new double[features.length];
+          for (int i = 0; i < features.length - 1; i++)
+            v[i] = Double.parseDouble(features[i]);
+          return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
+        }
+      }
+    );
+
+    // Building the model
+    int numIterations = 100;
+    final LinearRegressionModel model = 
+      LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations);
+
+    // Evaluate model on training examples and compute training error
+    JavaRDD<Tuple2<Double, Double>> valuesAndPreds = parsedData.map(
+      new Function<LabeledPoint, Tuple2<Double, Double>>() {
+        public Tuple2<Double, Double> call(LabeledPoint point) {
+          double prediction = model.predict(point.features());
+          return new Tuple2<Double, Double>(prediction, point.label());
+        }
+      }
+    );
+    JavaRDD<Object> MSE = new JavaDoubleRDD(valuesAndPreds.map(
+      new Function<Tuple2<Double, Double>, Object>() {
+        public Object call(Tuple2<Double, Double> pair) {
+          return Math.pow(pair._1() - pair._2(), 2.0);
+        }
+      }
+    ).rdd()).mean();
+    System.out.println("training Mean Squared Error = " + MSE);
+  }
+}
+{% endhighlight %}
+
+In order to run the above standalone application using Spark framework make
+sure that you follow the instructions provided at section [Standalone
+Applications](quick-start.html) of the quick-start guide. What is more, you
+should include to your build file *spark-mllib* as a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
@@ -356,7 +500,7 @@ def parsePoint(line):
     values = [float(x) for x in line.replace(',', ' ').split(' ')]
     return LabeledPoint(values[0], values[1:])
 
-data = sc.textFile("mllib/data/ridge-data/lpsa.data")
+data = sc.textFile("data/mllib/ridge-data/lpsa.data")
 parsedData = data.map(parsePoint)
 
 # Build the model

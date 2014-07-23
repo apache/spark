@@ -17,27 +17,34 @@
 
 package org.apache.spark.sql.parquet
 
+import scala.collection.JavaConversions._
+import scala.collection.mutable
+import scala.util.Try
+
 import java.io.IOException
+import java.lang.{Long => JLong}
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, List => JList}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat, FileOutputCommitter}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
-import parquet.hadoop.{ParquetRecordReader, ParquetInputFormat, ParquetOutputFormat}
-import parquet.hadoop.api.ReadSupport
+import parquet.hadoop._
+import parquet.hadoop.api.{InitContext, ReadSupport}
+import parquet.hadoop.metadata.GlobalMetaData
 import parquet.hadoop.util.ContextUtil
-import parquet.io.InvalidRecordException
+import parquet.io.ParquetDecodingException
 import parquet.schema.MessageType
 
-import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
+import org.apache.spark.{Logging, SerializableWritable, TaskContext}
 
 /**
  * Parquet table scan operator. Imports the file that backs the given
@@ -55,16 +62,14 @@ case class ParquetTableScan(
   override def execute(): RDD[Row] = {
     val sc = sqlContext.sparkContext
     val job = new Job(sc.hadoopConfiguration)
-    ParquetInputFormat.setReadSupportClass(
-      job,
-      classOf[org.apache.spark.sql.parquet.RowReadSupport])
+    ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
+
     val conf: Configuration = ContextUtil.getConfiguration(job)
-    val fileList = FileSystemHelper.listFiles(relation.path, conf)
-    // add all paths in the directory but skip "hidden" ones such
-    // as "_SUCCESS" and "_metadata"
-    for (path <- fileList if !path.getName.startsWith("_")) {
-      NewFileInputFormat.addInputPath(job, path)
+    val qualifiedPath = {
+      val path = new Path(relation.path)
+      path.getFileSystem(conf).makeQualified(path)
     }
+    NewFileInputFormat.addInputPath(job, qualifiedPath)
 
     // Store both requested and original schema in `Configuration`
     conf.set(
@@ -87,7 +92,7 @@ case class ParquetTableScan(
 
     sc.newAPIHadoopRDD(
       conf,
-      classOf[org.apache.spark.sql.parquet.FilteringParquetRowInputFormat],
+      classOf[FilteringParquetRowInputFormat],
       classOf[Void],
       classOf[Row])
       .map(_._2)
@@ -122,14 +127,7 @@ case class ParquetTableScan(
   private def validateProjection(projection: Seq[Attribute]): Boolean = {
     val original: MessageType = relation.parquetSchema
     val candidate: MessageType = ParquetTypesConverter.convertFromAttributes(projection)
-    try {
-      original.checkContains(candidate)
-      true
-    } catch {
-      case e: InvalidRecordException => {
-        false
-      }
-    }
+    Try(original.checkContains(candidate)).isSuccess
   }
 }
 
@@ -302,6 +300,11 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
  */
 private[parquet] class FilteringParquetRowInputFormat
   extends parquet.hadoop.ParquetInputFormat[Row] with Logging {
+
+  private var footers: JList[Footer] = _
+
+  private var fileStatuses= Map.empty[Path, FileStatus]
+
   override def createRecordReader(
       inputSplit: InputSplit,
       taskAttemptContext: TaskAttemptContext): RecordReader[Void, Row] = {
@@ -317,6 +320,70 @@ private[parquet] class FilteringParquetRowInputFormat
     } else {
       new ParquetRecordReader[Row](readSupport)
     }
+  }
+
+  override def getFooters(jobContext: JobContext): JList[Footer] = {
+    if (footers eq null) {
+      val statuses = listStatus(jobContext)
+      fileStatuses = statuses.map(file => file.getPath -> file).toMap
+      footers = getFooters(ContextUtil.getConfiguration(jobContext), statuses)
+    }
+
+    footers
+  }
+
+  // TODO Remove this method and related code once PARQUET-16 is fixed
+  // This method together with the `getFooters` method and the `fileStatuses` field are just used
+  // to mimic this PR: https://github.com/apache/incubator-parquet-mr/pull/17
+  override def getSplits(
+      configuration: Configuration,
+      footers: JList[Footer]): JList[ParquetInputSplit] = {
+
+    val maxSplitSize: JLong = configuration.getLong("mapred.max.split.size", Long.MaxValue)
+    val minSplitSize: JLong =
+      Math.max(getFormatMinSplitSize(), configuration.getLong("mapred.min.split.size", 0L))
+    if (maxSplitSize < 0 || minSplitSize < 0) {
+      throw new ParquetDecodingException(
+        s"maxSplitSize or minSplitSie should not be negative: maxSplitSize = $maxSplitSize;" +
+          s" minSplitSize = $minSplitSize")
+    }
+
+    val getGlobalMetaData =
+      classOf[ParquetFileWriter].getDeclaredMethod("getGlobalMetaData", classOf[JList[Footer]])
+    getGlobalMetaData.setAccessible(true)
+    val globalMetaData = getGlobalMetaData.invoke(null, footers).asInstanceOf[GlobalMetaData]
+
+    val readContext = getReadSupport(configuration).init(
+      new InitContext(configuration,
+        globalMetaData.getKeyValueMetaData(),
+        globalMetaData.getSchema()))
+
+    val generateSplits =
+      classOf[ParquetInputFormat[_]].getDeclaredMethods.find(_.getName == "generateSplits").get
+    generateSplits.setAccessible(true)
+
+    val splits = mutable.ArrayBuffer.empty[ParquetInputSplit]
+    for (footer <- footers) {
+      val fs = footer.getFile.getFileSystem(configuration)
+      val file = footer.getFile
+      val fileStatus = fileStatuses.getOrElse(file, fs.getFileStatus(file))
+      val parquetMetaData = footer.getParquetMetadata
+      val blocks = parquetMetaData.getBlocks
+      val fileBlockLocations = fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen)
+      splits.addAll(
+        generateSplits.invoke(
+          null,
+          blocks,
+          fileBlockLocations,
+          fileStatus,
+          parquetMetaData.getFileMetaData,
+          readContext.getRequestedSchema.toString,
+          readContext.getReadSupportMetadata,
+          minSplitSize,
+          maxSplitSize).asInstanceOf[JList[ParquetInputSplit]])
+    }
+
+    splits
   }
 }
 
