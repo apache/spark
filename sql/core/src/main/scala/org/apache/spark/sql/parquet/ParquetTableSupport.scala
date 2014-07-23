@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.parquet
 
-import java.util.{HashMap => JHashMap}
-
 import org.apache.hadoop.conf.Configuration
+
 import parquet.column.ParquetProperties
 import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.api.ReadSupport.ReadContext
 import parquet.hadoop.api.{ReadSupport, WriteSupport}
 import parquet.io.api._
-import parquet.schema.MessageType
+import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.execution.SparkSqlSerializer
+import com.google.common.io.BaseEncoding
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
@@ -92,8 +93,8 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
       configuration: Configuration,
       keyValueMetaData: java.util.Map[String, String],
       fileSchema: MessageType): ReadContext = {
-    var parquetSchema = fileSchema
-    val metadata = new JHashMap[String, String]()
+    var parquetSchema: MessageType = fileSchema
+    var metadata: java.util.Map[String, String] = new java.util.HashMap[String, String]()
     val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)
 
     if (requestedAttributes != null) {
@@ -108,7 +109,7 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
       metadata.put(RowReadSupport.SPARK_METADATA_KEY, origAttributesStr)
     }
 
-    new ReadSupport.ReadContext(parquetSchema, metadata)
+    return new ReadSupport.ReadContext(parquetSchema, metadata)
   }
 }
 
@@ -131,17 +132,13 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] var attributes: Seq[Attribute] = null
 
   override def init(configuration: Configuration): WriteSupport.WriteContext = {
-    val origAttributesStr: String = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
-    val metadata = new JHashMap[String, String]()
-    metadata.put(RowReadSupport.SPARK_METADATA_KEY, origAttributesStr)
-
-    if (attributes == null) {
-      attributes = ParquetTypesConverter.convertFromString(origAttributesStr)
-    }
-
+    attributes = if (attributes == null) RowWriteSupport.getSchema(configuration) else attributes
+    
     log.debug(s"write support initialized for requested schema $attributes")
     ParquetRelation.enableLogForwarding()
-    new WriteSupport.WriteContext(ParquetTypesConverter.convertFromAttributes(attributes), metadata)
+    new WriteSupport.WriteContext(
+      ParquetTypesConverter.convertFromAttributes(attributes),
+      new java.util.HashMap[java.lang.String, java.lang.String]())
   }
 
   override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
@@ -159,7 +156,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     writer.startMessage()
     while(index < attributes.size) {
       // null values indicate optional fields but we do not check currently
-      if (record(index) != null) {
+      if (record(index) != null && record(index) != Nil) {
         writer.startField(attributes(index).name, index)
         writeValue(attributes(index).dataType, record(index))
         writer.endField(attributes(index).name, index)
@@ -170,7 +167,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 
   private[parquet] def writeValue(schema: DataType, value: Any): Unit = {
-    if (value != null) {
+    if (value != null && value != Nil) {
       schema match {
         case t @ ArrayType(_) => writeArray(
           t,
@@ -187,19 +184,17 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 
   private[parquet] def writePrimitive(schema: PrimitiveType, value: Any): Unit = {
-    if (value != null) {
+    if (value != null && value != Nil) {
       schema match {
         case StringType => writer.addBinary(
           Binary.fromByteArray(
             value.asInstanceOf[String].getBytes("utf-8")
           )
         )
-        case BinaryType => writer.addBinary(
-          Binary.fromByteArray(value.asInstanceOf[Array[Byte]]))
         case IntegerType => writer.addInteger(value.asInstanceOf[Int])
-        case ShortType => writer.addInteger(value.asInstanceOf[Short])
+        case ShortType => writer.addInteger(value.asInstanceOf[Int])
         case LongType => writer.addLong(value.asInstanceOf[Long])
-        case ByteType => writer.addInteger(value.asInstanceOf[Byte])
+        case ByteType => writer.addInteger(value.asInstanceOf[Int])
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
         case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
@@ -211,12 +206,12 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writeStruct(
       schema: StructType,
       struct: CatalystConverter.StructScalaType[_]): Unit = {
-    if (struct != null) {
+    if (struct != null && struct != Nil) {
       val fields = schema.fields.toArray
       writer.startGroup()
       var i = 0
       while(i < fields.size) {
-        if (struct(i) != null) {
+        if (struct(i) != null && struct(i) != Nil) {
           writer.startField(fields(i).name, i)
           writeValue(fields(i).dataType, struct(i))
           writer.endField(fields(i).name, i)
@@ -304,8 +299,6 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
           record(index).asInstanceOf[String].getBytes("utf-8")
         )
       )
-      case BinaryType => writer.addBinary(
-        Binary.fromByteArray(record(index).asInstanceOf[Array[Byte]]))
       case IntegerType => writer.addInteger(record.getInt(index))
       case ShortType => writer.addInteger(record.getShort(index))
       case LongType => writer.addLong(record.getLong(index))

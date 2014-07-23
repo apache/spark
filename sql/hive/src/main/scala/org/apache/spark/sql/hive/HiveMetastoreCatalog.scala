@@ -43,29 +43,25 @@ import scala.collection.JavaConversions._
 private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
   import HiveMetastoreTypes._
 
-  /** Connection to hive metastore.  Usages should lock on `this`. */
-  protected[hive] val client = Hive.get(hive.hiveconf)
-
-  val caseSensitive: Boolean = false
+  val client = Hive.get(hive.hiveconf)
 
   def lookupRelation(
       db: Option[String],
       tableName: String,
-      alias: Option[String]): LogicalPlan = synchronized {
-    val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-    val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
-    val table = client.getTable(databaseName, tblName)
+      alias: Option[String]): LogicalPlan = {
+    val databaseName = db.getOrElse(hive.sessionState.getCurrentDatabase)
+    val table = client.getTable(databaseName, tableName)
     val partitions: Seq[Partition] =
       if (table.isPartitioned) {
-        client.getAllPartitionsForPruner(table).toSeq
+        client.getPartitions(table)
       } else {
         Nil
       }
 
     // Since HiveQL is case insensitive for table names we make them all lowercase.
     MetastoreRelation(
-      databaseName,
-      tblName,
+      databaseName.toLowerCase,
+      tableName.toLowerCase,
       alias)(table.getTTable, partitions.map(part => part.getTPartition))
   }
 
@@ -74,8 +70,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       tableName: String,
       schema: Seq[Attribute],
       allowExisting: Boolean = false): Unit = {
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
-    val table = new Table(dbName, tblName)
+    val table = new Table(databaseName, tableName)
     val hiveSchema =
       schema.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
     table.setFields(hiveSchema)
@@ -90,7 +85,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     sd.setInputFormat("org.apache.hadoop.mapred.TextInputFormat")
     sd.setOutputFormat("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")
     val serDeInfo = new SerDeInfo()
-    serDeInfo.setName(tblName)
+    serDeInfo.setName(tableName)
     serDeInfo.setSerializationLib("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
     serDeInfo.setParameters(Map[String, String]())
     sd.setSerdeInfo(serDeInfo)
@@ -109,14 +104,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case InsertIntoCreatedTable(db, tableName, child) =>
-        val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-        val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
+        val databaseName = db.getOrElse(hive.sessionState.getCurrentDatabase)
 
-        createTable(databaseName, tblName, child.output)
+        createTable(databaseName, tableName, child.output)
 
         InsertIntoTable(
           EliminateAnalysisOperators(
-            lookupRelation(Some(databaseName), tblName, None)),
+            lookupRelation(Some(databaseName), tableName, None)),
           Map.empty,
           child,
           overwrite = false)

@@ -57,7 +57,6 @@ abstract class NamedExpression extends Expression {
 abstract class Attribute extends NamedExpression {
   self: Product =>
 
-  def withNullability(newNullability: Boolean): Attribute
   def withQualifiers(newQualifiers: Seq[String]): Attribute
 
   def toAttribute = this
@@ -134,7 +133,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
    */
-  override def withNullability(newNullability: Boolean) = {
+  def withNullability(newNullability: Boolean) = {
     if (nullable == newNullability) {
       this
     } else {

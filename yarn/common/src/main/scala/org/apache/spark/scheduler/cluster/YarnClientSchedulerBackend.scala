@@ -30,11 +30,6 @@ private[spark] class YarnClientSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
   with Logging {
 
-  if (conf.getOption("spark.scheduler.minRegisteredExecutorsRatio").isEmpty) {
-    minRegisteredRatio = 0.8
-    ready = false
-  }
-
   var client: Client = null
   var appId: ApplicationId = null
 
@@ -53,7 +48,6 @@ private[spark] class YarnClientSchedulerBackend(
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
-    conf.set("spark.driver.appUIAddress", sc.ui.appUIHostPort)
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
@@ -81,7 +75,6 @@ private[spark] class YarnClientSchedulerBackend(
 
     logDebug("ClientArguments called with: " + argsArrayBuf)
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
-    totalExpectedExecutors.set(args.numExecutors)
     client = new Client(args, conf)
     appId = client.runApp()
     waitForApp()

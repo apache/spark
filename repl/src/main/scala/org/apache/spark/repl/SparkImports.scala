@@ -182,26 +182,15 @@ trait SparkImports {
         // ambiguity errors will not be generated. Also, quote
         // the name of the variable, so that we don't need to
         // handle quoting keywords separately.
-        case x: ClassHandler =>
-        // I am trying to guess if the import is a defined class
-        // This is an ugly hack, I am not 100% sure of the consequences.
-        // Here we, let everything but "defined classes" use the import with val.
-        // The reason for this is, otherwise the remote executor tries to pull the
-        // classes involved and may fail.
-          for (imv <- x.definedNames) {
-            val objName = req.lineRep.readPath
-            code.append("import " + objName + ".INSTANCE" + req.accessPath + ".`" + imv + "`\n")
-          }
-
         case x =>
           for (imv <- x.definedNames) {
             if (currentImps contains imv) addWrapper()
             val objName = req.lineRep.readPath
-            val valName = "$VAL" + req.lineRep.lineId
+            val valName = "$VAL" + newValId();
 
             if(!code.toString.endsWith(".`" + imv + "`;\n")) { // Which means already imported
-                code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
-                code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
+               code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
+               code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
             }
             // code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
             // code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
@@ -222,4 +211,10 @@ trait SparkImports {
   private def membersAtPickler(sym: Symbol): List[Symbol] =
     beforePickler(sym.info.nonPrivateMembers.toList)
 
+  private var curValId = 0
+
+  private def newValId(): Int = {
+    curValId += 1
+    curValId
+  }
 }

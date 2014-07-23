@@ -75,9 +75,7 @@ class TaskMetrics extends Serializable {
   /**
    * If this task reads from shuffle output, metrics on getting shuffle data will be collected here
    */
-  private var _shuffleReadMetrics: Option[ShuffleReadMetrics] = None
-
-  def shuffleReadMetrics = _shuffleReadMetrics
+  var shuffleReadMetrics: Option[ShuffleReadMetrics] = None
 
   /**
    * If this task writes to shuffle output, metrics on the written shuffle data will be collected
@@ -89,21 +87,6 @@ class TaskMetrics extends Serializable {
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
-
-  /** Adds the given ShuffleReadMetrics to any existing shuffle metrics for this task. */
-  def updateShuffleReadMetrics(newMetrics: ShuffleReadMetrics) = synchronized {
-    _shuffleReadMetrics match {
-      case Some(existingMetrics) =>
-        existingMetrics.shuffleFinishTime = math.max(
-          existingMetrics.shuffleFinishTime, newMetrics.shuffleFinishTime)
-        existingMetrics.fetchWaitTime += newMetrics.fetchWaitTime
-        existingMetrics.localBlocksFetched += newMetrics.localBlocksFetched
-        existingMetrics.remoteBlocksFetched += newMetrics.remoteBlocksFetched
-        existingMetrics.remoteBytesRead += newMetrics.remoteBytesRead
-      case None =>
-        _shuffleReadMetrics = Some(newMetrics)
-    }
-  }
 }
 
 private[spark] object TaskMetrics {
@@ -148,7 +131,7 @@ class ShuffleReadMetrics extends Serializable {
   /**
    * Number of blocks fetched in this shuffle by this task (remote or local)
    */
-  def totalBlocksFetched: Int = remoteBlocksFetched + localBlocksFetched
+  var totalBlocksFetched: Int = _
 
   /**
    * Number of remote blocks fetched in this shuffle by this task

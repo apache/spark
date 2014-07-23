@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRow}
+import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.{Row, SQLContext}
 
 trait Command {
   /**
@@ -87,10 +86,8 @@ case class ExplainCommand(
   extends LeafNode with Command {
 
   // Run through the optimizer to generate the physical plan.
-  override protected[sql] lazy val sideEffectResult: Seq[String] = try {
+  override protected[sql] lazy val sideEffectResult: Seq[String] = {
     "Physical execution plan:" +: context.executePlan(logicalPlan).executedPlan.toString.split("\n")
-  } catch { case cause: TreeNodeException[_] =>
-    "Error occurred during query planning: " +: cause.getMessage.split("\n")
   }
 
   def execute(): RDD[Row] = {

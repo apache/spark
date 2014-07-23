@@ -27,9 +27,6 @@
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-core_2.10</artifactId>
-  <properties>
-     <sbt.project.name>core</sbt.project.name>
-  </properties>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
   <url>http://spark.apache.org/</url>
@@ -113,10 +110,6 @@
     <dependency>
       <groupId>org.xerial.snappy</groupId>
       <artifactId>snappy-java</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>net.jpountz.lz4</groupId>
-      <artifactId>lz4</artifactId>
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>

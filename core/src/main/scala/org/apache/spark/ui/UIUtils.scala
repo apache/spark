@@ -25,7 +25,6 @@ import org.apache.spark.Logging
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS = "table table-bordered table-striped table-condensed sortable"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -136,30 +135,9 @@ private[spark] object UIUtils extends Logging {
   }
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
-  def uiRoot: String = {
-    if (System.getenv("APPLICATION_WEB_PROXY_BASE") != null) {
-      System.getenv("APPLICATION_WEB_PROXY_BASE")
-    } else if (System.getProperty("spark.ui.proxyBase") != null) {
-      System.getProperty("spark.ui.proxyBase")
-    }
-    else {
-      ""
-    }
-  }
+  val uiRoot : String = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("")
 
   def prependBaseUri(basePath: String = "", resource: String = "") = uiRoot + basePath + resource
-
-  val commonHeaderNodes = {
-    <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
-          type="text/css" />
-    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
-          type="text/css" />
-    <script src={prependBaseUri("/static/sorttable.js")} ></script>
-    <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
-    <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
-    <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
-  }
 
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(
@@ -179,7 +157,12 @@ private[spark] object UIUtils extends Logging {
 
     <html>
       <head>
-        {commonHeaderNodes}
+        <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
+              type="text/css" />
+        <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
+              type="text/css" />
+        <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{appName} - {title}</title>
       </head>
       <body>
@@ -210,7 +193,11 @@ private[spark] object UIUtils extends Logging {
   def basicSparkPage(content: => Seq[Node], title: String): Seq[Node] = {
     <html>
       <head>
-        {commonHeaderNodes}
+        <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
+              type="text/css" />
+        <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}  type="text/css" />
+        <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{title}</title>
       </head>
       <body>
@@ -237,9 +224,9 @@ private[spark] object UIUtils extends Logging {
       data: Seq[T],
       fixedWidth: Boolean = false): Seq[Node] = {
 
-    var listingTableClass = TABLE_CLASS
+    var tableClass = "table table-bordered table-striped table-condensed sortable"
     if (fixedWidth) {
-      listingTableClass += " table-fixed"
+      tableClass += " table-fixed"
     }
     val colWidth = 100.toDouble / headers.size
     val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
@@ -259,7 +246,7 @@ private[spark] object UIUtils extends Logging {
         }
       }
     }
-    <table class={listingTableClass}>
+    <table class={tableClass}>
       <thead>{headerRow}</thead>
       <tbody>
         {data.map(r => generateDataRow(r))}

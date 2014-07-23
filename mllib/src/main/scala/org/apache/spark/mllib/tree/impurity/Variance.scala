@@ -25,16 +25,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
  */
 @Experimental
 object Variance extends Impurity {
-
-  /**
-   * :: DeveloperApi ::
-   * information calculation for multiclass classification
-   * @param counts Array[Double] with counts for each label
-   * @param totalCount sum of counts for all labels
-   * @return information value
-   */
-  @DeveloperApi
-  override def calculate(counts: Array[Double], totalCount: Double): Double =
+   override def calculate(c0: Double, c1: Double): Double =
      throw new UnsupportedOperationException("Variance.calculate")
 
   /**

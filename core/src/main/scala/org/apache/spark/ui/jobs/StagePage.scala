@@ -22,8 +22,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{ToolTips, WebUIPage, UIUtils}
-import org.apache.spark.ui.jobs.UIData._
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
@@ -35,9 +34,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
-      val stageDataOption = listener.stageIdToData.get(stageId)
 
-      if (stageDataOption.isEmpty || stageDataOption.get.taskData.isEmpty) {
+      if (!listener.stageIdToTaskData.contains(stageId)) {
         val content =
           <div>
             <h4>Summary Metrics</h4> No tasks have started yet
@@ -47,14 +45,23 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           "Details for Stage %s".format(stageId), parent.headerTabs, parent)
       }
 
-      val stageData = stageDataOption.get
-      val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
+      val tasks = listener.stageIdToTaskData(stageId).values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val hasInput = stageData.inputBytes > 0
-      val hasShuffleRead = stageData.shuffleReadBytes > 0
-      val hasShuffleWrite = stageData.shuffleWriteBytes > 0
-      val hasBytesSpilled = stageData.memoryBytesSpilled > 0 && stageData.diskBytesSpilled > 0
+      val inputBytes = listener.stageIdToInputBytes.getOrElse(stageId, 0L)
+      val hasInput = inputBytes > 0
+      val shuffleReadBytes = listener.stageIdToShuffleRead.getOrElse(stageId, 0L)
+      val hasShuffleRead = shuffleReadBytes > 0
+      val shuffleWriteBytes = listener.stageIdToShuffleWrite.getOrElse(stageId, 0L)
+      val hasShuffleWrite = shuffleWriteBytes > 0
+      val memoryBytesSpilled = listener.stageIdToMemoryBytesSpilled.getOrElse(stageId, 0L)
+      val diskBytesSpilled = listener.stageIdToDiskBytesSpilled.getOrElse(stageId, 0L)
+      val hasBytesSpilled = memoryBytesSpilled > 0 && diskBytesSpilled > 0
+
+      var activeTime = 0L
+      val now = System.currentTimeMillis
+      val tasksActive = listener.stageIdToTasksActive(stageId).values
+      tasksActive.foreach(activeTime += _.timeRunning(now))
 
       // scalastyle:off
       val summary =
@@ -62,34 +69,34 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           <ul class="unstyled">
             <li>
               <strong>Total task time across all tasks: </strong>
-              {UIUtils.formatDuration(stageData.executorRunTime)}
+              {UIUtils.formatDuration(listener.stageIdToTime.getOrElse(stageId, 0L) + activeTime)}
             </li>
             {if (hasInput)
               <li>
                 <strong>Input: </strong>
-                {Utils.bytesToString(stageData.inputBytes)}
+                {Utils.bytesToString(inputBytes)}
               </li>
             }
             {if (hasShuffleRead)
               <li>
                 <strong>Shuffle read: </strong>
-                {Utils.bytesToString(stageData.shuffleReadBytes)}
+                {Utils.bytesToString(shuffleReadBytes)}
               </li>
             }
             {if (hasShuffleWrite)
               <li>
                 <strong>Shuffle write: </strong>
-                {Utils.bytesToString(stageData.shuffleWriteBytes)}
+                {Utils.bytesToString(shuffleWriteBytes)}
               </li>
             }
             {if (hasBytesSpilled)
             <li>
               <strong>Shuffle spill (memory): </strong>
-              {Utils.bytesToString(stageData.memoryBytesSpilled)}
+              {Utils.bytesToString(memoryBytesSpilled)}
             </li>
             <li>
               <strong>Shuffle spill (disk): </strong>
-              {Utils.bytesToString(stageData.diskBytesSpilled)}
+              {Utils.bytesToString(diskBytesSpilled)}
             </li>
             }
           </ul>
@@ -120,14 +127,14 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             metrics.get.resultSerializationTime.toDouble
           }
           val serializationQuantiles =
-            <td>Result serialization time</td> +: Distribution(serializationTimes).
-              get.getQuantiles().map(ms => <td>{UIUtils.formatDuration(ms.toLong)}</td>)
+            "Result serialization time" +: Distribution(serializationTimes).
+              get.getQuantiles().map(ms => UIUtils.formatDuration(ms.toLong))
 
           val serviceTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.executorRunTime.toDouble
           }
-          val serviceQuantiles = <td>Duration</td> +: Distribution(serviceTimes).get.getQuantiles()
-            .map(ms => <td>{UIUtils.formatDuration(ms.toLong)}</td>)
+          val serviceQuantiles = "Duration" +: Distribution(serviceTimes).get.getQuantiles()
+            .map(ms => UIUtils.formatDuration(ms.toLong))
 
           val gettingResultTimes = validTasks.map { case TaskUIData(info, _, _) =>
             if (info.gettingResultTime > 0) {
@@ -136,9 +143,9 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
               0.0
             }
           }
-          val gettingResultQuantiles = <td>Time spent fetching task results</td> +:
+          val gettingResultQuantiles = "Time spent fetching task results" +:
             Distribution(gettingResultTimes).get.getQuantiles().map { millis =>
-              <td>{UIUtils.formatDuration(millis.toLong)}</td>
+              UIUtils.formatDuration(millis.toLong)
             }
           // The scheduler delay includes the network delay to send the task to the worker
           // machine and to send back the result (but not the time to fetch the task result,
@@ -153,45 +160,42 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
             }
             totalExecutionTime - metrics.get.executorRunTime
           }
-          val schedulerDelayTitle = <td><span data-toggle="tooltip"
-            title={ToolTips.SCHEDULER_DELAY} data-placement="right">Scheduler delay</span></td>
-          val schedulerDelayQuantiles = schedulerDelayTitle +:
+          val schedulerDelayQuantiles = "Scheduler delay" +:
             Distribution(schedulerDelays).get.getQuantiles().map { millis =>
-              <td>{UIUtils.formatDuration(millis.toLong)}</td>
+              UIUtils.formatDuration(millis.toLong)
             }
 
           def getQuantileCols(data: Seq[Double]) =
-            Distribution(data).get.getQuantiles().map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
+            Distribution(data).get.getQuantiles().map(d => Utils.bytesToString(d.toLong))
 
           val inputSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.inputMetrics.map(_.bytesRead).getOrElse(0L).toDouble
           }
-          val inputQuantiles = <td>Input</td> +: getQuantileCols(inputSizes)
+          val inputQuantiles = "Input" +: getQuantileCols(inputSizes)
 
           val shuffleReadSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble
           }
-          val shuffleReadQuantiles = <td>Shuffle Read (Remote)</td> +:
-            getQuantileCols(shuffleReadSizes)
+          val shuffleReadQuantiles = "Shuffle Read (Remote)" +: getQuantileCols(shuffleReadSizes)
 
           val shuffleWriteSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
           }
-          val shuffleWriteQuantiles = <td>Shuffle Write</td> +: getQuantileCols(shuffleWriteSizes)
+          val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
 
           val memoryBytesSpilledSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.memoryBytesSpilled.toDouble
           }
-          val memoryBytesSpilledQuantiles = <td>Shuffle spill (memory)</td> +:
+          val memoryBytesSpilledQuantiles = "Shuffle spill (memory)" +:
             getQuantileCols(memoryBytesSpilledSizes)
 
           val diskBytesSpilledSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.diskBytesSpilled.toDouble
           }
-          val diskBytesSpilledQuantiles = <td>Shuffle spill (disk)</td> +:
+          val diskBytesSpilledQuantiles = "Shuffle spill (disk)" +:
             getQuantileCols(diskBytesSpilledSizes)
 
-          val listings: Seq[Seq[Node]] = Seq(
+          val listings: Seq[Seq[String]] = Seq(
             serializationQuantiles,
             serviceQuantiles,
             gettingResultQuantiles,
@@ -204,7 +208,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
 
           val quantileHeaders = Seq("Metric", "Min", "25th percentile",
             "Median", "75th percentile", "Max")
-          def quantileRow(data: Seq[Node]): Seq[Node] = <tr>{data}</tr>
+          def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>
           Some(UIUtils.listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
       val executorTable = new ExecutorTable(stageId, parent)

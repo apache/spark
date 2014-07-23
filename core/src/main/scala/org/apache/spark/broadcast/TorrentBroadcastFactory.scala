@@ -28,21 +28,21 @@ import org.apache.spark.{SecurityManager, SparkConf}
  */
 class TorrentBroadcastFactory extends BroadcastFactory {
 
-  override def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
+  def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
     TorrentBroadcast.initialize(isDriver, conf)
   }
 
-  override def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long) =
+  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long) =
     new TorrentBroadcast[T](value_, isLocal, id)
 
-  override def stop() { TorrentBroadcast.stop() }
+  def stop() { TorrentBroadcast.stop() }
 
   /**
    * Remove all persisted state associated with the torrent broadcast with the given ID.
    * @param removeFromDriver Whether to remove state from the driver.
    * @param blocking Whether to block until unbroadcasted
    */
-  override def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
+  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
     TorrentBroadcast.unpersist(id, removeFromDriver, blocking)
   }
 }
