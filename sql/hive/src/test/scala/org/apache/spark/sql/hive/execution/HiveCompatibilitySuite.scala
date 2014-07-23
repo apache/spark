@@ -391,6 +391,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby_sort_8",
     "groupby_sort_9",
     "groupby_sort_test_1",
+    "having",
+    "having1",
     "implicit_cast1",
     "innerjoin",
     "inoutdriver",
