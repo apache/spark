@@ -195,7 +195,9 @@ class SparkSubmitSuite extends FunSuite with Matchers {
     childArgsStr should include regex ("launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2")
     mainClass should be ("org.apache.spark.deploy.Client")
     classpath should have size (0)
-    sysProps should have size (2)
+    sysProps should have size (4)
+    sysProps.keys should contain ("spark.master")
+    sysProps.keys should contain ("spark.app.name")
     sysProps.keys should contain ("spark.jars")
     sysProps.keys should contain ("SPARK_SUBMIT")
   }
