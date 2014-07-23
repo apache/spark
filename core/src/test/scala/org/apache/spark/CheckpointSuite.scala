@@ -436,7 +436,7 @@ object CheckpointSuite {
     new CoGroupedRDD[K](
       Seq(first.asInstanceOf[RDD[(K, _)]], second.asInstanceOf[RDD[(K, _)]]),
       part
-    ).asInstanceOf[RDD[(K, Seq[Seq[V]])]]
+    ).asInstanceOf[RDD[(K, Array[Iterable[V]])]]
   }
 
 }
