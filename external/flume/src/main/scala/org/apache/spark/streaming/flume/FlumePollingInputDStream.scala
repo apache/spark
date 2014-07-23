@@ -17,12 +17,11 @@
 package org.apache.spark.streaming.flume
 
 
-import java.io.{ObjectOutput, ObjectInput, Externalizable}
 import java.net.InetSocketAddress
-import java.nio.ByteBuffer
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit, Executors}
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -53,9 +52,9 @@ private[streaming] class FlumePollingInputDStream[T: ClassTag](
     val maxBatchSize: Int,
     val parallelism: Int,
     storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[SparkFlumePollingEvent](_ssc) {
+  ) extends ReceiverInputDStream[SparkFlumeEvent](_ssc) {
 
-  override def getReceiver(): Receiver[SparkFlumePollingEvent] = {
+  override def getReceiver(): Receiver[SparkFlumeEvent] = {
     new FlumePollingReceiver(addresses, maxBatchSize, parallelism, storageLevel)
   }
 }
@@ -65,7 +64,7 @@ private[streaming] class FlumePollingReceiver(
     maxBatchSize: Int,
     parallelism: Int,
     storageLevel: StorageLevel
-  ) extends Receiver[SparkFlumePollingEvent](storageLevel) with Logging {
+  ) extends Receiver[SparkFlumeEvent](storageLevel) with Logging {
 
   lazy val channelFactoryExecutor =
     Executors.newCachedThreadPool(new ThreadFactoryBuilder().setDaemon(true).
@@ -104,12 +103,13 @@ private[streaming] class FlumePollingReceiver(
                   "Received batch of " + events.size() + " events with sequence number: " + seq)
                 try {
                   // Convert each Flume event to a serializable SparkPollingEvent
+                  val buffer = new ArrayBuffer[SparkFlumeEvent](events.size())
                   var j = 0
                   while (j < events.size()) {
-                    store(SparkFlumePollingEvent.fromSparkSinkEvent(events(j)))
-                    logDebug("Stored events with seq:" + seq)
+                    buffer += sparkSinkEventToSparkFlumeEvent(events(j))
                     j += 1
                   }
+                  store(buffer)
                   logDebug("Sending ack for sequence number: " + seq)
                   // Send an ack to Flume so that Flume discards the events from its channels.
                   client.ack(seq)
@@ -152,6 +152,18 @@ private[streaming] class FlumePollingReceiver(
     })
     channelFactory.releaseExternalResources()
   }
+
+  /**
+   * Utility method to convert [[SparkSinkEvent]] to [[SparkFlumeEvent]]
+   * @param event - Event to convert to SparkFlumeEvent
+   * @return - The SparkSinkEvent generated from Spar
+   */
+  private def sparkSinkEventToSparkFlumeEvent(event: SparkSinkEvent): SparkFlumeEvent = {
+    val sparkFlumeEvent = new SparkFlumeEvent()
+    sparkFlumeEvent.event.setBody(event.getBody)
+    sparkFlumeEvent.event.setHeaders(event.getHeaders)
+    sparkFlumeEvent
+  }
 }
 
 /**
@@ -162,36 +174,5 @@ private[streaming] class FlumePollingReceiver(
 private class FlumeConnection(val transceiver: NettyTransceiver,
   val client: SparkFlumeProtocol.Callback)
 
-/**
- * Companion object of [[SparkFlumePollingEvent]]
- */
-private[streaming] object SparkFlumePollingEvent {
-  def fromSparkSinkEvent(in: SparkSinkEvent): SparkFlumePollingEvent = {
-    val event = new SparkFlumePollingEvent()
-    event.event = in
-    event
-  }
-}
-
-/*
- * Unfortunately Avro does not allow including pre-compiled classes - so even though
- * SparkSinkEvent is identical to AvroFlumeEvent, we need to create a new class and a wrapper
- * around that to make it externalizable.
- */
-class SparkFlumePollingEvent extends Externalizable with Logging {
-  var event: SparkSinkEvent = new SparkSinkEvent()
-
-  /* De-serialize from bytes. */
-  def readExternal(in: ObjectInput) {
-    val (headers, bodyBuff) = EventTransformer.readExternal(in)
-    event.setBody(ByteBuffer.wrap(bodyBuff))
-    event.setHeaders(headers)
-  }
-
-  /* Serialize to bytes. */
-  def writeExternal(out: ObjectOutput) {
-    EventTransformer.writeExternal(out, event.getHeaders, event.getBody.array())
-  }
-}
 
 

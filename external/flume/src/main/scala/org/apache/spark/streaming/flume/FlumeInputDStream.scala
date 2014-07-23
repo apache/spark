@@ -30,9 +30,6 @@ import org.apache.flume.source.avro.AvroFlumeEvent
 import org.apache.flume.source.avro.Status
 import org.apache.avro.ipc.specific.SpecificResponder
 import org.apache.avro.ipc.NettyServer
-
-import org.apache.spark.util.Utils
-
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
 import org.apache.spark.storage.StorageLevel
@@ -42,11 +39,8 @@ import org.apache.spark.streaming.receiver.Receiver
 
 import org.jboss.netty.channel.ChannelPipelineFactory
 import org.jboss.netty.channel.Channels
-import org.jboss.netty.channel.ChannelPipeline
-import org.jboss.netty.channel.ChannelFactory
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
-import org.jboss.netty.handler.execution.ExecutionHandler
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
@@ -73,14 +67,47 @@ class SparkFlumeEvent() extends Externalizable {
 
   /* De-serialize from bytes. */
   def readExternal(in: ObjectInput) {
-    val (headers, bodyBuff) = EventTransformer.readExternal(in)
+    val bodyLength = in.readInt()
+    val bodyBuff = new Array[Byte](bodyLength)
+    in.readFully(bodyBuff)
+
+    val numHeaders = in.readInt()
+    val headers = new java.util.HashMap[CharSequence, CharSequence]
+
+    for (i <- 0 until numHeaders) {
+      val keyLength = in.readInt()
+      val keyBuff = new Array[Byte](keyLength)
+      in.readFully(keyBuff)
+      val key : String = Utils.deserialize(keyBuff)
+
+      val valLength = in.readInt()
+      val valBuff = new Array[Byte](valLength)
+      in.readFully(valBuff)
+      val value : String = Utils.deserialize(valBuff)
+
+      headers.put(key, value)
+    }
+
     event.setBody(ByteBuffer.wrap(bodyBuff))
     event.setHeaders(headers)
   }
 
   /* Serialize to bytes. */
   def writeExternal(out: ObjectOutput) {
-    EventTransformer.writeExternal(out, event.getHeaders, event.getBody.array())
+    val body = event.getBody.array()
+    out.writeInt(body.length)
+    out.write(body)
+
+    val numHeaders = event.getHeaders.size()
+    out.writeInt(numHeaders)
+    for ((k, v) <- event.getHeaders) {
+      val keyBuff = Utils.serialize(k.toString)
+      out.writeInt(keyBuff.length)
+      out.write(keyBuff)
+      val valBuff = Utils.serialize(v.toString)
+      out.writeInt(valBuff.length)
+      out.write(valBuff)
+    }
   }
 }
 
