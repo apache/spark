@@ -19,6 +19,7 @@ package org.apache.spark.shuffle.hash
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
+import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleReadMetrics
@@ -73,7 +74,8 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       }
     }
 
-    val blockFetcherItr = blockManager.getMultiple(blocksByAddress, serializer)
+    val shuffledBlocksByAddress = Random.shuffle(blocksByAddress)
+    val blockFetcherItr = blockManager.getMultiple(shuffledBlocksByAddress, serializer)
     val itr = blockFetcherItr.flatMap(unpackBlock)
 
     val completionIter = CompletionIterator[T, Iterator[T]](itr, {
