@@ -37,6 +37,15 @@ from pyspark.rdd import RDD
 from py4j.java_collections import ListConverter
 
 
+# These are special default configs for PySpark, they will overwrite
+# the default ones for Spark if they are not configured by user.
+DEFAULT_CONFIGS = {
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+    "spark.kryo.referenceTracking": False,
+    "spark.serializer.objectStreamReset": 1,
+}
+
+
 class SparkContext(object):
     """
     Main entry point for Spark functionality. A SparkContext represents the
@@ -112,6 +121,9 @@ class SparkContext(object):
         if environment:
             for key, value in environment.iteritems():
                 self._conf.setExecutorEnv(key, value)
+        for key, value in DEFAULT_CONFIGS.items():
+            if self._conf.get(key) is None:
+                self._conf.set(key, value)
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
