@@ -110,23 +110,26 @@ trait Logging {
   }
 
   private def initializeLogging() {
-    // If Log4j is being used, but is not initialized, load a default properties file
-    val binder = StaticLoggerBinder.getSingleton
-    val usingLog4j = binder.getLoggerFactoryClassStr.endsWith("Log4jLoggerFactory")
-    val log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
-    if (!log4jInitialized && usingLog4j) {
+    // If Log4j 1.2 is being used, but is not initialized, load a default properties file
+    val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
+    // This minimally distinguishes the log4j 1.2 binding, currently
+    // org.slf4j.impl.Log4jLoggerFactory, from the log4j 2.0 binding, currently
+    // org.apache.logging.slf4j.Log4jLoggerFactory
+    val usingLog4j12 =
+      binderClass.endsWith("Log4jLoggerFactory") && binderClass.startsWith("org.slf4j.")
+    val log4j12Initialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
+    if (!log4j12Initialized && usingLog4j12) {
       val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
       Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
         case Some(url) =>
           PropertyConfigurator.configure(url)
-          log.info(s"Using Spark's default log4j profile: $defaultLogProps")
         case None =>
           System.err.println(s"Spark was unable to load $defaultLogProps")
       }
     }
     Logging.initialized = true
 
-    // Force a call into slf4j to initialize it. Avoids this happening from mutliple threads
+    // Force a call into slf4j to initialize it. Avoids this happening from multiple threads
     // and triggering this: http://mailman.qos.ch/pipermail/slf4j-dev/2010-April/002956.html
     log
   }
