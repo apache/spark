@@ -26,7 +26,6 @@ import org.apache.spark.storage.StorageLevel
 
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl._
-import org.apache.spark.graphx.impl.MsgRDDFunctions._
 import org.apache.spark.graphx.util.BytecodeUtils
 
 
@@ -83,15 +82,13 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     val vdTag = classTag[VD]
     val newEdges = edges.withPartitionsRDD(edges.map { e =>
       val part: PartitionID = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
-
-      // Should we be using 3-tuple or an optimized class
-      new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
+      (part, (e.srcId, e.dstId, e.attr))
     }
       .partitionBy(new HashPartitioner(numPartitions))
       .mapPartitionsWithIndex( { (pid, iter) =>
         val builder = new EdgePartitionBuilder[ED, VD]()(edTag, vdTag)
         iter.foreach { message =>
-          val data = message.data
+          val data = message._2
           builder.add(data._1, data._2, data._3)
         }
         val edgePartition = builder.toEdgePartition
