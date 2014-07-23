@@ -480,11 +480,16 @@ private[spark] class ExternalSorter[K, V, C](
     val fileStream = new FileInputStream(spill.file)
     val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
 
-    // Track which partition and which batch stream we're in
+    // Track which partition and which batch stream we're in. These will be the indices of
+    // the next element we will read. We'll also store the last partition read so that
+    // readNextPartition() can figure out what partition that was from.
     var partitionId = 0
-    var indexInPartition = -1L  // Just to make sure we start at index 0
+    var indexInPartition = 0L
     var batchStreamsRead = 0
     var indexInBatch = 0
+    var lastPartitionId = 0
+
+    skipToNextPartition()
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
@@ -501,6 +506,18 @@ private[spark] class ExternalSorter[K, V, C](
     }
 
     /**
+     * Update partitionId if we have reached the end of our current partition, possibly skipping
+     * empty partitions on the way.
+     */
+    private def skipToNextPartition() {
+      while (partitionId < numPartitions &&
+          indexInPartition == spill.elementsPerPartition(partitionId)) {
+        partitionId += 1
+        indexInPartition = 0L
+      }
+    }
+
+    /**
      * Return the next (K, C) pair from the deserialization stream and update partitionId,
      * indexInPartition, indexInBatch and such to match its location.
      *
@@ -513,6 +530,7 @@ private[spark] class ExternalSorter[K, V, C](
       }
       val k = deserStream.readObject().asInstanceOf[K]
       val c = deserStream.readObject().asInstanceOf[C]
+      lastPartitionId = partitionId
       // Start reading the next batch if we're done with this one
       indexInBatch += 1
       if (indexInBatch == serializerBatchSize) {
@@ -521,16 +539,11 @@ private[spark] class ExternalSorter[K, V, C](
         deserStream = serInstance.deserializeStream(compressedStream)
         indexInBatch = 0
       }
-      // Update the partition location of the element we're reading, possibly skipping zero-length
-      // partitions until we get to the next non-empty one or to EOF.
+      // Update the partition location of the element we're reading
       indexInPartition += 1
-      while (indexInPartition == spill.elementsPerPartition(partitionId)) {
-        partitionId += 1
-        indexInPartition = 0
-      }
-      if (partitionId == numPartitions - 1 &&
-          indexInPartition == spill.elementsPerPartition(partitionId) - 1) {
-        // This is the last element, remember that we're done
+      skipToNextPartition()
+      // If we've finished reading the last partition, remember that we're done
+      if (partitionId == numPartitions) {
         finished = true
         deserStream.close()
       }
@@ -550,10 +563,10 @@ private[spark] class ExternalSorter[K, V, C](
             return false
           }
         }
-        assert(partitionId >= myPartition)
+        assert(lastPartitionId >= myPartition)
         // Check that we're still in the right partition; note that readNextItem will have returned
         // null at EOF above so we would've returned false there
-        partitionId == myPartition
+        lastPartitionId == myPartition
       }
 
       override def next(): Product2[K, C] = {

@@ -38,21 +38,25 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
     val sorter = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(3)), Some(ord), None)
     assert(sorter.iterator.toSeq === Seq())
+    sorter.stop()
 
     // Only aggregator
     val sorter2 = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(3)), None, None)
     assert(sorter2.iterator.toSeq === Seq())
+    sorter2.stop()
 
     // Only ordering
     val sorter3 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), Some(ord), None)
     assert(sorter3.iterator.toSeq === Seq())
+    sorter3.stop()
 
     // Neither aggregator nor ordering
     val sorter4 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(3)), None, None)
     assert(sorter4.iterator.toSeq === Seq())
+    sorter4.stop()
   }
 
   test("few elements per partition") {
@@ -73,24 +77,53 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext {
       Some(agg), Some(new HashPartitioner(7)), Some(ord), None)
     sorter.write(elements.iterator)
     assert(sorter.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    sorter.stop()
 
     // Only aggregator
     val sorter2 = new ExternalSorter[Int, Int, Int](
       Some(agg), Some(new HashPartitioner(7)), None, None)
     sorter2.write(elements.iterator)
     assert(sorter2.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    sorter2.stop()
 
     // Only ordering
     val sorter3 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), Some(ord), None)
     sorter3.write(elements.iterator)
     assert(sorter3.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    sorter3.stop()
 
     // Neither aggregator nor ordering
     val sorter4 = new ExternalSorter[Int, Int, Int](
       None, Some(new HashPartitioner(7)), None, None)
     sorter4.write(elements.iterator)
     assert(sorter4.partitionedIterator.map(p => (p._1, p._2.toSet)).toSet === expected)
+    sorter4.stop()
+  }
+
+  test("empty partitions with spilling") {
+    val conf = new SparkConf(false)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
+    sc = new SparkContext("local", "test", conf)
+
+    val agg = new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)
+    val ord = implicitly[Ordering[Int]]
+    val elements = Iterator((1, 1), (5, 5)) ++ (0 until 50000).iterator.map(x => (2, 2))
+
+    val sorter = new ExternalSorter[Int, Int, Int](
+      None, Some(new HashPartitioner(7)), None, None)
+    sorter.write(elements)
+    assert(sc.env.blockManager.diskBlockManager.getAllFiles().length > 0) // Make sure it spilled
+    val iter = sorter.partitionedIterator.map(p => (p._1, p._2.toList))
+    assert(iter.next() === (0, Nil))
+    assert(iter.next() === (1, List((1, 1))))
+    assert(iter.next() === (2, (0 until 50000).map(x => (2, 2)).toList))
+    assert(iter.next() === (3, Nil))
+    assert(iter.next() === (4, Nil))
+    assert(iter.next() === (5, List((5, 5))))
+    assert(iter.next() === (6, Nil))
+    sorter.stop()
   }
 
   test("spilling in local cluster") {
