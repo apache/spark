@@ -264,8 +264,8 @@ object MLUtils {
     (1 to numFolds).map { fold =>
       val sampler = new BernoulliSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
         complement = false)
-      val validation = new PartitionwiseSampledRDD(rdd, sampler, seed)
-      val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
+      val validation = new PartitionwiseSampledRDD(rdd, sampler, true, seed)
+      val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), true, seed)
       (training, validation)
     }.toArray
   }
