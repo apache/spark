@@ -27,20 +27,20 @@ try:
     import psutil
 
     def get_used_memory():
-        """ return the used memory in MB """
+        """ Return the used memory in MB """
         self = psutil.Process(os.getpid())
         return self.memory_info().rss >> 20
 
 except ImportError:
 
     def get_used_memory():
-        """ return the used memory in MB """
+        """ Return the used memory in MB """
         if platform.system() == 'Linux':
             for line in open('/proc/self/status'):
                 if line.startswith('VmRSS:'):
                     return int(line.split()[1]) >> 10
         else:
-            warnings.warn("please install psutil to have better "
+            warnings.warn("Please install psutil to have better "
                     "support with spilling")
             if platform.system() == "Darwin":
                 import resource
@@ -80,22 +80,22 @@ class SimpleAggregator(Aggregator):
 class Merger(object):
 
     """
-    merge shuffled data together by aggregator
+    Merge shuffled data together by aggregator
     """
 
     def __init__(self, aggregator):
         self.agg = aggregator
 
     def mergeValues(self, iterator):
-        """ combine the items by creator and combiner """
+        """ Combine the items by creator and combiner """
         raise NotImplementedError
 
     def mergeCombiners(self, iterator):
-        """ merge the combined items by mergeCombiner """
+        """ Merge the combined items by mergeCombiner """
         raise NotImplementedError
 
     def iteritems(self):
-        """ return the merged items ad iterator """
+        """ Return the merged items ad iterator """
         raise NotImplementedError
 
 
@@ -110,7 +110,7 @@ class InMemoryMerger(Merger):
         self.data = {}
 
     def mergeValues(self, iterator):
-        """ combine the items by creator and combiner """
+        """ Combine the items by creator and combiner """
         # speed up attributes lookup
         d, creator = self.data, self.agg.createCombiner
         comb = self.agg.mergeValue
@@ -118,14 +118,14 @@ class InMemoryMerger(Merger):
             d[k] = comb(d[k], v) if k in d else creator(v)
 
     def mergeCombiners(self, iterator):
-        """ merge the combined items by mergeCombiner """
+        """ Merge the combined items by mergeCombiner """
         # speed up attributes lookup
         d, comb = self.data, self.agg.mergeCombiners
         for k, v in iterator:
             d[k] = comb(d[k], v) if k in d else v
 
     def iteritems(self):
-        """ return the merged items ad iterator """
+        """ Return the merged items ad iterator """
         return self.data.iteritems()
 
 
@@ -182,6 +182,8 @@ class ExternalMerger(Merger):
     499950000
     """
 
+    TOTAL_PARTITIONS = 4096
+
     def __init__(self, aggregator, memory_limit=512, serializer=None,
             localdirs=None, scale=1, partitions=64, batch=10000):
         Merger.__init__(self, aggregator)
@@ -198,32 +200,32 @@ class ExternalMerger(Merger):
         self.scale = scale
         # unpartitioned merged data
         self.data = {}
-        # partitioned merged data
+        # partitioned merged data, list of dicts
         self.pdata = []
         # number of chunks dumped into disks
         self.spills = 0
 
     def _get_dirs(self):
-        """ get all the directories """
-        path = os.environ.get("SPARK_LOCAL_DIR", "/tmp/spark")
+        """ Get all the directories """
+        path = os.environ.get("SPARK_LOCAL_DIR", "/tmp")
         dirs = path.split(",")
         return [os.path.join(d, "python", str(os.getpid()), str(id(self)))
                 for d in dirs]
 
     def _get_spill_dir(self, n):
-        """ choose one directory for spill by number n """
+        """ Choose one directory for spill by number n """
         return os.path.join(self.localdirs[n % len(self.localdirs)], str(n))
 
     def next_limit(self):
         """
-        return the next memory limit. If the memory is not released
+        Return the next memory limit. If the memory is not released
         after spilling, it will dump the data only when the used memory
         starts to increase.
         """
         return max(self.memory_limit, get_used_memory() * 1.05)
 
     def mergeValues(self, iterator):
-        """ combine the items by creator and combiner """
+        """ Combine the items by creator and combiner """
         iterator = iter(iterator)
         # speedup attribute lookup
         creator, comb = self.agg.createCombiner, self.agg.mergeValue
@@ -239,11 +241,11 @@ class ExternalMerger(Merger):
                 break
 
     def _partition(self, key):
-        """ return the partition for key """
+        """ Return the partition for key """
         return (hash(key) / self.scale) % self.partitions
 
     def _partitioned_mergeValues(self, iterator, limit=0):
-        """ partition the items by key, then combine them """
+        """ Partition the items by key, then combine them """
         # speedup attribute lookup
         creator, comb = self.agg.createCombiner, self.agg.mergeValue
         c, pdata, hfun, batch = 0, self.pdata, self._partition, self.batch
@@ -260,7 +262,7 @@ class ExternalMerger(Merger):
                 limit = self.next_limit()
 
     def mergeCombiners(self, iterator, check=True):
-        """ merge (K,V) pair by mergeCombiner """
+        """ Merge (K,V) pair by mergeCombiner """
         iterator = iter(iterator)
         # speedup attribute lookup
         d, comb, batch = self.data, self.agg.mergeCombiners, self.batch
@@ -277,7 +279,7 @@ class ExternalMerger(Merger):
                 break
 
     def _partitioned_mergeCombiners(self, iterator, limit=0):
-        """ partition the items by key, then merge them """
+        """ Partition the items by key, then merge them """
         comb, pdata = self.agg.mergeCombiners, self.pdata
         c, hfun = 0, self._partition
         for k, v in iterator:
@@ -293,7 +295,7 @@ class ExternalMerger(Merger):
 
     def _first_spill(self):
         """
-        dump all the data into disks partition by partition.
+        Dump all the data into disks partition by partition.
 
         The data has not been partitioned, it will iterator the
         dataset once, write them into different files, has no
@@ -337,13 +339,13 @@ class ExternalMerger(Merger):
         self.spills += 1
 
     def iteritems(self):
-        """ return all merged items as iterator """
+        """ Return all merged items as iterator """
         if not self.pdata and not self.spills:
             return self.data.iteritems()
         return self._external_items()
 
     def _external_items(self):
-        """ return all partitioned items as iterator """
+        """ Return all partitioned items as iterator """
         assert not self.data
         if any(self.pdata):
             self._spill()
@@ -359,7 +361,10 @@ class ExternalMerger(Merger):
                     self.mergeCombiners(self.serializer.load_stream(open(p)),
                                         False)
 
-                    if get_used_memory() > hard_limit and j < self.spills - 1:
+                    # limit the total partitions
+                    if (self.scale * self.partitions < self.TOTAL_PARTITIONS)
+                            and j < self.spills - 1
+                            and get_used_memory() > hard_limit):
                         self.data.clear() # will read from disk again
                         for v in self._recursive_merged_items(i):
                             yield v
@@ -368,11 +373,17 @@ class ExternalMerger(Merger):
                 for v in self.data.iteritems():
                     yield v
                 self.data.clear()
+
+                # remove the merged partition
+                for j in range(self.spills):
+                    path = self._get_spill_dir(j)
+                    os.remove(os.path.join(path, str(i)))
+
         finally:
             self._cleanup()
 
     def _cleanup(self):
-        """ clean up all the files in disks """
+        """ Clean up all the files in disks """
         for d in self.localdirs:
             shutil.rmtree(d, True)
 
@@ -409,6 +420,11 @@ class ExternalMerger(Merger):
 
             for v in m._external_items():
                 yield v
+
+            # remove the merged partition
+            for j in range(self.spills):
+                path = self._get_spill_dir(j)
+                os.remove(os.path.join(path, str(i)))
 
 
 if __name__ == "__main__":

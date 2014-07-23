@@ -1225,14 +1225,17 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
-        # Transferring O(n) objects to Java is too expensive.  Instead, we'll
-        # form the hash buckets in Python, transferring O(numPartitions) objects
-        # to Java. Each object is a (splitNumber, [objects]) pair.
-        # In order to void too huge objects, the objects are grouped into chunks.
+        # Transferring O(n) objects to Java is too expensive.
+        # Instead, we'll form the hash buckets in Python,
+        # transferring O(numPartitions) objects to Java.
+        # Each object is a (splitNumber, [objects]) pair.
+        # In order to void too huge objects, the objects are
+        # grouped into chunks.
         outputSerializer = self.ctx._unbatched_serializer
 
-        limit = (_parse_memory(self.ctx._conf.get("spark.python.worker.memory")
-                               or "512m") / 2)
+        limit = (_parse_memory(self.ctx._conf.get(
+                    "spark.python.worker.memory", "512m") / 2)
+
         def add_shuffle_key(split, iterator):
 
             buckets = defaultdict(list)
@@ -1274,8 +1277,8 @@ class RDD(object):
                                                           id(partitionFunc))
         jrdd = pairRDD.partitionBy(partitioner).values()
         rdd = RDD(jrdd, self.ctx, BatchedSerializer(outputSerializer))
-        # This is required so that id(partitionFunc) remains unique, even if
-        # partitionFunc is a lambda:
+        # This is required so that id(partitionFunc) remains unique,
+        # even if partitionFunc is a lambda:
         rdd._partitionFunc = partitionFunc
         return rdd
 
@@ -1310,8 +1313,10 @@ class RDD(object):
             numPartitions = self._defaultReducePartitions()
 
         serializer = self.ctx.serializer
-        spill = (self.ctx._conf.get("spark.shuffle.spill") or 'True').lower() == 'true'
-        memory = _parse_memory(self.ctx._conf.get("spark.python.worker.memory") or "512m")
+        spill = (self.ctx._conf.get("spark.shuffle.spill", 'True').lower()
+                 == 'true')
+        memory = (_parse_memory(self.ctx._conf.get(
+                    "spark.python.worker.memory","512m")
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combineLocally(iterator):
@@ -1322,7 +1327,7 @@ class RDD(object):
 
         locally_combined = self.mapPartitions(combineLocally)
         shuffled = locally_combined.partitionBy(numPartitions)
- 
+
         def _mergeCombiners(iterator):
             merger = ExternalMerger(agg, memory, serializer) \
                          if spill else InMemoryMerger(agg)
