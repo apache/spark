@@ -42,8 +42,6 @@ private[hive] case class ShellCommand(cmd: String) extends Command
 
 private[hive] case class SourceCommand(filePath: String) extends Command
 
-private[hive] case class AddJar(jarPath: String) extends Command
-
 private[hive] case class AddFile(filePath: String) extends Command
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
@@ -229,7 +227,7 @@ private[hive] object HiveQl {
       } else if (sql.trim.toLowerCase.startsWith("uncache table")) {
         CacheCommand(sql.trim.drop(14).trim, false)
       } else if (sql.trim.toLowerCase.startsWith("add jar")) {
-        AddJar(sql.trim.drop(8))
+        NativeCommand(sql)
       } else if (sql.trim.toLowerCase.startsWith("add file")) {
         AddFile(sql.trim.drop(9))
       } else if (sql.trim.toLowerCase.startsWith("dfs")) {
