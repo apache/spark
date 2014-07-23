@@ -16,9 +16,13 @@
 #
 
 from pyspark.rdd import RDD, PipelinedRDD
-from pyspark.serializers import BatchedSerializer, PickleSerializer
+from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
+
+from itertools import chain, ifilter, imap
 
 from py4j.protocol import Py4JError
+from py4j.java_collections import ListConverter, MapConverter
+
 
 __all__ = ["SQLContext", "HiveContext", "LocalHiveContext", "TestHiveContext", "SchemaRDD", "Row"]
 
@@ -72,6 +76,15 @@ class SQLContext:
         if not hasattr(self, '_scala_SQLContext'):
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
+
+    def registerFunction(self, name, f, returnType = "string"):
+        def func(split, iterator): return imap(f, iterator)
+        command = (func, self._sc.serializer, self._sc.serializer)
+        env = MapConverter().convert(self._sc.environment,
+                                     self._sc._gateway._gateway_client)
+        includes = ListConverter().convert(self._sc._python_includes,
+                                     self._sc._gateway._gateway_client)
+        self._ssql_ctx.registerPython(name, bytearray(CloudPickleSerializer().dumps(command)), env, includes, self._sc.pythonExec, self._sc._javaAccumulator, returnType)
 
     def inferSchema(self, rdd):
         """Infer and apply a schema to an RDD of L{dict}s.

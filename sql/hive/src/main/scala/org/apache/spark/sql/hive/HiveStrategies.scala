@@ -34,6 +34,8 @@ private[hive] trait HiveStrategies {
 
   object Scripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case e @ EvaluatePython(udf, child) =>
+        BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case logical.ScriptTransformation(input, script, output, child) =>
         ScriptTransformation(input, script, output, planLater(child))(hiveContext) :: Nil
       case _ => Nil

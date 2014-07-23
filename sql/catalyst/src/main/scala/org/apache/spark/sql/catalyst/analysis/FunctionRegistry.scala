@@ -18,10 +18,25 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Expression
+import scala.collection.mutable
 
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
 trait FunctionRegistry {
   def lookupFunction(name: String, children: Seq[Expression]): Expression
+}
+
+trait OverrideFunctionRegistry extends FunctionRegistry {
+  type FunctionBuilder = Seq[Expression] => Expression
+
+  val functionBuilders = new mutable.HashMap[String, FunctionBuilder]()
+
+  def registerFunction(name: String, builder: FunctionBuilder) = {
+    functionBuilders.put(name, builder)
+  }
+
+  abstract override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    functionBuilders.get(name).map(_(children)).getOrElse(super.lookupFunction(name,children))
+  }
 }
 
 /**
