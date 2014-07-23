@@ -23,13 +23,14 @@ import org.apache.spark.mllib.random.DistributionGenerator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
-private[mllib] class RandomRDDPartition(val idx: Int,
-    val size: Long,
-    val rng: DistributionGenerator,
+import scala.util.Random
+
+private[mllib] class RandomRDDPartition(override val index: Int,
+    val size: Int,
+    val generator: DistributionGenerator,
     val seed: Long) extends Partition {
-
-  override val index: Int = idx
-
+  // Safety check in case a Long > Int.MaxValue cast to an Int was passed in as size
+  require(size > 0, "Positive partition size required.")
 }
 
 // These two classes are necessary since Range objects in Scala cannot have size > Int.MaxValue
@@ -41,6 +42,8 @@ private[mllib] class RandomRDD(@transient private var sc: SparkContext,
 
   require(size > 0, "Positive RDD size required.")
   require(numSlices > 0, "Positive number of partitions required")
+  require(math.ceil(size.toDouble / numSlices) <= Int.MaxValue,
+    "Partition size cannot exceed Int.MaxValue")
 
   override def compute(splitIn: Partition, context: TaskContext): Iterator[Double] = {
     val split = splitIn.asInstanceOf[RandomRDDPartition]
@@ -62,6 +65,8 @@ private[mllib] class RandomVectorRDD(@transient private var sc: SparkContext,
   require(size > 0, "Positive RDD size required.")
   require(numSlices > 0, "Positive number of partitions required")
   require(vectorSize > 0, "Positive vector size required.")
+  require(math.ceil(size.toDouble / numSlices) <= Int.MaxValue,
+    "Partition size cannot exceed Int.MaxValue")
 
   override def compute(splitIn: Partition, context: TaskContext): Iterator[Vector] = {
     val split = splitIn.asInstanceOf[RandomRDDPartition]
@@ -75,50 +80,20 @@ private[mllib] class RandomVectorRDD(@transient private var sc: SparkContext,
 
 private[mllib] object RandomRDD {
 
-  private[mllib] class FixedSizePointIterator(val numElem: Long, val rng: DistributionGenerator)
-    extends Iterator[Double] {
-
-    private var currentSize = 0
-
-    override def hasNext: Boolean = currentSize < numElem
-
-    override def next(): Double = {
-      currentSize += 1
-      rng.nextValue()
-    }
-  }
-
-  private[mllib] class FixedSizeVectorIterator(val numElem: Long,
-      val vectorSize: Int,
-      val rng: DistributionGenerator)
-    extends Iterator[Vector] {
-
-    private var currentSize = 0
-
-    override def hasNext: Boolean = currentSize < numElem
-
-    override def next(): Vector = {
-      currentSize += 1
-      new DenseVector((0 until vectorSize).map { _ => rng.nextValue() }.toArray)
-    }
-  }
-
   def getPartitions(size: Long,
       numSlices: Int,
       rng: DistributionGenerator,
       seed: Long): Array[Partition] = {
 
-    val firstPartitionSize = size / numSlices + size % numSlices
-    val otherPartitionSize = size / numSlices
-
     val partitions = new Array[RandomRDDPartition](numSlices)
     var i = 0
+    var start: Long = 0
+    var end: Long = 0
+    val random = new Random(seed)
     while (i < numSlices) {
-      partitions(i) =  if (i == 0) {
-        new RandomRDDPartition(i, firstPartitionSize, rng, seed)
-      } else {
-        new RandomRDDPartition(i, otherPartitionSize, rng.newInstance(), seed)
-      }
+      end = ((i + 1) * size) / numSlices
+      partitions(i) = new RandomRDDPartition(i, (end - start).toInt, rng, random.nextLong())
+      start = end
       i += 1
     }
     partitions.asInstanceOf[Array[Partition]]
@@ -127,14 +102,17 @@ private[mllib] object RandomRDD {
   // The RNG has to be reset every time the iterator is requested to guarantee same data
   // every time the content of the RDD is examined.
   def getPointIterator(partition: RandomRDDPartition): Iterator[Double] = {
-    partition.rng.setSeed(partition.seed + partition.index)
-    new FixedSizePointIterator(partition.size, partition.rng)
+    val generator = partition.generator.copy()
+    generator.setSeed(partition.seed)
+    Iterator.fill(partition.size)(generator.nextValue())
   }
 
   // The RNG has to be reset every time the iterator is requested to guarantee same data
   // every time the content of the RDD is examined.
   def getVectorIterator(partition: RandomRDDPartition, vectorSize: Int): Iterator[Vector] = {
-    partition.rng.setSeed(partition.seed + partition.index)
-    new FixedSizeVectorIterator(partition.size, vectorSize, partition.rng)
+    val generator = partition.generator.copy()
+    generator.setSeed(partition.seed)
+    Iterator.fill(partition.size)(new DenseVector(
+      (0 until vectorSize).map { _ => generator.nextValue() }.toArray))
   }
 }

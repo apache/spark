@@ -36,7 +36,7 @@ class DistributionGeneratorSuite extends FunSuite {
     // newInstance should contain a difference instance of the rng
     // i.e. setting difference seeds for difference instances produces different sequences of
     // random numbers.
-    val gen2 = gen.newInstance()
+    val gen2 = gen.copy()
     gen.setSeed(0L)
     val array3 = (0 until 1000).map(_ => gen.nextValue())
     gen2.setSeed(1L)
@@ -44,6 +44,13 @@ class DistributionGeneratorSuite extends FunSuite {
     // Compare arrays instead of elements since individual elements can coincide by chance but the
     // sequences should differ given two different seeds.
     assert(!array3.equals(array4))
+
+    // test that setting the same seed in the copied instance produces the same sequence of numbers
+    gen.setSeed(0L)
+    val array5 = (0 until 1000).map(_ => gen.nextValue())
+    gen2.setSeed(0L)
+    val array6 = (0 until 1000).map(_ => gen2.nextValue())
+    assert(array5.equals(array6))
   }
 
   def distributionChecks(gen: DistributionGenerator,
