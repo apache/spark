@@ -18,9 +18,7 @@
 package org.apache.spark.mllib.tree.configuration
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.tree.configuration.DTParams
 import org.apache.spark.mllib.tree.impurity.{RegressionImpurity, Variance}
-import org.apache.spark.mllib.tree.configuration.QuantileStrategy
 
 /**
  * :: Experimental ::
@@ -34,17 +32,11 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy
  */
 @Experimental
 class DTRegressorParams (
-    val impurity: RegressionImpurity = Variance,
+    var impurity: RegressionImpurity = Variance,
     maxDepth: Int = 5,
     maxBins: Int = 100,
     quantileStrategy: QuantileStrategy.QuantileStrategy = QuantileStrategy.Sort,
     maxMemoryInMB: Int = 128)
   extends DTParams(maxDepth, maxBins, quantileStrategy, maxMemoryInMB) {
-
-  /*
-  if (!List("variance").contains(impurity)) {
-      throw new IllegalArgumentException(s"Bad impurity parameter for regression: $impurity")
-  }
-  */
 
 }

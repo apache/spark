@@ -28,7 +28,7 @@ package org.apache.spark.mllib.rdd
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
  */
-class DatasetMetadata (
+class DatasetInfo (
     val numClasses: Int,
     val numFeatures: Int,
     val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int]())

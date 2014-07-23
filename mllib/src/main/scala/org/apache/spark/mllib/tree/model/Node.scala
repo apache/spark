@@ -125,7 +125,7 @@ class Node (
       println(prefix + s"If ${splitToString(split.get, true)}")
       leftNode.get.print(prefix + "  ")
       println(prefix + s"Else ${splitToString(split.get, false)}")
-      tNode.get.print(prefix + "  ")
+      rightNode.get.print(prefix + "  ")
     }
   }
 }

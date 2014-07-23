@@ -19,10 +19,9 @@ package org.apache.spark.mllib.tree
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
-import org.apache.spark.mllib.rdd.DatasetMetadata
+import org.apache.spark.mllib.rdd.DatasetInfo
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.DTParams
-import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy
 import org.apache.spark.mllib.tree.model._
@@ -34,9 +33,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * :: Experimental ::
  * A class that implements a decision tree algorithm for classification and regression. It
  * supports both continuous and categorical features.
- * @param params The configuration parameters for the tree algorithm which specify the type
- *                 of algorithm (classification, regression, etc.), feature type (continuous,
- *                 categorical), depth of the tree, quantile calculation strategy, etc.
+ * @param params The configuration parameters for the tree algorithm.
  */
 @Experimental
 private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected val params: DTParams)
@@ -47,19 +44,19 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
   /**
    * Method to train a decision tree model over an RDD
    * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   * @param dsMeta  Dataset metadata.
+   * @param datasetInfo  Dataset metadata.
    * @return top node of a DecisionTreeModel
    */
   protected def trainSub(
       input: RDD[LabeledPoint],
-      dsMeta: DatasetMetadata): Node = {
+      datasetInfo: DatasetInfo): Node = {
 
     // Cache input RDD for speedup during multiple passes.
     input.cache()
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
-    val (splits, bins) = findSplitsBins(input, dsMeta)
+    val (splits, bins) = findSplitsBins(input, datasetInfo)
     val numBins = bins(0).length
     logDebug("numBins = " + numBins)
 
@@ -81,7 +78,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     // Max memory usage for aggregates
     val maxMemoryUsage = params.maxMemoryInMB * 1024 * 1024
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
-    val numElementsPerNode = getElementsPerNode(dsMeta, numBins)
+    val numElementsPerNode = getElementsPerNode(datasetInfo, numBins)
     logDebug("numElementsPerNode = " + numElementsPerNode)
     val arraySizePerNode = 8 * numElementsPerNode // approx. memory usage for bin aggregate array
     val maxNumberOfNodesPerGroup = math.max(maxMemoryUsage / arraySizePerNode, 1)
@@ -109,7 +106,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
       logDebug("#####################################")
 
       // Find best split for all nodes at a level.
-      val splitsStatsForLevel = findBestSplits(input, dsMeta, parentImpurities,
+      val splitsStatsForLevel = findBestSplits(input, datasetInfo, parentImpurities,
         level, filters, splits, bins, maxLevelForSingleGroup)
 
         for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
@@ -157,34 +154,44 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
   protected def computeCentroidForCategories(
       featureIndex: Int,
       sampledInput: Array[LabeledPoint],
-      dsMeta: DatasetMetadata): Map[Double,Double]
+      datasetInfo: DatasetInfo): Map[Double,Double]
 
   /**
    * Extracts left and right split aggregates.
-   * @param binData Array[Double] of size 2*numFeatures*numSplits
+   * @param binData Array[Double] of size 2 * numFeatures * numBins
    * @return (leftNodeAgg, rightNodeAgg) tuple of type (Array[Array[Array[Double\]\]\],
    *         Array[Array[Array[Double\]\]\]) where each array is of size(numFeature,
    *         (numBins - 1), numClasses)
    */
   protected def extractLeftRightNodeAggregates(
     binData: Array[Double],
-    dsMeta: DatasetMetadata,
+    datasetInfo: DatasetInfo,
     numBins: Int): (Array[Array[Array[Double]]], Array[Array[Array[Double]]])
 
   /**
    * Get the number of stats elements stored per node in bin aggregates.
    */
   protected def getElementsPerNode(
-      dsMeta: DatasetMetadata,
+      datasetInfo: DatasetInfo,
       numBins: Int): Int
 
   /**
    * Performs a sequential aggregation of bins stats over a partition.
+   *
+   * @param agg  Array[Double] storing aggregate calculation of size
+   *             numClasses * numBins * numFeatures * numNodes for classification
+   * @param arr  Bin mapping from findBinsForLevel.
+   *             Array of size 1 + (numFeatures * numNodes).
+   * @param datasetInfo Dataset metadata.
+   * @param numNodes  Number of nodes in this (level of tree, group),
+   *                  where nodes at deeper (larger) levels may be divided into groups.
+   * @param bins    Number of bins = 1 + number of possible splits.
+   * @return  agg
    */
   protected def binSeqOpSub(
       agg: Array[Double],
       arr: Array[Double],
-      dsMeta: DatasetMetadata,
+      datasetInfo: DatasetInfo,
       numNodes: Int,
       bins: Array[Array[Bin]]): Array[Double]
 
@@ -203,7 +210,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
       splitIndex: Int,
       rightNodeAgg: Array[Array[Array[Double]]],
       topImpurity: Double,
-      numClasses: Int,
+      datasetInfo: DatasetInfo,
       level: Int): InformationGainStats
 
   /**
@@ -212,7 +219,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
   protected def getBinDataForNode(
       node: Int,
       binAggregates: Array[Double],
-      dsMeta: DatasetMetadata,
+      datasetInfo: DatasetInfo,
       numNodes: Int,
       numBins: Int): Array[Double]
 
@@ -223,7 +230,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
   /**
    * Extract the decision tree node information for the given tree level and node index
    */
-  private def extractNodeInfo(
+  protected def extractNodeInfo(
       nodeSplitStats: (Split, InformationGainStats),
       level: Int,
       index: Int,
@@ -240,7 +247,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
   /**
    *  Extract the decision tree node information for the children of the node
    */
-  private def extractInfoForLowerLevels(
+  protected def extractInfoForLowerLevels(
       level: Int,
       index: Int,
       maxDepth: Int,
@@ -278,7 +285,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
    *
    * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
    *              for DecisionTree
-   * @param dsMeta  Metadata for input.
+   * @param datasetInfo  Metadata for input.
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param level Level of the tree
    * @param filters Filters for all nodes at a given level
@@ -287,9 +294,9 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
    * @param maxLevelForSingleGroup the deepest level for single-group level-wise computation.
    * @return array of splits with best splits for all nodes at a given level.
    */
-  private def findBestSplits(
+  protected[tree] def findBestSplits(
       input: RDD[LabeledPoint],
-      dsMeta: DatasetMetadata,
+      datasetInfo: DatasetInfo,
       parentImpurities: Array[Double],
       level: Int,
       filters: Array[List[Filter]],
@@ -309,14 +316,14 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
       // Iterate over each group of nodes at a level.
       var groupIndex = 0
       while (groupIndex < numGroups) {
-        val bestSplitsForGroup = findBestSplitsPerGroup(input, dsMeta, parentImpurities, level,
+        val bestSplitsForGroup = findBestSplitsPerGroup(input, datasetInfo, parentImpurities, level,
           filters, splits, bins, numGroups, groupIndex)
         bestSplits = Array.concat(bestSplits, bestSplitsForGroup)
         groupIndex += 1
       }
       bestSplits
     } else {
-      findBestSplitsPerGroup(input, dsMeta, parentImpurities, level, filters, splits, bins)
+      findBestSplitsPerGroup(input, datasetInfo, parentImpurities, level, filters, splits, bins)
     }
   }
 
@@ -325,7 +332,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
    *
    * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
    *              for DecisionTree
-   * @param dsMeta  Metadata for input.
+   * @param datasetInfo  Metadata for input.
    * @param parentImpurities Impurities for all parent nodes for the current level
    * @param level Level of the tree
    * @param filters Filters for all nodes at a given level
@@ -335,9 +342,9 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
    * @param groupIndex index of the node group being processed. Default value is set to 0.
    * @return array of splits with best splits for all nodes at a given level.
    */
-  private def findBestSplitsPerGroup(
+  protected def findBestSplitsPerGroup(
       input: RDD[LabeledPoint],
-      dsMeta: DatasetMetadata,
+      datasetInfo: DatasetInfo,
       parentImpurities: Array[Double],
       level: Int,
       filters: Array[List[Filter]],
@@ -370,17 +377,18 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
      * drastically reduce the communication overhead.
      */
 
-    // common calculations for multiple nested methods
+    // Common calculations for multiple nested methods:
+
+    // Number of nodes to handle for each group in this level.
     val numNodes = math.pow(2, level).toInt / numGroups
     logDebug("numNodes = " + numNodes)
-    //logDebug("numFeatures = " + numFeatures)
+    logDebug("numFeatures = " + datasetInfo.numFeatures)
     val numBins = bins(0).length
     logDebug("numBins = " + numBins)
-    //val numClasses = dsMeta.numClasses
-    //logDebug("numClasses = " + numClasses)
-    val isMulticlass = dsMeta.isMulticlass
+    logDebug("numClasses = " + datasetInfo.numClasses)
+    val isMulticlass = datasetInfo.isMulticlass
     logDebug("isMulticlass = " + isMulticlass)
-    val isMulticlassWithCategoricalFeatures = dsMeta.isMulticlassWithCategoricalFeatures
+    val isMulticlassWithCategoricalFeatures = datasetInfo.isMulticlassWithCategoricalFeatures
     logDebug("isMultiClassWithCategoricalFeatures = " + isMulticlassWithCategoricalFeatures)
 
     // shift when more than one group is used at deep tree level
@@ -435,7 +443,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     }
 
     /**
-     * Find bin for one feature.
+     * Find bin for one (labeledPoint, feature).
      */
     def findBin(
         featureIndex: Int,
@@ -483,7 +491,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
        * Sequential search helper method to find bin for categorical feature.
        */
       def sequentialBinSearchForOrderedCategoricalFeatureInClassification(): Int = {
-        val featureCategories = dsMeta.categoricalFeaturesInfo(featureIndex)
+        val featureCategories = datasetInfo.categoricalFeaturesInfo(featureIndex)
         val numCategoricalBins = math.pow(2.0, featureCategories - 1).toInt - 1
         var binIndex = 0
         while (binIndex < numCategoricalBins) {
@@ -528,10 +536,16 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
      * where b_ij is an integer between 0 and numBins - 1 for regressions and binary
      * classification and the categorical feature value in  multiclass classification.
      * Invalid sample is denoted by noting bin for feature 1 as -1.
+     *
+     * @return  Array of size 1 + numFeatures * numNodes, where
+     *          arr(0) = label for labeledPoint, and
+     *          arr(1 + numFeatures * nodeIndex + featureIndex) =
+     *            bin index for this labeledPoint
+     *            (or InvalidBinIndex if labeledPoint is not handled by this node).
      */
     def findBinsForLevel(labeledPoint: LabeledPoint): Array[Double] = {
       // Calculate bin index and label per feature per node.
-      val arr = new Array[Double](1 + (dsMeta.numFeatures * numNodes))
+      val arr = new Array[Double](1 + (datasetInfo.numFeatures * numNodes))
       // First element of the array is the label of the instance.
       arr(0) = labeledPoint.label
       // Iterate over nodes.
@@ -540,14 +554,14 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
         val parentFilters = findParentFilters(nodeIndex)
         // Find out whether the sample qualifies for the particular node.
         val sampleValid = isSampleValid(parentFilters, labeledPoint)
-        val shift = 1 + dsMeta.numFeatures * nodeIndex
+        val shift = 1 + datasetInfo.numFeatures * nodeIndex
         if (!sampleValid) {
           // Mark one bin as -1 is sufficient.
           arr(shift) = InvalidBinIndex
         } else {
           var featureIndex = 0
-          while (featureIndex < dsMeta.numFeatures) {
-            val featureInfo = dsMeta.categoricalFeaturesInfo.get(featureIndex)
+          while (featureIndex < datasetInfo.numFeatures) {
+            val featureInfo = datasetInfo.categoricalFeaturesInfo.get(featureIndex)
             val isFeatureContinuous = featureInfo.isEmpty
             if (isFeatureContinuous) {
               arr(shift + featureIndex)
@@ -558,7 +572,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
                 = numBins > math.pow(2, featureCategories.toInt - 1) - 1
               arr(shift + featureIndex)
                 = findBin(featureIndex, labeledPoint, isFeatureContinuous,
-                isSpaceSufficientForAllCategoricalSplits)
+                  isSpaceSufficientForAllCategoricalSplits)
             }
             featureIndex += 1
           }
@@ -573,11 +587,11 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
 
     // Performs a sequential aggregation over a partition.
     def binSeqOp(agg: Array[Double], arr: Array[Double]): Array[Double] = {
-      binSeqOpSub(agg, arr, dsMeta, numNodes, bins)
+      binSeqOpSub(agg, arr, datasetInfo, numNodes, bins)
     }
 
     // Calculate bin aggregate length for classification or regression.
-    val binAggregateLength = numNodes * getElementsPerNode(dsMeta, numBins)
+    val binAggregateLength = numNodes * getElementsPerNode(datasetInfo, numBins)
     logDebug("binAggregateLength = " + binAggregateLength)
 
     /**
@@ -609,12 +623,12 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
         leftNodeAgg: Array[Array[Array[Double]]],
         rightNodeAgg: Array[Array[Array[Double]]],
         nodeImpurity: Double): Array[Array[InformationGainStats]] = {
-      val gains = Array.ofDim[InformationGainStats](dsMeta.numFeatures, numBins - 1)
+      val gains = Array.ofDim[InformationGainStats](datasetInfo.numFeatures, numBins - 1)
 
-      for (featureIndex <- 0 until dsMeta.numFeatures) {
+      for (featureIndex <- 0 until datasetInfo.numFeatures) {
         for (splitIndex <- 0 until numBins - 1) {
           gains(featureIndex)(splitIndex) = calculateGainForSplit(leftNodeAgg, featureIndex,
-            splitIndex, rightNodeAgg, nodeImpurity, dsMeta.numClasses, level)
+            splitIndex, rightNodeAgg, nodeImpurity, datasetInfo, level)
         }
       }
       gains
@@ -622,7 +636,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
 
     /**
      * Find the best split for a node.
-     * @param binData Array[Double] of size 2 * numSplits * numFeatures
+     * @param binData Array[Double] of size 2 * numBins * numFeatures
      * @param nodeImpurity impurity of the top node
      * @return tuple of split and information gain
      */
@@ -633,7 +647,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
       logDebug("node impurity = " + nodeImpurity)
 
       // Extract left right node aggregates.
-      val (leftNodeAgg, rightNodeAgg) = extractLeftRightNodeAggregates(binData, dsMeta, numBins)
+      val (leftNodeAgg, rightNodeAgg) = extractLeftRightNodeAggregates(binData, datasetInfo, numBins)
 
       // Calculate gains for all splits.
       val gains = calculateGainsForAllNodeSplits(leftNodeAgg, rightNodeAgg, nodeImpurity)
@@ -645,15 +659,15 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
         var bestGainStats = new InformationGainStats(Double.MinValue, -1.0, -1.0, -1.0, -1.0)
         // Iterate over features.
         var featureIndex = 0
-        while (featureIndex < dsMeta.numFeatures) {
+        while (featureIndex < datasetInfo.numFeatures) {
           // Iterate over all splits.
           var splitIndex = 0
           val maxSplitIndex : Double = {
-            val isFeatureContinuous = dsMeta.categoricalFeaturesInfo.get(featureIndex).isEmpty
+            val isFeatureContinuous = datasetInfo.categoricalFeaturesInfo.get(featureIndex).isEmpty
             if (isFeatureContinuous) {
               numBins - 1
             } else { // Categorical feature
-            val featureCategories = dsMeta.categoricalFeaturesInfo(featureIndex)
+            val featureCategories = datasetInfo.categoricalFeaturesInfo(featureIndex)
               val isSpaceSufficientForAllCategoricalSplits
                 = numBins > math.pow(2, featureCategories.toInt - 1) - 1
               if (isMulticlass && isSpaceSufficientForAllCategoricalSplits) {
@@ -690,7 +704,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     while (node < numNodes) {
       val nodeImpurityIndex = math.pow(2, level).toInt - 1 + node + groupShift
       val binsForNode: Array[Double]
-        = getBinDataForNode(node, binAggregates, dsMeta, numNodes, numBins)
+        = getBinDataForNode(node, binAggregates, datasetInfo, numNodes, numBins)
       logDebug("nodeImpurityIndex = " + nodeImpurityIndex)
       val parentNodeImpurity = parentImpurities(nodeImpurityIndex)
       logDebug("parent node impurity = " + parentNodeImpurity)
@@ -701,25 +715,46 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
   }
 
   /**
-   * Returns split and bins for decision tree calculation.
-   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   *              for DecisionTree
-   * @return a tuple of (splits,bins) where splits is an Array of [org.apache.spark.mllib.tree
-   *         .model.Split] of size (numFeatures, numSplits-1) and bins is an Array of [org.apache
-   *         .spark.mllib.tree.model.Bin] of size (numFeatures, numSplits1)
+   * Returns splits and bins for decision tree calculation.
+   * Continuous and categorical features are handled differently.
+   *
+   * Continuous features:
+   *   For each feature, there are numBins - 1 possible splits representing the possible binary
+   *   decisions at each node in the tree.
+   *
+   * Categorical features:
+   *   For each feature, there is 1 bin per split.
+   *   Splits and bins are handled in 2 ways:
+   *   (a) For multiclass classification with a low-arity feature
+   *       (i.e., if isMulticlass && isSpaceSufficientForAllCategoricalSplits),
+   *       the feature is split based on subsets of categories.
+   *       There are 2^(maxFeatureValue - 1) - 1 splits.
+   *   (b) For regression and binary classification,
+   *       and for multiclass classification with a high-arity feature,
+   *       there is one split per category.
+   *
+   * Categorical case (a) features are called unordered features.
+   * Other cases are called ordered features.
+   *
+   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @return A tuple of (splits,bins).
+   *         Splits is an Array of [[org.apache.spark.mllib.tree.model.Split]]
+   *          of size (numFeatures, numBins - 1).
+   *         Bins is an Array of [[org.apache.spark.mllib.tree.model.Bin]]
+   *          of size (numFeatures, numBins).
    */
   protected[tree] def findSplitsBins(
       input: RDD[LabeledPoint],
-      dsMeta: DatasetMetadata): (Array[Array[Split]], Array[Array[Bin]]) = {
+      datasetInfo: DatasetInfo): (Array[Array[Split]], Array[Array[Bin]]) = {
 
     val count = input.count()
 
-    val numFeatures = dsMeta.numFeatures
+    val numFeatures = datasetInfo.numFeatures
 
     val maxBins = params.maxBins
     val numBins = if (maxBins <= count) maxBins else count.toInt
     logDebug("numBins = " + numBins)
-    val isMulticlass = dsMeta.isMulticlass
+    val isMulticlass = datasetInfo.isMulticlass
     logDebug("isMulticlass = " + isMulticlass)
 
 
@@ -729,8 +764,8 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
      * It's a limitation of the current implementation but a reasonable trade-off since features
      * with large number of categories get favored over continuous features.
      */
-    if (dsMeta.categoricalFeaturesInfo.size > 0) {
-      val maxCategoriesForFeatures = dsMeta.categoricalFeaturesInfo.maxBy(_._2)._2
+    if (datasetInfo.categoricalFeaturesInfo.size > 0) {
+      val maxCategoriesForFeatures = datasetInfo.categoricalFeaturesInfo.maxBy(_._2)._2
       require(numBins > maxCategoriesForFeatures, "numBins should be greater than max categories " +
         "in categorical features")
     }
@@ -760,7 +795,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
         var featureIndex = 0
         while (featureIndex < numFeatures){
           // Check whether the feature is continuous.
-          val isFeatureContinuous = dsMeta.categoricalFeaturesInfo.get(featureIndex).isEmpty
+          val isFeatureContinuous = datasetInfo.categoricalFeaturesInfo.get(featureIndex).isEmpty
           if (isFeatureContinuous) {
             val featureSamples = sampledInput.map(lp => lp.features(featureIndex)).sorted
             val stride: Double = numSamples.toDouble / numBins
@@ -771,14 +806,14 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
               splits(featureIndex)(index) = split
             }
           } else { // Categorical feature
-            val featureCategories = dsMeta.categoricalFeaturesInfo(featureIndex)
+            val featureCategories = datasetInfo.categoricalFeaturesInfo(featureIndex)
             val isSpaceSufficientForAllCategoricalSplits =
               numBins > math.pow(2, featureCategories.toInt - 1) - 1
 
             // Use different bin/split calculation strategy for categorical features in multiclass
             // classification that satisfy the space constraint
             if (isMulticlass && isSpaceSufficientForAllCategoricalSplits) {
-              // 2^(maxFeatureValue- 1) - 1 combinations
+              // 2^(maxFeatureValue - 1) - 1 combinations
               var index = 0
               while (index < math.pow(2.0, featureCategories - 1).toInt - 1) {
                 val categories: List[Double] =
@@ -803,9 +838,8 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
                 index += 1
               }
             } else {
-
               val centroidForCategories =
-                computeCentroidForCategories(featureIndex, sampledInput, dsMeta)
+                computeCentroidForCategories(featureIndex, sampledInput, datasetInfo)
 
               logDebug("centroid for categories = " + centroidForCategories.mkString(","))
 
@@ -835,7 +869,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
                       new Bin(new DummyCategoricalSplit(featureIndex, Categorical),
                         splits(featureIndex)(0), Categorical, key)
                     } else {
-                      new Bin(splits(featureIndex)(index-1), splits(featureIndex)(index),
+                      new Bin(splits(featureIndex)(index - 1), splits(featureIndex)(index),
                         Categorical, key)
                     }
                   }
@@ -848,16 +882,16 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
         // Find all bins.
         featureIndex = 0
         while (featureIndex < numFeatures) {
-          val isFeatureContinuous = dsMeta.categoricalFeaturesInfo.get(featureIndex).isEmpty
+          val isFeatureContinuous = datasetInfo.categoricalFeaturesInfo.get(featureIndex).isEmpty
           if (isFeatureContinuous) { // Bins for categorical variables are already assigned.
             bins(featureIndex)(0) = new Bin(new DummyLowSplit(featureIndex, Continuous),
               splits(featureIndex)(0), Continuous, Double.MinValue)
             for (index <- 1 until numBins - 1){
-              val bin = new Bin(splits(featureIndex)(index-1), splits(featureIndex)(index),
+              val bin = new Bin(splits(featureIndex)(index - 1), splits(featureIndex)(index),
                 Continuous, Double.MinValue)
               bins(featureIndex)(index) = bin
             }
-            bins(featureIndex)(numBins-1) = new Bin(splits(featureIndex)(numBins-2),
+            bins(featureIndex)(numBins - 1) = new Bin(splits(featureIndex)(numBins - 2),
               new DummyHighSplit(featureIndex, Continuous), Continuous, Double.MinValue)
           }
           featureIndex += 1

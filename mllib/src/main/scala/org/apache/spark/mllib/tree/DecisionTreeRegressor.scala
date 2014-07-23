@@ -19,10 +19,10 @@ package org.apache.spark.mllib.tree
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
-import org.apache.spark.mllib.rdd.DatasetMetadata
+import org.apache.spark.mllib.rdd.DatasetInfo
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.configuration.DTRegressorParams
-import org.apache.spark.mllib.tree.impurity.{RegressionImpurity, Variance}
+import org.apache.spark.mllib.tree.configuration.{QuantileStrategies, DTRegressorParams}
+import org.apache.spark.mllib.tree.impurity.{RegressionImpurities, RegressionImpurity}
 import org.apache.spark.mllib.tree.model.{InformationGainStats, Bin, DecisionTreeRegressorModel}
 import org.apache.spark.rdd.RDD
 
@@ -38,30 +38,21 @@ class DecisionTreeRegressor (params: DTRegressorParams)
   extends DecisionTree[DecisionTreeRegressorModel](params) {
 
   private val impurityFunctor = params.impurity
-  /*
-  private val impurityFunctor = params.impurity match {
-    case "variance" => Variance
-    case _ => throw new IllegalArgumentException(s"Bad impurity parameter for regression: ${params.impurity}")
-  }
-  */
 
   /**
    * Method to train a decision tree model over an RDD
    * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-   * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
-   *                                number of discrete values they take. For example, an entry (n ->
-   *                                k) implies the feature n is categorical with k categories 0,
-   *                                1, 2, ... , k-1. It's important to note that features are
-   *                                zero-indexed.
+   * @param datasetInfo  Dataset metadata specifying number of classes, features, etc.
    * @return a DecisionTreeRegressorModel that can be used for prediction
    */
   def train(
     input: RDD[LabeledPoint],
-    categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int]()): DecisionTreeRegressorModel = {
+    datasetInfo: DatasetInfo): DecisionTreeRegressorModel = {
 
+    require(datasetInfo.isRegression)
     logDebug("algo = Regression")
 
-    val topNode = super.trainSub(input, 0, categoricalFeaturesInfo)
+    val topNode = super.trainSub(input, datasetInfo)
 
     new DecisionTreeRegressorModel(topNode)
   }
@@ -73,7 +64,7 @@ class DecisionTreeRegressor (params: DTRegressorParams)
   protected def computeCentroidForCategories(
       featureIndex: Int,
       sampledInput: Array[LabeledPoint],
-      dsMeta: DatasetMetadata): Map[Double,Double] = {
+      datasetInfo: DatasetInfo): Map[Double,Double] = {
     // For categorical variables in regression, each bin is a category.
     // The bins are sorted and are ordered by calculating the centroid of their corresponding labels.
     sampledInput.map(lp => (lp.features(featureIndex), lp.label))
@@ -83,22 +74,22 @@ class DecisionTreeRegressor (params: DTRegressorParams)
 
   /**
    * Extracts left and right split aggregates.
-   * @param binData Array[Double] of size 2*numFeatures*numSplits
+   * @param binData Array[Double] of size 2 * numFeatures * numBins
    * @return (leftNodeAgg, rightNodeAgg) tuple of type (Array[Array[Array[Double\]\]\],
    *         Array[Array[Array[Double\]\]\]) where each array is of size(numFeature,
-   *         (numBins - 1), numClasses)
+   *         (numBins - 1), 3)
    */
   protected def extractLeftRightNodeAggregates(
       binData: Array[Double],
-      dsMeta: DatasetMetadata,
+      datasetInfo: DatasetInfo,
       numBins: Int): (Array[Array[Array[Double]]], Array[Array[Array[Double]]]) = {
 
     // Initialize left and right split aggregates.
-    val leftNodeAgg = Array.ofDim[Double](dsMeta.numFeatures, numBins - 1, 3)
-    val rightNodeAgg = Array.ofDim[Double](dsMeta.numFeatures, numBins - 1, 3)
+    val leftNodeAgg = Array.ofDim[Double](datasetInfo.numFeatures, numBins - 1, 3)
+    val rightNodeAgg = Array.ofDim[Double](datasetInfo.numFeatures, numBins - 1, 3)
     // Iterate over all features.
     var featureIndex = 0
-    while (featureIndex < dsMeta.numFeatures) {
+    while (featureIndex < datasetInfo.numFeatures) {
       // shift for this featureIndex
       val shift = 3 * featureIndex * numBins
       // left node aggregate for the lowest split
@@ -138,9 +129,9 @@ class DecisionTreeRegressor (params: DTRegressorParams)
   }
 
   protected def getElementsPerNode(
-      dsMeta: DatasetMetadata,
+      datasetInfo: DatasetInfo,
       numBins: Int): Int = {
-    3 * numBins * dsMeta.numFeatures
+    3 * numBins * datasetInfo.numFeatures
   }
 
   /**
@@ -149,15 +140,15 @@ class DecisionTreeRegressor (params: DTRegressorParams)
    * the count, sum, sum of squares of one of the p bins is incremented.
    *
    * @param agg Array[Double] storing aggregate calculation of size
-   *            3 * numSplits * numFeatures * numNodes for classification
+   *            3 * numBins * numFeatures * numNodes for classification
    * @param arr Array[Double] of size 1 + (numFeatures * numNodes)
    * @return Array[Double] storing aggregate calculation of size
-   *         3 * numSplits * numFeatures * numNodes for regression
+   *         3 * numBins * numFeatures * numNodes for regression
    */
   protected def binSeqOpSub(
       agg: Array[Double],
       arr: Array[Double],
-      dsMeta: DatasetMetadata,
+      datasetInfo: DatasetInfo,
       numNodes: Int,
       bins: Array[Array[Bin]]): Array[Double] = {
     val numBins = bins(0).length
@@ -165,19 +156,19 @@ class DecisionTreeRegressor (params: DTRegressorParams)
     var nodeIndex = 0
     while (nodeIndex < numNodes) {
       // Check whether the instance was valid for this nodeIndex.
-      val validSignalIndex = 1 + dsMeta.numFeatures * nodeIndex
+      val validSignalIndex = 1 + datasetInfo.numFeatures * nodeIndex
       val isSampleValidForNode = arr(validSignalIndex) != InvalidBinIndex
       if (isSampleValidForNode) {
         // actual class label
         val label = arr(0)
         // Iterate over all features.
         var featureIndex = 0
-        while (featureIndex < dsMeta.numFeatures) {
+        while (featureIndex < datasetInfo.numFeatures) {
           // Find the bin index for this feature.
-          val arrShift = 1 + dsMeta.numFeatures * nodeIndex
+          val arrShift = 1 + datasetInfo.numFeatures * nodeIndex
           val arrIndex = arrShift + featureIndex
           // Update count, sum, and sum^2 for one bin.
-          val aggShift = 3 * numBins * dsMeta.numFeatures * nodeIndex
+          val aggShift = 3 * numBins * datasetInfo.numFeatures * nodeIndex
           val aggIndex = aggShift + 3 * featureIndex * numBins + arr(arrIndex).toInt * 3
           agg(aggIndex) = agg(aggIndex) + 1
           agg(aggIndex + 1) = agg(aggIndex + 1) + label
@@ -205,7 +196,7 @@ class DecisionTreeRegressor (params: DTRegressorParams)
       splitIndex: Int,
       rightNodeAgg: Array[Array[Array[Double]]],
       topImpurity: Double,
-      numClasses: Int,
+      datasetInfo: DatasetInfo,
       level: Int): InformationGainStats = {
 
     val leftCount = leftNodeAgg(featureIndex)(splitIndex)(0)
@@ -261,22 +252,12 @@ class DecisionTreeRegressor (params: DTRegressorParams)
   protected def getBinDataForNode(
       node: Int,
       binAggregates: Array[Double],
-      dsMeta: DatasetMetadata,
+      datasetInfo: DatasetInfo,
       numNodes: Int,
       numBins: Int): Array[Double] = {
-    val shift = 3 * node * numBins * dsMeta.numFeatures
-    val binsForNode = binAggregates.slice(shift, shift + 3 * numBins * dsMeta.numFeatures)
+    val shift = 3 * node * numBins * datasetInfo.numFeatures
+    val binsForNode = binAggregates.slice(shift, shift + 3 * numBins * datasetInfo.numFeatures)
     binsForNode
-  }
-
-  //===========================================================================
-  //  Protected methods
-  //===========================================================================
-
-  /**
-   * Performs a sequential aggregation over a partition for regression.
-   */
-  def regressionBinSeqOp(arr: Array[Double], agg: Array[Double]) = {
   }
 
 }
@@ -285,95 +266,41 @@ class DecisionTreeRegressor (params: DTRegressorParams)
 object DecisionTreeRegressor extends Serializable with Logging {
 
   /**
+   * Get a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTreeRegressor]].
+   */
+  def defaultParams(): DTRegressorParams = {
+    new DTRegressorParams()
+  }
+
+  /**
    * Train a decision tree model for regression.
    *
    * @param input  Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *               Labels should take values {0, 1, ..., numClasses-1}.
-   * @param dsMeta Dataset metadata (number of features, number of classes, etc.)
+   *               Labels should be real values.
+   * @param datasetInfo Dataset metadata (number of features, number of classes, etc.)
+   * @return DecisionTreeRegressorModel which can be used for prediction
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      datasetInfo: DatasetInfo): DecisionTreeRegressorModel = {
+    new DecisionTreeRegressor(new DTRegressorParams()).train(input, datasetInfo)
+  }
+
+  /**
+   * Train a decision tree model for regression.
+   *
+   * @param input  Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *               Labels should be real values.
+   * @param datasetInfo Dataset metadata (number of features, number of classes, etc.)
    * @param params The configuration parameters for the tree learning algorithm
    *               (tree depth, quantile calculation strategy, etc.)
    * @return DecisionTreeRegressorModel which can be used for prediction
    */
   def train(
-             input: RDD[LabeledPoint],
-             dsMeta: DatasetMetadata,
-             params: DTRegressorParams = new DTRegressorParams()): DecisionTreeRegressorModel = {
-    require(dsMeta.numClasses >= 2)
-    new DecisionTreeRegressor(params).train(input, dsMeta)
-  }
-
-  /**
-   * Train a decision tree model for binary or multiclass regression.
-   *
-   * @param input  Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *               Labels should take values {0, 1, ..., numClasses-1}.
-   * @param numClasses Number of classes (label types) for regression.
-   *                   Default = 2 (binary regression).
-   * @param categoricalFeaturesInfo A map from each categorical variable to the
-   *                                number of discrete values it takes. For example, an entry (n ->
-   *                                k) implies the feature n is categorical with k categories 0,
-   *                                1, 2, ... , k-1. It is important to note that features are
-   *                                zero-indexed.
-   *                                Default = treat all features as continuous.
-   * @param params The configuration parameters for the tree learning algorithm
-   *               (tree depth, quantile calculation strategy, etc.)
-   * @return DecisionTreeRegressorModel which can be used for prediction
-   */
-  def train(
-             input: RDD[LabeledPoint],
-             numClasses: Int = 2,
-             categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-             params: DTRegressorParams = new DTRegressorParams()): DecisionTreeRegressorModel = {
-
-    // Find the number of features by looking at the first sample.
-    val numFeatures = input.first().features.size
-    val dsMeta = new DatasetMetadata(numClasses, numFeatures, categoricalFeaturesInfo)
-
-    train(input, dsMeta, params)
-  }
-
-  // TODO: Move elsewhere!
-  protected def getImpurity(impurityName: String): RegressionImpurity = {
-    impurityName match {
-      case "gini" => Gini
-      case "entropy" => Entropy
-      case _ => throw new IllegalArgumentException(
-        s"Bad impurity parameter for regression: $impurityName")
-    }
-  }
-
-  /**
-   * Train a decision tree model for binary or multiclass regression.
-   *
-   * @param input  Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *               Labels should take values {0, 1, ..., numClasses-1}.
-   * @param numClasses Number of classes (label types) for regression.
-   * @param categoricalFeaturesInfo A map from each categorical variable to the
-   *                                number of discrete values it takes. For example, an entry (n ->
-   *                                k) implies the feature n is categorical with k categories 0,
-   *                                1, 2, ... , k-1. It is important to note that features are
-   *                                zero-indexed.
-   * @param impurityName Criterion used for information gain calculation
-   * @param maxDepth  Maximum depth of the tree
-   * @param maxBins  Maximum number of bins used for splitting features
-   * @param quantileStrategyName  Algorithm for calculating quantiles
-   * @return DecisionTreeRegressorModel which can be used for prediction
-   */
-  def train(
-             input: RDD[LabeledPoint],
-             numClasses: Int,
-             categoricalFeaturesInfo: Map[Int, Int],
-             impurityName: String,
-             maxDepth: Int,
-             maxBins: Int,
-             quantileStrategyName: String,
-             maxMemoryInMB: Int): DecisionTreeRegressorModel = {
-
-    val impurity = getImpurity(impurityName)
-    val quantileStrategy = getQuantileStrategy(quantileStrategyName)
-    val params =
-      new DTRegressorParams(impurity, maxDepth, maxBins, quantileStrategy, maxMemoryInMB)
-    train(input, numClasses, categoricalFeaturesInfo, params)
+      input: RDD[LabeledPoint],
+      datasetInfo: DatasetInfo,
+      params: DTRegressorParams = new DTRegressorParams()): DecisionTreeRegressorModel = {
+    new DecisionTreeRegressor(params).train(input, datasetInfo)
   }
 
 }

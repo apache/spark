@@ -27,16 +27,23 @@ import org.apache.spark.annotation.Experimental
 object QuantileStrategy extends Enumeration {
   type QuantileStrategy = Value
   val Sort, MinMax, ApproxHist = Value
+}
+
+
+/**
+ * :: Experimental ::
+ * Factory for creating [[org.apache.spark.mllib.tree.configuration.QuantileStrategy]] instances.
+ */
+@Experimental
+private[mllib] object QuantileStrategies {
 
   /**
    * Given a string with the name of a quantile strategy, get the QuantileStrategy type.
    */
-  def getQuantileStrategy(strategyName: String): QuantileStrategy = {
-    strategyName match {
-      case "sort" => Sort
-      case _ => throw new IllegalArgumentException(
-        s"Bad QuantileStrategy parameter: $strategyName")
-    }
+  def strategy(strategyName: String): QuantileStrategy.QuantileStrategy = strategyName match {
+    case "sort" => QuantileStrategy.Sort
+    case _ => throw new IllegalArgumentException(
+      s"Bad QuantileStrategy parameter: $strategyName")
   }
 
 }

@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.tree
 
+import org.apache.spark.mllib.rdd.DatasetInfo
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model.Filter
 import org.apache.spark.mllib.tree.model.Split
-import org.apache.spark.mllib.tree.configuration.{FeatureType, Strategy}
-import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.tree.configuration.{FeatureType, DTClassifierParams, DTRegressorParams}
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LocalSparkContext
@@ -31,12 +31,27 @@ import org.apache.spark.mllib.regression.LabeledPoint
 
 class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
+  private def getNumFeatures(data: Array[LabeledPoint]) = data.size match {
+    case 0 => 0
+    case _ => data(0).features.size
+  }
+
+  private val defaultClassifierParams =
+    new DTClassifierParams(Gini, maxDepth=3, maxBins=100)
+
+  private val defaultRegressorParams =
+    new DTRegressorParams(Variance, maxDepth=3, maxBins=100)
+
   test("split and bin calculation") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Gini, 3, 2, 100)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 2,
+      numFeatures = getNumFeatures(arr))
+
+    val dtLearner = new DecisionTreeClassifier(defaultClassifierParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
     assert(splits.length === 2)
     assert(bins.length === 2)
     assert(splits(0).length === 99)
@@ -47,14 +62,13 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(
-      Classification,
-      Gini,
-      maxDepth = 3,
-      numClassesForClassification = 2,
-      maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 2,
+      numFeatures = getNumFeatures(arr),
+      categoricalFeaturesInfo = Map(0 -> 2, 1 -> 2))
+
+    val dtLearner = new DecisionTreeClassifier(defaultClassifierParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
     assert(splits.length === 2)
     assert(bins.length === 2)
     assert(splits(0).length === 99)
@@ -127,14 +141,13 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(
-      Classification,
-      Gini,
-      maxDepth = 3,
-      numClassesForClassification = 2,
-      maxBins = 100,
+    val datasetInfo = new DatasetInfo(
+      numClasses = 2,
+      numFeatures = getNumFeatures(arr),
       categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+
+    val dtLearner = new DecisionTreeClassifier(defaultClassifierParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
 
     // Check splits.
 
@@ -244,14 +257,13 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(
-      Classification,
-      Gini,
-      maxDepth = 3,
-      numClassesForClassification = 100,
-      maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 100,
+      numFeatures = getNumFeatures(arr),
+      categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
+
+    val dtLearner = new DecisionTreeClassifier(defaultClassifierParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
 
     // Expecting 2^2 - 1 = 3 bins/splits
     assert(splits(0)(0).feature === 0)
@@ -338,14 +350,13 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
     assert(arr.length === 3000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(
-      Classification,
-      Gini,
-      maxDepth = 3,
-      numClassesForClassification = 100,
-      maxBins = 100,
+    val datasetInfo = new DatasetInfo(
+      numClasses = 100,
+      numFeatures = getNumFeatures(arr),
       categoricalFeaturesInfo = Map(0 -> 10, 1-> 10))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+
+    val dtLearner = new DecisionTreeClassifier(defaultClassifierParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
 
     // 2^10 - 1 > 100, so categorical variables will be ordered
 
@@ -393,15 +404,14 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(
-      Classification,
-      Gini,
-      numClassesForClassification = 2,
-      maxDepth = 3,
-      maxBins = 100,
+    val datasetInfo = new DatasetInfo(
+      numClasses = 2,
+      numFeatures = getNumFeatures(arr),
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
-    val bestSplits = DecisionTree.findBestSplits(rdd, new Array(7), strategy, 0,
+
+    val dtLearner = new DecisionTreeClassifier(defaultClassifierParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, new Array(7), 0,
       Array[List[Filter]](), splits, bins, 10)
 
     val split = bestSplits(0)._1
@@ -421,14 +431,14 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(
-      Regression,
-      Variance,
-      maxDepth = 3,
-      maxBins = 100,
+    val datasetInfo = new DatasetInfo(
+      numClasses = 0,
+      numFeatures = getNumFeatures(arr),
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
-    val bestSplits = DecisionTree.findBestSplits(rdd, new Array(7), strategy, 0,
+
+    val dtLearner = new DecisionTreeRegressor(defaultRegressorParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, new Array(7), 0,
       Array[List[Filter]](), splits, bins, 10)
 
     val split = bestSplits(0)._1
@@ -447,8 +457,13 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Gini, 3, 2, 100)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 2,
+      numFeatures = getNumFeatures(arr))
+
+    val dtLearner = new DecisionTreeClassifier(defaultClassifierParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
@@ -456,7 +471,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    val bestSplits = DecisionTree.findBestSplits(rdd, new Array(7), strategy, 0,
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, new Array(7), 0,
       Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
@@ -470,8 +485,13 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Gini, 3, 2, 100)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 2,
+      numFeatures = getNumFeatures(arr))
+
+    val dtLearner = new DecisionTreeClassifier(defaultClassifierParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
@@ -479,7 +499,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    val bestSplits = DecisionTree.findBestSplits(rdd, Array(0.0), strategy, 0,
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, Array(0.0), 0,
       Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
@@ -494,8 +514,15 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 2,
+      numFeatures = getNumFeatures(arr))
+
+    val dtParams = defaultClassifierParams
+    dtParams.impurity = Entropy
+    val dtLearner = new DecisionTreeClassifier(dtParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
@@ -503,7 +530,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    val bestSplits = DecisionTree.findBestSplits(rdd, Array(0.0), strategy, 0,
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, Array(0.0), 0,
       Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
@@ -518,8 +545,15 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 2,
+      numFeatures = getNumFeatures(arr))
+
+    val dtParams = defaultClassifierParams
+    dtParams.impurity = Entropy
+    val dtLearner = new DecisionTreeClassifier(dtParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
@@ -527,7 +561,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    val bestSplits = DecisionTree.findBestSplits(rdd, Array(0.0), strategy, 0,
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, Array(0.0), 0,
       Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
@@ -542,8 +576,15 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateOrderedLabeledPoints()
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy(Classification, Entropy, 3, 2, 100)
-    val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 2,
+      numFeatures = getNumFeatures(arr))
+
+    val dtParams = defaultClassifierParams
+    dtParams.impurity = Entropy
+    val dtLearner = new DecisionTreeClassifier(dtParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+
     assert(splits.length === 2)
     assert(splits(0).length === 99)
     assert(bins.length === 2)
@@ -557,7 +598,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val parentImpurities = Array(0.5, 0.5, 0.5)
 
     // Single group second level tree construction.
-    val bestSplits = DecisionTree.findBestSplits(rdd, parentImpurities, strategy, 1, filters,
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, parentImpurities, 1, filters,
       splits, bins, 10)
     assert(bestSplits.length === 2)
     assert(bestSplits(0)._2.gain > 0)
@@ -565,7 +606,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     // maxLevelForSingleGroup parameter is set to 0 to force splitting into groups for second
     // level tree construction.
-    val bestSplitsWithGroups = DecisionTree.findBestSplits(rdd, parentImpurities, strategy, 1,
+    val bestSplitsWithGroups = dtLearner.findBestSplits(rdd, datasetInfo, parentImpurities, 1,
       filters, splits, bins, 0)
     assert(bestSplitsWithGroups.length === 2)
     assert(bestSplitsWithGroups(0)._2.gain > 0)
@@ -586,12 +627,20 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   test("stump with categorical variables for multiclass classification") {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
-    val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
-      numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
-    assert(strategy.isMulticlassClassification)
-    val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
-    val bestSplits = DecisionTree.findBestSplits(input, new Array(31), strategy, 0,
+    val rdd = sc.parallelize(arr)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 3,
+      numFeatures = getNumFeatures(arr),
+      categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
+    assert(datasetInfo.isMulticlass)
+
+    val dtParams = defaultClassifierParams
+    dtParams.impurity = Entropy
+    dtParams.maxDepth = 5
+    val dtLearner = new DecisionTreeClassifier(dtParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, new Array(31), 0,
       Array[List[Filter]](), splits, bins, 10)
 
     assert(bestSplits.length === 1)
@@ -604,12 +653,17 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   test("stump with continuous variables for multiclass classification") {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
-    val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
-      numClassesForClassification = 3)
-    assert(strategy.isMulticlassClassification)
-    val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
-    val bestSplits = DecisionTree.findBestSplits(input, new Array(31), strategy, 0,
+    val rdd = sc.parallelize(arr)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 3,
+      numFeatures = getNumFeatures(arr))
+    assert(datasetInfo.isMulticlass)
+
+    val dtParams = defaultClassifierParams
+    dtParams.maxDepth = 5
+    val dtLearner = new DecisionTreeClassifier(dtParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, new Array(31), 0,
       Array[List[Filter]](), splits, bins, 10)
 
     assert(bestSplits.length === 1)
@@ -624,12 +678,19 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   test("stump with continuous + categorical variables for multiclass classification") {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
-    val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
-      numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 3))
-    assert(strategy.isMulticlassClassification)
-    val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
-    val bestSplits = DecisionTree.findBestSplits(input, new Array(31), strategy, 0,
+    val rdd = sc.parallelize(arr)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 3,
+      numFeatures = getNumFeatures(arr),
+      categoricalFeaturesInfo = Map(0 -> 3))
+    assert(datasetInfo.isMulticlass)
+
+    val dtParams = defaultClassifierParams
+    dtParams.maxDepth = 5
+    val dtLearner = new DecisionTreeClassifier(dtParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, new Array(31), 0,
       Array[List[Filter]](), splits, bins, 10)
 
     assert(bestSplits.length === 1)
@@ -643,12 +704,19 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
   test("stump with categorical variables for ordered multiclass classification") {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
-    val input = sc.parallelize(arr)
-    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
-      numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 10, 1 -> 10))
-    assert(strategy.isMulticlassClassification)
-    val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
-    val bestSplits = DecisionTree.findBestSplits(input, new Array(31), strategy, 0,
+    val rdd = sc.parallelize(arr)
+    val datasetInfo = new DatasetInfo(
+      numClasses = 3,
+      numFeatures = getNumFeatures(arr),
+      categoricalFeaturesInfo = Map(0 -> 10, 1 -> 10))
+    assert(datasetInfo.isMulticlass)
+
+    val dtParams = defaultClassifierParams
+    dtParams.maxDepth = 5
+    val dtLearner = new DecisionTreeClassifier(dtParams)
+    val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
+
+    val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, new Array(31), 0,
       Array[List[Filter]](), splits, bins, 10)
 
     assert(bestSplits.length === 1)

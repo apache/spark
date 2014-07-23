@@ -18,9 +18,8 @@
 package org.apache.spark.mllib.tree.configuration
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.tree.configuration.DTParams
 import org.apache.spark.mllib.tree.impurity.{ClassificationImpurity, Gini}
-import org.apache.spark.mllib.tree.configuration.QuantileStrategy
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 
 /**
  * :: Experimental ::
@@ -34,17 +33,11 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy
  */
 @Experimental
 class DTClassifierParams (
-    val impurity: ClassificationImpurity = Gini,
+    var impurity: ClassificationImpurity = Gini,
     maxDepth: Int = 5,
     maxBins: Int = 100,
-    quantileStrategy: QuantileStrategy.QuantileStrategy = QuantileStrategy.Sort,
+    quantileStrategy: QuantileStrategy = Sort,
     maxMemoryInMB: Int = 128)
   extends DTParams(maxDepth, maxBins, quantileStrategy, maxMemoryInMB) {
-
-  /*
-    if (!List("gini", "entropy").contains(impurity)) {
-      throw new IllegalArgumentException(s"Bad impurity parameter for classification: $impurity")
-    }
-  */
 
 }
