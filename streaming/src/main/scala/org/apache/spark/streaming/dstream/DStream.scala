@@ -620,66 +620,6 @@ abstract class DStream[T: ClassTag] (
     new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
   }
 
-//TODO: move pyprint to PythonDStream and executed by py4j call back function
-  /**
-   * Print the first ten elements of each PythonRDD generated in this PythonDStream. This is an output
-   * operator, so this PythonDStream will be registered as an output stream and there materialized.
-   * Since serialized Python object is readable by Python, pyprint writes out binary data to
-   * temporary file and run python script to deserialized and print the first ten elements
-   *
-   * Currently call python script directly. We should avoid this
-   */
-  private[streaming] def pyprint() {
-    def foreachFunc = (rdd: RDD[T], time: Time) => {
-      val iter = rdd.take(11).iterator
-
-      // Generate a temporary file
-      val prefix = "spark"
-      val suffix = ".tmp"
-      val tempFile = File.createTempFile(prefix, suffix)
-      val tempFileStream = new DataOutputStream(new FileOutputStream(tempFile.getAbsolutePath))
-      // Write out serialized python object to temporary file
-      PythonRDD.writeIteratorToStream(iter, tempFileStream)
-      tempFileStream.close()
-
-      // pythonExec should be passed from python. Move pyprint to PythonDStream
-      val pythonExec = new ProcessBuilder().environment().get("PYSPARK_PYTHON")
-
-      val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
-      // Call python script to deserialize and print result in stdout
-      val pb = new ProcessBuilder(pythonExec, sparkHome + "/python/pyspark/streaming/pyprint.py", tempFile.getAbsolutePath)
-      val workerEnv = pb.environment()
-
-      // envVars also should be pass from python
-      val pythonPath = sparkHome + "/python/" + File.pathSeparator + workerEnv.get("PYTHONPATH")
-      workerEnv.put("PYTHONPATH", pythonPath)
-      val worker = pb.start()
-      val is = worker.getInputStream()
-      val isr = new InputStreamReader(is)
-      val br = new BufferedReader(isr)
-
-      println ("-------------------------------------------")
-      println ("Time: " + time)
-      println ("-------------------------------------------")
-
-      // Print values which is from python std out
-      var line = ""
-      breakable {
-        while (true) {
-          line = br.readLine()
-          if (line == null) break()
-          println(line)
-        }
-      }
-      // Delete temporary file
-      tempFile.delete()
-      println()
-
-    }
-    new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
-  }
-
-
   /**
    * Return a new DStream in which each RDD contains all the elements in seen in a
    * sliding window of time over this DStream. The new DStream generates RDDs with

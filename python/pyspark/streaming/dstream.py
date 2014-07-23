@@ -445,7 +445,6 @@ class PipelinedDStream(DStream):
             self._prev_jdstream = prev._prev_jdstream  # maintain the pipeline
             self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
         self.is_cached = False
-        self.is_checkpointed = False
         self._ssc = prev._ssc
         self.ctx = prev.ctx
         self.prev = prev
@@ -482,4 +481,5 @@ class PipelinedDStream(DStream):
         return self._jdstream_val
 
     def _is_pipelinable(self):
-        return not (self.is_cached or self.is_checkpointed)
+        return not (self.is_cached)
+

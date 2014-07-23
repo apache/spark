@@ -170,6 +170,7 @@ class PythonTestInputStream3(ssc_ : JavaStreamingContext)
 
   val asJavaDStream = JavaDStream.fromDStream(this)
 }
+
 class PythonForeachDStream(
     prev: DStream[Array[Byte]],
     foreachFunction: PythonRDDFunction
