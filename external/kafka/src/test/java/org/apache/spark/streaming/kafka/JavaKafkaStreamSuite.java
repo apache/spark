@@ -61,10 +61,11 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
   }
 
   @Test
-  public void testKafkaStream() {
+  public void testKafkaStream() throws InterruptedException {
     String topic = "topic1";
     HashMap<String, Integer> topics = new HashMap<String, Integer>();
     topics.put(topic, 1);
+    testSuite.createTopic(topic);
 
     HashMap<String, Integer> sent = new HashMap<String, Integer>();
     sent.put("a", 5);
@@ -107,13 +108,15 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
 
     ssc.start();
 
-    HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
-    testSuite.produceAndSendTestMessage(topic,
-      JavaConverters.asScalaMapConverter(tmp).asScala().toMap(
-        Predef.<Tuple2<String, Object>>conforms()
-    ));
+    // Sleep to let Receiver start first
+    Thread.sleep(3000);
 
-    ssc.awaitTermination(10000);
+    HashMap<String, Object> tmp = new HashMap<String, Object>(sent);
+    testSuite.produceAndSendMessage(topic,
+      JavaConverters.asScalaMapConverter(tmp).asScala().toMap(
+        Predef.<Tuple2<String, Object>>conforms()));
+
+    ssc.awaitTermination(3000);
 
     Assert.assertEquals(sent.size(), result.size());
     for (String k : sent.keySet()) {
