@@ -56,6 +56,10 @@ class PythonDStream[T: ClassTag](
     }
   }
 
+  def foreachRDD(foreachFunc: PythonRDDFunction) {
+    new PythonForeachDStream(this, context.sparkContext.clean(foreachFunc, false)).register()
+  }
+
   val asJavaDStream  = JavaDStream.fromDStream(this)
 }
 
@@ -85,6 +89,40 @@ DStream[Array[Byte]](prev.ssc){
       case None => None
     }
   }
+
+  val asJavaDStream  = JavaDStream.fromDStream(this)
+}
+
+class PythonForeachDStream(
+    prev: DStream[Array[Byte]],
+    foreachFunction: PythonRDDFunction
+  ) extends ForEachDStream[Array[Byte]](
+    prev,
+    (rdd: RDD[Array[Byte]], time: Time) => {
+      foreachFunction.call(rdd.toJavaRDD(), time.milliseconds)
+    }
+  ) {
+
+  this.register()
+}
+/*
+This does not work. Ignore this for now. -TD
+class PythonTransformedDStream(
+    prev: DStream[Array[Byte]],
+    transformFunction: PythonRDDFunction
+  ) extends DStream[Array[Byte]](prev.ssc) {
+
+  override def dependencies = List(prev)
+
+  override def slideDuration: Duration = prev.slideDuration
+
+  override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
+    prev.getOrCompute(validTime).map(rdd => {
+      transformFunction.call(rdd.toJavaRDD(), validTime.milliseconds).rdd
+    })
+  }
+
   val asJavaDStream  = JavaDStream.fromDStream(this)
   //val asJavaPairDStream : JavaPairDStream[Long, Array[Byte]]  = JavaPairDStream.fromJavaDStream(this)
 }
+*/
