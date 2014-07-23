@@ -107,6 +107,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         // Exception, if present
         statusResponse.exception.map { e =>
           println(s"Exception from cluster was: $e")
+          e.printStackTrace()
           System.exit(-1)
         }
         System.exit(0)
