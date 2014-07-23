@@ -88,33 +88,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
 
   /**
-   * Creates a [[SchemaRDD]] from an [[RDD]] by applying a schema to this RDD and using a function
-   * that will be applied to each partition of the RDD to convert RDD records to [[Row]]s.
+   * :: DeveloperApi ::
+   * Creates a [[SchemaRDD]] from an [[RDD]] containing [[Row]]s by applying a schema to this RDD.
+   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
+   * the provided schema. Otherwise, there will be runtime exception.
    *
    * @group userf
    */
-  def applySchema[A](rdd: RDD[A], schema: StructType, f: A => Row): SchemaRDD =
-    applySchemaToPartitions(rdd, schema, (iter: Iterator[A]) => iter.map(f))
-
-  /**
-   * Creates a [[SchemaRDD]] from an [[RDD]] by applying a schema to this RDD and using a function
-   * that will be applied to each partition of the RDD to convert RDD records to [[Row]]s.
-   * Similar to `RDD.mapPartitions``, this function can be used to improve performance where there
-   * is other setup work that can be amortized and used repeatedly for all of the
-   * elements in a partition.
-   * @group userf
-   */
-  def applySchemaToPartitions[A](
-      rdd: RDD[A],
-      schema: StructType,
-      f: Iterator[A] => Iterator[Row]): SchemaRDD =
-    new SchemaRDD(this, makeCustomRDDScan(rdd, schema, f))
-
-  protected[sql] def makeCustomRDDScan[A](
-      rdd: RDD[A],
-      schema: StructType,
-      f: Iterator[A] => Iterator[Row]): LogicalPlan =
-    SparkLogicalPlan(ExistingRdd(schema.toAttributes, rdd.mapPartitions(f)))
+  @DeveloperApi
+  def applySchema(rowRDD: RDD[Row], schema: StructType): SchemaRDD = {
+    val logicalPlan = SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRDD))
+    new SchemaRDD(this, logicalPlan)
+  }
 
   /**
    * Loads a Parquet file, returning the result as a [[SchemaRDD]].
@@ -133,11 +118,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def jsonFile(path: String): SchemaRDD = jsonFile(path, 1.0)
 
   /**
+   * :: Experimental ::
    * Loads a JSON file (one object per line) and applies the given schema,
    * returning the result as a [[SchemaRDD]].
    *
    * @group userf
    */
+  @Experimental
   def jsonFile(path: String, schema: StructType): SchemaRDD = {
     val json = sparkContext.textFile(path)
     jsonRDD(json, schema)
@@ -162,19 +149,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def jsonRDD(json: RDD[String]): SchemaRDD = jsonRDD(json, 1.0)
 
   /**
+   * :: Experimental ::
    * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
    * returning the result as a [[SchemaRDD]].
    *
    * @group userf
    */
+  @Experimental
   def jsonRDD(json: RDD[String], schema: StructType): SchemaRDD = {
     val appliedSchema =
       Option(schema).getOrElse(JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, 1.0)))
-
-    applySchemaToPartitions(
-      json,
-      appliedSchema,
-      JsonRDD.jsonStringToRow(appliedSchema, _: Iterator[String]))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+    applySchema(rowRDD, appliedSchema)
   }
 
   /**
@@ -182,12 +168,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
-    val schema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
-
-    applySchemaToPartitions(
-      json,
-      schema,
-      JsonRDD.jsonStringToRow(schema, _: Iterator[String]))
+    val appliedSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, samplingRatio))
+    val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema)
+    applySchema(rowRDD, appliedSchema)
   }
 
 

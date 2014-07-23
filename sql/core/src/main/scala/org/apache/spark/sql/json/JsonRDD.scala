@@ -32,9 +32,9 @@ import org.apache.spark.sql.Logging
 private[sql] object JsonRDD extends Logging {
 
   private[sql] def jsonStringToRow(
-      schema: StructType,
-      jsonIter: Iterator[String]): Iterator[Row] = {
-    parseJson(jsonIter).map(parsed => asRow(parsed, schema))
+      json: RDD[String],
+      schema: StructType): RDD[Row] = {
+    parseJson(json).map(parsed => asRow(parsed, schema))
   }
 
   private[sql] def inferSchema(
@@ -42,8 +42,7 @@ private[sql] object JsonRDD extends Logging {
       samplingRatio: Double = 1.0): StructType = {
     require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
-    val allKeys =
-      schemaData.mapPartitions(iter => parseJson(iter)).map(allKeysWithValueTypes).reduce(_ ++ _)
+    val allKeys = parseJson(schemaData).map(allKeysWithValueTypes).reduce(_ ++ _)
     createSchema(allKeys)
   }
 
@@ -255,7 +254,7 @@ private[sql] object JsonRDD extends Logging {
     case atom => atom
   }
 
-  private def parseJson(jsonIter: Iterator[String]): Iterator[Map[String, Any]] = {
+  private def parseJson(json: RDD[String]): RDD[Map[String, Any]] = {
     // According to [Jackson-72: https://jira.codehaus.org/browse/JACKSON-72],
     // ObjectMapper will not return BigDecimal when
     // "DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS" is disabled
@@ -264,15 +263,17 @@ private[sql] object JsonRDD extends Logging {
     // for every float number, which will be slow.
     // So, right now, we will have Infinity for those BigDecimal number.
     // TODO: Support BigDecimal.
-    // Also, when there is a key appearing multiple times (a duplicate key),
-    // the ObjectMapper will take the last value associated with this duplicate key.
-    // For example: for {"key": 1, "key":2}, we will get "key"->2.
-    val mapper = new ObjectMapper()
-    jsonIter.map {
-      record =>
-        val parsed = scalafy(mapper.readValue(record, classOf[java.util.Map[String, Any]]))
-        parsed.asInstanceOf[Map[String, Any]]
-    }
+    json.mapPartitions(iter => {
+      // Also, when there is a key appearing multiple times (a duplicate key),
+      // the ObjectMapper will take the last value associated with this duplicate key.
+      // For example: for {"key": 1, "key":2}, we will get "key"->2.
+      val mapper = new ObjectMapper()
+      iter.map {
+        record =>
+          val parsed = scalafy(mapper.readValue(record, classOf[java.util.Map[String, Any]]))
+          parsed.asInstanceOf[Map[String, Any]]
+      }
+    })
   }
 
   private def toLong(value: Any): Long = {
