@@ -1234,7 +1234,7 @@ class RDD(object):
         outputSerializer = self.ctx._unbatched_serializer
 
         limit = (_parse_memory(self.ctx._conf.get(
-                    "spark.python.worker.memory", "512m") / 2)
+                    "spark.python.worker.memory", "512m")) / 2)
 
         def add_shuffle_key(split, iterator):
 
@@ -1315,8 +1315,8 @@ class RDD(object):
         serializer = self.ctx.serializer
         spill = (self.ctx._conf.get("spark.shuffle.spill", 'True').lower()
                  == 'true')
-        memory = (_parse_memory(self.ctx._conf.get(
-                    "spark.python.worker.memory", "512m")
+        memory = _parse_memory(self.ctx._conf.get(
+                    "spark.python.worker.memory", "512m"))
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combineLocally(iterator):

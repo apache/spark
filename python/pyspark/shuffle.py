@@ -217,13 +217,12 @@ class ExternalMerger(Merger):
         return os.path.join(self.localdirs[n % len(self.localdirs)], str(n))
 
     def _next_limit(self):
-        #"""
-        #Return the next memory limit. If the memory is not released
-        #after spilling, it will dump the data only when the used memory
-        #starts to increase.
-        #"""
-        #return max(self.memory_limit, get_used_memory() * 1.05)
-        return self.memory_limit
+        """
+        Return the next memory limit. If the memory is not released
+        after spilling, it will dump the data only when the used memory
+        starts to increase.
+        """
+        return max(self.memory_limit, get_used_memory() * 1.05)
 
     def mergeValues(self, iterator):
         """ Combine the items by creator and combiner """
@@ -363,7 +362,7 @@ class ExternalMerger(Merger):
                                         False)
 
                     # limit the total partitions
-                    if (self.scale * self.partitions < self.TOTAL_PARTITIONS)
+                    if (self.scale * self.partitions < self.TOTAL_PARTITIONS
                             and j < self.spills - 1
                             and get_used_memory() > hard_limit):
                         self.data.clear() # will read from disk again
