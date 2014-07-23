@@ -42,7 +42,7 @@ private[spark] class YarnClusterSchedulerBackend(
     totalExpectedResources.set(numExecutors)
   }
 
-  override def checkRegisteredResources(): Boolean = {
+  override def sufficientResourcesRegistered(): Boolean = {
     totalExecutors.get() >= totalExpectedResources.get() * minRegisteredRatio
   }
 }

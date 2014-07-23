@@ -112,7 +112,7 @@ private[spark] class SparkDeploySchedulerBackend(
     removeExecutor(fullId.split("/")(1), reason.toString)
   }
 
-  override def checkRegisteredResources(): Boolean = {
+  override def sufficientResourcesRegistered(): Boolean = {
     totalCoreCount.get() >= totalExpectedResources.get() * minRegisteredRatio
   }
 }

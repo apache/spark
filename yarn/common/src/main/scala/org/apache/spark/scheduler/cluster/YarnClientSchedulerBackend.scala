@@ -149,7 +149,7 @@ private[spark] class YarnClientSchedulerBackend(
     logInfo("Stopped")
   }
 
-  override def checkRegisteredResources(): Boolean = {
+  override def sufficientResourcesRegistered(): Boolean = {
     totalExecutors.get() >= totalExpectedResources.get() * minRegisteredRatio
   }
 }

@@ -54,9 +54,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
   // Submit tasks only after (registered resources / total expected resources) 
   // is equal to at least this value, that is double between 0 and 1.
-  var minRegisteredRatio = conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0)
-  if (minRegisteredRatio > 1) minRegisteredRatio = 1
-  // Whatever minRegisteredRatio is arrived, submit tasks after the time(milliseconds).
+  var minRegisteredRatio =
+    math.min(1, conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0))
+  // Submit tasks after maxRegisteredWaitingTime milliseconds
+  // if minRegisteredRatio has not yet been reached  
   val maxRegisteredWaitingTime =
     conf.getInt("spark.scheduler.maxRegisteredResourcesWaitingTime", 30000)
   val createTime = System.currentTimeMillis()
@@ -263,10 +264,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     }
   }
 
-  def checkRegisteredResources(): Boolean = true
+  def sufficientResourcesRegistered(): Boolean = true
 
   override def isReady(): Boolean = {
-    if (checkRegisteredResources) {
+    if (sufficientResourcesRegistered) {
       logInfo("SchedulerBackend is ready for scheduling beginning" +
         ", total expected resources: " + totalExpectedResources.get() +
         ", minRegisteredResourcesRatio: " + minRegisteredRatio)

@@ -750,7 +750,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode, CPU cores in standalone and mesos mode)
+    (resources are executors in yarn mode, CPU cores in standalone mode)
     to wait for before scheduling begins. Specified as a double between 0 and 1.
     Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config 
