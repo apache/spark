@@ -17,9 +17,7 @@ if __name__ == "__main__":
     fm_lines = lines.flatMap(lambda x: x.split(" "))
     mapped_lines = fm_lines.map(lambda x: (x, 1))
     reduced_lines = mapped_lines.reduceByKey(add)
-    
-    fm_lines.pyprint()
-    mapped_lines.pyprint()
+
     reduced_lines.pyprint()
     ssc.start()
     ssc.awaitTermination()
