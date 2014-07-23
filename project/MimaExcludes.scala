@@ -62,6 +62,14 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.storage.MemoryStore.Entry"),
         ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.rdd.RDD.org$apache$spark$rdd$RDD$$debugChildren$1"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.rdd.RDD.org$apache$spark$rdd$RDD$$firstDebugString$1"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.rdd.RDD.org$apache$spark$rdd$RDD$$shuffleDebugString$1"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.rdd.RDD.org$apache$spark$rdd$RDD$$debugString$1"),
+        ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.rdd.PairRDDFunctions.org$apache$spark$rdd$PairRDDFunctions$$"
             + "createZero$1")
       ) ++
@@ -74,7 +82,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]( // The only public constructor is the one without arguments.
           "org.apache.spark.mllib.recommendation.ALS.this"),
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$<init>$default$7")
+          "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$$<init>$default$7"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.mllib.recommendation.ALS.org$apache$spark$mllib$recommendation$ALS$^dateFeatures")
       ) ++
       MimaBuild.excludeSparkClass("mllib.linalg.distributed.ColumnStatisticsAggregator") ++
       MimaBuild.excludeSparkClass("rdd.ZippedRDD") ++
