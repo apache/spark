@@ -389,6 +389,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryo.registrationRequired</code></td>
+  <td>false</td>
+  <td>
+    Whether to require registration with Kryo. If set to 'true', Kryo will throw an exception
+    if an unregistered class is serialized. If set to false (the default), Kryo will write
+    unregistered class names along with each object. Writing class names can cause
+    significant performance overhead, so enabling this option can enforce strictly that a
+    user has not omitted classes from registration.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryoserializer.buffer.mb</code></td>
   <td>2</td>
   <td>
@@ -497,9 +508,9 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
     <td>spark.hadoop.validateOutputSpecs</td>
     <td>true</td>
-    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists) 
-    used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing 
-    output directories. We recommend that users do not disable this except if trying to achieve compatibility with 
+    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
+    used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
+    output directories. We recommend that users do not disable this except if trying to achieve compatibility with
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
 </tr>
 </table>
@@ -861,7 +872,7 @@ Apart from these, the following properties are also available, and may be useful
 </table>
 
 #### Cluster Managers
-Each cluster manager in Spark has additional configuration options. Configurations 
+Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
 
  * [YARN](running-on-yarn.html#configuration)

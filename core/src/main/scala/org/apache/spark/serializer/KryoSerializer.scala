@@ -48,6 +48,7 @@ class KryoSerializer(conf: SparkConf)
 
   private val bufferSize = conf.getInt("spark.kryoserializer.buffer.mb", 2) * 1024 * 1024
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
+  private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
   private val registrator = conf.getOption("spark.kryo.registrator")
 
   def newKryoOutput() = new KryoOutput(bufferSize)
@@ -55,6 +56,7 @@ class KryoSerializer(conf: SparkConf)
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
     val kryo = instantiator.newKryo()
+    kryo.setRegistrationRequired(registrationRequired)
     val classLoader = Thread.currentThread.getContextClassLoader
 
     // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops.
@@ -185,7 +187,8 @@ private[serializer] object KryoSerializer {
     classOf[MapStatus],
     classOf[BlockManagerId],
     classOf[Array[Byte]],
-    classOf[BoundedPriorityQueue[_]]
+    classOf[BoundedPriorityQueue[_]],
+    classOf[SparkConf]
   )
 }
 
