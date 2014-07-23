@@ -232,7 +232,8 @@ trait ClientBase extends Logging {
         if (!ClientBase.LOCAL_SCHEME.equals(localURI.getScheme())) {
           val setPermissions = if (destName.equals(ClientBase.APP_JAR)) true else false
           val destPath = copyRemoteFile(dst, qualifyForLocal(localURI), replication, setPermissions)
-          distCacheMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE,
+          val destFs = FileSystem.get(destPath.toUri(), conf)
+          distCacheMgr.addResource(destFs, conf, destPath, localResources, LocalResourceType.FILE,
             destName, statCache)
         } else if (confKey != null) {
           sparkConf.set(confKey, localPath)
