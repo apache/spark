@@ -104,6 +104,21 @@ object PhysicalOperation extends PredicateHelper {
   }
 }
 
+/**
+ * Matches a logical aggregation that can be performed on distributed data in two steps.  The first
+ * operates on the data in each partition performing partial aggregation for each group.  The second
+ * occurs after the shuffle and completes the aggregation.
+ *
+ * This pattern will only match if all aggregate expressions can be computed partially and will
+ * return the rewritten aggregation expressions for both phases.
+ *
+ * The returned values for this match are as follows:
+ *  - Grouping attributes for the final aggregation.
+ *  - Aggregates for the final aggregation.
+ *  - Grouping expressions for the partial aggregation.
+ *  - Partial aggregate expressions.
+ *  - Input to the aggregation.
+ */
 object PartialAggregation {
   type ReturnType =
     (Seq[Attribute], Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)

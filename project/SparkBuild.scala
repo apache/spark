@@ -187,9 +187,7 @@ object SparkBuild extends PomBuild {
 
 object Catalyst {
   lazy val settings = Seq(
-    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full),
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang" % "scala-compiler" % v),
-    libraryDependencies += "org.scalamacros" %% "quasiquotes" % "2.0.1")
+    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full))
 }
 
 object SQL {

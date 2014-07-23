@@ -154,10 +154,7 @@ abstract class NumericType extends NativeType with PrimitiveType {
 }
 
 object NumericType {
-  def unapply(a: Expression): Boolean = a match {
-    case e: Expression if e.dataType.isInstanceOf[NumericType] => true
-    case _ => false
-  }
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 }
 
 /** Matcher for any expressions that evaluate to [[IntegralType]]s */

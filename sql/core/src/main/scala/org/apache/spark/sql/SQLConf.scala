@@ -38,7 +38,7 @@ trait SQLConf {
   private[spark] def numShufflePartitions: Int = get("spark.sql.shuffle.partitions", "200").toInt
 
   /**
-   * When set to true, Spark SQL will use the scala compiler at runtime to generate custom bytecode
+   * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode
    * that evaluates expressions found in queries.  In general this custom code runs much faster
    * than interpreted evaluation, but there are significant start-up costs due to compilation.
    * As a result codegen is only benificial when queries run for a long time, or when the same

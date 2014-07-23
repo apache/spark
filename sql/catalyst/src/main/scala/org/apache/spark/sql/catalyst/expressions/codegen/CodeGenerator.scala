@@ -142,9 +142,10 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         evaluateAs(expressions._1.dataType)(f)
 
       def evaluateAs(resultType: DataType)(f: (TermName, TermName) => Tree): Seq[Tree] = {
-        // Right now some timestamp tests fail if we enforce this...
-        if (expressions._1.dataType != expressions._2.dataType)
+        // TODO: Right now some timestamp tests fail if we enforce this...
+        if (expressions._1.dataType != expressions._2.dataType) {
           log.warn(s"${expressions._1.dataType} != ${expressions._2.dataType}")
+        }
 
         val eval1 = expressionEvaluator(expressions._1)
         val eval2 = expressionEvaluator(expressions._2)
