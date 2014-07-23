@@ -39,7 +39,7 @@ from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
-from pyspark.rddsampler import RDDSampler
+from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 
@@ -393,7 +393,7 @@ class RDD(object):
         >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
         [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
         """
-        assert fraction >= 0.0, "Invalid fraction value: %s" % fraction
+        assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     # this is ported from scala/spark/RDD.scala
@@ -1405,6 +1405,23 @@ class RDD(object):
         [('a', ([1], [2])), ('b', ([4], []))]
         """
         return python_cogroup((self, other), numPartitions)
+
+    def sampleByKey(self, withReplacement, fractions, seed=None):
+        """
+        Return a subset of this RDD sampled by key (via stratified sampling).
+        Create a sample of this RDD using variable sampling rates for
+        different keys as specified by fractions, a key to sampling rate map.
+
+        >>> fractions = {"a": 0.2, "b": 0.1}
+        >>> keys = sc.parallelize(fractions.keys())
+        >>> vals = sc.parallelize(range(0, 20))
+        >>> keys.cartesian(vals).sampleByKey(False, fractions, 7).collect() #doctest: +SKIP
+        [('a', 3), ('a', 6), ('a', 11), ('a', 14), ('b', 1), ('b', 4), ('b', 18)]
+        """
+        for fraction in fractions.values():
+            assert fraction >= 0.0, "Negative fraction value: %s" % fraction
+        return self.mapPartitionsWithIndex( \
+            RDDStratifiedSampler(withReplacement, fractions, seed).func, True)
 
     def subtractByKey(self, other, numPartitions=None):
         """
