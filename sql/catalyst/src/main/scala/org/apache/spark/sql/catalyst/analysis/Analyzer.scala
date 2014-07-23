@@ -159,9 +159,6 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    * aggregates and then projects them away above the filter.
    */
   object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
-    val condName = "havingCondition"
-    val trueLit = Literal(true, BooleanType)
-    
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _)) 
           if !filter.resolved && aggregate.resolved && containsAggregate(havingCondition) => {
