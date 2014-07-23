@@ -130,7 +130,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
       var fetchedStatuses: Array[MapStatus] = null
-      fetching.synchronized {
+      shuffleId.toString.intern.synchronized {
         if (fetching.contains(shuffleId)) {
           // Someone else is fetching it; wait for them to be done
           while (fetching.contains(shuffleId)) {
