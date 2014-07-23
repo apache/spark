@@ -586,8 +586,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a new RDD by applying a function to each partition of this RDD. Note that
-   * `preservesPartitioning` means whether to preserve the partitioner of this RDD, which should be
-   * `false` unless this is a pair RDD and the input function doesn't modify the keys.
+   * `preservesPartitioning` means whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   def mapPartitions[U: ClassTag](
       f: Iterator[T] => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
@@ -597,8 +597,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
-   * of the original partition. Note that `preservesPartitioning` means whether to preserve the
-   * partitioner of this RDD, which should be `false` unless this is a pair RDD and the input
+   * of the original partition. Note that `preservesPartitioning` means whether the input function
+   * preserves the partitioner, which should be `false` unless this is a pair RDD and the input
    * function doesn't modify the keys.
    */
   def mapPartitionsWithIndex[U: ClassTag](
@@ -611,8 +611,8 @@ abstract class RDD[T: ClassTag](
    * :: DeveloperApi ::
    * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
    * mapPartitions that also passes the TaskContext into the closure. Note that
-   * `preservesPartitioning` means whether to preserve the partitioner of this RDD, which should be
-   * `false` unless this is a pair RDD and the input function doesn't modify the keys.
+   * `preservesPartitioning` means whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   @DeveloperApi
   def mapPartitionsWithContext[U: ClassTag](

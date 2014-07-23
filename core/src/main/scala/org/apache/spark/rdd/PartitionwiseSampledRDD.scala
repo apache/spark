@@ -39,7 +39,7 @@ class PartitionwiseSampledRDDPartition(val prev: Partition, val seed: Long)
  *
  * @param prev RDD to be sampled
  * @param sampler a random sampler
- * @param preservesPartitioning whether the partitioner of the parent RDD should be preserved
+ * @param preservesPartitioning whether the sampler preserves the partitioner of the parent RDD
  * @param seed random seed
  * @tparam T input RDD item type
  * @tparam U sampled RDD item type
