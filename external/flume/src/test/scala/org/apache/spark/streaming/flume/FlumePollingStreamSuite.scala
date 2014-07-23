@@ -127,7 +127,7 @@ import org.apache.spark.streaming.flume.sink._
       executorCompletion.take()
     }
     val startTime = System.currentTimeMillis()
-    while (outputBuffer.size < 5 * channels.size &&
+    while (outputBuffer.size < 5 &&
       System.currentTimeMillis() - startTime < 15000) {
       logInfo("output.size = " + outputBuffer.size)
       Thread.sleep(100)
