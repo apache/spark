@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import scala.math.Ordering.Implicits._
-
 /**
  * An interface for sort algorithm
  * FIFO: FIFO algorithm between TaskSetManagers
@@ -30,6 +28,7 @@ private[spark] trait SchedulingAlgorithm {
 
 private[spark] class FIFOSchedulingAlgorithm extends SchedulingAlgorithm {
   override def comparator(s1: Schedulable, s2: Schedulable): Boolean = {
+    import scala.math.Ordering.Implicits._
     (s1.priority, s2.jobId, s2.stageId) > (s2.priority, s1.jobId, s1.stageId)
   }
 }

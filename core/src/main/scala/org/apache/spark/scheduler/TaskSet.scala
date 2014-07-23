@@ -32,7 +32,7 @@ private[spark] class TaskSet(
     val id: String = stageId + "." + attempt
     val DEFAULT_PRIORITY: Int = 0
 
-  def priority:Int = {
+  val priority:Int = {
     if(properties != null){
       properties.getProperty("spark.scheduler.priority", "0").toInt
     }else{
