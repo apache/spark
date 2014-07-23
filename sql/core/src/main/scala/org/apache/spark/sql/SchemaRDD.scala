@@ -382,7 +382,7 @@ class SchemaRDD(
         case (obj, (attrName, dataType)) =>
           dataType match {
             case struct: StructType => map.put(attrName, rowToMap(obj.asInstanceOf[Row], struct))
-            case array @ ArrayType(struct: StructType) =>
+            case array @ ArrayType(struct: StructType, _) =>
               val arrayValues = obj match {
                 case seq: Seq[Any] =>
                   seq.map(element => rowToMap(element.asInstanceOf[Row], struct)).asJava

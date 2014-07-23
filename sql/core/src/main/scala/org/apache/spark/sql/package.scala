@@ -24,7 +24,9 @@ import org.apache.spark.annotation.DeveloperApi
  *
  *  @groupname dataType Data types
  *  @groupdesc Spark SQL data types.
- *  @groupprio dataType -2
+ *  @groupprio dataType -3
+ *  @groupname field Field
+ *  @groupprio field -2
  *  @groupname row Row
  *  @groupprio row -1
  */
@@ -377,7 +379,7 @@ package object sql {
    * `dataType` specifies the data type of a `StructField`.
    * The field of `nullable` specifies if values of a `StructField` can contain `null` values.
    *
-   * @group dataType
+   * @group field
    */
   @DeveloperApi
   type StructField = catalyst.types.StructField

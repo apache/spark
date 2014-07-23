@@ -133,7 +133,7 @@ private[sql] trait SchemaRDDLike {
    *
    * @group schema
    */
-  def schemaString: String = schema.structString
+  def schemaString: String = schema.treeString
 
   /** Prints out the schema.
    *

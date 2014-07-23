@@ -314,7 +314,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   protected[sql] def toAttributes =
     fields.map(f => AttributeReference(f.name, f.dataType, f.nullable)())
 
-  def structString: String = {
+  def treeString: String = {
     val builder = new StringBuilder
     builder.append("root\n")
     val prefix = " |"
@@ -323,7 +323,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
     builder.toString()
   }
 
-  def printStruct(): Unit = println(structString)
+  def printTreeString(): Unit = println(treeString)
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     fields.foreach(field => field.buildFormattedString(prefix, builder))
@@ -335,6 +335,7 @@ case class StructType(fields: Seq[StructField]) extends DataType {
 case class MapType(keyType: DataType, valueType: DataType) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"${prefix}-- key: ${keyType.simpleString}\n")
+    builder.append(s"${prefix}-- value: ${valueType.simpleString}\n")
     DataType.buildFormattedString(keyType, s"$prefix    |", builder)
     DataType.buildFormattedString(valueType, s"$prefix    |", builder)
   }
