@@ -41,7 +41,7 @@ private[spark] class MesosExecutorBackend
     driver.sendStatusUpdate(MesosTaskStatus.newBuilder()
       .setTaskId(mesosTaskId)
       .setState(TaskState.toMesos(state))
-//      .setData(ByteString.copyFrom(data))
+      .setData(ByteString.copyFrom(data))
       .build())
   }
 
