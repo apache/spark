@@ -256,6 +256,20 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
   }
+
+  test("SPARK-2576 importing SQLContext.createSchemaRDD.") {
+    // We need to use local-cluster to test this case.
+    val output = runInterpreter("local-cluster[1,1,512]",
+      """
+        |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+        |import sqlContext.createSchemaRDD
+        |case class TestCaseClass(value: Int)
+        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).collect
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
   if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {
     test("running on Mesos") {
       val output = runInterpreter("localquiet",
