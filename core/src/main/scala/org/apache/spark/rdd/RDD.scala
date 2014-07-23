@@ -1334,7 +1334,7 @@ abstract class RDD[T: ClassTag](
       if (isShuffle) {
         shuffleDebugString(rdd, prefix, isLastChild)
       } else {
-        debugSelf(rdd).map(prefix+_) ++ debugChildren(rdd, prefix)
+        debugSelf(rdd).map(prefix + _) ++ debugChildren(rdd, prefix)
       }
     }
     firstDebugString(this).mkString("\n")
