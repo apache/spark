@@ -57,49 +57,47 @@ class TestMerger(unittest.TestCase):
         self.agg = Aggregator(lambda x: [x], 
                 lambda x, y: x.append(y) or x,
                 lambda x, y: x.extend(y) or x)
-        ExternalMerger.PARTITIONS = 8
-        ExternalMerger.BATCH = 1 << 14
 
     def test_in_memory(self):
         m = InMemoryMerger(self.agg)
-        m.combine(self.data)
+        m.mergeValues(self.data)
         self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
                 sum(xrange(self.N)))
 
         m = InMemoryMerger(self.agg)
-        m.merge(map(lambda (x, y): (x, [y]), self.data))
+        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data))
         self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
                 sum(xrange(self.N)))
 
     def test_small_dataset(self):
         m = ExternalMerger(self.agg, 1000)
-        m.combine(self.data)
+        m.mergeValues(self.data)
         self.assertEqual(m.spills, 0)
         self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
                 sum(xrange(self.N)))
 
         m = ExternalMerger(self.agg, 1000)
-        m.merge(map(lambda (x, y): (x, [y]), self.data))
+        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data))
         self.assertEqual(m.spills, 0)
         self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
                 sum(xrange(self.N)))
 
     def test_medium_dataset(self):
         m = ExternalMerger(self.agg, 10)
-        m.combine(self.data)
+        m.mergeValues(self.data)
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
                 sum(xrange(self.N)))
 
         m = ExternalMerger(self.agg, 10)
-        m.merge(map(lambda (x, y): (x, [y]), self.data * 3))
+        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data * 3))
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
                 sum(xrange(self.N)) * 3)
 
     def test_huge_dataset(self):
         m = ExternalMerger(self.agg, 10)
-        m.merge(map(lambda (k, v): (k, [str(v)]), self.data * 10))
+        m.mergeCombiners(map(lambda (k, v): (k, [str(v)]), self.data * 10))
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(len(v) for k, v in m._recursive_merged_items(0)),
                 self.N * 10)

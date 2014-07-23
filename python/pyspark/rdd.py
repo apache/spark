@@ -1317,7 +1317,7 @@ class RDD(object):
         def combineLocally(iterator):
             merger = ExternalMerger(agg, memory, serializer) \
                          if spill else InMemoryMerger(agg)
-            merger.combine(iterator)
+            merger.mergeValues(iterator)
             return merger.iteritems()
 
         locally_combined = self.mapPartitions(combineLocally)
@@ -1326,7 +1326,7 @@ class RDD(object):
         def _mergeCombiners(iterator):
             merger = ExternalMerger(agg, memory, serializer) \
                          if spill else InMemoryMerger(agg)
-            merger.merge(iterator)
+            merger.mergeCombiners(iterator)
             return merger.iteritems()
 
         return shuffled.mapPartitions(_mergeCombiners)
