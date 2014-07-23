@@ -377,9 +377,9 @@ class RowMatrix(
       s"Only support dense matrix at this time but found ${B.getClass.getName}.")
 
     val Bb = rows.context.broadcast(B.toBreeze.asInstanceOf[BDM[Double]].toDenseVector.toArray)
-    val AB = rows.mapPartitions({ iter =>
+    val AB = rows.mapPartitions { iter =>
       val Bi = Bb.value
-      iter.map(row => {
+      iter.map { row =>
         val v = BDV.zeros[Double](k)
         var i = 0
         while (i < k) {
@@ -387,8 +387,8 @@ class RowMatrix(
           i += 1
         }
         Vectors.fromBreeze(v)
-      })
-    }, preservesPartitioning = true)
+      }
+    }
 
     new RowMatrix(AB, nRows, B.numCols)
   }

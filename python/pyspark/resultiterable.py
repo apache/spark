@@ -19,6 +19,7 @@ __all__ = ["ResultIterable"]
 
 import collections
 
+
 class ResultIterable(collections.Iterable):
     """
     A special result iterable. This is used because the standard iterator can not be pickled
@@ -27,7 +28,9 @@ class ResultIterable(collections.Iterable):
         self.data = data
         self.index = 0
         self.maxindex = len(data)
+
     def __iter__(self):
         return iter(self.data)
+
     def __len__(self):
         return len(self.data)
