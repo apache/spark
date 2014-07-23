@@ -103,13 +103,13 @@ object GenerateMIMAIgnore {
     * to public for some reason. So had to resort to java reflection to get all inner
     * functions with $$ in there name.
     */
-  def getInnerFunc(classSymbol: unv.ClassSymbol): Seq[String] = {
+  def getInnerFunctions(classSymbol: unv.ClassSymbol): Seq[String] = {
     try {
       Class.forName(classSymbol.fullName, false, classLoader).getMethods.map(_.getName)
         .filter(_.contains("$$")).map(classSymbol.fullName + "." + _)
     } catch {
       case t: Throwable =>
-        println("Error detecting inner functions for class:" + classSymbol.fullName)
+        println("[WARN] Unable to detect inner functions for class:" + classSymbol.fullName)
         Seq.empty[String]
     }
   }
@@ -117,7 +117,7 @@ object GenerateMIMAIgnore {
   private def getAnnotatedOrPackagePrivateMembers(classSymbol: unv.ClassSymbol) = {
     classSymbol.typeSignature.members
       .filter(x => isPackagePrivate(x) || isDeveloperApi(x) || isExperimental(x)).map(_.fullName) ++
-    getInnerFunc(classSymbol)
+      getInnerFunctions(classSymbol)
   }
 
   def main(args: Array[String]) {
@@ -137,7 +137,8 @@ object GenerateMIMAIgnore {
     name.endsWith("$class") ||
     name.contains("$sp") ||
     name.contains("hive") ||
-    name.contains("Hive")
+    name.contains("Hive") ||
+    name.contains("repl")
   }
 
   /**
