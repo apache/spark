@@ -267,9 +267,10 @@ private object SpecialLengths {
   val END_OF_DATA_SECTION = -1
   val PYTHON_EXCEPTION_THROWN = -2
   val TIMING_DATA = -3
+  val NULL = -4
 }
 
-private[spark] object PythonRDD extends Logging {
+private[spark] object PythonRDD {
   val UTF8 = Charset.forName("UTF-8")
 
   /**
@@ -345,7 +346,8 @@ private[spark] object PythonRDD extends Logging {
           }
         case other =>
           if (other == null) {
-            logDebug("Encountered NULL element from iterator. We skip writing NULL to stream.")
+            dataOut.writeInt(SpecialLengths.NULL)
+            writeIteratorToStream(iter, dataOut)
           } else {
             throw new SparkException("Unexpected element type " + first.getClass)
           }
@@ -529,7 +531,7 @@ private[spark] object PythonRDD extends Logging {
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
     if (str == null) {
-      logDebug("Encountered NULL string. We skip writing NULL to stream.")
+      dataOut.writeInt(SpecialLengths.NULL)
     } else {
         val bytes = str.getBytes(UTF8)
         dataOut.writeInt(bytes.length)

@@ -75,6 +75,7 @@ class SpecialLengths(object):
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
     TIMING_DATA = -3
+    NULL = -4
 
 
 class Serializer(object):
@@ -193,7 +194,7 @@ class BatchedSerializer(Serializer):
         return chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def _load_stream_without_unbatching(self, stream):
-            return self.serializer.load_stream(stream)
+        return self.serializer.load_stream(stream)
 
     def __eq__(self, other):
         return (isinstance(other, BatchedSerializer) and
@@ -309,6 +310,8 @@ class UTF8Deserializer(Serializer):
 
     def loads(self, stream):
         length = read_int(stream)
+        if length == SpecialLengths.NULL:
+            return None
         return stream.read(length).decode('utf8')
 
     def load_stream(self, stream):
