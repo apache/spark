@@ -116,6 +116,7 @@ private[spark] class Stage(
     }
   }
 
+  /** Return a new attempt id, starting with 0. */
   def newAttemptId(): Int = {
     val id = nextAttemptId
     nextAttemptId += 1

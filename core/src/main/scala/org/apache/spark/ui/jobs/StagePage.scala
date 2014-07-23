@@ -34,7 +34,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
-      val stageDataOption = listener.stageIdToData.get(stageId)
+      val stageAttemptId = request.getParameter("attempt").toInt
+      val stageDataOption = listener.stageIdToData.get((stageId, stageAttemptId))
 
       if (stageDataOption.isEmpty || stageDataOption.get.taskData.isEmpty) {
         val content =
@@ -49,7 +50,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
-      val accumulables = listener.stageIdToData(stageId).accumulables
+      val accumulables = listener.stageIdToData((stageId, stageAttemptId)).accumulables
       val hasInput = stageData.inputBytes > 0
       val hasShuffleRead = stageData.shuffleReadBytes > 0
       val hasShuffleWrite = stageData.shuffleWriteBytes > 0
@@ -211,7 +212,8 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           def quantileRow(data: Seq[Node]): Seq[Node] = <tr>{data}</tr>
           Some(UIUtils.listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
-      val executorTable = new ExecutorTable(stageId, parent)
+
+      val executorTable = new ExecutorTable(stageId, stageAttemptId, parent)
 
       val maybeAccumulableTable: Seq[Node] =
         if (accumulables.size > 0) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()

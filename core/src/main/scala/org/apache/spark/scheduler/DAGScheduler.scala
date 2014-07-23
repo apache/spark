@@ -164,7 +164,7 @@ class DAGScheduler(
    */
   def executorHeartbeatReceived(
       execId: String,
-      taskMetrics: Array[(Long, Int, TaskMetrics)], // (taskId, stageId, metrics)
+      taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
     implicit val timeout = Timeout(600 seconds)
@@ -677,7 +677,8 @@ class DAGScheduler(
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
-    listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
+    val stageInfo = stageIdToStage(task.stageId).info
+    listenerBus.post(SparkListenerTaskStart(task.stageId, stageInfo.attemptId, taskInfo))
     submitWaitingStages()
   }
 
@@ -843,6 +844,8 @@ class DAGScheduler(
       }
     }
 
+    stage.info = StageInfo.fromStage(stage, Some(tasks.size))
+
     if (tasks.size > 0) {
       // Preemptively serialize a task to make sure it can be serialized. We are catching this
       // exception here because it would be fairly hard to catch the non-serializable exception
@@ -887,13 +890,14 @@ class DAGScheduler(
   private[scheduler] def handleTaskCompletion(event: CompletionEvent) {
     val task = event.task
     val stageId = task.stageId
+    val stageInfo = stageIdToStage(task.stageId).info
     val taskType = Utils.getFormattedClassName(task)
 
     // The success case is dealt with separately below, since we need to compute accumulator
     // updates before posting.
     if (event.reason != Success) {
-      listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
-        event.taskMetrics))
+      listenerBus.post(SparkListenerTaskEnd(stageId, stageInfo.attemptId, taskType, event.reason,
+        event.taskInfo, event.taskMetrics))
     }
 
     if (!stageIdToStage.contains(task.stageId)) {
@@ -935,8 +939,8 @@ class DAGScheduler(
               logError(s"Failed to update accumulators for $task", e)
           }
         }
-        listenerBus.post(SparkListenerTaskEnd(stageId, taskType, event.reason, event.taskInfo,
-          event.taskMetrics))
+        listenerBus.post(SparkListenerTaskEnd(stageId, stageInfo.attemptId, taskType, event.reason,
+          event.taskInfo, event.taskMetrics))
         stage.pendingTasks -= task
         task match {
           case rt: ResultTask[_, _] =>
@@ -1029,6 +1033,7 @@ class DAGScheduler(
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
         // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
+        listenerBus.post(SparkListenerStageCompleted(failedStage.info))
         runningStages -= failedStage
         // TODO: Cancel running tasks in the stage
         logInfo("Marking " + failedStage + " (" + failedStage.name +
