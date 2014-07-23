@@ -50,7 +50,10 @@ package object sql {
    * {{{
    * import org.apache.spark.sql._
    *
+   * // Create a Row from values.
    * Row(value1, value2, value3, ...)
+   * // Create a Row from a Seq of values.
+   * Row.fromSeq(Seq(value1, value2, ...))
    * }}}
    *
    * A value of a row can be accessed through both generic access by ordinal,
@@ -272,7 +275,6 @@ package object sql {
    * `keyType: [[DataType]]` and `valueType: [[DataType]]`.
    * The field of `keyType` is used to specify the type of keys in the map.
    * The field of `valueType` is used to specify the type of values in the map.
-   * For a [[MapType]] column, keys and values should not contain any `null` value.
    *
    * @group dataType
    */

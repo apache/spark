@@ -37,6 +37,11 @@ object Row {
    * This method can be used to construct a [[Row]] with the given values.
    */
   def apply(values: Any*): Row = new GenericRow(values.toArray)
+
+  /**
+   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
+   */
+  def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
 }
 
 /**
