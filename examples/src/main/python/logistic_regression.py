@@ -47,9 +47,15 @@ def readPointBatch(iterator):
     return [matrix]
 
 if __name__ == "__main__":
+
     if len(sys.argv) != 3:
         print >> sys.stderr, "Usage: logistic_regression <file> <iterations>"
         exit(-1)
+
+    print >> sys.stderr,  """WARN: This is a naive implementation of Logistic Regression and is
+      given as an example! Please refer to examples/src/main/python/mllib/logistic_regression.py
+      to see how MLlib's implementation is used."""
+
     sc = SparkContext(appName="PythonLR")
     points = sc.textFile(sys.argv[1]).mapPartitions(readPointBatch).cache()
     iterations = int(sys.argv[2])

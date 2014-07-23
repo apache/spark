@@ -140,8 +140,8 @@ class HadoopRDD[K, V](
       // Create a JobConf that will be cached and used across this RDD's getJobConf() calls in the
       // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
       // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary objects.
-      // synchronize to prevent ConcurrentModificationException (Spark-1097, Hadoop-10456)
-      conf.synchronized {
+      // Synchronize to prevent ConcurrentModificationException (Spark-1097, Hadoop-10456).
+      HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
         val newJobConf = new JobConf(conf)
         initLocalJobConfFuncOpt.map(f => f(newJobConf))
         HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
@@ -246,6 +246,9 @@ class HadoopRDD[K, V](
 }
 
 private[spark] object HadoopRDD {
+  /** Constructing Configuration objects is not threadsafe, use this lock to serialize. */
+  val CONFIGURATION_INSTANTIATION_LOCK = new Object()
+
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
    * the local process.

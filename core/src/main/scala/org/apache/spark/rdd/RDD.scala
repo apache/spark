@@ -328,7 +328,7 @@ abstract class RDD[T: ClassTag](
       : RDD[T] = {
     if (shuffle) {
       /** Distributes elements evenly across output partitions, starting from a random partition. */
-      def distributePartition(index: Int, items: Iterator[T]): Iterator[(Int, T)] = {
+      val distributePartition = (index: Int, items: Iterator[T]) => {
         var position = (new Random(index)).nextInt(numPartitions)
         items.map { t =>
           // Note that the hash code of the key will just be the key itself. The HashPartitioner 
@@ -336,7 +336,7 @@ abstract class RDD[T: ClassTag](
           position = position + 1
           (position, t)
         }
-      }
+      } : Iterator[(Int, T)]
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
@@ -356,9 +356,9 @@ abstract class RDD[T: ClassTag](
       seed: Long = Utils.random.nextLong): RDD[T] = {
     require(fraction >= 0.0, "Invalid fraction value: " + fraction)
     if (withReplacement) {
-      new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), seed)
+      new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), true, seed)
     } else {
-      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](fraction), seed)
+      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](fraction), true, seed)
     }
   }
 
@@ -374,7 +374,7 @@ abstract class RDD[T: ClassTag](
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](x(0), x(1)), seed)
+      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](x(0), x(1)), true, seed)
     }.toArray
   }
 
@@ -509,6 +509,10 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
    * mapping to that key.
+   *
+   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy[K](f, defaultPartitioner(this))
@@ -516,6 +520,10 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
+   *
+   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K, numPartitions: Int)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy(f, new HashPartitioner(numPartitions))
@@ -523,6 +531,10 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
    * mapping to that key.
+   *
+   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K, p: Partitioner)(implicit kt: ClassTag[K], ord: Ordering[K] = null)
       : RDD[(K, Iterable[T])] = {
@@ -574,6 +586,9 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a new RDD by applying a function to each partition of this RDD.
+   *
+   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   def mapPartitions[U: ClassTag](
       f: Iterator[T] => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
@@ -584,6 +599,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
+   *
+   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   def mapPartitionsWithIndex[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
@@ -595,6 +613,9 @@ abstract class RDD[T: ClassTag](
    * :: DeveloperApi ::
    * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
    * mapPartitions that also passes the TaskContext into the closure.
+   *
+   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   @DeveloperApi
   def mapPartitionsWithContext[U: ClassTag](
@@ -677,7 +698,7 @@ abstract class RDD[T: ClassTag](
    * a map on the other).
    */
   def zip[U: ClassTag](other: RDD[U]): RDD[(T, U)] = {
-    zipPartitions(other, true) { (thisIter, otherIter) =>
+    zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) =>
       new Iterator[(T, U)] {
         def hasNext = (thisIter.hasNext, otherIter.hasNext) match {
           case (true, true) => true
@@ -907,19 +928,19 @@ abstract class RDD[T: ClassTag](
       throw new SparkException("countByValue() does not support arrays")
     }
     // TODO: This should perhaps be distributed by default.
-    def countPartition(iter: Iterator[T]): Iterator[OpenHashMap[T,Long]] = {
+    val countPartition = (iter: Iterator[T]) => {
       val map = new OpenHashMap[T,Long]
       iter.foreach {
         t => map.changeValue(t, 1L, _ + 1L)
       }
       Iterator(map)
-    }
-    def mergeMaps(m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]): OpenHashMap[T,Long] = {
+    }: Iterator[OpenHashMap[T,Long]]
+    val mergeMaps = (m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]) => {
       m2.foreach { case (key, value) =>
         m1.changeValue(key, value, _ + value)
       }
       m1
-    }
+    }: OpenHashMap[T,Long]
     val myResult = mapPartitions(countPartition).reduce(mergeMaps)
     // Convert to a Scala mutable map
     val mutableResult = scala.collection.mutable.Map[T,Long]()
@@ -1257,11 +1278,55 @@ abstract class RDD[T: ClassTag](
 
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString: String = {
-    def debugString(rdd: RDD[_], prefix: String = ""): Seq[String] = {
-      Seq(prefix + rdd + " (" + rdd.partitions.size + " partitions)") ++
-        rdd.dependencies.flatMap(d => debugString(d.rdd, prefix + "  "))
+    // Apply a different rule to the last child
+    def debugChildren(rdd: RDD[_], prefix: String): Seq[String] = {
+      val len = rdd.dependencies.length
+      len match {
+        case 0 => Seq.empty
+        case 1 =>
+          val d = rdd.dependencies.head
+          debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_,_,_]], true)
+        case _ =>
+          val frontDeps = rdd.dependencies.take(len - 1)
+          val frontDepStrings = frontDeps.flatMap(
+            d => debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_,_,_]]))
+
+          val lastDep = rdd.dependencies.last
+          val lastDepStrings =
+            debugString(lastDep.rdd, prefix, lastDep.isInstanceOf[ShuffleDependency[_,_,_]], true)
+
+          (frontDepStrings ++ lastDepStrings)
+      }
     }
-    debugString(this).mkString("\n")
+    // The first RDD in the dependency stack has no parents, so no need for a +-
+    def firstDebugString(rdd: RDD[_]): Seq[String] = {
+      val partitionStr = "(" + rdd.partitions.size + ")"
+      val leftOffset = (partitionStr.length - 1) / 2
+      val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
+      Seq(partitionStr + " " + rdd) ++ debugChildren(rdd, nextPrefix)
+    }
+    def shuffleDebugString(rdd: RDD[_], prefix: String = "", isLastChild: Boolean): Seq[String] = {
+      val partitionStr = "(" + rdd.partitions.size + ")"
+      val leftOffset = (partitionStr.length - 1) / 2
+      val thisPrefix = prefix.replaceAll("\\|\\s+$", "")
+      val nextPrefix = (
+        thisPrefix
+        + (if (isLastChild) "  " else "| ")
+        + (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset)))
+      Seq(thisPrefix + "+-" + partitionStr + " " + rdd) ++ debugChildren(rdd, nextPrefix)
+    }
+    def debugString(rdd: RDD[_],
+                    prefix: String = "",
+                    isShuffle: Boolean = true,
+                    isLastChild: Boolean = false): Seq[String] = {
+      if (isShuffle) {
+        shuffleDebugString(rdd, prefix, isLastChild)
+      }
+      else {
+        Seq(prefix + rdd) ++ debugChildren(rdd, prefix)
+      }
+    }
+    firstDebugString(this).mkString("\n")
   }
 
   override def toString: String = "%s%s[%d] at %s".format(

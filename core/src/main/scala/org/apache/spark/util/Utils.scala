@@ -44,7 +44,7 @@ import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
-private[spark] case class CallSite(val short: String, val long: String)
+private[spark] case class CallSite(short: String, long: String)
 
 /**
  * Various utility methods used by Spark.
@@ -809,7 +809,12 @@ private[spark] object Utils extends Logging {
    */
   def getCallSite: CallSite = {
     val trace = Thread.currentThread.getStackTrace()
-      .filterNot(_.getMethodName.contains("getStackTrace"))
+      .filterNot { ste:StackTraceElement => 
+        // When running under some profilers, the current stack trace might contain some bogus 
+        // frames. This is intended to ensure that we don't crash in these situations by
+        // ignoring any frames that we can't examine.
+        (ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace"))
+      }
 
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
@@ -1284,6 +1289,21 @@ private[spark] object Utils extends Logging {
         }
       }
     }
+  }
+
+  /** Return a nice string representation of the exception, including the stack trace. */
+  def exceptionString(e: Exception): String = {
+    if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)
+  }
+
+  /** Return a nice string representation of the exception, including the stack trace. */
+  def exceptionString(
+      className: String,
+      description: String,
+      stackTrace: Array[StackTraceElement]): String = {
+    val desc = if (description == null) "" else description
+    val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
+    s"$className: $desc\n$st"
   }
 
 }

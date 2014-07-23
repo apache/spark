@@ -30,7 +30,7 @@ class SQLContext:
     tables, execute SQL over tables, cache tables, and read parquet files.
     """
 
-    def __init__(self, sparkContext, sqlContext = None):
+    def __init__(self, sparkContext, sqlContext=None):
         """Create a new SQLContext.
 
         @param sparkContext: The SparkContext to wrap.
@@ -136,7 +136,6 @@ class SQLContext:
         """
         jschema_rdd = self._ssql_ctx.parquetFile(path)
         return SchemaRDD(jschema_rdd, self)
-
 
     def jsonFile(self, path):
         """Loads a text file storing one JSON object per line,
@@ -282,8 +281,8 @@ class HiveContext(SQLContext):
                 self._scala_HiveContext = self._get_hive_ctx()
             return self._scala_HiveContext
         except Py4JError as e:
-            raise Exception("You must build Spark with Hive. Export 'SPARK_HIVE=true' and run " \
-                            "sbt/sbt assembly" , e)
+            raise Exception("You must build Spark with Hive. Export 'SPARK_HIVE=true' and run "
+                            "sbt/sbt assembly", e)
 
     def _get_hive_ctx(self):
         return self._jvm.HiveContext(self._jsc.sc())
@@ -425,7 +424,7 @@ class SchemaRDD(RDD):
         """
         self._jschema_rdd.registerAsTable(name)
 
-    def insertInto(self, tableName, overwrite = False):
+    def insertInto(self, tableName, overwrite=False):
         """Inserts the contents of this SchemaRDD into the specified table.
 
         Optionally overwriting any existing data.
@@ -468,7 +467,7 @@ class SchemaRDD(RDD):
         # in Java land in the javaToPython function. May require a custom
         # pickle serializer in Pyrolite
         return RDD(jrdd, self._sc, BatchedSerializer(
-                        PickleSerializer())).map(lambda d: Row(d))
+            PickleSerializer())).map(lambda d: Row(d))
 
     # We override the default cache/persist/checkpoint behavior as we want to cache the underlying
     # SchemaRDD object in the JVM, not the PythonRDD checkpointed by the super class
@@ -531,6 +530,7 @@ class SchemaRDD(RDD):
         else:
             raise ValueError("Can only subtract another SchemaRDD")
 
+
 def _test():
     import doctest
     from array import array
@@ -541,11 +541,16 @@ def _test():
     sc = SparkContext('local[4]', 'PythonTest', batchSize=2)
     globs['sc'] = sc
     globs['sqlCtx'] = SQLContext(sc)
-    globs['rdd'] = sc.parallelize([{"field1" : 1, "field2" : "row1"},
-        {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
-    jsonStrings = ['{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
-       '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]}, "field6":[{"field7": "row2"}]}',
-       '{"field1" : null, "field2": "row3", "field3":{"field4":33, "field5": []}}']
+    globs['rdd'] = sc.parallelize(
+        [{"field1": 1, "field2": "row1"},
+         {"field1": 2, "field2": "row2"},
+         {"field1": 3, "field2": "row3"}]
+    )
+    jsonStrings = [
+        '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
+        '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]}, "field6":[{"field7": "row2"}]}',
+        '{"field1" : null, "field2": "row3", "field3":{"field4":33, "field5": []}}'
+    ]
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
     csvStrings = ['Year,Make,Model,Description'
@@ -555,12 +560,12 @@ def _test():
     globs['csvString'] = csvStrings
     globs['csv'] = sc.parallelize(csvStrings)
     globs['nestedRdd1'] = sc.parallelize([
-        {"f1" : array('i', [1, 2]), "f2" : {"row1" : 1.0}},
-        {"f1" : array('i', [2, 3]), "f2" : {"row2" : 2.0}}])
+        {"f1": array('i', [1, 2]), "f2": {"row1": 1.0}},
+        {"f1": array('i', [2, 3]), "f2": {"row2": 2.0}}])
     globs['nestedRdd2'] = sc.parallelize([
-        {"f1" : [[1, 2], [2, 3]], "f2" : set([1, 2]), "f3" : (1, 2)},
-        {"f1" : [[2, 3], [3, 4]], "f2" : set([2, 3]), "f3" : (2, 3)}])
-    (failure_count, test_count) = doctest.testmod(globs=globs,optionflags=doctest.ELLIPSIS)
+        {"f1": [[1, 2], [2, 3]], "f2": set([1, 2]), "f3": (1, 2)},
+        {"f1": [[2, 3], [3, 4]], "f2": set([2, 3]), "f3": (2, 3)}])
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
         exit(-1)
@@ -568,4 +573,3 @@ def _test():
 
 if __name__ == "__main__":
     _test()
-

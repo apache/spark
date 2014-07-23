@@ -51,7 +51,7 @@ import org.apache.spark.mllib.clustering.KMeans
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
-val data = sc.textFile("data/kmeans_data.txt")
+val data = sc.textFile("data/mllib/kmeans_data.txt")
 val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble)))
 
 // Cluster the data into two classes using KMeans
@@ -69,7 +69,54 @@ println("Within Set Sum of Squared Errors = " + WSSSE)
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object.
+calling `.rdd()` on your `JavaRDD` object. A standalone application example
+that is equivalent to the provided example in Scala is given bellow:
+
+{% highlight java %}
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.clustering.KMeans;
+import org.apache.spark.mllib.clustering.KMeansModel;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.SparkConf;
+
+public class KMeansExample {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("K-means Example");
+    JavaSparkContext sc = new JavaSparkContext(conf);
+
+    // Load and parse data
+    String path = "data/mllib/kmeans_data.txt";
+    JavaRDD<String> data = sc.textFile(path);
+    JavaRDD<Vector> parsedData = data.map(
+      new Function<String, Vector>() {
+        public Vector call(String s) {
+          String[] sarray = s.split(" ");
+          double[] values = new double[sarray.length];
+          for (int i = 0; i < sarray.length; i++)
+            values[i] = Double.parseDouble(sarray[i]);
+          return Vectors.dense(values);
+        }
+      }
+    );
+
+    // Cluster the data into two classes using KMeans
+    int numClusters = 2;
+    int numIterations = 20;
+    KMeansModel clusters = KMeans.train(parsedData.rdd(), numClusters, numIterations);
+
+    // Evaluate clustering by computing Within Set Sum of Squared Errors
+    double WSSSE = clusters.computeCost(parsedData.rdd());
+    System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
+  }
+}
+{% endhighlight %}
+
+In order to run the above standalone application using Spark framework make
+sure that you follow the instructions provided at section [Standalone
+Applications](quick-start.html) of the quick-start guide. What is more, you
+should include to your build file *spark-mllib* as a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
@@ -86,7 +133,7 @@ from numpy import array
 from math import sqrt
 
 # Load and parse the data
-data = sc.textFile("data/kmeans_data.txt")
+data = sc.textFile("data/mllib/kmeans_data.txt")
 parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
 
 # Build the model (cluster the data)

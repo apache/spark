@@ -58,7 +58,7 @@ private[sql] object ParquetTestData {
     """message myrecord {
       optional boolean myboolean;
       optional int32 myint;
-      optional binary mystring;
+      optional binary mystring (UTF8);
       optional int64 mylong;
       optional float myfloat;
       optional double mydouble;
@@ -87,7 +87,7 @@ private[sql] object ParquetTestData {
       message myrecord {
       required boolean myboolean;
       required int32 myint;
-      required binary mystring;
+      required binary mystring (UTF8);
       required int64 mylong;
       required float myfloat;
       required double mydouble;
@@ -119,14 +119,14 @@ private[sql] object ParquetTestData {
     // so that array types can be translated correctly.
     """
       message AddressBook {
-        required binary owner;
+        required binary owner (UTF8);
         optional group ownerPhoneNumbers {
-          repeated binary array;
+          repeated binary array (UTF8);
         }
         optional group contacts {
           repeated group array {
-            required binary name;
-            optional binary phoneNumber;
+            required binary name (UTF8);
+            optional binary phoneNumber (UTF8);
           }
         }
       }
@@ -181,16 +181,16 @@ private[sql] object ParquetTestData {
         required int32 x;
         optional group data1 {
           repeated group map {
-            required binary key;
+            required binary key (UTF8);
             required int32 value;
           }
         }
         required group data2 {
           repeated group map {
-            required binary key;
+            required binary key (UTF8);
             required group value {
               required int64 payload1;
-              optional binary payload2;
+              optional binary payload2 (UTF8);
             }
           }
         }

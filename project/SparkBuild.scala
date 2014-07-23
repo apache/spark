@@ -19,6 +19,7 @@ import scala.util.Properties
 import scala.collection.JavaConversions._
 
 import sbt._
+import sbt.Classpaths.publishTask
 import sbt.Keys._
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
@@ -86,9 +87,8 @@ object SparkBuild extends PomBuild {
     profiles
   }
 
-  override val profiles = Properties.envOrNone("MAVEN_PROFILES") match {
+  override val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
     case None => backwardCompatibility
-    // Rationale: If -P option exists no need to support backwardCompatibility.
     case Some(v) =>
       if (backwardCompatibility.nonEmpty)
         println("Note: We ignore environment variables, when use of profile is detected in " +
@@ -96,14 +96,31 @@ object SparkBuild extends PomBuild {
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
   }
 
+  Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
+    case Some(v) =>
+      v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.split("=")).foreach(x => System.setProperty(x(0), x(1)))
+    case _ => 
+  }
+
   override val userPropertiesMap = System.getProperties.toMap
+
+  lazy val MavenCompile = config("m2r") extend(Compile)
+  lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
   lazy val sharedSettings = graphSettings ++ ScalaStyleSettings ++ Seq (
     javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
     incOptions := incOptions.value.withNameHashing(true),
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
-    publishMavenStyle := true
+    publishMavenStyle := true,
+
+    otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
+    publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
+      (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
+    },
+    publishMavenStyle in MavenCompile := true,
+    publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
+    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
   )
 
   /** Following project only exists to pull previous artifacts of Spark for generating
@@ -149,6 +166,9 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
+  /* Spark SQL Core console settings */
+  enable(SQL.settings)(sql)
+
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
@@ -159,6 +179,27 @@ object SparkBuild extends PomBuild {
       else x.settings(Seq[Setting[_]](): _*)
     } ++ Seq[Project](oldDeps)
   }
+
+}
+
+object SQL {
+
+  lazy val settings = Seq(
+
+    initialCommands in console :=
+      """
+        |import org.apache.spark.sql.catalyst.analysis._
+        |import org.apache.spark.sql.catalyst.dsl._
+        |import org.apache.spark.sql.catalyst.errors._
+        |import org.apache.spark.sql.catalyst.expressions._
+        |import org.apache.spark.sql.catalyst.plans.logical._
+        |import org.apache.spark.sql.catalyst.rules._
+        |import org.apache.spark.sql.catalyst.types._
+        |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.execution
+        |import org.apache.spark.sql.test.TestSQLContext._
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
+  )
 
 }
 
