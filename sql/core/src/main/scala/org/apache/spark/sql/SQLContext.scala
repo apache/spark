@@ -97,6 +97,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   def applySchema(rowRDD: RDD[Row], schema: StructType): SchemaRDD = {
+    // TODO: use MutableProjection when rowRDD is another SchemaRDD and the applied
+    // schema differs from the existing schema on any field data type.
     val logicalPlan = SparkLogicalPlan(ExistingRdd(schema.toAttributes, rowRDD))
     new SchemaRDD(this, logicalPlan)
   }

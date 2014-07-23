@@ -431,4 +431,36 @@ class SQLQuerySuite extends QueryTest {
     )
     clear()
   }
+
+  test("apply schema") {
+    val schema = StructType(
+      StructField("f1", IntegerType, false) ::
+      StructField("f2", StringType, false) ::
+      StructField("f3", BooleanType, false) ::
+      StructField("f4", IntegerType, true) :: Nil)
+
+    val rowRDD = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v4 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(values(0).toInt, values(1), values(2).toBoolean, v4)
+    }
+
+    val schemaRDD = applySchema(rowRDD, schema)
+    schemaRDD.registerAsTable("applySchema")
+    checkAnswer(
+      sql("SELECT * FROM applySchema"),
+      (1, "A1", true, null) ::
+      (2, "B2", false, null) ::
+      (3, "C3", true, null) ::
+      (4, "D4", true, 2147483644) :: Nil)
+
+    checkAnswer(
+      sql("SELECT f1, f4 FROM applySchema"),
+      (1, null) ::
+      (2, null) ::
+      (3, null) ::
+      (4, 2147483644) :: Nil)
+  }
 }
