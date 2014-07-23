@@ -26,7 +26,6 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.graphx.impl._
-import org.apache.spark.graphx.impl.MsgRDDFunctions._
 import org.apache.spark.serializer.SerializationStream
 
 

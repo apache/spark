@@ -25,44 +25,6 @@ import org.apache.spark.graphx.{PartitionID, VertexId}
 import org.apache.spark.rdd.{ShuffledRDD, RDD}
 
 
-/**
- * A message used to send a specific value to a partition.
- * @param partition index of the target partition.
- * @param data value to send
- */
-private[graphx]
-class MessageToPartition[@specialized(Int, Long, Double, Char, Boolean/* , AnyRef */) T](
-    @transient var partition: PartitionID,
-    var data: T)
-  extends Product2[PartitionID, T] with Serializable {
-
-  override def _1 = partition
-
-  override def _2 = data
-
-  override def canEqual(that: Any): Boolean = that.isInstanceOf[MessageToPartition[_]]
-}
-
-
-private[graphx]
-class MsgRDDFunctions[T: ClassTag](self: RDD[MessageToPartition[T]]) {
-
-  /**
-   * Return a copy of the RDD partitioned using the specified partitioner.
-   */
-  def partitionBy(partitioner: Partitioner): RDD[MessageToPartition[T]] = {
-    new ShuffledRDD[PartitionID, T, T, MessageToPartition[T]](self, partitioner)
-  }
-
-}
-
-private[graphx]
-object MsgRDDFunctions {
-  implicit def rdd2PartitionRDDFunctions[T: ClassTag](rdd: RDD[MessageToPartition[T]]) = {
-    new MsgRDDFunctions(rdd)
-  }
-}
-
 private[graphx]
 class VertexRDDFunctions[VD: ClassTag](self: RDD[(VertexId, VD)]) {
   def copartitionWithVertices(partitioner: Partitioner): RDD[(VertexId, VD)] = {
