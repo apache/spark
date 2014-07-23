@@ -1229,7 +1229,7 @@ class RDD(object):
         # Instead, we'll form the hash buckets in Python,
         # transferring O(numPartitions) objects to Java.
         # Each object is a (splitNumber, [objects]) pair.
-        # In order to void too huge objects, the objects are
+        # In order to avoid too huge objects, the objects are
         # grouped into chunks.
         outputSerializer = self.ctx._unbatched_serializer
 
@@ -1316,11 +1316,11 @@ class RDD(object):
         spill = (self.ctx._conf.get("spark.shuffle.spill", 'True').lower()
                  == 'true')
         memory = (_parse_memory(self.ctx._conf.get(
-                    "spark.python.worker.memory","512m")
+                    "spark.python.worker.memory", "512m")
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combineLocally(iterator):
-            merger = ExternalMerger(agg, memory, serializer) \
+            merger = ExternalMerger(agg, memory * 0.9, serializer) \
                          if spill else InMemoryMerger(agg)
             merger.mergeValues(iterator)
             return merger.iteritems()

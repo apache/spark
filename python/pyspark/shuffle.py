@@ -216,13 +216,14 @@ class ExternalMerger(Merger):
         """ Choose one directory for spill by number n """
         return os.path.join(self.localdirs[n % len(self.localdirs)], str(n))
 
-    def next_limit(self):
-        """
-        Return the next memory limit. If the memory is not released
-        after spilling, it will dump the data only when the used memory
-        starts to increase.
-        """
-        return max(self.memory_limit, get_used_memory() * 1.05)
+    def _next_limit(self):
+        #"""
+        #Return the next memory limit. If the memory is not released
+        #after spilling, it will dump the data only when the used memory
+        #starts to increase.
+        #"""
+        #return max(self.memory_limit, get_used_memory() * 1.05)
+        return self.memory_limit
 
     def mergeValues(self, iterator):
         """ Combine the items by creator and combiner """
@@ -237,7 +238,7 @@ class ExternalMerger(Merger):
             c += 1
             if c % batch == 0 and get_used_memory() > self.memory_limit:
                 self._first_spill()
-                self._partitioned_mergeValues(iterator, self.next_limit())
+                self._partitioned_mergeValues(iterator, self._next_limit())
                 break
 
     def _partition(self, key):
@@ -259,7 +260,7 @@ class ExternalMerger(Merger):
             c += 1
             if c % batch == 0 and get_used_memory() > limit:
                 self._spill()
-                limit = self.next_limit()
+                limit = self._next_limit()
 
     def mergeCombiners(self, iterator, check=True):
         """ Merge (K,V) pair by mergeCombiner """
@@ -275,7 +276,7 @@ class ExternalMerger(Merger):
             c += 1
             if c % batch == 0 and get_used_memory() > self.memory_limit:
                 self._first_spill()
-                self._partitioned_mergeCombiners(iterator, self.next_limit())
+                self._partitioned_mergeCombiners(iterator, self._next_limit())
                 break
 
     def _partitioned_mergeCombiners(self, iterator, limit=0):
@@ -291,7 +292,7 @@ class ExternalMerger(Merger):
             c += 1
             if c % self.batch == 0 and get_used_memory() > limit:
                 self._spill()
-                limit = self.next_limit()
+                limit = self._next_limit()
 
     def _first_spill(self):
         """
@@ -349,7 +350,7 @@ class ExternalMerger(Merger):
         assert not self.data
         if any(self.pdata):
             self._spill()
-        hard_limit = self.next_limit()
+        hard_limit = self._next_limit()
 
         try:
             for i in range(self.partitions):
@@ -406,7 +407,7 @@ class ExternalMerger(Merger):
             m = ExternalMerger(self.agg, self.memory_limit, self.serializer,
                     subdirs, self.scale * self.partitions)
             m.pdata = [{} for _ in range(self.partitions)]
-            limit = self.next_limit()
+            limit = self._next_limit()
 
             for j in range(self.spills):
                 path = self._get_spill_dir(j)
@@ -416,7 +417,7 @@ class ExternalMerger(Merger):
 
                 if get_used_memory() > limit:
                     m._spill()
-                    limit = self.next_limit()
+                    limit = self._next_limit()
 
             for v in m._external_items():
                 yield v
