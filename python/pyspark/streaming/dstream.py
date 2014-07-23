@@ -43,14 +43,6 @@ class DStream(object):
         #hack to call print function in DStream
         getattr(self._jdstream, "print")()
 
-    def pyprint(self):
-        """
-        Print the first ten elements of each RDD generated in this DStream. This is an output
-        operator, so this DStream will be registered as an output stream and there materialized.
-
-        """
-        self._jdstream.pyprint()
-
     def filter(self, f):
         """
         Return DStream containing only the elements that satisfy predicate.
@@ -203,6 +195,38 @@ class DStream(object):
         return 2
 >>>>>>> clean up code
 
+    def foreachRDD(self, func):
+        """
+        """
+        from utils import RDDFunction
+        wrapped_func = RDDFunction(self.ctx, self._jrdd_deserializer, func)
+        self.ctx._jvm.PythonForeachDStream(self._jdstream.dstream(), wrapped_func)
+
+    def pyprint(self):
+        """
+        Print the first ten elements of each RDD generated in this DStream. This is an output
+        operator, so this DStream will be registered as an output stream and there materialized.
+
+        """
+        def takeAndPrint(rdd, time):
+            taken = rdd.take(11)
+            print "-------------------------------------------"
+            print "Time: %s" % (str(time))
+            print "-------------------------------------------"
+            for record in taken[:10]:
+                print record
+            if len(taken) > 10:
+                print "..."
+            print
+
+        self.foreachRDD(takeAndPrint)
+
+
+    #def transform(self, func):
+    #    from utils import RDDFunction
+    #    wrapped_func = RDDFunction(self.ctx, self._jrdd_deserializer, func)
+    #    jdstream = self.ctx._jvm.PythonTransformedDStream(self._jdstream.dstream(), wrapped_func).toJavaDStream
+    #    return DStream(jdstream, self._ssc, ...)  ## DO NOT KNOW HOW 
 
 class PipelinedDStream(DStream):
     def __init__(self, prev, func, preservesPartitioning=False):
@@ -222,7 +246,6 @@ class PipelinedDStream(DStream):
             self._prev_jdstream = prev._prev_jdstream  # maintain the pipeline
             self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
         self.is_cached = False
-        self.is_checkpointed = False
         self._ssc = prev._ssc
         self.ctx = prev.ctx
         self.prev = prev
@@ -259,4 +282,5 @@ class PipelinedDStream(DStream):
         return self._jdstream_val
 
     def _is_pipelinable(self):
-        return not (self.is_cached or self.is_checkpointed)
+        return not (self.is_cached)
+

@@ -15,6 +15,27 @@
 # limitations under the License.
 #
 
+from pyspark.rdd import RDD
+
+class RDDFunction():
+    def __init__(self, ctx, jrdd_deserializer, func):
+        self.ctx = ctx
+        self.deserializer = jrdd_deserializer
+        self.func = func
+
+    def call(self, jrdd, time):
+        # Wrap JavaRDD into python's RDD class
+        rdd = RDD(jrdd, self.ctx, self.deserializer)
+        # Call user defined RDD function
+        self.func(rdd, time)
+
+    def __str__(self):
+        return "%s, %s" % (str(self.deserializer), str(self.func))
+
+    class Java:
+        implements = ['org.apache.spark.streaming.api.python.PythonRDDFunction']
+
+
 
 def msDurationToString(ms):
     """
