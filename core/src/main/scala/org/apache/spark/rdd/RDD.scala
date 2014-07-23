@@ -1279,7 +1279,7 @@ abstract class RDD[T: ClassTag](
           info.numCachedPartitions, bytesToString(info.memSize),
           bytesToString(info.tachyonSize), bytesToString(info.diskSize)))
 
-      (rdd.toString+" ["+persistence+"]") +: storageInfo
+      s"$rdd [$persistence]" +: storageInfo
     }
 
     // Apply a different rule to the last child
@@ -1309,8 +1309,8 @@ abstract class RDD[T: ClassTag](
       val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
 
       debugSelf(rdd).zipWithIndex.map{
-        case (desc: String, 0) => partitionStr+" "+desc
-        case (desc: String, _) => nextPrefix+" "+desc
+        case (desc: String, 0) => s"$partitionStr $desc"
+        case (desc: String, _) => s"$nextPrefix $desc"
       } ++ debugChildren(rdd, nextPrefix)
     }
     def shuffleDebugString(rdd: RDD[_], prefix: String = "", isLastChild: Boolean): Seq[String] = {
@@ -1323,8 +1323,8 @@ abstract class RDD[T: ClassTag](
         + (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset)))
 
       debugSelf(rdd).zipWithIndex.map{
-        case (desc: String, 0) => thisPrefix+"+-"+partitionStr+" "+desc
-        case (desc: String, _) => nextPrefix+desc
+        case (desc: String, 0) => s"$thisPrefix+-$partitionStr $desc"
+        case (desc: String, _) => s"$nextPrefix$desc"
       } ++ debugChildren(rdd, nextPrefix)
     }
     def debugString(rdd: RDD[_],
