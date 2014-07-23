@@ -81,7 +81,6 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       shuffleMetrics.shuffleFinishTime = System.currentTimeMillis
       shuffleMetrics.fetchWaitTime = blockFetcherItr.fetchWaitTime
       shuffleMetrics.remoteBytesRead = blockFetcherItr.remoteBytesRead
-      shuffleMetrics.totalBlocksFetched = blockFetcherItr.totalBlocks
       shuffleMetrics.localBlocksFetched = blockFetcherItr.numLocalBlocks
       shuffleMetrics.remoteBlocksFetched = blockFetcherItr.numRemoteBlocks
       context.taskMetrics.updateShuffleReadMetrics(shuffleMetrics)
