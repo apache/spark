@@ -301,17 +301,17 @@ class ExpressionEvaluationSuite extends FunSuite {
     val c3 = 'a.boolean.at(2)
     val c4 = 'a.boolean.at(3)
 
-    checkEvaluation(IsNull(c1), false, row)
-    checkEvaluation(IsNotNull(c1), true, row)
+    checkEvaluation(c1.isNull, false, row)
+    checkEvaluation(c1.isNotNull, true, row)
 
-    checkEvaluation(IsNull(c2), true, row)
-    checkEvaluation(IsNotNull(c2), false, row)
+    checkEvaluation(c2.isNull, true, row)
+    checkEvaluation(c2.isNotNull, false, row)
 
-    checkEvaluation(IsNull(Literal(1, ShortType)), false)
-    checkEvaluation(IsNotNull(Literal(1, ShortType)), true)
+    checkEvaluation(Literal(1, ShortType).isNull, false)
+    checkEvaluation(Literal(1, ShortType).isNotNull, true)
 
-    checkEvaluation(IsNull(Literal(null, ShortType)), true)
-    checkEvaluation(IsNotNull(Literal(null, ShortType)), false)
+    checkEvaluation(Literal(null, ShortType).isNull, true)
+    checkEvaluation(Literal(null, ShortType).isNotNull, false)
 
     checkEvaluation(Coalesce(c1 :: c2 :: Nil), "^Ba*n", row)
     checkEvaluation(Coalesce(Literal(null, StringType) :: Nil), null, row)
@@ -326,11 +326,11 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(If(Literal(false, BooleanType),
       Literal("a", StringType), Literal("b", StringType)), "b", row)
 
-    checkEvaluation(In(c1, c1 :: c2 :: Nil), true, row)
-    checkEvaluation(In(Literal("^Ba*n", StringType),
-      Literal("^Ba*n", StringType) :: Nil), true, row)
-    checkEvaluation(In(Literal("^Ba*n", StringType),
-      Literal("^Ba*n", StringType) :: c2 :: Nil), true, row)
+    checkEvaluation(c1 in (c1, c2), true, row)
+    checkEvaluation(
+      Literal("^Ba*n", StringType) in (Literal("^Ba*n", StringType)), true, row)
+    checkEvaluation(
+      Literal("^Ba*n", StringType) in (Literal("^Ba*n", StringType), c2), true, row)
   }
 
   test("case when") {
@@ -420,6 +420,10 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     assert(GetField(Literal(null, typeS), "a").nullable === true)
     assert(GetField(Literal(null, typeS_notNullable), "a").nullable === true)
+
+    checkEvaluation('c.map(typeMap).at(3).getItem("aa"), "bb", row)
+    checkEvaluation('c.array(typeArray.elementType).at(4).getItem(1), "bb", row)
+    checkEvaluation('c.struct(typeS).at(2).getField("a"), "aa", row)
   }
 
   test("arithmetic") {
@@ -472,20 +476,20 @@ class ExpressionEvaluationSuite extends FunSuite {
     val c1 = 'a.string.at(0)
     val c2 = 'a.string.at(1)
 
-    checkEvaluation(Contains(c1, "b"), true, row)
-    checkEvaluation(Contains(c1, "x"), false, row)
-    checkEvaluation(Contains(c2, "b"), null, row)
-    checkEvaluation(Contains(c1, Literal(null, StringType)), null, row)
+    checkEvaluation(c1 contains "b", true, row)
+    checkEvaluation(c1 contains "x", false, row)
+    checkEvaluation(c2 contains "b", null, row)
+    checkEvaluation(c1 contains Literal(null, StringType), null, row)
 
-    checkEvaluation(StartsWith(c1, "a"), true, row)
-    checkEvaluation(StartsWith(c1, "b"), false, row)
-    checkEvaluation(StartsWith(c2, "a"), null, row)
-    checkEvaluation(StartsWith(c1, Literal(null, StringType)), null, row)
+    checkEvaluation(c1 startsWith "a", true, row)
+    checkEvaluation(c1 startsWith "b", false, row)
+    checkEvaluation(c2 startsWith "a", null, row)
+    checkEvaluation(c1 startsWith Literal(null, StringType), null, row)
 
-    checkEvaluation(EndsWith(c1, "c"), true, row)
-    checkEvaluation(EndsWith(c1, "b"), false, row)
-    checkEvaluation(EndsWith(c2, "b"), null, row)
-    checkEvaluation(EndsWith(c1, Literal(null, StringType)), null, row)
+    checkEvaluation(c1 endsWith "c", true, row)
+    checkEvaluation(c1 endsWith "b", false, row)
+    checkEvaluation(c2 endsWith "b", null, row)
+    checkEvaluation(c1 endsWith Literal(null, StringType), null, row)
   }
 
   test("Substring") {
@@ -542,5 +546,10 @@ class ExpressionEvaluationSuite extends FunSuite {
     assert(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === false)
     assert(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable === true)
     assert(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable === true)
+
+    checkEvaluation(s.substr(0, 2), "ex", row)
+    checkEvaluation(s.substr(0), "example", row)
+    checkEvaluation(s.substring(0, 2), "ex", row)
+    checkEvaluation(s.substring(0), "example", row)
   }
 }

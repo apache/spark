@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -41,15 +40,15 @@ class DslQuerySuite extends QueryTest {
 
   test("agg") {
     checkAnswer(
-      testData2.groupBy('a)('a, Sum('b)),
+      testData2.groupBy('a)('a, sum('b)),
       Seq((1,3),(2,3),(3,3))
     )
     checkAnswer(
-      testData2.groupBy('a)('a, Sum('b) as 'totB).aggregate(Sum('totB)),
+      testData2.groupBy('a)('a, sum('b) as 'totB).aggregate(sum('totB)),
       9
     )
     checkAnswer(
-      testData2.aggregate(Sum('b)),
+      testData2.aggregate(sum('b)),
       9
     )
   }
@@ -104,19 +103,19 @@ class DslQuerySuite extends QueryTest {
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
 
     checkAnswer(
-      arrayData.orderBy(GetItem('data, 0).asc),
+      arrayData.orderBy('data.getItem(0).asc),
       arrayData.collect().sortBy(_.data(0)).toSeq)
 
     checkAnswer(
-      arrayData.orderBy(GetItem('data, 0).desc),
+      arrayData.orderBy('data.getItem(0).desc),
       arrayData.collect().sortBy(_.data(0)).reverse.toSeq)
 
     checkAnswer(
-      mapData.orderBy(GetItem('data, 1).asc),
+      mapData.orderBy('data.getItem(1).asc),
       mapData.collect().sortBy(_.data(1)).toSeq)
 
     checkAnswer(
-      mapData.orderBy(GetItem('data, 1).desc),
+      mapData.orderBy('data.getItem(1).desc),
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
   }
 
