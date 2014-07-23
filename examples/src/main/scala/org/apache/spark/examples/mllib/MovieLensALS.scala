@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.mllib
 
-import scala.collection.mutable
-
 import com.esotericsoftware.kryo.Kryo
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
@@ -43,7 +41,6 @@ object MovieLensALS {
   class ALSRegistrator extends KryoRegistrator {
     override def registerClasses(kryo: Kryo) {
       kryo.register(classOf[Rating])
-      kryo.register(classOf[mutable.BitSet])
     }
   }
 

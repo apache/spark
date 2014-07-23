@@ -210,22 +210,6 @@ class HiveQuerySuite extends HiveComparisonTest {
     }
   }
 
-  createQueryTest("case sensitivity: Hive table",
-    "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
-
-  test("case sensitivity: registered table") {
-    val testData: SchemaRDD =
-      TestHive.sparkContext.parallelize(
-        TestData(1, "str1") ::
-        TestData(2, "str2") :: Nil)
-    testData.registerAsTable("REGisteredTABle")
-
-    assertResult(Array(Array(2, "str2"))) {
-      hql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
-        "WHERE TableAliaS.a > 1").collect()
-    }
-  }
-
   def isExplanation(result: SchemaRDD) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
     explanation.size > 1 && explanation.head.startsWith("Physical execution plan")
@@ -390,7 +374,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("CREATE TABLE m(value MAP<INT, STRING>)")
     hql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
     hql("SELECT * FROM m").collect().zip(hql("SELECT * FROM src LIMIT 10").collect()).map {
-      case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
+      case (Row(map: Map[Int, String]), Row(key: Int, value: String)) =>
         assert(map.size === 1)
         assert(map.head === (key, value))
     }
@@ -421,63 +405,64 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
-    def collectResults(rdd: SchemaRDD): Set[(String, String)] =
-      rdd.collect().map { case Row(key: String, value: String) => key -> value }.toSet
+    def rowsToPairs(rows: Array[Row]) = rows.map { case Row(key: String, value: String) =>
+      key -> value
+    }
 
     clear()
 
     // "set" itself returns all config variables currently specified in SQLConf.
     assert(hql("SET").collect().size == 0)
 
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(hql(s"SET $testKey=$testVal"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql(s"SET $testKey=$testVal").collect())
     }
 
     assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(hql("SET"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql("SET").collect())
     }
 
     hql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(hql("SET"))
+    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      rowsToPairs(hql("SET").collect())
     }
 
     // "set key"
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(hql(s"SET $testKey"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(hql(s"SET $testKey").collect())
     }
 
-    assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(hql(s"SET $nonexistentKey"))
+    assertResult(Array(nonexistentKey -> "<undefined>")) {
+      rowsToPairs(hql(s"SET $nonexistentKey").collect())
     }
 
     // Assert that sql() should have the same effects as hql() by repeating the above using sql().
     clear()
     assert(sql("SET").collect().size == 0)
 
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey=$testVal"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql(s"SET $testKey=$testVal").collect())
     }
 
     assert(hiveconf.get(testKey, "") == testVal)
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql("SET"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql("SET").collect())
     }
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET"))
+    assertResult(Array(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
+      rowsToPairs(sql("SET").collect())
     }
 
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey"))
+    assertResult(Array(testKey -> testVal)) {
+      rowsToPairs(sql(s"SET $testKey").collect())
     }
 
-    assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(sql(s"SET $nonexistentKey"))
+    assertResult(Array(nonexistentKey -> "<undefined>")) {
+      rowsToPairs(sql(s"SET $nonexistentKey").collect())
     }
 
     clear()

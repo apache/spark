@@ -60,9 +60,6 @@ case class ComplexData(
     mapField: Map[Int, String],
     structField: PrimitiveData)
 
-case class GenericData[A](
-    genericField: A)
-
 class ScalaReflectionSuite extends FunSuite {
   import ScalaReflection._
 
@@ -129,23 +126,6 @@ class ScalaReflectionSuite extends FunSuite {
             StructField("byteField", ByteType, nullable = false),
             StructField("booleanField", BooleanType, nullable = false))),
           nullable = true))),
-      nullable = true))
-  }
-
-  test("generic data") {
-    val schema = schemaFor[GenericData[Int]]
-    assert(schema === Schema(
-      StructType(Seq(
-        StructField("genericField", IntegerType, nullable = false))),
-      nullable = true))
-  }
-
-  test("tuple data") {
-    val schema = schemaFor[(Int, String)]
-    assert(schema === Schema(
-      StructType(Seq(
-        StructField("_1", IntegerType, nullable = false),
-        StructField("_2", StringType, nullable = true))),
       nullable = true))
   }
 }

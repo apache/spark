@@ -44,10 +44,6 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
    * having really large inodes at the top level. */
   private val localDirs: Array[File] = createLocalDirs()
-  if (localDirs.isEmpty) {
-    logError("Failed to create any local dir.")
-    System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
-  }
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
   private var shuffleSender : ShuffleSender = null
 
@@ -120,7 +116,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   private def createLocalDirs(): Array[File] = {
     logDebug(s"Creating local directories at root dirs '$rootDirs'")
     val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
-    rootDirs.split(",").flatMap { rootDir =>
+    rootDirs.split(",").map { rootDir =>
       var foundLocalDir = false
       var localDir: File = null
       var localDirId: String = null
@@ -140,13 +136,11 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
         }
       }
       if (!foundLocalDir) {
-        logError(s"Failed $MAX_DIR_CREATION_ATTEMPTS attempts to create local dir in $rootDir." +
-                  " Ignoring this directory.")
-        None
-      } else {
-        logInfo(s"Created local directory at $localDir")
-        Some(localDir)
+        logError(s"Failed $MAX_DIR_CREATION_ATTEMPTS attempts to create local dir in $rootDir")
+        System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
       }
+      logInfo(s"Created local directory at $localDir")
+      localDir
     }
   }
 

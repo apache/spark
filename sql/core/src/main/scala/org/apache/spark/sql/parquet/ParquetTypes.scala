@@ -22,7 +22,6 @@ import java.io.IOException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import parquet.hadoop.{ParquetFileReader, Footer, ParquetFileWriter}
 import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData}
@@ -43,22 +42,20 @@ private[parquet] object ParquetTypesConverter extends Logging {
   def isPrimitiveType(ctype: DataType): Boolean =
     classOf[PrimitiveType] isAssignableFrom ctype.getClass
 
-  def toPrimitiveDataType(parquetType: ParquetPrimitiveType): DataType =
-    parquetType.getPrimitiveTypeName match {
-      case ParquetPrimitiveTypeName.BINARY
-        if parquetType.getOriginalType == ParquetOriginalType.UTF8 => StringType
-      case ParquetPrimitiveTypeName.BINARY => BinaryType
-      case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
-      case ParquetPrimitiveTypeName.DOUBLE => DoubleType
-      case ParquetPrimitiveTypeName.FLOAT => FloatType
-      case ParquetPrimitiveTypeName.INT32 => IntegerType
-      case ParquetPrimitiveTypeName.INT64 => LongType
-      case ParquetPrimitiveTypeName.INT96 =>
-        // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
-        sys.error("Potential loss of precision: cannot convert INT96")
-      case _ => sys.error(
-        s"Unsupported parquet datatype $parquetType")
-    }
+  def toPrimitiveDataType(parquetType : ParquetPrimitiveTypeName): DataType = parquetType match {
+    case ParquetPrimitiveTypeName.BINARY => StringType
+    case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
+    case ParquetPrimitiveTypeName.DOUBLE => DoubleType
+    case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY => ArrayType(ByteType)
+    case ParquetPrimitiveTypeName.FLOAT => FloatType
+    case ParquetPrimitiveTypeName.INT32 => IntegerType
+    case ParquetPrimitiveTypeName.INT64 => LongType
+    case ParquetPrimitiveTypeName.INT96 =>
+      // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
+      sys.error("Potential loss of precision: cannot convert INT96")
+    case _ => sys.error(
+      s"Unsupported parquet datatype $parquetType")
+  }
 
   /**
    * Converts a given Parquet `Type` into the corresponding
@@ -107,7 +104,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
 
     if (parquetType.isPrimitive) {
-      toPrimitiveDataType(parquetType.asPrimitiveType)
+      toPrimitiveDataType(parquetType.asPrimitiveType.getPrimitiveTypeName)
     } else {
       val groupType = parquetType.asGroupType()
       parquetType.getOriginalType match {
@@ -167,17 +164,18 @@ private[parquet] object ParquetTypesConverter extends Logging {
    * @return The name of the corresponding Parquet primitive type
    */
   def fromPrimitiveDataType(ctype: DataType):
-      Option[(ParquetPrimitiveTypeName, Option[ParquetOriginalType])] = ctype match {
-    case StringType => Some(ParquetPrimitiveTypeName.BINARY, Some(ParquetOriginalType.UTF8))
-    case BinaryType => Some(ParquetPrimitiveTypeName.BINARY, None)
-    case BooleanType => Some(ParquetPrimitiveTypeName.BOOLEAN, None)
-    case DoubleType => Some(ParquetPrimitiveTypeName.DOUBLE, None)
-    case FloatType => Some(ParquetPrimitiveTypeName.FLOAT, None)
-    case IntegerType => Some(ParquetPrimitiveTypeName.INT32, None)
+      Option[ParquetPrimitiveTypeName] = ctype match {
+    case StringType => Some(ParquetPrimitiveTypeName.BINARY)
+    case BooleanType => Some(ParquetPrimitiveTypeName.BOOLEAN)
+    case DoubleType => Some(ParquetPrimitiveTypeName.DOUBLE)
+    case ArrayType(ByteType) =>
+      Some(ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)
+    case FloatType => Some(ParquetPrimitiveTypeName.FLOAT)
+    case IntegerType => Some(ParquetPrimitiveTypeName.INT32)
     // There is no type for Byte or Short so we promote them to INT32.
-    case ShortType => Some(ParquetPrimitiveTypeName.INT32, None)
-    case ByteType => Some(ParquetPrimitiveTypeName.INT32, None)
-    case LongType => Some(ParquetPrimitiveTypeName.INT64, None)
+    case ShortType => Some(ParquetPrimitiveTypeName.INT32)
+    case ByteType => Some(ParquetPrimitiveTypeName.INT32)
+    case LongType => Some(ParquetPrimitiveTypeName.INT64)
     case _ => None
   }
 
@@ -229,10 +227,9 @@ private[parquet] object ParquetTypesConverter extends Logging {
         if (nullable) Repetition.OPTIONAL else Repetition.REQUIRED
       }
     val primitiveType = fromPrimitiveDataType(ctype)
-    primitiveType.map {
-      case (primitiveType, originalType) =>
-        new ParquetPrimitiveType(repetition, primitiveType, name, originalType.orNull)
-    }.getOrElse {
+    if (primitiveType.isDefined) {
+      new ParquetPrimitiveType(repetition, primitiveType.get, name)
+    } else {
       ctype match {
         case ArrayType(elementType) => {
           val parquetElementType = fromDataType(
@@ -240,7 +237,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
             CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
             nullable = false,
             inArray = true)
-          ConversionPatterns.listType(repetition, name, parquetElementType)
+            ConversionPatterns.listType(repetition, name, parquetElementType)
         }
         case StructType(structFields) => {
           val fields = structFields.map {
@@ -368,24 +365,20 @@ private[parquet] object ParquetTypesConverter extends Logging {
         s"Expected $path for be a directory with Parquet files/metadata")
     }
     ParquetRelation.enableLogForwarding()
-
-    val children = fs.listStatus(path).filterNot {
-      _.getPath.getName == FileOutputCommitter.SUCCEEDED_FILE_NAME
+    val metadataPath = new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)
+    // if this is a new table that was just created we will find only the metadata file
+    if (fs.exists(metadataPath) && fs.isFile(metadataPath)) {
+      ParquetFileReader.readFooter(conf, metadataPath)
+    } else {
+      // there may be one or more Parquet files in the given directory
+      val footers = ParquetFileReader.readFooters(conf, fs.getFileStatus(path))
+      // TODO: for now we assume that all footers (if there is more than one) have identical
+      // metadata; we may want to add a check here at some point
+      if (footers.size() == 0) {
+        throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path")
+      }
+      footers(0).getParquetMetadata
     }
-
-    // NOTE (lian): Parquet "_metadata" file can be very slow if the file consists of lots of row
-    // groups. Since Parquet schema is replicated among all row groups, we only need to touch a
-    // single row group to read schema related metadata. Notice that we are making assumptions that
-    // all data in a single Parquet file have the same schema, which is normally true.
-    children
-      // Try any non-"_metadata" file first...
-      .find(_.getPath.getName != ParquetFileWriter.PARQUET_METADATA_FILE)
-      // ... and fallback to "_metadata" if no such file exists (which implies the Parquet file is
-      // empty, thus normally the "_metadata" file is expected to be fairly small).
-      .orElse(children.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE))
-      .map(ParquetFileReader.readFooter(conf, _))
-      .getOrElse(
-        throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path"))
   }
 
   /**
@@ -408,7 +401,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     } else {
       val attributes = convertToAttributes(
         readMetaData(origPath, conf).getFileMetaData.getSchema)
-      log.info(s"Falling back to schema conversion from Parquet types; result: $attributes")
+      log.warn(s"Falling back to schema conversion from Parquet types; result: $attributes")
       attributes
     }
   }

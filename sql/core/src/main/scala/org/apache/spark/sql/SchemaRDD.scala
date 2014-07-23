@@ -17,11 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util.{Map => JMap, List => JList, Set => JSet}
-
-import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
-
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
@@ -32,9 +27,10 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.types.{ArrayType, BooleanType, StructType}
+import org.apache.spark.sql.catalyst.types.{DataType, StructType, BooleanType}
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.api.java.JavaRDD
+import java.util.{Map => JMap}
 
 /**
  * :: AlphaComponent ::
@@ -137,13 +133,8 @@ class SchemaRDD(
    *
    * @group Query
    */
-  def select(exprs: Expression*): SchemaRDD = {
-    val aliases = exprs.zipWithIndex.map {
-      case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"c$i")()
-    }
-    new SchemaRDD(sqlContext, Project(aliases, logicalPlan))
-  }
+  def select(exprs: NamedExpression*): SchemaRDD =
+    new SchemaRDD(sqlContext, Project(exprs, logicalPlan))
 
   /**
    * Filters the output, only returning those rows where `condition` evaluates to true.
@@ -257,26 +248,6 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Union(logicalPlan, otherPlan.logicalPlan))
 
   /**
-   * Performs a relational except on two SchemaRDDs
-   *
-   * @param otherPlan the [[SchemaRDD]] that should be excepted from this one.
-   *
-   * @group Query
-   */
-  def except(otherPlan: SchemaRDD): SchemaRDD =
-    new SchemaRDD(sqlContext, Except(logicalPlan, otherPlan.logicalPlan))
-
-  /**
-   * Performs a relational intersect on two SchemaRDDs
-   *
-   * @param otherPlan the [[SchemaRDD]] that should be intersected with this one.
-   *
-   * @group Query
-   */
-  def intersect(otherPlan: SchemaRDD): SchemaRDD =
-    new SchemaRDD(sqlContext, Intersect(logicalPlan, otherPlan.logicalPlan))
-
-  /**
    * Filters tuples using a function over the value of the specified column.
    *
    * {{{
@@ -380,43 +351,32 @@ class SchemaRDD(
       val fields = structType.fields.map(field => (field.name, field.dataType))
       val map: JMap[String, Any] = new java.util.HashMap
       row.zip(fields).foreach {
-        case (obj, (attrName, dataType)) =>
+        case (obj, (name, dataType)) =>
           dataType match {
-            case struct: StructType => map.put(attrName, rowToMap(obj.asInstanceOf[Row], struct))
-            case array @ ArrayType(struct: StructType) =>
-              val arrayValues = obj match {
-                case seq: Seq[Any] =>
-                  seq.map(element => rowToMap(element.asInstanceOf[Row], struct)).asJava
-                case list: JList[_] =>
-                  list.map(element => rowToMap(element.asInstanceOf[Row], struct))
-                case set: JSet[_] =>
-                  set.map(element => rowToMap(element.asInstanceOf[Row], struct))
-                case arr if arr != null && arr.getClass.isArray =>
-                  arr.asInstanceOf[Array[Any]].map {
-                    element => rowToMap(element.asInstanceOf[Row], struct)
-                  }
-                case other => other
-              }
-              map.put(attrName, arrayValues)
-            case array: ArrayType => {
-              val arrayValues = obj match {
-                case seq: Seq[Any] => seq.asJava
-                case other => other
-              }
-              map.put(attrName, arrayValues)
-            }
-            case other => map.put(attrName, obj)
+            case struct: StructType => map.put(name, rowToMap(obj.asInstanceOf[Row], struct))
+            case other => map.put(name, obj)
           }
       }
 
       map
     }
 
-    val rowSchema = StructType.fromAttributes(this.queryExecution.analyzed.output)
+    // TODO: Actually, the schema of a row should be represented by a StructType instead of
+    // a Seq[Attribute]. Once we have finished that change, we can just use rowToMap to
+    // construct the Map for python.
+    val fields: Seq[(String, DataType)] = this.queryExecution.analyzed.output.map(
+      field => (field.name, field.dataType))
     this.mapPartitions { iter =>
       val pickle = new Pickler
       iter.map { row =>
-        rowToMap(row, rowSchema)
+        val map: JMap[String, Any] = new java.util.HashMap
+        row.zip(fields).foreach { case (obj, (name, dataType)) =>
+          dataType match {
+            case struct: StructType => map.put(name, rowToMap(obj.asInstanceOf[Row], struct))
+            case other => map.put(name, obj)
+          }
+        }
+        map
       }.grouped(10).map(batched => pickle.dumps(batched.toArray))
     }
   }

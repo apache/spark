@@ -15,16 +15,13 @@
  * limitations under the License.
  */
 
-import sbt._
-import sbt.Keys.version
-
 import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.core.MissingClassProblem
 import com.typesafe.tools.mima.core.MissingTypesProblem
 import com.typesafe.tools.mima.core.ProblemFilters._
 import com.typesafe.tools.mima.plugin.MimaKeys.{binaryIssueFilters, previousArtifact}
 import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
-
+import sbt._
 
 object MimaBuild {
 
@@ -56,7 +53,7 @@ object MimaBuild {
     excludePackage("org.apache.spark." + packageName)
   }
 
-  def ignoredABIProblems(base: File, currentSparkVersion: String) = {
+  def ignoredABIProblems(base: File) = {
 
     // Excludes placed here will be used for all Spark versions
     val defaultExcludes = Seq()
@@ -80,16 +77,11 @@ object MimaBuild {
     }
 
     defaultExcludes ++ ignoredClasses.flatMap(excludeClass) ++
-    ignoredMembers.flatMap(excludeMember) ++ MimaExcludes.excludes(currentSparkVersion)
+    ignoredMembers.flatMap(excludeMember) ++ MimaExcludes.excludes
   }
 
-  def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
-    val organization = "org.apache.spark"
-    val previousSparkVersion = "1.0.0"
-    val fullId = "spark-" + projectRef.project + "_2.10"
-    mimaDefaultSettings ++ 
-    Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
-      binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
-  }
-
+  def mimaSettings(sparkHome: File) = mimaDefaultSettings ++ Seq(
+    previousArtifact := None,
+    binaryIssueFilters ++= ignoredABIProblems(sparkHome)
+  )
 }

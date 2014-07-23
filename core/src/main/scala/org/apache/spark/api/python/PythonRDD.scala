@@ -600,8 +600,6 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
       // This happens on the master, where we pass the updates to Python through a socket
       if (val2.size > 0) {
         val socket = new Socket(serverHost, serverPort)
-        // SPARK-2282: Immediately reuse closed sockets because we create one per task.
-        socket.setReuseAddress(true)
         val in = socket.getInputStream
         val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
         out.writeInt(val2.size)

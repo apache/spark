@@ -60,26 +60,6 @@ class DslQuerySuite extends QueryTest {
       Seq(Seq("1")))
   }
 
-  test("select with functions") {
-    checkAnswer(
-      testData.select(sum('value), avg('value), count(1)),
-      Seq(Seq(5050.0, 50.5, 100)))
-
-    checkAnswer(
-      testData2.select('a + 'b, 'a < 'b),
-      Seq(
-        Seq(2, false),
-        Seq(3, true),
-        Seq(3, false),
-        Seq(4, false),
-        Seq(4, false),
-        Seq(5, false)))
-
-    checkAnswer(
-      testData2.select(sumDistinct('a)),
-      Seq(Seq(6)))
-  }
-
   test("sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
@@ -130,17 +110,17 @@ class DslQuerySuite extends QueryTest {
 
   test("average") {
     checkAnswer(
-      testData2.groupBy()(avg('a)),
+      testData2.groupBy()(Average('a)),
       2.0)
   }
 
   test("null average") {
     checkAnswer(
-      testData3.groupBy()(avg('b)),
+      testData3.groupBy()(Average('b)),
       2.0)
 
     checkAnswer(
-      testData3.groupBy()(avg('b), countDistinct('b)),
+      testData3.groupBy()(Average('b), CountDistinct('b :: Nil)),
       (2.0, 1) :: Nil)
   }
 
@@ -150,43 +130,22 @@ class DslQuerySuite extends QueryTest {
 
   test("null count") {
     checkAnswer(
-      testData3.groupBy('a)('a, count('b)),
+      testData3.groupBy('a)('a, Count('b)),
       Seq((1,0), (2, 1))
     )
 
     checkAnswer(
-      testData3.groupBy('a)('a, count('a + 'b)),
+      testData3.groupBy('a)('a, Count('a + 'b)),
       Seq((1,0), (2, 1))
     )
 
     checkAnswer(
-      testData3.groupBy()(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
+      testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
       (2, 1, 2, 2, 1) :: Nil
     )
   }
 
   test("zero count") {
     assert(emptyTableData.count() === 0)
-  }
-
-  test("except") {
-    checkAnswer(
-      lowerCaseData.except(upperCaseData),
-      (1, "a") ::
-      (2, "b") ::
-      (3, "c") ::
-      (4, "d") :: Nil)
-    checkAnswer(lowerCaseData.except(lowerCaseData), Nil)
-    checkAnswer(upperCaseData.except(upperCaseData), Nil)
-  }
-
-  test("intersect") {
-    checkAnswer(
-      lowerCaseData.intersect(lowerCaseData),
-      (1, "a") ::
-      (2, "b") ::
-      (3, "c") ::
-      (4, "d") :: Nil)
-    checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
   }
 }

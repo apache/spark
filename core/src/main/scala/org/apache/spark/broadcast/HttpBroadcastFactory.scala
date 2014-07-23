@@ -27,21 +27,21 @@ import org.apache.spark.{SecurityManager, SparkConf}
  * [[org.apache.spark.broadcast.HttpBroadcast]] for more details about this mechanism.
  */
 class HttpBroadcastFactory extends BroadcastFactory {
-  override def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
+  def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
     HttpBroadcast.initialize(isDriver, conf, securityMgr)
   }
 
-  override def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long) =
+  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long) =
     new HttpBroadcast[T](value_, isLocal, id)
 
-  override def stop() { HttpBroadcast.stop() }
+  def stop() { HttpBroadcast.stop() }
 
   /**
    * Remove all persisted state associated with the HTTP broadcast with the given ID.
    * @param removeFromDriver Whether to remove state from the driver
    * @param blocking Whether to block until unbroadcasted
    */
-  override def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
+  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
     HttpBroadcast.unpersist(id, removeFromDriver, blocking)
   }
 }

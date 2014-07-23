@@ -25,9 +25,7 @@ import scala.collection.JavaConverters._
  * SQLConf holds mutable config parameters and hints.  These can be set and
  * queried either by passing SET commands into Spark SQL's DSL
  * functions (sql(), hql(), etc.), or by programmatically using setters and
- * getters of this class.
- *
- * SQLConf is thread-safe (internally synchronized so safe to be used in multiple threads).
+ * getters of this class.  This class is thread-safe.
  */
 trait SQLConf {
 
@@ -66,16 +64,21 @@ trait SQLConf {
   }
 
   def get(key: String): String = {
-    Option(settings.get(key)).getOrElse(throw new NoSuchElementException(key))
+    if (!settings.containsKey(key)) {
+      throw new NoSuchElementException(key)
+    }
+    settings.get(key)
   }
 
   def get(key: String, defaultValue: String): String = {
-    Option(settings.get(key)).getOrElse(defaultValue)
+    if (!settings.containsKey(key)) defaultValue else settings.get(key)
   }
 
-  def getAll: Array[(String, String)] = settings.synchronized { settings.asScala.toArray }
+  def getAll: Array[(String, String)] = settings.asScala.toArray
 
-  def getOption(key: String): Option[String] = Option(settings.get(key))
+  def getOption(key: String): Option[String] = {
+    if (!settings.containsKey(key)) None else Some(settings.get(key))
+  }
 
   def contains(key: String): Boolean = settings.containsKey(key)
 

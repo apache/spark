@@ -158,7 +158,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
     checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
-
+    
     checkEvaluation(Literal(null, StringType) like regEx, null, new GenericRow(Array[Any]("bc%")))
   }
 
@@ -203,7 +203,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("data type casting") {
 
-    val sts = "1970-01-01 00:00:01.1"
+    val sts = "1970-01-01 00:00:01.0"
     val ts = Timestamp.valueOf(sts)
 
     checkEvaluation("abdef" cast StringType, "abdef")
@@ -293,7 +293,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     // A test for higher precision than millis
     checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
   }
-
+  
   test("null checking") {
     val row = new GenericRow(Array[Any]("^Ba*n", null, true, null))
     val c1 = 'a.string.at(0)
@@ -312,7 +312,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     checkEvaluation(IsNull(Literal(null, ShortType)), true)
     checkEvaluation(IsNotNull(Literal(null, ShortType)), false)
-
+    
     checkEvaluation(Coalesce(c1 :: c2 :: Nil), "^Ba*n", row)
     checkEvaluation(Coalesce(Literal(null, StringType) :: Nil), null, row)
     checkEvaluation(Coalesce(Literal(null, StringType) :: c1 :: c2 :: Nil), "^Ba*n", row)
@@ -323,11 +323,11 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(If(Literal(null, BooleanType), c2, c1), "^Ba*n", row)
     checkEvaluation(If(Literal(true, BooleanType), c1, c2), "^Ba*n", row)
     checkEvaluation(If(Literal(false, BooleanType), c2, c1), "^Ba*n", row)
-    checkEvaluation(If(Literal(false, BooleanType),
+    checkEvaluation(If(Literal(false, BooleanType), 
       Literal("a", StringType), Literal("b", StringType)), "b", row)
 
     checkEvaluation(In(c1, c1 :: c2 :: Nil), true, row)
-    checkEvaluation(In(Literal("^Ba*n", StringType),
+    checkEvaluation(In(Literal("^Ba*n", StringType), 
       Literal("^Ba*n", StringType) :: Nil), true, row)
     checkEvaluation(In(Literal("^Ba*n", StringType),
       Literal("^Ba*n", StringType) :: c2 :: Nil), true, row)
@@ -378,7 +378,7 @@ class ExpressionEvaluationSuite extends FunSuite {
 
   test("complex type") {
     val row = new GenericRow(Array[Any](
-      "^Ba*n",                                  // 0
+      "^Ba*n",                                  // 0 
       null.asInstanceOf[String],                // 1
       new GenericRow(Array[Any]("aa", "bb")),   // 2
       Map("aa"->"bb"),                          // 3
@@ -391,18 +391,18 @@ class ExpressionEvaluationSuite extends FunSuite {
     val typeMap = MapType(StringType, StringType)
     val typeArray = ArrayType(StringType)
 
-    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()),
+    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()), 
       Literal("aa")), "bb", row)
     checkEvaluation(GetItem(Literal(null, typeMap), Literal("aa")), null, row)
     checkEvaluation(GetItem(Literal(null, typeMap), Literal(null, StringType)), null, row)
-    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()),
+    checkEvaluation(GetItem(BoundReference(3, AttributeReference("c", typeMap)()), 
       Literal(null, StringType)), null, row)
 
-    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()),
+    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()), 
       Literal(1)), "bb", row)
     checkEvaluation(GetItem(Literal(null, typeArray), Literal(1)), null, row)
     checkEvaluation(GetItem(Literal(null, typeArray), Literal(null, IntegerType)), null, row)
-    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()),
+    checkEvaluation(GetItem(BoundReference(4, AttributeReference("c", typeArray)()), 
       Literal(null, IntegerType)), null, row)
 
     checkEvaluation(GetField(BoundReference(2, AttributeReference("c", typeS)()), "a"), "aa", row)
@@ -466,81 +466,5 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 === c2, false, row)
     checkEvaluation(c1 !== c2, true, row)
   }
-
-  test("StringComparison") {
-    val row = new GenericRow(Array[Any]("abc", null))
-    val c1 = 'a.string.at(0)
-    val c2 = 'a.string.at(1)
-
-    checkEvaluation(Contains(c1, "b"), true, row)
-    checkEvaluation(Contains(c1, "x"), false, row)
-    checkEvaluation(Contains(c2, "b"), null, row)
-    checkEvaluation(Contains(c1, Literal(null, StringType)), null, row)
-
-    checkEvaluation(StartsWith(c1, "a"), true, row)
-    checkEvaluation(StartsWith(c1, "b"), false, row)
-    checkEvaluation(StartsWith(c2, "a"), null, row)
-    checkEvaluation(StartsWith(c1, Literal(null, StringType)), null, row)
-
-    checkEvaluation(EndsWith(c1, "c"), true, row)
-    checkEvaluation(EndsWith(c1, "b"), false, row)
-    checkEvaluation(EndsWith(c2, "b"), null, row)
-    checkEvaluation(EndsWith(c1, Literal(null, StringType)), null, row)
-  }
-
-  test("Substring") {
-    val row = new GenericRow(Array[Any]("example", "example".toArray.map(_.toByte)))
-
-    val s = 'a.string.at(0)
-
-    // substring from zero position with less-than-full length
-    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)), "ex", row)
-    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(2, IntegerType)), "ex", row)
-
-    // substring from zero position with full length
-    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(7, IntegerType)), "example", row)
-    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(7, IntegerType)), "example", row)
-
-    // substring from zero position with greater-than-full length
-    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(100, IntegerType)), "example", row)
-    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(100, IntegerType)), "example", row)
-
-    // substring from nonzero position with less-than-full length
-    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(2, IntegerType)), "xa", row)
-
-    // substring from nonzero position with full length
-    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(6, IntegerType)), "xample", row)
-
-    // substring from nonzero position with greater-than-full length
-    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(100, IntegerType)), "xample", row)
-
-    // zero-length substring (within string bounds)
-    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(0, IntegerType)), "", row)
-
-    // zero-length substring (beyond string bounds)
-    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(4, IntegerType)), "", row)
-
-    // substring(null, _, _) -> null
-    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(4, IntegerType)), null, new GenericRow(Array[Any](null)))
-
-    // substring(_, null, _) -> null
-    checkEvaluation(Substring(s, Literal(null, IntegerType), Literal(4, IntegerType)), null, row)
-
-    // substring(_, _, null) -> null
-    checkEvaluation(Substring(s, Literal(100, IntegerType), Literal(null, IntegerType)), null, row)
-
-    // 2-arg substring from zero position
-    checkEvaluation(Substring(s, Literal(0, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "example", row)
-    checkEvaluation(Substring(s, Literal(1, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "example", row)
-
-    // 2-arg substring from nonzero position
-    checkEvaluation(Substring(s, Literal(2, IntegerType), Literal(Integer.MAX_VALUE, IntegerType)), "xample", row)
-
-    val s_notNull = 'a.string.notNull.at(0)
-
-    assert(Substring(s, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === true)
-    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(2, IntegerType)).nullable === false)
-    assert(Substring(s_notNull, Literal(null, IntegerType), Literal(2, IntegerType)).nullable === true)
-    assert(Substring(s_notNull, Literal(0, IntegerType), Literal(null, IntegerType)).nullable === true)
-  }
 }
+

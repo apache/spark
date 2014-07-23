@@ -44,7 +44,7 @@ private[streaming] class BlockGenerator(
     listener: BlockGeneratorListener,
     receiverId: Int,
     conf: SparkConf
-  ) extends RateLimiter(conf) with Logging {
+  ) extends Logging {
 
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
 
@@ -81,7 +81,6 @@ private[streaming] class BlockGenerator(
    * will be periodically pushed into BlockManager.
    */
   def += (data: Any): Unit = synchronized {
-    waitToPush()
     currentBuffer += data
   }
 

@@ -39,7 +39,9 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "execut
  * A SparkListener that prepares information to be displayed on the ExecutorsTab
  */
 @DeveloperApi
-class ExecutorsListener(storageStatusListener: StorageStatusListener) extends SparkListener {
+class ExecutorsListener(storageStatusListener: StorageStatusListener)
+  extends SparkListener {
+
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()

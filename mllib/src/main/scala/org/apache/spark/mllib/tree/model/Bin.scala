@@ -28,7 +28,7 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
  * @param highSplit signifying the upper threshold for the continuous feature to be
  *                 accepted in the bin
  * @param featureType type of feature -- categorical or continuous
- * @param category categorical label value accepted in the bin for binary classification
+ * @param category categorical label value accepted in the bin
  */
 private[tree]
 case class Bin(lowSplit: Split, highSplit: Split, featureType: FeatureType, category: Double)

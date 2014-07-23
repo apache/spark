@@ -17,12 +17,13 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.xml.Node
-
 import java.util.Date
 
-import org.apache.spark.scheduler.StageInfo
-import org.apache.spark.ui.{ToolTips, UIUtils}
+import scala.collection.mutable.HashMap
+import scala.xml.Node
+
+import org.apache.spark.scheduler.{StageInfo, TaskInfo}
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
@@ -42,16 +43,9 @@ private[ui] class StageTableBase(
     <th>Submitted</th>
     <th>Duration</th>
     <th>Tasks: Succeeded/Total</th>
-    <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
-    <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
-    <th>
-      <!-- Place the shuffle write tooltip on the left (rather than the default position
-        of on top) because the shuffle write column is the last column on the right side and
-        the tooltip is wider than the column, so it doesn't fit on top. -->
-      <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
-        Shuffle Write
-      </span>
-    </th>
+    <th>Input</th>
+    <th>Shuffle Read</th>
+    <th>Shuffle Write</th>
   }
 
   def toNodeSeq: Seq[Node] = {
@@ -70,14 +64,14 @@ private[ui] class StageTableBase(
     </table>
   }
 
-  private def makeProgressBar(started: Int, completed: Int, failed: Int, total: Int): Seq[Node] =
+  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] =
   {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 
     <div class="progress">
       <span style="text-align:center; position:absolute; width:100%; left:0;">
-        {completed}/{total} { if (failed > 0) s"($failed failed)" else "" }
+        {completed}/{total} {failed}
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
       <div class="bar bar-running" style={startWidth}></div>
@@ -88,8 +82,7 @@ private[ui] class StageTableBase(
     // scalastyle:off
     val killLink = if (killEnabled) {
       <span class="kill-link">
-        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}
-            onclick={"return window.confirm('Are you sure you want to kill stage %s ?');".format(s.stageId)}>kill</a>)
+        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>kill</a>)
       </span>
     }
     // scalastyle:on
@@ -107,23 +100,13 @@ private[ui] class StageTableBase(
       <pre class="stage-details collapsed">{s.details}</pre>
     }
 
-    val stageDataOption = listener.stageIdToData.get(s.stageId)
-    // Too many nested map/flatMaps with options are just annoying to read. Do this imperatively.
-    if (stageDataOption.isDefined && stageDataOption.get.description.isDefined) {
-      val desc = stageDataOption.get.description
-      <div><em>{desc}</em></div><div>{nameLink} {killLink}</div>
-    } else {
-      <div>{killLink} {nameLink} {details}</div>
-    }
+    listener.stageIdToDescription.get(s.stageId)
+      .map(d => <div><em>{d}</em></div><div>{nameLink} {killLink}</div>)
+      .getOrElse(<div>{killLink} {nameLink} {details}</div>)
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {
-    val stageDataOption = listener.stageIdToData.get(s.stageId)
-    if (stageDataOption.isEmpty) {
-      return <td>{s.stageId}</td><td>No data available for this stage</td>
-    }
-
-    val stageData = stageDataOption.get
+    val poolName = listener.stageIdToPool.get(s.stageId)
     val submissionTime = s.submissionTime match {
       case Some(t) => UIUtils.formatDate(new Date(t))
       case None => "Unknown"
@@ -133,20 +116,35 @@ private[ui] class StageTableBase(
       if (finishTime > t) finishTime - t else System.currentTimeMillis - t
     }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
-
-    val inputRead = stageData.inputBytes
-    val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
-    val shuffleRead = stageData.shuffleReadBytes
-    val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
-    val shuffleWrite = stageData.shuffleWriteBytes
-    val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
-
+    val startedTasks =
+      listener.stageIdToTasksActive.getOrElse(s.stageId, HashMap[Long, TaskInfo]()).size
+    val completedTasks = listener.stageIdToTasksComplete.getOrElse(s.stageId, 0)
+    val failedTasks = listener.stageIdToTasksFailed.getOrElse(s.stageId, 0) match {
+      case f if f > 0 => "(%s failed)".format(f)
+      case _ => ""
+    }
+    val totalTasks = s.numTasks
+    val inputSortable = listener.stageIdToInputBytes.getOrElse(s.stageId, 0L)
+    val inputRead = inputSortable match {
+      case 0 => ""
+      case b => Utils.bytesToString(b)
+    }
+    val shuffleReadSortable = listener.stageIdToShuffleRead.getOrElse(s.stageId, 0L)
+    val shuffleRead = shuffleReadSortable match {
+      case 0 => ""
+      case b => Utils.bytesToString(b)
+    }
+    val shuffleWriteSortable = listener.stageIdToShuffleWrite.getOrElse(s.stageId, 0L)
+    val shuffleWrite = shuffleWriteSortable match {
+      case 0 => ""
+      case b => Utils.bytesToString(b)
+    }
     <td>{s.stageId}</td> ++
     {if (isFairScheduler) {
       <td>
         <a href={"%s/stages/pool?poolname=%s"
-          .format(UIUtils.prependBaseUri(basePath), stageData.schedulingPool)}>
-          {stageData.schedulingPool}
+          .format(UIUtils.prependBaseUri(basePath), poolName.get)}>
+          {poolName.get}
         </a>
       </td>
     } else {
@@ -156,12 +154,11 @@ private[ui] class StageTableBase(
     <td valign="middle">{submissionTime}</td>
     <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
     <td class="progress-cell">
-      {makeProgressBar(stageData.numActiveTasks, stageData.numCompleteTasks,
-        stageData.numFailedTasks, s.numTasks)}
+      {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
     </td>
-    <td sorttable_customekey={inputRead.toString}>{inputReadWithUnit}</td>
-    <td sorttable_customekey={shuffleRead.toString}>{shuffleReadWithUnit}</td>
-    <td sorttable_customekey={shuffleWrite.toString}>{shuffleWriteWithUnit}</td>
+    <td sorttable_customekey={inputSortable.toString}>{inputRead}</td>
+    <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
+    <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
   }
 
   /** Render an HTML row that represents a stage */

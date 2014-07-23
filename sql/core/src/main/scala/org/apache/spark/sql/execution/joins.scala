@@ -319,18 +319,7 @@ case class BroadcastNestedLoopJoin(
 
   override def otherCopyArgs = sqlContext :: Nil
 
-  override def output = {
-    joinType match {
-      case LeftOuter =>
-        left.output ++ right.output.map(_.withNullability(true))
-      case RightOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output
-      case FullOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
-      case _ =>
-        left.output ++ right.output
-    }
-  }
+  def output = left.output ++ right.output
 
   /** The Streamed Relation */
   def left = streamed

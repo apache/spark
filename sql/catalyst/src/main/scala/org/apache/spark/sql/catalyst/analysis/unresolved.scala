@@ -52,7 +52,6 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   override lazy val resolved = false
 
   override def newInstance = this
-  override def withNullability(newNullability: Boolean) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
 
   // Unresolved attributes are transient at compile time and don't get evaluated during execution.
@@ -96,7 +95,6 @@ case class Star(
   override lazy val resolved = false
 
   override def newInstance = this
-  override def withNullability(newNullability: Boolean) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
 
   def expand(input: Seq[Attribute]): Seq[NamedExpression] = {

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
-import java.sql.Timestamp
 import java.util.{ArrayList => JArrayList}
 
 import scala.collection.JavaConversions._
@@ -29,7 +28,6 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.serde2.io.TimestampWritable
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -268,7 +266,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "NULL"
-      case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 

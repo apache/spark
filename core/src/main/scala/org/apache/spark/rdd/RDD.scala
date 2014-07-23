@@ -328,7 +328,7 @@ abstract class RDD[T: ClassTag](
       : RDD[T] = {
     if (shuffle) {
       /** Distributes elements evenly across output partitions, starting from a random partition. */
-      val distributePartition = (index: Int, items: Iterator[T]) => {
+      def distributePartition(index: Int, items: Iterator[T]): Iterator[(Int, T)] = {
         var position = (new Random(index)).nextInt(numPartitions)
         items.map { t =>
           // Note that the hash code of the key will just be the key itself. The HashPartitioner 
@@ -336,7 +336,7 @@ abstract class RDD[T: ClassTag](
           position = position + 1
           (position, t)
         }
-      } : Iterator[(Int, T)]
+      }
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
@@ -509,10 +509,6 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
    * mapping to that key.
-   *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
-   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy[K](f, defaultPartitioner(this))
@@ -520,10 +516,6 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
-   *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
-   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K, numPartitions: Int)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy(f, new HashPartitioner(numPartitions))
@@ -531,10 +523,6 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
    * mapping to that key.
-   *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
-   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K, p: Partitioner)(implicit kt: ClassTag[K], ord: Ordering[K] = null)
       : RDD[(K, Iterable[T])] = {
@@ -919,19 +907,19 @@ abstract class RDD[T: ClassTag](
       throw new SparkException("countByValue() does not support arrays")
     }
     // TODO: This should perhaps be distributed by default.
-    val countPartition = (iter: Iterator[T]) => {
+    def countPartition(iter: Iterator[T]): Iterator[OpenHashMap[T,Long]] = {
       val map = new OpenHashMap[T,Long]
       iter.foreach {
         t => map.changeValue(t, 1L, _ + 1L)
       }
       Iterator(map)
-    }: Iterator[OpenHashMap[T,Long]]
-    val mergeMaps = (m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]) => {
+    }
+    def mergeMaps(m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]): OpenHashMap[T,Long] = {
       m2.foreach { case (key, value) =>
         m1.changeValue(key, value, _ + value)
       }
       m1
-    }: OpenHashMap[T,Long]
+    }
     val myResult = mapPartitions(countPartition).reduce(mergeMaps)
     // Convert to a Scala mutable map
     val mutableResult = scala.collection.mutable.Map[T,Long]()
