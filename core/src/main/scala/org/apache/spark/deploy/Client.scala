@@ -140,8 +140,10 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
  */
 object Client {
   def main(args: Array[String]) {
-    println("WARNING: This client is deprecated and will be removed in a future version of Spark.")
-    println("Use ./bin/spark-submit with \"--master spark://host:port\"")
+    if (!sys.props.contains("SPARK_SUBMIT")) {
+      println("WARNING: This client is deprecated and will be removed in a future version of Spark.")
+      println("Use ./bin/spark-submit with \"--master spark://host:port\"")
+    }
 
     val conf = new SparkConf()
     val driverArgs = new ClientArguments(args)
