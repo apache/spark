@@ -47,7 +47,7 @@ trait SQLConf {
    * Defaults to false as this feature is currently experimental.
    */
   private[spark] def codegenEnabled: Boolean =
-    if (get("spark.sql.codegen", "true") == "true") true else false
+    if (get("spark.sql.codegen", "false") == "true") true else false
 
   /**
    * Upper bound on the sizes (in bytes) of the tables qualified for the auto conversion to
