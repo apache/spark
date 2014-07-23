@@ -268,14 +268,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
   override def isReady(): Boolean = {
     if (sufficientResourcesRegistered) {
-      logInfo("SchedulerBackend is ready for scheduling beginning" +
-        ", total expected resources: " + totalExpectedResources.get() +
-        ", minRegisteredResourcesRatio: " + minRegisteredRatio)
+      logInfo("SchedulerBackend is ready for scheduling beginning, total expected resources: " +
+        s"$totalExpectedResources, minRegisteredResourcesRatio: $minRegisteredRatio")
       return true
     }
     if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTime) {
       logInfo("SchedulerBackend is ready for scheduling beginning after waiting " +
-        "maxRegisteredResourcesWaitingTime(ms): " + maxRegisteredWaitingTime)
+        s"maxRegisteredResourcesWaitingTime: $maxRegisteredWaitingTime(ms)")
       return true
     }
     false
