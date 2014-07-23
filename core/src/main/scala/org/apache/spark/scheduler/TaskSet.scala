@@ -30,15 +30,10 @@ private[spark] class TaskSet(
     val jobId: Int,
     val properties: Properties) {
     val id: String = stageId + "." + attempt
-    val DEFAULT_PRIORITY: Int = 0
 
-  val priority:Int = {
-    if(properties != null){
-      properties.getProperty("spark.scheduler.priority", "0").toInt
-    }else{
-      DEFAULT_PRIORITY
-    }
-  }
+  val priority = if(properties != null){
+    properties.getProperty("spark.scheduler.priority", "0").toInt
+  } else 0
 
   def kill(interruptThread: Boolean) {
     tasks.foreach(_.kill(interruptThread))
