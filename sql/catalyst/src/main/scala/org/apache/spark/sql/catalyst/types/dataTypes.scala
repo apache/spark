@@ -23,18 +23,12 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag, runtimeMirror}
 import scala.util.parsing.combinator.RegexParsers
 
+import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.util.Utils
 
 /**
- * A JVM-global lock that should be used to prevent thread safety issues when using things in
- * scala.reflect.*.  Note that Scala Reflection API is made thread-safe in 2.11, but not yet for
- * 2.10.* builds.  See SI-6240 for more details.
- */
-protected[catalyst] object ScalaReflectionLock
-
-/**
- * Utility functions for working with DataTypes
+ * Utility functions for working with DataTypes.
  */
 object DataType extends RegexParsers {
   protected lazy val primitiveType: Parser[DataType] =

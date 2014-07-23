@@ -180,6 +180,7 @@ class GenericRow(protected[catalyst] val values: Array[Any]) extends Row {
     values(i).asInstanceOf[String]
   }
 
+  // Custom hashCode function that matches the efficient code generated version.
   override def hashCode(): Int = {
     var result: Int = 37
 

@@ -47,15 +47,16 @@ case class Generate(
     }
   }
 
-  override def output =
+  // This must be a val since the generator output expr ids are not preserved by serialization.
+  override val output =
     if (join) child.output ++ generatorOutput else generatorOutput
+
+  val boundGenerator = BindReferences.bindReference(generator, child.output)
 
   /** Codegenned rows are not serializable... */
   override val codegenEnabled = false
 
   override def execute() = {
-    val boundGenerator = BindReferences.bindReference(generator, child.output)
-
     if (join) {
       child.execute().mapPartitions { iter =>
         val nullValues = Seq.fill(generator.output.size)(Literal(null))

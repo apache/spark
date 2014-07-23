@@ -32,13 +32,13 @@ case class TestData(a: Int, b: String)
 class HiveQuerySuite extends HiveComparisonTest {
 
   createQueryTest("single case",
-    """SELECT case when true then 1 else 2 end FROM src""")
+    """SELECT case when true then 1 else 2 end FROM src LIMIT 1""")
 
   createQueryTest("double case",
-    """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else 2 end FROM src""")
+    """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else 2 end FROM src LIMIT 1""")
 
   createQueryTest("case else null",
-    """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else null end FROM src""")
+    """SELECT case when 1 = 2 then 1 when 2 = 2 then 3 else null end FROM src LIMIT 1""")
 
   test("CREATE TABLE AS runs once") {
     hql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
