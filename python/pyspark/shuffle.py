@@ -182,7 +182,8 @@ class ExternalMerger(Merger):
     499950000
     """
 
-    TOTAL_PARTITIONS = 4096
+    # the max total partitions created recursively
+    MAX_TOTAL_PARTITIONS = 4096
 
     def __init__(self, aggregator, memory_limit=512, serializer=None,
             localdirs=None, scale=1, partitions=64, batch=10000):
@@ -196,7 +197,7 @@ class ExternalMerger(Merger):
         self.partitions = partitions
         # check the memory after # of items merged
         self.batch = batch
-        # scale is used to scale down the hash of key for recursive hash map,
+        # scale is used to scale down the hash of key for recursive hash map
         self.scale = scale
         # unpartitioned merged data
         self.data = {}
@@ -362,7 +363,7 @@ class ExternalMerger(Merger):
                                         False)
 
                     # limit the total partitions
-                    if (self.scale * self.partitions < self.TOTAL_PARTITIONS
+                    if (self.scale * self.partitions < self.MAX_TOTAL_PARTITIONS
                             and j < self.spills - 1
                             and get_used_memory() > hard_limit):
                         self.data.clear() # will read from disk again
