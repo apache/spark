@@ -19,15 +19,15 @@ package org.apache.spark.sql
 
 import org.scalatest.FunSuite
 
-class SchemaSuite extends FunSuite {
+class DataTypeSuite extends FunSuite {
 
-  test("constructing an ArrayType") {
+  test("construct an ArrayType") {
     val array = ArrayType(StringType)
 
     assert(ArrayType(StringType, false) === array)
   }
 
-  test("extracting fields from a StructType") {
+  test("extract fields from a StructType") {
     val struct = StructType(
       StructField("a", IntegerType, true) ::
       StructField("b", LongType, false) ::
@@ -36,14 +36,17 @@ class SchemaSuite extends FunSuite {
 
     assert(StructField("b", LongType, false) === struct("b"))
 
-    assert(struct("e") === null)
+    intercept[IllegalArgumentException] {
+      struct("e")
+    }
 
     val expectedStruct = StructType(
       StructField("b", LongType, false) ::
       StructField("d", FloatType, true) :: Nil)
 
     assert(expectedStruct === struct(Set("b", "d")))
-    // struct does not have a field called e. So e is ignored.
-    assert(expectedStruct === struct(Set("b", "d", "e")))
+    intercept[IllegalArgumentException] {
+      struct(Set("b", "d", "e", "f"))
+    }
   }
 }

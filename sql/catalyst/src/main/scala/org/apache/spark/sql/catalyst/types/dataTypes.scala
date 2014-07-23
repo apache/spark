@@ -296,11 +296,18 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   require(StructType.validateFields(fields), "Found fields with the same name.")
 
   /**
+   * Returns all field names in a [[Seq]].
+   */
+  lazy val fieldNames: Seq[String] = fields.map(_.name)
+  private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
+
+  /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
    * have a name matching the given name, `null` will be returned.
    */
   def apply(name: String): StructField = {
-    fields.find(f => f.name == name).orNull
+    fields.find(f => f.name == name).getOrElse(
+      throw new IllegalArgumentException(s"Field ${name} does not exist."))
   }
 
   /**
@@ -308,6 +315,11 @@ case class StructType(fields: Seq[StructField]) extends DataType {
    * Those names which do not have matching fields will be ignored.
    */
   def apply(names: Set[String]): StructType = {
+    val nonExistFields = names -- fieldNamesSet
+    if (!nonExistFields.isEmpty) {
+      throw new IllegalArgumentException(
+        s"Field ${nonExistFields.mkString(",")} does not exist.")
+    }
     StructType(fields.filter(f => names.contains(f.name)))
   }
 
