@@ -586,8 +586,9 @@ To start the JDBC server, run the following in the Spark directory:
 
     ./sbin/start-thriftserver.sh
 
-The default port the server listens on is 10000.  Now you can use beeline to test the Thrift JDBC
-server:
+The default port the server listens on is 10000.  You may run
+`./sbin/start-thriftserver.sh --help` for a complete list of all available
+options.  Now you can use beeline to test the Thrift JDBC server:
 
     ./bin/beeline
 
@@ -765,3 +766,5 @@ To start the Spark SQL CLI, run the following in the Spark directory:
     ./bin/spark-sql
 
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
+You may run `./bin/spark-sql --help` for a complete list of all available
+options.
