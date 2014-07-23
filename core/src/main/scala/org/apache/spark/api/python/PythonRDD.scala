@@ -533,9 +533,9 @@ private[spark] object PythonRDD {
     if (str == null) {
       dataOut.writeInt(SpecialLengths.NULL)
     } else {
-        val bytes = str.getBytes(UTF8)
-        dataOut.writeInt(bytes.length)
-        dataOut.write(bytes)
+      val bytes = str.getBytes(UTF8)
+      dataOut.writeInt(bytes.length)
+      dataOut.write(bytes)
     }
   }
 
