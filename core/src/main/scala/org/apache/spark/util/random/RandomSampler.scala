@@ -106,3 +106,28 @@ class PoissonSampler[T](mean: Double) extends RandomSampler[T, T] {
 
   override def clone = new PoissonSampler[T](mean)
 }
+
+/**
+ * :: DeveloperApi ::
+ * A sampler selects items based on their importance scores defined in the keys.
+ *
+ * The importance score should be within range `[0, 1]`. Items with scores less than or equal to 0
+ * would never get selected, while items with scores greater than or equal to 1 would always get
+ * selected.
+ *
+ * @param ratio sampling probability
+ * @tparam T item type
+ */
+@DeveloperApi
+class ImportanceSampler[T](ratio: Double) extends RandomSampler[(Double, T), (Double, T)] {
+
+  private[random] var rng: Random = new XORShiftRandom
+
+  override def setSeed(seed: Long) = rng.setSeed(seed)
+
+  override def sample(items: Iterator[(Double, T)]): Iterator[(Double, T)] = {
+    items.filter(item => rng.nextDouble() < ratio)
+  }
+
+  override def clone = new ImportanceSampler[T](ratio)
+}

@@ -19,7 +19,11 @@ package org.apache.spark
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-import scala.reflect.ClassTag
+import org.apache.spark.util.random.{XORShiftRandom, SamplingUtils}
+
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.{ClassTag, classTag}
+import scala.util.hashing.byteswap32
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
@@ -108,21 +112,84 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   // An array of upper bounds for the first (partitions - 1) partitions
   private var rangeBounds: Array[K] = {
     if (partitions == 1) {
-      Array()
+      Array.empty
     } else {
-      val rddSize = rdd.count()
-      val maxSampleSize = partitions * 20.0
-      val frac = math.min(maxSampleSize / math.max(rddSize, 1), 1.0)
-      val rddSample = rdd.sample(false, frac, 1).map(_._1).collect().sorted
-      if (rddSample.length == 0) {
-        Array()
+      // This is the sample size we need to have roughly balanced output partitions.
+      val sampleSize = 20.0 * partitions
+      // Assume the input partitions are roughly balanced and over-sample a little bit.
+      val sampleSizePerPartition = math.ceil(5.0 * sampleSize / rdd.partitions.size).toInt
+      val shift = rdd.id
+      val classTagK = classTag[K]
+      val sketch = rdd.mapPartitionsWithIndex { (idx, iter) =>
+        val seed = byteswap32(idx + shift)
+        val (sample, n) = SamplingUtils.reservoirSampleAndCount(
+          iter.map(_._1), sampleSizePerPartition, seed)(classTagK)
+        Iterator((idx, n, sample))
+      }.collect()
+      var numItems = 0L
+      sketch.foreach { case (_, n, _) =>
+        numItems += n
+      }
+      if (numItems == 0L) {
+        Array.empty
       } else {
-        val bounds = new Array[K](partitions - 1)
-        for (i <- 0 until partitions - 1) {
-          val index = (rddSample.length - 1) * (i + 1) / partitions
-          bounds(i) = rddSample(index)
+        // If a partition contains much more than the average number of items, we re-sample from it
+        // to ensure that enough items are collected from that partition.
+        val fraction = math.min(sampleSize / math.max(numItems, 1L), 1.0)
+        val candidates = ArrayBuffer.empty[(K, Float)]
+        val imbalancedPartitions = ArrayBuffer.empty[Int]
+        sketch.foreach { case (idx, n, sample) =>
+          if (fraction * n > sampleSizePerPartition) {
+            imbalancedPartitions += idx
+          } else {
+            // The weight is 1 over the sampling probability.
+            val weight = (n.toDouble / sample.size).toFloat
+            sample.foreach { key =>
+              candidates += ((key, weight))
+            }
+          }
         }
-        bounds
+        if (imbalancedPartitions.nonEmpty) {
+          val sampleFunc: (TaskContext, Iterator[Product2[K, V]]) => Array[K] = { (context, iter) =>
+            val random = new XORShiftRandom(byteswap32(context.partitionId - shift))
+            iter.map(_._1).filter(t => random.nextDouble() < fraction).toArray
+          }
+          val weight = (1.0 / fraction).toFloat
+          val resultHandler: (Int, Array[K]) => Unit = { (index, sample) =>
+            sample.foreach { key =>
+              candidates += ((key, weight))
+            }
+          }
+          rdd.context.runJob(
+            rdd, sampleFunc, imbalancedPartitions, allowLocal = false, resultHandler)
+        }
+        var sumWeights: Double = 0.0
+        candidates.foreach { case (_, weight) =>
+          sumWeights += weight
+        }
+        val step = sumWeights / partitions
+        var cumWeight = 0.0
+        var target = step
+        val bounds = ArrayBuffer.empty[K]
+        val sorted = candidates.sortBy(_._1)
+        var i = 0
+        var j = 0
+        var previousBound = Option.empty[K]
+        while ((i < sorted.length) && (j < partitions - 1)) {
+          val (key, weight) = sorted(i)
+          cumWeight += weight
+          if (cumWeight > target) {
+            // Skip duplicate values.
+            if (previousBound.isEmpty || ordering.gt(key, previousBound.get)) {
+              bounds += key
+              target += step
+              j += 1
+              previousBound = Some(key)
+            }
+          }
+          i += 1
+        }
+        bounds.toArray
       }
     }
   }
