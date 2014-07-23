@@ -76,7 +76,7 @@ private[spark] class SparkUI(
     }
   }
 
-  /** Set the app name for this UI. */
+  /** Set the app name for this UI. The maximum length of the app name is 255. */
   def setAppName(name: String) {
     appName = name
   }
