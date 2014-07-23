@@ -22,7 +22,8 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * Stores configuration options for DecisionTree construction.
- * @param maxDepth maximum depth of the tree
+ * @param maxDepth Maximum depth of the tree.
+ *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
  * @param maxBins maximum number of bins used for splitting features
  * @param quantileStrategy algorithm for calculating quantiles
  * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is

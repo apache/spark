@@ -25,7 +25,8 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  * :: Experimental ::
  * Stores all the configuration options for DecisionTreeClassifier construction
  * @param impurity criterion used for information gain calculation (e.g., Gini or Entropy)
- * @param maxDepth maximum depth of the tree
+ * @param maxDepth Maximum depth of the tree.
+ *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
  * @param maxBins maximum number of bins used for splitting features
  * @param quantileStrategy algorithm for calculating quantiles
  * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
@@ -34,7 +35,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 @Experimental
 class DTClassifierParams (
     var impurity: ClassificationImpurity = Gini,
-    maxDepth: Int = 5,
+    maxDepth: Int = 4,
     maxBins: Int = 100,
     quantileStrategy: QuantileStrategy = Sort,
     maxMemoryInMB: Int = 128)

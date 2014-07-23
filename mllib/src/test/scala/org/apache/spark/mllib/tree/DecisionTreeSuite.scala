@@ -37,10 +37,10 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   }
 
   private val defaultClassifierParams =
-    new DTClassifierParams(Gini, maxDepth=3, maxBins=100)
+    new DTClassifierParams(Gini, maxDepth = 2, maxBins = 100)
 
   private val defaultRegressorParams =
-    new DTRegressorParams(Variance, maxDepth=3, maxBins=100)
+    new DTRegressorParams(Variance, maxDepth = 2, maxBins = 100)
 
   test("split and bin calculation") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
@@ -636,7 +636,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val dtParams = defaultClassifierParams
     dtParams.impurity = Entropy
-    dtParams.maxDepth = 5
+    dtParams.maxDepth = 4
     val dtLearner = new DecisionTreeClassifier(dtParams)
     val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
 
@@ -660,7 +660,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(datasetInfo.isMulticlass)
 
     val dtParams = defaultClassifierParams
-    dtParams.maxDepth = 5
+    dtParams.maxDepth = 4
     val dtLearner = new DecisionTreeClassifier(dtParams)
     val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
     val bestSplits = dtLearner.findBestSplits(rdd, datasetInfo, new Array(31), 0,
@@ -686,7 +686,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(datasetInfo.isMulticlass)
 
     val dtParams = defaultClassifierParams
-    dtParams.maxDepth = 5
+    dtParams.maxDepth = 4
     val dtLearner = new DecisionTreeClassifier(dtParams)
     val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
 
@@ -712,7 +712,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(datasetInfo.isMulticlass)
 
     val dtParams = defaultClassifierParams
-    dtParams.maxDepth = 5
+    dtParams.maxDepth = 4
     val dtLearner = new DecisionTreeClassifier(dtParams)
     val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
 

@@ -63,7 +63,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     // depth of the decision tree
     val maxDepth = params.maxDepth
     // the max number of nodes possible given the depth of the tree
-    val maxNumNodes = math.pow(2, maxDepth).toInt - 1
+    val maxNumNodes = math.pow(2, maxDepth + 1).toInt - 1
     // Initialize an array to hold filters applied to points for each node.
     val filters = new Array[List[Filter]](maxNumNodes)
     // The filter at the top node is an empty list.
@@ -99,7 +99,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
 
     var level = 0
     var break = false
-    while (level < maxDepth && !break) {
+    while (level <= maxDepth && !break) {
 
       logDebug("#####################################")
       logDebug("level = " + level)
@@ -238,7 +238,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     val split = nodeSplitStats._1
     val stats = nodeSplitStats._2
     val nodeIndex = math.pow(2, level).toInt - 1 + index
-    val isLeaf = (stats.gain <= 0) || (level == params.maxDepth - 1)
+    val isLeaf = (stats.gain <= 0) || (level == params.maxDepth)
     val node = new Node(nodeIndex, stats.predict, isLeaf, Some(split), None, None, Some(stats))
     logDebug("Node = " + node)
     nodes(nodeIndex) = node
@@ -259,7 +259,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     while (i <= 1) {
      // Calculate the index of the node from the node level and the index at the current level.
       val nodeIndex = math.pow(2, level + 1).toInt - 1 + 2 * index + i
-      if (level < maxDepth - 1) {
+      if (level < maxDepth) {
         val impurity = if (i == 0) {
           nodeSplitStats._2.leftImpurity
         } else {

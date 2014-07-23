@@ -23,7 +23,8 @@ import org.apache.spark.mllib.tree.impurity.{RegressionImpurity, Variance}
 /**
  * :: Experimental ::
  * Stores all the configuration options for DecisionTreeRegressor construction
- * @param maxDepth maximum depth of the tree
+ * @param maxDepth Maximum depth of the tree.
+ *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
  * @param maxBins maximum number of bins used for splitting features
  * @param quantileStrategy algorithm for calculating quantiles
  * @param maxMemoryInMB maximum memory in MB allocated to histogram aggregation. Default value is
@@ -33,7 +34,7 @@ import org.apache.spark.mllib.tree.impurity.{RegressionImpurity, Variance}
 @Experimental
 class DTRegressorParams (
     var impurity: RegressionImpurity = Variance,
-    maxDepth: Int = 5,
+    maxDepth: Int = 4,
     maxBins: Int = 100,
     quantileStrategy: QuantileStrategy.QuantileStrategy = QuantileStrategy.Sort,
     maxMemoryInMB: Int = 128)

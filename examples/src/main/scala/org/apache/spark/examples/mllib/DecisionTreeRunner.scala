@@ -48,7 +48,7 @@ object DecisionTreeRunner {
       dataFormat: String = null,
       algo: String = "classification",
       impurity: Option[String] = None,
-      maxDepth: Int = 5,
+      maxDepth: Int = 4,
       maxBins: Int = 100,
       fracTest: Double = 0.2)
 
