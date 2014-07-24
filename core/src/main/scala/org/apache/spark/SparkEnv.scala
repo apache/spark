@@ -71,10 +71,6 @@ class SparkEnv (
   // All accesses should be manually synchronized
   val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 
-  // A mapping of thread ID to amount of memory, in bytes, used for unrolling a block
-  // All accesses should be manually synchronized
-  val unrollMemoryMap = mutable.HashMap[Long, Long]()
-
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation

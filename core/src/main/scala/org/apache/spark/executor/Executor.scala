@@ -266,11 +266,13 @@ private[spark] class Executor(
           }
         }
       } finally {
-        val threadId = Thread.currentThread().getId
+        // Release memory used by this thread for shuffles
         val shuffleMemoryMap = env.shuffleMemoryMap
-        val unrollMemoryMap = env.unrollMemoryMap
-        shuffleMemoryMap.synchronized { shuffleMemoryMap.remove(threadId) }
-        unrollMemoryMap.synchronized { unrollMemoryMap.remove(threadId) }
+        shuffleMemoryMap.synchronized {
+          shuffleMemoryMap.remove(Thread.currentThread().getId)
+        }
+        // Release memory used by this thread for unrolling blocks
+        env.blockManager.memoryStore.releaseUnrollMemory()
         runningTasks.remove(taskId)
       }
     }
