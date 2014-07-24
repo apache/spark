@@ -295,7 +295,7 @@ class RDD(object):
         """
         def func(split, iterator):
             return imap(f, iterator)
-        return PipelinedRDD(self, func, preservesPartitioning)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def flatMap(self, f, preservesPartitioning=False):
         """
@@ -1052,7 +1052,7 @@ class RDD(object):
                 if not isinstance(x, basestring):
                     x = unicode(x)
                 yield x.encode("utf-8")
-        keyed = PipelinedRDD(self, func)
+        keyed = self.mapPartitionsWithIndex(func)
         keyed._bypass_serializer = True
         keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
 

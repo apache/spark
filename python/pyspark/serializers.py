@@ -66,7 +66,7 @@ import marshal
 import struct
 import sys
 from pyspark import cloudpickle
-
+import mypickle
 
 __all__ = ["PickleSerializer", "MarshalSerializer"]
 
@@ -277,10 +277,27 @@ class PickleSerializer(FramedSerializer):
     not be as fast as more specialized serializers.
     """
 
-    def dumps(self, obj):
-        return cPickle.dumps(obj, 2)
+    def __init__(self):
+        FramedSerializer.__init__(self)
+        self.failed = False
 
-    loads = cPickle.loads
+    def dumps(self, obj):
+        if self.failed:
+            return mypickle.dumps(obj)
+        try:
+            return cPickle.dumps(obj, 2)
+        except Exception:
+            self.failed = True
+            return mypickle.dumps(obj)
+
+    def loads(self, obj):
+        if self.failed:
+            return mypickle.loads(obj)
+        try:
+            return cPickle.loads(obj)
+        except Exception:
+            self.failed = True
+            return mypickle.loads(obj)
 
 
 class CloudPickleSerializer(PickleSerializer):
