@@ -64,6 +64,13 @@ private[spark] class EventLoggingListener(
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
   /**
+   * Return only the unique application directory without the base directory.
+   */
+  def getApplicationLogDir(): String = {
+    name
+  }
+
+  /**
    * Begin logging events.
    * If compression is used, log a file that indicates which compression library is used.
    */

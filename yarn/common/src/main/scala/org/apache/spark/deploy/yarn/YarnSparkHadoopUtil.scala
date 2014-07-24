@@ -30,6 +30,9 @@ import org.apache.hadoop.util.StringInterner
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.conf.Configuration
+
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
@@ -129,6 +132,19 @@ object YarnSparkHadoopUtil {
       "%([A-Za-z_][A-Za-z0-9_]*?)%"
     } else {
       "\\$([A-Za-z_][A-Za-z0-9_]*)"
+    }
+  }
+
+  def getUIHistoryAddress(sc: SparkContext, conf: SparkConf) : String = {
+    val eventLogDir = sc.eventLogger match {
+      case Some(logger) => logger.getApplicationLogDir()
+      case None => ""
+    }
+    val historyServerAddress = conf.get("spark.yarn.historyServer.address", "")
+    if (historyServerAddress != "" && eventLogDir != "") {
+      historyServerAddress + HistoryServer.UI_PATH_PREFIX + s"/$eventLogDir"
+    } else {
+      ""
     }
   }
 

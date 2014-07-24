@@ -59,6 +59,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
   private var yarnAllocator: YarnAllocationHandler = _
   private var isFinished: Boolean = false
   private var uiAddress: String = _
+  private var uiHistoryAddress: String = _
   private val maxAppAttempts: Int = conf.getInt(
     YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)
   private var isLastAMRetry: Boolean = true
@@ -216,6 +217,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
         if (sparkContext != null) {
           uiAddress = sparkContext.ui.appUIHostPort
+          uiHistoryAddress = YarnSparkHadoopUtil.getUIHistoryAddress(sparkContext, sparkConf)
           this.yarnAllocator = YarnAllocationHandler.newAllocator(
             yarnConf,
             amClient,
@@ -312,8 +314,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
       logInfo("Unregistering ApplicationMaster with " + status)
       if (registered) {
-        val trackingUrl = sparkConf.get("spark.yarn.historyServer.address", "")
-        amClient.unregisterApplicationMaster(status, diagnostics, trackingUrl)
+        amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
       }
     }
   }

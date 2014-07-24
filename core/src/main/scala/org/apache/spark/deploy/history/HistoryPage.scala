@@ -75,7 +75,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     "Last Updated")
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    val uiAddress = "/history/" + info.id
+    val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
     val startTime = UIUtils.formatDate(info.startTime)
     val endTime = UIUtils.formatDate(info.endTime)
     val duration = UIUtils.formatDuration(info.endTime - info.startTime)
