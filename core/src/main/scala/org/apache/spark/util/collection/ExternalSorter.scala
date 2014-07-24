@@ -501,8 +501,13 @@ private[spark] class ExternalSorter[K, V, C](
 
     /** Construct a stream that only reads from the next batch */
     def nextBatchStream(): InputStream = {
-      batchStreamsRead += 1
-      ByteStreams.limit(bufferedStream, spill.serializerBatchSizes(batchStreamsRead - 1))
+      if (batchStreamsRead < spill.serializerBatchSizes.length) {
+        batchStreamsRead += 1
+        ByteStreams.limit(bufferedStream, spill.serializerBatchSizes(batchStreamsRead - 1))
+      } else {
+        // No more batches left; give an empty stream
+        bufferedStream
+      }
     }
 
     /**
