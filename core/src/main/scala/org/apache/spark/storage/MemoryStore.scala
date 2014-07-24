@@ -128,9 +128,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         PutResult(res.size, res.data, droppedBlocks)
       case Right(iteratorValues) =>
         // Not enough space to unroll this block; drop to disk if applicable
-        logWarning(s"Not enough space to store $blockId in memory! Free memory is ${freeMemory}B.")
+        logWarning(s"Not enough space to store block $blockId in memory! " +
+          s"Free memory is $freeMemory bytes.")
         if (level.useDisk && allowPersistToDisk) {
-          logWarning(s"Persisting $blockId to disk instead.")
+          logWarning(s"Persisting block $blockId to disk instead.")
           val res = blockManager.diskStore.putValues(blockId, iteratorValues, level, returnValues)
           PutResult(res.size, res.data, droppedBlocks)
         } else {
@@ -269,7 +270,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       }
 
     } finally {
-      // Unless we return an iterator that depends on the vector, free up space for other threads
+      // If we return an array, the values returned do not depend on the underlying vector and
+      // we can immediately free up space for other threads. Otherwise, if we return an iterator,
+      // we release the memory claimed by this thread later on when the task finishes.
       if (keepUnrolling) {
         vector = null
         unrollMemoryMap.synchronized {
