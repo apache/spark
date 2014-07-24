@@ -18,7 +18,7 @@
 package org.apache.spark.util.collection
 
 /**
- * An append-only buffer similar to ArrayBuffer, but more efficient for small buffers.
+ * An append-only buffer similar to ArrayBuffer, but more memory-efficient for small buffers.
  * ArrayBuffer always allocates an Object array to store the data, with 16 entries by default,
  * so it has about 80-100 bytes of overhead. In contrast, CompactBuffer can keep up to two
  * elements in fields of the main object, and only allocates an Array[AnyRef] if there are more
@@ -63,13 +63,15 @@ private[spark] class CompactBuffer[T] extends Seq[T] with Serializable {
   }
 
   def += (value: T): CompactBuffer[T] = {
-    growToSize(curSize + 1)
-    val newIndex = curSize - 1
+    val newIndex = curSize
     if (newIndex == 0) {
       element0 = value
+      curSize = 1
     } else if (newIndex == 1) {
       element1 = value
+      curSize = 2
     } else {
+      growToSize(curSize + 1)
       otherElements(newIndex - 2) = value.asInstanceOf[AnyRef]
     }
     this
@@ -91,7 +93,7 @@ private[spark] class CompactBuffer[T] extends Seq[T] with Serializable {
         }
         if (itsSize > 2) {
           // At this point our size is also above 2, so just copy its array directly into ours.
-          // Note that since we added two elements above, the index n this.otherElements that we
+          // Note that since we added two elements above, the index in this.otherElements that we
           // should copy to is oldSize.
           System.arraycopy(itsElements, 0, otherElements, oldSize, itsSize - 2)
         }
