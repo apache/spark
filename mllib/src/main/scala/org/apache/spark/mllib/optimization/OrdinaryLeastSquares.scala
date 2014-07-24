@@ -26,6 +26,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 
 class OrdinaryLeastSquares extends Optimizer with Logging {
+
   @DeveloperApi
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
     OrdinaryLeastSquares.fit(data, initialWeights.size)
@@ -34,16 +35,18 @@ class OrdinaryLeastSquares extends Optimizer with Logging {
 
 @DeveloperApi
 object OrdinaryLeastSquares extends Logging {
+
   def fit(data: RDD[(Double, Vector)], rank: Int): Vector = {
+    // TODO: Compute and return other statistics:
+    // (R-squared, Adjusted R-squared, Std. Error of weights, t-statistics, p-value)
     val featureRows = data.map { case (y, x) => x }
     val response = data.map { case (y, x) => y }.cache()
 
     val featureRowMatrix = new RowMatrix(featureRows)
     val svd = featureRowMatrix.computeSVD(rank, computeU = true)
     val uRdd = svd.U.rows
-    val numPartitions = svd.U.rows.partitions.size
 
-    val yHatRdd = response.repartition(numPartitions).zipPartitions(uRdd, true) {
+    val yHatRdd = response.zipPartitions(uRdd, true) {
       (yIterator, uIterator) => new Iterator[BV[Double]] {
           def hasNext = yIterator.hasNext
           def next = {
