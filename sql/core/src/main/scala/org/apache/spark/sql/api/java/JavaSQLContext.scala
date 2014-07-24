@@ -131,21 +131,44 @@ class JavaSQLContext(val sqlContext: SQLContext) {
     * [[SQLContext#csvRDD]] to parse such files.
     *
     * @param path path to input file
+    * @param schema StructType object to specify schema (field names and types). This will
+    *               override field names if header is used
     * @param delimiter Optional delimiter (default is comma)
     * @param quote Optional quote character or string (default is '"')
-    * @param schema optional StructType object to specify schema (field names and types). This will
-    *               override field names if header is used
     * @param header Optional flag to indicate first line of each file is the header
     *               (default is false)
     */
   def csvFile(
       path: String,
-      delimiter: String = ",",
-      quote: Char = '"',
-      schema: StructType = null,
-      header: Boolean = false): JavaSchemaRDD = {
+      schema: StructType,
+      delimiter: String,
+      quote: Char,
+      header: Boolean): JavaSchemaRDD = {
     val csv = sqlContext.sparkContext.textFile(path)
-    csvRDD(csv, delimiter, quote, schema, header)
+    csvRDD(csv, schema, delimiter, quote, header)
+  }
+
+  /**
+   * Loads a CSV file (according to RFC 4180) and returns the result as a [[JavaSchemaRDD]].
+   * It infers the schema based on the first record.
+   *
+   * NOTE: If there are new line characters inside quoted fields this method may fail to
+   * parse correctly, because the two lines may be in different partitions. Use
+   * [[SQLContext#csvRDD]] to parse such files.
+   *
+   * @param path path to input file
+   * @param delimiter Optional delimiter (default is comma)
+   * @param quote Optional quote character or string (default is '"')
+   * @param header Optional flag to indicate first line of each file is the header
+   *               (default is false)
+   */
+  def csvFile(
+      path: String,
+      delimiter: String,
+      quote: Char,
+      header: Boolean): JavaSchemaRDD = {
+    val csv = sqlContext.sparkContext.textFile(path)
+    csvRDD(csv, delimiter, quote, header)
   }
 
   /**
@@ -156,21 +179,43 @@ class JavaSQLContext(val sqlContext: SQLContext) {
    * [[JavaSparkContext#wholeTextFiles]] to read each file into a single partition.
    *
    * @param csv input RDD
-   * @param delimiter Optional delimiter (default is comma)
-   * @param quote Optional quote character of strig (default is '"')
    * @param schema optional StructType object to specify schema (field names and types). This will
    *               override field names if header is used
+   * @param delimiter Optional delimiter (default is comma)
+   * @param quote Optional quote character of strig (default is '"')
    * @param header Optional flag to indicate first line of each file is the hader
    *               (default is false)
    */
   def csvRDD(
       csv: JavaRDD[String],
-      delimiter: String = ",",
-      quote: Char = '"',
-      schema: StructType = null,
-      header: Boolean = false): JavaSchemaRDD = {
-    new JavaSchemaRDD(sqlContext, CsvRDD.inferSchema(csv, delimiter, quote, schema, header))
+      schema: StructType,
+      delimiter: String,
+      quote: Char,
+      header: Boolean): JavaSchemaRDD = {
+    new JavaSchemaRDD(sqlContext, CsvRDD.inferSchema(csv, delimiter, quote, Some(schema), header))
   }
+
+  /**
+   * Parses an RDD of String as a CSV (according to RFC 4180) and returns the result as a
+   * [[JavaSchemaRDD]]. It infers the schema based on the first record.
+   *
+   * NOTE: If there are new line characters inside quoted fields, use
+   * [[JavaSparkContext#wholeTextFiles]] to read each file into a single partition.
+   *
+   * @param csv input RDD
+   * @param delimiter Optional delimiter (default is comma)
+   * @param quote Optional quote character of strig (default is '"')
+   * @param header Optional flag to indicate first line of each file is the hader
+   *               (default is false)
+   */
+  def csvRDD(
+      csv: JavaRDD[String],
+      delimiter: String,
+      quote: Char,
+      header: Boolean): JavaSchemaRDD = {
+    new JavaSchemaRDD(sqlContext, CsvRDD.inferSchema(csv, delimiter, quote, None, header))
+  }
+
 
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
