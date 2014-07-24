@@ -128,6 +128,9 @@ trait ClientBase extends Logging {
     if (!srcUri.getScheme().equals(dstUri.getScheme())) {
       return false
     }
+    if (srcUri.equals(dstUri) == true) {
+      return true;
+    }
     var srcHost = srcUri.getHost()
     var dstHost = dstUri.getHost()
     if ((srcHost != null) && (dstHost != null)) {
