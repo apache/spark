@@ -451,11 +451,13 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("BinaryComparison") {
-    val row = new GenericRow(Array[Any](1, 2, 3, null))
+    val row = new GenericRow(Array[Any](1, 2, 3, null, 3, null))
     val c1 = 'a.int.at(0)
     val c2 = 'a.int.at(1)
     val c3 = 'a.int.at(2)
     val c4 = 'a.int.at(3)
+    val c5 = 'a.int.at(4)
+    val c6 = 'a.int.at(5)
 
     checkEvaluation(LessThan(c1, c4), null, row)
     checkEvaluation(LessThan(c1, c2), true, row)
@@ -469,6 +471,12 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 >= c2, false, row)
     checkEvaluation(c1 === c2, false, row)
     checkEvaluation(c1 !== c2, true, row)
+    checkEvaluation(c4 <=> c1, false, row)
+    checkEvaluation(c1 <=> c4, false, row)
+    checkEvaluation(c4 <=> c6, true, row)
+    checkEvaluation(c3 <=> c5, true, row)
+    checkEvaluation(Literal(true) <=> Literal(null, BooleanType), false, row)
+    checkEvaluation(Literal(null, BooleanType) <=> Literal(true), false, row)
   }
 
   test("StringComparison") {
