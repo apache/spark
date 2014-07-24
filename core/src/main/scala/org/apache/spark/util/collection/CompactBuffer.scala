@@ -148,8 +148,10 @@ private[spark] class CompactBuffer[T] extends Seq[T] with Serializable {
 }
 
 private[spark] object CompactBuffer {
-  def apply[T](values: T*): CompactBuffer[T] = {
+  def apply[T](): CompactBuffer[T] = new CompactBuffer[T]
+
+  def apply[T](value: T): CompactBuffer[T] = {
     val buf = new CompactBuffer[T]
-    buf ++= values
+    buf += value
   }
 }
