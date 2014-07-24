@@ -58,11 +58,6 @@ export PYTHONPATH=$SPARK_HOME/python/lib/py4j-0.8.1-src.zip:$PYTHONPATH
 export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
 export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
 
-# If IPython options are specified, assume user wants to run IPython
-if [[ -n "$IPYTHON_OPTS" ]]; then
-  IPYTHON=1
-fi
-
 # Build up arguments list manually to preserve quotes and backslashes.
 # We export Spark submit arguments as an environment variable because shell.py must run as a
 # PYTHONSTARTUP script, which does not take in arguments. This is required for IPython notebooks.
@@ -92,9 +87,8 @@ if [[ "$1" =~ \.py$ ]]; then
   echo -e "Use ./bin/spark-submit <python file>\n" 1>&2
   exec $FWDIR/bin/spark-submit "$@"
 else
-  # Only use ipython if no command line arguments were provided [SPARK-1134]
   if [[ "$IPYTHON" = "1" ]]; then
-    exec ipython $IPYTHON_OPTS
+    exec ipython "$@"
   else
     exec "$PYSPARK_PYTHON"
   fi

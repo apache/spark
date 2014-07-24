@@ -44,6 +44,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 
 from py4j.java_collections import ListConverter, MapConverter
+from statsd import DogStatsd as statsd
 
 __all__ = ["RDD"]
 
@@ -1214,13 +1215,21 @@ class RDD(object):
 
         def add_shuffle_key(split, iterator):
 
+            client = statsd()
             buckets = defaultdict(list)
+            record_count = 0
 
             for (k, v) in iterator:
+                record_count += 1
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
+            client.histogram('spark.partition_metric.record_count', record_count)
+            client.histogram('spark.partition_metric.partition_count', len(buckets))
+
             for (split, items) in buckets.iteritems():
+                client.histogram('spark.partition_metric.partition_size', len(items))
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
+
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
         with _JavaStackTrace(self.context) as st:
@@ -1267,7 +1276,9 @@ class RDD(object):
 
         def combineLocally(iterator):
             combiners = {}
+            client = statsd()
             for x in iterator:
+                client.increment('spark.combine_by_key_metric.combine_locally_count', sample_rate=0.001)
                 (k, v) = x
                 if k not in combiners:
                     combiners[k] = createCombiner(v)

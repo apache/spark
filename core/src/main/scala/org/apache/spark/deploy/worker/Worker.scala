@@ -220,6 +220,10 @@ private[spark] class Worker(
     case Heartbeat =>
       logInfo(s"Received heartbeat from driver ${sender.path}")
 
+    case UnregisteredWorker =>
+      logError("Worker is not registered with master. Terminating.")
+      System.exit(1)
+
     case RegisterWorkerFailed(message) =>
       if (!registered) {
         logError("Worker registration failed: " + message)
@@ -234,7 +238,7 @@ private[spark] class Worker(
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
             self, workerId, host,
-            appDesc.sparkHome.map(userSparkHome => new File(userSparkHome)).getOrElse(sparkHome),
+            new File(sparkHome.getAbsolutePath),
             workDir, akkaUrl, conf, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()

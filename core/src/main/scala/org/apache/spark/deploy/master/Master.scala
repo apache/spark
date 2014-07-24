@@ -333,6 +333,7 @@ private[spark] class Master(
           workerInfo.lastHeartbeat = System.currentTimeMillis()
         case None =>
           logWarning("Got heartbeat from unregistered worker " + workerId)
+          sender ! UnregisteredWorker
       }
     }
 

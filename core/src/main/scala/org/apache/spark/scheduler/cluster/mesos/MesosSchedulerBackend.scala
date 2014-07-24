@@ -194,7 +194,11 @@ private[spark] class MesosSchedulerBackend(
           mem >= sc.executorMemory || slaveIdsWithExecutors.contains(slaveId)
         }
 
-        for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer)) {
+        def dataNode(o: Offer) = {
+          o.getHostname.startsWith("dn")
+        }
+
+        for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer) if dataNode(offer)) {
           offerableIndices.put(offer.getSlaveId.getValue, index)
           offerableWorkers += new WorkerOffer(
             offer.getSlaveId.getValue,
@@ -333,4 +337,7 @@ private[spark] class MesosSchedulerBackend(
 
   // TODO: query Mesos for number of cores
   override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
+
+  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
+  }
 }
