@@ -63,10 +63,7 @@ object MimaExcludes {
               "org.apache.spark.storage.MemoryStore.Entry")
           ) ++
           Seq(
-            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.rdd.OrderedRDDFunctions.org$apache$spark$rdd$OrderedRDDFunctions$$"
-                + "ordering")
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.FlumeReceiver.this")
           ) ++
           Seq( // Ignore some private methods in ALS.
             ProblemFilters.exclude[MissingMethodProblem](
