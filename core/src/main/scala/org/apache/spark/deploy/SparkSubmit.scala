@@ -269,6 +269,9 @@ object SparkSubmit {
       sysProps.getOrElseUpdate(k, v)
     }
 
+    // Spark properties included on command line take precedence
+    sysProps ++= args.sparkProperties
+
     (childArgs, childClasspath, sysProps, childMainClass)
   }
 
