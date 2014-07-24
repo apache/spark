@@ -48,9 +48,6 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         // TODO: We could add an env variable here and intercept it in `sc.addJar` that would
         //       truncate filesystem paths similar to what YARN does. For now, we just require
         //       people call `addJar` assuming the jar is in the same directory.
-        val env = sys.env
-        val props = conf.getAll.toMap
-
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
 
         val classPathConf = "spark.driver.extraClassPath"
@@ -63,10 +60,12 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
           cp.split(java.io.File.pathSeparator)
         }
 
-        val javaOptionsConf = "spark.driver.extraJavaOptions"
-        val javaOpts = sys.props.get(javaOptionsConf)
+        val extraJavaOptsConf = "spark.driver.extraJavaOptions"
+        val extraJavaOpts = sys.props.get(extraJavaOptsConf).toSeq
+        val sparkJavaOpts = Utils.sparkJavaOpts(conf)
+        val javaOpts = sparkJavaOpts ++ extraJavaOpts
         val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
-          driverArgs.driverOptions, env, props, classPathEntries, libraryPathEntries, javaOpts)
+          driverArgs.driverOptions, sys.env, classPathEntries, libraryPathEntries, javaOpts)
 
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,

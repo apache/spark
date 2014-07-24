@@ -23,8 +23,7 @@ private[spark] case class Command(
     mainClass: String,
     arguments: Seq[String],
     environment: Map[String, String],
-    sparkProps: Map[String, String],
     classPathEntries: Seq[String],
     libraryPathEntries: Seq[String],
-    extraJavaOptions: Option[String] = None) {
+    javaOpts: Seq[String]) {
 }

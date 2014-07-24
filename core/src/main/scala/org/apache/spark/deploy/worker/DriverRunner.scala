@@ -80,10 +80,9 @@ private[spark] class DriverRunner(
             driverDesc.command.mainClass,
             driverDesc.command.arguments.map(substituteVariables),
             driverDesc.command.environment,
-            driverDesc.command.sparkProps,
             classPath,
             driverDesc.command.libraryPathEntries,
-            driverDesc.command.extraJavaOptions)
+            driverDesc.command.javaOpts)
           val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
             sparkHome.getAbsolutePath)
           launchDriver(command, driverDesc.command.environment, driverDir, driverDesc.supervise)
