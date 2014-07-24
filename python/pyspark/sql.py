@@ -291,6 +291,36 @@ def parse_schema(s):
     else:
         return tuple(parse_schema(part) for part in parts)
 
+def _extend_tree(lines):
+    parts = []
+
+    def subtree(depth):
+        sub = parts
+        while depth > 1:
+            sub = sub[-1]
+            depth -= 1
+        return sub
+
+    for line in lines:
+        subtree(line.count('|')).append([line])
+
+    return parts
+
+def _parse_tree(tree):
+    if isinstance(tree[0], basestring):
+        name, _type = tree[0].split(":")
+        name = name.split(" ")[-1]
+        if len(tree) == 1:
+            return (name, _type.strip())
+        else:
+            return (name, _parse_tree(tree[1:]))
+    else:
+        return tuple(_parse_tree(sub) for sub in tree)
+
+def parse_tree_schema(tree):
+    lines = tree.split("\n")[1:-1]
+    parts = _extend_tree(lines)
+    return _parse_tree(parts)
 
 def create_getter(schema, i):
     cls = create_cls(schema)
@@ -337,6 +367,12 @@ def create_cls(schema):
                 if getattr(self, name) != getattr(x, name):
                     return False
             return True
+
+        def __repr__(self):
+            return ("Row(%s)" % ", ".join("%s=%r" % (k[0], v) 
+                    for k,v in zip(self._schema, self)))
+        def __str__(self):
+            return repr(self)
 
     return Row
 
@@ -510,11 +546,10 @@ class SQLContext:
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
-        >>> srdd2.collect() == [
-        ... {"f1":1, "f2":"row1", "f3":{"field4":11, "field5": None}, "f4":None},
-        ... {"f1":2, "f2":None, "f3":{"field4":22,  "field5": [10, 11]}, "f4":[{"field7": "row2"}]},
-        ... {"f1":None, "f2":"row3", "f3":{"field4":33, "field5": []}, "f4":None}]
-        True
+        >>> srdd2.collect()
+        [Row(f1=1, f2=u'row1', f3={u'field4': 11, u'field5': None}, f4=None), \
+Row(f1=2, f2=None, f3={u'field4': 22, u'field5': [10, 11]}, f4=[{u'field7': u'row2'}]), \
+Row(f1=None, f2=u'row3', f3={u'field4': 33, u'field5': []}, f4=None)]
         """
         jschema_rdd = self._ssql_ctx.jsonFile(path)
         return SchemaRDD(jschema_rdd, self)
@@ -527,11 +562,10 @@ class SQLContext:
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
-        >>> srdd2.collect() == [
-        ... {"f1":1, "f2":"row1", "f3":{"field4":11, "field5": None}, "f4":None},
-        ... {"f1":2, "f2":None, "f3":{"field4":22,  "field5": [10, 11]}, "f4":[{"field7": "row2"}]},
-        ... {"f1":None, "f2":"row3", "f3":{"field4":33, "field5": []}, "f4":None}]
-        True
+        >>> srdd2.collect()
+        [Row(f1=1, f2=u'row1', f3={u'field4': 11, u'field5': None}, f4=None), \
+Row(f1=2, f2=None, f3={u'field4': 22, u'field5': [10, 11]}, f4=[{u'field7': u'row2'}]), \
+Row(f1=None, f2=u'row3', f3={u'field4': 33, u'field5': []}, f4=None)]
         """
         def func(iterator):
             for x in iterator:
@@ -550,9 +584,8 @@ class SQLContext:
         >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
-        >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"},
-        ...                     {"f1" : 3, "f2": "row3"}]
-        True
+        >>> srdd2.collect()
+        [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
         """
         return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
 
@@ -682,7 +715,7 @@ class SchemaRDD(RDD):
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx._sc
         self._jschema_rdd = jschema_rdd
-        self.schema = schema # TODO: fetch schema from jschema_rdd
+        self.schema = schema or parse_tree_schema(jschema_rdd.schemaString())
 
         self.is_cached = False
         self.is_checkpointed = False
@@ -789,17 +822,13 @@ class SchemaRDD(RDD):
         jrdd = self._jschema_rdd.javaToPython()
         rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
         rows = rdd.take(n)
-        if self.schema:
-            cls = create_cls(self.schema)
-            rows = [cls(tuple(r[f[0]] for f in self.schema)) for r in rows]
-        return rows
+        cls = create_cls(self.schema)
+        return [cls(tuple(r[f[0]] for f in self.schema)) for r in rows]
 
     def collect(self):
         jrdd = self._jschema_rdd.javaToPython()
         rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
         rows = rdd.collect()
-        if not self.schema and rows:
-            self.schema = infer_schema(rows[0], True)
         cls = create_cls(self.schema)
         rows = [cls(tuple(r[f[0]] for f in self.schema)) for r in rows]
         return rows
@@ -820,10 +849,7 @@ class SchemaRDD(RDD):
             for i in iter:
                 yield cls(tuple(i[f[0]] for f in schema))
 
-        if self.schema:
-            return rdd.mapPartitions(applySchema)
-        else:
-            return rdd.map(lambda d: Row(d))
+        return rdd.mapPartitions(applySchema)
 
     def mapPartitionsWithIndex(self, f, preserve):
         jrdd = self._jschema_rdd.javaToPython()
