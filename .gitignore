@@ -20,6 +20,7 @@ conf/streaming-env.sh
 conf/log4j.properties
 conf/metrics.properties
 conf/spark-defaults.conf
+conf/hive-site.xml
 docs/_site
 docs/api
 target/
