@@ -154,7 +154,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
             iter.map(_._1).filter(t => random.nextDouble() < fraction).toArray
           }
           val weight = (1.0 / fraction).toFloat
-          val resultHandler: (Int, Array[K]) => Unit = { (index, sample) =>
+          val resultHandler: (Int, Array[K]) => Unit = { (_, sample) =>
             sample.foreach { key =>
               candidates += ((key, weight))
             }
@@ -162,7 +162,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
           rdd.context.runJob(
             rdd, sampleFunc, imbalancedPartitions, allowLocal = false, resultHandler)
         }
-        var sumWeights: Double = 0.0
+        val numCandidates = candidates.size
+        var sumWeights = 0.0
         candidates.foreach { case (_, weight) =>
           sumWeights += weight
         }
@@ -170,12 +171,12 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         var cumWeight = 0.0
         var target = step
         val bounds = ArrayBuffer.empty[K]
-        val sorted = candidates.sortBy(_._1)
+        val orderedCandidates = candidates.sortBy(_._1)
         var i = 0
         var j = 0
         var previousBound = Option.empty[K]
-        while ((i < sorted.length) && (j < partitions - 1)) {
-          val (key, weight) = sorted(i)
+        while ((i < numCandidates) && (j < partitions - 1)) {
+          val (key, weight) = orderedCandidates(i)
           cumWeight += weight
           if (cumWeight > target) {
             // Skip duplicate values.
