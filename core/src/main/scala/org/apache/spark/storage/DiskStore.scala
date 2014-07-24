@@ -55,15 +55,15 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     PutResult(bytes.limit(), Right(bytes.duplicate()))
   }
 
-  override def putValues(
+  override def putArray(
       blockId: BlockId,
       values: Array[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    putValues(blockId, values.toIterator, level, returnValues)
+    putIterator(blockId, values.toIterator, level, returnValues)
   }
 
-  override def putValues(
+  override def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,

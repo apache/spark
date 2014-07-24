@@ -78,14 +78,14 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
-      putValues(blockId, values, level, returnValues = true)
+      putIterator(blockId, values, level, returnValues = true)
     } else {
       val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
   }
 
-  override def putValues(
+  override def putArray(
       blockId: BlockId,
       values: Array[Any],
       level: StorageLevel,
@@ -101,12 +101,12 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def putValues(
+  override def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    putValues(blockId, values, level, returnValues, allowPersistToDisk = true)
+    putIterator(blockId, values, level, returnValues, allowPersistToDisk = true)
   }
 
   /**
@@ -121,7 +121,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * back from disk and attempts to cache it in memory. In this case, we should not persist the
    * block back on disk again, as it is already in disk store.
    */
-  private[storage] def putValues(
+  private[storage] def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
@@ -132,7 +132,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     unrolledValues match {
       case Left(arrayValues) =>
         // Values are fully unrolled in memory, so store them as an array
-        val res = putValues(blockId, arrayValues, level, returnValues)
+        val res = putArray(blockId, arrayValues, level, returnValues)
         droppedBlocks ++= res.droppedBlocks
         PutResult(res.size, res.data, droppedBlocks)
       case Right(iteratorValues) =>
@@ -141,7 +141,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           s"Free memory is $freeMemory bytes.")
         if (level.useDisk && allowPersistToDisk) {
           logWarning(s"Persisting block $blockId to disk instead.")
-          val res = blockManager.diskStore.putValues(blockId, iteratorValues, level, returnValues)
+          val res = blockManager.diskStore.putIterator(blockId, iteratorValues, level, returnValues)
           PutResult(res.size, res.data, droppedBlocks)
         } else {
           PutResult(0, Left(iteratorValues), droppedBlocks)
