@@ -41,8 +41,7 @@ from py4j.java_collections import ListConverter
 # the default ones for Spark if they are not configured by user.
 DEFAULT_CONFIGS = {
     "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
-    "spark.kryo.referenceTracking": False,
-    "spark.serializer.objectStreamReset": 1,
+    "spark.serializer.objectStreamReset": 100,
 }
 
 
