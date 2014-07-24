@@ -24,11 +24,10 @@ import org.apache.spark.annotation.Experimental
  * Enum for selecting the quantile calculation strategy
  */
 @Experimental
-object QuantileStrategy extends Enumeration {
+private[mllib] object QuantileStrategy extends Enumeration {
   type QuantileStrategy = Value
   val Sort, MinMax, ApproxHist = Value
 }
-
 
 /**
  * :: Experimental ::
@@ -37,13 +36,24 @@ object QuantileStrategy extends Enumeration {
 @Experimental
 private[mllib] object QuantileStrategies {
 
+  import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
+
+  /**
+   * Mapping used for strategy names.
+   * If you add a new strategy type, add it here.
+   */
+  val nameToStrategyMap: Map[String, QuantileStrategy] = Map(
+    "sort" -> Sort)
+
   /**
    * Given a string with the name of a quantile strategy, get the QuantileStrategy type.
    */
-  def strategy(strategyName: String): QuantileStrategy.QuantileStrategy = strategyName match {
-    case "sort" => QuantileStrategy.Sort
-    case _ => throw new IllegalArgumentException(
-      s"Bad QuantileStrategy parameter: $strategyName")
+  def strategy(name: String): QuantileStrategy = {
+    if (nameToStrategyMap.contains(name)) {
+      nameToStrategyMap(name)
+    } else {
+      throw new IllegalArgumentException(s"Bad QuantileStrategy parameter: $name")
+    }
   }
 
 }

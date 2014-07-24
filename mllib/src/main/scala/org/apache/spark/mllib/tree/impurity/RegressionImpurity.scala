@@ -36,4 +36,5 @@ private[mllib] trait RegressionImpurity extends Serializable {
    */
   @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
+
 }

@@ -33,7 +33,33 @@ import org.apache.spark.annotation.Experimental
 class DTParams (
     var maxDepth: Int,
     var maxBins: Int,
-    var quantileStrategy: QuantileStrategy.QuantileStrategy,
+    var quantileStrategy: String,
     var maxMemoryInMB: Int) extends Serializable {
+
+  def setMaxDepth(maxDepth: Int) = {
+    this.maxDepth = maxDepth
+  }
+
+  def setMaxBins(maxBins: Int) = {
+    this.maxBins = maxBins
+  }
+
+  def setQuantileStrategy(quantileStrategy: String) = {
+    if (!QuantileStrategies.nameToStrategyMap.contains(quantileStrategy)) {
+      throw new IllegalArgumentException(s"Bad QuantileStrategy parameter: $quantileStrategy")
+    }
+    this.quantileStrategy = quantileStrategy
+  }
+
+  def setMaxMemoryInMB(maxMemoryInMB: Int) = {
+    this.maxMemoryInMB = maxMemoryInMB
+  }
+
+  /**
+   * Get list of supported quantileStrategy options.
+   */
+  def supportedQuantileStrategies(): List[String] = {
+    QuantileStrategies.nameToStrategyMap.keys.toList
+  }
 
 }

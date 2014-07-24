@@ -25,17 +25,15 @@ import org.apache.spark.annotation.Experimental
  * type based on its name.
  */
 @Experimental
-object ClassificationImpurities {
+private[mllib] object ClassificationImpurities {
 
   /**
    * Mapping used for impurity names, used for parsing impurity settings.
    * If you add a new impurity class, add it here.
    */
-  val impurityToNameMap: Map[ClassificationImpurity, String] = Map(
-      Gini -> "gini",
-      Entropy -> "entropy")
-
-  val nameToImpurityMap: Map[String, ClassificationImpurity] = impurityToNameMap.map(_.swap)
+  val nameToImpurityMap: Map[String, ClassificationImpurity] = Map(
+      "gini" -> Gini,
+      "entropy" -> Entropy)
 
   val names: List[String] = nameToImpurityMap.keys.toList
 
@@ -47,19 +45,6 @@ object ClassificationImpurities {
       nameToImpurityMap(name)
     } else {
       throw new IllegalArgumentException(s"Bad impurity parameter for classification: $name")
-    }
-  }
-
-  /**
-   * Given impurity type, return name.
-   */
-  def impurityName(impurity: ClassificationImpurity): String = {
-    if (impurityToNameMap.contains(impurity)) {
-      impurityToNameMap(impurity)
-    } else {
-      throw new IllegalArgumentException(
-        s"ClassificationImpurity type ${impurity.toString}"
-        + " not registered in ClassificationImpurities factory.")
     }
   }
 

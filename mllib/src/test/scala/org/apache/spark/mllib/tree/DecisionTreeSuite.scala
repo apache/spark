@@ -17,10 +17,11 @@
 
 package org.apache.spark.mllib.tree
 
+import scala.collection.JavaConversions._
+
 import org.apache.spark.mllib.rdd.DatasetInfo
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model.Filter
 import org.apache.spark.mllib.tree.model.Split
 import org.apache.spark.mllib.tree.configuration.{FeatureType, DTClassifierParams, DTRegressorParams}
@@ -37,10 +38,10 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
   }
 
   private val defaultClassifierParams =
-    new DTClassifierParams(Gini, maxDepth = 2, maxBins = 100)
+    new DTClassifierParams("gini", maxDepth = 2, maxBins = 100)
 
   private val defaultRegressorParams =
-    new DTRegressorParams(Variance, maxDepth = 2, maxBins = 100)
+    new DTRegressorParams("variance", maxDepth = 2, maxBins = 100)
 
   test("split and bin calculation") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
@@ -519,7 +520,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       numFeatures = getNumFeatures(arr))
 
     val dtParams = defaultClassifierParams
-    dtParams.impurity = Entropy
+    dtParams.impurity = "entropy"
     val dtLearner = new DecisionTreeClassifier(dtParams)
     val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
 
@@ -550,7 +551,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       numFeatures = getNumFeatures(arr))
 
     val dtParams = defaultClassifierParams
-    dtParams.impurity = Entropy
+    dtParams.impurity = "entropy"
     val dtLearner = new DecisionTreeClassifier(dtParams)
     val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
 
@@ -581,7 +582,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       numFeatures = getNumFeatures(arr))
 
     val dtParams = defaultClassifierParams
-    dtParams.impurity = Entropy
+    dtParams.impurity = "entropy"
     val dtLearner = new DecisionTreeClassifier(dtParams)
     val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
 
@@ -635,7 +636,6 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(datasetInfo.isMulticlass)
 
     val dtParams = defaultClassifierParams
-    dtParams.impurity = Entropy
     dtParams.maxDepth = 4
     val dtLearner = new DecisionTreeClassifier(dtParams)
     val (splits, bins) = dtLearner.findSplitsBins(rdd, datasetInfo)
@@ -762,6 +762,14 @@ object DecisionTreeSuite {
       }
     }
     arr
+  }
+
+  def generateCategoricalDataPointsAsList(): (java.util.List[LabeledPoint], DatasetInfo) = {
+    val datasetInfo = new DatasetInfo(
+      numClasses = 2,
+      numFeatures = 2,
+      categoricalFeaturesInfo = Map(0 -> 2, 1 -> 2))
+    (seqAsJavaList(generateCategoricalDataPoints()), datasetInfo)
   }
 
   def generateCategoricalDataPoints(): Array[LabeledPoint] = {

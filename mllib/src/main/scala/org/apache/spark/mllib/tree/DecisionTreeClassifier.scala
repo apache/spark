@@ -22,6 +22,8 @@ import org.apache.spark.Logging
 import org.apache.spark.mllib.rdd.DatasetInfo
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.DTClassifierParams
+import org.apache.spark.mllib.tree.impurity.ClassificationImpurities
+
 //import org.apache.spark.mllib.tree.impurity.{ClassificationImpurity, ClassificationImpurities}
 import org.apache.spark.mllib.tree.model.{InformationGainStats, Bin, DecisionTreeClassifierModel}
 import org.apache.spark.rdd.RDD
@@ -37,7 +39,7 @@ import org.apache.spark.rdd.RDD
 class DecisionTreeClassifier (params: DTClassifierParams)
   extends DecisionTree[DecisionTreeClassifierModel](params) {
 
-  private val impurityFunctor = params.impurity
+  private val impurityFunctor = ClassificationImpurities.impurity(params.impurity)
 
   /**
    * Method to train a decision tree model over an RDD
@@ -45,7 +47,7 @@ class DecisionTreeClassifier (params: DTClassifierParams)
    * @param datasetInfo  Dataset metadata specifying number of classes, features, etc.
    * @return a DecisionTreeClassifierModel that can be used for prediction
    */
-  def train(
+  def run(
       input: RDD[LabeledPoint],
       datasetInfo: DatasetInfo): DecisionTreeClassifierModel = {
 
@@ -538,7 +540,7 @@ object DecisionTreeClassifier extends Serializable with Logging {
       input: RDD[LabeledPoint],
       datasetInfo: DatasetInfo): DecisionTreeClassifierModel = {
     require(datasetInfo.numClasses >= 2)
-    new DecisionTreeClassifier(new DTClassifierParams()).train(input, datasetInfo)
+    new DecisionTreeClassifier(new DTClassifierParams()).run(input, datasetInfo)
   }
 
   /**
@@ -556,7 +558,7 @@ object DecisionTreeClassifier extends Serializable with Logging {
       datasetInfo: DatasetInfo,
       params: DTClassifierParams): DecisionTreeClassifierModel = {
     require(datasetInfo.numClasses >= 2)
-    new DecisionTreeClassifier(params).train(input, datasetInfo)
+    new DecisionTreeClassifier(params).run(input, datasetInfo)
   }
 
 }

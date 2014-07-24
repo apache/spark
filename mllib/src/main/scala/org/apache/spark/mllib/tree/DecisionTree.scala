@@ -23,6 +23,7 @@ import org.apache.spark.mllib.rdd.DatasetInfo
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.DTParams
 import org.apache.spark.mllib.tree.configuration.FeatureType._
+import org.apache.spark.mllib.tree.configuration.QuantileStrategies
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
@@ -36,12 +37,22 @@ import org.apache.spark.util.random.XORShiftRandom
  * @param params The configuration parameters for the tree algorithm.
  */
 @Experimental
-private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected val params: DTParams)
+private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (params: DTParams)
   extends Serializable with Logging {
 
   protected final val InvalidBinIndex = -1
 
-  /**
+  // depth of the decision tree
+  protected val maxDepth: Int = params.maxDepth
+
+  protected val maxBins: Int = params.maxBins
+
+  protected val quantileStrategy: QuantileStrategy.QuantileStrategy =
+    QuantileStrategies.strategy(params.quantileStrategy)
+
+  protected val maxMemoryInMB: Int = params.maxMemoryInMB
+
+    /**
    * Method to train a decision tree model over an RDD
    * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
    * @param datasetInfo  Dataset metadata.
@@ -60,8 +71,6 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     val numBins = bins(0).length
     logDebug("numBins = " + numBins)
 
-    // depth of the decision tree
-    val maxDepth = params.maxDepth
     // the max number of nodes possible given the depth of the tree
     val maxNumNodes = math.pow(2, maxDepth + 1).toInt - 1
     // Initialize an array to hold filters applied to points for each node.
@@ -76,7 +85,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     // Calculate level for single group construction
 
     // Max memory usage for aggregates
-    val maxMemoryUsage = params.maxMemoryInMB * 1024 * 1024
+    val maxMemoryUsage = maxMemoryInMB * 1024 * 1024
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
     val numElementsPerNode = getElementsPerNode(datasetInfo, numBins)
     logDebug("numElementsPerNode = " + numElementsPerNode)
@@ -238,7 +247,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     val split = nodeSplitStats._1
     val stats = nodeSplitStats._2
     val nodeIndex = math.pow(2, level).toInt - 1 + index
-    val isLeaf = (stats.gain <= 0) || (level == params.maxDepth)
+    val isLeaf = (stats.gain <= 0) || (level == maxDepth)
     val node = new Node(nodeIndex, stats.predict, isLeaf, Some(split), None, None, Some(stats))
     logDebug("Node = " + node)
     nodes(nodeIndex) = node
@@ -732,7 +741,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
    *   (b) For regression and binary classification,
    *       and for multiclass classification with a high-arity feature,
    *       there is one split per category.
-   *
+
    * Categorical case (a) features are called unordered features.
    * Other cases are called ordered features.
    *
@@ -751,7 +760,6 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
 
     val numFeatures = datasetInfo.numFeatures
 
-    val maxBins = params.maxBins
     val numBins = if (maxBins <= count) maxBins else count.toInt
     logDebug("numBins = " + numBins)
     val isMulticlass = datasetInfo.isMulticlass
@@ -784,7 +792,7 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (protected va
     val stride: Double = numSamples.toDouble / numBins
     logDebug("stride = " + stride)
 
-    params.quantileStrategy match {
+    quantileStrategy match {
       case QuantileStrategy.Sort =>
         val splits = Array.ofDim[Split](numFeatures, numBins - 1)
         val bins = Array.ofDim[Bin](numFeatures, numBins)

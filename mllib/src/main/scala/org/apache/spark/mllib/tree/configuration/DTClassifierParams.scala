@@ -18,13 +18,12 @@
 package org.apache.spark.mllib.tree.configuration
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.mllib.tree.impurity.{ClassificationImpurity, Gini}
-import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
+import org.apache.spark.mllib.tree.impurity.ClassificationImpurities
 
 /**
  * :: Experimental ::
  * Stores all the configuration options for DecisionTreeClassifier construction
- * @param impurity criterion used for information gain calculation (e.g., Gini or Entropy)
+ * @param impurity criterion used for information gain calculation (e.g., "gini" or "entropy")
  * @param maxDepth Maximum depth of the tree.
  *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
  * @param maxBins maximum number of bins used for splitting features
@@ -34,11 +33,27 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  */
 @Experimental
 class DTClassifierParams (
-    var impurity: ClassificationImpurity = Gini,
+    var impurity: String = "gini",
     maxDepth: Int = 4,
     maxBins: Int = 100,
-    quantileStrategy: QuantileStrategy = Sort,
+    quantileStrategy: String = "sort",
     maxMemoryInMB: Int = 128)
   extends DTParams(maxDepth, maxBins, quantileStrategy, maxMemoryInMB) {
+
+  def setImpurity(impurity: String) = {
+    if (!ClassificationImpurities.nameToImpurityMap.contains(impurity)) {
+      throw new IllegalArgumentException(s"Bad impurity parameter for classification: $impurity")
+    }
+    this.impurity = impurity
+  }
+
+}
+
+object DTClassifierParams {
+
+  /**
+   * List of supported impurity options.
+   */
+  final val supportedImpurities: List[String] = ClassificationImpurities.names
 
 }

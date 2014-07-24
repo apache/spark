@@ -37,7 +37,7 @@ import org.apache.spark.rdd.RDD
 class DecisionTreeRegressor (params: DTRegressorParams)
   extends DecisionTree[DecisionTreeRegressorModel](params) {
 
-  private val impurityFunctor = params.impurity
+  private val impurityFunctor = RegressionImpurities.impurity(params.impurity)
 
   /**
    * Method to train a decision tree model over an RDD
@@ -45,7 +45,7 @@ class DecisionTreeRegressor (params: DTRegressorParams)
    * @param datasetInfo  Dataset metadata specifying number of classes, features, etc.
    * @return a DecisionTreeRegressorModel that can be used for prediction
    */
-  def train(
+  def run(
     input: RDD[LabeledPoint],
     datasetInfo: DatasetInfo): DecisionTreeRegressorModel = {
 
@@ -283,7 +283,7 @@ object DecisionTreeRegressor extends Serializable with Logging {
   def train(
       input: RDD[LabeledPoint],
       datasetInfo: DatasetInfo): DecisionTreeRegressorModel = {
-    new DecisionTreeRegressor(new DTRegressorParams()).train(input, datasetInfo)
+    new DecisionTreeRegressor(new DTRegressorParams()).run(input, datasetInfo)
   }
 
   /**
@@ -300,7 +300,7 @@ object DecisionTreeRegressor extends Serializable with Logging {
       input: RDD[LabeledPoint],
       datasetInfo: DatasetInfo,
       params: DTRegressorParams = new DTRegressorParams()): DecisionTreeRegressorModel = {
-    new DecisionTreeRegressor(params).train(input, datasetInfo)
+    new DecisionTreeRegressor(params).run(input, datasetInfo)
   }
 
 }

@@ -25,16 +25,14 @@ import org.apache.spark.annotation.Experimental
  * type based on its name.
  */
 @Experimental
-object RegressionImpurities {
+private[mllib] object RegressionImpurities {
 
   /**
    * Mapping used for impurity names, used for parsing impurity settings.
    * If you add a new impurity class, add it here.
    */
-  val impurityToNameMap: Map[RegressionImpurity, String] = Map(
-    Variance -> "variance")
-
-  val nameToImpurityMap: Map[String, RegressionImpurity] = impurityToNameMap.map(_.swap)
+  val nameToImpurityMap: Map[String, RegressionImpurity] = Map(
+    "variance" -> Variance)
 
   val names: List[String] = nameToImpurityMap.keys.toList
 
@@ -46,19 +44,6 @@ object RegressionImpurities {
       nameToImpurityMap(name)
     } else {
       throw new IllegalArgumentException(s"Bad impurity parameter for regression: $name")
-    }
-  }
-
-  /**
-   * Given impurity type, return name.
-   */
-  def impurityName(impurity: RegressionImpurity): String = {
-    if (impurityToNameMap.contains(impurity)) {
-      impurityToNameMap(impurity)
-    } else {
-      throw new IllegalArgumentException(
-        s"RegressionImpurity type ${impurity.toString}"
-          + " not registered in RegressionImpurities factory.")
     }
   }
 

@@ -25,7 +25,6 @@ import org.apache.spark.mllib.rdd.DatasetInfo
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTreeClassifier, DecisionTreeRegressor}
 import org.apache.spark.mllib.tree.configuration.{DTClassifierParams, DTRegressorParams}
-import org.apache.spark.mllib.tree.impurity.{ClassificationImpurities, RegressionImpurities}
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -52,10 +51,11 @@ object DecisionTreeRunner {
       maxBins: Int = 100,
       fracTest: Double = 0.2)
 
+  private val defaultCImpurity = new DTClassifierParams().impurity
+  private val defaultRImpurity = new DTRegressorParams().impurity
+
   def main(args: Array[String]) {
     val defaultParams = Params()
-    val defaultCImpurity = ClassificationImpurities.impurityName(new DTClassifierParams().impurity)
-    val defaultRImpurity = RegressionImpurities.impurityName(new DTRegressorParams().impurity)
 
     val parser = new OptionParser[Params]("DecisionTreeRunner") {
       head("DecisionTreeRunner: an example decision tree app.")
@@ -65,9 +65,9 @@ object DecisionTreeRunner {
       opt[String]("impurity")
         .text(
           s"impurity type\n" +
-          s"\tFor classification: ${ClassificationImpurities.names.mkString(",")}\n" +
+          s"\tFor classification: ${DTClassifierParams.supportedImpurities.mkString(",")}\n" +
           s"\t  default: $defaultCImpurity" +
-          s"\tFor regression: ${RegressionImpurities.names.mkString(",")}\n" +
+          s"\tFor regression: ${DTRegressorParams.supportedImpurities.mkString(",")}\n" +
           s"\t  default: $defaultRImpurity")
         .action((x, c) => c.copy(impurity = Some(x)))
       opt[Int]("maxDepth")
@@ -90,14 +90,6 @@ object DecisionTreeRunner {
       checkConfig { params =>
         if (!List("classification", "regression").contains(params.algo)) {
           failure(s"Did not recognize Algo: ${params.algo}")
-        }
-        if (params.impurity != None) {
-          if ((params.algo == "classification" &&
-                !ClassificationImpurities.names.contains(params.impurity)) ||
-              (params.algo == "regression" &&
-                !RegressionImpurities.names.contains(params.impurity))) {
-            failure(s"Algo ${params.algo} is not compatible with impurity ${params.impurity}.")
-          }
         }
         if (params.fracTest < 0 || params.fracTest > 1) {
           failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1].")
@@ -167,7 +159,7 @@ object DecisionTreeRunner {
     val numTraining = training.count()
     val numTest = test.count()
 
-    println(s"numTraining = $numTraining, numTest = $numTest.")
+    println(s"numTraining = $numTraining, numTest = $numTest")
 
     examples.unpersist(blocking = false)
 
@@ -179,27 +171,27 @@ object DecisionTreeRunner {
         val dtParams = DecisionTreeClassifier.defaultParams()
         dtParams.maxDepth = params.maxDepth
         dtParams.maxBins = params.maxBins
-        if (params.impurity != None) {
-          dtParams.impurity = ClassificationImpurities.impurity(params.impurity.get)
+        if (params.impurity == None) {
+          dtParams.impurity = defaultCImpurity
         }
         val dtLearner = new DecisionTreeClassifier(dtParams)
-        val model = dtLearner.train(training, datasetInfo)
+        val model = dtLearner.run(training, datasetInfo)
         model.print()
         val accuracy = accuracyScore(model, test)
-        println(s"Test accuracy = $accuracy.")
+        println(s"Test accuracy = $accuracy")
       }
       case "regression" => {
         val dtParams = DecisionTreeRegressor.defaultParams()
         dtParams.maxDepth = params.maxDepth
         dtParams.maxBins = params.maxBins
-        if (params.impurity != None) {
-          dtParams.impurity = RegressionImpurities.impurity(params.impurity.get)
+        if (params.impurity == None) {
+          dtParams.impurity = defaultRImpurity
         }
         val dtLearner = new DecisionTreeRegressor(dtParams)
-        val model = dtLearner.train(training, datasetInfo)
+        val model = dtLearner.run(training, datasetInfo)
         model.print()
         val mse = meanSquaredError(model, test)
-        println(s"Test mean squared error = $mse.")
+        println(s"Test mean squared error = $mse")
       }
       case _ => {
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
