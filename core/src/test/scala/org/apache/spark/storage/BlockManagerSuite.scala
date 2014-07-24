@@ -107,6 +107,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     }
 
     System.clearProperty("spark.test.useCompressedOops")
+
+    // This is normally cleared when a task ends, but since we do not
+    // mock the entire job here, we have to manually clear this ourselves
+    SparkEnv.get.unrollMemoryMap.clear()
   }
 
   test("StorageLevel object caching") {
@@ -905,7 +909,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
         case _ => fail("Updated block is neither list1 nor list3")
       }
     }
-    assert(store.get("list3").isDefined, "list3 was not in store")
+    assert(store.memoryStore.contains("list3"), "list3 was not in memory store")
 
     // 2 updated blocks - list2 is kicked out of memory (but put on disk) while list4 is added
     val updatedBlocks4 =
@@ -918,19 +922,27 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
         case _ => fail("Updated block is neither list2 nor list4")
       }
     }
-    assert(store.get("list4").isDefined, "list4 was not in store")
+    assert(store.diskStore.contains("list2"), "list2 was not in disk store")
+    assert(store.memoryStore.contains("list4"), "list4 was not in memory store")
 
-    // 1 updated block - list5 is too big to fit in store, but list3 is kicked out in the process
+    // 0 updated blocks - list5 is too big to fit in store
     val updatedBlocks5 =
       store.putIterator("list5", bigList.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    assert(updatedBlocks5.size === 1)
-    assert(updatedBlocks5.head._1 === TestBlockId("list3"))
-    assert(updatedBlocks5.head._2.storageLevel === StorageLevel.NONE)
-    assert(!store.get("list1").isDefined, "list1 was in store")
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(!store.get("list3").isDefined, "list3 was in store")
-    assert(store.get("list4").isDefined, "list4 was not in store")
-    assert(!store.get("list5").isDefined, "list5 was in store")
+    assert(updatedBlocks5.size === 0)
+
+    // memory store contains only list3 and list4
+    assert(!store.memoryStore.contains("list1"), "list1 was in memory store")
+    assert(!store.memoryStore.contains("list2"), "list2 was in memory store")
+    assert(store.memoryStore.contains("list3"), "list3 was not in memory store")
+    assert(store.memoryStore.contains("list4"), "list4 was not in memory store")
+    assert(!store.memoryStore.contains("list5"), "list5 was in memory store")
+
+    // disk store contains only list2
+    assert(!store.diskStore.contains("list1"), "list1 was in disk store")
+    assert(store.diskStore.contains("list2"), "list2 was not in disk store")
+    assert(!store.diskStore.contains("list3"), "list3 was in disk store")
+    assert(!store.diskStore.contains("list4"), "list4 was in disk store")
+    assert(!store.diskStore.contains("list5"), "list5 was in disk store")
   }
 
   test("query block statuses") {
