@@ -1413,10 +1413,14 @@ class RDD(object):
         different keys as specified by fractions, a key to sampling rate map.
 
         >>> fractions = {"a": 0.2, "b": 0.1}
-        >>> keys = sc.parallelize(fractions.keys())
-        >>> vals = sc.parallelize(range(0, 20))
-        >>> keys.cartesian(vals).sampleByKey(False, fractions, 7).collect() #doctest: +SKIP
-        [('a', 3), ('a', 6), ('a', 11), ('a', 14), ('b', 1), ('b', 4), ('b', 18)]
+        >>> rdd = sc.parallelize(fractions.keys()).cartesian(sc.parallelize(range(0, 1000)))
+        >>> sample = dict(rdd.sampleByKey(False, fractions, 2).groupByKey().collect())
+        >>> 150 < len(sample["a"]) < 250 and 50 < len(sample["b"]) < 150
+        True
+        >>> max(sample["a"]) <= 999 and min(sample["a"]) >= 0
+        True
+        >>> max(sample["b"]) <= 999 and min(sample["b"]) >= 0
+        True
         """
         for fraction in fractions.values():
             assert fraction >= 0.0, "Negative fraction value: %s" % fraction
