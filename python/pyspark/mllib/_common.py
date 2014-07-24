@@ -99,11 +99,15 @@ def _deserialize_numpy_array(shape, ba, offset, dtype=float64):
 
 
 def _serialize_double(d):
+    """
+    Serialize a double (float or numpy.float64) into a mutually understood format.
+    """
     if type(d) == float or type(d) == float64:
         d = float64(d)
         ba = bytearray(9)
         ba[0] = DOUBLE_MAGIC
-
+        _copyto(d, buffer=ba, offset=1, shape=[1], dtype=float64)
+        return ba
     else:
         raise TypeError("_serialize_double called on a non-float object")
 
@@ -158,11 +162,21 @@ def _serialize_sparse_vector(v):
     _copyto(v.values, buffer=ba, offset=values_offset, shape=[nonzeros], dtype=float64)
     return ba
 
-# TODO add units
+
 def _deserialize_double(ba, offset=0):
     """Deserialize a double from a mutually understood format.
 
-    >>>
+    >>> import sys
+    >>> _deserialize_double(_serialize_double(123.0))
+    123.0
+    >>> _deserialize_double(_serialize_double(float64(0.0)))
+    0.0
+    >>> x = sys.float_info.max
+    >>> _deserialize_double(_serialize_double(sys.float_info.max)) == x
+    True
+    >>> y = float64(sys.float_info.max)
+    >>> _deserialize_double(_serialize_double(sys.float_info.max)) == y
+    True
     """
     if type(ba) != bytearray:
         raise TypeError("_deserialize_double called on a %s; wanted bytearray" % type(ba))
