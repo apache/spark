@@ -27,8 +27,8 @@ class ScalaSideDataTypeConversionSuite extends FunSuite {
   val javaSqlCtx = new JavaSQLContext(javaCtx)
 
   def checkDataType(scalaDataType: DataType) {
-    val javaDataType = javaSqlCtx.asJavaDataType(scalaDataType)
-    val actual = javaSqlCtx.asScalaDataType(javaDataType)
+    val javaDataType = javaSqlCtx.sqlContext.asJavaDataType(scalaDataType)
+    val actual = javaSqlCtx.sqlContext.asScalaDataType(javaDataType)
     assert(scalaDataType === actual, s"Converted data type ${actual} " +
       s"does not equal the expected data type ${scalaDataType}")
   }

@@ -19,11 +19,13 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.api.java.types.{DataType => JDataType, StructField => JStructField}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
@@ -418,6 +420,99 @@ class SQLContext(@transient val sparkContext: SparkContext)
       }
     }
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+  }
+
+  /**
+   * Returns the equivalent StructField in Scala for the given StructField in Java.
+   */
+  protected def asJavaStructField(scalaStructField: StructField): JStructField = {
+    org.apache.spark.sql.api.java.types.DataType.createStructField(
+      scalaStructField.name,
+      asJavaDataType(scalaStructField.dataType),
+      scalaStructField.nullable)
+  }
+
+  /**
+   * Returns the equivalent DataType in Java for the given DataType in Scala.
+   */
+  protected[sql] def asJavaDataType(scalaDataType: DataType): JDataType = scalaDataType match {
+    case StringType =>
+      org.apache.spark.sql.api.java.types.DataType.StringType
+    case BinaryType =>
+      org.apache.spark.sql.api.java.types.DataType.BinaryType
+    case BooleanType =>
+      org.apache.spark.sql.api.java.types.DataType.BooleanType
+    case TimestampType =>
+      org.apache.spark.sql.api.java.types.DataType.TimestampType
+    case DecimalType =>
+      org.apache.spark.sql.api.java.types.DataType.DecimalType
+    case DoubleType =>
+      org.apache.spark.sql.api.java.types.DataType.DoubleType
+    case FloatType =>
+      org.apache.spark.sql.api.java.types.DataType.FloatType
+    case ByteType =>
+      org.apache.spark.sql.api.java.types.DataType.ByteType
+    case IntegerType =>
+      org.apache.spark.sql.api.java.types.DataType.IntegerType
+    case LongType =>
+      org.apache.spark.sql.api.java.types.DataType.LongType
+    case ShortType =>
+      org.apache.spark.sql.api.java.types.DataType.ShortType
+
+    case arrayType: ArrayType =>
+      org.apache.spark.sql.api.java.types.DataType.createArrayType(
+        asJavaDataType(arrayType.elementType), arrayType.containsNull)
+    case mapType: MapType =>
+      org.apache.spark.sql.api.java.types.DataType.createMapType(
+        asJavaDataType(mapType.keyType), asJavaDataType(mapType.valueType))
+    case structType: StructType =>
+      org.apache.spark.sql.api.java.types.DataType.createStructType(
+        structType.fields.map(asJavaStructField).asJava)
+  }
+
+  /**
+   * Returns the equivalent StructField in Scala for the given StructField in Java.
+   */
+  protected def asScalaStructField(javaStructField: JStructField): StructField = {
+    StructField(
+      javaStructField.getName,
+      asScalaDataType(javaStructField.getDataType),
+      javaStructField.isNullable)
+  }
+
+  /**
+   * Returns the equivalent DataType in Scala for the given DataType in Java.
+   */
+  protected[sql] def asScalaDataType(javaDataType: JDataType): DataType = javaDataType match {
+    case stringType: org.apache.spark.sql.api.java.types.StringType =>
+      StringType
+    case binaryType: org.apache.spark.sql.api.java.types.BinaryType =>
+      BinaryType
+    case booleanType: org.apache.spark.sql.api.java.types.BooleanType =>
+      BooleanType
+    case timestampType: org.apache.spark.sql.api.java.types.TimestampType =>
+      TimestampType
+    case decimalType: org.apache.spark.sql.api.java.types.DecimalType =>
+      DecimalType
+    case doubleType: org.apache.spark.sql.api.java.types.DoubleType =>
+      DoubleType
+    case floatType: org.apache.spark.sql.api.java.types.FloatType =>
+      FloatType
+    case byteType: org.apache.spark.sql.api.java.types.ByteType =>
+      ByteType
+    case integerType: org.apache.spark.sql.api.java.types.IntegerType =>
+      IntegerType
+    case longType: org.apache.spark.sql.api.java.types.LongType =>
+      LongType
+    case shortType: org.apache.spark.sql.api.java.types.ShortType =>
+      ShortType
+
+    case arrayType: org.apache.spark.sql.api.java.types.ArrayType =>
+      ArrayType(asScalaDataType(arrayType.getElementType), arrayType.isContainsNull)
+    case mapType: org.apache.spark.sql.api.java.types.MapType =>
+      MapType(asScalaDataType(mapType.getKeyType), asScalaDataType(mapType.getValueType))
+    case structType: org.apache.spark.sql.api.java.types.StructType =>
+      StructType(structType.getFields.map(asScalaStructField))
   }
 
 }

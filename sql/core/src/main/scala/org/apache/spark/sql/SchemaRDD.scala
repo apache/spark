@@ -119,6 +119,11 @@ class SchemaRDD(
   override protected def getDependencies: Seq[Dependency[_]] =
     List(new OneToOneDependency(queryExecution.toRdd))
 
+  /** Returns the schema of this SchemaRDD (represented by a [[StructType]]).
+    *
+    * @group schema
+    */
+  def schema: StructType = queryExecution.analyzed.schema
 
   // =======================================================================
   // Query DSL

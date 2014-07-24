@@ -134,11 +134,20 @@ public abstract class DataType {
   }
 
   /**
-   * Creates a StructType with the given StructFields ({@code fields}).
+   * Creates a StructType with the given list of StructFields ({@code fields}).
    * @param fields
    * @return
    */
   public static StructType createStructType(List<StructField> fields) {
+    return createStructType(fields.toArray(new StructField[0]));
+  }
+
+  /**
+   * Creates a StructType with the given StructField array ({@code fields}).
+   * @param fields
+   * @return
+   */
+  public static StructType createStructType(StructField[] fields) {
     if (fields == null) {
       throw new IllegalArgumentException("fields should not be null.");
     }
@@ -151,11 +160,11 @@ public abstract class DataType {
 
       distinctNames.add(field.getName());
     }
-    if (distinctNames.size() != fields.size()) {
-      throw new IllegalArgumentException(
-        "fields should have distinct names.");
+    if (distinctNames.size() != fields.length) {
+      throw new IllegalArgumentException("fields should have distinct names.");
     }
 
     return new StructType(fields);
   }
+
 }

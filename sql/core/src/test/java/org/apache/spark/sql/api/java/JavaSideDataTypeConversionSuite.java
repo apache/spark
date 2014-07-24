@@ -38,8 +38,8 @@ public class JavaSideDataTypeConversionSuite {
 
   public void checkDataType(DataType javaDataType) {
     org.apache.spark.sql.catalyst.types.DataType scalaDataType =
-      javaSqlCtx.asScalaDataType(javaDataType);
-    DataType actual = javaSqlCtx.asJavaDataType(scalaDataType);
+      javaSqlCtx.sqlContext().asScalaDataType(javaDataType);
+    DataType actual = javaSqlCtx.sqlContext().asJavaDataType(scalaDataType);
     Assert.assertEquals(javaDataType, actual);
   }
 
@@ -147,11 +147,6 @@ public class JavaSideDataTypeConversionSuite {
     }
 
     // StructType
-    try {
-      DataType.createStructType(null);
-      Assert.fail();
-    } catch (IllegalArgumentException expectedException) {
-    }
     try {
       List<StructField> simpleFields = new ArrayList<StructField>();
       simpleFields.add(DataType.createStructField("a", DataType.DecimalType, false));

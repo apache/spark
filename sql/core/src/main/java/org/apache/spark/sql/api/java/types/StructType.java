@@ -22,13 +22,13 @@ import java.util.List;
 
 /**
  * The data type representing Rows.
- * A StructType object comprises a List of StructFields.
+ * A StructType object comprises an array of StructFields.
  */
 public class StructType extends DataType {
   private StructField[] fields;
 
-  protected StructType(List<StructField> fields) {
-    this.fields = fields.toArray(new StructField[0]);
+  protected StructType(StructField[] fields) {
+    this.fields = fields;
   }
 
   public StructField[] getFields() {

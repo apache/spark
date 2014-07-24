@@ -22,6 +22,7 @@ import java.util.{List => JList}
 import org.apache.spark.Partitioner
 import org.apache.spark.api.java.{JavaRDDLike, JavaRDD}
 import org.apache.spark.api.java.function.{Function => JFunction}
+import org.apache.spark.sql.api.java.types.StructType
 import org.apache.spark.sql.{SQLContext, SchemaRDD, SchemaRDDLike}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.rdd.RDD
@@ -52,6 +53,10 @@ class JavaSchemaRDD(
   val rdd = baseSchemaRDD.map(new Row(_))
 
   override def toString: String = baseSchemaRDD.toString
+
+  /** Returns the schema of this JavaSchemaRDD (represented by a StructType). */
+  def schema: StructType =
+    sqlContext.asJavaDataType(baseSchemaRDD.schema).asInstanceOf[StructType]
 
   // =======================================================================
   // Base RDD functions that do NOT change schema

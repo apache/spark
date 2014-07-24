@@ -19,14 +19,17 @@ package org.apache.spark.sql.api.java
 
 import java.beans.Introspector
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.sql.api.java.types.{DataType => JDataType, StructType => JStructType}
+import org.apache.spark.sql.api.java.types.{StructField => JStructField}
 import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 import org.apache.spark.util.Utils
@@ -96,6 +99,20 @@ class JavaSQLContext(val sqlContext: SQLContext) {
   }
 
   /**
+   * :: DeveloperApi ::
+   * Creates a JavaSchemaRDD from an RDD containing Rows by applying a schema to this RDD.
+   * It is important to make sure that the structure of every Row of the provided RDD matches the
+   * provided schema. Otherwise, there will be runtime exception.
+   */
+  @DeveloperApi
+  def applySchema(rowRDD: JavaRDD[Row], schema: JStructType): JavaSchemaRDD = {
+    val scalaRowRDD = rowRDD.rdd.map(r => r.row)
+    val scalaSchema = sqlContext.asScalaDataType(schema).asInstanceOf[StructType]
+    val logicalPlan = SparkLogicalPlan(ExistingRdd(scalaSchema.toAttributes, scalaRowRDD))
+    new JavaSchemaRDD(sqlContext, logicalPlan)
+  }
+
+  /**
    * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
    */
   def parquetFile(path: String): JavaSchemaRDD =
@@ -104,26 +121,45 @@ class JavaSQLContext(val sqlContext: SQLContext) {
       ParquetRelation(path, Some(sqlContext.sparkContext.hadoopConfiguration)))
 
   /**
-   * Loads a JSON file (one object per line), returning the result as a [[JavaSchemaRDD]].
+   * Loads a JSON file (one object per line), returning the result as a JavaSchemaRDD.
    * It goes through the entire dataset once to determine the schema.
-   *
-   * @group userf
    */
   def jsonFile(path: String): JavaSchemaRDD =
     jsonRDD(sqlContext.sparkContext.textFile(path))
 
   /**
+   * :: Experimental ::
+   * Loads a JSON file (one object per line) and applies the given schema,
+   * returning the result as a JavaSchemaRDD.
+   */
+  @Experimental
+  def jsonFile(path: String, schema: JStructType): JavaSchemaRDD =
+    jsonRDD(sqlContext.sparkContext.textFile(path), schema)
+
+  /**
    * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
-   * [[JavaSchemaRDD]].
+   * [JavaSchemaRDD.
    * It goes through the entire dataset once to determine the schema.
-   *
-   * @group userf
    */
   def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD = {
-    val schema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json, 1.0))
-    val logicalPlan =
-      sqlContext.makeCustomRDDScan[String](json, schema, JsonRDD.jsonStringToRow(schema, _))
+    val appliedScalaSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))
+    val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
+    val logicalPlan = SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))
+    new JavaSchemaRDD(sqlContext, logicalPlan)
+  }
 
+  /**
+   * :: Experimental ::
+   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
+   * returning the result as a JavaSchemaRDD.
+   */
+  @Experimental
+  def jsonRDD(json: JavaRDD[String], schema: JStructType): JavaSchemaRDD = {
+    val appliedScalaSchema =
+      Option(sqlContext.asScalaDataType(schema)).getOrElse(
+        JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))).asInstanceOf[StructType]
+    val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
+    val logicalPlan = SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 
