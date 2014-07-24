@@ -203,11 +203,11 @@ class SQLContext:
         >>> for csvStr in csvStrings:
         ...   print>>ofn, csvStr
         >>> ofn.close()
-        >>> csv = sqlCtx.csvFile(csvFile, delimiter = ",", header = True)
+        >>> csv = sqlCtx.csvFile(csvFile, delimiter = ", ", header = True)
         >>> sqlCtx.registerRDDAsTable(csv, "csvTable")
-        >>> csvRes = sqlCtx.sql("SELECT Year FROM csvTable where Make = 'Ford'")
-        >>> csvRes.collect() == [{"Year": "1997"}]
-        True
+        >>> csvRes = sqlCtx.sql("SELECT Year FROM csvTable WHERE Make = 'Ford'")
+        >>> csvRes.collect()
+        [{u'Year': u'1997'}]
         """
         jschema_rdd = self._ssql_ctx.csvFile(path, delimiter, quote, header)
         return SchemaRDD(jschema_rdd, self)
@@ -220,7 +220,7 @@ class SQLContext:
         NOTE: If there are new line characters inside quoted fields, use wholeTextFile to
         read each file into a single partition.
 
-        >>> csvrdd = sqlCtx.csvRDD(csv, delimiter = ",", header = True)
+        >>> csvrdd = sqlCtx.csvRDD(csv, delimiter = ", ", header = True)
         >>> sqlCtx.registerRDDAsTable(csvrdd, "csvTable2")
         >>> csvRes = sqlCtx.sql("SELECT count(*) FROM csvTable2")
         >>> csvRes.collect() == [{"c0": 3}]
