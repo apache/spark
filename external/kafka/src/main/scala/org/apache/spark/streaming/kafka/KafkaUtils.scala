@@ -158,8 +158,8 @@ object KafkaUtils {
    * When 'auto.offset.reset' = 'largest', directly read data from end, ignore old, unwanted data.
    * This is default in Kafka 0.8.
    *
-   * To avoid concurrent deleting Zookeeper metadata in each Receiver when multiple consumers are
-   * launched, this should be call be createStream().
+   * To avoid deleting existing Zookeeper metadata in each Receiver when multiple consumers are
+   * launched, this should be called be createStream().
    * @param zkQuorum Zookeeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    */
