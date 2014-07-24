@@ -72,10 +72,11 @@ except:
 # Python interpreter must agree on what endian the machine is.
 
 
-DENSE_VECTOR_MAGIC = 1
+DENSE_VECTOR_MAGIC  = 1
 SPARSE_VECTOR_MAGIC = 2
-DENSE_MATRIX_MAGIC = 3
+DENSE_MATRIX_MAGIC  = 3
 LABELED_POINT_MAGIC = 4
+DOUBLE_MAGIC        = 5
 
 
 def _deserialize_numpy_array(shape, ba, offset, dtype=float64):
@@ -95,6 +96,16 @@ def _deserialize_numpy_array(shape, ba, offset, dtype=float64):
     """
     ar = ndarray(shape=shape, buffer=ba, offset=offset, dtype=dtype, order='C')
     return ar.copy()
+
+
+def _serialize_double(d):
+    if type(d) == float or type(d) == float64:
+        d = float64(d)
+        ba = bytearray(9)
+        ba[0] = DOUBLE_MAGIC
+
+    else:
+        raise TypeError("_serialize_double called on a non-float object")
 
 
 def _serialize_double_vector(v):
@@ -146,6 +157,22 @@ def _serialize_sparse_vector(v):
     values_offset = 9 + 4 * nonzeros
     _copyto(v.values, buffer=ba, offset=values_offset, shape=[nonzeros], dtype=float64)
     return ba
+
+# TODO add units
+def _deserialize_double(ba, offset=0):
+    """Deserialize a double from a mutually understood format.
+
+    >>>
+    """
+    if type(ba) != bytearray:
+        raise TypeError("_deserialize_double called on a %s; wanted bytearray" % type(ba))
+    nb = len(ba) - offset
+    if nb < 8:
+        raise TypeError("_deserialize_double called on a %d-byte array, which is too short" % nb)
+    if ba[offset] == DOUBLE_MAGIC:
+        return struct.unpack("d", ba[1:])[0]
+    else:
+        raise TypeError("_deserialize_double called on bytearray with wrong magic")
 
 
 def _deserialize_double_vector(ba, offset=0):

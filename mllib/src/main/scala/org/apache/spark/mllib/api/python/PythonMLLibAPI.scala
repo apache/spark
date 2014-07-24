@@ -19,11 +19,13 @@ package org.apache.spark.mllib.api.python
 
 import java.nio.{ByteBuffer, ByteOrder}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.random.RandomRDDGenerators
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.MLUtils
@@ -41,6 +43,7 @@ class PythonMLLibAPI extends Serializable {
   private val SPARSE_VECTOR_MAGIC: Byte = 2
   private val DENSE_MATRIX_MAGIC: Byte = 3
   private val LABELED_POINT_MAGIC: Byte = 4
+  private val DOUBLE_MAGIC: Byte = 5
 
   private[python] def deserializeDoubleVector(bytes: Array[Byte], offset: Int = 0): Vector = {
     require(bytes.length - offset >= 5, "Byte array too short")
@@ -52,6 +55,10 @@ class PythonMLLibAPI extends Serializable {
     } else {
       throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
+  }
+
+  private def deserializeDouble(bytes: Array[Byte], offset: Int = 0): Double = {
+
   }
 
   private def deserializeDenseVector(bytes: Array[Byte], offset: Int = 0): Vector = {
@@ -87,6 +94,15 @@ class PythonMLLibAPI extends Serializable {
     val values = new Array[Double](nonZeros)
     db.get(values)
     Vectors.sparse(size, indices, values)
+  }
+
+  private def serializeDouble(double: Double): Array[Byte] = {
+    val bytes = new Array[Byte](9)
+    val bb = ByteBuffer.wrap(bytes)
+    bb.order(ByteOrder.nativeOrder())
+    bb.put(DOUBLE_MAGIC)
+    bb.putDouble(double)
+    bytes
   }
 
   private def serializeDenseVector(doubles: Array[Double]): Array[Byte] = {
@@ -429,5 +445,21 @@ class PythonMLLibAPI extends Serializable {
       alpha: Double): MatrixFactorizationModel = {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
     ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
+  }
+
+  def uniformRDD(jsc: JavaSparkContext,
+      size: Long,
+      numPartitions: Int,
+      seed: Long): JavaRDD[Array[Byte]] = {
+    RandomRDDGenerators.uniformRDD(jsc.sc, size, numPartitions, seed)
+      .map(serializeDouble).toJavaRDD()
+  }
+
+  def uniformRDD(jsc: JavaSparkContext, size: Long, numPartitions: Int): JavaRDD[Array[Byte]] = {
+    RandomRDDGenerators.uniformRDD(jsc.sc, size, numPartitions).map(serializeDouble).toJavaRDD()
+  }
+
+  def uniformRDD(jsc: JavaSparkContext, size: Long): JavaRDD[Array[Byte]] = {
+    RandomRDDGenerators.uniformRDD(jsc.sc, size).map(serializeDouble).toJavaRDD()
   }
 }
