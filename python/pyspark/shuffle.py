@@ -189,7 +189,7 @@ class ExternalMerger(Merger):
     MAX_TOTAL_PARTITIONS = 4096
 
     def __init__(self, aggregator, memory_limit=512, serializer=None,
-            localdirs=None, scale=1, partitions=64, batch=10000):
+            localdirs=None, scale=1, partitions=59, batch=1000):
         Merger.__init__(self, aggregator)
         self.memory_limit = memory_limit
         # default serializer is only used for tests
@@ -208,6 +208,8 @@ class ExternalMerger(Merger):
         self.pdata = []
         # number of chunks dumped into disks
         self.spills = 0
+        # randomize the hash of key, id(o) is the address of o (aligned by 8)
+        self._seed = id(self) + 7
 
     def _get_dirs(self):
         """ Get all the directories """
@@ -246,7 +248,7 @@ class ExternalMerger(Merger):
 
     def _partition(self, key):
         """ Return the partition for key """
-        return (hash(key) / self.scale) % self.partitions
+        return hash((key, self._seed)) % self.partitions
 
     def _partitioned_mergeValues(self, iterator, limit=0):
         """ Partition the items by key, then combine them """
