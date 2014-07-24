@@ -96,7 +96,7 @@ class BlockFetcherIteratorSuite extends FunSuite with Matchers {
     bufferMessage.buffers.foreach{ b =>
       buffer.put(b)
     }
-    buffer.flip
+    buffer.flip()
     arrayBuffer += buffer
 
     val someMessage = Some(Message.createBufferMessage(arrayBuffer))
