@@ -24,6 +24,7 @@ import org.scalatest.{FunSuite, Matchers}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.TestingUtils._
 
 class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
 
@@ -48,10 +49,6 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
   }
 
   lazy val dataRDD = sc.parallelize(data, 2).cache()
-
-  def compareDouble(x: Double, y: Double, tol: Double = 1E-3): Boolean = {
-    math.abs(x - y) / (math.abs(y) + 1e-15) < tol
-  }
 
   test("LBFGS loss should be decreasing and match the result of Gradient Descent.") {
     val regParam = 0
@@ -126,15 +123,15 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
       miniBatchFrac,
       initialWeightsWithIntercept)
 
-    assert(compareDouble(lossGD(0), lossLBFGS(0)),
+    assert(lossGD(0) ~= lossLBFGS(0) absTol 1E-5,
       "The first losses of LBFGS and GD should be the same.")
 
     // The 2% difference here is based on observation, but is not theoretically guaranteed.
-    assert(compareDouble(lossGD.last, lossLBFGS.last, 0.02),
+    assert(lossGD.last ~= lossLBFGS.last relTol 0.02,
       "The last losses of LBFGS and GD should be within 2% difference.")
 
-    assert(compareDouble(weightLBFGS(0), weightGD(0), 0.02) &&
-      compareDouble(weightLBFGS(1), weightGD(1), 0.02),
+    assert(
+      (weightLBFGS(0) ~= weightGD(0) relTol 0.02) && (weightLBFGS(1) ~= weightGD(1) relTol 0.02),
       "The weight differences between LBFGS and GD should be within 2%.")
   }
 
@@ -226,8 +223,8 @@ class LBFGSSuite extends FunSuite with LocalSparkContext with Matchers {
       initialWeightsWithIntercept)
 
     // for class LBFGS and the optimize method, we only look at the weights
-    assert(compareDouble(weightLBFGS(0), weightGD(0), 0.02) &&
-      compareDouble(weightLBFGS(1), weightGD(1), 0.02),
+    assert(
+      (weightLBFGS(0) ~= weightGD(0) relTol 0.02) && (weightLBFGS(1) ~= weightGD(1) relTol 0.02),
       "The weight differences between LBFGS and GD should be within 2%.")
   }
 }
