@@ -205,63 +205,73 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       droppedBlocks: ArrayBuffer[(BlockId, BlockStatus)])
     : Either[Array[Any], Iterator[Any]] = {
 
-    var count = 0                     // The number of elements unrolled so far
-    var atMemoryLimit = false         // Whether we are at the memory limit for unrolling blocks
-    var previousSize = 0L             // Previous estimate of the size of our buffer
-    val memoryRequestPeriod = 1000    // How frequently we request more memory for our buffer
-    val memoryRequestThreshold = 100  // Before this is exceeded, request memory every round
+    // Number of elements unrolled so far
+    var elementsUnrolled = 0
+    // Whether there is still enough memory for us to continue unrolling this block
+    var keepUnrolling = true
+    // Initial per-thread memory to request for unrolling blocks (bytes). Exposed for testing.
+    val initialMemoryThreshold = conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
+    // How often to check whether we need to request more memory. Exposed for testing.
+    val memoryCheckPeriod = conf.getLong("spark.storage.unrollCheckPeriod", 16)
+    // Memory currently reserved by this thread (bytes)
+    var memoryThreshold = initialMemoryThreshold
+    // Memory to request as a multiple of current vector size
+    val memoryGrowthFactor = 1.5
 
     val threadId = Thread.currentThread().getId
     val unrollMemoryMap = SparkEnv.get.unrollMemoryMap
-    var buffer = new SizeTrackingVector[Any]
+    var vector = new SizeTrackingVector[Any]
 
+    // Request memory for our vector and return whether request is granted.
+    // This involves synchronizing across all threads and can be expensive if called frequently.
+    def requestMemory(memoryToRequest: Long): Boolean = {
+      unrollMemoryMap.synchronized {
+        val previouslyOccupiedMemory = unrollMemoryMap.get(threadId).getOrElse(0L)
+        val otherThreadsMemory = unrollMemoryMap.values.sum - previouslyOccupiedMemory
+        val availableMemory = freeMemory - otherThreadsMemory
+        val granted = availableMemory > memoryToRequest
+        if (granted) { unrollMemoryMap(threadId) = memoryToRequest }
+        granted
+      }
+    }
+
+    // Request enough memory to begin unrolling
+    keepUnrolling = requestMemory(memoryThreshold)
+
+    // Unroll this block safely, checking whether we have exceeded our threshold periodically
     try {
-      while (values.hasNext && !atMemoryLimit) {
-        buffer += values.next()
-        count += 1
-        if (count % memoryRequestPeriod == 1 || count < memoryRequestThreshold) {
-          // Calculate the amount of memory to request from the global memory pool
-          val currentSize = buffer.estimateSize()
-          val delta = if (previousSize > 0) math.max(currentSize - previousSize, 0) else 0
-          val memoryToRequest = currentSize + delta
-          previousSize = currentSize
-
-          // Atomically check whether there is sufficient memory in the global pool to continue
-          unrollMemoryMap.synchronized {
-            val previouslyOccupiedMemory = unrollMemoryMap.get(threadId).getOrElse(0L)
-            val otherThreadsMemory = unrollMemoryMap.values.sum - previouslyOccupiedMemory
-
-            // Request memory for the local buffer and return whether request is granted
-            def requestMemory(): Boolean = {
-              val availableMemory = freeMemory - otherThreadsMemory
-              val granted = availableMemory > memoryToRequest
-              if (granted) { unrollMemoryMap(threadId) = memoryToRequest }
-              granted
-            }
-
-            // If the first request is not granted, try again after ensuring free space
-            // If there is still not enough space, give up and drop the partition
-            if (!requestMemory()) {
+      while (values.hasNext && keepUnrolling) {
+        vector += values.next()
+        if (elementsUnrolled % memoryCheckPeriod == 0) {
+          // If our vector's size has exceeded the threshold, request more memory
+          val currentSize = vector.estimateSize()
+          if (currentSize >= memoryThreshold) {
+            val amountToRequest = (currentSize * memoryGrowthFactor).toLong
+            if (!requestMemory(amountToRequest)) {
+              // If the first request is not granted, try again after ensuring free space
+              // If there is still not enough space, give up and drop the partition
               val result = ensureFreeSpace(blockId, globalBufferMemory)
               droppedBlocks ++= result.droppedBlocks
-              atMemoryLimit = !requestMemory()
+              keepUnrolling = requestMemory(amountToRequest)
             }
+            memoryThreshold = amountToRequest
           }
         }
+        elementsUnrolled += 1
       }
 
-      if (!atMemoryLimit) {
+      if (keepUnrolling) {
         // We successfully unrolled the entirety of this block
-        Left(buffer.toArray)
+        Left(vector.toArray)
       } else {
         // We ran out of space while unrolling the values for this block
-        Right(buffer.iterator ++ values)
+        Right(vector.iterator ++ values)
       }
 
     } finally {
-      // Unless we return an iterator that depends on the buffer, free up space for other threads
-      if (!atMemoryLimit) {
-        buffer = null
+      // Unless we return an iterator that depends on the vector, free up space for other threads
+      if (keepUnrolling) {
+        vector = null
         unrollMemoryMap.synchronized {
           unrollMemoryMap(threadId) = 0
         }

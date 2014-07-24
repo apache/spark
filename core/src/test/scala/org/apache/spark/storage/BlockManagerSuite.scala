@@ -75,6 +75,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     conf.set("spark.storage.disableBlockManagerHeartBeat", "true")
     conf.set("spark.driver.port", boundPort.toString)
     conf.set("spark.storage.bufferFraction", "0.4")
+    conf.set("spark.storage.unrollMemoryThreshold", "512")
+    conf.set("spark.storage.unrollCheckPeriod", "1")
     SparkEnv.set(env)
 
     master = new BlockManagerMaster(
@@ -143,11 +145,11 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("master + 1 manager interaction") {
-    store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 20000, conf,
       securityMgr, mapOutputTracker)
-    val a1 = new Array[Byte](400)
-    val a2 = new Array[Byte](400)
-    val a3 = new Array[Byte](400)
+    val a1 = new Array[Byte](4000)
+    val a2 = new Array[Byte](4000)
+    val a3 = new Array[Byte](4000)
 
     // Putting a1, a2  and a3 in memory and telling master only about a1 and a2
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
@@ -192,11 +194,11 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("removing block") {
-    store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 20000, conf,
       securityMgr, mapOutputTracker)
-    val a1 = new Array[Byte](400)
-    val a2 = new Array[Byte](400)
-    val a3 = new Array[Byte](400)
+    val a1 = new Array[Byte](4000)
+    val a2 = new Array[Byte](4000)
+    val a3 = new Array[Byte](4000)
 
     // Putting a1, a2 and a3 in memory and telling master only about a1 and a2
     store.putSingle("a1-to-remove", a1, StorageLevel.MEMORY_ONLY)
@@ -205,8 +207,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
     // Checking whether blocks are in memory and memory size
     val memStatus = master.getMemoryStatus.head._2
-    assert(memStatus._1 == 2000L, "total memory " + memStatus._1 + " should equal 2000")
-    assert(memStatus._2 <= 1200L, "remaining memory " + memStatus._2 + " should <= 1200")
+    assert(memStatus._1 == 20000L, "total memory " + memStatus._1 + " should equal 20000")
+    assert(memStatus._2 <= 12000L, "remaining memory " + memStatus._2 + " should <= 12000")
     assert(store.getSingle("a1-to-remove").isDefined, "a1 was not in store")
     assert(store.getSingle("a2-to-remove").isDefined, "a2 was not in store")
     assert(store.getSingle("a3-to-remove").isDefined, "a3 was not in store")
@@ -235,17 +237,17 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
       val memStatus = master.getMemoryStatus.head._2
-      memStatus._1 should equal (2000L)
-      memStatus._2 should equal (2000L)
+      memStatus._1 should equal (20000L)
+      memStatus._2 should equal (20000L)
     }
   }
 
   test("removing rdd") {
-    store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 20000, conf,
       securityMgr, mapOutputTracker)
-    val a1 = new Array[Byte](400)
-    val a2 = new Array[Byte](400)
-    val a3 = new Array[Byte](400)
+    val a1 = new Array[Byte](4000)
+    val a2 = new Array[Byte](4000)
+    val a3 = new Array[Byte](4000)
     // Putting a1, a2 and a3 in memory.
     store.putSingle(rdd(0, 0), a1, StorageLevel.MEMORY_ONLY)
     store.putSingle(rdd(0, 1), a2, StorageLevel.MEMORY_ONLY)
@@ -925,6 +927,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(updatedBlocks5.size === 1)
     assert(updatedBlocks5.head._1 === TestBlockId("list3"))
     assert(updatedBlocks5.head._2.storageLevel === StorageLevel.NONE)
+    assert(!store.get("list1").isDefined, "list1 was in store")
     assert(store.get("list2").isDefined, "list2 was not in store")
     assert(!store.get("list3").isDefined, "list3 was in store")
     assert(store.get("list4").isDefined, "list4 was not in store")
@@ -1025,14 +1028,14 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     store = new BlockManager(
       "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)
     /*
-     * After a1 and a2 are cached, there is less than 4000 bytes of free space left. When we try
+     * After a1 and a2 are cached, we do not have enough room to unroll a3 safely. When we try
      * to cache a3, we attempt to ensure free space of only 12000 * 0.2 = 2400 bytes, which is
      * not enough to drop a1 or a2, as there is already >= 2400 bytes of free space. Therefore,
      * we give up and drop a3 on the spot.
      */
     store.putSingle("a1", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     store.putSingle("a2", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
-    store.putSingle("a3", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingle("a3", new Array[Byte](3000), StorageLevel.MEMORY_ONLY)
     // Memory store should contain a1, a2
     assert(store.memoryStore.contains("a1"), "a1 was not in store")
     assert(store.memoryStore.contains("a2"), "a2 was not in store")
@@ -1043,7 +1046,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
      * (i.e. a1) from memory to accommodate a5 (because 2000 < 2400).
      */
     store.putSingle("a4", new Array[Byte](2000), StorageLevel.MEMORY_ONLY)
-    store.putSingle("a5", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingle("a5", new Array[Byte](3000), StorageLevel.MEMORY_ONLY)
     // Memory store should contain a2, a4, a5
     assert(!store.memoryStore.contains("a1"), "a1 was in store")
     assert(store.memoryStore.contains("a2"), "a2 was not in store")
@@ -1062,7 +1065,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
      */
     store.putSingle("a1", new Array[Byte](4000), StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a2", new Array[Byte](4000), StorageLevel.MEMORY_AND_DISK)
-    store.putSingle("a3", new Array[Byte](4000), StorageLevel.MEMORY_AND_DISK)
+    store.putSingle("a3", new Array[Byte](3000), StorageLevel.MEMORY_AND_DISK)
     // Memory store should contain a1, a2; disk store should contain a3
     assert(store.memoryStore.contains("a1"), "a1 was not in memory store")
     assert(store.memoryStore.contains("a2"), "a2 was not in memory store")
@@ -1071,7 +1074,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(!store.diskStore.contains("a2"), "a2 was in disk store")
     assert(store.diskStore.contains("a3"), "a3 was not in disk store")
     store.putSingle("a4", new Array[Byte](2000), StorageLevel.MEMORY_AND_DISK)
-    store.putSingle("a5", new Array[Byte](4000), StorageLevel.MEMORY_AND_DISK)
+    store.putSingle("a5", new Array[Byte](3000), StorageLevel.MEMORY_AND_DISK)
     // Memory store should contain a2, a4, a5; disk store should contain a1, a3
     assert(!store.memoryStore.contains("a1"), "a1 was in memory store")
     assert(store.memoryStore.contains("a2"), "a2 was not in memory store")
