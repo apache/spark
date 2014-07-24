@@ -1415,7 +1415,7 @@ class RDD(object):
         >>> fractions = {"a": 0.2, "b": 0.1}
         >>> rdd = sc.parallelize(fractions.keys()).cartesian(sc.parallelize(range(0, 1000)))
         >>> sample = dict(rdd.sampleByKey(False, fractions, 2).groupByKey().collect())
-        >>> 150 < len(sample["a"]) < 250 and 50 < len(sample["b"]) < 150
+        >>> 100 < len(sample["a"]) < 300 and 50 < len(sample["b"]) < 150
         True
         >>> max(sample["a"]) <= 999 and min(sample["a"]) >= 0
         True
