@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-import org.apache.spark.util.random.{XORShiftRandom, SamplingUtils}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{ClassTag, classTag}
 import scala.util.hashing.byteswap32
@@ -28,6 +26,7 @@ import scala.util.hashing.byteswap32
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{CollectionsUtils, Utils}
+import org.apache.spark.util.random.{XORShiftRandom, SamplingUtils}
 
 /**
  * An object that defines how the elements in a key-value pair RDD are partitioned by key.
