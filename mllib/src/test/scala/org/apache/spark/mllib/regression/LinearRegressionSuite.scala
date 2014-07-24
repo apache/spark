@@ -62,14 +62,13 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
   // Test if we can correctly fit Y = 3 + 10*X1 + 10*X2
   test("OLS linear regression") {
     val testRDD = sc.parallelize(LinearDataGenerator.generateLinearInput(
-      0.0, Array(10.0, 10.0), 100, 42), 2).cache()
+      3.0, Array(10.0, 10.0), 100, 42), 2).cache()
     val linRegOLS = new LinearRegressionWithOLS().setIntercept(true)
 
     val model = linRegOLS.run(testRDD)
-    assert(model.intercept === 0.0)
+    assert(model.intercept >= 2.5 && model.intercept <= 3.5)
 
     val weights = model.weights
-    println("Model is: " + model.weights)
     assert(weights.size === 2)
     assert(weights(0) >= 9.0 && weights(0) <= 11.0)
     assert(weights(1) >= 9.0 && weights(1) <= 11.0)
