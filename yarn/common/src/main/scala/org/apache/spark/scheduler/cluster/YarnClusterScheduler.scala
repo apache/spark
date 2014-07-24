@@ -23,6 +23,8 @@ import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.deploy.SparkHadoopUtil
+
 /**
  *
  * This is a simple extension to ClusterScheduler - to ensure that appropriate initialization of ApplicationMaster, etc is done
@@ -31,7 +33,7 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
 
   logInfo("Created YarnClusterScheduler")
 
-  def this(sc: SparkContext) = this(sc, new Configuration())
+  def this(sc: SparkContext) = this(sc, SparkHadoopUtil.get.conf)
 
   // Nothing else for now ... initialize application master : which needs sparkContext to determine how to allocate
   // Note that only the first creation of SparkContext influences (and ideally, there must be only one SparkContext, right ?)
