@@ -28,9 +28,12 @@ try:
 
     def get_used_memory():
         """ Return the used memory in MB """
-        self = psutil.Process(os.getpid())
-        return self.memory_info().rss >> 20
-
+        process = psutil.Process(os.getpid())
+        if hasattr(process, "memory_info"):
+            info = process.memory_info()
+        else:
+            info = process.get_memory_info()
+        return info.rss >> 20
 except ImportError:
 
     def get_used_memory():
