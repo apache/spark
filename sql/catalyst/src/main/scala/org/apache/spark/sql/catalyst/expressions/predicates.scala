@@ -153,7 +153,7 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
   }
 }
 
-case class EqualNSTo(left: Expression, right: Expression) extends BinaryComparison {
+case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<=>"
   override def nullable = false
   override def eval(input: Row): Any = {
