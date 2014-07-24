@@ -22,6 +22,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.CallSite
 
+import scala.collection.mutable.HashSet
+
 /**
  * A stage is a set of independent tasks all computing the same function that need to run as part
  * of a Spark job, where all the tasks have the same shuffle dependencies. Each DAG of tasks run
@@ -56,6 +58,16 @@ private[spark] class Stage(
   val numPartitions = rdd.partitions.size
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
+
+  /** List of jobs that this stage belong to. */
+  val jobIds = new HashSet[Int]
+  /** For stages that are the final (consists of only ResultTasks), link to the ActiveJob. */
+  var resultOfJob: Option[ActiveJob] = None
+  var pendingTasks: Option[HashSet[Task[_]]] = None
+
+  /** Pointer to the [StageInfo] object, set by DAGScheduler. */
+  var info: StageInfo = null
+
   private var nextAttemptId = 0
 
   def isAvailable: Boolean = {

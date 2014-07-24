@@ -686,15 +686,11 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     BlockManagerId("exec-" + host, host, 12345, 0)
 
   private def assertDataStructuresEmpty = {
-    assert(scheduler.pendingTasks.isEmpty)
     assert(scheduler.activeJobs.isEmpty)
     assert(scheduler.failedStages.isEmpty)
     assert(scheduler.jobIdToActiveJob.isEmpty)
     assert(scheduler.jobIdToStageIds.isEmpty)
-    assert(scheduler.stageIdToJobIds.isEmpty)
     assert(scheduler.stageIdToStage.isEmpty)
-    assert(scheduler.stageToInfos.isEmpty)
-    assert(scheduler.resultStageToJob.isEmpty)
     assert(scheduler.runningStages.isEmpty)
     assert(scheduler.shuffleToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
