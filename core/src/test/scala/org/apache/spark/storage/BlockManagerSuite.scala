@@ -76,7 +76,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     conf.set("spark.driver.port", boundPort.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
-    conf.set("spark.storage.unrollCheckPeriod", "1")
     SparkEnv.set(env)
 
     master = new BlockManagerMaster(

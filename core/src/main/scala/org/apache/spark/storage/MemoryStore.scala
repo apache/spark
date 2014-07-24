@@ -221,8 +221,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     var keepUnrolling = true
     // Initial per-thread memory to request for unrolling blocks (bytes). Exposed for testing.
     val initialMemoryThreshold = conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
-    // How often to check whether we need to request more memory. Exposed for testing.
-    val memoryCheckPeriod = conf.getLong("spark.storage.unrollCheckPeriod", 16)
+    // How often to check whether we need to request more memory
+    val memoryCheckPeriod = 16
     // Memory currently reserved by this thread (bytes)
     var memoryThreshold = initialMemoryThreshold
     // Memory to request as a multiple of current vector size
