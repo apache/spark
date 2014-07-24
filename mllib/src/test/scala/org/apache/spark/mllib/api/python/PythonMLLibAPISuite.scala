@@ -62,7 +62,7 @@ class PythonMLLibAPISuite extends FunSuite {
     for (x <- List(123.0, -10.0, 0.0, Double.MaxValue, Double.MinValue)) {
       val bytes = py.serializeDouble(x)
       val deser = py.deserializeDouble(bytes)
-      assert( x === deser)
+      assert(x === deser)
     }
   }
 }
