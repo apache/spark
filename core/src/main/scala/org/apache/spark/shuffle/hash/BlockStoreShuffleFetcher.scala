@@ -81,10 +81,9 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       shuffleMetrics.shuffleFinishTime = System.currentTimeMillis
       shuffleMetrics.fetchWaitTime = blockFetcherItr.fetchWaitTime
       shuffleMetrics.remoteBytesRead = blockFetcherItr.remoteBytesRead
-      shuffleMetrics.totalBlocksFetched = blockFetcherItr.totalBlocks
       shuffleMetrics.localBlocksFetched = blockFetcherItr.numLocalBlocks
       shuffleMetrics.remoteBlocksFetched = blockFetcherItr.numRemoteBlocks
-      context.taskMetrics.shuffleReadMetrics = Some(shuffleMetrics)
+      context.taskMetrics.updateShuffleReadMetrics(shuffleMetrics)
     })
 
     new InterruptibleIterator[T](context, completionIter)

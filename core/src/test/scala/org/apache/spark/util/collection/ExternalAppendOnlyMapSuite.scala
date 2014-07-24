@@ -334,8 +334,8 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
 
-    val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
-      mergeValue, mergeCombiners)
+    val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](
+      createCombiner, mergeValue, mergeCombiners)
 
     (1 to 100000).foreach { i => map.insert(i, i) }
     map.insert(Int.MaxValue, Int.MaxValue)
@@ -346,11 +346,32 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
       it.next()
     }
   }
+
+  test("spilling with null keys and values") {
+    val conf = new SparkConf(true)
+    conf.set("spark.shuffle.memoryFraction", "0.001")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
+
+    val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](
+      createCombiner, mergeValue, mergeCombiners)
+
+    (1 to 100000).foreach { i => map.insert(i, i) }
+    map.insert(null.asInstanceOf[Int], 1)
+    map.insert(1, null.asInstanceOf[Int])
+    map.insert(null.asInstanceOf[Int], null.asInstanceOf[Int])
+
+    val it = map.iterator
+    while (it.hasNext) {
+      // Should not throw NullPointerException
+      it.next()
+    }
+  }
+
 }
 
 /**
  * A dummy class that always returns the same hash code, to easily test hash collisions
  */
-case class FixedHashObject(val v: Int, val h: Int) extends Serializable {
+case class FixedHashObject(v: Int, h: Int) extends Serializable {
   override def hashCode(): Int = h
 }

@@ -36,6 +36,21 @@ class SQLQuerySuite extends QueryTest {
       "test")
   }
 
+  test("SPARK-2407 Added Parser of SQL SUBSTR()") {
+    checkAnswer(
+      sql("SELECT substr(tableName, 1, 2) FROM tableName"),
+      "te")
+    checkAnswer(
+      sql("SELECT substr(tableName, 3) FROM tableName"),
+      "st")
+    checkAnswer(
+      sql("SELECT substring(tableName, 1, 2) FROM tableName"),
+      "te")
+    checkAnswer(
+      sql("SELECT substring(tableName, 3) FROM tableName"),
+      "st")
+  }
+
   test("index into array") {
     checkAnswer(
       sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
@@ -369,6 +384,31 @@ class SQLQuerySuite extends QueryTest {
         (1, "abc"),
         (2, "abc"),
         (3, null)))
+  }
+
+  test("EXCEPT") {
+
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM upperCaseData "),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM lowerCaseData "), Nil)
+    checkAnswer(
+      sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData "), Nil)
+  }
+
+ test("INTERSECT") {
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM upperCaseData"), Nil)
   }
 
   test("SET commands semantics using sql()") {

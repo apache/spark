@@ -91,6 +91,17 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     }
   }
 
+  test("RangePartitioner for keys that are not Comparable (but with Ordering)") {
+    // Row does not extend Comparable, but has an implicit Ordering defined.
+    implicit object RowOrdering extends Ordering[Row] {
+      override def compare(x: Row, y: Row) = x.value - y.value
+    }
+
+    val rdd = sc.parallelize(1 to 4500).map(x => (Row(x), Row(x)))
+    val partitioner = new RangePartitioner(1500, rdd)
+    partitioner.getPartition(Row(100))
+  }
+
   test("HashPartitioner not equal to RangePartitioner") {
     val rdd = sc.parallelize(1 to 10).map(x => (x, x))
     val rangeP2 = new RangePartitioner(2, rdd)
@@ -177,3 +188,6 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     // Add other tests here for classes that should be able to handle empty partitions correctly
   }
 }
+
+
+private sealed case class Row(value: Int)
