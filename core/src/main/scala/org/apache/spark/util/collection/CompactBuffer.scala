@@ -49,7 +49,7 @@ private[spark] class CompactBuffer[T] extends Seq[T] with Serializable {
     }
   }
 
-  def update(position: Int, value: T): Unit = {
+  private def update(position: Int, value: T): Unit = {
     if (position < 0 || position >= curSize) {
       throw new IndexOutOfBoundsException
     }
@@ -79,19 +79,21 @@ private[spark] class CompactBuffer[T] extends Seq[T] with Serializable {
 
   def ++= (values: TraversableOnce[T]): CompactBuffer[T] = {
     values match {
+      // Optimize merging of CompactBuffers, used in cogroup and groupByKey
       case compactBuf: CompactBuffer[T] =>
         val oldSize = curSize
         // Copy the other buffer's size and elements to local variables in case it is equal to us
         val itsSize = compactBuf.curSize
         val itsElements = compactBuf.otherElements
         growToSize(curSize + itsSize)
-        if (itsSize > 0) {
+        if (itsSize == 1) {
           this(oldSize) = compactBuf.element0
-        }
-        if (itsSize > 1) {
+        } else if (itsSize == 2) {
+          this(oldSize) = compactBuf.element0
           this(oldSize + 1) = compactBuf.element1
-        }
-        if (itsSize > 2) {
+        } else if (itsSize > 2) {
+          this(oldSize) = compactBuf.element0
+          this(oldSize + 1) = compactBuf.element1
           // At this point our size is also above 2, so just copy its array directly into ours.
           // Note that since we added two elements above, the index in this.otherElements that we
           // should copy to is oldSize.
