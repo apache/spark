@@ -254,7 +254,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
               if (!requestMemory(amountToRequest)) {
                 // If the first request is not granted, try again after ensuring free space
                 // If there is still not enough space, give up and drop the partition
-                val result = ensureFreeSpace(blockId, globalUnrollMemory, unrolling = true)
+                val extraSpaceNeeded = globalUnrollMemory - unrollMemoryMap.values.sum
+                val result = ensureFreeSpace(blockId, extraSpaceNeeded)
                 droppedBlocks ++= result.droppedBlocks
                 keepUnrolling = requestMemory(amountToRequest)
               }
@@ -363,8 +364,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    */
   private def ensureFreeSpace(
       blockIdToAdd: BlockId,
-      space: Long,
-      unrolling: Boolean = false): ResultWithDroppedBlocks = {
+      space: Long): ResultWithDroppedBlocks = {
     logInfo(s"ensureFreeSpace($space) called with curMem=$currentMemory, maxMem=$maxMemory")
 
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
@@ -375,13 +375,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
 
     // Take into account the amount of memory currently occupied by unrolling blocks
-    val freeSpace =
-      if (!unrolling) {
-        val unrollMemoryMap = SparkEnv.get.unrollMemoryMap
-        unrollMemoryMap.synchronized { freeMemory - unrollMemoryMap.values.sum }
-      } else {
-        freeMemory
-      }
+    val unrollMemoryMap = SparkEnv.get.unrollMemoryMap
+    val freeSpace = unrollMemoryMap.synchronized { freeMemory - unrollMemoryMap.values.sum }
 
     if (freeSpace < space) {
       val rddToAdd = getRddId(blockIdToAdd)
