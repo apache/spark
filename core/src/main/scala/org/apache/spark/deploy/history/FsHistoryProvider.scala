@@ -37,7 +37,6 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     
   private val maxSavedApplications = conf.getInt("spark.history.fs.maxsavedapplications", 50)
 
-
   private val logDir = conf.get("spark.history.fs.logDirectory", null)
   if (logDir == null) {
     throw new IllegalArgumentException("Logging directory must be specified.")
