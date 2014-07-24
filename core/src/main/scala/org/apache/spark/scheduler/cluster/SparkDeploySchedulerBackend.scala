@@ -36,7 +36,7 @@ private[spark] class SparkDeploySchedulerBackend(
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
 
   val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
-  totalExpectedResources.getAndSet(maxCores.getOrElse(0))
+  val totalExpectedCores = maxCores.getOrElse(0)
 
   override def start() {
     super.start()
@@ -113,6 +113,6 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
-    totalCoreCount.get() >= totalExpectedResources.get() * minRegisteredRatio
+    totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
   }
 }

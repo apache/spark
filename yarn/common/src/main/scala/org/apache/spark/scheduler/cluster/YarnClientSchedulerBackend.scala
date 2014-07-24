@@ -38,6 +38,7 @@ private[spark] class YarnClientSchedulerBackend(
   var appId: ApplicationId = null
   var checkerThread: Thread = null
   var stopping: Boolean = false
+  var totalExpectedExecutors = 0
 
   private[spark] def addArg(optionName: String, envVar: String, sysProp: String,
       arrayBuf: ArrayBuffer[String]) {
@@ -83,7 +84,7 @@ private[spark] class YarnClientSchedulerBackend(
 
     logDebug("ClientArguments called with: " + argsArrayBuf)
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
-    totalExpectedResources.set(args.numExecutors)
+    totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
     appId = client.runApp()
     waitForApp()
@@ -150,6 +151,6 @@ private[spark] class YarnClientSchedulerBackend(
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
-    totalExecutors.get() >= totalExpectedResources.get() * minRegisteredRatio
+    totalExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 }

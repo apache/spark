@@ -48,7 +48,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
   var totalExecutors = new AtomicInteger(0)
-  var totalExpectedResources = new AtomicInteger(0)
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
@@ -268,8 +267,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
   override def isReady(): Boolean = {
     if (sufficientResourcesRegistered) {
-      logInfo("SchedulerBackend is ready for scheduling beginning, total expected resources: " +
-        s"$totalExpectedResources, minRegisteredResourcesRatio: $minRegisteredRatio")
+      logInfo("SchedulerBackend is ready for scheduling beginning after " +
+        s"reached minRegisteredResourcesRatio: $minRegisteredRatio")
       return true
     }
     if ((System.currentTimeMillis() - createTime) >= maxRegisteredWaitingTime) {
