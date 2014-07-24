@@ -71,8 +71,8 @@ package object sql {
    * }}}
    *
    * For native primitive access, it is invalid to use the native primitive interface to retrieve
-   * a value that is null, instead a user must check `isNullAt` before attempting to retrieve a value
-   * that might be null.
+   * a value that is null, instead a user must check `isNullAt` before attempting to retrieve a
+   * value that might be null.
    * An example of native primitive access:
    * {{{
    * // using the row from the previous example.
@@ -160,7 +160,7 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
-   * The data type representing `java.sql.Timestamp` values
+   * The data type representing `java.sql.Timestamp` values.
    *
    * @group dataType
    */
@@ -200,7 +200,7 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
-   * The data type representing `Byte` values
+   * The data type representing `Byte` values.
    *
    * @group dataType
    */
