@@ -36,15 +36,23 @@ import org.apache.flume.sink.AbstractSink
  * if an ACK is not received from Spark within that time
  * threads - Number of threads to use to receive requests from Spark (Default: 10)
  *
+ * This sink is unlike other Flume sinks in the sense that it does not push data,
+ * instead the process method in this sink simply blocks the SinkRunner the first time it is
+ * called. This sink starts up an Avro IPC server that uses the SparkFlumeProtocol.
+ *
+ * Each time a getEventBatch call comes, creates a transaction and reads events
+ * from the channel. When enough events are read, the events are sent to the Spark receiver and
+ * the thread itself is blocked and a reference to it saved off.
+ *
+ * When the ack for that batch is received,
+ * the thread which created the transaction is is retrieved and it commits the transaction with the
+ * channel from the same thread it was originally created in (since Flume transactions are
+ * thread local). If a nack is received instead, the sink rolls back the transaction. If no ack
+ * is received within the specified timeout, the transaction is rolled back too. If an ack comes
+ * after that, it is simply ignored and the events get re-sent.
+ *
  */
-// Flume forces transactions to be thread-local. So each transaction *must* be committed, or
-// rolled back from the thread it was originally created in. So each getEvents call from Spark
-// creates a TransactionProcessor which runs in a new thread, in which the transaction is created
-// and events are pulled off the channel. Once the events are sent to spark,
-// that thread is blocked and the TransactionProcessor is saved in a map,
-// until an ACK or NACK comes back or the transaction times out (after the specified timeout).
-// When the response comes, the TransactionProcessor is retrieved and then unblocked,
-// at which point the transaction is committed or rolled back.
+
 private[flume]
 class SparkSink extends AbstractSink with Logging with Configurable {
 

@@ -35,16 +35,20 @@ import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.streaming.{TestSuiteBase, TestOutputStream, StreamingContext}
 import org.apache.spark.streaming.flume.sink._
 
-  class FlumePollingStreamSuite extends TestSuiteBase {
+class FlumePollingStreamSuite extends TestSuiteBase {
 
   val testPort = 9999
+  val batchCount = 5
+  val eventsPerBatch = 100
+  val totalEventsPerChannel = batchCount * eventsPerBatch
+  val channelCapacity = 5000
 
   test("flume polling test") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
       FlumeUtils.createPollingStream(ssc, Seq(new InetSocketAddress("localhost", testPort)),
-        StorageLevel.MEMORY_AND_DISK, 100, 1)
+        StorageLevel.MEMORY_AND_DISK, eventsPerBatch, 1)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)
@@ -52,7 +56,7 @@ import org.apache.spark.streaming.flume.sink._
 
     // Start the channel and sink.
     val context = new Context()
-    context.put("capacity", "5000")
+    context.put("capacity", channelCapacity.toString)
     context.put("transactionCapacity", "1000")
     context.put("keep-alive", "0")
     val channel = new MemoryChannel()
@@ -77,7 +81,8 @@ import org.apache.spark.streaming.flume.sink._
     val ssc = new StreamingContext(conf, batchDuration)
     val addresses = Seq(testPort, testPort + 1).map(new InetSocketAddress("localhost", _))
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
-      FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK, 100, 5)
+      FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
+        eventsPerBatch, 5)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)
@@ -85,7 +90,7 @@ import org.apache.spark.streaming.flume.sink._
 
     // Start the channel and sink.
     val context = new Context()
-    context.put("capacity", "5000")
+    context.put("capacity", channelCapacity.toString)
     context.put("transactionCapacity", "1000")
     context.put("keep-alive", "0")
     val channel = new MemoryChannel()
@@ -127,7 +132,7 @@ import org.apache.spark.streaming.flume.sink._
       executorCompletion.take()
     }
     val startTime = System.currentTimeMillis()
-    while (outputBuffer.size < 5 &&
+    while (outputBuffer.size < batchCount * channels.size &&
       System.currentTimeMillis() - startTime < 15000) {
       logInfo("output.size = " + outputBuffer.size)
       Thread.sleep(100)
@@ -138,9 +143,9 @@ import org.apache.spark.streaming.flume.sink._
     ssc.stop()
 
     val flattenedBuffer = outputBuffer.flatten
-    assert(flattenedBuffer.size === 25 * channels.size)
+    assert(flattenedBuffer.size === totalEventsPerChannel * channels.size)
     var counter = 0
-    for (k <- 0 until channels.size; i <- 0 until 25) {
+    for (k <- 0 until channels.size; i <- 0 until totalEventsPerChannel) {
       val eventToVerify = EventBuilder.withBody((channels(k).getName + " - " +
         String.valueOf(i)).getBytes("utf-8"),
         Map[String, String]("test-" + i.toString -> "header"))
@@ -157,7 +162,7 @@ import org.apache.spark.streaming.flume.sink._
         j += 1
       }
     }
-    assert(counter === 25 * channels.size)
+    assert(counter === totalEventsPerChannel * channels.size)
   }
 
   def assertChannelIsEmpty(channel: MemoryChannel) = {
@@ -170,10 +175,10 @@ import org.apache.spark.streaming.flume.sink._
   private class TxnSubmitter(channel: MemoryChannel, clock: ManualClock) extends Callable[Void] {
     override def call(): Void = {
       var t = 0
-      for (i <- 0 until 5) {
+      for (i <- 0 until batchCount) {
         val tx = channel.getTransaction
         tx.begin()
-        for (j <- 0 until 5) {
+        for (j <- 0 until eventsPerBatch) {
           channel.put(EventBuilder.withBody((channel.getName + " - " + String.valueOf(t)).getBytes(
             "utf-8"),
             Map[String, String]("test-" + t.toString -> "header")))

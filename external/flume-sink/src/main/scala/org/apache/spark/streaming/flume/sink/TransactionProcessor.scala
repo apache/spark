@@ -213,6 +213,13 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
     charSeqMap
   }
 
+  /**
+   * When the thread is started it sets as many events as the batch size or less (if enough
+   * events aren't available) into the eventBatch and object and lets any threads waiting on the
+   * [[getEventBatch]] method to proceed. Then this thread waits for acks or nacks to come in,
+   * or for a specified timeout and commits or rolls back the transaction.
+   * @return
+   */
   override def call(): Void = {
     populateEvents()
     processAckOrNack()

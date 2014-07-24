@@ -31,6 +31,15 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
  * @param transactionTimeout Timeout in millis after which the transaction if not acked by Spark
  *                           is rolled back.
  */
+// Flume forces transactions to be thread-local. So each transaction *must* be committed, or
+// rolled back from the thread it was originally created in. So each getEvents call from Spark
+// creates a TransactionProcessor which runs in a new thread, in which the transaction is created
+// and events are pulled off the channel. Once the events are sent to spark,
+// that thread is blocked and the TransactionProcessor is saved in a map,
+// until an ACK or NACK comes back or the transaction times out (after the specified timeout).
+// When the response comes or a timeout is hit, the TransactionProcessor is retrieved and then
+// unblocked, at which point the transaction is committed or rolled back.
+
 private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
   val transactionTimeout: Int, val backOffInterval: Int) extends SparkFlumeProtocol with Logging {
   val transactionExecutorOpt = Option(Executors.newFixedThreadPool(threads,
