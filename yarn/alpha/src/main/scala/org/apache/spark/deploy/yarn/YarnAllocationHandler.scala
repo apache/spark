@@ -90,7 +90,7 @@ private[yarn] class YarnAllocationHandler(
 
   // Additional memory overhead - in mb.
   private def memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    YarnAllocationHandler.MEMORY_OVERHEAD)
+    math.max((YarnAllocationHandler.MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, YarnAllocationHandler.MEMORY_OVERHEAD_MIN))
 
   private val numExecutorsRunning = new AtomicInteger()
   // Used to generate a unique id per executor
@@ -548,8 +548,9 @@ object YarnAllocationHandler {
   // request types (like map/reduce in hadoop for example)
   val PRIORITY = 1
 
-  // Additional memory overhead - in mb
-  val MEMORY_OVERHEAD = 384
+  // Additional memory overhead
+  val MEMORY_OVERHEAD_FACTOR = 0.06
+  val MEMORY_OVERHEAD_MIN = 384
 
   // Host to rack map - saved from allocation requests
   // We are expecting this not to change.
