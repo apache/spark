@@ -926,7 +926,7 @@ private[hive] object HiveQl {
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
     case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
     case Token(DIV(), left :: right:: Nil) =>
-      Cast(Divide(nodeToExpr(left), nodeToExpr(right)), IntegerType)
+      Cast(Divide(nodeToExpr(left), nodeToExpr(right)), LongType)
     case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
 
     /* Comparisons */
