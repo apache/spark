@@ -100,6 +100,34 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     partitioner.getPartition(Row(100))
   }
 
+  test("RangePartitioner should run only one job if data is roughly balanced") {
+    val rdd = sc.makeRDD(0 until 20, 20).flatMap { i =>
+      val random = new java.util.Random(i)
+      Iterator.fill(5000 * i)((random.nextDouble() + i, i))
+    }.cache()
+    for (numPartitions <- Seq(10, 20, 40)) {
+      val partitioner = new RangePartitioner(numPartitions, rdd)
+      assert(partitioner.numPartitions === numPartitions)
+      assert(partitioner.singlePass === true)
+      val counts = rdd.keys.map(key => partitioner.getPartition(key)).countByValue().values
+      assert(counts.max < 2.0 * counts.min)
+    }
+  }
+
+  test("RangePartitioner should work well on unbalanced data") {
+    val rdd = sc.makeRDD(0 until 20, 20).flatMap { i =>
+      val random = new java.util.Random(i)
+      Iterator.fill(20 * i * i * i)((random.nextDouble() + i, i))
+    }.cache()
+    for (numPartitions <- Seq(2, 4, 8)) {
+      val partitioner = new RangePartitioner(numPartitions, rdd)
+      assert(partitioner.numPartitions === numPartitions)
+      assert(partitioner.singlePass === false)
+      val counts = rdd.keys.map(key => partitioner.getPartition(key)).countByValue().values
+      assert(counts.max < 2.0 * counts.min)
+    }
+  }
+
   test("HashPartitioner not equal to RangePartitioner") {
     val rdd = sc.parallelize(1 to 10).map(x => (x, x))
     val rangeP2 = new RangePartitioner(2, rdd)

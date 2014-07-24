@@ -108,6 +108,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 
   private var ordering = implicitly[Ordering[K]]
 
+  @transient private[spark] var singlePass = true // for unit tests
+
   // An array of upper bounds for the first (partitions - 1) partitions
   private var rangeBounds: Array[K] = {
     if (partitions == 1) {
@@ -116,7 +118,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       // This is the sample size we need to have roughly balanced output partitions.
       val sampleSize = 20.0 * partitions
       // Assume the input partitions are roughly balanced and over-sample a little bit.
-      val sampleSizePerPartition = math.ceil(5.0 * sampleSize / rdd.partitions.size).toInt
+      val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.size).toInt
       val shift = rdd.id
       val classTagK = classTag[K]
       val sketch = rdd.mapPartitionsWithIndex { (idx, iter) =>
@@ -149,9 +151,10 @@ class RangePartitioner[K : Ordering : ClassTag, V](
           }
         }
         if (imbalancedPartitions.nonEmpty) {
+          singlePass = false
           val sampleFunc: (TaskContext, Iterator[Product2[K, V]]) => Array[K] = { (context, iter) =>
             val random = new XORShiftRandom(byteswap32(context.partitionId - shift))
-            iter.map(_._1).filter(t => random.nextDouble() < fraction).toArray
+            iter.map(_._1).filter(t => random.nextDouble() < fraction).toArray(classTagK)
           }
           val weight = (1.0 / fraction).toFloat
           val resultHandler: (Int, Array[K]) => Unit = { (_, sample) =>
