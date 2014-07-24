@@ -18,11 +18,12 @@
 package org.apache.spark.util.collection
 
 /**
- * An append-only buffer similar to ArrayBuffer, but more efficient for small buffers. ArrayBuffer always allocates an
- * Object array to store the data, with 16 entries by default, so it has about 80-100 bytes of overhead. In contrast,
- * CompactBuffer can keep up to two elements in fields of the main object, and only allocates an Array[AnyRef] if
- * there are more entries than that. This makes it more efficient for operations like groupBy where we expect some
- * keys to have very few elements.
+ * An append-only buffer similar to ArrayBuffer, but more efficient for small buffers.
+ * ArrayBuffer always allocates an Object array to store the data, with 16 entries by default,
+ * so it has about 80-100 bytes of overhead. In contrast, CompactBuffer can keep up to two
+ * elements in fields of the main object, and only allocates an Array[AnyRef] if there are more
+ * entries than that. This makes it more efficient for operations like groupBy where we expect
+ * some keys to have very few elements.
  */
 private[spark] class CompactBuffer[T] extends Seq[T] with Serializable {
   // First two elements
@@ -89,8 +90,9 @@ private[spark] class CompactBuffer[T] extends Seq[T] with Serializable {
           this(oldSize + 1) = compactBuf.element1
         }
         if (itsSize > 2) {
-          // At this point our size is also above 2, so just copy its array directly into ours. Note that since we
-          // added two elements above, the index n this.otherElements that we should copy to is oldSize.
+          // At this point our size is also above 2, so just copy its array directly into ours.
+          // Note that since we added two elements above, the index n this.otherElements that we
+          // should copy to is oldSize.
           System.arraycopy(itsElements, 0, otherElements, oldSize, itsSize - 2)
         }
 
@@ -127,8 +129,9 @@ private[spark] class CompactBuffer[T] extends Seq[T] with Serializable {
       while (newSize - 2 > newArrayLen) {
         newArrayLen *= 2
         if (newArrayLen == Int.MinValue) {
-          // Prevent overflow if we double from 2^30 to 2^31, which will become Int.MinValue. Note that we set the new
-          // array length to Int.MaxValue - 2 so that our capacity calculation above still gives a positive integer.
+          // Prevent overflow if we double from 2^30 to 2^31, which will become Int.MinValue.
+          // Note that we set the new array length to Int.MaxValue - 2 so that our capacity
+          // calculation above still gives a positive integer.
           newArrayLen = Int.MaxValue - 2
         }
       }
