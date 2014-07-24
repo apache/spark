@@ -48,9 +48,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * The amount of space ensured for unrolling values in memory, shared across all cores.
    * This space is not reserved in advance, but allocated dynamically by dropping existing blocks.
    */
-  private val globalBufferMemory = {
-    val bufferFraction = conf.getDouble("spark.storage.bufferFraction", 0.2)
-    (maxMemory * bufferFraction).toLong
+  private val globalUnrollMemory = {
+    val unrollFraction = conf.getDouble("spark.storage.unrollFraction", 0.2)
+    (maxMemory * unrollFraction).toLong
   }
 
   logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
@@ -251,7 +251,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
             if (!requestMemory(amountToRequest)) {
               // If the first request is not granted, try again after ensuring free space
               // If there is still not enough space, give up and drop the partition
-              val result = ensureFreeSpace(blockId, globalBufferMemory)
+              val result = ensureFreeSpace(blockId, globalUnrollMemory)
               droppedBlocks ++= result.droppedBlocks
               keepUnrolling = requestMemory(amountToRequest)
             }

@@ -74,7 +74,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     conf.set("spark.test.useCompressedOops", "true")
     conf.set("spark.storage.disableBlockManagerHeartBeat", "true")
     conf.set("spark.driver.port", boundPort.toString)
-    conf.set("spark.storage.bufferFraction", "0.4")
+    conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
     conf.set("spark.storage.unrollCheckPeriod", "1")
     SparkEnv.set(env)
@@ -1024,7 +1024,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("safely unroll blocks") {
-    conf.set("spark.storage.bufferFraction", "0.2")
+    conf.set("spark.storage.unrollFraction", "0.2")
     store = new BlockManager(
       "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)
     /*
@@ -1056,7 +1056,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("safely unroll blocks (disk)") {
-    conf.set("spark.storage.bufferFraction", "0.2")
+    conf.set("spark.storage.unrollFraction", "0.2")
     store = new BlockManager(
       "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)
     /*

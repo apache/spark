@@ -459,7 +459,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.bufferFraction</code></td>
+  <td><code>spark.storage.unrollFraction</code></td>
   <td>0.2</td>
   <td>
     Fraction of <code>spark.storage.memoryFraction</code> to use for unrolling blocks in memory.
