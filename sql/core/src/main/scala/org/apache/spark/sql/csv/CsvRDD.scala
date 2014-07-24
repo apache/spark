@@ -38,26 +38,26 @@ private[sql] object CsvRDD extends Logging {
       csv: RDD[String],
       delimiter: String,
       quote: Char,
-      userSchema: StructType,
+      userSchema: Option[StructType],
       useHeader: Boolean): LogicalPlan = {
 
     val firstLine = csv.first()
-    val schema = if (userSchema == null) {
-      // Assume first row is representative and use it to determine number of fields
-      val firstRow = new CsvTokenizer(Seq(firstLine).iterator, delimiter, quote).next()
-      val header = if (useHeader) {
-        logger.info(s"Using header line: $firstLine")
-        firstRow
-      } else {
-        firstRow.zipWithIndex.map { case (value, index) => s"V$index"}
-      }
-      // By default fields are assumed to be StringType
-      val schemaFields = header.map { fieldName =>
-        StructField(fieldName, StringType, nullable = true)
-      }
-       StructType(schemaFields)
-    } else {
-      userSchema
+    val schema = userSchema match {
+      case Some(userSupportedSchema) => userSupportedSchema
+      case None =>
+        // Assume first row is representative and use it to determine number of fields
+        val firstRow = new CsvTokenizer(Seq(firstLine).iterator, delimiter, quote).next()
+        val header = if (useHeader) {
+          logger.info(s"Using header line: $firstLine")
+          firstRow
+        } else {
+          firstRow.zipWithIndex.map { case (value, index) => s"V$index"}
+        }
+        // By default fields are assumed to be StringType
+        val schemaFields = header.map { fieldName =>
+          StructField(fieldName, StringType, nullable = true)
+        }
+        StructType(schemaFields)
     }
 
     val numFields = schema.fields.length

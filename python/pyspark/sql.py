@@ -203,9 +203,10 @@ class SQLContext:
         >>> for csvStr in csvStrings:
         ...   print>>ofn, csvStr
         >>> ofn.close()
-        >>> csv = sqlCtx.csvFile(csvFile, delimiter = ", ", header = True)
+        >>> csv = sqlCtx.csvFile(csvFile, delimiter = ",", header = True)
         >>> sqlCtx.registerRDDAsTable(csv, "csvTable")
-        >>> csvRes = sqlCtx.sql("SELECT Year FROM csvTable limit 1")
+        >>> csvRes = sqlCtx.sql("SELECT Year FROM csvTable where Make = 'Ford'")
+        >>> csvRes.collect() == [{"Year": "1997"}]
         True
         """
         jschema_rdd = self._ssql_ctx.csvFile(path, delimiter, quote, header)
@@ -219,9 +220,10 @@ class SQLContext:
         NOTE: If there are new line characters inside quoted fields, use wholeTextFile to
         read each file into a single partition.
 
-        >>> csvrdd = sqlCtx.csvRDD(csv, delimiter = ", ", header = True)
+        >>> csvrdd = sqlCtx.csvRDD(csv, delimiter = ",", header = True)
         >>> sqlCtx.registerRDDAsTable(csvrdd, "csvTable2")
         >>> csvRes = sqlCtx.sql("SELECT count(*) FROM csvTable2")
+        >>> csvRes.collect() == [{"c0": 3}]
         True
         """
         def func(split, iterator):
@@ -553,11 +555,11 @@ def _test():
     ]
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
-    csvStrings = ['Year,Make,Model,Description'
-                  '"1997","Ford","E350",',
-                  '2000,Mercury,"Cougar", "Really ""Good"" car"',
-                  '2007,Honda,"Civic",']
-    globs['csvString'] = csvStrings
+    csvStrings = ['Year, Make, Model, Description',
+                  '"1997", "Ford", "E350", ',
+                  '2000, Mercury, "Cougar", "Really ""Good"" car"',
+                  '2007, Honda, "Civic", ']
+    globs['csvStrings'] = csvStrings
     globs['csv'] = sc.parallelize(csvStrings)
     globs['nestedRdd1'] = sc.parallelize([
         {"f1": array('i', [1, 2]), "f2": {"row1": 1.0}},
