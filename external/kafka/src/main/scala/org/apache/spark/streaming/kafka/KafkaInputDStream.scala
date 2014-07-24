@@ -25,7 +25,7 @@ import java.util.concurrent.Executors
 
 import kafka.consumer._
 import kafka.serializer.Decoder
-import kafka.utils.{ZkUtils, VerifiableProperties}
+import kafka.utils.VerifiableProperties
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
@@ -95,21 +95,7 @@ class KafkaReceiver[
     consumerConnector = Consumer.create(consumerConfig)
     logInfo("Connected to " + zkConnect)
 
-    // When auto.offset.reset is defined as smallest, it is our responsibility to try and whack the
-    // consumer group zk node. This parameter is triggered when current offset is out of range,
-    // default is 'largest', which means shifting the offset to the end of current queue.
-    //
-    // The kafka high level consumer doesn't expose setting offsets currently, this is a trick
-    // copied from Kafka's ConsoleConsumer. See code related to 'auto.offset.reset' when it is
-    // set to 'smallest':
-    // scalastyle:off
-    // https://github.com/apache/kafka/blob/0.8.0/core/src/main/scala/kafka/consumer/ConsoleConsumer.scala:181
-    // scalastyle:on
-    if (kafkaParams.get("auto.offset.reset") == Some("smallest")) {
-      ZkUtils.maybeDeletePath(zkConnect, "/consumers/" + kafkaParams("group.id"))
-    }
-
-    val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
+    val keyDecoder = manifest[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[K]]
     val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])

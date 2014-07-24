@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.kafka
 
+
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
 
@@ -24,11 +25,12 @@ import java.lang.{Integer => JInt}
 import java.util.{Map => JMap}
 
 import kafka.serializer.{Decoder, StringDecoder}
+import kafka.utils.ZkUtils
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext, JavaPairDStream}
-import org.apache.spark.streaming.dstream.{ReceiverInputDStream, DStream}
+import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext}
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 
 object KafkaUtils {
@@ -144,5 +146,24 @@ object KafkaUtils {
 
     createStream[K, V, U, T](
       jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
+  }
+
+  /**
+   * Delete the consumer group related Zookeeper metadata immediately,
+   * force consumer to ignore previous consumer offset and directly read data from the beginning
+   * or end of the partition. The behavior of reading data from the beginning or end of the
+   * partition also relies on kafka parameter 'auto.offset.reset':
+   * When 'auto.offset.reset' = 'smallest', directly read data from beginning,
+   * will re-read the whole partition.
+   * When 'auto.offset.reset' = 'largest', directly read data from end, ignore old, unwanted data.
+   * This is default in Kafka 0.8.
+   *
+   * To avoid concurrent deleting Zookeeper metadata in each Receiver when multiple consumers are
+   * launched, this should be call be createStream().
+   * @param zkQuorum Zookeeper quorum (hostname:port,hostname:port,..).
+   * @param groupId The group id for this consumer.
+   */
+  def resetOffset(zkQuorum: String, groupId: String) {
+    ZkUtils.maybeDeletePath(zkQuorum, s"/consumers/$groupId")
   }
 }
