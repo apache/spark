@@ -19,22 +19,26 @@
 package org.apache.spark.mllib.grouped
 
 import org.apache.spark.SparkContext._
-import org.scalatest.FunSuite
 import org.apache.spark.mllib.util.{LocalSparkContext, MLUtils}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.optimization.{GradientDescent, SquaredL2Updater, HingeGradient}
-import org.apache.spark.mllib.classification.SVMWithSGD
+import org.apache.spark.mllib.classification.{SVMSuite, LogisticRegressionSuite, LogisticRegressionWithSGD, SVMWithSGD}
+import org.apache.spark.mllib.regression.LabeledPoint
 
-/**
- * Created by kellrott on 7/1/14.
- */
-class GroupedTestSuite extends FunSuite with LocalSparkContext {
+import org.scalatest.FunSuite
+import org.scalatest.Matchers
+
+class GroupedTestSuite extends FunSuite with LocalSparkContext with Matchers {
 
   test("Grouped Optimization") {
 
-    val data = MLUtils.loadLibSVMFile(sc, "data/sample_libsvm_data.txt")
+    val nPoints = 10000
+    val A = 0.01
+    val B = -1.5
+    val C = 1.0
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val data = sc.parallelize(testData)
     val folds = MLUtils.kFold(data, 10, 11)
-    //SVMWithSGD.train(folds(0)._1, 100)
 
     val numFeatures: Int = data.first().features.size
     val initialWeights = Vectors.dense(new Array[Double](numFeatures))
@@ -59,7 +63,12 @@ class GroupedTestSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Grouped SVM") {
-    val data = MLUtils.loadLibSVMFile(sc, "data/sample_libsvm_data.txt")
+    val nPoints = 10000
+    val A = 0.01
+    val B = -1.5
+    val C = 1.0
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val data = sc.parallelize(testData)
     val folds = MLUtils.kFold(data, 10, 11)
 
     val array_models = folds.map( x => SVMWithSGD.train(x._1, 10))
@@ -67,18 +76,45 @@ class GroupedTestSuite extends FunSuite with LocalSparkContext {
     val trainingFolds = GroupedUtils.kFoldTrainingUnion(folds)
     val grouped_models = GroupedSVMWithSGD.train(trainingFolds, 10)
 
+    assert( grouped_models.map( x => array_models.map( y => x._2.weights == y.weights).exists(_==true) ).forall(_==true) )
+  }
+
+
+  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
+    val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
+      prediction != expected.label
+    }
+    // At least 83% of the predictions should be on.
+    ((input.length - numOffPredictions).toDouble / input.length) should be > 0.83
+  }
+
+  // Test if grouped logistic regression method returns the same results as doing
+  // regressions one by one
+  test("Grouped logistic regression") {
+    val nPoints = 10000
+    val A = 2.0
+    val B = -1.5
+
+    val testData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 42)
+
+    val baseTestRDD = sc.parallelize(testData, 2)
+    baseTestRDD.cache()
+
+    val testFolds = MLUtils.kFold(baseTestRDD, 10, 42)
+
+    val testUnion = GroupedUtils.kFoldTrainingUnion(testFolds)
+
+    val array_models = testFolds.map( _._1 ).map( testRDD => {
+      val lr = new LogisticRegressionWithSGD().setIntercept(true)
+      lr.optimizer.setStepSize(10.0).setNumIterations(20)
+      lr.run(testRDD)
+    } )
+
+    val glr = new GroupedLogisticRegressionWithSGD[Int]().setIntercept(true)
+    glr.optimizer.setStepSize(10.0).setNumIterations(20)
+    val grouped_models = glr.run(testUnion)
 
     assert( grouped_models.map( x => array_models.map( y => x._2.weights == y.weights).exists(_==true) ).forall(_==true) )
-
-    /*
-    array_models.foreach( x => {
-      println(x.weights)
-    } )
-    println("===")
-    grouped_models.foreach( x => {
-      println(x._2.weights)
-    } )
-    */
   }
 
 }

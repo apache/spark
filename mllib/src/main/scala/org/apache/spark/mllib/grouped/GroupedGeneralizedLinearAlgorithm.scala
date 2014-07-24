@@ -55,6 +55,15 @@ abstract class GroupedGeneralizedLinearAlgorithm[K, M <: GeneralizedLinearModel]
   protected var validateData: Boolean = true
 
   /**
+   * Set if the algorithm should add an intercept. Default false.
+   * We set the default to false because adding the intercept will cause memory allocation.
+   */
+  def setIntercept(addIntercept: Boolean): this.type = {
+    this.addIntercept = addIntercept
+    this
+  }
+
+  /**
    * Run the algorithm with the configured parameters on an input
    * RDD of LabeledPoint entries.
    */
