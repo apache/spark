@@ -45,6 +45,15 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   private val putLock = new Object()
 
   /**
+   * Mapping from thread ID to memory used for unrolling blocks.
+   *
+   * To avoid potential deadlocks, all accesses of this map in MemoryStore are assumed to
+   * first synchronize on `putLock` and then on `unrollMemoryMap`, in that particular order.
+   * This is lazy because SparkEnv does not exist when we mock this class in tests.
+   */
+  private lazy val unrollMemoryMap = SparkEnv.get.unrollMemoryMap
+
+  /**
    * The amount of space ensured for unrolling values in memory, shared across all cores.
    * This space is not reserved in advance, but allocated dynamically by dropping existing blocks.
    */
@@ -220,19 +229,20 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     val memoryGrowthFactor = 1.5
 
     val threadId = Thread.currentThread().getId
-    val unrollMemoryMap = SparkEnv.get.unrollMemoryMap
     var vector = new SizeTrackingVector[Any]
 
-    // Request memory for our vector and return whether request is granted.
-    // This involves synchronizing across all threads and can be expensive if called frequently.
+    // Request memory for our vector and return whether the request is granted. This involves
+    // synchronizing on putLock and unrollMemoryMap (in that order), which could be expensive.
     def requestMemory(memoryToRequest: Long): Boolean = {
-      unrollMemoryMap.synchronized {
-        val previouslyOccupiedMemory = unrollMemoryMap.get(threadId).getOrElse(0L)
-        val otherThreadsMemory = unrollMemoryMap.values.sum - previouslyOccupiedMemory
-        val availableMemory = freeMemory - otherThreadsMemory
-        val granted = availableMemory > memoryToRequest
-        if (granted) { unrollMemoryMap(threadId) = memoryToRequest }
-        granted
+      putLock.synchronized {
+        unrollMemoryMap.synchronized {
+          val previouslyOccupiedMemory = unrollMemoryMap.get(threadId).getOrElse(0L)
+          val otherThreadsMemory = unrollMemoryMap.values.sum - previouslyOccupiedMemory
+          val availableMemory = freeMemory - otherThreadsMemory
+          val granted = availableMemory > memoryToRequest
+          if (granted) { unrollMemoryMap(threadId) = memoryToRequest }
+          granted
+        }
       }
     }
 
@@ -248,18 +258,20 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           val currentSize = vector.estimateSize()
           if (currentSize >= memoryThreshold) {
             val amountToRequest = (currentSize * memoryGrowthFactor).toLong
-            // Hold the put lock, in case another thread concurrently puts a block that
-            // takes up the free space we just ensured for unrolling here
+            // Hold the put lock, in case another thread concurrently puts a block that takes
+            // up the unrolling space we just ensured here
             putLock.synchronized {
-              if (!requestMemory(amountToRequest)) {
-                // If the first request is not granted, try again after ensuring free space
-                // If there is still not enough space, give up and drop the partition
-                val extraSpaceNeeded = globalUnrollMemory - unrollMemoryMap.values.sum
-                val result = ensureFreeSpace(blockId, extraSpaceNeeded)
-                droppedBlocks ++= result.droppedBlocks
-                keepUnrolling = requestMemory(amountToRequest)
+              unrollMemoryMap.synchronized {
+                if (!requestMemory(amountToRequest)) {
+                  // If the first request is not granted, try again after ensuring free space
+                  // If there is still not enough space, give up and drop the partition
+                  val extraSpaceNeeded = globalUnrollMemory - unrollMemoryMap.values.sum
+                  val result = ensureFreeSpace(blockId, extraSpaceNeeded)
+                  droppedBlocks ++= result.droppedBlocks
+                  keepUnrolling = requestMemory(amountToRequest)
+                }
+                memoryThreshold = amountToRequest
               }
-              memoryThreshold = amountToRequest
             }
           }
         }
@@ -357,7 +369,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
    * don't fit into memory that we want to avoid).
    *
-   * Assume that a lock is held by the caller to ensure only one thread is dropping blocks.
+   * Assume that `putLock` is held by the caller to ensure only one thread is dropping blocks.
    * Otherwise, the freed space may fill up before the caller puts in their new value.
    *
    * Return whether there is enough free space, along with the blocks dropped in the process.
@@ -375,7 +387,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
 
     // Take into account the amount of memory currently occupied by unrolling blocks
-    val unrollMemoryMap = SparkEnv.get.unrollMemoryMap
     val freeSpace = unrollMemoryMap.synchronized { freeMemory - unrollMemoryMap.values.sum }
 
     if (freeSpace < space) {
