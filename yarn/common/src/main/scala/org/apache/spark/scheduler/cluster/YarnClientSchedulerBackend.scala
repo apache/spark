@@ -133,9 +133,7 @@ private[spark] class YarnClientSchedulerBackend(
           }
           Thread.sleep(1000L)
         }
-        if (checkerThread != null) {
-          checkerThread = null
-        }
+        checkerThread = null
         Thread.currentThread().interrupt()
       }
     }
