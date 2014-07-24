@@ -40,8 +40,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   @volatile private var currentMemory = 0L
 
-  // Object used to ensure that only one thread is putting blocks and if necessary,
-  // dropping blocks from the memory store.
+  // Object used to ensure that only one thread is putting blocks and if necessary, dropping
+  // blocks from the memory store.
   private val putLock = new Object()
 
   /**
