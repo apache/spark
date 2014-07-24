@@ -35,7 +35,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private val UPDATE_INTERVAL_MS = conf.getInt("spark.history.fs.updateInterval",
     conf.getInt("spark.history.updateInterval", 10)) * 1000
     
-  private val maxSavedApplications = conf.getInt("spark.history.fs.maxsavedapplications", 50)
+  private val maxApplicationEnabled = conf.getBoolean("spark.history.fs.maxsavedapplication.enable", false)
+
+  private val maxSavedApplication = conf.getInt("spark.history.fs.maxsavedapplication", 50)
 
   private val logDir = conf.get("spark.history.fs.logDirectory", null)
   if (logDir == null) {
@@ -119,10 +121,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       val logStatus = fs.listStatus(new Path(logDir))
       var logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
       
-      if(logDirs.size > maxSavedApplications)
+      if(maxApplicationEnabled && logDirs.size > maxSavedApplication)
       {
           val apps = logDirs.sortBy(dir => -getModificationTime(dir))
-          val deleteApps = apps.takeRight(logDirs.size - maxSavedApplications);
+          val deleteApps = apps.takeRight(logDirs.size - maxSavedApplication);
           deleteApps.foreach(x => fs.delete(x.getPath, true))
           logDirs = fs.listStatus(new Path(logDir))
       }
