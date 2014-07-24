@@ -34,10 +34,13 @@ private[mllib] object Entropy extends ClassificationImpurity {
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
-   * @return information value
+   * @return information value, or 0 if totalCount = 0
    */
   @DeveloperApi
   override def calculate(counts: Array[Double], totalCount: Double): Double = {
+    if (totalCount == 0) {
+      return 0
+    }
     val numClasses = counts.length
     var impurity = 0.0
     var classIndex = 0

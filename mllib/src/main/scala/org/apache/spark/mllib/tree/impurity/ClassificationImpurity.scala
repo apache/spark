@@ -31,7 +31,7 @@ private[mllib] trait ClassificationImpurity extends Serializable {
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
-   * @return information value
+   * @return information value, or 0 if count = 0
    */
   @DeveloperApi
   def calculate(counts: Array[Double], totalCount: Double): Double

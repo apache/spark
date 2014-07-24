@@ -23,7 +23,8 @@ import org.apache.spark.mllib.tree.impurity.RegressionImpurities
 /**
  * :: Experimental ::
  * Stores all the configuration options for DecisionTreeRegressor construction
- * @param impurity criterion used for information gain calculation (e.g., Variance)
+ * @param impurity Criterion used for information gain calculation.
+ *                 Currently supported: "variance"
  * @param maxDepth Maximum depth of the tree.
  *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
  * @param maxBins maximum number of bins used for splitting features

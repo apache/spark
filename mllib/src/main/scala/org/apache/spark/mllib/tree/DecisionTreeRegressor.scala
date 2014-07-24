@@ -41,7 +41,7 @@ class DecisionTreeRegressor (params: DTRegressorParams)
 
   /**
    * Method to train a decision tree model over an RDD
-   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
+   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @param datasetInfo  Dataset metadata specifying number of classes, features, etc.
    * @return a DecisionTreeRegressorModel that can be used for prediction
    */

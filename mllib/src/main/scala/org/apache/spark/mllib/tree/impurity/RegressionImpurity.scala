@@ -32,7 +32,7 @@ private[mllib] trait RegressionImpurity extends Serializable {
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
-   * @return information value
+   * @return information value, or 0 if count = 0
    */
   @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double

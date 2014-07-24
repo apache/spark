@@ -87,7 +87,11 @@ class DecisionTreeClassifier (params: DTClassifierParams)
 
   /**
    * Extracts left and right split aggregates.
-   * @param binData Array[Double] of size 2 * numFeatures * numBins
+   * @param binData Aggregate array slice from getBinDataForNode.
+   *                For unordered features, this is leftChildData ++ rightChildData,
+   *                 each of which is indexed by (feature, split/bin, class),
+   *                 with class being the least significant bit.
+   *                For ordered features, this is of size numClasses * numBins * numFeatures.
    * @return (leftNodeAgg, rightNodeAgg) tuple of type (Array[Array[Array[Double\]\]\],
    *         Array[Array[Array[Double\]\]\]) where each array is of size(numFeature,
    *         (numBins - 1), numClasses)
@@ -134,6 +138,11 @@ class DecisionTreeClassifier (params: DTClassifierParams)
       }
     }
 
+    /**
+     * Reshape binData for this feature.
+     * Indexes binData as (feature, split, class) with class as the least significant bit.
+     * @param leftNodeAgg   leftNodeAgg(featureIndex)(splitIndex)(classIndex) = aggregate value
+     */
     def findAggForUnorderedFeatureClassification(
         leftNodeAgg: Array[Array[Array[Double]]],
         rightNodeAgg: Array[Array[Array[Double]]],
@@ -209,13 +218,12 @@ class DecisionTreeClassifier (params: DTClassifierParams)
    * either the left count or the right count of one of the p bins is
    * incremented based upon whether the feature is classified as 0 or 1.
    * @param agg Array storing aggregate calculation, of size:
-   *            numClasses * numBins * numFeatures * numNodes
-   *            TODO: FIX DOC
+   *            numClasses * numBins * numFeatures * numNodes for ordered features, or
+   *            2 * numClasses * numBins * numFeatures * numNodes for unordered features
    * @param arr  Bin mapping from findBinsForLevel.
    *             Array of size 1 + (numFeatures * numNodes).
    * @return Array storing aggregate calculation, of size:
-   *         2 * numBins * numFeatures * numNodes for ordered features, or
-   *         2 * numClasses * numBins * numFeatures * numNodes for unordered features
+   *
    */
   protected def binSeqOpSub(
       agg: Array[Double],
@@ -225,19 +233,21 @@ class DecisionTreeClassifier (params: DTClassifierParams)
       bins: Array[Array[Bin]]): Array[Double] = {
     val numBins = bins(0).length
     if(datasetInfo.isMulticlassWithCategoricalFeatures) {
-      unorderedClassificationBinSeqOp(arr, agg, datasetInfo, numNodes, bins)
+      multiclassWithCategoricalBinSeqOp(arr, agg, datasetInfo, numNodes, bins)
     } else {
-      orderedClassificationBinSeqOp(arr, agg, datasetInfo, numNodes, numBins)
+      binaryOrNoCategoricalBinSeqOp(arr, agg, datasetInfo, numNodes, numBins)
     }
     agg
   }
 
   /**
    * Calculates the information gain for all splits based upon left/right split aggregates.
-   * @param leftNodeAgg left node aggregates
+   * @param leftNodeAgg Left node aggregates:
+   *                    leftNodeAgg(feature)(split)(class) = weight of examples
    * @param featureIndex feature index
    * @param splitIndex split index
-   * @param rightNodeAgg right node aggregate
+   * @param rightNodeAgg Right node aggregates:
+   *                     rightNodeAgg(feature)(split)(class) = weight of examples
    * @param topImpurity impurity of the parent node
    * @return information gain and statistics for all splits
    */
@@ -252,20 +262,10 @@ class DecisionTreeClassifier (params: DTClassifierParams)
 
     val numClasses = datasetInfo.numClasses
 
-    val leftCounts: Array[Double] = new Array[Double](numClasses)
-    val rightCounts: Array[Double] = new Array[Double](numClasses)
-    var leftTotalCount = 0.0
-    var rightTotalCount = 0.0
-    var classIndex = 0
-    while (classIndex < numClasses) {
-      val leftClassCount = leftNodeAgg(featureIndex)(splitIndex)(classIndex)
-      val rightClassCount = rightNodeAgg(featureIndex)(splitIndex)(classIndex)
-      leftCounts(classIndex) = leftClassCount
-      leftTotalCount += leftClassCount
-      rightCounts(classIndex) = rightClassCount
-      rightTotalCount += rightClassCount
-      classIndex += 1
-    }
+    val leftCounts: Array[Double] = leftNodeAgg(featureIndex)(splitIndex)
+    val rightCounts: Array[Double] = rightNodeAgg(featureIndex)(splitIndex)
+    var leftTotalCount = leftCounts.sum
+    var rightTotalCount = rightCounts.sum
 
     val impurity = {
       if (level > 0) {
@@ -282,33 +282,15 @@ class DecisionTreeClassifier (params: DTClassifierParams)
       }
     }
 
-    if (leftTotalCount == 0) {
-      return new InformationGainStats(0, topImpurity, topImpurity, Double.MinValue, 1)
-    }
-    if (rightTotalCount == 0) {
-      return new InformationGainStats(0, topImpurity, Double.MinValue, topImpurity, 1)
-    }
-
-    val leftImpurity = impurityFunctor.calculate(leftCounts, leftTotalCount)
-    val rightImpurity = impurityFunctor.calculate(rightCounts, rightTotalCount)
-
-    val leftWeight = leftTotalCount / (leftTotalCount + rightTotalCount)
-    val rightWeight = rightTotalCount / (leftTotalCount + rightTotalCount)
-
-    val gain = {
-      if (level > 0) {
-        impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-      } else {
-        impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-      }
-    }
-
     val totalCount = leftTotalCount + rightTotalCount
+    if (totalCount == 0) {
+      // Return arbitrary prediction.
+      return new InformationGainStats(0, topImpurity, topImpurity, topImpurity, 0)
+    }
 
     // Sum of count for each label
-    val leftRightCounts: Array[Double]
-    = leftCounts.zip(rightCounts)
-      .map{case (leftCount, rightCount) => leftCount + rightCount}
+    val leftRightCounts: Array[Double] =
+      leftCounts.zip(rightCounts).map{ case (leftCount, rightCount) => leftCount + rightCount }
 
     def indexOfLargestArrayElement(array: Array[Double]): Int = {
       val result = array.foldLeft(-1, Double.MinValue, 0) {
@@ -322,11 +304,40 @@ class DecisionTreeClassifier (params: DTClassifierParams)
     val predict = indexOfLargestArrayElement(leftRightCounts)
     val prob = leftRightCounts(predict) / totalCount
 
+    val leftImpurity = if (leftTotalCount == 0) {
+      topImpurity
+    } else {
+      impurityFunctor.calculate(leftCounts, leftTotalCount)
+    }
+    val rightImpurity = if (rightTotalCount == 0) {
+      topImpurity
+    } else {
+      impurityFunctor.calculate(rightCounts, rightTotalCount)
+    }
+
+    val leftWeight = leftTotalCount / totalCount
+    val rightWeight = rightTotalCount / totalCount
+
+    val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
+
     new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict, prob)
   }
 
   /**
    * Get bin data for one node.
+   *
+   * @param node  Node index in this (level, group).
+   * @param binAggregates  For unordered features,
+   *                        the first half of binAggregates contains leftChildData,
+   *                        and the second half contains rightChildData.
+   *                        Each half is of size numNodes * numFeatures * numBins * numClasses.
+   *                       For ordered features,
+   *                        this is of size numNodes * numFeatures * numBins * numClasses.
+   *                       Indexing uses node as the most significant bit.
+   * @return  For unordered features, returns leftChildData ++ rightChildData,
+   *           each of which is indexed by (feature, bin/split, class),
+   *           with class being the least significant bit.
+   *          For ordered features, returns data of size numClasses * numBins * numFeatures.
    */
   protected def getBinDataForNode(
       node: Int,
@@ -338,11 +349,12 @@ class DecisionTreeClassifier (params: DTClassifierParams)
       val shift = datasetInfo.numClasses * node * numBins * datasetInfo.numFeatures
       val rightChildShift = datasetInfo.numClasses * numBins * datasetInfo.numFeatures * numNodes
       val binsForNode = {
-        val leftChildData
-        = binAggregates.slice(shift, shift + datasetInfo.numClasses * numBins * datasetInfo.numFeatures)
-        val rightChildData
-        = binAggregates.slice(rightChildShift + shift,
-          rightChildShift + shift + datasetInfo.numClasses * numBins * datasetInfo.numFeatures)
+        val leftChildData = binAggregates.slice(
+            shift,
+            shift + datasetInfo.numClasses * numBins * datasetInfo.numFeatures)
+        val rightChildData = binAggregates.slice(
+            rightChildShift + shift,
+            rightChildShift + shift + datasetInfo.numClasses * numBins * datasetInfo.numFeatures)
         leftChildData ++ rightChildData
       }
       binsForNode
@@ -388,9 +400,8 @@ class DecisionTreeClassifier (params: DTClassifierParams)
 
   /**
    *
-   * @param arr  Size numNodes * numFeatures + 1.
-   *             Indexed by (node, feature) where feature is the least significant bit,
-   *             shifted by 1.
+   * @param arr  arr(0) = label.
+   *             arr(1 + featureIndex + nodeIndex * numFeatures) = feature value (category)
    * @param agg  Indexed by (node, feature, bin, label) where label is the least significant bit.
    * @param rightChildShift
    * @param bins
@@ -408,19 +419,22 @@ class DecisionTreeClassifier (params: DTClassifierParams)
 
     // Find the bin index for this feature.
     val arrIndex = 1 + datasetInfo.numFeatures * nodeIndex + featureIndex
+    val featureValue = arr(arrIndex)
     // Update the left or right count for one bin.
-    val aggShift = datasetInfo.numClasses * numBins * datasetInfo.numFeatures * nodeIndex
-    val aggIndex = aggShift + datasetInfo.numClasses * featureIndex * numBins +
-      arr(arrIndex).toInt * datasetInfo.numClasses
+    val aggShift =
+      nodeIndex * datasetInfo.numFeatures * numBins * datasetInfo.numClasses +
+      featureIndex * numBins * datasetInfo.numClasses +
+      label.toInt
     // Find all matching bins and increment their values
     val featureCategories = datasetInfo.categoricalFeaturesInfo(featureIndex)
     val numCategoricalBins = math.pow(2.0, featureCategories - 1).toInt - 1
     var binIndex = 0
     while (binIndex < numCategoricalBins) {
-      if (bins(featureIndex)(binIndex).highSplit.categories.contains(label.toInt)) {
-        agg(aggIndex + binIndex) += 1
+      val aggIndex = aggShift + binIndex * datasetInfo.numClasses
+      if (bins(featureIndex)(binIndex).highSplit.categories.contains(featureValue)) {
+        agg(aggIndex) += 1
       } else {
-        agg(rightChildShift + aggIndex + binIndex) += 1
+        agg(rightChildShift + aggIndex) += 1
       }
       binIndex += 1
     }
@@ -436,7 +450,7 @@ class DecisionTreeClassifier (params: DTClassifierParams)
    * @param numNodes
    * @param numBins
    */
-  private def orderedClassificationBinSeqOp(
+  private def binaryOrNoCategoricalBinSeqOp(
       arr: Array[Double],
       agg: Array[Double],
       datasetInfo: DatasetInfo,
@@ -471,11 +485,13 @@ class DecisionTreeClassifier (params: DTClassifierParams)
    *            numClasses * numBins * numFeatures * numNodes
    *            // Size set by getElementsPerNode():
    *            //   2 * numClasses * numBins * numFeatures * numNodes
+   *           SHOULD BE indexed by (node, feature, bin, class),
+   *            with class being the least significant bit. (based on future use)
    * @param datasetInfo  Dataset metadata.
    * @param numNodes     Number of nodes in this (level, group).
    * @param bins
    */
-  private def unorderedClassificationBinSeqOp(
+  private def multiclassWithCategoricalBinSeqOp(
       arr: Array[Double],
       agg: Array[Double],
       datasetInfo: DatasetInfo,
@@ -517,6 +533,7 @@ class DecisionTreeClassifier (params: DTClassifierParams)
   }
 
 }
+
 
 object DecisionTreeClassifier extends Serializable with Logging {
 
