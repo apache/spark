@@ -37,7 +37,7 @@ private[ui] class StageTableBase(
   protected def isFairScheduler = parent.isFairScheduler
 
   protected def columns: Seq[Node] = {
-    <th>Stage Id</th> ++
+    <th>ID</th> ++
     {if (isFairScheduler) {<th>Pool Name</th>} else Seq.empty} ++
     <th>Description</th>
     <th>Submitted</th>
@@ -153,7 +153,10 @@ private[ui] class StageTableBase(
     val shuffleWrite = stageData.shuffleWriteBytes
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
 
-    <td>{s.stageId}</td> ++
+    <td>{s.stageId}{if (s.attemptId > 0) {
+      " (Attempt %d)".format(s.attemptId + 1)
+    }}
+    </td> ++
     {if (isFairScheduler) {
       <td>
         <a href={"%s/stages/pool?poolname=%s"

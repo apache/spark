@@ -753,6 +753,8 @@ class DAGScheduler(
       null
     }
 
+    stageToInfos(stage) = StageInfo.fromStage(stage)
+
     // must be run listener before possible NotSerializableException
     // should be "StageSubmitted" first and then "JobEnded"
     listenerBus.post(SparkListenerStageSubmitted(stageToInfos(stage), properties))
