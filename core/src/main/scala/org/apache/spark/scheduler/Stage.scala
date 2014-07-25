@@ -108,8 +108,8 @@ private[spark] class Stage(
 
   def attemptId: Int = nextAttemptId
 
-  val name = callSite.short
-  val details = callSite.long
+  val name = callSite.shortForm
+  val details = callSite.longForm
 
   override def toString = "Stage " + id
 

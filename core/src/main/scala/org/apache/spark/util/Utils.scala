@@ -44,7 +44,7 @@ import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
-private[spark] case class CallSite(short: String, long: String)
+private[spark] case class CallSite(shortForm: String, longForm: String)
 
 /**
  * Various utility methods used by Spark.
@@ -848,8 +848,8 @@ private[spark] object Utils extends Logging {
     }
     val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
     CallSite(
-      short = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
-      long = callStack.take(callStackDepth).mkString("\n"))
+      shortForm = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
+      longForm = callStack.take(callStackDepth).mkString("\n"))
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */

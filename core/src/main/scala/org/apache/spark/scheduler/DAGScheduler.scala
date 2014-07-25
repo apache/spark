@@ -455,7 +455,7 @@ class DAGScheduler(
     waiter.awaitResult() match {
       case JobSucceeded => {}
       case JobFailed(exception: Exception) =>
-        logInfo("Failed to run " + callSite.short)
+        logInfo("Failed to run " + callSite.shortForm)
         throw exception
     }
   }
@@ -679,7 +679,7 @@ class DAGScheduler(
       val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
       clearCacheLocs()
       logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".format(
-        job.jobId, callSite.short, partitions.length, allowLocal))
+        job.jobId, callSite.shortForm, partitions.length, allowLocal))
       logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
       logInfo("Parents of final stage: " + finalStage.parents)
       logInfo("Missing parents: " + getMissingParentStages(finalStage))
