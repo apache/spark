@@ -62,12 +62,12 @@ object MimaExcludes {
               "org.apache.spark.storage.MemoryStore.Entry")
           ) ++
           Seq(
-            // BlockManager now uses Arrays instead of ArrayBuffers
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+            // Renamed putValues -> putArray + putIterator
+            ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.storage.MemoryStore.putValues"),
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+            ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.storage.DiskStore.putValues"),
-            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+            ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.storage.TachyonStore.putValues")
           ) ++
           Seq(
