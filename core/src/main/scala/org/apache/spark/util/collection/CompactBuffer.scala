@@ -129,7 +129,7 @@ private[spark] class CompactBuffer[T] extends Seq[T] with Serializable {
     }
     val capacity = if (otherElements != null) otherElements.length + 2 else 2
     if (newSize > capacity) {
-      var newArrayLen = 16
+      var newArrayLen = 8
       while (newSize - 2 > newArrayLen) {
         newArrayLen *= 2
         if (newArrayLen == Int.MinValue) {
