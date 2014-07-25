@@ -204,9 +204,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   /** Fill in values by parsing user options. */
   private def parseOpts(opts: Seq[String]): Unit = {
-    var inSparkOpts = true
-
     // Delineates parsing of Spark options from parsing of user options.
+    var inSparkOpts = true
     parse(opts)
 
     def parse(opts: Seq[String]): Unit = opts match {
@@ -319,7 +318,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
               SparkSubmit.printErrorAndExit(errMessage)
             case v =>
               primaryResource =
-                if (!SparkSubmit.isShell(v) && !SparkSubmit.isInternal(v)) {
+                if (!SparkSubmit.isShell(v)) {
                   Utils.resolveURI(v).toString
                 } else {
                   v
