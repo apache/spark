@@ -81,7 +81,11 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
     appContext.setApplicationType("SPARK")
-    sparkConf.getIntOption("spark.maxappattempts") match {
+    sparkConf.getOption("spark.maxappattempts").map(_.toInt) match {
+      case Some(v) => logInfo("Setting maxAppAttemtps!")
+      case None => logInfo("*Not* setting maxAppAttempts! WOWOWOWO")
+    }
+    sparkConf.getOption("spark.maxappattempts").map(_.toInt) match {
       case Some(v) => appContext.setMaxAppAttempts(v)
       case None => logDebug("Not setting max app attempts.")
     }
@@ -118,10 +122,10 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
 
   def calculateAMMemory(newApp: GetNewApplicationResponse) :Int = {
     // TODO: Need a replacement for the following code to fix -Xmx?
-    // val minResMemory: Int = newApp.getMinimumResourceCapability().getMemory()
-    // var amMemory = ((args.amMemory / minResMemory) * minResMemory) +
-    //  ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
-    //    memoryOverhead )
+    val minResMemory: Int = newApp.getMinimumResourceCapability().getMemory()
+    var amMemory = ((args.amMemory / minResMemory) * minResMemory) +
+    ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
+     memoryOverhead )
     args.amMemory
   }
 
