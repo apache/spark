@@ -311,9 +311,9 @@ class RDD(object):
         >>> sorted(rdd.map(lambda x: (x, 1)).collect())
         [('a', 1), ('b', 1), ('c', 1)]
         """
-        def func(split, iterator):
+        def func(_, iterator):
             return imap(f, iterator)
-        return PipelinedRDD(self, func, preservesPartitioning)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def flatMap(self, f, preservesPartitioning=False):
         """
@@ -1070,7 +1070,7 @@ class RDD(object):
                 if not isinstance(x, basestring):
                     x = unicode(x)
                 yield x.encode("utf-8")
-        keyed = PipelinedRDD(self, func)
+        keyed = self.mapPartitionsWithIndex(func)
         keyed._bypass_serializer = True
         keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
 
@@ -1268,7 +1268,7 @@ class RDD(object):
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
 
-        keyed = PipelinedRDD(self, add_shuffle_key)
+        keyed = self.mapPartitionsWithIndex(add_shuffle_key)
         keyed._bypass_serializer = True
         with _JavaStackTrace(self.context) as st:
             pairRDD = self.ctx._jvm.PairwiseRDD(
