@@ -1312,7 +1312,7 @@ private[spark] object Utils extends Logging {
   def sparkJavaOpts(conf: SparkConf, filterKey: (String => Boolean) = _ => true): Seq[String] = {
     conf.getAll
       .filter { case (k, _) => filterKey(k) }
-      .map { case (k, v) => "-D" + k + "=\\\"" + v + "\\\"" }
+      .map { case (k, v) => s"-D$k=$v" }
   }
 
 }
