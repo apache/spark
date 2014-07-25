@@ -24,25 +24,25 @@ private[stat] object ChiSquaredTest {
 
   val PEARSON = "pearson"
 
-  def chiSquared(x: RDD[Double],
-      y: RDD[Double],
+  def chiSquared(expected: RDD[Double],
+      observed: RDD[Double],
       method: String = PEARSON): ChiSquaredTestResult = {
     method match {
-      case PEARSON => chiSquaredPearson(x, y)
+      case PEARSON => chiSquaredPearson(expected, observed)
       case _ => throw new IllegalArgumentException("Unrecognized method for Chi squared test.")
     }
   }
 
-  def chiSquared(X: RDD[Vector],
-                 method: String = PEARSON): ChiSquaredTestResult = {
+  def chiSquared(counts: RDD[Vector], method: String = PEARSON): ChiSquaredTestResult = {
     method match {
-      case PEARSON => chiSquaredPearson(X)
+      case PEARSON => chiSquaredPearson(counts)
       case _ => throw new IllegalArgumentException("Unrecognized method for Chi squared test.")
     }
   }
 
-  private def chiSquaredPearson(x: RDD[Double], y: RDD[Double]): ChiSquaredTestResult = ???
+  private def chiSquaredPearson(expected: RDD[Double],
+      observed: RDD[Double]): ChiSquaredTestResult = ???
 
-  private def chiSquaredPearson(X: RDD[Vector]): ChiSquaredTestResult = ???
+  private def chiSquaredPearson(counts: RDD[Vector]): ChiSquaredTestResult = ???
 
 }

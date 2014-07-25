@@ -78,17 +78,22 @@ object Statistics {
    */
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
 
-  def chiSquared(x: RDD[Double], y: RDD[Double], method: String): ChiSquaredTestResult = {
-    ChiSquaredTest.chiSquared(x, y, method)
+  // Technically these should be RDD[Long] since the data should be counts
+  def chiSquared(expected: RDD[Double],
+      observed: RDD[Double],
+      method: String): ChiSquaredTestResult = {
+    ChiSquaredTest.chiSquared(expected, observed, method)
   }
 
-  def chiSquared(x: RDD[Double], y: RDD[Double]): ChiSquaredTestResult = {
-    ChiSquaredTest.chiSquared(x, y)
+  def chiSquared(expected: RDD[Double], observed: RDD[Double]): ChiSquaredTestResult = {
+    ChiSquaredTest.chiSquared(expected, observed)
   }
 
-  def chiSquared(X: RDD[Vector], method: String): ChiSquaredTestResult = {
-    ChiSquaredTest.chiSquared(X, method)
+  // Same here. It should be something like RDD[Array[Long]] for counts instead, but I don't know
+  // if we should be consistent about how a "matrix" is presented
+  def chiSquared(counts: RDD[Vector], method: String): ChiSquaredTestResult = {
+    ChiSquaredTest.chiSquared(counts, method)
   }
 
-  def chiSquared(X: RDD[Vector]): ChiSquaredTestResult = ChiSquaredTest.chiSquared(X)
+  def chiSquared(counts: RDD[Vector]): ChiSquaredTestResult = ChiSquaredTest.chiSquared(counts)
 }
