@@ -85,4 +85,10 @@ object Statistics {
   def chiSquared(x: RDD[Double], y: RDD[Double]): ChiSquaredTestResult = {
     ChiSquaredTest.chiSquared(x, y)
   }
+
+  def chiSquared(X: RDD[Vector], method: String): ChiSquaredTestResult = {
+    ChiSquaredTest.chiSquared(X, method)
+  }
+
+  def chiSquared(X: RDD[Vector]): ChiSquaredTestResult = ChiSquaredTest.chiSquared(X)
 }

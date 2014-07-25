@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.stat.test
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.Vector
 
 private[stat] object ChiSquaredTest {
 
@@ -32,6 +33,16 @@ private[stat] object ChiSquaredTest {
     }
   }
 
+  def chiSquared(X: RDD[Vector],
+                 method: String = PEARSON): ChiSquaredTestResult = {
+    method match {
+      case PEARSON => chiSquaredPearson(X)
+      case _ => throw new IllegalArgumentException("Unrecognized method for Chi squared test.")
+    }
+  }
+
   private def chiSquaredPearson(x: RDD[Double], y: RDD[Double]): ChiSquaredTestResult = ???
+
+  private def chiSquaredPearson(X: RDD[Vector]): ChiSquaredTestResult = ???
 
 }
