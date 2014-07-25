@@ -45,7 +45,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   with PrivateMethodTester {
 
   private val conf = new SparkConf(false)
-  val env: SparkEnv = SparkEnv.empty(conf)
   var store: BlockManager = null
   var store2: BlockManager = null
   var actorSystem: ActorSystem = null
@@ -76,7 +75,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     conf.set("spark.driver.port", boundPort.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
-    SparkEnv.set(env)
 
     master = new BlockManagerMaster(
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
@@ -107,10 +105,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     }
 
     System.clearProperty("spark.test.useCompressedOops")
-
-    // This is normally cleared when a task ends, but since we do not
-    // mock the entire job here, we have to manually clear this ourselves
-    SparkEnv.get.unrollMemoryMap.clear()
   }
 
   test("StorageLevel object caching") {

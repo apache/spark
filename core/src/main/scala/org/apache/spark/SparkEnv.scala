@@ -134,14 +134,6 @@ object SparkEnv extends Logging {
     env.get()
   }
 
-  /**
-   * Create an empty SparkEnv. For testing only.
-   */
-  private[spark] def empty(conf: SparkConf): SparkEnv = {
-    new SparkEnv(
-      "test", null, null, null, null, null, null, null, null, null, null, null, null, null, conf)
-  }
-
   private[spark] def create(
       conf: SparkConf,
       executorId: String,
