@@ -176,7 +176,9 @@ class ShuffleSuite extends FunSuite with Matchers with LocalSparkContext {
     val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"), p(3, "3"))
     val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
     val pairs2: RDD[MutablePair[Int, String]] = sc.parallelize(data2, 2)
-    val results = new CoGroupedRDD[Int](Seq(pairs1, pairs2), new HashPartitioner(2)).collectAsMap()
+    val results = new CoGroupedRDD[Int](Seq(pairs1, pairs2), new HashPartitioner(2))
+      .map(p => (p._1, p._2.map(_.toArray)))
+      .collectAsMap()
 
     assert(results(1)(0).length === 3)
     assert(results(1)(0).contains(1))
