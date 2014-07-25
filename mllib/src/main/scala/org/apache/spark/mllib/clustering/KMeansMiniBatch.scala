@@ -30,35 +30,41 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
- * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
- * they are executed together with joint passes over the data for efficiency.
- *
+ * K-means clustering with support for multiple parallel runs, a k-means++ like initialization
+ * mode (the k-means|| algorithm by Bahmani et al), and randomly-sampled mini-batches of points
+ * in each iteration instead of all points for speed (Web-Scale K-Means Clustering by Sculley).
+ * 
  * This is an iterative algorithm that will make multiple passes over the data, so any RDDs given
  * to it should be cached by the user.
  */
-class KMeans private (
+class KMeansMiniBatch private (
     private var k: Int,
     private var maxIterations: Int,
+    private var batchSize: Int,
     private var runs: Int,
     private var initializationMode: String,
     private var initializationSteps: Int,
-    private var epsilon: Double) extends Serializable with KMeansCommons with Logging {
-
+    private var rng: XORShiftRandom) extends Serializable with KMeansCommons with Logging {
+ 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
-   * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4}.
+   * batchSize: 1000, initializationMode: "k-means||", initializationSteps: 5}.
    */
-  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
+  def this() = this(2, 20, 1, 1000, KMeansMiniBatch.K_MEANS_PARALLEL, 5, new XORShiftRandom())
 
+  def setBatchSize(batchSize: Int): KMeansMiniBatch = {
+    this.batchSize = batchSize
+    this
+  }
+  
   /** Set the number of clusters to create (k). Default: 2. */
-  def setK(k: Int): KMeans = {
+  def setK(k: Int): KMeansMiniBatch = {
     this.k = k
     this
   }
 
   /** Set maximum number of iterations to run. Default: 20. */
-  def setMaxIterations(maxIterations: Int): KMeans = {
+  def setMaxIterations(maxIterations: Int): KMeansMiniBatch = {
     this.maxIterations = maxIterations
     this
   }
@@ -68,8 +74,8 @@ class KMeans private (
    * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
    */
-  def setInitializationMode(initializationMode: String): KMeans = {
-    if (initializationMode != KMeans.RANDOM && initializationMode != KMeans.K_MEANS_PARALLEL) {
+  def setInitializationMode(initializationMode: String): KMeansMiniBatch = {
+    if (initializationMode != KMeansMiniBatch.RANDOM && initializationMode != KMeansMiniBatch.K_MEANS_PARALLEL) {
       throw new IllegalArgumentException("Invalid initialization mode: " + initializationMode)
     }
     this.initializationMode = initializationMode
@@ -83,7 +89,7 @@ class KMeans private (
    * return the best clustering found over any run. Default: 1.
    */
   @Experimental
-  def setRuns(runs: Int): KMeans = {
+  def setRuns(runs: Int): KMeansMiniBatch = {
     if (runs <= 0) {
       throw new IllegalArgumentException("Number of runs must be positive")
     }
@@ -95,20 +101,11 @@ class KMeans private (
    * Set the number of steps for the k-means|| initialization mode. This is an advanced
    * setting -- the default of 5 is almost always enough. Default: 5.
    */
-  def setInitializationSteps(initializationSteps: Int): KMeans = {
+  def setInitializationSteps(initializationSteps: Int): KMeansMiniBatch = {
     if (initializationSteps <= 0) {
       throw new IllegalArgumentException("Number of initialization steps must be positive")
     }
     this.initializationSteps = initializationSteps
-    this
-  }
-
-  /**
-   * Set the distance threshold within which we've consider centers to have converged.
-   * If all centers move less than this Euclidean distance, we stop iterating one run.
-   */
-  def setEpsilon(epsilon: Double): KMeans = {
-    this.epsilon = epsilon
     this
   }
 
@@ -123,113 +120,76 @@ class KMeans private (
     val breezeData = data.map(_.toBreeze).zip(norms).map { case (v, norm) =>
       new BreezeVectorWithNorm(v, norm)
     }
-    val model = runBreeze(breezeData)
+    
+    val runModels = (0 until runs).map { _ =>
+      runBreeze(breezeData)
+    }
+    
+    val bestModel = runModels.minBy(t => t._2)._1
+    
     norms.unpersist()
-    model
+    bestModel
   }
 
   /**
    * Implementation of K-Means using breeze.
    */
-  private def runBreeze(data: RDD[BreezeVectorWithNorm]): KMeansModel = {
+  private def runBreeze(data: RDD[BreezeVectorWithNorm]): (KMeansModel, Double) = {
 
     val sc = data.sparkContext
 
     val initStartTime = System.nanoTime()
 
-    val centers = if (initializationMode == KMeans.RANDOM) {
-      Array.tabulate(runs)(r => initRandom(data, k))
+    val centers = if (initializationMode == KMeansMiniBatch.RANDOM) {
+      initRandom(data, k)
     } else {
-      Array.tabulate(runs)(r => initParallel(data, k, initializationSteps))
+      initParallel(data, k, initializationSteps)
     }
-
+    
+    val centerCounts = Array.fill(centers.length){0}
+    
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
       " seconds.")
 
-    val active = Array.fill(runs)(true)
-    val costs = Array.fill(runs)(0.0)
-
-    var activeRuns = new ArrayBuffer[Int] ++ (0 until runs)
+    var costs = 0.0
     var iteration = 0
-
     val iterationStartTime = System.nanoTime()
 
     // Execute iterations of Lloyd's algorithm until all runs have converged
-    while (iteration < maxIterations && !activeRuns.isEmpty) {
-      type WeightedPoint = (BV[Double], Long)
-      def mergeContribs(p1: WeightedPoint, p2: WeightedPoint): WeightedPoint = {
-        (p1._1 += p2._1, p1._2 + p2._2)
+    while (iteration < maxIterations) {
+
+      val sampledPoints = data.takeSample(false, batchSize, rng.nextInt())
+      
+      val groupedPoints = sampledPoints.map { p =>
+        val (center, cost) = KMeansMiniBatch.findClosest(centers, p)
+
+        (center, p.vector, cost)
       }
 
-      val activeCenters = activeRuns.map(r => centers(r)).toArray
-      val costAccums = activeRuns.map(_ => sc.accumulator(0.0))
-
-      // Find the sum and count of points mapping to each center
-      val totalContribs = data.mapPartitions { points =>
-        val runs = activeCenters.length
-        val k = activeCenters(0).length
-        val dims = activeCenters(0)(0).vector.length
-
-        val sums = Array.fill(runs, k)(BDV.zeros[Double](dims).asInstanceOf[BV[Double]])
-        val counts = Array.fill(runs, k)(0L)
-
-        points.foreach { point =>
-          (0 until runs).foreach { i =>
-            val (bestCenter, cost) = KMeans.findClosest(activeCenters(i), point)
-            costAccums(i) += cost
-            sums(i)(bestCenter) += point.vector
-            counts(i)(bestCenter) += 1
-          }
-        }
-
-        val contribs = for (i <- 0 until runs; j <- 0 until k) yield {
-          ((i, j), (sums(i)(j), counts(i)(j)))
-        }
-        contribs.iterator
-      }.reduceByKey(mergeContribs).collectAsMap()
-
-      // Update the cluster centers and costs for each active run
-      for ((run, i) <- activeRuns.zipWithIndex) {
-        var changed = false
-        var j = 0
-        while (j < k) {
-          val (sum, count) = totalContribs((i, j))
-          if (count != 0) {
-            sum /= count.toDouble
-            val newCenter = new BreezeVectorWithNorm(sum)
-            if (KMeans.fastSquaredDistance(newCenter, centers(run)(j)) > epsilon * epsilon) {
-              changed = true
-            }
-            centers(run)(j) = newCenter
-          }
-          j += 1
-        }
-        if (!changed) {
-          active(run) = false
-          logInfo("Run " + run + " finished in " + (iteration + 1) + " iterations")
-        }
-        costs(run) = costAccums(i).value
-      }
-
-      activeRuns = activeRuns.filter(active(_))
+      // Update the cluster centers and costs
+      costs = 0.0
+	  for ((centerIdx, vec, dist) <- groupedPoints) {
+        costs += dist
+        centerCounts(centerIdx) += 1
+	    
+        // take gradient step
+        val learningRate = 1.0 / centerCounts(centerIdx).toDouble
+	    val center = centers(centerIdx).vector
+	    val updatedCenter = center * (1.0 - learningRate) + vec * learningRate
+	   
+	    centers(centerIdx) = new BreezeVectorWithNorm(updatedCenter)
+  	  }
+        
       iteration += 1
     }
 
     val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
     logInfo(s"Iterations took " + "%.3f".format(iterationTimeInSeconds) + " seconds.")
+ 
+    logInfo(s"The cost for the run is $costs.")
 
-    if (iteration == maxIterations) {
-      logInfo(s"KMeans reached the max number of iterations: $maxIterations.")
-    } else {
-      logInfo(s"KMeans converged in $iteration iterations.")
-    }
-
-    val (minCost, bestRun) = costs.zipWithIndex.min
-
-    logInfo(s"The cost for the best run is $minCost.")
-
-    new KMeansModel(centers(bestRun).map(c => Vectors.fromBreeze(c.vector)))
+    new Tuple2(new KMeansModel(centers.map(c => Vectors.fromBreeze(c.vector))), costs)
   }
 }
 
@@ -237,7 +197,7 @@ class KMeans private (
 /**
  * Top-level methods for calling K-means clustering.
  */
-object KMeans extends KMeansObjectCommons {
+object KMeansMiniBatch extends KMeansObjectCommons {
 
   // Initialization mode names
   val RANDOM = "random"
@@ -248,6 +208,7 @@ object KMeans extends KMeansObjectCommons {
    *
    * @param data training points stored as `RDD[Array[Double]]`
    * @param k number of clusters
+   * @param batchSize number of points in each batch
    * @param maxIterations max number of iterations
    * @param runs number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
@@ -255,10 +216,12 @@ object KMeans extends KMeansObjectCommons {
   def train(
       data: RDD[Vector],
       k: Int,
+      batchSize: Int,
       maxIterations: Int,
       runs: Int,
       initializationMode: String): KMeansModel = {
-    new KMeans().setK(k)
+    new KMeansMiniBatch().setK(k)
+      .setBatchSize(batchSize)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
@@ -272,7 +235,7 @@ object KMeans extends KMeansObjectCommons {
       data: RDD[Vector],
       k: Int,
       maxIterations: Int): KMeansModel = {
-    train(data, k, maxIterations, 1, K_MEANS_PARALLEL)
+    train(data, k, 1000, maxIterations, 1, K_MEANS_PARALLEL)
   }
 
   /**
@@ -283,6 +246,18 @@ object KMeans extends KMeansObjectCommons {
       k: Int,
       maxIterations: Int,
       runs: Int): KMeansModel = {
-    train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
+    train(data, k, 1000, maxIterations, runs, K_MEANS_PARALLEL)
+  }
+  
+    /**
+   * Trains a k-means model using specified parameters and the default values for unspecified.
+   */
+  def train(
+      data: RDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      runs: Int,
+      initializationMode: String): KMeansModel = {
+    train(data, k, 1000, maxIterations, runs, initializationMode)
   }
 }
