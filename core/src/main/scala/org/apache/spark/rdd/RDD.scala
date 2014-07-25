@@ -354,7 +354,7 @@ abstract class RDD[T: ClassTag](
   def sample(withReplacement: Boolean, 
       fraction: Double, 
       seed: Long = Utils.random.nextLong): RDD[T] = {
-    require(fraction >= 0.0, "Invalid fraction value: " + fraction)
+    require(fraction >= 0.0, "Negative fraction value: " + fraction)
     if (withReplacement) {
       new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), true, seed)
     } else {
