@@ -1040,7 +1040,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
      */
     store.putSingle("a1", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     store.putSingle("a2", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
-    store.putSingle("a3", new Array[Byte](3000), StorageLevel.MEMORY_ONLY)
+    store.putSingle("a3", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     // Memory store should contain a1, a2
     assert(store.memoryStore.contains("a1"), "a1 was not in store")
     assert(store.memoryStore.contains("a2"), "a2 was not in store")
@@ -1051,7 +1051,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
      * (i.e. a1) from memory to accommodate a5 (because 2000 < 2400).
      */
     store.putSingle("a4", new Array[Byte](2000), StorageLevel.MEMORY_ONLY)
-    store.putSingle("a5", new Array[Byte](3000), StorageLevel.MEMORY_ONLY)
+    store.putSingle("a5", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     // Memory store should contain a2, a4, a5
     assert(!store.memoryStore.contains("a1"), "a1 was in store")
     assert(store.memoryStore.contains("a2"), "a2 was not in store")
