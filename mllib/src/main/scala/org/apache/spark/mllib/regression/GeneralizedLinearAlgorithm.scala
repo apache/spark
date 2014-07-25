@@ -114,6 +114,52 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
+   * Return the model in a sqeuence of string. First row is num_features:N,
+   * second row is :intercept, rest of the file consists of one row per
+   * non-zero weight with id:value.
+   *
+   * @param model The linear model.
+   * @return Seq[String] sequence of string for model.
+   */
+  def serializeModel(model: M): Seq[String] = {
+    val weightSeq = model.weights.toArray.zipWithIndex.flatMap { x =>
+      if (x._1 != 0) {
+        Some(x._2.toString + ":" + x._1.toString)
+      } else {
+        None
+      }
+    }
+    Seq("num_features:%d".format(model.weights.size),
+      ":%f".format(model.intercept)) ++ weightSeq
+  }
+
+  /**
+   * Create a linear model from a string representation, which is created
+   * by serializeModel.
+   *
+   * @param strModel Sequence of string for the model.
+   * @return The linear model.
+   */
+  def deserializeModel(strModel: Seq[String]): M = {
+    val keyValues = strModel.map { line =>
+      val parts = line.split(":")
+      (parts(0), parts(1).toDouble)
+    }
+
+    if (keyValues(0)._1 != "num_features" ||
+      keyValues(1)._1 != "") {
+      throw new Exception("Invalid model header")
+    }
+    val numFeatures = keyValues(0)._2.toInt
+    val intercept = keyValues(1)._2
+    val weights = Array.fill(numFeatures) { 0.0d }
+    keyValues.view(2, keyValues.length).foreach { kv =>
+      weights(kv._1.toInt) = kv._2
+    }
+    createModel(Vectors.dense(weights), intercept)
+  }
+
+  /**
    * Run the algorithm with the configured parameters on an input
    * RDD of LabeledPoint entries.
    */

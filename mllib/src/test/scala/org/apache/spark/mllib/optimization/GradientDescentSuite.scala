@@ -26,6 +26,7 @@ import org.scalatest.Matchers
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.classification.SVMWithSGD
 
 object GradientDescentSuite {
 
@@ -62,6 +63,10 @@ object GradientDescentSuite {
 }
 
 class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers {
+
+  def compareDouble(x: Double, y: Double, tol: Double = 1E-3): Boolean = {
+    math.abs(x - y) / (math.abs(y) + 1e-15) < tol
+  }
 
   test("Assert the loss is decreasing.") {
     val nPoints = 10000
@@ -101,6 +106,21 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers
 
     val lossDiff = loss.init.zip(loss.tail).map { case (lhs, rhs) => lhs - rhs }
     assert(lossDiff.count(_ > 0).toDouble / lossDiff.size > 0.8)
+
+    val (_, loss2) = GradientDescent.runGradientDescent(
+      dataRDD,
+      gradient,
+      new LazyL1Updater(),
+      stepSize,
+      numIterations,
+      regParam,
+      initialWeightsWithIntercept)
+
+    assert(loss2.last - loss2.head < 0, "loss isn't decreasing.")
+
+    val lossDiff2 = loss2.init.zip(loss2.tail).map { case (lhs, rhs) => lhs - rhs }
+    assert(lossDiff2.count(_ > 0).toDouble / lossDiff2.size > 0.8)
+
   }
 
   test("Test the loss and gradient of first iteration with regularization.") {
@@ -126,10 +146,6 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers
     val regParam1 = 1
     val (newWeights1, loss1) = GradientDescent.runMiniBatchSGD(
       dataRDD, gradient, updater, 1, 1, regParam1, 1.0, initialWeightsWithIntercept)
-
-    def compareDouble(x: Double, y: Double, tol: Double = 1E-3): Boolean = {
-      math.abs(x - y) / (math.abs(y) + 1e-15) < tol
-    }
 
     assert(compareDouble(
       loss1(0),
