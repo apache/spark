@@ -42,6 +42,7 @@ from py4j.java_collections import ListConverter
 DEFAULT_CONFIGS = {
     "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
     "spark.serializer.objectStreamReset": 100,
+    "spark.rdd.compress": True,
 }
 
 
@@ -121,8 +122,7 @@ class SparkContext(object):
             for key, value in environment.iteritems():
                 self._conf.setExecutorEnv(key, value)
         for key, value in DEFAULT_CONFIGS.items():
-            if self._conf.get(key) is None:
-                self._conf.set(key, value)
+            self._conf.setIfMissing(key, value)
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
