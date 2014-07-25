@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.hash
 
 import org.apache.spark.{InterruptibleIterator, TaskContext}
+import org.apache.spark.rdd.SortOrder
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
 
@@ -38,7 +39,7 @@ class HashShuffleReader[K, C](
     val iter = BlockStoreShuffleFetcher.fetch(handle.shuffleId, startPartition, context,
       Serializer.getSerializer(dep.serializer))
 
-    if (dep.aggregator.isDefined) {
+    val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         new InterruptibleIterator(context, dep.aggregator.get.combineCombinersByKey(iter, context))
       } else {
@@ -49,6 +50,17 @@ class HashShuffleReader[K, C](
     } else {
       iter
     }
+
+    val sortedIter = for (sortOrder <- dep.sortOrder; ordering <- dep.keyOrdering) yield {
+      val buf = aggregatedIter.toArray
+      if (sortOrder == SortOrder.ASCENDING) {
+        buf.sortWith((x, y) => ordering.lt(x._1, y._1)).iterator
+      } else {
+        buf.sortWith((x, y) => ordering.gt(x._1, y._1)).iterator
+      }
+    }
+
+    sortedIter.getOrElse(aggregatedIter)
   }
 
   /** Close this reader */

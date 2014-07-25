@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.SortOrder.SortOrder
 import org.apache.spark.serializer.Serializer
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
@@ -51,6 +52,8 @@ class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
 
   private var mapSideCombine: Boolean = false
 
+  private var sortOrder: Option[SortOrder] = None
+
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): ShuffledRDD[K, V, C, P] = {
     this.serializer = Option(serializer)
@@ -75,8 +78,15 @@ class ShuffledRDD[K, V, C, P <: Product2[K, C] : ClassTag](
     this
   }
 
+  /** Set sort order for RDD's sorting. */
+  def setSortOrder(sortOrder: SortOrder): ShuffledRDD[K, V, C, P] = {
+    this.sortOrder = Option(sortOrder)
+    this
+  }
+
   override def getDependencies: Seq[Dependency[_]] = {
-    List(new ShuffleDependency(prev, part, serializer, keyOrdering, aggregator, mapSideCombine))
+    List(new ShuffleDependency(prev, part, serializer,
+      keyOrdering, aggregator, mapSideCombine, sortOrder))
   }
 
   override val partitioner = Some(part)
