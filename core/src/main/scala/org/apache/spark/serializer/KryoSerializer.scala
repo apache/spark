@@ -31,6 +31,7 @@ import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage._
 import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.util.collection.CompactBuffer
 
 import scala.reflect.ClassTag
 
@@ -185,6 +186,7 @@ private[serializer] object KryoSerializer {
     classOf[GotBlock],
     classOf[GetBlock],
     classOf[MapStatus],
+    classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
     classOf[Array[Byte]],
     classOf[BoundedPriorityQueue[_]],

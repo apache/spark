@@ -25,7 +25,7 @@ import scala.language.existentials
 import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
 import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap}
+import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap, CompactBuffer}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleHandle
 
@@ -66,14 +66,14 @@ private[spark] class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep]
  */
 @DeveloperApi
 class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
-  extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) {
+  extends RDD[(K, Array[Iterable[_]])](rdds.head.context, Nil) {
 
   // For example, `(k, a) cogroup (k, b)` produces k -> Seq(ArrayBuffer as, ArrayBuffer bs).
   // Each ArrayBuffer is represented as a CoGroup, and the resulting Seq as a CoGroupCombiner.
   // CoGroupValue is the intermediate state of each value before being merged in compute.
-  private type CoGroup = ArrayBuffer[Any]
+  private type CoGroup = CompactBuffer[Any]
   private type CoGroupValue = (Any, Int)  // Int is dependency number
-  private type CoGroupCombiner = Seq[CoGroup]
+  private type CoGroupCombiner = Array[CoGroup]
 
   private var serializer: Option[Serializer] = None
 
@@ -114,7 +114,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
   override val partitioner: Some[Partitioner] = Some(part)
 
-  override def compute(s: Partition, context: TaskContext): Iterator[(K, CoGroupCombiner)] = {
+  override def compute(s: Partition, context: TaskContext): Iterator[(K, Array[Iterable[_]])] = {
     val sparkConf = SparkEnv.get.conf
     val externalSorting = sparkConf.getBoolean("spark.shuffle.spill", true)
     val split = s.asInstanceOf[CoGroupPartition]
@@ -150,7 +150,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
           getCombiner(kv._1)(depNum) += kv._2
         }
       }
-      new InterruptibleIterator(context, map.iterator)
+      new InterruptibleIterator(context,
+        map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
     } else {
       val map = createExternalMap(numRdds)
       rddIterators.foreach { case (it, depNum) =>
@@ -161,7 +162,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       }
       context.taskMetrics.memoryBytesSpilled = map.memoryBytesSpilled
       context.taskMetrics.diskBytesSpilled = map.diskBytesSpilled
-      new InterruptibleIterator(context, map.iterator)
+      new InterruptibleIterator(context,
+        map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
     }
   }
 
