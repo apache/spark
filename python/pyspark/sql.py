@@ -322,32 +322,47 @@ def parse_tree_schema(tree):
     parts = _extend_tree(lines)
     return _parse_tree(parts)
 
+def create(cls, v):
+    return cls(v) if v is not None else v
+
 def create_getter(schema, i):
     cls = create_cls(schema)
     def getter(self):
-        return cls(self[i])
+        return create(cls, self[i])
     return getter
 
 def create_cls(schema):
     from operator import itemgetter
 
     if isinstance(schema, list):
+        if not schema:
+            return list
         cls = create_cls(schema[0])
-        class List(object):
-            def __init__(self, d):
-                self.d = d
+        class List(list):
             def __getitem__(self, i):
-                return cls(self.d[i])
-            def __str__(self):
-                return str(self.d)
-            def __repr__(self):
-                return repr(self.d)
+                return create(cls, list.__getitem__(self, i))
+            def __reduce__(self):
+                return (list, (list(self),))
         return List
 
+    elif isinstance(schema, dict):
+        if not schema:
+            return dict
+        vcls = create_cls(schema['value'])
+        class Dict(dict):
+            def __getitem__(self, k):
+                return create(vcls, dict.__getitem__(self, k))
+
+    # builtin types
+    elif not isinstance(schema, tuple):
+        return schema
+
+
     class Row(tuple):
+
         _schema = schema
-        def __marshal__(self):
-            return tuple(self)
+        _fields = tuple(n for n, _ in schema)
+
         for __i,__x in enumerate(schema):
             if isinstance(__x, tuple):
                 __name, _type = __x
@@ -363,14 +378,15 @@ def create_cls(schema):
         def __equals__(self, x):
             if type(self) != type(x):
                 return False
-            for name, _ in self._schema:
+            for name in self._fields:
                 if getattr(self, name) != getattr(x, name):
                     return False
             return True
 
         def __repr__(self):
-            return ("Row(%s)" % ", ".join("%s=%r" % (k[0], v) 
-                    for k,v in zip(self._schema, self)))
+            return ("Row(%s)" % ", ".join("%s=%r" % (n, getattr(self, n))
+                    for n in self._fields))
+
         def __str__(self):
             return repr(self)
 
@@ -492,13 +508,8 @@ class SQLContext:
         #TODO: use new API
         rdd = rdd.map(lambda row: add_schema(row, schema))
         jrdd = self._pythonToJavaMap(rdd._jrdd)
-        try:
-            srdd = self._ssql_ctx.inferSchema(jrdd.rdd())
-        except :
-            print 'old', row, schema
-            
-            raise
-        return SchemaRDD(srdd, self, schema)
+        srdd = self._ssql_ctx.inferSchema(jrdd.rdd())
+        return SchemaRDD(srdd, self)
 
     def registerRDDAsTable(self, rdd, tableName):
         """Registers the given RDD as a temporary table in the catalog.
@@ -547,9 +558,9 @@ class SQLContext:
         >>> srdd2 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
         >>> srdd2.collect()
-        [Row(f1=1, f2=u'row1', f3={u'field4': 11, u'field5': None}, f4=None), \
-Row(f1=2, f2=None, f3={u'field4': 22, u'field5': [10, 11]}, f4=[{u'field7': u'row2'}]), \
-Row(f1=None, f2=u'row3', f3={u'field4': 33, u'field5': []}, f4=None)]
+        [Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None), \
+Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=Row(field7=(u'row2',))), \
+Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
         """
         jschema_rdd = self._ssql_ctx.jsonFile(path)
         return SchemaRDD(jschema_rdd, self)
@@ -563,9 +574,9 @@ Row(f1=None, f2=u'row3', f3={u'field4': 33, u'field5': []}, f4=None)]
         >>> srdd2 = sqlCtx.sql(
         ...   "SELECT field1 AS f1, field2 as f2, field3 as f3, field6 as f4 from table1")
         >>> srdd2.collect()
-        [Row(f1=1, f2=u'row1', f3={u'field4': 11, u'field5': None}, f4=None), \
-Row(f1=2, f2=None, f3={u'field4': 22, u'field5': [10, 11]}, f4=[{u'field7': u'row2'}]), \
-Row(f1=None, f2=u'row3', f3={u'field4': 33, u'field5': []}, f4=None)]
+        [Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None), \
+Row(f1=2, f2=None, f3=Row(field4=22, field5=[10, 11]), f4=Row(field7=(u'row2',))), \
+Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)]
         """
         def func(iterator):
             for x in iterator:
@@ -677,25 +688,8 @@ class TestHiveContext(HiveContext):
         return self._jvm.TestHiveContext(self._jsc.sc())
 
 
-# TODO: Investigate if it is more efficient to use a namedtuple. One problem is that named tuples
-# are custom classes that must be generated per Schema.
-class Row(dict):
-    """A row in L{SchemaRDD}.
-
-    An extended L{dict} that takes a L{dict} in its constructor, and
-    exposes those items as fields.
-
-    >>> r = Row({"hello" : "world", "foo" : "bar"})
-    >>> r.hello
-    'world'
-    >>> r.foo
-    'bar'
-    """
-
-    def __init__(self, d):
-        d.update(self.__dict__)
-        self.__dict__ = d
-        dict.__init__(self, d)
+class Row(tuple):
+    pass
 
 
 class SchemaRDD(RDD):
@@ -720,7 +714,8 @@ class SchemaRDD(RDD):
         self.is_cached = False
         self.is_checkpointed = False
         self.ctx = self.sql_ctx._sc
-        self._jrdd_deserializer = self.ctx.serializer
+        # the _jrdd is created by javaToPython(), serialized by pickle
+        self._jrdd_deserializer = BatchedSerializer(PickleSerializer())
 
     @property
     def _jrdd(self):
@@ -730,7 +725,8 @@ class SchemaRDD(RDD):
         L{pyspark.rdd.RDD} super class (map, filter, etc.).
         """
         if not hasattr(self, '_lazy_jrdd'):
-            self._lazy_jrdd = self._toPython()._jrdd
+            self._lazy_jrdd = self._jschema_rdd.javaToPython()
+
         return self._lazy_jrdd
 
     @property
@@ -819,52 +815,31 @@ class SchemaRDD(RDD):
         >>> sc.parallelize(range(100), 100).filter(lambda x: x > 90).take(3)
         [91, 92, 93]
         """
-        jrdd = self._jschema_rdd.javaToPython()
-        rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
+
+        rdd = RDD(self._jrdd, self._sc, self._jrdd_deserializer)
         rows = rdd.take(n)
         cls = create_cls(self.schema)
-        return [cls(tuple(r[f[0]] for f in self.schema)) for r in rows]
+        return [cls(r) for r in rows]
 
     def collect(self):
-        jrdd = self._jschema_rdd.javaToPython()
-        rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
+        rdd = RDD(self._jrdd, self._sc, self._jrdd_deserializer)
         rows = rdd.collect()
         cls = create_cls(self.schema)
-        rows = [cls(tuple(r[f[0]] for f in self.schema)) for r in rows]
+        rows = [cls(r) for r in rows]
         return rows
 
-    def _toPython(self):
-        # We have to import the Row class explicitly, so that the reference Pickler has is
-        # pyspark.sql.Row instead of __main__.Row
-        from pyspark.sql import Row
-        jrdd = self._jschema_rdd.javaToPython()
-        # TODO: This is inefficient, we should construct the Python Row object
-        # in Java land in the javaToPython function. May require a custom
-        # pickle serializer in Pyrolite
-        rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
+    # convert Row in JavaSchemaRDD into namedtuple
+    def mapPartitions(self, f, preservesPartitioning=False):
+        rdd = RDD(self._jrdd, self._sc, self._jrdd_deserializer)
 
         schema = self.schema
         def applySchema(iter):
             cls = create_cls(schema)
             for i in iter:
-                yield cls(tuple(i[f[0]] for f in schema))
+                yield cls(i)
 
-        return rdd.mapPartitions(applySchema)
-
-    def mapPartitionsWithIndex(self, f, preserve):
-        jrdd = self._jschema_rdd.javaToPython()
-        # TODO: This is inefficient, we should construct the Python Row object
-        # in Java land in the javaToPython function. May require a custom
-        # pickle serializer in Pyrolite
-        rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
-
-        schema = self.schema
-        def applySchema(iter):
-            cls = create_cls(schema)
-            for i in iter:
-                yield cls(tuple(i[f[0]] for f in schema))
-
-        return rdd.mapPartitions(applySchema).mapPartitionsWithIndex(f, preserve)
+        objrdd = rdd.mapPartitions(applySchema, preservesPartitioning)
+        return objrdd.mapPartitions(f, preservesPartitioning)
 
     # We override the default cache/persist/checkpoint behavior as we want to cache the underlying
     # SchemaRDD object in the JVM, not the PythonRDD checkpointed by the super class

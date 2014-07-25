@@ -293,9 +293,9 @@ class RDD(object):
         >>> sorted(rdd.map(lambda x: (x, 1)).collect())
         [('a', 1), ('b', 1), ('c', 1)]
         """
-        def func(split, iterator):
+        def func(iterator):
             return imap(f, iterator)
-        return self.mapPartitionsWithIndex(func, preservesPartitioning)
+        return self.mapPartitions(func, preservesPartitioning)
 
     def flatMap(self, f, preservesPartitioning=False):
         """
@@ -308,9 +308,9 @@ class RDD(object):
         >>> sorted(rdd.flatMap(lambda x: [(x, x), (x, x)]).collect())
         [(2, 2), (2, 2), (3, 3), (3, 3), (4, 4), (4, 4)]
         """
-        def func(s, iterator):
+        def func(iterator):
             return chain.from_iterable(imap(f, iterator))
-        return self.mapPartitionsWithIndex(func, preservesPartitioning)
+        return self.mapPartitions(func, preservesPartitioning)
 
     def mapPartitions(self, f, preservesPartitioning=False):
         """
@@ -321,9 +321,9 @@ class RDD(object):
         >>> rdd.mapPartitions(f).collect()
         [3, 7]
         """
-        def func(s, iterator):
+        def func(i, iterator):
             return f(iterator)
-        return self.mapPartitionsWithIndex(func)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
         """
