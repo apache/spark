@@ -17,11 +17,12 @@
 
 package org.apache.spark.util.random
 
+import cern.jet.random.Poisson
+import cern.jet.random.engine.DRand
+
 import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
-import org.apache.commons.math3.random.RandomDataGenerator
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
@@ -65,13 +66,13 @@ private[spark] object StratifiedSamplingUtils extends Logging {
       counts: Option[Map[K, Long]],
       seed: Long): mutable.Map[K, AcceptanceResult] = {
     val combOp = getCombOp[K]
-    val mappedPartitionRDD = rdd.mapPartitionsWithIndex({ case (partition, iter) =>
+    val mappedPartitionRDD = rdd.mapPartitionsWithIndex { case (partition, iter) =>
       val zeroU: mutable.Map[K, AcceptanceResult] = new mutable.HashMap[K, AcceptanceResult]()
       val rng = new RandomDataGenerator()
       rng.reSeed(seed + partition)
       val seqOp = getSeqOp(withReplacement, fractions, rng, counts)
       Iterator(iter.aggregate(zeroU)(seqOp, combOp))
-    }, preservesPartitioning=true)
+    }
     mappedPartitionRDD.reduce(combOp)
   }
 
@@ -100,23 +101,18 @@ private[spark] object StratifiedSamplingUtils extends Logging {
           val n = counts.get(key)
           val sampleSize = math.ceil(n * fraction).toLong
           val lmbd1 = PoissonBounds.getLowerBound(sampleSize)
-          val minCount = PoissonBounds.getMinCount(lmbd1)
-          val lmbd2 = if (lmbd1 == 0) {
-            PoissonBounds.getUpperBound(sampleSize)
-          } else {
-            PoissonBounds.getUpperBound(sampleSize - minCount)
-          }
+          val lmbd2 = PoissonBounds.getUpperBound(sampleSize)
           acceptResult.acceptBound = lmbd1 / n
-          acceptResult.waitListBound = lmbd2 / n
+          acceptResult.waitListBound = (lmbd2 - lmbd1) / n
         }
         val acceptBound = acceptResult.acceptBound
         val copiesAccepted = if (acceptBound == 0.0) 0L else rng.nextPoisson(acceptBound)
         if (copiesAccepted > 0) {
           acceptResult.numAccepted += copiesAccepted
         }
-        val copiesWaitlisted = rng.nextPoisson(acceptResult.waitListBound).toInt
+        val copiesWaitlisted = rng.nextPoisson(acceptResult.waitListBound)
         if (copiesWaitlisted > 0) {
-          acceptResult.waitList ++= ArrayBuffer.fill(copiesWaitlisted)(rng.nextUniform(0.0, 1.0))
+          acceptResult.waitList ++= ArrayBuffer.fill(copiesWaitlisted)(rng.nextUniform())
         }
       } else {
         // We use the streaming version of the algorithm for sampling without replacement to avoid
@@ -127,7 +123,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
         acceptResult.waitListBound =
           BernoulliBounds.getLowerBound(delta, acceptResult.numItems, fraction)
 
-        val x = rng.nextUniform(0.0, 1.0)
+        val x = rng.nextUniform()
         if (x < acceptResult.acceptBound) {
           acceptResult.numAccepted += 1
         } else if (x < acceptResult.waitListBound) {
@@ -218,7 +214,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
       rng.reSeed(seed + idx)
       // Must use the same invoke pattern on the rng as in getSeqOp for without replacement
       // in order to generate the same sequence of random numbers when creating the sample
-      iter.filter(t => rng.nextUniform(0.0, 1.0) < samplingRateByKey(t._1))
+      iter.filter(t => rng.nextUniform() < samplingRateByKey(t._1))
     }
   }
 
@@ -250,9 +246,9 @@ private[spark] object StratifiedSamplingUtils extends Logging {
           // Must use the same invoke pattern on the rng as in getSeqOp for with replacement
           // in order to generate the same sequence of random numbers when creating the sample
           val copiesAccepted = if (acceptBound == 0) 0L else rng.nextPoisson(acceptBound)
-          val copiesWailisted = rng.nextPoisson(finalResult(key).waitListBound).toInt
+          val copiesWailisted = rng.nextPoisson(finalResult(key).waitListBound)
           val copiesInSample = copiesAccepted +
-            (0 until copiesWailisted).count(i => rng.nextUniform(0.0, 1.0) < thresholdByKey(key))
+            (0 until copiesWailisted).count(i => rng.nextUniform() < thresholdByKey(key))
           if (copiesInSample > 0) {
             Iterator.fill(copiesInSample.toInt)(item)
           } else {
@@ -265,7 +261,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
         val rng = new RandomDataGenerator()
         rng.reSeed(seed + idx)
         iter.flatMap { item =>
-          val count = rng.nextPoisson(fractions(item._1)).toInt
+          val count = rng.nextPoisson(fractions(item._1))
           if (count > 0) {
             Iterator.fill(count)(item)
           } else {
@@ -273,6 +269,25 @@ private[spark] object StratifiedSamplingUtils extends Logging {
           }
         }
       }
+    }
+  }
+
+  /** A random data generator that generates both uniform values and Poisson values. */
+  private class RandomDataGenerator {
+    val uniform = new XORShiftRandom()
+    var poisson = new Poisson(1.0, new DRand)
+
+    def reSeed(seed: Long) {
+      uniform.setSeed(seed)
+      poisson = new Poisson(1.0, new DRand(seed.toInt))
+    }
+
+    def nextPoisson(mean: Double): Int = {
+      poisson.nextInt(mean)
+    }
+
+    def nextUniform(): Double = {
+      uniform.nextDouble()
     }
   }
 }
