@@ -331,7 +331,7 @@ class DAGScheduler(
     if (registeredStages.isEmpty || registeredStages.get.isEmpty) {
       logError("No stages registered for job " + job.jobId)
     } else {
-      stageIdToStage.filter(s => registeredStages.get.contains(s._1)).foreach {
+      stageIdToStage.filterKeys(stageId => registeredStages.get.contains(stageId)).foreach {
         case (stageId, stage) =>
           val jobSet = stage.jobIds
           if (!jobSet.contains(job.jobId)) {
