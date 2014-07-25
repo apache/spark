@@ -246,6 +246,8 @@ trait HiveTypeCoercion {
 
       // No need to change other EqualTo operators as that actually makes sense for boolean types.
       case e: EqualTo => e
+      // No need to change the EqualNullSafe operators, too
+      case e: EqualNullSafe => e
       // Otherwise turn them to Byte types so that there exists and ordering.
       case p: BinaryComparison
           if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>

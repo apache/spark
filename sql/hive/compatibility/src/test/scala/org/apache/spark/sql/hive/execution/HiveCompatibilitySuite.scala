@@ -196,7 +196,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Hive returns the results of describe as plain text. Comments with multiple lines
     // introduce extra lines in the Hive results, which make the result comparison fail.
-    "describe_comment_indent"
+    "describe_comment_indent",
+
+    // Limit clause without a ordering, which causes failure.
+    "orc_predicate_pushdown"
   )
 
   /**
@@ -503,6 +506,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "join_hive_626",
     "join_map_ppr",
     "join_nulls",
+    "join_nullsafe",
     "join_rc",
     "join_reorder2",
     "join_reorder3",
@@ -734,6 +738,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_double",
     "udf_E",
     "udf_elt",
+    "udf_equal",
     "udf_exp",
     "udf_field",
     "udf_find_in_set",

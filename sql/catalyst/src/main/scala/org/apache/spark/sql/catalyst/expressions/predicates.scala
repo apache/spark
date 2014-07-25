@@ -153,6 +153,22 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
   }
 }
 
+case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
+  def symbol = "<=>"
+  override def nullable = false
+  override def eval(input: Row): Any = {
+    val l = left.eval(input)
+    val r = right.eval(input)
+    if (l == null && r == null) {
+      true
+    } else if (l == null || r == null) {
+      false
+    } else {
+      l == r
+    }
+  }
+}
+
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<"
   override def eval(input: Row): Any = c2(input, left, right, _.lt(_, _))

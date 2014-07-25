@@ -253,7 +253,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-        ShortType, DecimalType, TimestampType)
+        ShortType, DecimalType, TimestampType, BinaryType)
 
     protected def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
@@ -269,6 +269,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "NULL"
       case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
+      case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
