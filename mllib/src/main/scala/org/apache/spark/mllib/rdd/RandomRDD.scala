@@ -29,20 +29,20 @@ private[mllib] class RandomRDDPartition(override val index: Int,
     val size: Int,
     val generator: DistributionGenerator,
     val seed: Long) extends Partition {
-  // Safety check in case a Long > Int.MaxValue cast to an Int was passed in as size
-  require(size > 0, "Positive partition size required.")
+
+  require(size >= 0, "Non-negative partition size required.")
 }
 
 // These two classes are necessary since Range objects in Scala cannot have size > Int.MaxValue
-private[mllib] class RandomRDD(@transient private var sc: SparkContext,
+private[mllib] class RandomRDD(@transient sc: SparkContext,
     size: Long,
-    numSlices: Int,
+    numPartitions: Int,
     @transient rng: DistributionGenerator,
     @transient seed: Long = Utils.random.nextLong) extends RDD[Double](sc, Nil) {
 
   require(size > 0, "Positive RDD size required.")
-  require(numSlices > 0, "Positive number of partitions required")
-  require(math.ceil(size.toDouble / numSlices) <= Int.MaxValue,
+  require(numPartitions > 0, "Positive number of partitions required")
+  require(math.ceil(size.toDouble / numPartitions) <= Int.MaxValue,
     "Partition size cannot exceed Int.MaxValue")
 
   override def compute(splitIn: Partition, context: TaskContext): Iterator[Double] = {
@@ -51,21 +51,21 @@ private[mllib] class RandomRDD(@transient private var sc: SparkContext,
   }
 
   override def getPartitions: Array[Partition] = {
-    RandomRDD.getPartitions(size, numSlices, rng, seed)
+    RandomRDD.getPartitions(size, numPartitions, rng, seed)
   }
 }
 
-private[mllib] class RandomVectorRDD(@transient private var sc: SparkContext,
+private[mllib] class RandomVectorRDD(@transient sc: SparkContext,
     size: Long,
     vectorSize: Int,
-    numSlices: Int,
+    numPartitions: Int,
     @transient rng: DistributionGenerator,
     @transient seed: Long = Utils.random.nextLong) extends RDD[Vector](sc, Nil) {
 
   require(size > 0, "Positive RDD size required.")
-  require(numSlices > 0, "Positive number of partitions required")
+  require(numPartitions > 0, "Positive number of partitions required")
   require(vectorSize > 0, "Positive vector size required.")
-  require(math.ceil(size.toDouble / numSlices) <= Int.MaxValue,
+  require(math.ceil(size.toDouble / numPartitions) <= Int.MaxValue,
     "Partition size cannot exceed Int.MaxValue")
 
   override def compute(splitIn: Partition, context: TaskContext): Iterator[Vector] = {
@@ -74,24 +74,24 @@ private[mllib] class RandomVectorRDD(@transient private var sc: SparkContext,
   }
 
   override protected def getPartitions: Array[Partition] = {
-    RandomRDD.getPartitions(size, numSlices, rng, seed)
+    RandomRDD.getPartitions(size, numPartitions, rng, seed)
   }
 }
 
 private[mllib] object RandomRDD {
 
   def getPartitions(size: Long,
-      numSlices: Int,
+      numPartitions: Int,
       rng: DistributionGenerator,
       seed: Long): Array[Partition] = {
 
-    val partitions = new Array[RandomRDDPartition](numSlices)
+    val partitions = new Array[RandomRDDPartition](numPartitions)
     var i = 0
     var start: Long = 0
     var end: Long = 0
     val random = new Random(seed)
-    while (i < numSlices) {
-      end = ((i + 1) * size) / numSlices
+    while (i < numPartitions) {
+      end = ((i + 1) * size) / numPartitions
       partitions(i) = new RandomRDDPartition(i, (end - start).toInt, rng, random.nextLong())
       start = end
       i += 1
@@ -104,7 +104,7 @@ private[mllib] object RandomRDD {
   def getPointIterator(partition: RandomRDDPartition): Iterator[Double] = {
     val generator = partition.generator.copy()
     generator.setSeed(partition.seed)
-    Iterator.fill(partition.size)(generator.nextValue())
+    Array.fill(partition.size)(generator.nextValue()).toIterator
   }
 
   // The RNG has to be reset every time the iterator is requested to guarantee same data
@@ -112,7 +112,7 @@ private[mllib] object RandomRDD {
   def getVectorIterator(partition: RandomRDDPartition, vectorSize: Int): Iterator[Vector] = {
     val generator = partition.generator.copy()
     generator.setSeed(partition.seed)
-    Iterator.fill(partition.size)(new DenseVector(
-      (0 until vectorSize).map { _ => generator.nextValue() }.toArray))
+    Array.fill(partition.size)(new DenseVector(
+      (0 until vectorSize).map { _ => generator.nextValue() }.toArray)).toIterator
   }
 }

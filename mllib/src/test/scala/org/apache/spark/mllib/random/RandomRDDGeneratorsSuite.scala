@@ -28,7 +28,7 @@ import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.StatCounter
 
-/**
+/*
  * Note: avoid including APIs that do not set the seed for the RNG in unit tests
  * in order to guarantee deterministic behavior.
  *
@@ -78,9 +78,9 @@ class RandomRDDGeneratorsSuite extends FunSuite with LocalSparkContext with Seri
       assert(rdd.partitions.size === numPartitions)
 
       // check that partition sizes are balanced
-      val partSizes = rdd.partitions.map( p => p.asInstanceOf[RandomRDDPartition].size.toDouble)
+      val partSizes = rdd.partitions.map(p => p.asInstanceOf[RandomRDDPartition].size.toDouble)
       val partStats = new StatCounter(partSizes)
-      assert(partStats.stdev < 1.0)
+      assert(partStats.max - partStats.min <= 1)
     }
 
     // size > Int.MaxValue
@@ -88,39 +88,26 @@ class RandomRDDGeneratorsSuite extends FunSuite with LocalSparkContext with Seri
     val numPartitions = 101
     val rdd = new RandomRDD(sc, size, numPartitions, new UniformGenerator, 0L)
     assert(rdd.partitions.size === numPartitions)
-    val count = rdd.partitions.foldLeft(0L){
-      (count, part) => count + part.asInstanceOf[RandomRDDPartition].size
+    val count = rdd.partitions.foldLeft(0L) { (count, part) =>
+      count + part.asInstanceOf[RandomRDDPartition].size
     }
     assert(count === size)
 
     // size needs to be positive
-    try {
-      new RandomRDD(sc, 0, 10, new UniformGenerator, 0L)
-      assert(false)
-    } catch {
-      case iae: IllegalArgumentException =>
-    }
+    intercept[IllegalArgumentException] { new RandomRDD(sc, 0, 10, new UniformGenerator, 0L) }
 
     // numPartitions needs to be positive
-    try {
-      new RandomRDD(sc, 100, 0, new UniformGenerator, 0L)
-      assert(false)
-    } catch {
-      case iae: IllegalArgumentException =>
-    }
+    intercept[IllegalArgumentException] { new RandomRDD(sc, 100, 0, new UniformGenerator, 0L) }
 
     // partition size needs to be <= Int.MaxValue
-    try {
+    intercept[IllegalArgumentException] {
       new RandomRDD(sc, Int.MaxValue.toLong * 100L, 99, new UniformGenerator, 0L)
-      assert(false)
-    } catch {
-      case iae: IllegalArgumentException =>
     }
   }
 
   test("randomRDD for different distributions") {
-    val size = 1000000L
-    val numPartitions = 100
+    val size = 100000L
+    val numPartitions = 10
     val poissonMean = 100.0
 
     for (seed <- 0 until 5) {

@@ -20,15 +20,18 @@ package org.apache.spark.mllib.random
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
 
 /**
- * Trait for random number generators that generate i.i.d values from a distribution.
+ * :: Experimental ::
+ * Trait for random number generators that generate i.i.d. values from a distribution.
  */
+@Experimental
 trait DistributionGenerator extends Pseudorandom with Serializable {
 
   /**
-   * Returns an i.i.d sample as a Double from an underlying distribution.
+   * Returns an i.i.d. sample as a Double from an underlying distribution.
    */
   def nextValue(): Double
 
@@ -40,8 +43,10 @@ trait DistributionGenerator extends Pseudorandom with Serializable {
 }
 
 /**
+ * :: Experimental ::
  * Generates i.i.d. samples from U[0.0, 1.0]
  */
+@Experimental
 class UniformGenerator extends DistributionGenerator {
 
   // XORShiftRandom for better performance. Thread safety isn't necessary here.
@@ -57,8 +62,10 @@ class UniformGenerator extends DistributionGenerator {
 }
 
 /**
- * Generates i.i.d. samples from the Standard Normal Distribution.
+ * :: Experimental ::
+ * Generates i.i.d. samples from the standard normal distribution.
  */
+@Experimental
 class StandardNormalGenerator extends DistributionGenerator {
 
   // XORShiftRandom for better performance. Thread safety isn't necessary here.
@@ -74,10 +81,12 @@ class StandardNormalGenerator extends DistributionGenerator {
 }
 
 /**
+ * :: Experimental ::
  * Generates i.i.d. samples from the Poisson distribution with the given mean.
  *
  * @param mean mean for the Poisson distribution.
  */
+@Experimental
 class PoissonGenerator(val mean: Double) extends DistributionGenerator {
 
   private var rng = new Poisson(mean, new DRand)

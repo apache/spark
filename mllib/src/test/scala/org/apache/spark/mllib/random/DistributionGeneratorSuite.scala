@@ -56,10 +56,10 @@ class DistributionGeneratorSuite extends FunSuite {
   def distributionChecks(gen: DistributionGenerator,
       mean: Double = 0.0,
       stddev: Double = 1.0,
-      epsilon: Double = 1e-3) {
+      epsilon: Double = 0.01) {
     for (seed <- 0 until 5) {
       gen.setSeed(seed.toLong)
-      val sample = (0 until 10000000).map { _ => gen.nextValue()}
+      val sample = (0 until 100000).map { _ => gen.nextValue()}
       val stats = new StatCounter(sample)
       assert(math.abs(stats.mean - mean) < epsilon)
       assert(math.abs(stats.stdev - stddev) < epsilon)
@@ -84,8 +84,7 @@ class DistributionGeneratorSuite extends FunSuite {
     for (mean <- List(1.0, 5.0, 100.0)) {
       val poisson = new PoissonGenerator(mean)
       apiChecks(poisson)
-      distributionChecks(poisson, mean, math.sqrt(mean), 1e-2)
+      distributionChecks(poisson, mean, math.sqrt(mean), 0.1)
     }
   }
 }
-
