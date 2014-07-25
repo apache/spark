@@ -100,9 +100,26 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--name", "myApp",
       "--class", "Foo",
       "userjar.jar",
+      "--",
       "some",
       "--weird", "args")
     val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.childArgs should be (Seq("some", "--weird", "args"))
+  }
+
+  test("handles extra spark options after user program options") {
+    val clArgs = Seq(
+      "--name", "myApp",
+      "--master", "local",
+      "userjar.jar",
+      "--class", "Foo",
+      "--",
+      "some",
+      "--weird", "args")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.master should be ("local")
+    appArgs.name should be ("myApp")
+    appArgs.mainClass should be ("Foo")
     appArgs.childArgs should be (Seq("some", "--weird", "args"))
   }
 
@@ -122,6 +139,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--name", "beauty",
       "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
+      "--",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
@@ -160,6 +178,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--name", "trill",
       "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
+      "--",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
@@ -192,6 +211,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--driver-cores", "5",
       "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
+      "--",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
@@ -219,6 +239,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--driver-memory", "4g",
       "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
+      "--",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
@@ -241,6 +262,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--driver-memory", "4g",
       "--conf", "spark.shuffle.spill=false",
       "thejar.jar",
+      "--",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)

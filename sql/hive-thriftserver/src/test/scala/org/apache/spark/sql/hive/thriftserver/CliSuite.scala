@@ -18,24 +18,30 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import scala.collection.JavaConversions._
+
 import java.io.{BufferedReader, InputStreamReader, PrintWriter}
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
+import org.apache.spark.sql.catalyst.util.getTempFilePath
+
 class CliSuite extends FunSuite with BeforeAndAfterAll with TestUtils {
-  val WAREHOUSE_PATH = TestUtils.getWarehousePath("cli")
-  val METASTORE_PATH = TestUtils.getMetastorePath("cli")
+  val METASTORE_PATH = getTempFilePath("metastore")
+  val WAREHOUSE_PATH = getTempFilePath("warehouse")
 
   override def beforeAll() {
-    val pb = new ProcessBuilder(
-      "../../bin/spark-sql",
-      "--master",
-      "local",
-      "--hiveconf",
-      s"javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$METASTORE_PATH;create=true",
-      "--hiveconf",
-      "hive.metastore.warehouse.dir=" + WAREHOUSE_PATH)
+    val connectionUrl = s"jdbc:derby:;databaseName=$METASTORE_PATH;create=true"
+    val args =
+      s"""../../bin/spark-sql
+         |  --master local
+         |  --
+         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$connectionUrl
+         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$WAREHOUSE_PATH
+       """.stripMargin.split("\\s").filter(_.nonEmpty)
 
+    val pb = new ProcessBuilder(seqAsJavaList(args))
     process = pb.start()
     outputWriter = new PrintWriter(process.getOutputStream, true)
     inputReader = new BufferedReader(new InputStreamReader(process.getInputStream))
