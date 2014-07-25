@@ -710,7 +710,6 @@ class DAGScheduler(
         if (missing == Nil) {
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
           submitMissingTasks(stage, jobId.get)
-          runningStages += stage
         } else {
           for (parent <- missing) {
             submitStage(parent)
@@ -753,11 +752,14 @@ class DAGScheduler(
       null
     }
 
-    // must be run listener before possible NotSerializableException
-    // should be "StageSubmitted" first and then "JobEnded"
-    listenerBus.post(SparkListenerStageSubmitted(stageToInfos(stage), properties))
-
     if (tasks.size > 0) {
+      runningStages += stage
+      // SparkListenerStageSubmitted should be posted before testing whether tasks are
+      // serializable. If tasks are not serializable, a SparkListenerStageCompleted event
+      // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
+      // event.
+      listenerBus.post(SparkListenerStageSubmitted(stageToInfos(stage), properties))
+
       // Preemptively serialize a task to make sure it can be serialized. We are catching this
       // exception here because it would be fairly hard to catch the non-serializable exception
       // down the road, where we have several different implementations for local scheduler and
