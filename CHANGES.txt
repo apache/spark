@@ -1,6 +1,304 @@
 Spark Change Log
 ----------------
 
+Release 1.0.2
+
+  [SPARK-2529] Clean closures in foreach and foreachPartition.
+  Reynold Xin <rxin@apache.org>
+  2014-07-25 01:10:05 -0700
+  Commit: 797c663, github.com/apache/spark/pull/1583
+
+  Updating versions for 1.0.2 release.
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-07-25 03:09:36 +0000
+  Commit: 70109da
+
+  [SPARK-2464][Streaming] Fixed Twitter stream stopping bug
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-07-24 15:59:09 -0700
+  Commit: 53b4e0f, github.com/apache/spark/pull/1577
+
+  [SPARK-2603][SQL] Remove unnecessary toMap and toList in converting Java collections to Scala collections JsonRDD.scala
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-07-24 11:19:19 -0700
+  Commit: 9124159, github.com/apache/spark/pull/1504
+
+  [SPARK-2658][SQL] Add rule for true = 1.
+  Michael Armbrust <michael@databricks.com>
+  2014-07-23 22:52:49 -0700
+  Commit: 6b08046, github.com/apache/spark/pull/1556
+
+  [SPARK-2615] [SQL] Add Equal Sign "==" Support for HiveQl
+  Cheng Hao <hao.cheng@intel.com>
+  2014-07-22 18:13:28 -0700
+  Commit: c6421b6, github.com/apache/spark/pull/1522
+
+  [SPARK-2561][SQL] Fix apply schema
+  Michael Armbrust <michael@databricks.com>
+  2014-07-21 18:18:17 -0700
+  Commit: 84bbfbd, github.com/apache/spark/pull/1470
+
+  [SPARK-2494] [PySpark] make hash of None consistant cross machines
+  Davies Liu <davies.liu@gmail.com>
+  2014-07-21 11:59:54 -0700
+  Commit: cdcd467, github.com/apache/spark/pull/1371
+
+  Revert "[SPARK-1199][REPL] Remove VALId and use the original import style for defined classes."
+  Patrick Wendell <pwendell@gmail.com>
+  2014-07-21 11:53:57 -0700
+  Commit: e0cc384
+
+  [SPARK-2598] RangePartitioner's binary search does not use the given Ordering
+  Reynold Xin <rxin@apache.org>
+  2014-07-20 11:06:06 -0700
+  Commit: 480669f, github.com/apache/spark/pull/1500
+
+  [SPARK-2524] missing document about spark.deploy.retainedDrivers
+  lianhuiwang <lianhuiwang09@gmail.com>, Wang Lianhui <lianhuiwang09@gmail.com>, unknown <Administrator@taguswang-PC1.tencent.com>
+  2014-07-19 20:46:59 -0700
+  Commit: 11670bf, github.com/apache/spark/pull/1443
+
+  Typo fix to the programming guide in the docs
+  Cesar Arevalo <cesar@zephyrhealthinc.com>
+  2014-07-19 20:20:07 -0700
+  Commit: a0624e8, github.com/apache/spark/pull/1495
+
+  [SPARK-2540] [SQL] Add HiveDecimal & HiveVarchar support in unwrapping data
+  Cheng Hao <hao.cheng@intel.com>
+  2014-07-18 16:38:11 -0500
+  Commit: 7611840, github.com/apache/spark/pull/1436
+
+  Added t2 instance types
+  Basit Mustafa <basitmustafa@computes-things-for-basit.local>
+  2014-07-18 12:23:47 -0700
+  Commit: 284bf10, github.com/apache/spark/pull/1446
+
+  [SPARK-2570] [SQL] Fix the bug of ClassCastException
+  Cheng Hao <hao.cheng@intel.com>
+  2014-07-17 23:25:01 -0700
+  Commit: d35837a, github.com/apache/spark/pull/1475
+
+  [SPARK-2534] Avoid pulling in the entire RDD in various operators (branch-1.0 backport)
+  Reynold Xin <rxin@apache.org>
+  2014-07-17 16:33:30 -0700
+  Commit: 26c428a, github.com/apache/spark/pull/1469
+
+  [SPARK-2412] CoalescedRDD throws exception with certain pref locs
+  Aaron Davidson <aaron@databricks.com>
+  2014-07-17 01:01:14 -0700
+  Commit: 3bb5d2f, github.com/apache/spark/pull/1337
+
+  [SPARK-2154] Schedule next Driver when one completes (standalone mode)
+  Aaron Davidson <aaron@databricks.com>
+  2014-07-16 14:16:48 -0700
+  Commit: 0b0b895, github.com/apache/spark/pull/1405
+
+  SPARK-1097: Do not introduce deadlock while fixing concurrency bug
+  Aaron Davidson <aaron@databricks.com>
+  2014-07-16 14:10:17 -0700
+  Commit: 91e7a71, github.com/apache/spark/pull/1409
+
+  [SPARK-2518][SQL] Fix foldability of Substring expression.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-07-16 11:13:38 -0700
+  Commit: bf1ddc7, github.com/apache/spark/pull/1432
+
+  [SPARK-2525][SQL] Remove as many compilation warning messages as possible in Spark SQL
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-07-16 10:53:59 -0700
+  Commit: fb38b9c, github.com/apache/spark/pull/1444
+
+  [SPARK-2504][SQL] Fix nullability of Substring expression.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-07-15 22:43:48 -0700
+  Commit: e61149d, github.com/apache/spark/pull/1426
+
+  [SPARK-2509][SQL] Add optimization for Substring.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-07-15 22:35:34 -0700
+  Commit: 16c8d56, github.com/apache/spark/pull/1428
+
+  [SPARK-2314][SQL] Override collect and take in JavaSchemaRDD, forwarding to SchemaRDD implementations.
+  Aaron Staple <aaron.staple@gmail.com>
+  2014-07-15 21:35:36 -0700
+  Commit: 96fdc7c, github.com/apache/spark/pull/1421
+
+  [SPARK-2498] [SQL] Synchronize on a lock when using scala reflection inside data type objects.
+  Zongheng Yang <zongheng.y@gmail.com>
+  2014-07-15 17:58:28 -0700
+  Commit: 9c5f096, github.com/apache/spark/pull/1423
+
+  [SQL] Attribute equality comparisons should be done by exprId.
+  Michael Armbrust <michael@databricks.com>
+  2014-07-15 17:56:17 -0700
+  Commit: 8da0fd8, github.com/apache/spark/pull/1414
+
+  SPARK-2407: Added internal implementation of SQL SUBSTR()
+  William Benton <willb@redhat.com>
+  2014-07-15 14:11:57 -0700
+  Commit: 2db77e9, github.com/apache/spark/pull/1359
+
+  [SQL] Whitelist more Hive tests.
+  Michael Armbrust <michael@databricks.com>
+  2014-07-15 14:04:01 -0700
+  Commit: f2bf651, github.com/apache/spark/pull/1396
+
+  [SPARK-2483][SQL] Fix parsing of repeated, nested data access.
+  Michael Armbrust <michael@databricks.com>
+  2014-07-15 14:01:48 -0700
+  Commit: 3aa120c, github.com/apache/spark/pull/1411
+
+  [SPARK-2485][SQL] Lock usage of hive client.
+  Michael Armbrust <michael@databricks.com>
+  2014-07-15 00:13:51 -0700
+  Commit: 53a6399, github.com/apache/spark/pull/1412
+
+  Add/increase severity of warning in documentation of groupBy()
+  Aaron Davidson <aaron@databricks.com>
+  2014-07-14 23:38:12 -0700
+  Commit: 0e27279, github.com/apache/spark/pull/1380
+
+  [SPARK-2443][SQL] Fix slow read from partitioned tables
+  Zongheng Yang <zongheng.y@gmail.com>
+  2014-07-14 13:22:24 -0700
+  Commit: 2ec7d7a, github.com/apache/spark/pull/1408
+
+  [SPARK-2405][SQL] Reusue same byte buffers when creating new instance of InMemoryRelation
+  Michael Armbrust <michael@databricks.com>
+  2014-07-12 12:13:32 -0700
+  Commit: effa69f, github.com/apache/spark/pull/1332
+
+  [SPARK-2441][SQL] Add more efficient distinct operator.
+  Michael Armbrust <michael@databricks.com>
+  2014-07-12 12:07:27 -0700
+  Commit: 37e4943, github.com/apache/spark/pull/1366
+
+  [SPARK-2455] Mark (Shippable)VertexPartition serializable
+  Ankur Dave <ankurdave@gmail.com>
+  2014-07-12 12:05:34 -0700
+  Commit: 354ce4d, github.com/apache/spark/pull/1376
+
+  Updating versions for branch-1.0
+  Patrick Wendell <pwendell@gmail.com>
+  2014-07-12 08:31:24 -0700
+  Commit: 2a5514f
+
+  HOTFIX: Updating Python doc version
+  Patrick Wendell <pwendell@gmail.com>
+  2014-07-12 08:27:39 -0700
+  Commit: ea434cf
+
+  [SPARK-2415] [SQL] RowWriteSupport should handle empty ArrayType correctly.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-07-10 19:23:44 -0700
+  Commit: 390ae9b, github.com/apache/spark/pull/1339
+
+  [SPARK-2431][SQL] Refine StringComparison and related codes.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-07-10 19:20:00 -0700
+  Commit: 1fef57b, github.com/apache/spark/pull/1357
+
+  SPARK-2427: Fix Scala examples that use the wrong command line arguments index
+  Artjom-Metro <Artjom-Metro@users.noreply.github.com>, Artjom-Metro <artjom31415@googlemail.com>
+  2014-07-10 16:03:30 -0700
+  Commit: 5bfd319, github.com/apache/spark/pull/1353
+
+  [SPARK-1341] [Streaming] Throttle BlockGenerator to limit rate of data consumption.
+  Issac Buenrostro <buenrostro@ooyala.com>
+  2014-07-10 16:01:08 -0700
+  Commit: ca19cfb, github.com/apache/spark/pull/945
+
+  [SPARK-2417][MLlib] Fix DecisionTree tests
+  johnnywalleye <jsondag@gmail.com>
+  2014-07-09 11:06:34 -0700
+  Commit: cb443cf, github.com/apache/spark/pull/1343
+
+  [STREAMING] SPARK-2343: Fix QueueInputDStream with oneAtATime false
+  Manuel Laflamme <manuel.laflamme@gmail.com>
+  2014-07-09 10:45:45 -0700
+  Commit: 21fae6d, github.com/apache/spark/pull/1285
+
+  [SPARK-2152][MLlib] fix bin offset in DecisionTree node aggregations (also resolves SPARK-2160)
+  johnnywalleye <jsondag@gmail.com>
+  2014-07-08 19:17:26 -0700
+  Commit: d569838, github.com/apache/spark/pull/1316
+
+  [SPARK-2362] Fix for newFilesOnly logic in file DStream
+  Gabriele Nizzoli <mail@nizzoli.net>
+  2014-07-08 14:23:38 -0700
+  Commit: 8854891, github.com/apache/spark/pull/1077
+
+  [SPARK-2409] Make SQLConf thread safe.
+  Reynold Xin <rxin@apache.org>
+  2014-07-08 14:00:47 -0700
+  Commit: 1c12b0b, github.com/apache/spark/pull/1334
+
+  [SPARK-2403] Catch all errors during serialization in DAGScheduler
+  Daniel Darabos <darabos.daniel@gmail.com>
+  2014-07-08 10:43:46 -0700
+  Commit: 3bd32f0, github.com/apache/spark/pull/1329
+
+  [SPARK-2395][SQL] Optimize common LIKE patterns.
+  Michael Armbrust <michael@databricks.com>
+  2014-07-08 10:36:18 -0700
+  Commit: 4bf8dda, github.com/apache/spark/pull/1325
+
+  [EC2] Add default history server port to ec2 script
+  Andrew Or <andrewor14@gmail.com>
+  2014-07-08 16:49:31 +0900
+  Commit: 3e95225, github.com/apache/spark/pull/1296
+
+  [SPARK-2391][SQL] Custom take() for LIMIT queries.
+  Michael Armbrust <michael@databricks.com>
+  2014-07-08 00:41:46 -0700
+  Commit: faa0e9f, github.com/apache/spark/pull/1318
+
+  Resolve sbt warnings during build Ⅱ
+  witgo <witgo@qq.com>
+  2014-07-08 00:31:42 -0700
+  Commit: 23b01a3, github.com/apache/spark/pull/1153
+
+  [SPARK-2376][SQL] Selecting list values inside nested JSON objects raises java.lang.IllegalArgumentException
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-07-07 18:37:38 -0700
+  Commit: 9dce7be, github.com/apache/spark/pull/1320
+
+  [SPARK-2375][SQL] JSON schema inference may not resolve type conflicts correctly for a field inside an array of structs
+  Yin Huai <huaiyin.thu@gmail.com>
+  2014-07-07 17:05:59 -0700
+  Commit: 1032c28, github.com/apache/spark/pull/1308
+
+  [SPARK-2386] [SQL] RowWriteSupport should use the exact types to cast.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-07-07 17:04:02 -0700
+  Commit: 691b554, github.com/apache/spark/pull/1315
+
+  [SPARK-2339][SQL] SQL parser in sql-core is case sensitive, but a table alias is converted to lower case when we create Subquery
+  Yin Huai <huai@cse.ohio-state.edu>
+  2014-07-07 17:01:44 -0700
+  Commit: e522971, github.com/apache/spark/pull/1317
+
+  [SPARK-1977][MLLIB] register mutable BitSet in MovieLenseALS
+  Neville Li <neville@spotify.com>
+  2014-07-07 15:06:14 -0700
+  Commit: 5044ba6, github.com/apache/spark/pull/1319
+
+  [SPARK-2327] [SQL] Fix nullabilities of Join/Generate/Aggregate.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-07-05 11:51:48 -0700
+  Commit: b459aa7, github.com/apache/spark/pull/1266
+
+  [SPARK-2366] [SQL] Add column pruning for the right side of LeftSemi join.
+  Takuya UESHIN <ueshin@happy-camper.st>
+  2014-07-05 11:48:08 -0700
+  Commit: 3aa52be, github.com/apache/spark/pull/1301
+
+  [SPARK-2370][SQL] Decrease metadata retrieved for partitioned hive queries.
+  Michael Armbrust <michael@databricks.com>
+  2014-07-04 19:15:48 -0700
+  Commit: b77715a, github.com/apache/spark/pull/1305
+
+
 Release 1.0.1
 
   [SPARK-2059][SQL] Add analysis checks
