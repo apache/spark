@@ -77,23 +77,21 @@ class LogisticRegressionModel (
 class LogisticRegressionWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
-    private var regParam: Double,
     private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
 
   private val gradient = new LogisticGradient()
-  private val updater = new SimpleUpdater()
-  override val optimizer = new GradientDescent(gradient, updater)
+  private val regularizer = new SimpleRegularizer()
+  override val optimizer = new GradientDescent(gradient, regularizer)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
-    .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
   override protected val validators = List(DataValidators.binaryLabelValidator)
 
   /**
    * Construct a LogisticRegression object with default parameters
    */
-  def this() = this(1.0, 100, 0.0, 1.0)
+  def this() = this(1.0, 100, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)
@@ -128,7 +126,7 @@ object LogisticRegressionWithSGD {
       stepSize: Double,
       miniBatchFraction: Double,
       initialWeights: Vector): LogisticRegressionModel = {
-    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction)
+    new LogisticRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
       .run(input, initialWeights)
   }
 
@@ -149,7 +147,7 @@ object LogisticRegressionWithSGD {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double): LogisticRegressionModel = {
-    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction)
+    new LogisticRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
       .run(input)
   }
 

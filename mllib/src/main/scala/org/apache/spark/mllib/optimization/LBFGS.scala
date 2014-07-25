@@ -19,7 +19,7 @@ package org.apache.spark.mllib.optimization
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseVector => BDV, axpy}
+import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -32,16 +32,16 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * Class used to solve an optimization problem using Limited-memory BFGS.
  * Reference: [[http://en.wikipedia.org/wiki/Limited-memory_BFGS]]
  * @param gradient Gradient function to be used.
- * @param updater Updater to be used to update weights after every iteration.
+ * @param regularizer Regularizer to be used for regularization.
  */
 @DeveloperApi
-class LBFGS(private var gradient: Gradient, private var updater: Updater)
-  extends Optimizer with Logging {
+class LBFGS private[mllib] (
+    private var gradient: Gradient,
+    private var regularizer: Regularizer) extends Optimizer with Logging {
 
   private var numCorrections = 10
   private var convergenceTol = 1E-4
   private var maxNumIterations = 100
-  private var regParam = 0.0
 
   /**
    * Set the number of corrections used in the LBFGS update. Default 10.
@@ -76,8 +76,9 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   /**
    * Set the regularization parameter. Default 0.0.
    */
+  @Deprecated
   def setRegParam(regParam: Double): this.type = {
-    this.regParam = regParam
+   // this.regParam = regParam
     this
   }
 
@@ -95,8 +96,9 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
    * The updater is responsible to perform the update from the regularization term as well,
    * and therefore determines what kind or regularization is used, if any.
    */
+  @Deprecated
   def setUpdater(updater: Updater): this.type = {
-    this.updater = updater
+    //this.updater = updater
     this
   }
 
@@ -104,11 +106,10 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
     val (weights, _) = LBFGS.runLBFGS(
       data,
       gradient,
-      updater,
+      regularizer,
       numCorrections,
       convergenceTol,
       maxNumIterations,
-      regParam,
       initialWeights)
     weights
   }
@@ -130,11 +131,10 @@ object LBFGS extends Logging {
    *               the form (label, [feature values]).
    * @param gradient - Gradient object (used to compute the gradient of the loss function of
    *                   one single data example)
-   * @param updater - Updater function to actually perform a gradient step in a given direction.
+   * @param regularizer - Updater function to actually perform a gradient step in a given direction.
    * @param numCorrections - The number of corrections used in the L-BFGS update.
    * @param convergenceTol - The convergence tolerance of iterations for L-BFGS
    * @param maxNumIterations - Maximal number of iterations that L-BFGS can be run.
-   * @param regParam - Regularization parameter
    *
    * @return A tuple containing two elements. The first element is a column matrix containing
    *         weights for every feature, and the second element is an array containing the loss
@@ -143,19 +143,17 @@ object LBFGS extends Logging {
   def runLBFGS(
       data: RDD[(Double, Vector)],
       gradient: Gradient,
-      updater: Updater,
+      regularizer: Regularizer,
       numCorrections: Int,
       convergenceTol: Double,
       maxNumIterations: Int,
-      regParam: Double,
       initialWeights: Vector): (Vector, Array[Double]) = {
 
     val lossHistory = new ArrayBuffer[Double](maxNumIterations)
 
     val numExamples = data.count()
 
-    val costFun =
-      new CostFun(data, gradient, updater, regParam, numExamples)
+    val costFun = new CostFun(data, gradient, regularizer, numExamples)
 
     val lbfgs = new BreezeLBFGS[BDV[Double]](maxNumIterations, numCorrections, convergenceTol)
 
@@ -187,8 +185,7 @@ object LBFGS extends Logging {
   private class CostFun(
     data: RDD[(Double, Vector)],
     gradient: Gradient,
-    updater: Updater,
-    regParam: Double,
+    regularizer: Regularizer,
     numExamples: Long) extends DiffFunction[BDV[Double]] {
 
     private var i = 0
@@ -198,7 +195,7 @@ object LBFGS extends Logging {
       val localData = data
       val localGradient = gradient
 
-      val (gradientSum, lossSum) = localData.aggregate((BDV.zeros[Double](weights.size), 0.0))(
+      var (gradientSum, lossSum) = localData.aggregate((BDV.zeros[Double](weights.size), 0.0))(
           seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
             val l = localGradient.compute(
               features, label, Vectors.fromBreeze(weights), Vectors.fromBreeze(grad))
@@ -208,42 +205,15 @@ object LBFGS extends Logging {
             (grad1 += grad2, loss1 + loss2)
           })
 
-      /**
-       * regVal is sum of weight squares if it's L2 updater;
-       * for other updater, the same logic is followed.
-       */
-      val regVal = updater.compute(
-        Vectors.fromBreeze(weights),
-        Vectors.dense(new Array[Double](weights.size)), 0, 1, regParam)._2
+      gradientSum :*= (1.0 / numExamples)
+      lossSum *= (1.0 / numExamples)
 
-      val loss = lossSum / numExamples + regVal
-      /**
-       * It will return the gradient part of regularization using updater.
-       *
-       * Given the input parameters, the updater basically does the following,
-       *
-       * w' = w - thisIterStepSize * (gradient + regGradient(w))
-       * Note that regGradient is function of w
-       *
-       * If we set gradient = 0, thisIterStepSize = 1, then
-       *
-       * regGradient(w) = w - w'
-       *
-       * TODO: We need to clean it up by separating the logic of regularization out
-       *       from updater to regularizer.
-       */
-      // The following gradientTotal is actually the regularization part of gradient.
-      // Will add the gradientSum computed from the data with weights in the next step.
-      val gradientTotal = weights - updater.compute(
-        Vectors.fromBreeze(weights),
-        Vectors.dense(new Array[Double](weights.size)), 1, 1, regParam)._1.toBreeze
-
-      // gradientTotal = gradientSum / numExamples + gradientTotal
-      axpy(1.0 / numExamples, gradientSum, gradientTotal)
+      lossSum += regularizer.compute(Vectors.fromBreeze(weights),
+        Vectors.fromBreeze(gradientSum))
 
       i += 1
 
-      (loss, gradientTotal)
+      (lossSum, gradientSum)
     }
   }
 

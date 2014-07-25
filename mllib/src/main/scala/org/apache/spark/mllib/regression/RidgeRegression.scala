@@ -58,12 +58,11 @@ class RidgeRegressionWithSGD private (
   extends GeneralizedLinearAlgorithm[RidgeRegressionModel] with Serializable {
 
   private val gradient = new LeastSquaresGradient()
-  private val updater = new SquaredL2Updater()
+  private val regularizer = new L2Regularizer(regParam)
 
-  override val optimizer = new GradientDescent(gradient, updater)
+  override val optimizer = new GradientDescent(gradient, regularizer)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
-    .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
   /**

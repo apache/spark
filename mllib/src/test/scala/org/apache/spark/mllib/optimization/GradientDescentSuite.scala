@@ -72,10 +72,9 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers
     val initialWeights = Array(initialB)
 
     val gradient = new LogisticGradient()
-    val updater = new SimpleUpdater()
+    val regularizer = new SimpleRegularizer()
     val stepSize = 1.0
     val numIterations = 10
-    val regParam = 0
     val miniBatchFrac = 1.0
 
     // Add a extra variable consisting of all 1.0's for the intercept.
@@ -90,10 +89,9 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers
     val (_, loss) = GradientDescent.runMiniBatchSGD(
       dataRDD,
       gradient,
-      updater,
+      regularizer,
       stepSize,
       numIterations,
-      regParam,
       miniBatchFrac,
       initialWeightsWithIntercept)
 
@@ -106,7 +104,6 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers
   test("Test the loss and gradient of first iteration with regularization.") {
 
     val gradient = new LogisticGradient()
-    val updater = new SquaredL2Updater()
 
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(2.0, -1.5, 10000, 42)
@@ -119,13 +116,13 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with Matchers
     // Prepare non-zero weights
     val initialWeightsWithIntercept = Vectors.dense(1.0, 0.5)
 
-    val regParam0 = 0
+    val regularizer0 = new L2Regularizer(0.0)
     val (newWeights0, loss0) = GradientDescent.runMiniBatchSGD(
-      dataRDD, gradient, updater, 1, 1, regParam0, 1.0, initialWeightsWithIntercept)
+      dataRDD, gradient, regularizer0, 1, 1, 1.0, initialWeightsWithIntercept)
 
-    val regParam1 = 1
+    val regularizer1 = new L2Regularizer(1.0)
     val (newWeights1, loss1) = GradientDescent.runMiniBatchSGD(
-      dataRDD, gradient, updater, 1, 1, regParam1, 1.0, initialWeightsWithIntercept)
+      dataRDD, gradient, regularizer1, 1, 1, 1.0, initialWeightsWithIntercept)
 
     def compareDouble(x: Double, y: Double, tol: Double = 1E-3): Boolean = {
       math.abs(x - y) / (math.abs(y) + 1e-15) < tol

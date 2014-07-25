@@ -83,11 +83,10 @@ class SVMWithSGD private (
   extends GeneralizedLinearAlgorithm[SVMModel] with Serializable {
 
   private val gradient = new HingeGradient()
-  private val updater = new SquaredL2Updater()
-  override val optimizer = new GradientDescent(gradient, updater)
+  private val regularizer = new L2Regularizer(regParam)
+  override val optimizer = new GradientDescent(gradient, regularizer)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
-    .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
   override protected val validators = List(DataValidators.binaryLabelValidator)
 

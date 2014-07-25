@@ -58,11 +58,10 @@ class LassoWithSGD private (
   extends GeneralizedLinearAlgorithm[LassoModel] with Serializable {
 
   private val gradient = new LeastSquaresGradient()
-  private val updater = new L1Updater()
-  override val optimizer = new GradientDescent(gradient, updater)
+  private val regularizer = new L1Regularizer(regParam)
+  override val optimizer = new GradientDescent(gradient, regularizer)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
-    .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
   /**
