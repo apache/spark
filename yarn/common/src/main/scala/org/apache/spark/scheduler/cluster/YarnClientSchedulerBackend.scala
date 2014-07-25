@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments, ExecutorLauncher}
+import org.apache.spark.deploy.yarn.{Client, ClientArguments, ExecutorLauncher, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 import scala.collection.mutable.ArrayBuffer
@@ -37,6 +37,8 @@ private[spark] class YarnClientSchedulerBackend(
 
   var client: Client = null
   var appId: ApplicationId = null
+  var checkerThread: Thread = null
+  var stopping: Boolean = false
 
   private[spark] def addArg(optionName: String, envVar: String, sysProp: String,
       arrayBuf: ArrayBuffer[String]) {
@@ -54,6 +56,7 @@ private[spark] class YarnClientSchedulerBackend(
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
     conf.set("spark.driver.appUIAddress", sc.ui.appUIHostPort)
+    conf.set("spark.driver.appUIHistoryAddress", YarnSparkHadoopUtil.getUIHistoryAddress(sc, conf))
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
@@ -85,6 +88,7 @@ private[spark] class YarnClientSchedulerBackend(
     client = new Client(args, conf)
     appId = client.runApp()
     waitForApp()
+    checkerThread = yarnApplicationStateCheckerThread()
   }
 
   def waitForApp() {
@@ -115,7 +119,32 @@ private[spark] class YarnClientSchedulerBackend(
     }
   }
 
+  private def yarnApplicationStateCheckerThread(): Thread = {
+    val t = new Thread {
+      override def run() {
+        while (!stopping) {
+          val report = client.getApplicationReport(appId)
+          val state = report.getYarnApplicationState()
+          if (state == YarnApplicationState.FINISHED || state == YarnApplicationState.KILLED
+            || state == YarnApplicationState.FAILED) {
+            logError(s"Yarn application already ended: $state")
+            sc.stop()
+            stopping = true
+          }
+          Thread.sleep(1000L)
+        }
+        checkerThread = null
+        Thread.currentThread().interrupt()
+      }
+    }
+    t.setName("Yarn Application State Checker")
+    t.setDaemon(true)
+    t.start()
+    t
+  }
+
   override def stop() {
+    stopping = true
     super.stop()
     client.stop
     logInfo("Stopped")
