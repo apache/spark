@@ -272,7 +272,7 @@ private[spark] class Executor(
           shuffleMemoryMap.remove(Thread.currentThread().getId)
         }
         // Release memory used by this thread for unrolling blocks
-        env.blockManager.memoryStore.releaseUnrollMemory()
+        env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
         runningTasks.remove(taskId)
       }
     }

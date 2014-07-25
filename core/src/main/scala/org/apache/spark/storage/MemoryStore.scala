@@ -40,12 +40,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   @volatile private var currentMemory = 0L
 
-  // Object used to ensure that only one thread is putting blocks and if necessary, dropping
-  // blocks from the memory store.
-  private val putLock = new Object()
+  // Ensure only one thread is putting, and if necessary, dropping blocks at any given time
+  private val accountingLock = new Object
 
   // A mapping from thread ID to amount of memory used for unrolling a block (in bytes)
-  // All accesses of this map are assumed to have manually synchronized on `putLock`
+  // All accesses of this map are assumed to have manually synchronized on `accountingLock`
   private val unrollMemoryMap = mutable.HashMap[Long, Long]()
 
   /**
@@ -228,11 +227,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     // Request memory for our vector and return whether the request is granted
     // This involves synchronizing across all threads, which is expensive if called frequently
     def requestMemory(memoryToRequest: Long): Boolean = {
-      putLock.synchronized {
-        val otherThreadsMemory = currentUnrollMemory - threadCurrentUnrollMemory
+      accountingLock.synchronized {
+        val otherThreadsMemory = currentUnrollMemory - currentUnrollMemoryForThisThread
         val availableMemory = freeMemory - otherThreadsMemory
         val granted = availableMemory > memoryToRequest
-        if (granted) { reserveUnrollMemory(memoryToRequest) }
+        if (granted) { reserveUnrollMemoryForThisThread(memoryToRequest) }
         granted
       }
     }
@@ -251,7 +250,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
             val amountToRequest = (currentSize * memoryGrowthFactor).toLong
             // Hold the put lock, in case another thread concurrently puts a block that takes
             // up the unrolling space we just ensured here
-            putLock.synchronized {
+            accountingLock.synchronized {
               if (!requestMemory(amountToRequest)) {
                 // If the first request is not granted, try again after ensuring free space
                 // If there is still not enough space, give up and drop the partition
@@ -281,7 +280,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       // we release the memory claimed by this thread later on when the task finishes.
       if (keepUnrolling) {
         vector = null
-        releaseUnrollMemory()
+        releaseUnrollMemoryForThisThread()
       }
     }
   }
@@ -298,7 +297,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
    * must also be passed by the caller.
    *
-   * Lock on the object putLock to ensure that all the put requests and its associated block
+   * Synchronize on `accountingLock` to ensure that all the put requests and its associated block
    * dropping is done by only on thread at a time. Otherwise while one thread is dropping
    * blocks to free memory for one block, another thread may use up the freed space for
    * another block.
@@ -320,7 +319,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     var putSuccess = false
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
-    putLock.synchronized {
+    accountingLock.synchronized {
       val freeSpaceResult = ensureFreeSpace(blockId, size)
       val enoughFreeSpace = freeSpaceResult.success
       droppedBlocks ++= freeSpaceResult.droppedBlocks
@@ -356,7 +355,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
    * don't fit into memory that we want to avoid).
    *
-   * Assume that `putLock` is held by the caller to ensure only one thread is dropping blocks.
+   * Assume that `accountingLock` is held by the caller to ensure only one thread is dropping blocks.
    * Otherwise, the freed space may fill up before the caller puts in their new value.
    *
    * Return whether there is enough free space, along with the blocks dropped in the process.
@@ -430,28 +429,28 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   /**
    * Reserve memory for unrolling blocks used by this thread.
    */
-  private def reserveUnrollMemory(memory: Long): Unit = putLock.synchronized {
+  private def reserveUnrollMemoryForThisThread(memory: Long): Unit = accountingLock.synchronized {
     unrollMemoryMap(Thread.currentThread().getId) = memory
   }
 
   /**
    * Release memory used by this thread for unrolling blocks.
    */
-  private[spark] def releaseUnrollMemory(): Unit = putLock.synchronized {
+  private[spark] def releaseUnrollMemoryForThisThread(): Unit = accountingLock.synchronized {
     unrollMemoryMap.remove(Thread.currentThread().getId)
   }
 
   /**
    * Return the amount of memory currently occupied for unrolling blocks across all threads.
    */
-  private def currentUnrollMemory: Long = putLock.synchronized {
+  private def currentUnrollMemory: Long = accountingLock.synchronized {
     unrollMemoryMap.values.sum
   }
 
   /**
    * Return the amount of memory currently occupied for unrolling blocks by this thread.
    */
-  private def threadCurrentUnrollMemory: Long = putLock.synchronized {
+  private def currentUnrollMemoryForThisThread: Long = accountingLock.synchronized {
     unrollMemoryMap.getOrElse(Thread.currentThread().getId, 0L)
   }
 }
