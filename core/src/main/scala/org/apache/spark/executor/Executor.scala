@@ -149,6 +149,7 @@ private[spark] class Executor(
     extends Runnable {
 
     @volatile private var killed = false
+    @volatile var running = false
     @volatile var task: Task[Any] = _
 
     def kill(interruptThread: Boolean) {
@@ -194,6 +195,7 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
+        running = true
         val value = task.run(taskId.toInt)
         val taskFinish = System.currentTimeMillis()
 
@@ -208,7 +210,6 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.hostname = Utils.localHostName()
           m.executorDeserializeTime = taskStart - startTime
           m.executorRunTime = taskFinish - taskStart
           m.jvmGCTime = gcTime - startGCTime
@@ -379,16 +380,18 @@ private[spark] class Executor(
         while (!isStopped) {
           val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
           for (taskRunner <- runningTasks.values()) {
-            Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
-              tasksMetrics += ((taskRunner.taskId, metrics))
+            if (taskRunner.running) {
+              Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
+                tasksMetrics += ((taskRunner.taskId, metrics))
+              }
             }
           }
 
           val message = Heartbeat(executorId, tasksMetrics.toArray,
             env.blockManager.blockManagerId)
-          val reregister = !AkkaUtils.askWithReply[Boolean](message, heartbeatReceiverRef,
+          val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
             retryAttempts, retryIntervalMs, timeout)
-          if (reregister) {
+          if (response.reregisterBlockManager) {
             logWarning("Told to re-register on heartbeat")
             env.blockManager.reregister()
           }

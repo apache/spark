@@ -22,11 +22,17 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.scheduler.TaskScheduler
 
+/**
+ * A heartbeat from executors to the driver. This is a shared message used by several internal
+ * components to convey liveness or execution information for in-progress tasks.
+ */
 private[spark] case class Heartbeat(
     executorId: String,
     taskMetrics: Array[(Long, TaskMetrics)],
     blockManagerId: BlockManagerId)
   extends Serializable
+
+private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean) extends Serializable
 
 /**
  * Lives in the driver to receive heartbeats from executors..
@@ -34,6 +40,8 @@ private[spark] case class Heartbeat(
 private[spark] class HeartbeatReceiver(scheduler: TaskScheduler) extends Actor {
   override def receive = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
-      sender ! scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId)
+      val response = HeartbeatResponse(
+        !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
+      sender ! response
   }
 }

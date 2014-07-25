@@ -545,8 +545,8 @@ Apart from these, the following properties are also available, and may be useful
     <td>spark.executor.heartbeatInterval</td>
     <td>2000</td>
     <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
-    the driver that the executor is still alive and update it with metrics for in-progress tasks.
-    </td>
+    the driver know that the executor is still alive and update it with metrics for in-progress
+    tasks.</td>
 </tr>
 </table>
 
