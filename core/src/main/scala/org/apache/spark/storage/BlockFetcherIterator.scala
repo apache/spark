@@ -217,7 +217,7 @@ object BlockFetcherIterator {
       // Split local and remote blocks.
       val remoteRequests = splitLocalRemoteBlocks()
       // Add the remote requests into our queue in a random order
-      fetchRequests ++= Utils.randomize(remoteRequests)
+      fetchRequests ++= remoteRequests
 
       // Send out initial requests for blocks, up to our maxBytesInFlight
       while (!fetchRequests.isEmpty &&
@@ -320,7 +320,7 @@ object BlockFetcherIterator {
       // Split Local Remote Blocks and set numBlocksToFetch
       val remoteRequests = splitLocalRemoteBlocks()
       // Add the remote requests into our queue in a random order
-      for (request <- Utils.randomize(remoteRequests)) {
+      for (request <- remoteRequests) {
         fetchRequestsSync.put(request)
       }
 
