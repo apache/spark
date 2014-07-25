@@ -74,7 +74,7 @@ trait ActorHelper {
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store[T](iter: Iterator[T]) {
-    println("Storing iterator")
+    //println("Storing iterator")
     context.parent ! IteratorData(iter)
   }
 
@@ -93,7 +93,7 @@ trait ActorHelper {
    * being pushed into Spark's memory.
    */
   def store[T](item: T) {
-    println("Storing item")
+    //println("Storing item")
     context.parent ! SingleItemData(item)
   }
 }
@@ -157,11 +157,11 @@ private[streaming] class ActorReceiver[T: ClassTag](
     def receive = {
 
       case IteratorData(iterator) =>
-        println("received iterator")
+        //println("received iterator")
         store(iterator.asInstanceOf[Iterator[T]])
 
       case SingleItemData(msg) =>
-        println("received single")
+        //println("received single")
         store(msg.asInstanceOf[T])
         n.incrementAndGet
 
