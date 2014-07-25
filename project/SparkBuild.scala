@@ -21,6 +21,7 @@ import scala.collection.JavaConversions._
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
+import sbtunidoc.Plugin.genjavadocSettings
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
@@ -107,7 +108,7 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
-  lazy val sharedSettings = graphSettings ++ ScalaStyleSettings ++ Seq (
+  lazy val sharedSettings = graphSettings ++ ScalaStyleSettings ++ genjavadocSettings ++ Seq (
     javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
     incOptions := incOptions.value.withNameHashing(true),
     retrieveManaged := true,
