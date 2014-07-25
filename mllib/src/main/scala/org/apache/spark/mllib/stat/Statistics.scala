@@ -20,10 +20,12 @@ package org.apache.spark.mllib.stat
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.stat.correlation.Correlations
+import org.apache.spark.mllib.stat.test.{ChiSquaredTest, ChiSquaredTestResult}
 import org.apache.spark.rdd.RDD
 
 /**
- * API for statistical functions in MLlib
+ * :: Experimental ::
+ * API for statistical functions in MLLib
  */
 @Experimental
 object Statistics {
@@ -75,4 +77,12 @@ object Statistics {
    *         specified method.
    */
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
+
+  def chiSquared(x: RDD[Double], y: RDD[Double], method: String): ChiSquaredTestResult = {
+    ChiSquaredTest.chiSquared(x, y, method)
+  }
+
+  def chiSquared(x: RDD[Double], y: RDD[Double]): ChiSquaredTestResult = {
+    ChiSquaredTest.chiSquared(x, y)
+  }
 }
