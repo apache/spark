@@ -126,6 +126,9 @@ private[spark] class SortShuffleWriter[K, V, C](
       out.close()
     }
 
+    // Register our map output with the ShuffleBlockManager, which handles cleaning it over time
+    blockManager.shuffleBlockManager.addCompletedMap(dep.shuffleId, mapId, numPartitions)
+
     mapStatus = new MapStatus(blockManager.blockManagerId,
       lengths.map(MapOutputTracker.compressSize))
   }
