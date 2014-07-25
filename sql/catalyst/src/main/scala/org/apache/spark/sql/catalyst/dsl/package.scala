@@ -79,8 +79,24 @@ package object dsl {
     def === (other: Expression) = EqualTo(expr, other)
     def !== (other: Expression) = Not(EqualTo(expr, other))
 
+    def in(list: Expression*) = In(expr, list)
+
     def like(other: Expression) = Like(expr, other)
     def rlike(other: Expression) = RLike(expr, other)
+    def contains(other: Expression) = Contains(expr, other)
+    def startsWith(other: Expression) = StartsWith(expr, other)
+    def endsWith(other: Expression) = EndsWith(expr, other)
+    def substr(pos: Expression, len: Expression = Literal(Int.MaxValue)) =
+      Substring(expr, pos, len)
+    def substring(pos: Expression, len: Expression = Literal(Int.MaxValue)) =
+      Substring(expr, pos, len)
+
+    def isNull = IsNull(expr)
+    def isNotNull = IsNotNull(expr)
+
+    def getItem(ordinal: Expression) = GetItem(expr, ordinal)
+    def getField(fieldName: String) = GetField(expr, fieldName)
+
     def cast(to: DataType) = Cast(expr, to)
 
     def asc = SortOrder(expr, Ascending)
@@ -112,6 +128,7 @@ package object dsl {
     def sumDistinct(e: Expression) = SumDistinct(e)
     def count(e: Expression) = Count(e)
     def countDistinct(e: Expression*) = CountDistinct(e)
+    def approxCountDistinct(e: Expression, rsd: Double = 0.05) = ApproxCountDistinct(e, rsd)
     def avg(e: Expression) = Average(e)
     def first(e: Expression) = First(e)
     def min(e: Expression) = Min(e)
@@ -163,6 +180,18 @@ package object dsl {
 
       /** Creates a new AttributeReference of type binary */
       def binary = AttributeReference(s, BinaryType, nullable = true)()
+
+      /** Creates a new AttributeReference of type array */
+      def array(dataType: DataType) = AttributeReference(s, ArrayType(dataType), nullable = true)()
+
+      /** Creates a new AttributeReference of type map */
+      def map(keyType: DataType, valueType: DataType): AttributeReference =
+        map(MapType(keyType, valueType))
+      def map(mapType: MapType) = AttributeReference(s, mapType, nullable = true)()
+
+      /** Creates a new AttributeReference of type struct */
+      def struct(fields: StructField*): AttributeReference = struct(StructType(fields))
+      def struct(structType: StructType) = AttributeReference(s, structType, nullable = true)()
     }
 
     implicit class DslAttribute(a: AttributeReference) {
