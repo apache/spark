@@ -231,10 +231,20 @@ trait HiveTypeCoercion {
    * Changes Boolean values to Bytes so that expressions like true < false can be Evaluated.
    */
   object BooleanComparisons extends Rule[LogicalPlan] {
+    val trueValues = Seq(1, 1L, 1.toByte, 1.toShort, BigDecimal(1)).map(Literal(_))
+    val falseValues = Seq(0, 0L, 0.toByte, 0.toShort, BigDecimal(0)).map(Literal(_))
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      // No need to change EqualTo operators as that actually makes sense for boolean types.
+
+      // Hive treats (true = 1) as true and (false = 0) as true.
+      case EqualTo(l @ BooleanType(), r) if trueValues.contains(r) => l
+      case EqualTo(l, r @ BooleanType()) if trueValues.contains(l) => r
+      case EqualTo(l @ BooleanType(), r) if falseValues.contains(r) => Not(l)
+      case EqualTo(l, r @ BooleanType()) if falseValues.contains(l) => Not(r)
+
+      // No need to change other EqualTo operators as that actually makes sense for boolean types.
       case e: EqualTo => e
       // Otherwise turn them to Byte types so that there exists and ordering.
       case p: BinaryComparison

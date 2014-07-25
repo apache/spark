@@ -30,6 +30,18 @@ case class TestData(a: Int, b: String)
  */
 class HiveQuerySuite extends HiveComparisonTest {
 
+  createQueryTest("boolean = number",
+    """
+      |SELECT
+      |  1 = true, 1L = true, 1Y = true, true = 1, true = 1L, true = 1Y,
+      |  0 = true, 0L = true, 0Y = true, true = 0, true = 0L, true = 0Y,
+      |  1 = false, 1L = false, 1Y = false, false = 1, false = 1L, false = 1Y,
+      |  0 = false, 0L = false, 0Y = false, false = 0, false = 0L, false = 0Y,
+      |  2 = true, 2L = true, 2Y = true, true = 2, true = 2L, true = 2Y,
+      |  2 = false, 2L = false, 2Y = false, false = 2, false = 2L, false = 2Y
+      |FROM src LIMIT 1
+    """.stripMargin)
+
   test("CREATE TABLE AS runs once") {
     hql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
     assert(hql("SELECT COUNT(*) FROM foo").collect().head.getLong(0) === 1,
