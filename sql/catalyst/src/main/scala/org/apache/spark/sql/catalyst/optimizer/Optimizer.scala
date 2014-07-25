@@ -153,6 +153,8 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
       case e @ GetItem(_, Literal(null, _)) => Literal(null, e.dataType)
       case e @ GetField(Literal(null, _), _) => Literal(null, e.dataType)
+      case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
+      case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
 
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
