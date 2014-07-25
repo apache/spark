@@ -31,10 +31,12 @@ object BuildCommons {
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
   val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl, spark, sql,
-  streaming, streamingFlume, streamingKafka, streamingMqtt, streamingTwitter, streamingZeromq) =
+  streaming, streamingFlumeSink, streamingFlume, streamingKafka, streamingMqtt, streamingTwitter,
+  streamingZeromq) =
     Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
-      "spark", "sql", "streaming", "streaming-flume", "streaming-kafka", "streaming-mqtt",
-      "streaming-twitter", "streaming-zeromq").map(ProjectRef(buildLocation, _))
+      "spark", "sql", "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka",
+      "streaming-mqtt", "streaming-twitter", "streaming-zeromq").
+      map(ProjectRef(buildLocation, _))
 
   val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests, sparkGangliaLgpl) =
     Seq("yarn", "yarn-stable", "yarn-alpha", "java8-tests", "ganglia-lgpl")
