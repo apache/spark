@@ -63,7 +63,8 @@ class TwitterReceiver(
     storageLevel: StorageLevel
   ) extends Receiver[Status](storageLevel) with Logging {
 
-  private var twitterStream: TwitterStream = _
+  @volatile private var twitterStream: TwitterStream = _
+  @volatile private var stopped = false
 
   def onStart() {
     try {
@@ -78,7 +79,9 @@ class TwitterReceiver(
         def onScrubGeo(l: Long, l1: Long) {}
         def onStallWarning(stallWarning: StallWarning) {}
         def onException(e: Exception) {
-          restart("Error receiving tweets", e)
+          if (!stopped) {
+            restart("Error receiving tweets", e)
+          }
         }
       })
 
@@ -91,12 +94,14 @@ class TwitterReceiver(
       }
       setTwitterStream(newTwitterStream)
       logInfo("Twitter receiver started")
+      stopped = false
     } catch {
       case e: Exception => restart("Error starting Twitter stream", e)
     }
   }
 
   def onStop() {
+    stopped = true
     setTwitterStream(null)
     logInfo("Twitter receiver stopped")
   }

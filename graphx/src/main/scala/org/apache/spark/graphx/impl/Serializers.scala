@@ -24,8 +24,10 @@ import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.graphx._
 import org.apache.spark.serializer._
+
+import org.apache.spark.graphx._
+import org.apache.spark.graphx.impl.RoutingTablePartition.RoutingTableMessage
 
 private[graphx]
 class RoutingTableMessageSerializer extends Serializer with Serializable {
@@ -35,10 +37,8 @@ class RoutingTableMessageSerializer extends Serializer with Serializable {
       new ShuffleSerializationStream(s) {
         def writeObject[T: ClassTag](t: T): SerializationStream = {
           val msg = t.asInstanceOf[RoutingTableMessage]
-          writeVarLong(msg.vid, optimizePositive = false)
-          writeUnsignedVarInt(msg.pid)
-          // TODO: Write only the bottom two bits of msg.position
-          s.write(msg.position)
+          writeVarLong(msg._1, optimizePositive = false)
+          writeInt(msg._2)
           this
         }
       }
@@ -47,10 +47,8 @@ class RoutingTableMessageSerializer extends Serializer with Serializable {
       new ShuffleDeserializationStream(s) {
         override def readObject[T: ClassTag](): T = {
           val a = readVarLong(optimizePositive = false)
-          val b = readUnsignedVarInt()
-          val c = s.read()
-          if (c == -1) throw new EOFException
-          new RoutingTableMessage(a, b, c.toByte).asInstanceOf[T]
+          val b = readInt()
+          (a, b).asInstanceOf[T]
         }
       }
   }
