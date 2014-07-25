@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.api.java;
 
-import java.io.File;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import com.google.common.io.Files;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -36,7 +34,6 @@ import org.apache.spark.sql.api.java.types.StructType;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.sql.test.TestSQLContext;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -44,14 +41,11 @@ import org.apache.spark.sql.test.TestSQLContext;
 public class JavaApplySchemaSuite implements Serializable {
   private transient JavaSparkContext javaCtx;
   private transient JavaSQLContext javaSqlCtx;
-  private transient File tempDir;
 
   @Before
   public void setUp() {
-    javaCtx = new JavaSparkContext(TestSQLContext.sparkContext());
+    javaCtx = new JavaSparkContext("local", "JavaApplySchemaSuite");
     javaSqlCtx = new JavaSQLContext(javaCtx);
-    tempDir = Files.createTempDir();
-    tempDir.deleteOnExit();
   }
 
   @After
@@ -135,7 +129,7 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataType.createStructField("null", DataType.StringType, true));
     fields.add(DataType.createStructField("string", DataType.StringType, true));
     StructType expectedSchema = DataType.createStructType(fields);
-    List<Row> expectedResult = new ArrayList<Row>(1);
+    List<Row> expectedResult = new ArrayList<Row>(2);
     expectedResult.add(
       Row.create(
         new BigDecimal("92233720368547758070"),

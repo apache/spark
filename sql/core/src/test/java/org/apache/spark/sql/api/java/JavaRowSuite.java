@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 public class JavaRowSuite {
@@ -41,7 +41,7 @@ public class JavaRowSuite {
   private byte[] binaryValue;
   private Timestamp timestampValue;
 
-  @BeforeClass
+  @Before
   public void setUp() {
     byteValue = (byte)127;
     shortValue = (short)32767;
