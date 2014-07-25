@@ -19,9 +19,9 @@
 from operator import itemgetter
 import time
 import sys
-from collections import namedtuple
 import types
 import array
+import warnings
 
 from pyspark.rdd import RDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer
@@ -360,7 +360,6 @@ def create_cls(schema):
 
     class Row(tuple):
 
-        _schema = schema
         _fields = tuple(n for n, _ in schema)
 
         for __i,__x in enumerate(schema):
@@ -373,7 +372,7 @@ def create_cls(schema):
                 del __name, _type
             else:
                 locals()[__x] = property(itemgetter(__i))
-        del __i,__x
+        del __i, __x
 
         def __equals__(self, x):
             if type(self) != type(x):
@@ -473,27 +472,51 @@ class SQLContext:
         row = rdd.first()
         if not isinstance(row, (dict, tuple)):
             raise ValueError("Cannot apply schema to type %s" % type(row))
+        if isinstance(row, dict):
+            warnings.warn("using dict to infer schema is deprecated")
 
         schema = infer_schema(row, True)
         rdd = rdd.map(lambda r: drop_schema(r, schema))
         return self.applySchema(rdd, schema)
 
-    def applySchema(self, rdd, schema, f=None):
+    def applySchema(self, rdd, schema):
         """
-        apply a schema to an RDD of L{dict}s.
+        Apply a schema to an RDD of L{tuple}s or L{list}s.
+
+        The schema could be a string or tuple (with or without types), such as
+        "name value" or ("name", "value") or (("name", str), ("value", int)).
+
+        The schema can have nested struct (struct, list, map).
+
+        In string schema, the fields are seperated by space. Each field can be
+        followed by composit type, for example:
+
+            "name address(city zipcode) items[] props{}"
+
+        It's equal to (primary types are emitted):
+
+            ("name", ("address, ("city", "zipcode")), ("item", []),
+             ("props", {}))
+
+        So it's also equal to:
+
+            (("name", string),
+             ("address", (("city", string), ("zipcode", int))),
+             ("item", []),
+             ("props", {}),
+
+        The `schema` should match with the rows in `rdd`, first few rows will be
+        checked.
 
         >>> rdd = sc.parallelize([("Alice", 11), ("Bob", 21)])
         >>> srdd = sqlCtx.applySchema(rdd, ("name", "age"))
-        >>> srdd.first().name, srdd.first().age
-        (u'Alice', 11)
+        >>> srdd.first()
+        Row(name=u'Alice', age=11)
 
         >>> srdd = sqlCtx.applySchema(rdd, "name age")
-        >>> srdd.first().name, srdd.first().age
-        (u'Alice', 11)
+        >>> srdd.first()
+        Row(name=u'Alice', age=11)
         """
-
-        if f is not None:
-            rdd = rdd.map(f)
 
         if isinstance(rdd, SchemaRDD):
             raise ValueError("Cannot apply schema to %s" % SchemaRDD.__name__)
@@ -907,16 +930,18 @@ def _test():
     import doctest
     from array import array
     from pyspark.context import SparkContext
+    from collections import namedtuple
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext('local[4]', 'PythonTest', batchSize=2)
     globs['sc'] = sc
     globs['sqlCtx'] = SQLContext(sc)
+    Row = namedtuple("Row", "field1 field2")
     globs['rdd'] = sc.parallelize(
-        [{"field1": 1, "field2": "row1"},
-         {"field1": 2, "field2": "row2"},
-         {"field1": 3, "field2": "row3"}]
+        [Row(1, "row1"),
+         Row(2, "row2"),
+         Row(3, "row3")]
     )
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
@@ -925,12 +950,14 @@ def _test():
     ]
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
+    NestedRow1 = namedtuple("NestedRow1", "f1 f2")
     globs['nestedRdd1'] = sc.parallelize([
-        {"f1": array('i', [1, 2]), "f2": {"row1": 1.0}},
-        {"f1": array('i', [2, 3]), "f2": {"row2": 2.0}}])
+        NestedRow1(array('i', [1, 2]), {"row1": 1.0}),
+        NestedRow1(array('i', [2, 3]), {"row2": 2.0})])
+    NestedRow2 = namedtuple("NestedRow2", "f1 f2 f3")
     globs['nestedRdd2'] = sc.parallelize([
-        {"f1": [[1, 2], [2, 3]], "f2": set([1, 2]), "f3": (1, 2)},
-        {"f1": [[2, 3], [3, 4]], "f2": set([2, 3]), "f3": (2, 3)}])
+        NestedRow2([[1, 2], [2, 3]], set([1, 2]), (1, 2)),
+        NestedRow2([[2, 3], [3, 4]], set([2, 3]), (2, 3))])
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
