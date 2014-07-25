@@ -46,10 +46,6 @@ object SparkSubmit {
   private val CLUSTER = 2
   private val ALL_DEPLOY_MODES = CLIENT | CLUSTER
 
-  // A special jar name that indicates the class being run is inside of Spark itself, and therefore
-  // no user jar is needed.
-  private val SPARK_INTERNAL = "spark-internal"
-
   // Special primary resource names that represent shells rather than application jars.
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
@@ -261,9 +257,7 @@ object SparkSubmit {
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (clusterManager == YARN && deployMode == CLUSTER) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
-      if (args.primaryResource != SPARK_INTERNAL) {
-        childArgs += ("--jar", args.primaryResource)
-      }
+      childArgs += ("--jar", args.primaryResource)
       childArgs += ("--class", args.mainClass)
       if (args.childArgs != null) {
         args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
@@ -338,7 +332,7 @@ object SparkSubmit {
    * Return whether the given primary resource represents a user jar.
    */
   private def isUserJar(primaryResource: String): Boolean = {
-    !isShell(primaryResource) && !isPython(primaryResource) && !isInternal(primaryResource)
+    !isShell(primaryResource) && !isPython(primaryResource)
   }
 
   /**
@@ -353,10 +347,6 @@ object SparkSubmit {
    */
   private[spark] def isPython(primaryResource: String): Boolean = {
     primaryResource.endsWith(".py") || primaryResource == PYSPARK_SHELL
-  }
-
-  private[spark] def isInternal(primaryResource: String): Boolean = {
-    primaryResource == SPARK_INTERNAL
   }
 
   /**
