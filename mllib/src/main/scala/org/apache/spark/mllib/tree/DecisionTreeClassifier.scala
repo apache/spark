@@ -23,8 +23,6 @@ import org.apache.spark.mllib.rdd.DatasetInfo
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.DTClassifierParams
 import org.apache.spark.mllib.tree.impurity.ClassificationImpurities
-
-//import org.apache.spark.mllib.tree.impurity.{ClassificationImpurity, ClassificationImpurities}
 import org.apache.spark.mllib.tree.model.{InformationGainStats, Bin, DecisionTreeClassifierModel}
 import org.apache.spark.rdd.RDD
 
@@ -57,10 +55,6 @@ class DecisionTreeClassifier (params: DTClassifierParams)
     val topNode = super.trainSub(input, datasetInfo)
     new DecisionTreeClassifierModel(topNode)
   }
-
-  //===========================================================================
-  //  Protected methods (abstract from DecisionTree)
-  //===========================================================================
 
   protected def computeCentroidForCategories(
       featureIndex: Int,
@@ -107,15 +101,16 @@ class DecisionTreeClassifier (params: DTClassifierParams)
         featureIndex: Int) {
 
       // shift for this featureIndex
-      val shift = datasetInfo.numClasses * featureIndex * numBins
+      val numClasses = datasetInfo.numClasses
+      val shift = numClasses * featureIndex * numBins
 
       var classIndex = 0
-      while (classIndex < datasetInfo.numClasses) {
+      while (classIndex < numClasses) {
         // left node aggregate for the lowest split
         leftNodeAgg(featureIndex)(0)(classIndex) = binData(shift + classIndex)
         // right node aggregate for the highest split
         rightNodeAgg(featureIndex)(numBins - 2)(classIndex)
-          = binData(shift + (datasetInfo.numClasses * (numBins - 1)) + classIndex)
+          = binData(shift + (numClasses * (numBins - 1)) + classIndex)
         classIndex += 1
       }
 
@@ -125,12 +120,12 @@ class DecisionTreeClassifier (params: DTClassifierParams)
         // calculating left node aggregate for a split as a sum of left node aggregate of a
         // lower split and the left bin aggregate of a bin where the split is a high split
         var innerClassIndex = 0
-        while (innerClassIndex < datasetInfo.numClasses) {
+        while (innerClassIndex < numClasses) {
           leftNodeAgg(featureIndex)(splitIndex)(innerClassIndex)
-            = binData(shift + datasetInfo.numClasses * splitIndex + innerClassIndex) +
+            = binData(shift + numClasses * splitIndex + innerClassIndex) +
             leftNodeAgg(featureIndex)(splitIndex - 1)(innerClassIndex)
           rightNodeAgg(featureIndex)(numBins - 2 - splitIndex)(innerClassIndex) =
-            binData(shift + (datasetInfo.numClasses * (numBins - 1 - splitIndex) + innerClassIndex)) +
+            binData(shift + (numClasses * (numBins - 1 - splitIndex) + innerClassIndex)) +
               rightNodeAgg(featureIndex)(numBins - 1 - splitIndex)(innerClassIndex)
           innerClassIndex += 1
         }
@@ -367,10 +362,6 @@ class DecisionTreeClassifier (params: DTClassifierParams)
     }
   }
 
-  //===========================================================================
-  //  Private methods
-  //===========================================================================
-
   /**
    * Increment aggregate in location for (node, feature, bin, label)
    * to indicate that, for this (example,
@@ -513,7 +504,8 @@ class DecisionTreeClassifier (params: DTClassifierParams)
         while (featureIndex < datasetInfo.numFeatures) {
           val isFeatureContinuous = datasetInfo.categoricalFeaturesInfo.get(featureIndex).isEmpty
           if (isFeatureContinuous) {
-            updateBinForOrderedFeature(arr, agg, nodeIndex, label, featureIndex, datasetInfo, numBins)
+            updateBinForOrderedFeature(arr, agg, nodeIndex, label, featureIndex, datasetInfo,
+              numBins)
           } else {
             val featureCategories = datasetInfo.categoricalFeaturesInfo(featureIndex)
             val isSpaceSufficientForAllCategoricalSplits =
@@ -522,7 +514,8 @@ class DecisionTreeClassifier (params: DTClassifierParams)
               updateBinForUnorderedFeature(arr, agg, nodeIndex, featureIndex, label,
                 rightChildShift, datasetInfo, numBins, bins)
             } else {
-              updateBinForOrderedFeature(arr, agg, nodeIndex, label, featureIndex, datasetInfo, numBins)
+              updateBinForOrderedFeature(arr, agg, nodeIndex, label, featureIndex, datasetInfo,
+                numBins)
             }
           }
           featureIndex += 1

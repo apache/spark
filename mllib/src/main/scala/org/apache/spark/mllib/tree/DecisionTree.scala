@@ -149,10 +149,6 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (params: DTPa
     topNode
   }
 
-  //===========================================================================
-  //  Protected abstract methods
-  //===========================================================================
-
   /**
    * For a given categorical feature, use a subsample of the data
    * to choose how to arrange possible splits.
@@ -231,10 +227,6 @@ private[mllib] abstract class DecisionTree[M <: DecisionTreeModel] (params: DTPa
       datasetInfo: DatasetInfo,
       numNodes: Int,
       numBins: Int): Array[Double]
-
-  //===========================================================================
-  //  Protected (non-abstract) methods
-  //===========================================================================
 
   /**
    * Extract the decision tree node information for the given tree level and node index

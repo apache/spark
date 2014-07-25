@@ -18,8 +18,6 @@
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.annotation.Experimental
-//import org.apache.spark.mllib.tree.model.DecisionTreeModel
-//import org.apache.spark.mllib.tree.model.Node
 
 
 /**

@@ -57,16 +57,12 @@ class DecisionTreeRegressor (params: DTRegressorParams)
     new DecisionTreeRegressorModel(topNode)
   }
 
-  //===========================================================================
-  //  Protected methods (abstract from DecisionTree)
-  //===========================================================================
-
   protected def computeCentroidForCategories(
       featureIndex: Int,
       sampledInput: Array[LabeledPoint],
       datasetInfo: DatasetInfo): Map[Double,Double] = {
     // For categorical variables in regression, each bin is a category.
-    // The bins are sorted and are ordered by calculating the centroid of their corresponding labels.
+    // The bins are sorted and ordered by calculating the centroid of their corresponding labels.
     sampledInput.map(lp => (lp.features(featureIndex), lp.label))
       .groupBy(_._1)
       .mapValues(x => x.map(_._2).sum / x.map(_._1).length)
