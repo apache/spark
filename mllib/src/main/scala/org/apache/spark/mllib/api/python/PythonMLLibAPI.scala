@@ -41,7 +41,6 @@ class PythonMLLibAPI extends Serializable {
   private val SPARSE_VECTOR_MAGIC: Byte = 2
   private val DENSE_MATRIX_MAGIC: Byte = 3
   private val LABELED_POINT_MAGIC: Byte = 4
-  private val DOUBLE_MAGIC: Byte = 5
 
   private[python] def deserializeDoubleVector(bytes: Array[Byte], offset: Int = 0): Vector = {
     require(bytes.length - offset >= 5, "Byte array too short")
@@ -56,11 +55,9 @@ class PythonMLLibAPI extends Serializable {
   }
 
   private[python] def deserializeDouble(bytes: Array[Byte], offset: Int = 0): Double = {
-    require(bytes.length - offset == 9, "Wrong size byte array for Double")
+    require(bytes.length - offset == 8, "Wrong size byte array for Double")
     val bb = ByteBuffer.wrap(bytes, offset, bytes.length - offset)
     bb.order(ByteOrder.nativeOrder())
-    val magic = bb.get()
-    require(magic == DOUBLE_MAGIC, "Invalid magic: " + magic)
     bb.getDouble
   }
 
@@ -99,11 +96,18 @@ class PythonMLLibAPI extends Serializable {
     Vectors.sparse(size, indices, values)
   }
 
+  /**
+   * Returns an 8-byte array for the input Double.
+   *
+   * Note: we currently do not use a magic byte for double for storage efficiency.
+   * This should be reconsidered when we add Ser/De for other 8-byte types (e.g. Long), for safety.
+   * The corresponding deserializer, deserializeDouble, needs to be modified as well if the
+   * serialization scheme changes.
+   */
   private[python] def serializeDouble(double: Double): Array[Byte] = {
-    val bytes = new Array[Byte](9)
+    val bytes = new Array[Byte](8)
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    bb.put(DOUBLE_MAGIC)
     bb.putDouble(double)
     bytes
   }
