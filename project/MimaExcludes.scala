@@ -83,6 +83,8 @@ object MimaExcludes {
           MimaBuild.excludeSparkClass("storage.Entry") ++
           MimaBuild.excludeSparkClass("storage.MemoryStore$Entry") ++
           Seq(
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.mllib.tree.configuration.Algo"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.tree.impurity.Gini.calculate"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
