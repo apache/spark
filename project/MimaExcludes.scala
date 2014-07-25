@@ -91,7 +91,11 @@ object MimaExcludes {
               "org.apache.spark.mllib.tree.configuration.Algo"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.tree.impurity.Gini.calculate"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.mllib.tree.impurity.Gini.calculate"),
             ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.tree.impurity.Entropy.calculate"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.mllib.tree.impurity.Entropy.calculate"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.tree.impurity.Variance.calculate")
