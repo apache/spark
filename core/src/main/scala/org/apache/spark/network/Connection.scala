@@ -325,8 +325,14 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
       logInfo("Connected to [" + address + "], " + outbox.messages.size + " messages pending")
     } catch {
       case e: Exception => {
-        logWarning("Error finishing connection to " + address, e)
-        callOnExceptionCallback(e)
+        if (!force) {
+          logWarning("finish connect failed [" + address + "], " + outbox.messages.size +
+            " messages pending", e)
+          return false
+        } else {
+          logWarning("Error finishing connection to " + address, e)
+          callOnExceptionCallback(e)
+        }
       }
     }
     true
