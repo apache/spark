@@ -1028,68 +1028,150 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(!store.memoryStore.contains(rdd(1, 0)), "rdd_1_0 was in store")
   }
 
-  test("safely unroll blocks") {
-    conf.set("spark.storage.unrollFraction", "0.2")
-    store = new BlockManager(
-      "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)
-    /*
-     * After a1 and a2 are cached, we do not have enough room to unroll a3 safely. When we try
-     * to cache a3, we attempt to ensure free space of only 12000 * 0.2 = 2400 bytes, which is
-     * not enough to drop a1 or a2, as there is already >= 2400 bytes of free space. Therefore,
-     * we give up and drop a3 on the spot.
-     */
-    store.putSingle("a1", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
-    store.putSingle("a2", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
-    store.putSingle("a3", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
-    // Memory store should contain a1, a2
-    assert(store.memoryStore.contains("a1"), "a1 was not in store")
-    assert(store.memoryStore.contains("a2"), "a2 was not in store")
-    assert(!store.memoryStore.contains("a3"), "a3 was in store")
-    /*
-     * After a4 is cached, there is less than 2000 bytes of free space left. Now we try to cache
-     * a5, which is the same size as a3. Ensuring free space of 2400 bytes now drops the LRU block
-     * (i.e. a1) from memory to accommodate a5 (because 2000 < 2400).
-     */
-    store.putSingle("a4", new Array[Byte](2000), StorageLevel.MEMORY_ONLY)
-    store.putSingle("a5", new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
-    // Memory store should contain a2, a4, a5
-    assert(!store.memoryStore.contains("a1"), "a1 was in store")
-    assert(store.memoryStore.contains("a2"), "a2 was not in store")
-    assert(!store.memoryStore.contains("a3"), "a3 was in store")
-    assert(store.memoryStore.contains("a4"), "a4 was not in store")
-    assert(store.memoryStore.contains("a5"), "a5 was not in store")
+  /**
+   * Verify the result of MemoryStore#unrollSafely is as expected.
+   */
+  private def verifyUnroll(
+      expected: Iterator[Any],
+      result: Either[Array[Any], Iterator[Any]],
+      shouldBeArray: Boolean): Unit = {
+    val actual: Iterator[Any] = result match {
+      case Left(arr: Array[Any]) =>
+        assert(shouldBeArray, "expected iterator from unroll!")
+        arr.iterator
+      case Right(it: Iterator[Any]) =>
+        assert(!shouldBeArray, "expected array from unroll!")
+        it
+      case _ =>
+        fail("unroll returned neither an iterator nor an array...")
+    }
+    expected.zip(actual).foreach { case (e, a) =>
+      assert(e === a, "unroll did not return original values!")
+    }
   }
 
-  test("safely unroll blocks (disk)") {
-    conf.set("spark.storage.unrollFraction", "0.2")
+  test("safely unroll blocks") {
     store = new BlockManager(
       "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)
-    /*
-     * This test is the same as the previous, except it caches each block using MEMORY_AND_DISK.
-     * The effect is that all dropped blocks now go to disk instead of simply disappear.
-     */
-    store.putSingle("a1", new Array[Byte](4000), StorageLevel.MEMORY_AND_DISK)
-    store.putSingle("a2", new Array[Byte](4000), StorageLevel.MEMORY_AND_DISK)
-    store.putSingle("a3", new Array[Byte](3000), StorageLevel.MEMORY_AND_DISK)
-    // Memory store should contain a1, a2; disk store should contain a3
-    assert(store.memoryStore.contains("a1"), "a1 was not in memory store")
-    assert(store.memoryStore.contains("a2"), "a2 was not in memory store")
-    assert(!store.memoryStore.contains("a3"), "a3 was in memory store")
-    assert(!store.diskStore.contains("a1"), "a1 was in disk store")
-    assert(!store.diskStore.contains("a2"), "a2 was in disk store")
-    assert(store.diskStore.contains("a3"), "a3 was not in disk store")
-    store.putSingle("a4", new Array[Byte](2000), StorageLevel.MEMORY_AND_DISK)
-    store.putSingle("a5", new Array[Byte](3000), StorageLevel.MEMORY_AND_DISK)
-    // Memory store should contain a2, a4, a5; disk store should contain a1, a3
-    assert(!store.memoryStore.contains("a1"), "a1 was in memory store")
-    assert(store.memoryStore.contains("a2"), "a2 was not in memory store")
-    assert(!store.memoryStore.contains("a3"), "a3 was in memory store")
-    assert(store.memoryStore.contains("a4"), "a4 was not in memory store")
-    assert(store.memoryStore.contains("a5"), "a5 was not in memory store")
-    assert(store.diskStore.contains("a1"), "a1 was not in disk store")
-    assert(!store.diskStore.contains("a2"), "a2 was in disk store")
-    assert(store.diskStore.contains("a3"), "a3 was not in disk store")
-    assert(!store.diskStore.contains("a4"), "a4 was in disk store")
-    assert(!store.diskStore.contains("a5"), "a5 was in disk store")
+    val smallList = List.fill(40)(new Array[Byte](100))
+    val bigList = List.fill(40)(new Array[Byte](1000))
+    val memoryStore = store.memoryStore
+    val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
+
+    // Unroll with all the space in the world. This should succeed and return an array.
+    var unrollResult = memoryStore.unrollSafely("unroll", smallList.iterator, droppedBlocks)
+    verifyUnroll(smallList.iterator, unrollResult, shouldBeArray = true)
+
+    // Unroll with not enough space. This should succeed after kicking out someBlock1.
+    store.putIterator("someBlock1", smallList.iterator, StorageLevel.MEMORY_ONLY)
+    store.putIterator("someBlock2", smallList.iterator, StorageLevel.MEMORY_ONLY)
+    unrollResult = memoryStore.unrollSafely("unroll", smallList.iterator, droppedBlocks)
+    verifyUnroll(smallList.iterator, unrollResult, shouldBeArray = true)
+    assert(droppedBlocks.size === 1)
+    assert(droppedBlocks.head._1 === TestBlockId("someBlock1"))
+    droppedBlocks.clear()
+
+    // Unroll huge block with not enough space. Even after ensuring free space of 12000 * 0.4 =
+    // 4800 bytes, there is still not enough room to unroll this block. This returns an iterator.
+    // In the mean time, however, we kicked out someBlock2 before giving up.
+    store.putIterator("someBlock3", smallList.iterator, StorageLevel.MEMORY_ONLY)
+    unrollResult = memoryStore.unrollSafely("unroll", bigList.iterator, droppedBlocks)
+    verifyUnroll(bigList.iterator, unrollResult, shouldBeArray = false)
+    assert(droppedBlocks.size === 1)
+    assert(droppedBlocks.head._1 === TestBlockId("someBlock2"))
+    droppedBlocks.clear()
+  }
+
+  test("safely unroll blocks through putIterator") {
+    store = new BlockManager(
+      "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)
+    val memOnly = StorageLevel.MEMORY_ONLY
+    val memoryStore = store.memoryStore
+    val smallList = List.fill(40)(new Array[Byte](100))
+    val bigList = List.fill(40)(new Array[Byte](1000))
+    def smallIterator = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def bigIterator = bigList.iterator.asInstanceOf[Iterator[Any]]
+
+    // Unroll with plenty of space. This should succeed and cache both blocks.
+    val result1 = memoryStore.putIterator("b1", smallIterator, memOnly, returnValues = true)
+    val result2 = memoryStore.putIterator("b2", smallIterator, memOnly, returnValues = true)
+    assert(memoryStore.contains("b1"))
+    assert(memoryStore.contains("b2"))
+    assert(result1.size > 0) // unroll was successful
+    assert(result2.size > 0)
+    assert(result1.data.isLeft) // unroll did not drop this block to disk
+    assert(result2.data.isLeft) // unroll did not drop this block to disk
+
+    // Re-put these two blocks so block manager knows about them too. Otherwise, block manager
+    // would not know how to drop them from memory later.
+    memoryStore.remove("b1")
+    memoryStore.remove("b2")
+    store.putIterator("b1", smallIterator, memOnly)
+    store.putIterator("b2", smallIterator, memOnly)
+
+    // Unroll with not enough space. This should succeed but kick out b1 in the process.
+    val result3 = memoryStore.putIterator("b3", smallIterator, memOnly, returnValues = true)
+    assert(result3.size > 0)
+    assert(result3.data.isLeft)
+    assert(!memoryStore.contains("b1"))
+    assert(memoryStore.contains("b2"))
+    assert(memoryStore.contains("b3"))
+    memoryStore.remove("b3")
+    store.putIterator("b3", smallIterator, memOnly)
+
+    // Unroll huge block with not enough space. This should fail and kick out b2 in the process.
+    val result4 = memoryStore.putIterator("b4", bigIterator, memOnly, returnValues = true)
+    assert(result4.size === 0) // unroll was unsuccessful
+    assert(result4.data.isLeft)
+    assert(!memoryStore.contains("b1"))
+    assert(!memoryStore.contains("b2"))
+    assert(memoryStore.contains("b3"))
+    assert(!memoryStore.contains("b4"))
+  }
+
+  /**
+   * This test is essentially identical to the preceding one, except that it uses MEMORY_AND_DISK.
+   */
+  test("safely unroll blocks through putIterator (disk)") {
+    store = new BlockManager(
+      "<driver>", actorSystem, master, serializer, 12000, conf, securityMgr, mapOutputTracker)
+    val memAndDisk = StorageLevel.MEMORY_AND_DISK
+    val memoryStore = store.memoryStore
+    val diskStore = store.diskStore
+    val smallList = List.fill(40)(new Array[Byte](100))
+    val bigList = List.fill(40)(new Array[Byte](1000))
+    def smallIterator = smallList.iterator.asInstanceOf[Iterator[Any]]
+    def bigIterator = bigList.iterator.asInstanceOf[Iterator[Any]]
+
+    store.putIterator("b1", smallIterator, memAndDisk)
+    store.putIterator("b2", smallIterator, memAndDisk)
+
+    // Unroll with not enough space. This should succeed but kick out b1 in the process.
+    // Memory store should contain b2 and b3, while disk store should contain only b1
+    val result3 = memoryStore.putIterator("b3", smallIterator, memAndDisk, returnValues = true)
+    assert(result3.size > 0)
+    assert(!memoryStore.contains("b1"))
+    assert(memoryStore.contains("b2"))
+    assert(memoryStore.contains("b3"))
+    assert(diskStore.contains("b1"))
+    assert(!diskStore.contains("b2"))
+    assert(!diskStore.contains("b3"))
+    memoryStore.remove("b3")
+    store.putIterator("b3", smallIterator, StorageLevel.MEMORY_ONLY)
+
+    // Unroll huge block with not enough space. This should fail and drop the new block to disk
+    // directly in addition to kicking out b2 in the process. Memory store should contain only
+    // b3, while disk store should contain b1, b2 and b4.
+    val result4 = memoryStore.putIterator("b4", bigIterator, memAndDisk, returnValues = true)
+    assert(result4.size > 0)
+    assert(result4.data.isRight) // unroll returned bytes from disk
+    assert(!memoryStore.contains("b1"))
+    assert(!memoryStore.contains("b2"))
+    assert(memoryStore.contains("b3"))
+    assert(!memoryStore.contains("b4"))
+    assert(diskStore.contains("b1"))
+    assert(diskStore.contains("b2"))
+    assert(!diskStore.contains("b3"))
+    assert(diskStore.contains("b4"))
   }
 }
