@@ -122,6 +122,9 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
   protected val EXCEPT = Keyword("EXCEPT")
   protected val SUBSTR = Keyword("SUBSTR")
   protected val SUBSTRING = Keyword("SUBSTRING")
+  protected val LEN = Keyword("LEN")
+  protected val LENGTH = Keyword("LENGTH")
+  protected val STRLEN = Keyword("STRLEN")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -322,6 +325,13 @@ class SqlParser extends StandardTokenParsers with PackratParsers {
     } |
     (SUBSTR | SUBSTRING) ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case s ~ "," ~ p ~ "," ~ l => Substring(s,p,l)
+    } |
+    (LEN | LENGTH) ~> "(" ~> expression <~ ")" ^^ { case s => Length(s) } |
+    STRLEN ~> "(" ~> expression ~ "," ~  expression <~ ")" ^^ {
+      case s ~ "," ~  e => Strlen(s, e)
+    } |
+    STRLEN ~> "(" ~> expression  <~ ")" ^^ {
+      case s  => Strlen(s, Literal(StrlenConstants.DefaultEncoding))
     } |
     ident ~ "(" ~ repsep(expression, ",") <~ ")" ^^ {
       case udfName ~ _ ~ exprs => UnresolvedFunction(udfName, exprs)

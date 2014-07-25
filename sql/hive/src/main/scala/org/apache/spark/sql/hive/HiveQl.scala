@@ -866,6 +866,7 @@ private[hive] object HiveQl {
   val WHEN = "(?i)WHEN".r
   val CASE = "(?i)CASE".r
   val SUBSTR = "(?i)SUBSTR(?:ING)?".r
+  val STRLEN = "(?i)STRLEN".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -995,8 +996,13 @@ private[hive] object HiveQl {
     case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand
     case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: Nil) => 
       Substring(nodeToExpr(string), nodeToExpr(pos), Literal(Integer.MAX_VALUE, IntegerType))
-    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) => 
+    case Token("TOK_FUNCTION", Token(SUBSTR(), Nil) :: string :: pos :: length :: Nil) =>
       Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
+    case Token("TOK_FUNCTION", Token(STRLEN(), Nil) :: string :: Nil) =>
+      Strlen(nodeToExpr(string), Literal(StrlenConstants.DefaultEncoding))
+    case Token("TOK_FUNCTION", Token(STRLEN(), Nil) :: string :: encoding :: Nil) =>
+      Strlen(nodeToExpr(string), nodeToExpr(encoding))
+
 
     /* UDFs - Must be last otherwise will preempt built in functions */
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>

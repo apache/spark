@@ -47,6 +47,34 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT substring(tableName, 3) FROM tableName"),
       "st")
+    checkAnswer(
+      sql("SELECT substring(tableName, 2) FROM tableName group by substring(tableName, 2)"),
+      "est")
+  }
+
+  test("SPARK-TBD Added Parser of SQL LENGTH()") {
+    checkAnswer(
+       sql("SELECT length(key) as keylen from testData where key = 100"), 3)
+    checkAnswer(
+      sql("SELECT len(key), count(*) as cnt from testData where key <= 100 group by len(key)"),
+      Seq(Seq(1,9),Seq(2,90), Seq(3,1)))
+    checkAnswer(
+      sql("SELECT max(length(key * key) - len(key)) from testData where key <= 100"), 2)
+    checkAnswer(
+      sql("SELECT min(Length(s)) FROM nullableRepeatedData where s is not null"), 4)
+    checkAnswer(
+      sql("SELECT max(LENGTH(s)) FROM nullableRepeatedData"), 4)
+  }
+
+  test("SPARK-TBD Added Parser of SQL STRLEN()") {
+    checkAnswer(
+      sql("SELECT StrLen(s) from repeatedData"), Seq(Seq(4),Seq(4)))
+    checkAnswer(
+      sql("SELECT StrLen(s,'UTF-8') from repeatedData"), Seq(Seq(4),Seq(4)))
+    checkAnswer(
+      sql("SELECT max(StrLen(s,'UTF-8')) from nullStrings"), 3)
+    checkAnswer(
+      sql("SELECT strlen('a','ISO-8859-1') + strlen('abcde','ISO-8859-1') FROM testData limit 1"), 6)
   }
 
   test("index into array") {

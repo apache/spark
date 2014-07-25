@@ -18,10 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types._
+
+import scala.collection.mutable.ArrayBuffer
 
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -567,4 +570,30 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(s.substring(0, 2), "ex", row)
     checkEvaluation(s.substring(0), "example", row)
   }
+
+  test("Length") {
+    checkEvaluation(Length(Literal(null, IntegerType)), null)
+    checkEvaluation(Length(Literal(0,IntegerType)), 1)
+    checkEvaluation(Length(Literal(12,IntegerType)), 2)
+    checkEvaluation(Length(Literal(123,IntegerType)), 3)
+    checkEvaluation(Length(Literal(12.4F, FloatType)), 4)
+    checkEvaluation(Length(Literal(12345678901L,LongType)), 11)
+    checkEvaluation(Length(Literal(1234567890.2D, DoubleType)), 14)
+    checkEvaluation(Length(Literal("1234567890ABC",StringType)), 13)
+    checkEvaluation(Length(Literal("\uF93D\uF936\uF949\uF942",StringType)), 4)
+  }
+
+  test("Strlen") {
+    checkEvaluation(Strlen(Literal(null, StringType), "ISO-8859-1"), null)
+    checkEvaluation(Strlen(Literal(null, StringType), "UTF-8"), null)
+    checkEvaluation(Strlen(Literal(null, StringType), "UTF-16"), null)
+    checkEvaluation(Strlen(Literal("1234567890ABC", StringType), "ISO-8859-1"), 13)
+    checkEvaluation(Strlen(Literal("1234567890ABC", StringType), "UTF-8"), 13)
+    checkEvaluation(Strlen(Literal("1234567890ABC", StringType), "UTF-16"), 7)
+    checkEvaluation(Strlen(Literal("\uF93D\uF936\uF949\uF942", StringType), "ISO-8859-1"), 4)
+    checkEvaluation(Strlen(Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-8"), 4)
+    checkEvaluation(Strlen(Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-16"), 2)
+    checkEvaluation(Strlen(Literal("\uF93D\uF936\uF949\uF942", StringType), "UTF-32"), 1)
+  }
+
 }
