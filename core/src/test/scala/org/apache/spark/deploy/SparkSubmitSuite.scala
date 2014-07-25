@@ -101,10 +101,9 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--class", "Foo",
       "userjar.jar",
       "some",
-      "--class", "Bar",
       "--weird", "args")
     val appArgs = new SparkSubmitArguments(clArgs)
-    appArgs.childArgs should be (Seq("some", "--class", "Bar", "--weird", "args"))
+    appArgs.childArgs should be (Seq("some", "--weird", "args"))
   }
 
   test("handles YARN cluster mode") {

@@ -20,6 +20,9 @@
 #
 # Shell script for starting the Spark SQL CLI
 
+# Enter posix mode for bash
+set -o posix
+
 # Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
@@ -30,4 +33,4 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
 fi
 
 CLASS="org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
-exec "$FWDIR"/bin/spark-submit --class $CLASS $@ spark-internal
+exec "$FWDIR"/bin/spark-submit --class $CLASS spark-internal $@

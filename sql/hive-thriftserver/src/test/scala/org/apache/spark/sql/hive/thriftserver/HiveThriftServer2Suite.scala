@@ -28,7 +28,6 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.util.getTempFilePath
-import org.apache.spark.sql.hive.test.TestHive
 
 /**
  * Test for the HiveThriftServer2 using JDBC.
@@ -58,16 +57,14 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
     // hard to clean up Hive resources entirely, so we just start a new process and kill
     // that process for cleanup.
     val defaultArgs = Seq(
-      "../../bin/spark-class",
-      "-Dspark.master=local",
-      HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$"),
+      "../../sbin/start-thriftserver.sh",
+      "--master local",
       "--hiveconf",
       "hive.root.logger=INFO,console",
       "--hiveconf",
-      "\"javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + METASTORE_PATH +
-        ";create=true\"",
+      s"javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$METASTORE_PATH;create=true",
       "--hiveconf",
-      "\"hive.metastore.warehouse.dir=" + WAREHOUSE_PATH + "\"")
+      s"hive.metastore.warehouse.dir=$WAREHOUSE_PATH")
     val pb = new ProcessBuilder(defaultArgs ++ args)
     process = pb.start()
     inputReader = new BufferedReader(new InputStreamReader(process.getInputStream))
@@ -121,7 +118,7 @@ class HiveThriftServer2Suite extends FunSuite with BeforeAndAfterAll with TestUt
 
   def getConnection: Connection = {
     val connectURI = s"jdbc:hive2://localhost:$PORT/"
-    DriverManager.getConnection(connectURI, "", "")
+    DriverManager.getConnection(connectURI, System.getProperty("user.name"), "")
   }
 
   def createStatement(): Statement = getConnection.createStatement()

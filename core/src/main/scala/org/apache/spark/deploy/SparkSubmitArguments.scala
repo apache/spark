@@ -204,7 +204,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
 
   /** Fill in values by parsing user options. */
   private def parseOpts(opts: Seq[String]): Unit = {
-    val EQ_SEPARATED_OPT = """(--[^=]+)=(.+)""".r
+    var inSparkOpts = true
 
     // Delineates parsing of Spark options from parsing of user options.
     parse(opts)
@@ -307,21 +307,33 @@ private[spark] class SparkSubmitArguments(args: Seq[String]) {
         verbose = true
         parse(tail)
 
-      case EQ_SEPARATED_OPT(opt, value) :: tail =>
-        // convert --foo=bar to --foo bar
-        parse(opt :: value :: tail)
-
-      case value :: tail if value.startsWith("-") =>
-        SparkSubmit.printErrorAndExit(s"Unrecognized option '$value'.")
-
       case value :: tail =>
-        primaryResource = if (!SparkSubmit.isShell(value) && !SparkSubmit.isInternal(value)) {
-          Utils.resolveURI(value).toString
+        if (inSparkOpts) {
+          value match {
+            // convert --foo=bar to --foo bar
+            case v if v.startsWith("--") && v.contains("=") && v.split("=").size == 2 =>
+              val parts = v.split("=")
+              parse(Seq(parts(0), parts(1)) ++ tail)
+            case v if v.startsWith("-") =>
+              val errMessage = s"Unrecognized option '$value'."
+              SparkSubmit.printErrorAndExit(errMessage)
+            case v =>
+              primaryResource =
+                if (!SparkSubmit.isShell(v) && !SparkSubmit.isInternal(v)) {
+                  Utils.resolveURI(v).toString
+                } else {
+                  v
+                }
+              inSparkOpts = false
+              isPython = SparkSubmit.isPython(v)
+              parse(tail)
+          }
         } else {
-          value
+          if (!value.isEmpty) {
+            childArgs += value
+          }
+          parse(tail)
         }
-        isPython = SparkSubmit.isPython(value)
-        childArgs ++= tail.filter(_.nonEmpty)
 
       case Nil =>
     }

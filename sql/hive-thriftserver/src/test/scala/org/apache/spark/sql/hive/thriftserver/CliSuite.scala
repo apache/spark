@@ -30,9 +30,9 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with TestUtils {
 
   override def beforeAll() {
     val pb = new ProcessBuilder(
-      "../../bin/spark-class",
-      "-Dspark.master=local",
-      SparkSQLCLIDriver.getClass.getCanonicalName.stripSuffix("$"),
+      "../../bin/spark-sql",
+      "--master",
+      "local",
       "--hiveconf",
       s"javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$METASTORE_PATH;create=true",
       "--hiveconf",

@@ -33,4 +33,4 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
 fi
 
 CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
-exec "$FWDIR"/bin/spark-submit --class $CLASS $@ spark-internal
+exec "$FWDIR"/bin/spark-submit --class $CLASS spark-internal $@
