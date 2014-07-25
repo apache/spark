@@ -20,6 +20,7 @@ import sys
 import platform
 import shutil
 import warnings
+import gc
 
 from pyspark.serializers import BatchedSerializer, PickleSerializer
 
@@ -242,7 +243,7 @@ class ExternalMerger(Merger):
 
             c += 1
             if c % batch == 0 and get_used_memory() > self.memory_limit:
-                self._first_spill()
+                self._spill()
                 self._partitioned_mergeValues(iterator, self._next_limit())
                 break
 
@@ -280,7 +281,7 @@ class ExternalMerger(Merger):
 
             c += 1
             if c % batch == 0 and get_used_memory() > self.memory_limit:
-                self._first_spill()
+                self._spill()
                 self._partitioned_mergeCombiners(iterator, self._next_limit())
                 break
 
@@ -299,33 +300,6 @@ class ExternalMerger(Merger):
                 self._spill()
                 limit = self._next_limit()
 
-    def _first_spill(self):
-        """
-        Dump all the data into disks partition by partition.
-
-        The data has not been partitioned, it will iterator the
-        dataset once, write them into different files, has no
-        additional memory. It only called when the memory goes
-        above limit at the first time.
-        """
-        path = self._get_spill_dir(self.spills)
-        if not os.path.exists(path):
-            os.makedirs(path)
-        # open all the files for writing
-        streams = [open(os.path.join(path, str(i)), 'w')
-                   for i in range(self.partitions)]
-
-        for k, v in self.data.iteritems():
-            h = self._partition(k)
-            # put one item in batch, make it compatitable with load_stream
-            # it will increase the memory if dump them in batch
-            self.serializer.dump_stream([(k, v)], streams[h])
-        for s in streams:
-            s.close()
-        self.data.clear()
-        self.pdata = [{} for i in range(self.partitions)]
-        self.spills += 1
-
     def _spill(self):
         """
         dump already partitioned data into disks.
@@ -336,13 +310,38 @@ class ExternalMerger(Merger):
         if not os.path.exists(path):
             os.makedirs(path)
 
-        for i in range(self.partitions):
-            p = os.path.join(path, str(i))
-            with open(p, "w") as f:
-                # dump items in batch
-                self.serializer.dump_stream(self.pdata[i].iteritems(), f)
-            self.pdata[i].clear()
+        if not self.pdata:
+            # The data has not been partitioned, it will iterator the
+            # dataset once, write them into different files, has no
+            # additional memory. It only called when the memory goes
+            # above limit at the first time.
+
+            # open all the files for writing
+            streams = [open(os.path.join(path, str(i)), 'w')
+                       for i in range(self.partitions)]
+
+            for k, v in self.data.iteritems():
+                h = self._partition(k)
+                # put one item in batch, make it compatitable with load_stream
+                # it will increase the memory if dump them in batch
+                self.serializer.dump_stream([(k, v)], streams[h])
+
+            for s in streams:
+                s.close()
+
+            self.data.clear()
+            self.pdata = [{} for i in range(self.partitions)]
+
+        else:
+            for i in range(self.partitions):
+                p = os.path.join(path, str(i))
+                with open(p, "w") as f:
+                    # dump items in batch
+                    self.serializer.dump_stream(self.pdata[i].iteritems(), f)
+                self.pdata[i].clear()
+
         self.spills += 1
+        gc.collect() # release the memory as much as possible
 
     def iteritems(self):
         """ Return all merged items as iterator """
@@ -372,6 +371,7 @@ class ExternalMerger(Merger):
                             and j < self.spills - 1
                             and get_used_memory() > hard_limit):
                         self.data.clear() # will read from disk again
+                        gc.collect() # release the memory as much as possible
                         for v in self._recursive_merged_items(i):
                             yield v
                         return
@@ -379,6 +379,7 @@ class ExternalMerger(Merger):
                 for v in self.data.iteritems():
                     yield v
                 self.data.clear()
+                gc.collect()
 
                 # remove the merged partition
                 for j in range(self.spills):
