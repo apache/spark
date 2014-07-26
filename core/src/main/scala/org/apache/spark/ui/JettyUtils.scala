@@ -85,15 +85,28 @@ private[spark] object JettyUtils extends Logging {
       path: String,
       servletParams: ServletParams[T],
       securityMgr: SecurityManager,
-      basePath: String = ""): ServletContextHandler = {
+      basePath: String): ServletContextHandler = {
     createServletHandler(path, createServlet(servletParams, securityMgr), basePath)
+  }
+
+  def createServletHandler[T <% AnyRef](
+      path: String,
+      servletParams: ServletParams[T],
+      securityMgr: SecurityManager): ServletContextHandler = {
+    createServletHandler(path, createServlet(servletParams, securityMgr), "")
+  }
+
+  def createServletHandler(
+      path: String,
+      servlet: HttpServlet): ServletContextHandler = {
+    createServletHandler(path, servlet, "")
   }
 
   /** Create a context handler that responds to a request with the given path prefix */
   def createServletHandler(
       path: String,
       servlet: HttpServlet,
-      basePath: String = ""): ServletContextHandler = {
+      basePath: String): ServletContextHandler = {
     val prefixedPath = attachPrefix(basePath, path)
     val contextHandler = new ServletContextHandler
     val holder = new ServletHolder(servlet)
