@@ -35,7 +35,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   type EvaluatedType = Any
 
-  def references = Set.empty
+  override def references = Set.empty
 
   override def toString = s"input[$ordinal]"
 
