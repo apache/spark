@@ -65,6 +65,14 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   /** Binds an input expression to a given input schema */
   protected def bind(in: InType, inputSchema: Seq[Attribute]): InType
 
+  /**
+   * A cache of generated classes.
+   *
+   * From the Guava Docs: A Cache is similar to ConcurrentMap, but not quite the same. The most
+   * fundamental difference is that a ConcurrentMap persists all elements that are added to it until
+   * they are explicitly removed. A Cache on the other hand is generally configured to evict entries
+   * automatically, in order to constrain its memory footprint
+   */
   protected val cache = CacheBuilder.newBuilder()
     .maximumSize(1000)
     .build(
@@ -74,9 +82,11 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         }
       })
 
-  def apply(expressions: InType, inputSchema: Seq[Attribute]): OutType=
+  /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
+  def apply(expressions: InType, inputSchema: Seq[Attribute]): OutType =
     apply(bind(expressions, inputSchema))
 
+  /** Generates the requested evaluator given already bound expression(s). */
   def apply(expressions: InType): OutType = cache.get(canonicalize(expressions))
 
   /**
@@ -233,7 +243,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       case Cast(child @ NumericType(), FloatType) =>
         child.castOrNull(c => q"$c.toFloat", IntegerType)
 
-      // Special handling required for timestamps in hive test cases.
+      // Special handling required for timestamps in hive test cases since the toString function
+      // does not match the expected output.
       case Cast(e, StringType) if e.dataType != TimestampType =>
         val eval = expressionEvaluator(e)
         eval.code ++
@@ -355,9 +366,9 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           var $nullTerm = true
           var $primitiveTerm: ${termForType(c.dataType)} = ${defaultPrimitive(c.dataType)}
         """.children ++
-          children.map { c =>
-            val eval = expressionEvaluator(c)
-            q"""
+        children.map { c =>
+          val eval = expressionEvaluator(c)
+          q"""
             if($nullTerm) {
               ..${eval.code}
               if(!${eval.nullTerm}) {
@@ -365,8 +376,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
                 $primitiveTerm = ${eval.primitiveTerm}
               }
             }
-           """
-          }
+          """
+        }
 
       case i @ expressions.If(condition, trueValue, falseValue) =>
         val condEval = expressionEvaluator(condition)
@@ -392,8 +403,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     // If there was no match in the partial function above, we fall back on calling the interpreted
     // expression evaluator.
     val code: Seq[Tree] =
-      primitiveEvaluation.lift.apply(e)
-        .getOrElse {
+      primitiveEvaluation.lift.apply(e).getOrElse {
         log.debug(s"No rules to generate $e")
         val tree = reify { e }
         q"""

@@ -304,9 +304,7 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
 
     leftResults.cartesian(rightResults).mapPartitions { iter =>
       val joinedRow = new JoinedRow
-      iter.map {
-        case (l: Row, r: Row) => joinedRow(l, r)
-      }
+      iter.map(r => joinedRow(r._1, r._2))
     }
   }
 }

@@ -70,7 +70,7 @@ package object expressions  {
   abstract class MutableProjection extends Projection {
     def currentValue: Row
 
-    /** Updates the target of this projection to a new MutableRow */
+    /** Uses the given row to store the output of the projection. */
     def target(row: MutableRow): MutableProjection
   }
 }

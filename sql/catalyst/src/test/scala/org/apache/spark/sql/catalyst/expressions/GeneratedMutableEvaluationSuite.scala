@@ -22,18 +22,19 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 
 /**
- * Overrides our expression evaluation tests to use code generation for evaluation.
+ * Overrides our expression evaluation tests to use generated code on mutable rows.
  */
-class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
+class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
   override def checkEvaluation(
-      expression: Expression,
-      expected: Any,
-      inputRow: Row = EmptyRow): Unit = {
+                                expression: Expression,
+                                expected: Any,
+                                inputRow: Row = EmptyRow): Unit = {
+    lazy val evaluated = GenerateProjection.expressionEvaluator(expression)
+
     val plan = try {
-      GenerateMutableProjection(Alias(expression, s"Optimized($expression)")() :: Nil)()
+      GenerateProjection(Alias(expression, s"Optimized($expression)")() :: Nil)
     } catch {
       case e: Throwable =>
-        val evaluated = GenerateProjection.expressionEvaluator(expression)
         fail(
           s"""
             |Code generation of $expression failed:
@@ -42,28 +43,19 @@ class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
           """.stripMargin)
     }
 
-    val actual  = plan(inputRow).apply(0)
-    if(actual != expected) {
+    val actual = plan(inputRow)
+    val expectedRow = new GenericRow(Array[Any](expected))
+    if (actual.hashCode() != expectedRow.hashCode()) {
+      fail(
+        s"""
+          |Mismatched hashCodes for values: $actual, $expectedRow
+          |Hash Codes: ${actual.hashCode()} != ${expectedRow.hashCode()}
+          |${evaluated.code.mkString("\n")}
+        """.stripMargin)
+    }
+    if (actual != expectedRow) {
       val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
     }
-  }
-
-
-  test("multithreaded eval") {
-    import scala.concurrent._
-    import ExecutionContext.Implicits.global
-    import scala.concurrent.duration._
-
-    val futures = (1 to 20).map { _ =>
-      future {
-        GeneratePredicate(EqualTo(Literal(1), Literal(1)))
-        GenerateProjection(EqualTo(Literal(1), Literal(1)) :: Nil)
-        GenerateMutableProjection(EqualTo(Literal(1), Literal(1)) :: Nil)
-        GenerateOrdering(Add(Literal(1), Literal(1)).asc :: Nil)
-      }
-    }
-
-    futures.foreach(Await.result(_, 10.seconds))
   }
 }

@@ -107,7 +107,7 @@ case class GeneratedAggregate(
 
     val computationSchema = computeFunctions.flatMap(_.schema)
 
-    val resultMap = aggregatesToCompute.zip(computeFunctions).map {
+    val resultMap: Map[Long, Expression] = aggregatesToCompute.zip(computeFunctions).map {
       case (agg, func) => agg.id -> func.result
     }.toMap
 
@@ -116,8 +116,11 @@ case class GeneratedAggregate(
       case (e, i) => (e, Alias(e, s"GroupingExpr$i")())
     }
 
-    val groupMap = namedGroups.map { case (k, v) => k -> v.toAttribute}.toMap
+    val groupMap: Map[Expression, Attribute] =
+      namedGroups.map { case (k, v) => k -> v.toAttribute}.toMap
 
+    // The set of expressions that produce the final output given the aggregation buffer and the
+    // grouping expressions.
     val resultExpressions = aggregateExpressions.map(_.transform {
       case e: Expression if resultMap.contains(e.id) => resultMap(e.id)
       case e: Expression if groupMap.contains(e) => groupMap(e)
@@ -125,25 +128,21 @@ case class GeneratedAggregate(
 
     child.execute().mapPartitions { iter =>
       // Builds a new custom class for holding the results of aggregation for a group.
-      @transient
       val newAggregationBuffer =
         newProjection(computeFunctions.flatMap(_.initialValues), child.output)
 
       // A projection that is used to update the aggregate values for a group given a new tuple.
       // This projection should be targeted at the current values for the group and then applied
       // to a joined row of the current values with the new input row.
-      @transient
       val updateProjection =
         newMutableProjection(
           computeFunctions.flatMap(_.update),
           computeFunctions.flatMap(_.schema) ++ child.output)()
 
       // A projection that computes the group given an input tuple.
-      @transient
       val groupProjection = newProjection(groupingExpressions, child.output)
 
       // A projection that produces the final result, given a computation.
-      @transient
       val resultProjectionBuilder =
         newMutableProjection(
           resultExpressions,
@@ -155,10 +154,11 @@ case class GeneratedAggregate(
         // TODO: Codegening anything other than the updateProjection is probably over kill.
         val buffer = newAggregationBuffer(EmptyRow).asInstanceOf[MutableRow]
         var currentRow: Row = null
+        updateProjection.target(buffer)
 
         while (iter.hasNext) {
           currentRow = iter.next()
-          updateProjection.target(buffer)(joinedRow(buffer, currentRow))
+          updateProjection(joinedRow(buffer, currentRow))
         }
 
         val resultProjection = resultProjectionBuilder()
