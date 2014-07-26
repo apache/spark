@@ -344,7 +344,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    * {{{
    * val rawGraph: Graph[_, _] = Graph.textFile("webgraph")
-   * val outDeg: RDD[(VertexId, Int)] = rawGraph.outDegrees()
+   * val outDeg: RDD[(VertexId, Int)] = rawGraph.outDegrees
    * val graph = rawGraph.outerJoinVertices(outDeg) {
    *   (vid, data, optDeg) => optDeg.getOrElse(0)
    * }

@@ -46,6 +46,7 @@ import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.util.collection.CompactBuffer
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -216,17 +217,17 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     val reducePartition = (iter: Iterator[(K, V)]) => {
       val map = new JHashMap[K, V]
-      iter.foreach { case (k, v) =>
-        val old = map.get(k)
-        map.put(k, if (old == null) v else func(old, v))
+      iter.foreach { pair =>
+        val old = map.get(pair._1)
+        map.put(pair._1, if (old == null) pair._2 else func(old, pair._2))
       }
       Iterator(map)
     } : Iterator[JHashMap[K, V]]
 
     val mergeMaps = (m1: JHashMap[K, V], m2: JHashMap[K, V]) => {
-      m2.foreach { case (k, v) =>
-        val old = m1.get(k)
-        m1.put(k, if (old == null) v else func(old, v))
+      m2.foreach { pair =>
+        val old = m1.get(pair._1)
+        m1.put(pair._1, if (old == null) pair._2 else func(old, pair._2))
       }
       m1
     } : JHashMap[K, V]
@@ -361,12 +362,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     // groupByKey shouldn't use map side combine because map side combine does not
     // reduce the amount of data shuffled and requires all map side data be inserted
     // into a hash table, leading to more objects in the old gen.
-    val createCombiner = (v: V) => ArrayBuffer(v)
-    val mergeValue = (buf: ArrayBuffer[V], v: V) => buf += v
-    val mergeCombiners = (c1: ArrayBuffer[V], c2: ArrayBuffer[V]) => c1 ++ c2
-    val bufs = combineByKey[ArrayBuffer[V]](
+    val createCombiner = (v: V) => CompactBuffer(v)
+    val mergeValue = (buf: CompactBuffer[V], v: V) => buf += v
+    val mergeCombiners = (c1: CompactBuffer[V], c2: CompactBuffer[V]) => c1 ++= c2
+    val bufs = combineByKey[CompactBuffer[V]](
       createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine=false)
-    bufs.mapValues(_.toIterable)
+    bufs.asInstanceOf[RDD[(K, Iterable[V])]]
   }
 
   /**
@@ -401,9 +402,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
-    this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
-      for (v <- vs; w <- ws) yield (v, w)
-    }
+    this.cogroup(other, partitioner).flatMapValues( pair =>
+      for (v <- pair._1; w <- pair._2) yield (v, w)
+    )
   }
 
   /**
@@ -413,11 +414,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * partition the output RDD.
    */
   def leftOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
-    this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
-      if (ws.isEmpty) {
-        vs.map(v => (v, None))
+    this.cogroup(other, partitioner).flatMapValues { pair =>
+      if (pair._2.isEmpty) {
+        pair._1.map(v => (v, None))
       } else {
-        for (v <- vs; w <- ws) yield (v, Some(w))
+        for (v <- pair._1; w <- pair._2) yield (v, Some(w))
       }
     }
   }
@@ -430,11 +431,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def rightOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], W))] = {
-    this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
-      if (vs.isEmpty) {
-        ws.map(w => (None, w))
+    this.cogroup(other, partitioner).flatMapValues { pair =>
+      if (pair._1.isEmpty) {
+        pair._2.map(w => (None, w))
       } else {
-        for (v <- vs; w <- ws) yield (Some(v), w)
+        for (v <- pair._1; w <- pair._2) yield (Some(v), w)
       }
     }
   }
@@ -535,7 +536,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val data = self.collect()
     val map = new mutable.HashMap[K, V]
     map.sizeHint(data.length)
-    data.foreach { case (k, v) => map.put(k, v) }
+    data.foreach { pair => map.put(pair._1, pair._2) }
     map
   }
 
@@ -571,11 +572,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
-    cg.mapValues { case Seq(vs, w1s, w2s, w3s) =>
-      (vs.asInstanceOf[Seq[V]],
-        w1s.asInstanceOf[Seq[W1]],
-        w2s.asInstanceOf[Seq[W2]],
-        w3s.asInstanceOf[Seq[W3]])
+    cg.mapValues { case Array(vs, w1s, w2s, w3s) =>
+       (vs.asInstanceOf[Iterable[V]],
+         w1s.asInstanceOf[Iterable[W1]],
+         w2s.asInstanceOf[Iterable[W2]],
+         w3s.asInstanceOf[Iterable[W3]])
     }
   }
 
@@ -589,8 +590,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
-    cg.mapValues { case Seq(vs, ws) =>
-      (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
+    cg.mapValues { case Array(vs, w1s) =>
+      (vs.asInstanceOf[Iterable[V]], w1s.asInstanceOf[Iterable[W]])
     }
   }
 
@@ -604,10 +605,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
-    cg.mapValues { case Seq(vs, w1s, w2s) =>
-      (vs.asInstanceOf[Seq[V]],
-       w1s.asInstanceOf[Seq[W1]],
-       w2s.asInstanceOf[Seq[W2]])
+    cg.mapValues { case Array(vs, w1s, w2s) =>
+      (vs.asInstanceOf[Iterable[V]],
+        w1s.asInstanceOf[Iterable[W1]],
+        w2s.asInstanceOf[Iterable[W2]])
     }
   }
 
@@ -712,8 +713,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         val index = p.getPartition(key)
         val process = (it: Iterator[(K, V)]) => {
           val buf = new ArrayBuffer[V]
-          for ((k, v) <- it if k == key) {
-            buf += v
+          for (pair <- it if pair._1 == key) {
+            buf += pair._2
           }
           buf
         } : Seq[V]
@@ -858,8 +859,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
       try {
         while (iter.hasNext) {
-          val (k, v) = iter.next()
-          writer.write(k, v)
+          val pair = iter.next()
+          writer.write(pair._1, pair._2)
         }
       } finally {
         writer.close(hadoopContext)

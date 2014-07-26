@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.util.TimeZone
 
 import org.scalatest.BeforeAndAfter
 
@@ -31,14 +32,20 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   lazy val hiveQueryDir = TestHive.getHiveFile("ql" + File.separator + "src" +
     File.separator + "test" + File.separator + "queries" + File.separator + "clientpositive")
 
+  var originalTimeZone: TimeZone = _
+
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   override def beforeAll() {
     TestHive.cacheTables = true
+    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+    originalTimeZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
   }
 
   override def afterAll() {
     TestHive.cacheTables = false
+    TimeZone.setDefault(originalTimeZone)
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
@@ -92,8 +99,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "create_view_translate",
     "partitions_json",
 
-    // Timezone specific test answers.
-    "udf_unix_timestamp",
+    // This test is totally fine except that it includes wrong queries and expects errors, but error
+    // message format in Hive and Spark SQL differ. Should workaround this later.
     "udf_to_unix_timestamp",
 
     // Cant run without local map/reduce.
@@ -189,7 +196,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Hive returns the results of describe as plain text. Comments with multiple lines
     // introduce extra lines in the Hive results, which make the result comparison fail.
-    "describe_comment_indent"
+    "describe_comment_indent",
+
+    // Limit clause without a ordering, which causes failure.
+    "orc_predicate_pushdown"
   )
 
   /**
@@ -284,6 +294,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "correlationoptimizer1",
     "correlationoptimizer10",
     "correlationoptimizer11",
+    "correlationoptimizer13",
     "correlationoptimizer14",
     "correlationoptimizer15",
     "correlationoptimizer2",
@@ -292,6 +303,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "correlationoptimizer6",
     "correlationoptimizer7",
     "correlationoptimizer8",
+    "correlationoptimizer9",
     "count",
     "cp_mj_rc",
     "create_insert_outputformat",
@@ -382,6 +394,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby_sort_8",
     "groupby_sort_9",
     "groupby_sort_test_1",
+    "having",
+    "having1",
     "implicit_cast1",
     "innerjoin",
     "inoutdriver",
@@ -492,6 +506,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "join_hive_626",
     "join_map_ppr",
     "join_nulls",
+    "join_nullsafe",
     "join_rc",
     "join_reorder2",
     "join_reorder3",
@@ -659,8 +674,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_publisher_error_1",
     "subq2",
     "tablename_with_select",
+    "timestamp_1",
+    "timestamp_2",
     "timestamp_3",
     "timestamp_comparison",
+    "timestamp_lazy",
     "timestamp_null",
     "timestamp_udf",
     "touch",
@@ -720,6 +738,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_double",
     "udf_E",
     "udf_elt",
+    "udf_equal",
     "udf_exp",
     "udf_field",
     "udf_find_in_set",
@@ -802,6 +821,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_translate",
     "udf_trim",
     "udf_ucase",
+    "udf_unix_timestamp",
     "udf_upper",
     "udf_var_pop",
     "udf_var_samp",

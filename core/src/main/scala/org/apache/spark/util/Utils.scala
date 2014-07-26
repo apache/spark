@@ -44,7 +44,7 @@ import org.apache.spark.executor.ExecutorUncaughtExceptionHandler
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
-private[spark] case class CallSite(val short: String, val long: String)
+private[spark] case class CallSite(shortForm: String, longForm: String)
 
 /**
  * Various utility methods used by Spark.
@@ -848,8 +848,8 @@ private[spark] object Utils extends Logging {
     }
     val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
     CallSite(
-      short = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
-      long = callStack.take(callStackDepth).mkString("\n"))
+      shortForm = "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine),
+      longForm = callStack.take(callStackDepth).mkString("\n"))
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
@@ -1289,6 +1289,21 @@ private[spark] object Utils extends Logging {
         }
       }
     }
+  }
+
+  /** Return a nice string representation of the exception, including the stack trace. */
+  def exceptionString(e: Exception): String = {
+    if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)
+  }
+
+  /** Return a nice string representation of the exception, including the stack trace. */
+  def exceptionString(
+      className: String,
+      description: String,
+      stackTrace: Array[StackTraceElement]): String = {
+    val desc = if (description == null) "" else description
+    val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
+    s"$className: $desc\n$st"
   }
 
 }
