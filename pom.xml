@@ -95,14 +95,14 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
-    <module>repl</module>
+<!--    <module>repl</module> -->
     <module>assembly</module>
     <module>external/twitter</module>
-    <module>external/kafka</module>
+<!--    <module>external/kafka</module> -->
     <module>external/flume</module>
     <module>external/zeromq</module>
     <module>external/mqtt</module>
-    <module>examples</module>
+<!--    <module>examples</module> -->
   </modules>
 
   <properties>
