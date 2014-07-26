@@ -47,12 +47,13 @@ class SQLContext:
             ...
         ValueError:...
 
-        >>> allTypes = sc.parallelize([{"int" : 1, "string" : "string", "double" : 1.0, "long": 1L,
-        ... "boolean" : True}])
+        >>> from datetime import datetime
+        >>> allTypes = sc.parallelize([{"int": 1, "string": "string", "double": 1.0, "long": 1L,
+        ... "boolean": True, "time": datetime(2010, 1, 1, 1, 1, 1)}])
         >>> srdd = sqlCtx.inferSchema(allTypes).map(lambda x: (x.int, x.string, x.double, x.long,
-        ... x.boolean))
+        ... x.boolean, x.time))
         >>> srdd.collect()[0]
-        (1, u'string', 1.0, 1, True)
+        (1, u'string', 1.0, 1, True, datetime.datetime(2010, 1, 1, 1, 1, 1))
         """
         self._sc = sparkContext
         self._jsc = self._sc._jsc

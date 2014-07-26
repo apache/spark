@@ -357,16 +357,52 @@ class SQLContext(@transient val sparkContext: SparkContext)
       case c: java.util.Map[_, _] =>
         val (key, value) = c.head
         MapType(typeFor(key), typeFor(value))
+      case c: java.util.Calendar => TimestampType
       case c if c.getClass.isArray =>
         val elem = c.asInstanceOf[Array[_]].head
         ArrayType(typeFor(elem))
       case c => throw new Exception(s"Object of type $c cannot be used")
     }
-    val schema = rdd.first().map { case (fieldName, obj) =>
+    val firstRow = rdd.first()
+    val schema = firstRow.map { case (fieldName, obj) =>
       AttributeReference(fieldName, typeFor(obj), true)()
     }.toSeq
 
-    val rowRdd = rdd.mapPartitions { iter =>
+    def needTransform(obj: Any): Boolean = obj match {
+      case c: java.util.List[_] => c.exists(needTransform)
+      case c: java.util.Set[_] => c.exists(needTransform)
+      case c: java.util.Map[_, _] => c.exists {
+        case (key, value) => needTransform(key) || needTransform(value)
+      }
+      case c if c.getClass.isArray =>
+        c.asInstanceOf[Array[_]].exists(needTransform)
+      case c: java.util.Calendar => true
+      case c => false
+    }
+
+    def transform(obj: Any): Any = obj match {
+      case c: java.util.List[_] => c.map(transform)
+      case c: java.util.Set[_] => c.map(transform)
+      case c: java.util.Map[_, _] => c.map {
+        case (key, value) => (transform(key), transform(value))
+      }
+      case c if c.getClass.isArray =>
+        c.asInstanceOf[Array[_]].map(transform)
+      case c: java.util.Calendar =>
+        new java.sql.Timestamp(c.getTime().getTime())
+      case c => c
+    }
+
+    val need = firstRow.exists {case (key, value) => needTransform(value)}
+    val transformed = if (need) {
+      rdd.mapPartitions { iter =>
+        iter.map {
+          m => m.map {case (key, value) => (key, transform(value))}
+        }
+      }
+    } else rdd
+
+    val rowRdd = transformed.mapPartitions { iter =>
       iter.map { map =>
         new GenericRow(map.values.toArray.asInstanceOf[Array[Any]]): Row
       }
