@@ -149,15 +149,16 @@ object KafkaUtils {
   /**
    * Create an input stream that pulls messages form a Kafka Broker in according to the specified starting position.
    * @param ssc      	StreamingContext object
-   * @param borkers	 	Kafka brokers list of host:port
+   * @param groupId   The group id for this consumer
+   * @param zkQuorum 	Zookeeper quorum (hostname:port,hostname:port,..).
    * @param topic	 	a topic to consume
    * @param partition 	partition of this topic
    * @param startPositionOffset	beginning to consume from this offset position
    * @param maxBatchByteSize	max buffer size for a fetch request
    * @param storageLevel RDD storage level.
    */
-  def createStream(ssc: StreamingContext, brokers: Seq[String], topic: String, partition: Int, startPositionOffset: Long,
-    maxBatchByteSize: Int, storageLevel: StorageLevel): ReceiverInputDStream[(Long, Array[Byte])] = {
-    new KafkaSimpleInputDStream[StringDecoder, StringDecoder](ssc, brokers, topic, partition, startPositionOffset, maxBatchByteSize, storageLevel);
+  def createStream(ssc: StreamingContext, zkQuorum: String, groupId: String, topic: String, partition: Int, startPositionOffset: Long,
+    autoCommitOffset: Boolean, maxBatchByteSize: Int, storageLevel: StorageLevel): ReceiverInputDStream[(Long, Array[Byte])] = {
+    new KafkaSimpleInputDStream[StringDecoder, StringDecoder](ssc, zkQuorum, groupId, topic, partition, startPositionOffset, autoCommitOffset, maxBatchByteSize, storageLevel)
   }
 }
