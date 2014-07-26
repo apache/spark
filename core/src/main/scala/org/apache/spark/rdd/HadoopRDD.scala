@@ -44,7 +44,7 @@ import org.apache.spark.util.NextIterator
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
  */
-private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSplit)
+private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient val s: InputSplit)
   extends Partition {
 
   val inputSplit = new SerializableWritable[InputSplit](s)

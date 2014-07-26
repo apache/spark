@@ -58,14 +58,14 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
  */
 @DeveloperApi
 class ShuffleDependency[K, V, C](
-    @transient rdd: RDD[_ <: Product2[K, V]],
+    rddp: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
     val serializer: Option[Serializer] = None,
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false,
     val sortOrder: Option[SortOrder] = None)
-  extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) {
+  extends Dependency(rddp.asInstanceOf[RDD[Product2[K, V]]]) {
 
   val shuffleId: Int = rdd.context.newShuffleId()
 

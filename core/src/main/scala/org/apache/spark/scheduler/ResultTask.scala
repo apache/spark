@@ -94,7 +94,7 @@ private[spark] class ResultTask[T, U](
     var rdd: RDD[T],
     var func: (TaskContext, Iterator[T]) => U,
     _partitionId: Int,
-    @transient locs: Seq[TaskLocation],
+    @transient val locs: Seq[TaskLocation],
     var outputId: Int)
   extends Task[U](stageId, _partitionId) with Externalizable {
 

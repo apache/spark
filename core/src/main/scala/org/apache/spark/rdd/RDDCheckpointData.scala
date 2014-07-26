@@ -39,7 +39,7 @@ private[spark] object CheckpointState extends Enumeration {
  * as well as, manages the post-checkpoint state by providing the updated partitions,
  * iterator and preferred locations of the checkpointed RDD.
  */
-private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
+private[spark] class RDDCheckpointData[T: ClassTag](@transient val rdd: RDD[T])
   extends Logging with Serializable {
 
   import CheckpointState._

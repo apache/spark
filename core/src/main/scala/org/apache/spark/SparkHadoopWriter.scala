@@ -35,7 +35,7 @@ import org.apache.spark.rdd.HadoopRDD
  * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
  */
 private[spark]
-class SparkHadoopWriter(@transient jobConf: JobConf)
+class SparkHadoopWriter(@transient val jobConf: JobConf)
   extends Logging
   with SparkHadoopMapRedUtil
   with Serializable {

@@ -40,7 +40,7 @@ import org.apache.spark.serializer.JavaSerializer
  * @tparam T partial data that can be added in
  */
 class Accumulable[R, T] (
-    @transient initialValue: R,
+    @transient val initialValue: R,
     param: AccumulableParam[R, T])
   extends Serializable {
 
@@ -219,7 +219,7 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T])
+class Accumulator[T](initialValue: T, param: AccumulatorParam[T])
   extends Accumulable[T,T](initialValue, param)
 
 /**

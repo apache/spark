@@ -36,7 +36,7 @@ import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 private[spark] class NewHadoopPartition(
     rddId: Int,
     val index: Int,
-    @transient rawSplit: InputSplit with Writable)
+    @transient val rawSplit: InputSplit with Writable)
   extends Partition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
@@ -64,7 +64,7 @@ class NewHadoopRDD[K, V](
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    @transient conf: Configuration)
+    conf: Configuration)
   extends RDD[(K, V)](sc, Nil)
   with SparkHadoopMapReduceUtil
   with Logging {
@@ -170,7 +170,7 @@ private[spark] class WholeTextFileRDD(
     inputFormatClass: Class[_ <: WholeTextFileInputFormat],
     keyClass: Class[String],
     valueClass: Class[String],
-    @transient conf: Configuration,
+    conf: Configuration,
     minPartitions: Int)
   extends NewHadoopRDD[String, String](sc, inputFormatClass, keyClass, valueClass, conf) {
 

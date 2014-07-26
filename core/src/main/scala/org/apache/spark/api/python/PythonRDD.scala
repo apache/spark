@@ -584,7 +584,7 @@ class BytesToString extends org.apache.spark.api.java.function.Function[Array[By
  * Internal class that acts as an `AccumulatorParam` for Python accumulators. Inside, it
  * collects a list of pickled strings that we pass to Python through a socket.
  */
-private class PythonAccumulatorParam(@transient serverHost: String, serverPort: Int)
+private class PythonAccumulatorParam(@transient val serverHost: String, serverPort: Int)
   extends AccumulatorParam[JList[Array[Byte]]] {
 
   Utils.checkHost(serverHost, "Expected hostname")
