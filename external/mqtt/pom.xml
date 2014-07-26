@@ -54,8 +54,8 @@
     </dependency>
     <dependency>
       <groupId>${akka.group}</groupId>
-      <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
-      <version>${akka.version}</version>
+      <artifactId>akka-zeromq_${scala.binary.version}.0-M3</artifactId>
+      <version>2.2.0</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
