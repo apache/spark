@@ -22,7 +22,7 @@ import java.util.concurrent.Semaphore
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.concurrent.future
+import scala.concurrent.Future
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.Matchers
@@ -102,7 +102,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
 
     val rdd1 = rdd.map(x => x)
 
-    future {
+    Future {
       taskStartedSemaphore.acquire()
       sc.cancelAllJobs()
       taskCancelledSemaphore.release(100000)
@@ -125,7 +125,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     })
 
     // jobA is the one to be cancelled.
-    val jobA = future {
+    val jobA = Future {
       sc.setJobGroup("jobA", "this is a job to be cancelled")
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.count()
     }
@@ -155,7 +155,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     })
 
     // jobA is the one to be cancelled.
-    val jobA = future {
+    val jobA = Future {
       sc.setJobGroup("jobA", "this is a job to be cancelled", interruptOnCancel = true)
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100000); i }.count()
     }
@@ -195,7 +195,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     val f2 = rdd.countAsync()
 
     // Kill one of the action.
-    future {
+    Future {
       sem1.acquire()
       f1.cancel()
       sem2.release(10)
@@ -211,7 +211,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     // Cancel before launching any tasks
     {
       val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.countAsync()
-      future { f.cancel() }
+      Future { f.cancel() }
       val e = intercept[SparkException] { f.get() }
       assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
     }
@@ -227,7 +227,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
       })
 
       val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.countAsync()
-      future {
+      Future {
         // Wait until some tasks were launched before we cancel the job.
         sem.acquire()
         f.cancel()
@@ -241,7 +241,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     // Cancel before launching any tasks
     {
       val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.takeAsync(5000)
-      future { f.cancel() }
+      Future { f.cancel() }
       val e = intercept[SparkException] { f.get() }
       assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
     }
@@ -256,7 +256,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
         }
       })
       val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.takeAsync(5000)
-      future {
+      Future {
         sem.acquire()
         f.cancel()
       }

@@ -199,7 +199,7 @@ private[spark] class Worker(
 
     case WorkDirCleanup =>
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
-      val cleanupFuture = concurrent.future {
+      val cleanupFuture = concurrent.Future {
         logInfo("Cleaning up oldest application directories in " + workDir + " ...")
         Utils.findOldFiles(workDir, APP_DATA_RETENTION_SECS)
           .foreach(Utils.deleteRecursively)

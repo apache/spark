@@ -169,7 +169,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
   @volatile private var _cancelled: Boolean = false
 
   // A promise used to signal the future.
-  private val p = promise[T]()
+  private val p = Promise[T]()
 
   override def cancel(): Unit = this.synchronized {
     _cancelled = true
@@ -183,7 +183,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
    * should use runJob implementation in this promise. See takeAsync for example.
    */
   def run(func: => T)(implicit executor: ExecutionContext): this.type = {
-    scala.concurrent.future {
+    scala.concurrent.Future {
       thread = Thread.currentThread
       try {
         p.success(func)
