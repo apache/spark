@@ -85,12 +85,18 @@ class StreamingContext private[streaming] (
       master: String,
       appName: String,
       batchDuration: Duration,
-      sparkHome: String = null,
-      jars: Seq[String] = Nil,
-      environment: Map[String, String] = Map()) = {
+      sparkHome: String,
+      jars: Seq[String],
+      environment: Map[String, String]) = {
     this(StreamingContext.createNewSparkContext(master, appName, sparkHome, jars, environment),
          null, batchDuration)
   }
+
+  def this(
+      master: String,
+      appName: String,
+      batchDuration: Duration) =
+    this(master, appName, batchDuration, null, null, Map())
 
   /**
    * Recreate a StreamingContext from a checkpoint file.
@@ -98,8 +104,11 @@ class StreamingContext private[streaming] (
    * @param hadoopConf Optional, configuration object if necessary for reading from
    *                   HDFS compatible filesystems
    */
-  def this(path: String, hadoopConf: Configuration = new Configuration) =
+  def this(path: String, hadoopConf: Configuration) =
     this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).get, null)
+
+  def this(path: String) =
+    this(path, new Configuration)
 
   if (sc_ == null && cp_ == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
