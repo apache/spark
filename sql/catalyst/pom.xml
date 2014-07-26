@@ -27,7 +27,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-catalyst_2.10</artifactId>
+  <artifactId>spark-catalyst_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Catalyst</name>
   <url>http://spark.apache.org/</url>

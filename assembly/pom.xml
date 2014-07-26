@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-assembly_2.10</artifactId>
+  <artifactId>spark-assembly_2.11</artifactId>
   <name>Spark Project Assembly</name>
   <url>http://spark.apache.org/</url>
   <packaging>pom</packaging>

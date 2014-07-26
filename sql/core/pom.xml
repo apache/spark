@@ -27,7 +27,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-sql_2.10</artifactId>
+  <artifactId>spark-sql_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project SQL</name>
   <url>http://spark.apache.org/</url>
