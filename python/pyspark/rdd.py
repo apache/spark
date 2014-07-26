@@ -39,9 +39,11 @@ from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
-from pyspark.rddsampler import RDDSampler
+from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
+from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
+    get_used_memory
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -197,6 +199,22 @@ class MaxHeapQ(object):
             self._sink(1)
 
 
+def _parse_memory(s):
+    """
+    Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
+    return the value in MB
+
+    >>> _parse_memory("256m")
+    256
+    >>> _parse_memory("2g")
+    2048
+    """
+    units = {'g': 1024, 'm': 1, 't': 1 << 20, 'k': 1.0 / 1024}
+    if s[-1] not in units:
+        raise ValueError("invalid format: " + s)
+    return int(float(s[:-1]) * units[s[-1].lower()])
+
+
 class RDD(object):
 
     """
@@ -231,10 +249,10 @@ class RDD(object):
 
     def cache(self):
         """
-        Persist this RDD with the default storage level (C{MEMORY_ONLY}).
+        Persist this RDD with the default storage level (C{MEMORY_ONLY_SER}).
         """
         self.is_cached = True
-        self._jrdd.cache()
+        self.persist(StorageLevel.MEMORY_ONLY_SER)
         return self
 
     def persist(self, storageLevel):
@@ -393,7 +411,7 @@ class RDD(object):
         >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
         [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
         """
-        assert fraction >= 0.0, "Invalid fraction value: %s" % fraction
+        assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     # this is ported from scala/spark/RDD.scala
@@ -1207,20 +1225,49 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
-        # Transferring O(n) objects to Java is too expensive.  Instead, we'll
-        # form the hash buckets in Python, transferring O(numPartitions) objects
-        # to Java.  Each object is a (splitNumber, [objects]) pair.
+        # Transferring O(n) objects to Java is too expensive.
+        # Instead, we'll form the hash buckets in Python,
+        # transferring O(numPartitions) objects to Java.
+        # Each object is a (splitNumber, [objects]) pair.
+        # In order to avoid too huge objects, the objects are
+        # grouped into chunks.
         outputSerializer = self.ctx._unbatched_serializer
+
+        limit = (_parse_memory(self.ctx._conf.get(
+                    "spark.python.worker.memory", "512m")) / 2)
 
         def add_shuffle_key(split, iterator):
 
             buckets = defaultdict(list)
+            c, batch = 0, min(10 * numPartitions, 1000)
 
             for (k, v) in iterator:
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
+                c += 1
+
+                # check used memory and avg size of chunk of objects
+                if (c % 1000 == 0 and get_used_memory() > limit
+                        or c > batch):
+                    n, size = len(buckets), 0
+                    for split in buckets.keys():
+                        yield pack_long(split)
+                        d = outputSerializer.dumps(buckets[split])
+                        del buckets[split]
+                        yield d
+                        size += len(d)
+
+                    avg = (size / n) >> 20
+                    # let 1M < avg < 10M
+                    if avg < 1:
+                        batch *= 1.5
+                    elif avg > 10:
+                        batch = max(batch / 1.5, 1)
+                    c = 0
+
             for (split, items) in buckets.iteritems():
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
+
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
         with _JavaStackTrace(self.context) as st:
@@ -1230,8 +1277,8 @@ class RDD(object):
                                                           id(partitionFunc))
         jrdd = pairRDD.partitionBy(partitioner).values()
         rdd = RDD(jrdd, self.ctx, BatchedSerializer(outputSerializer))
-        # This is required so that id(partitionFunc) remains unique, even if
-        # partitionFunc is a lambda:
+        # This is required so that id(partitionFunc) remains unique,
+        # even if partitionFunc is a lambda:
         rdd._partitionFunc = partitionFunc
         return rdd
 
@@ -1265,26 +1312,28 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
+        serializer = self.ctx.serializer
+        spill = (self.ctx._conf.get("spark.shuffle.spill", 'True').lower()
+                 == 'true')
+        memory = _parse_memory(self.ctx._conf.get(
+                    "spark.python.worker.memory", "512m"))
+        agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
+
         def combineLocally(iterator):
-            combiners = {}
-            for x in iterator:
-                (k, v) = x
-                if k not in combiners:
-                    combiners[k] = createCombiner(v)
-                else:
-                    combiners[k] = mergeValue(combiners[k], v)
-            return combiners.iteritems()
+            merger = ExternalMerger(agg, memory * 0.9, serializer) \
+                         if spill else InMemoryMerger(agg)
+            merger.mergeValues(iterator)
+            return merger.iteritems()
+
         locally_combined = self.mapPartitions(combineLocally)
         shuffled = locally_combined.partitionBy(numPartitions)
 
         def _mergeCombiners(iterator):
-            combiners = {}
-            for (k, v) in iterator:
-                if k not in combiners:
-                    combiners[k] = v
-                else:
-                    combiners[k] = mergeCombiners(combiners[k], v)
-            return combiners.iteritems()
+            merger = ExternalMerger(agg, memory, serializer) \
+                         if spill else InMemoryMerger(agg)
+            merger.mergeCombiners(iterator)
+            return merger.iteritems()
+
         return shuffled.mapPartitions(_mergeCombiners)
 
     def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):
@@ -1343,7 +1392,8 @@ class RDD(object):
             return xs
 
         def mergeCombiners(a, b):
-            return a + b
+            a.extend(b)
+            return a
 
         return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
                                  numPartitions).mapValues(lambda x: ResultIterable(x))
@@ -1405,6 +1455,27 @@ class RDD(object):
         [('a', ([1], [2])), ('b', ([4], []))]
         """
         return python_cogroup((self, other), numPartitions)
+
+    def sampleByKey(self, withReplacement, fractions, seed=None):
+        """
+        Return a subset of this RDD sampled by key (via stratified sampling).
+        Create a sample of this RDD using variable sampling rates for
+        different keys as specified by fractions, a key to sampling rate map.
+
+        >>> fractions = {"a": 0.2, "b": 0.1}
+        >>> rdd = sc.parallelize(fractions.keys()).cartesian(sc.parallelize(range(0, 1000)))
+        >>> sample = dict(rdd.sampleByKey(False, fractions, 2).groupByKey().collect())
+        >>> 100 < len(sample["a"]) < 300 and 50 < len(sample["b"]) < 150
+        True
+        >>> max(sample["a"]) <= 999 and min(sample["a"]) >= 0
+        True
+        >>> max(sample["b"]) <= 999 and min(sample["b"]) >= 0
+        True
+        """
+        for fraction in fractions.values():
+            assert fraction >= 0.0, "Negative fraction value: %s" % fraction
+        return self.mapPartitionsWithIndex( \
+            RDDStratifiedSampler(withReplacement, fractions, seed).func, True)
 
     def subtractByKey(self, other, numPartitions=None):
         """
